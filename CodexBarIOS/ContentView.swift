@@ -9,7 +9,7 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(refreshService.results) { result in
+                    ForEach(displayedResults) { result in
                         ProviderUsageCard(
                             result: result,
                             statusText: dashboardStatusText(for: result)
@@ -43,11 +43,11 @@ struct ContentView: View {
                 }
             }
             .overlay {
-                if refreshService.results.isEmpty {
+                if displayedResults.isEmpty {
                     ContentUnavailableView(
                         "No Usage Data",
                         systemImage: "gauge.with.dots.needle.50percent",
-                        description: Text("Add providers to start tracking usage.")
+                        description: Text("Configure providers in Settings to start tracking live usage.")
                     )
                 }
             }
@@ -60,10 +60,14 @@ struct ContentView: View {
         }
     }
 
+    private var displayedResults: [ProviderUsageResult] {
+        refreshService.results.filter { configurationStore.isConfigured($0.providerID) }
+    }
+
     private func dashboardStatusText(for result: ProviderUsageResult) -> String {
-        if result.providerID == .codex && configurationStore.isConfigured(.codex) {
+        if configurationStore.isConfigured(result.providerID) {
             if result.subtitle.localizedCaseInsensitiveContains("not configured") {
-                return configurationStore.statusText(for: .codex)
+                return configurationStore.statusText(for: result.providerID)
             }
 
             return result.subtitle

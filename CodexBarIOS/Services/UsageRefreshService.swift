@@ -45,8 +45,7 @@ public extension UsageRefreshService {
         UsageRefreshService(
             providers: [
                 CodexUsageProvider(),
-                DemoUsageProvider.samples.first { $0.providerID == .copilot }!,
-                DemoUsageProvider.samples.first { $0.providerID == .openRouter }!,
+                CopilotUsageProvider(),
             ]
         )
     }

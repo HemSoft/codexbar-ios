@@ -30,6 +30,11 @@
 		100000000000000000000015 /* CodexUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* CodexUsageProvider.swift */; };
 		100000000000000000000016 /* CodexWebAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* CodexWebAuthService.swift */; };
 		100000000000000000000017 /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* AppAppearance.swift */; };
+		100000000000000000000018 /* CopilotCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001A /* CopilotCredentials.swift */; };
+		100000000000000000000019 /* CopilotCredentialsParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001B /* CopilotCredentialsParser.swift */; };
+		10000000000000000000001A /* CopilotWebAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001C /* CopilotWebAuthService.swift */; };
+		10000000000000000000001B /* CopilotUsageParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001D /* CopilotUsageParser.swift */; };
+		10000000000000000000001C /* CopilotUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001E /* CopilotUsageProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -68,6 +73,11 @@
 		200000000000000000000017 /* CodexUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageProvider.swift; sourceTree = "<group>"; };
 		200000000000000000000018 /* CodexWebAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexWebAuthService.swift; sourceTree = "<group>"; };
 		200000000000000000000019 /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearance.swift; sourceTree = "<group>"; };
+		20000000000000000000001A /* CopilotCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotCredentials.swift; sourceTree = "<group>"; };
+		20000000000000000000001B /* CopilotCredentialsParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotCredentialsParser.swift; sourceTree = "<group>"; };
+		20000000000000000000001C /* CopilotWebAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotWebAuthService.swift; sourceTree = "<group>"; };
+		20000000000000000000001D /* CopilotUsageParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotUsageParser.swift; sourceTree = "<group>"; };
+		20000000000000000000001E /* CopilotUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotUsageProvider.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -120,6 +130,7 @@
 				200000000000000000000019 /* AppAppearance.swift */,
 				20000000000000000000000F /* ProviderAccountConfiguration.swift */,
 				200000000000000000000014 /* CodexCredentials.swift */,
+				20000000000000000000001A /* CopilotCredentials.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -136,6 +147,10 @@
 				200000000000000000000016 /* CodexUsageParser.swift */,
 				200000000000000000000017 /* CodexUsageProvider.swift */,
 				200000000000000000000018 /* CodexWebAuthService.swift */,
+				20000000000000000000001B /* CopilotCredentialsParser.swift */,
+				20000000000000000000001C /* CopilotWebAuthService.swift */,
+				20000000000000000000001D /* CopilotUsageParser.swift */,
+				20000000000000000000001E /* CopilotUsageProvider.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -295,6 +310,11 @@
 				100000000000000000000015 /* CodexUsageProvider.swift in Sources */,
 				100000000000000000000016 /* CodexWebAuthService.swift in Sources */,
 				100000000000000000000017 /* AppAppearance.swift in Sources */,
+				100000000000000000000018 /* CopilotCredentials.swift in Sources */,
+				100000000000000000000019 /* CopilotCredentialsParser.swift in Sources */,
+				10000000000000000000001A /* CopilotWebAuthService.swift in Sources */,
+				10000000000000000000001B /* CopilotUsageParser.swift in Sources */,
+				10000000000000000000001C /* CopilotUsageProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -8,10 +8,14 @@ struct ProviderSettingsView: View {
     @State private var configuration: ProviderAccountConfiguration
     @State private var secret = ""
     @State private var isSigningInWithCodex = false
+    @State private var isSigningInWithCopilot = false
     @State private var codexAuthError: String?
-    @State private var codexAuthURL: PresentedAuthURL?
+    @State private var copilotAuthError: String?
+    @State private var authURL: PresentedAuthURL?
 
     private let codexAuthService = CodexWebAuthService()
+    private let copilotAuthService = CopilotWebAuthService()
+    private let copilotUsageProvider = CopilotUsageProvider()
 
     init(configurationStore: ProviderConfigurationStore, providerID: ProviderID) {
         self.configurationStore = configurationStore
@@ -61,6 +65,35 @@ struct ProviderSettingsView: View {
                         Text(codexAuthError)
                             .foregroundStyle(.red)
                     }
+                } else if providerID == .copilot {
+                    TextField("GitHub OAuth Client ID", text: oauthClientIDBinding)
+                        .textContentType(.oneTimeCode)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    Button {
+                        Task {
+                            await signInWithCopilot()
+                        }
+                    } label: {
+                        if isSigningInWithCopilot {
+                            ProgressView()
+                        } else {
+                            Text(configurationStore.hasSecret(for: providerID) ? "Sign in Again" : "Sign in with GitHub")
+                        }
+                    }
+                    .disabled(isSigningInWithCopilot || normalizedOAuthClientID.isEmpty)
+
+                    if configurationStore.hasSecret(for: providerID) {
+                        Button("Sign Out", role: .destructive) {
+                            configurationStore.saveSecret("", for: providerID)
+                        }
+                    }
+
+                    if let copilotAuthError {
+                        Text(copilotAuthError)
+                            .foregroundStyle(.red)
+                    }
                 } else if configuration.requiresSecret {
                         SecureField(secretPlaceholder, text: $secret)
                             .textContentType(.password)
@@ -103,8 +136,8 @@ struct ProviderSettingsView: View {
             configurationStore.update(configuration)
             configurationStore.refreshSecretAvailability()
         }
-        .sheet(item: $codexAuthURL) { authURL in
-            SafariAuthView(url: authURL.url)
+        .sheet(item: $authURL) { authURL in
+            SafariAuthSheet(authURL: authURL)
         }
     }
 
@@ -116,12 +149,10 @@ struct ProviderSettingsView: View {
 
     private var availableAuthMethods: [ProviderAuthMethod] {
         switch providerID {
-        case .codex:
+        case .codex, .copilot:
             [.browserSession]
         case .openRouter:
             [.apiKey]
-        case .copilot:
-            [.cliToken, .oauth]
         case .claude, .cursor:
             [.browserSession, .oauth, .apiKey]
         }
@@ -141,13 +172,24 @@ struct ProviderSettingsView: View {
     }
 
     private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
-        guard providerID == .codex else {
+        guard providerID == .codex || providerID == .copilot else {
             return configuration
         }
 
         var normalized = configuration
         normalized.authMethod = .browserSession
         return normalized
+    }
+
+    private var normalizedOAuthClientID: String {
+        (configuration.oauthClientID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var oauthClientIDBinding: Binding<String> {
+        Binding(
+            get: { configuration.oauthClientID ?? "" },
+            set: { configuration.oauthClientID = $0 }
+        )
     }
 
     @MainActor
@@ -157,24 +199,85 @@ struct ProviderSettingsView: View {
 
         do {
             let result = try await codexAuthService.signIn { url in
-                codexAuthURL = PresentedAuthURL(url: url)
+                authURL = PresentedAuthURL(url: url)
             }
             configuration.authMethod = .browserSession
             configurationStore.update(configuration)
             configurationStore.saveSecret(result.storedCredential, for: providerID)
-            codexAuthURL = nil
+            authURL = nil
         } catch {
             codexAuthError = error.localizedDescription
-            codexAuthURL = nil
+            authURL = nil
         }
 
         isSigningInWithCodex = false
+    }
+
+    @MainActor
+    private func signInWithCopilot() async {
+        isSigningInWithCopilot = true
+        copilotAuthError = nil
+
+        do {
+            let result = try await copilotAuthService.signIn(
+                clientID: normalizedOAuthClientID,
+                presentAuthorizationURL: { url in
+                    authURL = PresentedAuthURL(url: url, userCode: authURL?.userCode)
+                },
+                presentUserCode: { userCode in
+                    authURL = PresentedAuthURL(url: authURL?.url ?? URL(string: "https://github.com/login/device")!, userCode: userCode)
+                }
+            )
+            let username = try await copilotUsageProvider.fetchUsername(accessToken: result.accessToken)
+            if let username, !username.isEmpty {
+                configuration.accountLabel = username
+            }
+            configuration.authMethod = .browserSession
+            configurationStore.update(configuration)
+            configurationStore.saveSecret(result.storedCredential(username: username), for: providerID)
+            authURL = nil
+        } catch {
+            copilotAuthError = error.localizedDescription
+            authURL = nil
+        }
+
+        isSigningInWithCopilot = false
     }
 }
 
 private struct PresentedAuthURL: Identifiable {
     let id = UUID()
     let url: URL
+    let userCode: String?
+
+    init(url: URL, userCode: String? = nil) {
+        self.url = url
+        self.userCode = userCode
+    }
+}
+
+private struct SafariAuthSheet: View {
+    let authURL: PresentedAuthURL
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let userCode = authURL.userCode {
+                VStack(spacing: 6) {
+                    Text("GitHub device code")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(userCode)
+                        .font(.system(.title2, design: .monospaced).weight(.semibold))
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color(.secondarySystemGroupedBackground))
+            }
+
+            SafariAuthView(url: authURL.url)
+        }
+    }
 }
 
 private struct SafariAuthView: UIViewControllerRepresentable {

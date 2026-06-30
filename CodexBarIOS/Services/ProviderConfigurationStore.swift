@@ -70,7 +70,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             return false
         }
 
-        if configuration.requiresSecret || providerID == .codex {
+        if configuration.requiresSecret || providerID == .codex || providerID == .copilot {
             return hasSecret(for: providerID)
         }
 
@@ -85,18 +85,22 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         if isConfigured(providerID) {
             let label = configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-            if providerID == .codex {
+            if providerID == .codex || providerID == .copilot {
                 return label.isEmpty ? "Configured - live usage enabled" : "\(label) - live usage enabled"
             }
 
-            return label.isEmpty ? "Configured - demo data" : "\(label) - demo data"
+            return label.isEmpty ? "Configured" : label
         }
 
         if providerID == .codex {
             return "Not configured - sign in with ChatGPT"
         }
 
-        return "Not configured - demo data"
+        if providerID == .copilot {
+            return "Not configured - sign in with GitHub"
+        }
+
+        return "Not configured"
     }
 
     public func refreshSecretAvailability() {
@@ -167,7 +171,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     private static func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
-        guard configuration.providerID == .codex else {
+        guard configuration.providerID == .codex || configuration.providerID == .copilot else {
             return configuration
         }
 

@@ -5,17 +5,20 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
     public var isEnabled: Bool
     public var accountLabel: String
     public var authMethod: ProviderAuthMethod
+    public var oauthClientID: String?
 
     public init(
         providerID: ProviderID,
         isEnabled: Bool = true,
         accountLabel: String = "",
-        authMethod: ProviderAuthMethod
+        authMethod: ProviderAuthMethod,
+        oauthClientID: String? = nil
     ) {
         self.providerID = providerID
         self.isEnabled = isEnabled
         self.accountLabel = accountLabel
         self.authMethod = authMethod
+        self.oauthClientID = oauthClientID
     }
 
     public var id: ProviderID {
@@ -69,7 +72,7 @@ public extension ProviderAccountConfiguration {
         case .codex:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .copilot:
-            ProviderAccountConfiguration(providerID: providerID, authMethod: .cliToken)
+            ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .claude:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .openRouter:

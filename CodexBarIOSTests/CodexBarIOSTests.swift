@@ -15,7 +15,7 @@ final class CodexBarIOSTests: XCTestCase {
         )
         XCTAssertEqual(
             ProviderAccountConfiguration.defaultConfiguration(for: .copilot).authMethod,
-            .cliToken
+            .browserSession
         )
         XCTAssertEqual(
             ProviderAccountConfiguration.defaultConfiguration(for: .codex).authMethod,
@@ -93,6 +93,72 @@ final class CodexBarIOSTests: XCTestCase {
         """)
 
         XCTAssertEqual(credentials, CodexCredentials(accessToken: "access-token", accountID: "account-id"))
+    }
+
+    func testCopilotDeviceCodeRequestBodyUsesGitHubDeviceFlow() {
+        let body = String(
+            data: CopilotWebAuthService.makeDeviceCodeRequestBody(clientID: "client id"),
+            encoding: .utf8
+        )
+
+        XCTAssertEqual(body, "client_id=client%20id&scope=read%3Auser")
+    }
+
+    func testCopilotAccessTokenRequestBodyUsesDeviceCodeGrant() {
+        let body = String(
+            data: CopilotWebAuthService.makeAccessTokenRequestBody(
+                clientID: "client",
+                deviceCode: "device"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertEqual(
+            body,
+            "client_id=client&device_code=device&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code"
+        )
+    }
+
+    func testCopilotCredentialsParserReadsStoredJSONAndRawToken() {
+        XCTAssertEqual(
+            CopilotCredentialsParser.parse(#"{"accessToken":"token","username":"octocat"}"#),
+            CopilotCredentials(accessToken: "token", username: "octocat")
+        )
+        XCTAssertEqual(
+            CopilotCredentialsParser.parse("gho_raw_token"),
+            CopilotCredentials(accessToken: "gho_raw_token")
+        )
+    }
+
+    func testCopilotUsageParserReadsQuotaSnapshots() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
+        let payload = """
+        {
+          "login": "octocat",
+          "copilot_plan": "individual_pro",
+          "quota_reset_date_utc": "2030-01-03T00:00:00Z",
+          "quota_snapshots": {
+            "premium_interactions": {
+              "entitlement": 2000,
+              "remaining": 500,
+              "unlimited": false
+            },
+            "chat": {
+              "entitlement": 100,
+              "remaining": 12,
+              "unlimited": false
+            }
+          }
+        }
+        """
+
+        let result = try XCTUnwrap(CopilotUsageParser.parse(Data(payload.utf8), fetchedAt: fetchedAt))
+
+        XCTAssertEqual(result.providerID, .copilot)
+        XCTAssertEqual(result.title, "GitHub Copilot (octocat) - Pro")
+        XCTAssertEqual(result.bars.map(\.label), ["Premium interactions (1,500 / 2,000)", "Chat (88 / 100)"])
+        XCTAssertEqual(result.bars.map(\.usageText), ["75%", "88%"])
+        XCTAssertEqual(result.subtitle, "Resets in 3d")
     }
 
     func testCodexUsageParserReadsUsageWindows() throws {
