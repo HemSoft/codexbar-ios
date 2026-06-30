@@ -19,8 +19,50 @@ final class CodexBarIOSTests: XCTestCase {
         )
         XCTAssertEqual(
             ProviderAccountConfiguration.defaultConfiguration(for: .codex).authMethod,
-            .codexAuthJSON
+            .browserSession
         )
+    }
+
+    func testCodexAuthURLUsesBrowserLoginFlow() throws {
+        let url = CodexWebAuthService.authorizationURL(
+            redirectURI: "http://localhost:1455/auth/callback",
+            state: "state",
+            codeChallenge: "challenge"
+        )
+
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.scheme, "https")
+        XCTAssertEqual(components.host, "auth.openai.com")
+        XCTAssertEqual(components.path, "/oauth/authorize")
+        XCTAssertEqual(components.queryItemValue(named: "response_type"), "code")
+        XCTAssertEqual(components.queryItemValue(named: "redirect_uri"), "http://localhost:1455/auth/callback")
+        XCTAssertEqual(components.queryItemValue(named: "code_challenge_method"), "S256")
+        XCTAssertEqual(components.queryItemValue(named: "originator"), "codex_cli_rs")
+        XCTAssertEqual(components.queryItemValue(named: "codex_cli_simplified_flow"), "true")
+    }
+
+    func testCodexTokenRequestBodyUsesPKCECodeExchange() {
+        let body = String(
+            data: CodexWebAuthService.makeTokenRequestBody(
+                code: "code value",
+                redirectURI: "http://localhost:1455/auth/callback",
+                codeVerifier: "verifier value"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertEqual(
+            body,
+            "grant_type=authorization_code&code=code%20value&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&client_id=app_EMoamEEZ73f0CkXaXp7hrann&code_verifier=verifier%20value"
+        )
+    }
+
+    func testCodexAuthExtractsChatGPTAccountID() {
+        let header = #"{"alg":"none"}"#.base64URLEncodedForTest()
+        let payload = #"{"chatgpt_account_id":"account-id"}"#.base64URLEncodedForTest()
+        let token = "\(header).\(payload).signature"
+
+        XCTAssertEqual(CodexWebAuthService.accountID(from: token), "account-id")
     }
 
     func testCodexCredentialsParserReadsCliAuthJson() {
@@ -62,6 +104,16 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.used), [42, 81])
     }
 
+    func testCodexUsageWithoutCredentialIsNotDemoData() async throws {
+        let provider = CodexUsageProvider(secretStore: EmptySecretStore())
+
+        let result = try await provider.fetchUsage()
+
+        XCTAssertEqual(result.providerID, .codex)
+        XCTAssertEqual(result.subtitle, "Not configured - sign in with ChatGPT.")
+        XCTAssertTrue(result.bars.isEmpty)
+    }
+
     @MainActor
     func testDemoRefreshReturnsSortedResults() async {
         let service = UsageRefreshService.demo()
@@ -74,5 +126,32 @@ final class CodexBarIOSTests: XCTestCase {
         )
         XCTAssertFalse(service.isRefreshing)
         XCTAssertNil(service.lastRefreshError)
+    }
+}
+
+private struct EmptySecretStore: SecretStore {
+    func readSecret(account: String) throws -> String? {
+        nil
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {
+    }
+
+    func deleteSecret(account: String) throws {
+    }
+}
+
+private extension URLComponents {
+    func queryItemValue(named name: String) -> String? {
+        queryItems?.first { $0.name == name }?.value
+    }
+}
+
+private extension String {
+    func base64URLEncodedForTest() -> String {
+        Data(utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 }

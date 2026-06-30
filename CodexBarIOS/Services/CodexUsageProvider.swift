@@ -22,7 +22,7 @@ public final class CodexUsageProvider: UsageProvider {
             let storedSecret = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: .codex)),
             let credentials = CodexCredentialsParser.parse(storedSecret)
         else {
-            return try await DemoUsageProvider.samples.first { $0.providerID == .codex }!.fetchUsage()
+            return failureResult("Not configured - sign in with ChatGPT.")
         }
 
         var request = URLRequest(url: usageEndpoint)
@@ -60,4 +60,3 @@ public final class CodexUsageProvider: UsageProvider {
         )
     }
 }
-

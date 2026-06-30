@@ -1,5 +1,5 @@
 import SwiftUI
-import UniformTypeIdentifiers
+import SafariServices
 
 struct ProviderSettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
@@ -7,7 +7,11 @@ struct ProviderSettingsView: View {
 
     @State private var configuration: ProviderAccountConfiguration
     @State private var secret = ""
-    @State private var isImportingCodexAuth = false
+    @State private var isSigningInWithCodex = false
+    @State private var codexAuthError: String?
+    @State private var codexAuthURL: PresentedAuthURL?
+
+    private let codexAuthService = CodexWebAuthService()
 
     init(configurationStore: ProviderConfigurationStore, providerID: ProviderID) {
         self.configurationStore = configurationStore
@@ -33,23 +37,35 @@ struct ProviderSettingsView: View {
             }
 
             Section {
-                if configuration.requiresSecret {
-                    if configuration.authMethod == .codexAuthJSON {
-                        Button("Import auth.json") {
-                            isImportingCodexAuth = true
+                if providerID == .codex {
+                    Button {
+                        Task {
+                            await signInWithCodex()
                         }
+                    } label: {
+                        if isSigningInWithCodex {
+                            ProgressView()
+                        } else {
+                            Text(configurationStore.hasSecret(for: providerID) ? "Sign in Again" : "Sign in with ChatGPT")
+                        }
+                    }
+                    .disabled(isSigningInWithCodex)
 
-                        TextEditor(text: $secret)
-                            .font(.system(.footnote, design: .monospaced))
-                            .frame(minHeight: 130)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    } else {
+                    if configurationStore.hasSecret(for: providerID) {
+                        Button("Sign Out", role: .destructive) {
+                            configurationStore.saveSecret("", for: providerID)
+                        }
+                    }
+
+                    if let codexAuthError {
+                        Text(codexAuthError)
+                            .foregroundStyle(.red)
+                    }
+                } else if configuration.requiresSecret {
                         SecureField(secretPlaceholder, text: $secret)
                             .textContentType(.password)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                    }
 
                     Button("Save Credential") {
                         configurationStore.saveSecret(secret, for: providerID)
@@ -87,12 +103,8 @@ struct ProviderSettingsView: View {
             configurationStore.update(configuration)
             configurationStore.refreshSecretAvailability()
         }
-        .fileImporter(
-            isPresented: $isImportingCodexAuth,
-            allowedContentTypes: [.json, .text],
-            allowsMultipleSelection: false
-        ) { result in
-            importCodexAuth(from: result)
+        .sheet(item: $codexAuthURL) { authURL in
+            SafariAuthView(url: authURL.url)
         }
     }
 
@@ -105,7 +117,7 @@ struct ProviderSettingsView: View {
     private var availableAuthMethods: [ProviderAuthMethod] {
         switch providerID {
         case .codex:
-            [.codexAuthJSON]
+            [.browserSession]
         case .openRouter:
             [.apiKey]
         case .copilot:
@@ -118,41 +130,14 @@ struct ProviderSettingsView: View {
     private var nonSecretAuthText: String {
         switch configuration.authMethod {
         case .browserSession:
-            "This provider will use an authenticated browser session once its fetcher is implemented."
+            "Sign in through the browser to connect this account."
         case .codexAuthJSON:
-            "Paste Codex CLI auth.json contents or an access token."
+            "Codex auth.json import is no longer used."
         case .oauth:
             "This provider will use OAuth once its sign-in flow is implemented."
         case .apiKey, .cliToken:
             "Paste a credential to save it in Keychain."
         }
-    }
-
-    private func importCodexAuth(from result: Result<[URL], Error>) {
-        guard
-            case .success(let urls) = result,
-            let url = urls.first
-        else {
-            return
-        }
-
-        let didAccessSecurityScopedResource = url.startAccessingSecurityScopedResource()
-        defer {
-            if didAccessSecurityScopedResource {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        guard
-            let data = try? Data(contentsOf: url),
-            let contents = String(data: data, encoding: .utf8)
-        else {
-            return
-        }
-
-        secret = contents
-        configurationStore.saveSecret(contents, for: providerID)
-        secret = ""
     }
 
     private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
@@ -161,8 +146,45 @@ struct ProviderSettingsView: View {
         }
 
         var normalized = configuration
-        normalized.authMethod = .codexAuthJSON
+        normalized.authMethod = .browserSession
         return normalized
+    }
+
+    @MainActor
+    private func signInWithCodex() async {
+        isSigningInWithCodex = true
+        codexAuthError = nil
+
+        do {
+            let result = try await codexAuthService.signIn { url in
+                codexAuthURL = PresentedAuthURL(url: url)
+            }
+            configuration.authMethod = .browserSession
+            configurationStore.update(configuration)
+            configurationStore.saveSecret(result.storedCredential, for: providerID)
+            codexAuthURL = nil
+        } catch {
+            codexAuthError = error.localizedDescription
+            codexAuthURL = nil
+        }
+
+        isSigningInWithCodex = false
+    }
+}
+
+private struct PresentedAuthURL: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct SafariAuthView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {
     }
 }
 

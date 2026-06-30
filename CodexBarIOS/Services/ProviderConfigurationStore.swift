@@ -62,7 +62,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             return false
         }
 
-        if configuration.requiresSecret {
+        if configuration.requiresSecret || providerID == .codex {
             return hasSecret(for: providerID)
         }
 
@@ -85,7 +85,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         if providerID == .codex {
-            return "Not configured - import auth.json"
+            return "Not configured - sign in with ChatGPT"
         }
 
         return "Not configured - demo data"
@@ -148,7 +148,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         var normalized = configuration
-        normalized.authMethod = .codexAuthJSON
+        normalized.authMethod = .browserSession
         return normalized
     }
 }

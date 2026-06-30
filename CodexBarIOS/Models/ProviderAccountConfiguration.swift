@@ -67,7 +67,7 @@ public extension ProviderAccountConfiguration {
     static func defaultConfiguration(for providerID: ProviderID) -> ProviderAccountConfiguration {
         switch providerID {
         case .codex:
-            ProviderAccountConfiguration(providerID: providerID, authMethod: .codexAuthJSON)
+            ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .copilot:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .cliToken)
         case .claude:

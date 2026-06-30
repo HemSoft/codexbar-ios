@@ -28,6 +28,7 @@
 		100000000000000000000013 /* CodexCredentialsParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* CodexCredentialsParser.swift */; };
 		100000000000000000000014 /* CodexUsageParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* CodexUsageParser.swift */; };
 		100000000000000000000015 /* CodexUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* CodexUsageProvider.swift */; };
+		100000000000000000000016 /* CodexWebAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* CodexWebAuthService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +65,7 @@
 		200000000000000000000015 /* CodexCredentialsParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexCredentialsParser.swift; sourceTree = "<group>"; };
 		200000000000000000000016 /* CodexUsageParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageParser.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* CodexUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageProvider.swift; sourceTree = "<group>"; };
+		200000000000000000000018 /* CodexWebAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexWebAuthService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -130,6 +132,7 @@
 				200000000000000000000015 /* CodexCredentialsParser.swift */,
 				200000000000000000000016 /* CodexUsageParser.swift */,
 				200000000000000000000017 /* CodexUsageProvider.swift */,
+				200000000000000000000018 /* CodexWebAuthService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -287,6 +290,7 @@
 				100000000000000000000013 /* CodexCredentialsParser.swift in Sources */,
 				100000000000000000000014 /* CodexUsageParser.swift in Sources */,
 				100000000000000000000015 /* CodexUsageProvider.swift in Sources */,
+				100000000000000000000016 /* CodexWebAuthService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

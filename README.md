@@ -13,7 +13,7 @@ The Windows reference implementation is checked out beside this repo at:
 - SwiftUI dashboard for provider usage cards
 - Provider abstraction ready for Codex, Copilot, Claude, OpenRouter, and Cursor adapters
 - Settings screen for enabling providers, labeling accounts, choosing auth method, and saving API keys/tokens in Keychain
-- ChatGPT / Codex usage fetcher using pasted Codex CLI `auth.json` contents or access token
+- ChatGPT / Codex browser sign-in with Keychain-backed usage fetching
 - Refresh service with demo data for providers whose fetchers have not been ported yet
 - Unit tests for model severity and refresh behavior
 
