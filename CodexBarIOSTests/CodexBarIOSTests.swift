@@ -79,6 +79,7 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     func testCodexUsageParserReadsUsageWindows() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
         let payload = """
         {
           "plan_type": "pro",
@@ -97,11 +98,47 @@ final class CodexBarIOSTests: XCTestCase {
         }
         """
 
-        let result = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8)))
+        let result = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8), fetchedAt: fetchedAt))
 
         XCTAssertEqual(result.title, "ChatGPT / Codex (Pro)")
-        XCTAssertEqual(result.bars.map(\.label), ["5-hour", "Weekly"])
+        XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
         XCTAssertEqual(result.bars.map(\.used), [42, 81])
+        XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%"])
+        XCTAssertEqual(result.bars.first?.resetDescription, "Resets 1d 0h (Mon 7:00 PM EST)")
+        XCTAssertEqual(result.bars.first?.projectionCurrent, 0.42)
+        XCTAssertEqual(result.bars.first?.projectionLimit, 1)
+        XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_893_438_000))
+        XCTAssertEqual(result.bars.first?.projectionPeriodEnd, Date(timeIntervalSince1970: 1_893_456_000))
+    }
+
+    func testUsageBarFormatsPercentAndProjection() {
+        let start = Date(timeIntervalSince1970: 1_767_225_600)
+        let now = start.addingTimeInterval(60 * 60)
+        let end = start.addingTimeInterval(5 * 60 * 60)
+        let bar = UsageBar(
+            label: "5 hour usage limit",
+            used: 25,
+            limit: 100,
+            projectionCurrent: 0.25,
+            projectionLimit: 1,
+            projectionPeriodStart: start,
+            projectionPeriodEnd: end,
+            showProjectionOnCurrentBar: true
+        )
+
+        XCTAssertEqual(bar.usageText, "25%")
+        XCTAssertEqual(bar.projectedFraction(at: now), 1)
+        XCTAssertEqual(
+            bar.projectionDescription(at: now),
+            "Projected 100% at current pace - Limit hit Wed 11:00 PM EST - 1h early"
+        )
+    }
+
+    func testUsageBarKeepsOverLimitPercentVisible() {
+        let bar = UsageBar(label: "Weekly usage limit", used: 112, limit: 100)
+
+        XCTAssertEqual(bar.usageText, "112%")
+        XCTAssertEqual(bar.fractionUsed, 1)
     }
 
     func testCodexUsageWithoutCredentialIsNotDemoData() async throws {

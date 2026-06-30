@@ -19,11 +19,18 @@ public enum CodexUsageParser {
 
         windows.sort { $0.durationSeconds < $1.durationSeconds }
         let bars = windows.map { window in
-            UsageBar(
+            let usedFraction = window.usedPercent / 100
+            return UsageBar(
                 label: label(forDuration: window.durationSeconds),
                 used: window.usedPercent,
                 limit: 100,
-                resetsAt: window.resetsAt
+                resetDescription: formatReset(window.resetsAt, now: fetchedAt),
+                resetsAt: window.resetsAt,
+                projectionCurrent: usedFraction,
+                projectionLimit: 1,
+                projectionPeriodStart: window.resetsAt.addingTimeInterval(TimeInterval(-window.durationSeconds)),
+                projectionPeriodEnd: window.resetsAt,
+                showProjectionOnCurrentBar: true
             )
         }
 
@@ -58,12 +65,46 @@ public enum CodexUsageParser {
     private static func label(forDuration durationSeconds: Int) -> String {
         switch durationSeconds {
         case 18_000:
-            "5-hour"
+            "5 hour usage limit"
         case 604_800:
-            "Weekly"
+            "Weekly usage limit"
         default:
-            "\(max(1, durationSeconds / 3_600))-hour"
+            "\(max(1, durationSeconds / 3_600)) hour usage limit"
         }
+    }
+
+    private static func formatReset(_ resetAt: Date, now: Date) -> String {
+        let remaining = resetAt.timeIntervalSince(now)
+        let easternReset = formatEasternResetTime(resetAt, remaining: remaining)
+
+        if remaining <= 0 {
+            return "Resets now (\(easternReset))"
+        }
+
+        let relativeReset: String
+        if remaining >= 86_400 {
+            let days = Int(remaining / 86_400)
+            let hours = Int(remaining.truncatingRemainder(dividingBy: 86_400) / 3_600)
+            relativeReset = "Resets \(days)d \(hours)h"
+        } else if remaining >= 3_600 {
+            let hours = Int(remaining / 3_600)
+            let minutes = Int(remaining.truncatingRemainder(dividingBy: 3_600) / 60)
+            relativeReset = "Resets \(hours)h \(minutes)m"
+        } else {
+            relativeReset = "Resets \(max(1, Int(remaining / 60)))m"
+        }
+
+        return "\(relativeReset) (\(easternReset))"
+    }
+
+    private static func formatEasternResetTime(_ resetAt: Date, remaining: TimeInterval) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "America/New_York")
+        formatter.dateFormat = remaining >= 86_400 ? "EEE h:mm a" : "h:mm a"
+
+        let abbreviation = formatter.timeZone.abbreviation(for: resetAt) ?? "ET"
+        return "\(formatter.string(from: resetAt)) \(abbreviation)"
     }
 
     private static func formatDisplayName(planType: String?) -> String {
@@ -133,4 +174,3 @@ private struct CodexUsageWindow {
     let resetsAt: Date
     let durationSeconds: Int
 }
-
