@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,13 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }
@@ -81,4 +89,3 @@ private struct ProviderSettingsRow: View {
 #Preview {
     SettingsView(configurationStore: ProviderConfigurationStore())
 }
-
