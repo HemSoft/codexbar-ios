@@ -24,6 +24,10 @@
 		10000000000000000000000F /* ProviderConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ProviderConfigurationStore.swift */; };
 		100000000000000000000010 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* SettingsView.swift */; };
 		100000000000000000000011 /* ProviderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* ProviderSettingsView.swift */; };
+		100000000000000000000012 /* CodexCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* CodexCredentials.swift */; };
+		100000000000000000000013 /* CodexCredentialsParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* CodexCredentialsParser.swift */; };
+		100000000000000000000014 /* CodexUsageParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* CodexUsageParser.swift */; };
+		100000000000000000000015 /* CodexUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* CodexUsageProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +60,10 @@
 		200000000000000000000011 /* ProviderConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderConfigurationStore.swift; sourceTree = "<group>"; };
 		200000000000000000000012 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		200000000000000000000013 /* ProviderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSettingsView.swift; sourceTree = "<group>"; };
+		200000000000000000000014 /* CodexCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexCredentials.swift; sourceTree = "<group>"; };
+		200000000000000000000015 /* CodexCredentialsParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexCredentialsParser.swift; sourceTree = "<group>"; };
+		200000000000000000000016 /* CodexUsageParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageParser.swift; sourceTree = "<group>"; };
+		200000000000000000000017 /* CodexUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageProvider.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +114,7 @@
 				200000000000000000000005 /* UsageBar.swift */,
 				200000000000000000000006 /* UsageSeverity.swift */,
 				20000000000000000000000F /* ProviderAccountConfiguration.swift */,
+				200000000000000000000014 /* CodexCredentials.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -118,6 +127,9 @@
 				200000000000000000000009 /* UsageRefreshService.swift */,
 				200000000000000000000010 /* KeychainService.swift */,
 				200000000000000000000011 /* ProviderConfigurationStore.swift */,
+				200000000000000000000015 /* CodexCredentialsParser.swift */,
+				200000000000000000000016 /* CodexUsageParser.swift */,
+				200000000000000000000017 /* CodexUsageProvider.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -271,6 +283,10 @@
 				10000000000000000000000F /* ProviderConfigurationStore.swift in Sources */,
 				100000000000000000000010 /* SettingsView.swift in Sources */,
 				100000000000000000000011 /* ProviderSettingsView.swift in Sources */,
+				100000000000000000000012 /* CodexCredentials.swift in Sources */,
+				100000000000000000000013 /* CodexCredentialsParser.swift in Sources */,
+				100000000000000000000014 /* CodexUsageParser.swift in Sources */,
+				100000000000000000000015 /* CodexUsageProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

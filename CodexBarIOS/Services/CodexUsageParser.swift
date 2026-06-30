@@ -1,0 +1,136 @@
+import Foundation
+
+public enum CodexUsageParser {
+    public static func parse(_ data: Data, fetchedAt: Date = Date()) -> ProviderUsageResult? {
+        guard
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let rateLimit = root["rate_limit"] as? [String: Any]
+        else {
+            return nil
+        }
+
+        var windows: [CodexUsageWindow] = []
+        addWindow(named: "primary_window", from: rateLimit, to: &windows)
+        addWindow(named: "secondary_window", from: rateLimit, to: &windows)
+
+        guard !windows.isEmpty else {
+            return nil
+        }
+
+        windows.sort { $0.durationSeconds < $1.durationSeconds }
+        let bars = windows.map { window in
+            UsageBar(
+                label: label(forDuration: window.durationSeconds),
+                used: window.usedPercent,
+                limit: 100,
+                resetsAt: window.resetsAt
+            )
+        }
+
+        return ProviderUsageResult(
+            providerID: .codex,
+            title: formatDisplayName(planType: root["plan_type"] as? String),
+            subtitle: "Live ChatGPT usage",
+            bars: bars,
+            fetchedAt: fetchedAt
+        )
+    }
+
+    private static func addWindow(named name: String, from rateLimit: [String: Any], to windows: inout [CodexUsageWindow]) {
+        guard
+            let window = rateLimit[name] as? [String: Any],
+            let usedPercent = doubleValue(window["used_percent"]),
+            let resetEpoch = intValue(window["reset_at"]),
+            let durationSeconds = intValue(window["limit_window_seconds"])
+        else {
+            return
+        }
+
+        windows.append(
+            CodexUsageWindow(
+                usedPercent: min(max(usedPercent, 0), 100),
+                resetsAt: Date(timeIntervalSince1970: TimeInterval(resetEpoch)),
+                durationSeconds: durationSeconds
+            )
+        )
+    }
+
+    private static func label(forDuration durationSeconds: Int) -> String {
+        switch durationSeconds {
+        case 18_000:
+            "5-hour"
+        case 604_800:
+            "Weekly"
+        default:
+            "\(max(1, durationSeconds / 3_600))-hour"
+        }
+    }
+
+    private static func formatDisplayName(planType: String?) -> String {
+        guard let planType, !planType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return ProviderID.codex.displayName
+        }
+
+        return "\(ProviderID.codex.displayName) (\(formatPlanName(planType)))"
+    }
+
+    private static func formatPlanName(_ planType: String) -> String {
+        switch planType.lowercased() {
+        case "free":
+            "Free"
+        case "plus":
+            "Plus"
+        case "pro", "prolite":
+            "Pro"
+        case "team":
+            "Team"
+        case "enterprise":
+            "Enterprise"
+        default:
+            planType
+                .replacingOccurrences(of: "_", with: " ")
+                .split(separator: " ")
+                .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
+                .joined(separator: " ")
+        }
+    }
+
+    private static func doubleValue(_ value: Any?) -> Double? {
+        if let value = value as? Double {
+            return value
+        }
+
+        if let value = value as? Int {
+            return Double(value)
+        }
+
+        if let value = value as? String {
+            return Double(value)
+        }
+
+        return nil
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        if let value = value as? Int {
+            return value
+        }
+
+        if let value = value as? Double {
+            return Int(value)
+        }
+
+        if let value = value as? String {
+            return Int(value)
+        }
+
+        return nil
+    }
+}
+
+private struct CodexUsageWindow {
+    let usedPercent: Double
+    let resetsAt: Date
+    let durationSeconds: Int
+}
+

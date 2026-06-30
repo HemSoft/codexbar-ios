@@ -102,8 +102,12 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 
-    private func keychainAccount(for providerID: ProviderID) -> String {
+    public nonisolated static func keychainAccount(for providerID: ProviderID) -> String {
         "provider.\(providerID.rawValue).credential"
+    }
+
+    private func keychainAccount(for providerID: ProviderID) -> String {
+        Self.keychainAccount(for: providerID)
     }
 
     private static func loadConfigurations(from defaults: UserDefaults) -> [ProviderAccountConfiguration] {
@@ -128,4 +132,3 @@ public final class ProviderConfigurationStore: ObservableObject {
             .sorted { $0.providerID.displayName < $1.providerID.displayName }
     }
 }
-

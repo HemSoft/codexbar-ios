@@ -30,6 +30,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
 public enum ProviderAuthMethod: String, Codable, CaseIterable, Identifiable, Sendable {
     case apiKey
     case browserSession
+    case codexAuthJSON
     case cliToken
     case oauth
 
@@ -43,6 +44,8 @@ public enum ProviderAuthMethod: String, Codable, CaseIterable, Identifiable, Sen
             "API Key"
         case .browserSession:
             "Browser Session"
+        case .codexAuthJSON:
+            "Codex auth.json"
         case .cliToken:
             "CLI Token"
         case .oauth:
@@ -52,7 +55,7 @@ public enum ProviderAuthMethod: String, Codable, CaseIterable, Identifiable, Sen
 
     public var requiresSecret: Bool {
         switch self {
-        case .apiKey, .cliToken:
+        case .apiKey, .codexAuthJSON, .cliToken:
             true
         case .browserSession, .oauth:
             false
@@ -64,7 +67,7 @@ public extension ProviderAccountConfiguration {
     static func defaultConfiguration(for providerID: ProviderID) -> ProviderAccountConfiguration {
         switch providerID {
         case .codex:
-            ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
+            ProviderAccountConfiguration(providerID: providerID, authMethod: .codexAuthJSON)
         case .copilot:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .cliToken)
         case .claude:
@@ -76,4 +79,3 @@ public extension ProviderAccountConfiguration {
         }
     }
 }
-

@@ -40,4 +40,14 @@ public extension UsageRefreshService {
     static func demo() -> UsageRefreshService {
         UsageRefreshService(providers: DemoUsageProvider.samples)
     }
+
+    static func live() -> UsageRefreshService {
+        UsageRefreshService(
+            providers: [
+                CodexUsageProvider(),
+                DemoUsageProvider.samples.first { $0.providerID == .copilot }!,
+                DemoUsageProvider.samples.first { $0.providerID == .openRouter }!,
+            ]
+        )
+    }
 }

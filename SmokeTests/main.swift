@@ -20,8 +20,8 @@ struct SmokeTests {
         expect(bar.fractionUsed == 1, "usage fraction should clamp at 1")
         expect(bar.severity == .critical, "over-limit usage should be critical")
         expect(
-            ProviderAccountConfiguration.defaultConfiguration(for: .openRouter).authMethod == .apiKey,
-            "OpenRouter should default to API key auth"
+            ProviderAccountConfiguration.defaultConfiguration(for: .codex).authMethod == .codexAuthJSON,
+            "Codex should default to auth.json import"
         )
 
         let service = UsageRefreshService.demo()
