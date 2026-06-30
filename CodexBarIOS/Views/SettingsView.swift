@@ -8,11 +8,14 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("Appearance", selection: appearanceBinding) {
+                    Picker("Color Scheme", selection: appearanceBinding) {
                         ForEach(AppAppearance.allCases) { appearance in
                             Text(appearance.displayName).tag(appearance)
                         }
                     }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Appearance")
                 }
 
                 Section {
