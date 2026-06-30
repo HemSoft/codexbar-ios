@@ -26,7 +26,7 @@ struct ProviderSettingsView: View {
                     .autocorrectionDisabled()
 
                 Picker("Auth method", selection: $configuration.authMethod) {
-                    ForEach(ProviderAuthMethod.allCases) { method in
+                    ForEach(availableAuthMethods) { method in
                         Text(method.displayName).tag(method)
                     }
                 }
@@ -83,7 +83,8 @@ struct ProviderSettingsView: View {
             configurationStore.update(newValue)
         }
         .onAppear {
-            configuration = configurationStore.configuration(for: providerID)
+            configuration = normalizedConfiguration(configurationStore.configuration(for: providerID))
+            configurationStore.update(configuration)
             configurationStore.refreshSecretAvailability()
         }
         .fileImporter(
@@ -99,6 +100,19 @@ struct ProviderSettingsView: View {
         configurationStore.hasSecret(for: providerID)
             ? "Credential saved"
             : "Paste credential"
+    }
+
+    private var availableAuthMethods: [ProviderAuthMethod] {
+        switch providerID {
+        case .codex:
+            [.codexAuthJSON]
+        case .openRouter:
+            [.apiKey]
+        case .copilot:
+            [.cliToken, .oauth]
+        case .claude, .cursor:
+            [.browserSession, .oauth, .apiKey]
+        }
     }
 
     private var nonSecretAuthText: String {
@@ -139,6 +153,16 @@ struct ProviderSettingsView: View {
         secret = contents
         configurationStore.saveSecret(contents, for: providerID)
         secret = ""
+    }
+
+    private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
+        guard providerID == .codex else {
+            return configuration
+        }
+
+        var normalized = configuration
+        normalized.authMethod = .codexAuthJSON
+        return normalized
     }
 }
 

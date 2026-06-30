@@ -12,7 +12,7 @@ struct ContentView: View {
                     ForEach(refreshService.results) { result in
                         ProviderUsageCard(
                             result: result,
-                            statusText: configurationStore.statusText(for: result.providerID)
+                            statusText: dashboardStatusText(for: result)
                         )
                     }
                 }
@@ -58,6 +58,14 @@ struct ContentView: View {
         .task {
             await refreshService.refresh()
         }
+    }
+
+    private func dashboardStatusText(for result: ProviderUsageResult) -> String {
+        if result.providerID == .codex && configurationStore.isConfigured(.codex) {
+            return result.subtitle
+        }
+
+        return configurationStore.statusText(for: result.providerID)
     }
 }
 

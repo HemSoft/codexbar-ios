@@ -77,7 +77,15 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         if isConfigured(providerID) {
             let label = configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            if providerID == .codex {
+                return label.isEmpty ? "Configured - live usage enabled" : "\(label) - live usage enabled"
+            }
+
             return label.isEmpty ? "Configured - demo data" : "\(label) - demo data"
+        }
+
+        if providerID == .codex {
+            return "Not configured - import auth.json"
         }
 
         return "Not configured - demo data"
@@ -123,12 +131,24 @@ public final class ProviderConfigurationStore: ObservableObject {
             .filter { !decodedProviderIDs.contains($0) }
             .map(ProviderAccountConfiguration.defaultConfiguration)
 
-        return (decoded + missingConfigurations).sorted { $0.providerID.displayName < $1.providerID.displayName }
+        return (decoded + missingConfigurations)
+            .map(normalizedConfiguration)
+            .sorted { $0.providerID.displayName < $1.providerID.displayName }
     }
 
     private static func defaultConfigurations() -> [ProviderAccountConfiguration] {
         ProviderID.allCases
             .map(ProviderAccountConfiguration.defaultConfiguration)
             .sorted { $0.providerID.displayName < $1.providerID.displayName }
+    }
+
+    private static func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
+        guard configuration.providerID == .codex else {
+            return configuration
+        }
+
+        var normalized = configuration
+        normalized.authMethod = .codexAuthJSON
+        return normalized
     }
 }
