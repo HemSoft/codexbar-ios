@@ -1,0 +1,39 @@
+import CodexBarIOS
+import Foundation
+
+func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
+    if !condition() {
+        fputs("Smoke test failed: \(message)\n", stderr)
+        Foundation.exit(1)
+    }
+}
+
+@main
+struct SmokeTests {
+    @MainActor
+    static func main() async {
+        expect(UsageSeverity(fractionUsed: 0.74) == .normal, "0.74 should be normal")
+        expect(UsageSeverity(fractionUsed: 0.75) == .warning, "0.75 should be warning")
+        expect(UsageSeverity(fractionUsed: 0.90) == .critical, "0.90 should be critical")
+
+        let bar = UsageBar(label: "Weekly", used: 125, limit: 100)
+        expect(bar.fractionUsed == 1, "usage fraction should clamp at 1")
+        expect(bar.severity == .critical, "over-limit usage should be critical")
+        expect(
+            ProviderAccountConfiguration.defaultConfiguration(for: .openRouter).authMethod == .apiKey,
+            "OpenRouter should default to API key auth"
+        )
+
+        let service = UsageRefreshService.demo()
+        await service.refresh()
+
+        expect(
+            service.results.map(\.providerID) == [.codex, .copilot, .openRouter],
+            "demo providers should refresh in title order"
+        )
+        expect(service.isRefreshing == false, "refresh flag should reset")
+        expect(service.lastRefreshError == nil, "demo refresh should not fail")
+
+        print("CodexBarIOS smoke tests passed")
+    }
+}
