@@ -52,7 +52,7 @@ struct ContentView: View {
                 }
             }
         }
-        .sheet(isPresented: $isShowingSettings) {
+        .sheet(isPresented: $isShowingSettings, onDismiss: refreshAfterSettingsDismissed) {
             SettingsView(configurationStore: configurationStore)
         }
         .task {
@@ -62,10 +62,21 @@ struct ContentView: View {
 
     private func dashboardStatusText(for result: ProviderUsageResult) -> String {
         if result.providerID == .codex && configurationStore.isConfigured(.codex) {
+            if result.subtitle.localizedCaseInsensitiveContains("not configured") {
+                return configurationStore.statusText(for: .codex)
+            }
+
             return result.subtitle
         }
 
         return configurationStore.statusText(for: result.providerID)
+    }
+
+    private func refreshAfterSettingsDismissed() {
+        configurationStore.refreshSecretAvailability()
+        Task {
+            await refreshService.refresh()
+        }
     }
 }
 
