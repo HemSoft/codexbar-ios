@@ -8,6 +8,14 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section {
+                    Picker("Appearance", selection: appearanceBinding) {
+                        ForEach(AppAppearance.allCases) { appearance in
+                            Text(appearance.displayName).tag(appearance)
+                        }
+                    }
+                }
+
+                Section {
                     ForEach(configurationStore.configurations) { configuration in
                         NavigationLink {
                             ProviderSettingsView(
@@ -39,6 +47,13 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private var appearanceBinding: Binding<AppAppearance> {
+        Binding(
+            get: { configurationStore.appAppearance },
+            set: { configurationStore.updateAppAppearance($0) }
+        )
     }
 }
 

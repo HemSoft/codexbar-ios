@@ -4,11 +4,13 @@ import Foundation
 public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
     @Published public private(set) var secretAvailability: [ProviderID: Bool]
+    @Published public private(set) var appAppearance: AppAppearance
     @Published public private(set) var lastError: String?
 
     private let defaults: UserDefaults
     private let secretStore: SecretStore
-    private let configurationsKey = "providerConfigurations"
+    private let configurationsKey = DefaultsKey.configurations
+    private let appAppearanceKey = DefaultsKey.appAppearance
 
     public init(
         defaults: UserDefaults = .standard,
@@ -18,6 +20,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.secretStore = secretStore
         self.configurations = Self.loadConfigurations(from: defaults)
         self.secretAvailability = [:]
+        self.appAppearance = Self.loadAppAppearance(from: defaults)
         refreshSecretAvailability()
     }
 
@@ -35,6 +38,11 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         configurations.sort { $0.providerID.displayName < $1.providerID.displayName }
         saveConfigurations()
+    }
+
+    public func updateAppAppearance(_ appearance: AppAppearance) {
+        appAppearance = appearance
+        defaults.set(appearance.rawValue, forKey: appAppearanceKey)
     }
 
     public func saveSecret(_ secret: String, for providerID: ProviderID) {
@@ -118,9 +126,14 @@ public final class ProviderConfigurationStore: ObservableObject {
         Self.keychainAccount(for: providerID)
     }
 
+    private enum DefaultsKey {
+        static let configurations = "providerConfigurations"
+        static let appAppearance = "appAppearance"
+    }
+
     private static func loadConfigurations(from defaults: UserDefaults) -> [ProviderAccountConfiguration] {
         guard
-            let data = defaults.data(forKey: "providerConfigurations"),
+            let data = defaults.data(forKey: DefaultsKey.configurations),
             let decoded = try? JSONDecoder().decode([ProviderAccountConfiguration].self, from: data)
         else {
             return defaultConfigurations()
@@ -134,6 +147,17 @@ public final class ProviderConfigurationStore: ObservableObject {
         return (decoded + missingConfigurations)
             .map(normalizedConfiguration)
             .sorted { $0.providerID.displayName < $1.providerID.displayName }
+    }
+
+    private static func loadAppAppearance(from defaults: UserDefaults) -> AppAppearance {
+        guard
+            let rawValue = defaults.string(forKey: DefaultsKey.appAppearance),
+            let appearance = AppAppearance(rawValue: rawValue)
+        else {
+            return .system
+        }
+
+        return appearance
     }
 
     private static func defaultConfigurations() -> [ProviderAccountConfiguration] {

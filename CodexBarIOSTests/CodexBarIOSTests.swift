@@ -23,6 +23,23 @@ final class CodexBarIOSTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testAppAppearanceDefaultsToSystemAndPersists() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        XCTAssertEqual(store.appAppearance, .system)
+
+        store.updateAppAppearance(.dark)
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        XCTAssertEqual(reloadedStore.appAppearance, .dark)
+    }
+
     func testCodexAuthURLUsesBrowserLoginFlow() throws {
         let url = CodexWebAuthService.authorizationURL(
             redirectURI: "http://localhost:1455/auth/callback",

@@ -11,6 +11,7 @@ struct CodexBarIOSApp: App {
                 refreshService: refreshService,
                 configurationStore: configurationStore
             )
+            .preferredColorScheme(configurationStore.appAppearance.colorScheme)
         }
     }
 }
