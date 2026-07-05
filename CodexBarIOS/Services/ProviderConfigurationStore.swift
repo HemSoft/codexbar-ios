@@ -114,6 +114,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         sortGroups()
         sortConfigurations()
         saveGroups()
+        saveConfigurations()
         return true
     }
 

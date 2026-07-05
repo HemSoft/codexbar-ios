@@ -5,7 +5,8 @@ import WidgetKit
 enum WidgetSnapshotPublisher {
     static func publish(
         results: [ProviderUsageResult],
-        configurationStore: ProviderConfigurationStore
+        configurationStore: ProviderConfigurationStore,
+        snapshotDefaults: UserDefaults? = WidgetSnapshotStore.userDefaults()
     ) {
         let now = Date()
         let displayable = orderedDisplayableResults(
@@ -46,8 +47,8 @@ enum WidgetSnapshotPublisher {
             }
         )
 
-        WidgetSnapshotStore.saveSnapshot(snapshot)
-        WidgetSnapshotStore.saveRefreshInterval(configurationStore.widgetRefreshInterval)
+        WidgetSnapshotStore.saveSnapshot(snapshot, defaults: snapshotDefaults)
+        WidgetSnapshotStore.saveRefreshInterval(configurationStore.widgetRefreshInterval, defaults: snapshotDefaults)
         WidgetCenter.shared.reloadTimelines(ofKind: CodexBarWidgetConstants.widgetKind)
     }
 

@@ -386,10 +386,9 @@ struct CodexBarWidgetView: View {
     private var defaultTiles: [CodexBarWidgetTile] {
         let groupFiltered: [CodexBarWidgetProviderSnapshot]
         if let selectedGroupID = entry.configuration.group?.id {
-            let filteredResults = entry.snapshot.results.filter { provider in
+            groupFiltered = entry.snapshot.results.filter { provider in
                 (provider.groupID ?? CodexBarWidgetGroupChoice.ungroupedID) == selectedGroupID
             }
-            groupFiltered = filteredResults.isEmpty ? entry.snapshot.results : filteredResults
         } else {
             groupFiltered = entry.snapshot.results
         }

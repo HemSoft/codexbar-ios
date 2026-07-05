@@ -98,6 +98,9 @@ struct SettingsView: View {
                     HStack {
                         TextField("New group", text: $newGroupName)
                             .textInputAutocapitalization(.words)
+                            .onSubmit {
+                                addGroup()
+                            }
 
                         Button {
                             addGroup()

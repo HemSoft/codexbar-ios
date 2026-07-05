@@ -22,12 +22,15 @@ struct ContentView: View {
     }
 
     var body: some View {
+        let sections = dashboardSections
+        let showGroupHeaders = shouldShowGroupHeaders(for: sections)
+
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(dashboardSections) { section in
+                    ForEach(sections) { section in
                         VStack(alignment: .leading, spacing: 8) {
-                            if shouldShowGroupHeaders {
+                            if showGroupHeaders {
                                 Text(section.title)
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
@@ -168,11 +171,21 @@ struct ContentView: View {
     private var dashboardSections: [DashboardSection] {
         var sections: [DashboardSection] = []
         var sectionIndexes: [String: Int] = [:]
+        let configurationsByAccountID = Dictionary(
+            uniqueKeysWithValues: configurationStore.configurations.map { configuration in
+                (configuration.id, configuration)
+            }
+        )
+        let groupsByID = Dictionary(
+            uniqueKeysWithValues: configurationStore.groups.map { group in
+                (group.id, group)
+            }
+        )
 
         for result in orderedDisplayedResults {
-            let configuration = configurationStore.configuration(accountID: result.accountID)
+            let configuration = configurationsByAccountID[result.accountID]
             let groupID = configuration?.groupID ?? DashboardSection.ungroupedID
-            let title = configurationStore.group(for: configuration?.groupID)?.name
+            let title = configuration?.groupID.flatMap { groupsByID[$0]?.name }
                 ?? ProviderAccountGroup.ungroupedDisplayName
 
             if let sectionIndex = sectionIndexes[groupID] {
@@ -186,9 +199,9 @@ struct ContentView: View {
         return sections
     }
 
-    private var shouldShowGroupHeaders: Bool {
-        !configurationStore.groups.isEmpty && dashboardSections.contains { section in
-            section.id != DashboardSection.ungroupedID || dashboardSections.count > 1
+    private func shouldShowGroupHeaders(for sections: [DashboardSection]) -> Bool {
+        !configurationStore.groups.isEmpty && sections.contains { section in
+            section.id != DashboardSection.ungroupedID || sections.count > 1
         }
     }
 
