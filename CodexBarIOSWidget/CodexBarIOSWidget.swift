@@ -299,23 +299,34 @@ struct CodexBarWidgetView: View {
             entry.configuration.tile4DisplayMode,
         ]
 
-        if configuredChoices.contains(where: { $0 != nil }) {
-            return zip(configuredChoices, configuredDisplayModes)
-                .prefix(tileCount)
-                .compactMap { choice, displayMode in
-                    guard let choice else {
-                        return nil
-                    }
+        let maximumTiles = tileCount
+        let fallbackTiles = Array(defaultTiles.prefix(maximumTiles))
 
-                    return CodexBarWidgetRenderedTile(
-                        tile: resolvedTile(for: choice, in: allTiles),
-                        displayMode: displayMode
+        if configuredChoices.contains(where: { $0 != nil }) {
+            return (0..<maximumTiles).compactMap { index in
+                let tile: CodexBarWidgetTile?
+                if configuredChoices.indices.contains(index), let choice = configuredChoices[index] {
+                    tile = resolvedTile(for: choice, in: allTiles)
+                } else if fallbackTiles.indices.contains(index) {
+                    tile = fallbackTiles[index]
+                } else {
+                    tile = nil
+                }
+
+                return tile.map {
+                    CodexBarWidgetRenderedTile(
+                        tile: $0,
+                        displayMode: displayMode(at: index, in: configuredDisplayModes)
                     )
                 }
+            }
         }
 
-        return zip(defaultTiles.prefix(tileCount), configuredDisplayModes).map { tile, displayMode in
-            CodexBarWidgetRenderedTile(tile: tile, displayMode: displayMode)
+        return fallbackTiles.enumerated().map { index, tile in
+            CodexBarWidgetRenderedTile(
+                tile: tile,
+                displayMode: displayMode(at: index, in: configuredDisplayModes)
+            )
         }
     }
 
@@ -381,6 +392,13 @@ struct CodexBarWidgetView: View {
         return nil
     }
 
+    private func displayMode(
+        at index: Int,
+        in displayModes: [CodexBarWidgetTileDisplayMode]
+    ) -> CodexBarWidgetTileDisplayMode {
+        displayModes.indices.contains(index) ? displayModes[index] : .automatic
+    }
+
     private var tileCount: Int {
         switch entry.configuration.layout {
         case .automatic:
@@ -431,7 +449,7 @@ struct TileWidget: View {
             if tiles.isEmpty {
                 EmptyWidgetState()
             } else if usesDenseGrid {
-                DenseTileWidget(tiles: Array(tiles.prefix(4)), generatedAt: generatedAt)
+                DenseTileWidget(tiles: tiles, generatedAt: generatedAt, family: family)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     LazyVGrid(columns: columns, spacing: 8) {
@@ -476,6 +494,7 @@ struct TileWidget: View {
 struct DenseTileWidget: View {
     let tiles: [CodexBarWidgetRenderedTile]
     let generatedAt: Date
+    let family: WidgetFamily
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -488,32 +507,29 @@ struct DenseTileWidget: View {
                 Spacer(minLength: 0)
             }
 
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    denseTile(at: 0)
-                    denseTile(at: 1)
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(Array(displayedTiles.enumerated()), id: \.offset) { _, tile in
+                    ProviderWidgetTile(renderedTile: tile, style: .dense)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxHeight: .infinity)
-
-                HStack(spacing: 8) {
-                    denseTile(at: 2)
-                    denseTile(at: 3)
-                }
-                .frame(maxHeight: .infinity)
             }
             .frame(maxHeight: .infinity)
         }
         .frame(maxHeight: .infinity)
     }
 
-    @ViewBuilder
-    private func denseTile(at index: Int) -> some View {
-        if tiles.indices.contains(index) {
-            ProviderWidgetTile(renderedTile: tiles[index], style: .dense)
-        } else {
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+    private var displayedTiles: [CodexBarWidgetRenderedTile] {
+        switch family {
+        case .systemExtraLarge:
+            Array(tiles.prefix(6))
+        default:
+            Array(tiles.prefix(4))
         }
+    }
+
+    private var columns: [GridItem] {
+        let columnCount = family == .systemExtraLarge ? 3 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: 8), count: columnCount)
     }
 }
 
@@ -829,24 +845,24 @@ struct ProviderWidgetTile: View {
     }
 
     private var primaryMetric: String {
-        if let creditsRemaining = tile.creditsRemaining {
-            return widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
-        }
-
         if let bar = tile.bar {
             return bar.usageText
+        }
+
+        if let creditsRemaining = tile.creditsRemaining {
+            return widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
         }
 
         return statusLabel
     }
 
     private var compactDetail: String {
-        if tile.creditsRemaining != nil {
-            return tile.title
-        }
-
         if let bar = tile.bar {
             return bar.label
+        }
+
+        if tile.creditsRemaining != nil {
+            return tile.title
         }
 
         return tile.subtitle
