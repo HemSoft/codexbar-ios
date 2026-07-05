@@ -38,6 +38,17 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker("Ordering", selection: dashboardOrderingModeBinding) {
+                        ForEach(DashboardOrderingMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Dashboard")
+                }
+
+                Section {
                     Toggle("Usage Alerts", isOn: usageAlertsEnabledBinding)
 
                     Stepper(value: usageAlertUsagePercentBinding, in: 50...100, step: 5) {
@@ -222,6 +233,13 @@ struct SettingsView: View {
         Binding(
             get: { configurationStore.widgetRefreshInterval },
             set: { configurationStore.updateWidgetRefreshInterval($0) }
+        )
+    }
+
+    private var dashboardOrderingModeBinding: Binding<DashboardOrderingMode> {
+        Binding(
+            get: { configurationStore.dashboardOrderingMode },
+            set: { configurationStore.updateDashboardOrderingMode($0) }
         )
     }
 

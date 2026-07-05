@@ -11,7 +11,8 @@ enum WidgetSnapshotPublisher {
         let now = Date()
         let displayable = orderedDisplayableResults(
             results: results,
-            configurationStore: configurationStore
+            configurationStore: configurationStore,
+            now: now
         )
 
         let snapshot = CodexBarWidgetSnapshot(
@@ -59,29 +60,20 @@ enum WidgetSnapshotPublisher {
 
     private static func orderedDisplayableResults(
         results: [ProviderUsageResult],
-        configurationStore: ProviderConfigurationStore
+        configurationStore: ProviderConfigurationStore,
+        now: Date
     ) -> [ProviderUsageResult] {
         let displayable = results.filter { result in
             configurationStore.configuration(accountID: result.accountID)
                 .map(configurationStore.shouldDisplayOnDashboard) ?? false
         }
-        let order = Dictionary(
-            uniqueKeysWithValues: configurationStore.dashboardCardOrder.enumerated().map { index, accountID in
-                (accountID, index)
-            }
+
+        return DashboardUsageSorter.orderedResults(
+            displayable,
+            mode: configurationStore.dashboardOrderingMode,
+            manualOrder: configurationStore.dashboardCardOrder,
+            now: now
         )
-
-        return displayable.enumerated()
-            .sorted { lhs, rhs in
-                let lhsOrder = order[lhs.element.id] ?? Int.max
-                let rhsOrder = order[rhs.element.id] ?? Int.max
-                if lhsOrder != rhsOrder {
-                    return lhsOrder < rhsOrder
-                }
-
-                return lhs.offset < rhs.offset
-            }
-            .map(\.element)
     }
 
     private static func statusText(

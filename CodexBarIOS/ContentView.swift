@@ -43,7 +43,7 @@ struct ContentView: View {
                             }
 
                             ForEach(section.results) { result in
-                                ProviderUsageCard(
+                                let card = ProviderUsageCard(
                                     result: result,
                                     statusText: dashboardStatusText(for: result),
                                     trend: historyStore.trendSummary(for: result)
@@ -52,19 +52,28 @@ struct ContentView: View {
                                 .onTapGesture {
                                     selectedHistoryResult = result
                                 }
-                                .onDrag {
-                                    draggedCardID = result.id
-                                    return NSItemProvider(object: result.id as NSString)
+
+                                if isManualDashboardOrdering {
+                                    card
+                                        .onDrag {
+                                            draggedCardID = result.id
+                                            return NSItemProvider(object: result.id as NSString)
+                                        }
+                                        .onDrop(
+                                            of: [UTType.text],
+                                            delegate: ProviderUsageCardDropDelegate(
+                                                targetID: result.id,
+                                                draggedCardID: $draggedCardID,
+                                                moveCard: moveCard,
+                                                finishDrag: finishCardDrag
+                                            )
+                                        )
+                                } else {
+                                    card
+                                        .accessibilityHint(
+                                            Text("Smart ordering is active.")
+                                        )
                                 }
-                                .onDrop(
-                                    of: [UTType.text],
-                                    delegate: ProviderUsageCardDropDelegate(
-                                        targetID: result.id,
-                                        draggedCardID: $draggedCardID,
-                                        moveCard: moveCard,
-                                        finishDrag: finishCardDrag
-                                    )
-                                )
                             }
                         }
                     }
@@ -153,6 +162,9 @@ struct ContentView: View {
         .onChange(of: configurationStore.dashboardCardOrder) { _, _ in
             publishWidgetSnapshot()
         }
+        .onChange(of: configurationStore.dashboardOrderingMode) { _, _ in
+            publishWidgetSnapshot()
+        }
         .onChange(of: configurationStore.groups) { _, _ in
             publishWidgetSnapshot()
         }
@@ -169,23 +181,11 @@ struct ContentView: View {
     }
 
     private var orderedDisplayedResults: [ProviderUsageResult] {
-        let order = Dictionary(
-            uniqueKeysWithValues: configurationStore.dashboardCardOrder.enumerated().map { index, accountID in
-                (accountID, index)
-            }
+        DashboardUsageSorter.orderedResults(
+            displayedResults,
+            mode: configurationStore.dashboardOrderingMode,
+            manualOrder: configurationStore.dashboardCardOrder
         )
-
-        return displayedResults.enumerated()
-            .sorted { lhs, rhs in
-                let lhsOrder = order[lhs.element.id] ?? Int.max
-                let rhsOrder = order[rhs.element.id] ?? Int.max
-                if lhsOrder != rhsOrder {
-                    return lhsOrder < rhsOrder
-                }
-
-                return lhs.offset < rhs.offset
-            }
-            .map(\.element)
     }
 
     private var dashboardSections: [DashboardSection] {
@@ -202,17 +202,33 @@ struct ContentView: View {
             }
         )
 
-        for result in orderedDisplayedResults {
+        for (offset, result) in orderedDisplayedResults.enumerated() {
             let configuration = configurationsByAccountID[result.accountID]
             let groupID = configuration?.groupID ?? DashboardSection.ungroupedID
             let title = configuration?.groupID.flatMap { groupsByID[$0]?.name }
                 ?? ProviderAccountGroup.ungroupedDisplayName
 
+            if configurationStore.dashboardOrderingMode == .smart {
+                if sections.indices.last.map({ sections[$0].groupID }) == groupID {
+                    sections[sections.count - 1].results.append(result)
+                } else {
+                    sections.append(
+                        DashboardSection(
+                            id: "\(groupID).\(offset)",
+                            groupID: groupID,
+                            title: title,
+                            results: [result]
+                        )
+                    )
+                }
+                continue
+            }
+
             if let sectionIndex = sectionIndexes[groupID] {
                 sections[sectionIndex].results.append(result)
             } else {
                 sectionIndexes[groupID] = sections.count
-                sections.append(DashboardSection(id: groupID, title: title, results: [result]))
+                sections.append(DashboardSection(id: groupID, groupID: groupID, title: title, results: [result]))
             }
         }
 
@@ -221,12 +237,16 @@ struct ContentView: View {
 
     private func shouldShowGroupHeaders(for sections: [DashboardSection]) -> Bool {
         !configurationStore.groups.isEmpty && sections.contains { section in
-            section.id != DashboardSection.ungroupedID || sections.count > 1
+            section.groupID != DashboardSection.ungroupedID || sections.count > 1
         }
     }
 
     private var visibleDashboardOrder: [String] {
         dashboardSections.flatMap(\.results).map(\.id)
+    }
+
+    private var isManualDashboardOrdering: Bool {
+        configurationStore.dashboardOrderingMode == .manual
     }
 
     private func dashboardStatusText(for result: ProviderUsageResult) -> String {
@@ -253,6 +273,10 @@ struct ContentView: View {
     }
 
     private func moveCard(_ draggedID: String, to targetID: String) {
+        guard isManualDashboardOrdering else {
+            return
+        }
+
         var orderedIDs = visibleDashboardOrder
         guard
             dashboardGroupID(for: draggedID) == dashboardGroupID(for: targetID),
@@ -278,11 +302,20 @@ struct ContentView: View {
     }
 
     private func finishCardDrag() {
+        guard isManualDashboardOrdering else {
+            draggedCardID = nil
+            return
+        }
+
         persistVisibleCardOrder(visibleDashboardOrder)
         draggedCardID = nil
     }
 
     private func persistVisibleCardOrder(_ orderedVisibleIDs: [String]) {
+        guard isManualDashboardOrdering else {
+            return
+        }
+
         let visibleIDs = Set(displayedResults.map(\.id))
         let hiddenOrderedIDs = configurationStore.dashboardCardOrder.filter { !visibleIDs.contains($0) }
         configurationStore.updateDashboardCardOrder(orderedVisibleIDs + hiddenOrderedIDs)
@@ -452,6 +485,7 @@ private struct DashboardSection: Identifiable {
     static let ungroupedID = "__ungrouped"
 
     let id: String
+    let groupID: String
     let title: String
     var results: [ProviderUsageResult]
 }

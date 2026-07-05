@@ -247,6 +247,56 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(provider.groupName, "Work")
     }
 
+    @MainActor
+    func testWidgetSnapshotPublisherUsesSmartDashboardOrdering() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var highBalanceConfiguration = store.addAccount(for: .openRouter)
+        highBalanceConfiguration.accountLabel = "High Balance"
+        XCTAssertTrue(store.update(highBalanceConfiguration))
+        store.saveSecret("openrouter-high", for: highBalanceConfiguration)
+
+        var lowBalanceConfiguration = store.addAccount(for: .openRouter)
+        lowBalanceConfiguration.accountLabel = "Low Balance"
+        XCTAssertTrue(store.update(lowBalanceConfiguration))
+        store.saveSecret("openrouter-low", for: lowBalanceConfiguration)
+        store.updateDashboardOrderingMode(.smart)
+
+        let highBalance = ProviderUsageResult(
+            accountID: highBalanceConfiguration.id,
+            providerID: .openRouter,
+            title: highBalanceConfiguration.displayName,
+            subtitle: "Balance",
+            bars: [],
+            creditsRemaining: 50,
+            fetchedAt: fetchedAt
+        )
+        let lowBalance = ProviderUsageResult(
+            accountID: lowBalanceConfiguration.id,
+            providerID: .openRouter,
+            title: lowBalanceConfiguration.displayName,
+            subtitle: "Balance",
+            bars: [],
+            creditsRemaining: 2,
+            fetchedAt: fetchedAt
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [highBalance, lowBalance],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+
+        let snapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        XCTAssertEqual(snapshot.results.map(\.accountID), [lowBalanceConfiguration.id, highBalanceConfiguration.id])
+    }
+
     func testProviderAccountConfigurationDecodesLegacyAccountWithoutGroup() throws {
         let json = """
         {
@@ -336,6 +386,159 @@ final class CodexBarIOSTests: XCTestCase {
 
         let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
         XCTAssertEqual(reloadedStore.dashboardCardOrder, ["claude", "codex", "copilot"])
+    }
+
+    @MainActor
+    func testDashboardOrderingModeDefaultsToManualAndPersists() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        XCTAssertEqual(store.dashboardOrderingMode, .manual)
+
+        store.updateDashboardOrderingMode(.smart)
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        XCTAssertEqual(reloadedStore.dashboardOrderingMode, .smart)
+    }
+
+    func testDashboardUsageSorterOrdersSmartResultsByUrgency() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let periodStart = now.addingTimeInterval(-2 * 60 * 60)
+        let periodEnd = now.addingTimeInterval(3 * 60 * 60)
+        let criticalProjection = makeHistoryResult(
+            accountID: "critical.projection",
+            providerID: .codex,
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 20,
+                    limit: 100,
+                    projectionCurrent: 80,
+                    projectionLimit: 100,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+        let warningUsage = makeHistoryResult(
+            accountID: "warning.usage",
+            providerID: .codex,
+            fetchedAt: now,
+            used: 80
+        )
+        let lowBalance = makeHistoryResult(
+            accountID: "balance.low",
+            providerID: .openRouter,
+            fetchedAt: now,
+            creditsRemaining: 2
+        )
+        let highBalance = makeHistoryResult(
+            accountID: "balance.high",
+            providerID: .openRouter,
+            fetchedAt: now,
+            creditsRemaining: 20
+        )
+        let manualSecond = makeHistoryResult(
+            accountID: "manual.second",
+            providerID: .claude,
+            fetchedAt: now,
+            used: 20
+        )
+        let manualFirst = makeHistoryResult(
+            accountID: "manual.first",
+            providerID: .cursor,
+            fetchedAt: now,
+            used: 20
+        )
+
+        let ordered = DashboardUsageSorter.orderedResults(
+            [manualSecond, highBalance, warningUsage, manualFirst, lowBalance, criticalProjection],
+            mode: .smart,
+            manualOrder: ["manual.first", "manual.second"],
+            now: now
+        )
+
+        XCTAssertEqual(
+            ordered.map(\.accountID),
+            ["critical.projection", "warning.usage", "balance.low", "balance.high", "manual.first", "manual.second"]
+        )
+    }
+
+    func testDashboardUsageSorterKeepsManualOrderingWhenManualModeIsSelected() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let critical = makeHistoryResult(
+            accountID: "critical",
+            providerID: .codex,
+            fetchedAt: now,
+            used: 95
+        )
+        let normal = makeHistoryResult(
+            accountID: "normal",
+            providerID: .cursor,
+            fetchedAt: now,
+            used: 10
+        )
+
+        let ordered = DashboardUsageSorter.orderedResults(
+            [critical, normal],
+            mode: .manual,
+            manualOrder: ["normal", "critical"],
+            now: now
+        )
+
+        XCTAssertEqual(ordered.map(\.accountID), ["normal", "critical"])
+    }
+
+    func testDashboardUsageSorterKeepsExhaustedProjectionsAheadOfFutureHits() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let periodStart = now.addingTimeInterval(-60 * 60)
+        let periodEnd = now.addingTimeInterval(4 * 60 * 60)
+        let exhausted = makeHistoryResult(
+            accountID: "projection.exhausted",
+            providerID: .codex,
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 100,
+                    limit: 100,
+                    projectionCurrent: 120,
+                    projectionLimit: 100,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+        let futureHit = makeHistoryResult(
+            accountID: "projection.future",
+            providerID: .codex,
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 95,
+                    limit: 100,
+                    projectionCurrent: 80,
+                    projectionLimit: 100,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+
+        let ordered = DashboardUsageSorter.orderedResults(
+            [futureHit, exhausted],
+            mode: .smart,
+            manualOrder: [],
+            now: now
+        )
+
+        XCTAssertEqual(ordered.map(\.accountID), ["projection.exhausted", "projection.future"])
     }
 
     @MainActor
@@ -2435,6 +2638,7 @@ final class CodexBarIOSTests: XCTestCase {
         providerID: ProviderID = .codex,
         fetchedAt: Date,
         used: Double? = nil,
+        bars: [UsageBar]? = nil,
         creditsRemaining: Double? = nil
     ) -> ProviderUsageResult {
         ProviderUsageResult(
@@ -2442,7 +2646,7 @@ final class CodexBarIOSTests: XCTestCase {
             providerID: providerID,
             title: providerID.displayName,
             subtitle: "Test data",
-            bars: used.map { [UsageBar(label: "Usage", used: $0, limit: 100)] } ?? [],
+            bars: bars ?? used.map { [UsageBar(label: "Usage", used: $0, limit: 100)] } ?? [],
             creditsRemaining: creditsRemaining,
             fetchedAt: fetchedAt
         )
