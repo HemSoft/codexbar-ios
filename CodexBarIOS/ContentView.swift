@@ -193,17 +193,33 @@ struct ContentView: View {
             }
         )
 
-        for result in orderedDisplayedResults {
+        for (offset, result) in orderedDisplayedResults.enumerated() {
             let configuration = configurationsByAccountID[result.accountID]
             let groupID = configuration?.groupID ?? DashboardSection.ungroupedID
             let title = configuration?.groupID.flatMap { groupsByID[$0]?.name }
                 ?? ProviderAccountGroup.ungroupedDisplayName
 
+            if configurationStore.dashboardOrderingMode == .smart {
+                if sections.indices.last.map({ sections[$0].groupID }) == groupID {
+                    sections[sections.count - 1].results.append(result)
+                } else {
+                    sections.append(
+                        DashboardSection(
+                            id: "\(groupID).\(offset)",
+                            groupID: groupID,
+                            title: title,
+                            results: [result]
+                        )
+                    )
+                }
+                continue
+            }
+
             if let sectionIndex = sectionIndexes[groupID] {
                 sections[sectionIndex].results.append(result)
             } else {
                 sectionIndexes[groupID] = sections.count
-                sections.append(DashboardSection(id: groupID, title: title, results: [result]))
+                sections.append(DashboardSection(id: groupID, groupID: groupID, title: title, results: [result]))
             }
         }
 
@@ -212,7 +228,7 @@ struct ContentView: View {
 
     private func shouldShowGroupHeaders(for sections: [DashboardSection]) -> Bool {
         !configurationStore.groups.isEmpty && sections.contains { section in
-            section.id != DashboardSection.ungroupedID || sections.count > 1
+            section.groupID != DashboardSection.ungroupedID || sections.count > 1
         }
     }
 
@@ -443,6 +459,7 @@ private struct DashboardSection: Identifiable {
     static let ungroupedID = "__ungrouped"
 
     let id: String
+    let groupID: String
     let title: String
     var results: [ProviderUsageResult]
 }
