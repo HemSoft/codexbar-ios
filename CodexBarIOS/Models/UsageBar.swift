@@ -54,6 +54,18 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         UsageSeverity(fractionUsed: fractionUsed)
     }
 
+    public func projectedSeverity(at now: Date = Date()) -> UsageSeverity? {
+        guard let projectedFraction = projectedFraction(at: now) else {
+            return nil
+        }
+
+        return UsageSeverity(fractionUsed: projectedFraction)
+    }
+
+    public func effectiveSeverity(at now: Date = Date()) -> UsageSeverity {
+        max(severity, projectedSeverity(at: now) ?? .normal)
+    }
+
     public var usageText: String {
         guard limit > 0 else {
             return "0%"
@@ -110,7 +122,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         )
 
         guard limitHit != Self.limitNotReachedDescription else {
-            return nil
+            return "Projected to stay under limit"
         }
 
         return "Projected \(Int((projectedFraction * 100).rounded()))% at current pace - \(limitHit)"

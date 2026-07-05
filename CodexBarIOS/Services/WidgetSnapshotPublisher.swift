@@ -7,13 +7,14 @@ enum WidgetSnapshotPublisher {
         results: [ProviderUsageResult],
         configurationStore: ProviderConfigurationStore
     ) {
+        let now = Date()
         let displayable = orderedDisplayableResults(
             results: results,
             configurationStore: configurationStore
         )
 
         let snapshot = CodexBarWidgetSnapshot(
-            generatedAt: Date(),
+            generatedAt: now,
             results: displayable.map { result in
                 CodexBarWidgetProviderSnapshot(
                     accountID: result.accountID,
@@ -21,18 +22,23 @@ enum WidgetSnapshotPublisher {
                     title: result.title,
                     subtitle: statusText(for: result, configurationStore: configurationStore),
                     bars: result.bars.enumerated().map { index, bar in
-                        CodexBarWidgetUsageBarSnapshot(
+                        let projectedFraction = bar.projectedFraction(at: now)
+                        let projectedSeverity = bar.projectedSeverity(at: now)
+                        return CodexBarWidgetUsageBarSnapshot(
                             id: stableBarID(accountID: result.accountID, bar: bar, index: index),
                             label: bar.label,
                             fractionUsed: bar.fractionUsed,
                             usageText: bar.usageText,
                             resetDescription: bar.resetDescription,
-                            severity: CodexBarWidgetSeverity(bar.severity)
+                            severity: CodexBarWidgetSeverity(bar.severity),
+                            projectedFraction: projectedFraction,
+                            projectionDescription: bar.projectionDescription(at: now),
+                            projectedSeverity: projectedSeverity.map(CodexBarWidgetSeverity.init)
                         )
                     },
                     creditsRemaining: result.creditsRemaining,
                     fetchedAt: result.fetchedAt,
-                    severity: CodexBarWidgetSeverity(result.highestSeverity)
+                    severity: CodexBarWidgetSeverity(result.highestSeverity(at: now))
                 )
             }
         )

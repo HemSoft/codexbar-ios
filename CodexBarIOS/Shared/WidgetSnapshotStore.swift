@@ -59,6 +59,9 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
     public let usageText: String
     public let resetDescription: String?
     public let severity: CodexBarWidgetSeverity
+    public let projectedFraction: Double?
+    public let projectionDescription: String?
+    public let projectedSeverity: CodexBarWidgetSeverity?
 
     public init(
         id: String,
@@ -66,7 +69,10 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
         fractionUsed: Double,
         usageText: String,
         resetDescription: String?,
-        severity: CodexBarWidgetSeverity
+        severity: CodexBarWidgetSeverity,
+        projectedFraction: Double? = nil,
+        projectionDescription: String? = nil,
+        projectedSeverity: CodexBarWidgetSeverity? = nil
     ) {
         self.id = id
         self.label = label
@@ -74,6 +80,17 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
         self.usageText = usageText
         self.resetDescription = resetDescription
         self.severity = severity
+        self.projectedFraction = projectedFraction
+        self.projectionDescription = projectionDescription
+        self.projectedSeverity = projectedSeverity
+    }
+
+    public var effectiveSeverity: CodexBarWidgetSeverity {
+        max(severity, projectedSeverity ?? .normal)
+    }
+
+    public var effectiveFractionUsed: Double {
+        max(fractionUsed, projectedFraction ?? 0)
     }
 }
 

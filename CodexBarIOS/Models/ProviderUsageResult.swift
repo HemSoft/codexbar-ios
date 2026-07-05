@@ -32,6 +32,10 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     }
 
     public var highestSeverity: UsageSeverity {
-        bars.map(\.severity).max() ?? .normal
+        highestSeverity()
+    }
+
+    public func highestSeverity(at now: Date = Date()) -> UsageSeverity {
+        bars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal
     }
 }

@@ -601,8 +601,7 @@ struct ProviderWidgetTile: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                    ProgressView(value: bar.fractionUsed)
-                        .tint(bar.severity.tint)
+                    WidgetUsageProgressBar(bar: bar)
                 }
             } else {
                 Text(tile.subtitle)
@@ -642,11 +641,10 @@ struct ProviderWidgetTile: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
 
-                ProgressView(value: bar.fractionUsed)
-                    .tint(bar.severity.tint)
+                WidgetUsageProgressBar(bar: bar)
 
-                if let resetDescription = bar.resetDescription {
-                    Text(resetDescription)
+                if let detail = bar.projectionDescription ?? bar.resetDescription {
+                    Text(detail)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -702,8 +700,7 @@ struct ProviderWidgetTile: View {
                 .minimumScaleFactor(0.65)
 
             if let bar = tile.bar {
-                ProgressView(value: bar.fractionUsed)
-                    .tint(bar.severity.tint)
+                WidgetUsageProgressBar(bar: bar)
             }
         }
     }
@@ -723,11 +720,10 @@ struct ProviderWidgetTile: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
-                ProgressView(value: bar.fractionUsed)
-                    .tint(bar.severity.tint)
+                WidgetUsageProgressBar(bar: bar)
 
-                if let resetDescription = bar.resetDescription {
-                    Text(resetDescription)
+                if let detail = bar.projectionDescription ?? bar.resetDescription {
+                    Text(detail)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -890,6 +886,10 @@ struct ProviderWidgetTile: View {
 
     private var statusDetail: String {
         if let bar = tile.bar {
+            if let projectionDescription = bar.projectionDescription {
+                return projectionDescription
+            }
+
             return [bar.usageText, bar.resetDescription]
                 .compactMap { $0 }
                 .joined(separator: " - ")
@@ -901,6 +901,34 @@ struct ProviderWidgetTile: View {
         }
 
         return tile.subtitle
+    }
+}
+
+private struct WidgetUsageProgressBar: View {
+    let bar: CodexBarWidgetUsageBarSnapshot
+
+    var body: some View {
+        GeometryReader { proxy in
+            let actualWidth = proxy.size.width * min(max(bar.fractionUsed, 0), 1)
+            let projectedWidth = proxy.size.width * min(max(bar.projectedFraction ?? 0, 0), 1)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.primary.opacity(0.12))
+
+                if projectedWidth > actualWidth {
+                    Capsule()
+                        .fill(bar.effectiveSeverity.projectedTint.opacity(0.55))
+                        .frame(width: projectedWidth)
+                }
+
+                Capsule()
+                    .fill(bar.effectiveSeverity.tint)
+                    .frame(width: actualWidth)
+            }
+        }
+        .frame(height: 6)
+        .accessibilityLabel("\(bar.label) \(bar.usageText)")
     }
 }
 
@@ -920,7 +948,7 @@ struct AccessoryCircularWidget: View {
     let tile: CodexBarWidgetTile?
 
     var body: some View {
-        Gauge(value: tile?.bar?.fractionUsed ?? 0) {
+        Gauge(value: tile?.bar?.effectiveFractionUsed ?? 0) {
             Image(systemName: "gauge.with.dots.needle.50percent")
         } currentValueLabel: {
             Text(tile.map(summary) ?? "--")
@@ -928,6 +956,7 @@ struct AccessoryCircularWidget: View {
                 .minimumScaleFactor(0.6)
         }
         .gaugeStyle(.accessoryCircularCapacity)
+        .tint(tile?.severity.tint ?? .secondary)
     }
 }
 
@@ -1091,11 +1120,11 @@ private extension CodexBarWidgetProviderSnapshot {
 
     private var representativeBar: CodexBarWidgetUsageBarSnapshot? {
         bars.max { lhs, rhs in
-            if lhs.severity == rhs.severity {
-                return lhs.fractionUsed < rhs.fractionUsed
+            if lhs.effectiveSeverity == rhs.effectiveSeverity {
+                return lhs.effectiveFractionUsed < rhs.effectiveFractionUsed
             }
 
-            return lhs.severity < rhs.severity
+            return lhs.effectiveSeverity < rhs.effectiveSeverity
         }
     }
 
@@ -1108,7 +1137,7 @@ private extension CodexBarWidgetProviderSnapshot {
             subtitle: subtitle,
             bar: bar,
             creditsRemaining: nil,
-            severity: bar.severity
+            severity: bar.effectiveSeverity
         )
     }
 }
@@ -1145,6 +1174,17 @@ private extension CodexBarWidgetSeverity {
             .orange
         case .critical:
             .red
+        }
+    }
+
+    var projectedTint: Color {
+        switch self {
+        case .normal:
+            Color(red: 0x86 / 255.0, green: 0xEF / 255.0, blue: 0xAC / 255.0)
+        case .warning:
+            Color(red: 0xFA / 255.0, green: 0xCC / 255.0, blue: 0x15 / 255.0)
+        case .critical:
+            Color(red: 0xF8 / 255.0, green: 0x71 / 255.0, blue: 0x71 / 255.0)
         }
     }
 }
