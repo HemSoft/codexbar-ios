@@ -10,6 +10,7 @@ Status last reviewed: 2026-07-05
 - Main dashboard, provider settings, widget support, and snapshot trend improvements are on `main`.
 - Development signing is stable through the dedicated CodexBar keychain documented in `AGENTS.md`.
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
+- App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
 - App Store production distribution, TestFlight upload, product metadata, and review materials are not done yet.
 
 ## Apple Requirements To Keep Current
@@ -34,8 +35,8 @@ Reference links:
 ### 1. App Store Connect Setup
 
 - [x] Confirm Apple Developer Program membership and team ownership. Membership confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
-- [ ] Create the App Store Connect app record.
-- [ ] Confirm bundle ID, SKU, primary language, category, and age rating.
+- [x] Create the App Store Connect app record. Created as `CodexBar Usage Monitor`, app ID `6787769891`, on 2026-07-05.
+- [ ] Confirm bundle ID, SKU, primary language, category, and age rating. Initial record uses bundle ID `com.hemsoft.CodexBarIOS`, SKU `codexbar-ios`, and primary language `English (U.S.)`.
 - [ ] Decide initial availability: iPhone and iPad.
 - [ ] Decide pricing: likely free unless a paid distribution plan is introduced.
 
