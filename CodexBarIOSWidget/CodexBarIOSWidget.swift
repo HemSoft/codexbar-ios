@@ -341,7 +341,7 @@ struct CodexBarWidgetView: View {
     }
 
     private var selectedTiles: [CodexBarWidgetRenderedTile] {
-        let allTiles = entry.snapshot.selectableTiles
+        let allTiles = scopedSelectableTiles
         let configuredChoices = [
             entry.configuration.tile1,
             entry.configuration.tile2,
@@ -384,6 +384,16 @@ struct CodexBarWidgetView: View {
     }
 
     private var defaultTiles: [CodexBarWidgetTile] {
+        scopedProviders.map(\.summaryTile)
+    }
+
+    private var scopedSelectableTiles: [CodexBarWidgetTile] {
+        scopedProviders.flatMap { provider in
+            [provider.summaryTile] + provider.bars.map { provider.barTile($0) }
+        }
+    }
+
+    private var scopedProviders: [CodexBarWidgetProviderSnapshot] {
         let groupFiltered: [CodexBarWidgetProviderSnapshot]
         if let selectedGroupID = entry.configuration.group?.id {
             groupFiltered = entry.snapshot.results.filter { provider in
@@ -393,11 +403,9 @@ struct CodexBarWidgetView: View {
             groupFiltered = entry.snapshot.results
         }
 
-        let providers = entry.configuration.focus.providerID.map { providerID in
+        return entry.configuration.focus.providerID.map { providerID in
             groupFiltered.filter { $0.providerID == providerID }
         } ?? groupFiltered
-
-        return providers.map(\.summaryTile)
     }
 
     private func resolvedTile(
@@ -428,7 +436,7 @@ struct CodexBarWidgetView: View {
         }
 
         let savedBarID = String(choiceID.dropFirst("bar.".count))
-        let providers = entry.snapshot.results
+        let providers = scopedProviders
             .filter { provider in
                 savedBarID == provider.accountID
                     || savedBarID.hasPrefix("\(provider.accountID).")
