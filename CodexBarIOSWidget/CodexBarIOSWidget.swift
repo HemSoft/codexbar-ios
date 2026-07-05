@@ -1083,10 +1083,20 @@ private extension CodexBarWidgetProviderSnapshot {
             providerTitle: title,
             title: creditsRemaining == nil ? title : "\(title) Balance",
             subtitle: subtitle,
-            bar: bars.first,
+            bar: representativeBar,
             creditsRemaining: creditsRemaining,
             severity: severity
         )
+    }
+
+    private var representativeBar: CodexBarWidgetUsageBarSnapshot? {
+        bars.max { lhs, rhs in
+            if lhs.severity == rhs.severity {
+                return lhs.fractionUsed < rhs.fractionUsed
+            }
+
+            return lhs.severity < rhs.severity
+        }
     }
 
     func barTile(_ bar: CodexBarWidgetUsageBarSnapshot) -> CodexBarWidgetTile {
