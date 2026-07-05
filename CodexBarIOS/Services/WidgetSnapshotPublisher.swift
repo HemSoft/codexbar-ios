@@ -16,11 +16,14 @@ enum WidgetSnapshotPublisher {
         let snapshot = CodexBarWidgetSnapshot(
             generatedAt: now,
             results: displayable.map { result in
-                CodexBarWidgetProviderSnapshot(
+                let configuration = configurationStore.configuration(accountID: result.accountID)
+                return CodexBarWidgetProviderSnapshot(
                     accountID: result.accountID,
                     providerID: result.providerID.rawValue,
                     title: result.title,
                     subtitle: statusText(for: result, configurationStore: configurationStore),
+                    groupID: configuration?.groupID,
+                    groupName: configurationStore.group(for: configuration?.groupID)?.name,
                     bars: result.bars.enumerated().map { index, bar in
                         let projectedFraction = bar.projectedFraction(at: now)
                         let projectedSeverity = bar.projectedSeverity(at: now)

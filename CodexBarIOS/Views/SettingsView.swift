@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isConfirmingReset = false
     @State private var alertPermissionMessage: String?
+    @State private var newGroupName = ""
 
     var body: some View {
         NavigationStack {
@@ -74,6 +75,37 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    if configurationStore.groups.isEmpty {
+                        Text("No groups")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(configurationStore.groups) { group in
+                        TextField(
+                            "Group name",
+                            text: groupNameBinding(for: group)
+                        )
+                        .textInputAutocapitalization(.words)
+                    }
+                    .onDelete(perform: deleteGroups)
+
+                    HStack {
+                        TextField("New group", text: $newGroupName)
+                            .textInputAutocapitalization(.words)
+
+                        Button {
+                            addGroup()
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                        }
+                        .disabled(newGroupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel("Add group")
+                    }
+                } header: {
+                    Text("Groups")
+                }
+
+                Section {
                     if configurationStore.configurations.isEmpty {
                         Text("No accounts")
                             .foregroundStyle(.secondary)
@@ -90,7 +122,8 @@ struct SettingsView: View {
                         } label: {
                             ProviderSettingsRow(
                                 configuration: configuration,
-                                isConfigured: configurationStore.isConfigured(configuration)
+                                isConfigured: configurationStore.isConfigured(configuration),
+                                groupName: configurationStore.group(for: configuration.groupID)?.name
                             )
                         }
                     }
@@ -225,11 +258,40 @@ struct SettingsView: View {
         }
         onAccountsChanged()
     }
+
+    private func addGroup() {
+        guard configurationStore.addGroup(named: newGroupName) != nil else {
+            return
+        }
+
+        newGroupName = ""
+    }
+
+    private func deleteGroups(at offsets: IndexSet) {
+        let groups = configurationStore.groups
+        for index in offsets {
+            configurationStore.removeGroup(groups[index])
+        }
+    }
+
+    private func groupNameBinding(for group: ProviderAccountGroup) -> Binding<String> {
+        Binding(
+            get: {
+                configurationStore.group(for: group.id)?.name ?? group.name
+            },
+            set: { name in
+                var updated = group
+                updated.name = name
+                _ = configurationStore.updateGroup(updated)
+            }
+        )
+    }
 }
 
 private struct ProviderSettingsRow: View {
     let configuration: ProviderAccountConfiguration
     let isConfigured: Bool
+    let groupName: String?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -242,6 +304,11 @@ private struct ProviderSettingsRow: View {
                 Text(statusText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                if let groupName {
+                    Text(groupName)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }

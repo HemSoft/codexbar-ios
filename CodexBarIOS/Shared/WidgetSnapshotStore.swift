@@ -22,6 +22,8 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
     public let providerID: String
     public let title: String
     public let subtitle: String
+    public let groupID: String?
+    public let groupName: String?
     public let bars: [CodexBarWidgetUsageBarSnapshot]
     public let creditsRemaining: Double?
     public let fetchedAt: Date
@@ -32,6 +34,8 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
         providerID: String,
         title: String,
         subtitle: String,
+        groupID: String? = nil,
+        groupName: String? = nil,
         bars: [CodexBarWidgetUsageBarSnapshot],
         creditsRemaining: Double?,
         fetchedAt: Date,
@@ -41,6 +45,8 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
         self.providerID = providerID
         self.title = title
         self.subtitle = subtitle
+        self.groupID = groupID
+        self.groupName = groupName
         self.bars = bars
         self.creditsRemaining = creditsRemaining
         self.fetchedAt = fetchedAt

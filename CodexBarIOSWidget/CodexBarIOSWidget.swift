@@ -58,6 +58,9 @@ struct CodexBarWidgetConfigurationIntent: WidgetConfigurationIntent {
     @Parameter(title: "Focus", default: .dashboardOrder)
     var focus: CodexBarWidgetFocus
 
+    @Parameter(title: "Group")
+    var group: CodexBarWidgetGroupChoice?
+
     @Parameter(title: "Tile 1")
     var tile1: CodexBarWidgetTileChoice?
 
@@ -215,6 +218,47 @@ struct CodexBarWidgetTileChoice: AppEntity {
     }
 }
 
+struct CodexBarWidgetGroupChoice: AppEntity {
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Group")
+    static let defaultQuery = CodexBarWidgetGroupChoiceQuery()
+    static let ungroupedID = "__ungrouped"
+
+    let id: String
+    let title: String
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)")
+    }
+}
+
+struct CodexBarWidgetGroupChoiceQuery: EntityStringQuery {
+    func entities(for identifiers: [CodexBarWidgetGroupChoice.ID]) async throws -> [CodexBarWidgetGroupChoice] {
+        let choices = Self.choices()
+        return identifiers.map { identifier in
+            choices.first { $0.id == identifier }
+                ?? CodexBarWidgetGroupChoice(id: identifier, title: "Saved Group")
+        }
+    }
+
+    func entities(matching string: String) async throws -> [CodexBarWidgetGroupChoice] {
+        guard !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return Self.choices()
+        }
+
+        return Self.choices().filter { choice in
+            choice.title.localizedCaseInsensitiveContains(string)
+        }
+    }
+
+    func suggestedEntities() async throws -> [CodexBarWidgetGroupChoice] {
+        Self.choices()
+    }
+
+    private static func choices() -> [CodexBarWidgetGroupChoice] {
+        WidgetSnapshotStore.loadSnapshot().groupChoices
+    }
+}
+
 struct CodexBarWidgetTileChoiceQuery: EntityStringQuery {
     func entities(for identifiers: [CodexBarWidgetTileChoice.ID]) async throws -> [CodexBarWidgetTileChoice] {
         let choices = Self.choices()
@@ -340,9 +384,16 @@ struct CodexBarWidgetView: View {
     }
 
     private var defaultTiles: [CodexBarWidgetTile] {
-        let providers = entry.configuration.focus.providerID.map { providerID in
-            entry.snapshot.results.filter { $0.providerID == providerID }
+        let groupID = entry.configuration.group?.id
+        let groupFiltered = groupID.map { selectedGroupID in
+            entry.snapshot.results.filter { provider in
+                (provider.groupID ?? CodexBarWidgetGroupChoice.ungroupedID) == selectedGroupID
+            }
         } ?? entry.snapshot.results
+
+        let providers = entry.configuration.focus.providerID.map { providerID in
+            groupFiltered.filter { $0.providerID == providerID }
+        } ?? groupFiltered
 
         return providers.map(\.summaryTile)
     }
@@ -1100,6 +1151,37 @@ private extension CodexBarWidgetSnapshot {
     var selectableTiles: [CodexBarWidgetTile] {
         results.flatMap { provider in
             [provider.summaryTile] + provider.bars.map { provider.barTile($0) }
+        }
+    }
+
+    var groupChoices: [CodexBarWidgetGroupChoice] {
+        var choices: [CodexBarWidgetGroupChoice] = []
+        var seenIDs = Set<String>()
+
+        for provider in results {
+            let id = provider.groupID ?? CodexBarWidgetGroupChoice.ungroupedID
+            guard seenIDs.insert(id).inserted else {
+                continue
+            }
+
+            choices.append(
+                CodexBarWidgetGroupChoice(
+                    id: id,
+                    title: provider.groupName ?? "Ungrouped"
+                )
+            )
+        }
+
+        return choices.sorted {
+            if $0.id == CodexBarWidgetGroupChoice.ungroupedID {
+                return false
+            }
+
+            if $1.id == CodexBarWidgetGroupChoice.ungroupedID {
+                return true
+            }
+
+            return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
     }
 }

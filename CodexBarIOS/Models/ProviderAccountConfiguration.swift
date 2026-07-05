@@ -5,6 +5,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
     public let providerID: ProviderID
     public var isEnabled: Bool
     public var accountLabel: String
+    public var groupID: String?
     public var authMethod: ProviderAuthMethod
     public var oauthClientID: String?
     public var copilotAccountScope: CopilotAccountScope
@@ -18,6 +19,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         providerID: ProviderID,
         isEnabled: Bool = true,
         accountLabel: String = "",
+        groupID: String? = nil,
         authMethod: ProviderAuthMethod,
         oauthClientID: String? = nil,
         copilotAccountScope: CopilotAccountScope = .personal,
@@ -30,6 +32,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         self.providerID = providerID
         self.isEnabled = isEnabled
         self.accountLabel = accountLabel
+        self.groupID = groupID
         self.authMethod = authMethod
         self.oauthClientID = oauthClientID
         self.copilotAccountScope = copilotAccountScope
@@ -54,6 +57,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
             providerID: providerID,
             isEnabled: isEnabled,
             accountLabel: accountLabel,
+            groupID: groupID,
             authMethod: authMethod,
             oauthClientID: oauthClientID,
             copilotAccountScope: copilotAccountScope,
@@ -69,6 +73,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         case providerID
         case isEnabled
         case accountLabel
+        case groupID
         case authMethod
         case oauthClientID
         case copilotAccountScope
@@ -85,6 +90,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         self.providerID = providerID
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.accountLabel = try container.decodeIfPresent(String.self, forKey: .accountLabel) ?? ""
+        self.groupID = try container.decodeIfPresent(String.self, forKey: .groupID)
         self.authMethod = try container.decode(ProviderAuthMethod.self, forKey: .authMethod)
         self.oauthClientID = try container.decodeIfPresent(String.self, forKey: .oauthClientID)
         self.copilotAccountScope = try container.decodeIfPresent(CopilotAccountScope.self, forKey: .copilotAccountScope) ?? .personal
@@ -93,6 +99,18 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         self.copilotTotalAllotment = try container.decodeIfPresent(Double.self, forKey: .copilotTotalAllotment)
         self.openCodeWorkspaceId = try container.decodeIfPresent(String.self, forKey: .openCodeWorkspaceId) ?? ""
     }
+}
+
+public struct ProviderAccountGroup: Identifiable, Equatable, Codable, Sendable {
+    public let id: String
+    public var name: String
+
+    public init(id: String = UUID().uuidString, name: String) {
+        self.id = id
+        self.name = name
+    }
+
+    public static let ungroupedDisplayName = "Ungrouped"
 }
 
 public enum CopilotAccountScope: String, Codable, CaseIterable, Identifiable, Sendable {
