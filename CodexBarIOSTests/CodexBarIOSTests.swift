@@ -135,6 +135,21 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(WidgetSnapshotStore.loadBuilderConfiguration(defaults: defaults), configuration)
     }
 
+    func testWidgetBuilderConfigurationTreatsLayoutAndDisplayAsCustomizations() {
+        XCTAssertFalse(CodexBarWidgetBuilderConfiguration.default.hasCustomizations)
+
+        XCTAssertTrue(
+            CodexBarWidgetBuilderConfiguration(layout: .twoTiles).hasCustomizations
+        )
+        XCTAssertTrue(
+            CodexBarWidgetBuilderConfiguration(displayModes: [.fullBar]).hasCustomizations
+        )
+        XCTAssertTrue(
+            CodexBarWidgetBuilderConfiguration(selectedTileIDs: [nil, "bar.codex.personal.0.five-hour"])
+                .hasCustomizations
+        )
+    }
+
     func testWidgetSnapshotBuilderTilesIncludeProviderSummaryAndGranularBars() throws {
         let generatedAt = Date(timeIntervalSince1970: 1_788_475_200)
         let snapshot = CodexBarWidgetSnapshot(

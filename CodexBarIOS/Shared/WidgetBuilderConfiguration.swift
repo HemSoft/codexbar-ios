@@ -99,6 +99,12 @@ public struct CodexBarWidgetBuilderConfiguration: Codable, Equatable, Sendable {
         selectedTileIDs.contains { $0 != nil }
     }
 
+    public var hasCustomizations: Bool {
+        layout != .automatic
+            || hasSelectedTiles
+            || displayModes.contains { $0 != .automatic }
+    }
+
     public func tileID(at index: Int) -> String? {
         selectedTileIDs.indices.contains(index) ? selectedTileIDs[index] : nil
     }

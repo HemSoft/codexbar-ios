@@ -395,12 +395,21 @@ struct CodexBarWidgetView: View {
 
         if usesBuilderDefaults {
             return (0..<maximumTiles).compactMap { index in
-                guard let tileID = builderConfiguration.tileID(at: index) else {
+                let tile: CodexBarWidgetTile?
+                if let tileID = builderConfiguration.tileID(at: index) {
+                    tile = resolvedTile(for: tileID, in: allTiles)
+                } else if fallbackTiles.indices.contains(index) {
+                    tile = fallbackTiles[index]
+                } else {
+                    tile = nil
+                }
+
+                guard let tile else {
                     return nil
                 }
 
                 return CodexBarWidgetRenderedTile(
-                    tile: resolvedTile(for: tileID, in: allTiles),
+                    tile: tile,
                     displayMode: displayMode(from: builderConfiguration.displayMode(at: index))
                 )
             }
@@ -415,7 +424,7 @@ struct CodexBarWidgetView: View {
     }
 
     private func usesBuilderDefaults(_ configuration: CodexBarWidgetBuilderConfiguration) -> Bool {
-        configuration.hasSelectedTiles
+        configuration.hasCustomizations
             && entry.configuration.focus == .dashboardOrder
             && entry.configuration.group == nil
     }

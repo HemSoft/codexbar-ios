@@ -87,19 +87,19 @@ struct WidgetBuilderView: View {
 
     private var previewTiles: [CodexBarWidgetBuilderTile] {
         let tileByID = Dictionary(uniqueKeysWithValues: availableTiles.map { ($0.id, $0) })
-        let selectedTiles = (0..<slotCount).compactMap { index -> CodexBarWidgetBuilderTile? in
-            guard let tileID = configuration.tileID(at: index) else {
-                return nil
+        let fallbackTiles = Array(availableTiles.prefix(slotCount))
+
+        if configuration.hasCustomizations {
+            return (0..<slotCount).compactMap { index -> CodexBarWidgetBuilderTile? in
+                if let tileID = configuration.tileID(at: index) {
+                    return tileByID[tileID] ?? .unavailable(id: tileID)
+                }
+
+                return fallbackTiles.indices.contains(index) ? fallbackTiles[index] : nil
             }
-
-            return tileByID[tileID] ?? .unavailable(id: tileID)
         }
 
-        if !selectedTiles.isEmpty {
-            return selectedTiles
-        }
-
-        return Array(availableTiles.prefix(slotCount))
+        return fallbackTiles
     }
 
     private var layoutBinding: Binding<CodexBarWidgetBuilderLayout> {
