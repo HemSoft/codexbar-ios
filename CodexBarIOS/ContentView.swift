@@ -4,10 +4,22 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @ObservedObject var refreshService: UsageRefreshService
     @ObservedObject var configurationStore: ProviderConfigurationStore
+    private let usageAlertNotifier: any UsageAlertNotifying
+
     @State private var isShowingSettings = false
     @State private var autoRefreshSchedule: AutoRefreshSchedule?
     @State private var autoRefreshResetID = UUID()
     @State private var draggedCardID: String?
+
+    init(
+        refreshService: UsageRefreshService,
+        configurationStore: ProviderConfigurationStore,
+        usageAlertNotifier: any UsageAlertNotifying = LocalUsageAlertNotifier.shared
+    ) {
+        self.refreshService = refreshService
+        self.configurationStore = configurationStore
+        self.usageAlertNotifier = usageAlertNotifier
+    }
 
     var body: some View {
         NavigationStack {
@@ -82,13 +94,20 @@ struct ContentView: View {
                     }
                 },
                 onAccountRefresh: { configuration in
-                    await refreshService.refresh(configuration: configuration)
+                    let result = await refreshService.refresh(configuration: configuration)
+                    publishWidgetSnapshot()
+                    await processUsageAlerts()
+                    return result
+                },
+                onAlertAuthorizationRequest: {
+                    await usageAlertNotifier.requestAuthorization()
                 }
             )
         }
         .task {
             await refreshService.refresh(configurations: configurationStore.configurations)
             publishWidgetSnapshot()
+            await processUsageAlerts()
         }
         .task(id: AutoRefreshTaskID(interval: configurationStore.autoRefreshInterval, resetID: autoRefreshResetID)) {
             await runAutoRefreshLoop()
@@ -202,8 +221,23 @@ struct ContentView: View {
     private func refreshNow() async {
         await refreshService.refresh(configurations: configurationStore.configurations)
         publishWidgetSnapshot()
+        await processUsageAlerts()
         if configurationStore.autoRefreshInterval.seconds != nil {
             autoRefreshResetID = UUID()
+        }
+    }
+
+    private func processUsageAlerts() async {
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: refreshService.results,
+            settings: configurationStore.usageAlertSettings,
+            activeAlertIDs: configurationStore.usageAlertActiveIDs
+        )
+
+        configurationStore.updateUsageAlertActiveIDs(evaluation.activeAlertIDs)
+
+        for notification in evaluation.notifications {
+            await usageAlertNotifier.deliver(notification)
         }
     }
 
@@ -229,6 +263,7 @@ struct ContentView: View {
 
             await refreshService.refresh(configurations: configurationStore.configurations)
             publishWidgetSnapshot()
+            await processUsageAlerts()
         }
     }
 }

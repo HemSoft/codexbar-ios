@@ -4,9 +4,11 @@ struct SettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     var onAccountsChanged: @MainActor () -> Void = {}
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
+    var onAlertAuthorizationRequest: @MainActor () async -> Bool = { false }
 
     @Environment(\.dismiss) private var dismiss
     @State private var isConfirmingReset = false
+    @State private var alertPermissionMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -30,6 +32,31 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Auto Refresh")
+                }
+
+                Section {
+                    Toggle("Usage Alerts", isOn: usageAlertsEnabledBinding)
+
+                    Stepper(value: usageAlertUsagePercentBinding, in: 50...100, step: 5) {
+                        Text("Usage at \(Int((configurationStore.usageAlertSettings.usageThreshold * 100).rounded()))%")
+                    }
+                    .disabled(!configurationStore.usageAlertSettings.isEnabled)
+
+                    Stepper(value: usageAlertBalanceBinding, in: 1...100, step: 1) {
+                        Text("Balance below \(formattedBalanceThreshold)")
+                    }
+                    .disabled(!configurationStore.usageAlertSettings.isEnabled)
+
+                    Toggle("Warning and Critical Alerts", isOn: usageAlertSeverityBinding)
+                        .disabled(!configurationStore.usageAlertSettings.isEnabled)
+
+                    if let alertPermissionMessage {
+                        Text(alertPermissionMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Alerts")
                 }
 
                 Section {
@@ -140,6 +167,53 @@ struct SettingsView: View {
             get: { configurationStore.widgetRefreshInterval },
             set: { configurationStore.updateWidgetRefreshInterval($0) }
         )
+    }
+
+    private var usageAlertsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { configurationStore.usageAlertSettings.isEnabled },
+            set: { isEnabled in
+                if isEnabled {
+                    Task {
+                        let granted = await onAlertAuthorizationRequest()
+                        configurationStore.updateUsageAlertsEnabled(granted)
+                        alertPermissionMessage = granted ? nil : "Notifications are disabled for CodexBar."
+                    }
+                } else {
+                    configurationStore.updateUsageAlertsEnabled(false)
+                    alertPermissionMessage = nil
+                }
+            }
+        )
+    }
+
+    private var usageAlertUsagePercentBinding: Binding<Double> {
+        Binding(
+            get: { configurationStore.usageAlertSettings.usageThreshold * 100 },
+            set: { configurationStore.updateUsageAlertUsageThreshold($0 / 100) }
+        )
+    }
+
+    private var usageAlertBalanceBinding: Binding<Double> {
+        Binding(
+            get: { configurationStore.usageAlertSettings.balanceThreshold },
+            set: { configurationStore.updateUsageAlertBalanceThreshold($0) }
+        )
+    }
+
+    private var usageAlertSeverityBinding: Binding<Bool> {
+        Binding(
+            get: { configurationStore.usageAlertSettings.includesSeverityAlerts },
+            set: { configurationStore.updateUsageAlertIncludesSeverityAlerts($0) }
+        )
+    }
+
+    private var formattedBalanceThreshold: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.maximumFractionDigits = 0
+        return formatter.string(from: NSNumber(value: configurationStore.usageAlertSettings.balanceThreshold))
+            ?? "$\(Int(configurationStore.usageAlertSettings.balanceThreshold.rounded()))"
     }
 
     private func deleteAccounts(at offsets: IndexSet) {
