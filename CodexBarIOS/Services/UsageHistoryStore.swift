@@ -66,6 +66,8 @@ public struct UsageTrendSummary: Equatable, Sendable {
 public final class UsageHistoryStore: ObservableObject {
     @Published public private(set) var snapshots: [UsageHistorySnapshot]
 
+    deinit {}
+
     private let defaults: UserDefaults
     private let retention: TimeInterval
     private let maxSnapshotsPerAccount: Int

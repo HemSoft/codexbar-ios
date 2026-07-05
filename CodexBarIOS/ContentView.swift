@@ -118,7 +118,7 @@ struct ContentView: View {
                 },
                 onAccountRefresh: { configuration in
                     let result = await refreshService.refresh(configuration: configuration)
-                    recordUsageHistoryIfAvailable()
+                    recordUsageHistoryIfAvailable(result: result)
                     publishWidgetSnapshot()
                     await processUsageAlerts()
                     return result
@@ -131,10 +131,7 @@ struct ContentView: View {
         .sheet(item: $selectedHistoryResult) { result in
             ProviderUsageHistoryDetailView(
                 result: result,
-                snapshots: historyStore.snapshots(
-                    for: result.accountID,
-                    since: Date().addingTimeInterval(-7 * 24 * 60 * 60)
-                ),
+                snapshots: historyStore.snapshots(for: result.accountID),
                 trend: historyStore.trendSummary(for: result)
             )
         }
@@ -304,7 +301,14 @@ struct ContentView: View {
         }
 
         historyStore.record(results: refreshService.results)
-        historyStore.removeSnapshotsForMissingAccounts(validAccountIDs: Set(configurationStore.configurations.map(\.id)))
+    }
+
+    private func recordUsageHistoryIfAvailable(result: ProviderUsageResult?) {
+        guard refreshService.lastRefreshError == nil, let result else {
+            return
+        }
+
+        historyStore.record(results: [result])
     }
 
     private var refreshAccessibilityLabel: String {
@@ -529,6 +533,12 @@ private struct ProviderUsageHistoryDetailView: View {
                 }
 
                 Section("Recent") {
+                    if snapshots.isEmpty {
+                        Text("No history recorded yet.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
                     ForEach(snapshots.reversed()) { snapshot in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             VStack(alignment: .leading, spacing: 3) {
@@ -536,7 +546,7 @@ private struct ProviderUsageHistoryDetailView: View {
                                     .font(.body.weight(.semibold))
                                     .monospacedDigit()
 
-                                Text(snapshotDateFormatter.string(from: snapshot.capturedAt))
+                                Text(Self.snapshotDateFormatter.string(from: snapshot.capturedAt))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -558,7 +568,7 @@ private struct ProviderUsageHistoryDetailView: View {
 
     private func valueText(for snapshot: UsageHistorySnapshot) -> String {
         if let creditsRemaining = snapshot.creditsRemaining {
-            return currencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
+            return Self.currencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
         }
 
         guard let value = snapshot.primaryValue else {
@@ -568,21 +578,21 @@ private struct ProviderUsageHistoryDetailView: View {
         return "\(Int((value * 100).rounded()))%"
     }
 
-    private var currencyFormatter: NumberFormatter {
+    private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         formatter.minimumFractionDigits = 2
         formatter.maximumFractionDigits = 2
         return formatter
-    }
+    }()
 
-    private var snapshotDateFormatter: DateFormatter {
+    private static let snapshotDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter
-    }
+    }()
 }
 
 #Preview {
