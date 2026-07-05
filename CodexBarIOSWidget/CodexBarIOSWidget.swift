@@ -355,6 +355,7 @@ struct CodexBarWidgetView: View {
 
     private var selectedTiles: [CodexBarWidgetRenderedTile] {
         let allTiles = scopedSelectableTiles
+        let builderConfiguration = WidgetSnapshotStore.loadBuilderConfiguration()
         let configuredChoices = [
             entry.configuration.tile1,
             entry.configuration.tile2,
@@ -372,7 +373,7 @@ struct CodexBarWidgetView: View {
             entry.configuration.tile6DisplayMode,
         ]
 
-        let maximumTiles = tileCount
+        let maximumTiles = tileCount(builderConfiguration: builderConfiguration)
         let fallbackTiles = Array(defaultTiles.prefix(maximumTiles))
 
         if configuredChoices.contains(where: { $0 != nil }) {
@@ -384,6 +385,19 @@ struct CodexBarWidgetView: View {
                 return CodexBarWidgetRenderedTile(
                     tile: resolvedTile(for: choice, in: allTiles),
                     displayMode: displayMode(at: index, in: configuredDisplayModes)
+                )
+            }
+        }
+
+        if builderConfiguration.hasSelectedTiles {
+            return (0..<maximumTiles).compactMap { index in
+                guard let tileID = builderConfiguration.tileID(at: index) else {
+                    return nil
+                }
+
+                return CodexBarWidgetRenderedTile(
+                    tile: resolvedTile(for: tileID, in: allTiles),
+                    displayMode: displayMode(from: builderConfiguration.displayMode(at: index))
                 )
             }
         }
@@ -430,6 +444,27 @@ struct CodexBarWidgetView: View {
         return .unavailable(choice: choice)
     }
 
+    private func resolvedTile(
+        for tileID: String,
+        in allTiles: [CodexBarWidgetTile]
+    ) -> CodexBarWidgetTile {
+        if let exactMatch = allTiles.first(where: { $0.id == tileID }) {
+            return exactMatch
+        }
+
+        if let legacyMatch = legacyBarTile(for: tileID) {
+            return legacyMatch
+        }
+
+        return .unavailable(
+            choice: CodexBarWidgetTileChoice(
+                id: tileID,
+                title: "Saved Tile",
+                subtitle: "Open CodexBar to refresh"
+            )
+        )
+    }
+
     private func legacyBarTile(for choiceID: String) -> CodexBarWidgetTile? {
         guard choiceID.hasPrefix("bar.") else {
             return nil
@@ -469,27 +504,42 @@ struct CodexBarWidgetView: View {
         displayModes.indices.contains(index) ? displayModes[index] : .automatic
     }
 
-    private var tileCount: Int {
+    private func displayMode(from displayMode: CodexBarWidgetBuilderDisplayMode) -> CodexBarWidgetTileDisplayMode {
+        CodexBarWidgetTileDisplayMode(rawValue: displayMode.rawValue) ?? .automatic
+    }
+
+    private func tileCount(builderConfiguration: CodexBarWidgetBuilderConfiguration) -> Int {
+        if entry.configuration.layout == .automatic {
+            return builderConfiguration.layout.tileCount(
+                maximum: maximumTileCount,
+                automaticCount: automaticTileCount
+            )
+        }
+
         switch entry.configuration.layout {
         case .automatic:
-            switch family {
-            case .systemSmall:
-                1
-            case .systemMedium:
-                2
-            case .systemLarge:
-                4
-            case .systemExtraLarge:
-                6
-            default:
-                1
-            }
+            return automaticTileCount
         case .oneTile:
-            1
+            return 1
         case .twoTiles:
-            min(maximumTileCount, 2)
+            return min(maximumTileCount, 2)
         case .fourTiles:
-            min(maximumTileCount, 4)
+            return min(maximumTileCount, 4)
+        }
+    }
+
+    private var automaticTileCount: Int {
+        switch family {
+        case .systemSmall:
+            1
+        case .systemMedium:
+            2
+        case .systemLarge:
+            4
+        case .systemExtraLarge:
+            6
+        default:
+            1
         }
     }
 

@@ -69,6 +69,12 @@ struct SettingsView: View {
                         }
                     }
 
+                    NavigationLink {
+                        WidgetBuilderView()
+                    } label: {
+                        Label("Widget Builder", systemImage: "square.grid.2x2")
+                    }
+
                     Text("Widgets use the latest app snapshot and ask iOS to reload on this cadence. iOS may adjust timing to preserve battery.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)

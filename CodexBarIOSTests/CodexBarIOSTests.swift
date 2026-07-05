@@ -113,6 +113,88 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(WidgetSnapshotStore.loadRefreshInterval(defaults: defaults), .threeHours)
     }
 
+    func testWidgetSnapshotStoreRoundTripsBuilderConfiguration() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let configuration = CodexBarWidgetBuilderConfiguration(
+            layout: .fourTiles,
+            selectedTileIDs: [
+                "bar.codex.personal.0.five-hour",
+                "bar.codex.personal.1.weekly",
+                nil,
+                "provider.openRouter.work",
+            ],
+            displayModes: [.fullBar, .compactPercent, .automatic, .balanceOnly]
+        )
+
+        WidgetSnapshotStore.saveBuilderConfiguration(configuration, defaults: defaults)
+
+        XCTAssertEqual(WidgetSnapshotStore.loadBuilderConfiguration(defaults: defaults), configuration)
+    }
+
+    func testWidgetSnapshotBuilderTilesIncludeProviderSummaryAndGranularBars() throws {
+        let generatedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let snapshot = CodexBarWidgetSnapshot(
+            generatedAt: generatedAt,
+            results: [
+                CodexBarWidgetProviderSnapshot(
+                    accountID: "codex.personal",
+                    providerID: "codex",
+                    title: "ChatGPT / Codex",
+                    subtitle: "Personal",
+                    bars: [
+                        CodexBarWidgetUsageBarSnapshot(
+                            id: "codex.personal.0.five-hour",
+                            label: "5-hour",
+                            fractionUsed: 0.42,
+                            usageText: "42%",
+                            resetDescription: "Resets 2h",
+                            severity: .normal
+                        ),
+                        CodexBarWidgetUsageBarSnapshot(
+                            id: "codex.personal.1.weekly",
+                            label: "Weekly",
+                            fractionUsed: 0.81,
+                            usageText: "81%",
+                            resetDescription: "Resets Sun",
+                            severity: .warning
+                        ),
+                    ],
+                    creditsRemaining: nil,
+                    fetchedAt: generatedAt,
+                    severity: .warning
+                ),
+                CodexBarWidgetProviderSnapshot(
+                    accountID: "openRouter.work",
+                    providerID: "openRouter",
+                    title: "OpenRouter",
+                    subtitle: "API Key",
+                    bars: [],
+                    creditsRemaining: 9.75,
+                    fetchedAt: generatedAt,
+                    severity: .normal
+                ),
+            ]
+        )
+
+        let tiles = snapshot.builderTiles
+
+        XCTAssertEqual(
+            tiles.map(\.id),
+            [
+                "provider.codex.personal",
+                "bar.codex.personal.0.five-hour",
+                "bar.codex.personal.1.weekly",
+                "provider.openRouter.work",
+            ]
+        )
+        XCTAssertEqual(try XCTUnwrap(tiles.first { $0.id == "provider.codex.personal" }).value, "81%")
+        XCTAssertEqual(try XCTUnwrap(tiles.first { $0.id == "provider.openRouter.work" }).value, "$9.75")
+    }
+
     @MainActor
     func testWidgetSnapshotPublisherPropagatesProviderGroup() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
