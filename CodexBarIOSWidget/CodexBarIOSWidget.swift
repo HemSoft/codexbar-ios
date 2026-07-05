@@ -260,8 +260,11 @@ struct CodexBarWidgetGroupChoiceQuery: EntityStringQuery {
 }
 
 struct CodexBarWidgetTileChoiceQuery: EntityStringQuery {
+    @IntentParameterDependency<CodexBarWidgetConfigurationIntent>(\.$group, \.$focus)
+    var intent
+
     func entities(for identifiers: [CodexBarWidgetTileChoice.ID]) async throws -> [CodexBarWidgetTileChoice] {
-        let choices = Self.choices()
+        let choices = choices()
         return identifiers.map { identifier in
             choices.first { $0.id == identifier }
                 ?? CodexBarWidgetTileChoice(id: identifier, title: "Saved Tile", subtitle: "Open CodexBar to refresh")
@@ -270,21 +273,31 @@ struct CodexBarWidgetTileChoiceQuery: EntityStringQuery {
 
     func entities(matching string: String) async throws -> [CodexBarWidgetTileChoice] {
         guard !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return Self.choices()
+            return choices()
         }
 
-        return Self.choices().filter { choice in
+        return choices().filter { choice in
             choice.title.localizedCaseInsensitiveContains(string)
                 || choice.subtitle.localizedCaseInsensitiveContains(string)
         }
     }
 
     func suggestedEntities() async throws -> [CodexBarWidgetTileChoice] {
-        Self.choices()
+        choices()
     }
 
-    private static func choices() -> [CodexBarWidgetTileChoice] {
-        WidgetSnapshotStore.loadSnapshot().selectableTiles.map { tile in
+    private func choices() -> [CodexBarWidgetTileChoice] {
+        Self.choices(
+            group: intent?.group,
+            focus: intent?.focus ?? .dashboardOrder
+        )
+    }
+
+    private static func choices(
+        group: CodexBarWidgetGroupChoice? = nil,
+        focus: CodexBarWidgetFocus = .dashboardOrder
+    ) -> [CodexBarWidgetTileChoice] {
+        WidgetSnapshotStore.loadSnapshot().selectableTiles(group: group, focus: focus).map { tile in
             CodexBarWidgetTileChoice(
                 id: tile.id,
                 title: tile.choiceTitle,
@@ -388,24 +401,11 @@ struct CodexBarWidgetView: View {
     }
 
     private var scopedSelectableTiles: [CodexBarWidgetTile] {
-        scopedProviders.flatMap { provider in
-            [provider.summaryTile] + provider.bars.map { provider.barTile($0) }
-        }
+        entry.snapshot.selectableTiles(group: entry.configuration.group, focus: entry.configuration.focus)
     }
 
     private var scopedProviders: [CodexBarWidgetProviderSnapshot] {
-        let groupFiltered: [CodexBarWidgetProviderSnapshot]
-        if let selectedGroupID = entry.configuration.group?.id {
-            groupFiltered = entry.snapshot.results.filter { provider in
-                (provider.groupID ?? CodexBarWidgetGroupChoice.ungroupedID) == selectedGroupID
-            }
-        } else {
-            groupFiltered = entry.snapshot.results
-        }
-
-        return entry.configuration.focus.providerID.map { providerID in
-            groupFiltered.filter { $0.providerID == providerID }
-        } ?? groupFiltered
+        entry.snapshot.scopedProviders(group: entry.configuration.group, focus: entry.configuration.focus)
     }
 
     private func resolvedTile(
@@ -1158,10 +1158,31 @@ struct CodexBarWidgetRenderedTile: Identifiable {
 }
 
 private extension CodexBarWidgetSnapshot {
-    var selectableTiles: [CodexBarWidgetTile] {
-        results.flatMap { provider in
+    func selectableTiles(
+        group: CodexBarWidgetGroupChoice? = nil,
+        focus: CodexBarWidgetFocus = .dashboardOrder
+    ) -> [CodexBarWidgetTile] {
+        scopedProviders(group: group, focus: focus).flatMap { provider in
             [provider.summaryTile] + provider.bars.map { provider.barTile($0) }
         }
+    }
+
+    func scopedProviders(
+        group: CodexBarWidgetGroupChoice? = nil,
+        focus: CodexBarWidgetFocus = .dashboardOrder
+    ) -> [CodexBarWidgetProviderSnapshot] {
+        let groupFiltered: [CodexBarWidgetProviderSnapshot]
+        if let selectedGroupID = group?.id {
+            groupFiltered = results.filter { provider in
+                (provider.groupID ?? CodexBarWidgetGroupChoice.ungroupedID) == selectedGroupID
+            }
+        } else {
+            groupFiltered = results
+        }
+
+        return focus.providerID.map { providerID in
+            groupFiltered.filter { $0.providerID == providerID }
+        } ?? groupFiltered
     }
 
     var groupChoices: [CodexBarWidgetGroupChoice] {
