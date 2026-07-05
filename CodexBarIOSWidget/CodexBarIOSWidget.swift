@@ -304,21 +304,14 @@ struct CodexBarWidgetView: View {
 
         if configuredChoices.contains(where: { $0 != nil }) {
             return (0..<maximumTiles).compactMap { index in
-                let tile: CodexBarWidgetTile?
-                if configuredChoices.indices.contains(index), let choice = configuredChoices[index] {
-                    tile = resolvedTile(for: choice, in: allTiles)
-                } else if fallbackTiles.indices.contains(index) {
-                    tile = fallbackTiles[index]
-                } else {
-                    tile = nil
+                guard configuredChoices.indices.contains(index), let choice = configuredChoices[index] else {
+                    return nil
                 }
 
-                return tile.map {
-                    CodexBarWidgetRenderedTile(
-                        tile: $0,
-                        displayMode: displayMode(at: index, in: configuredDisplayModes)
-                    )
-                }
+                return CodexBarWidgetRenderedTile(
+                    tile: resolvedTile(for: choice, in: allTiles),
+                    displayMode: displayMode(at: index, in: configuredDisplayModes)
+                )
             }
         }
 
