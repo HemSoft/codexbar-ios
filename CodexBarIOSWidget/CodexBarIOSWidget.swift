@@ -61,14 +61,26 @@ struct CodexBarWidgetConfigurationIntent: WidgetConfigurationIntent {
     @Parameter(title: "Tile 1")
     var tile1: CodexBarWidgetTileChoice?
 
+    @Parameter(title: "Tile 1 Display", default: .automatic)
+    var tile1DisplayMode: CodexBarWidgetTileDisplayMode
+
     @Parameter(title: "Tile 2")
     var tile2: CodexBarWidgetTileChoice?
+
+    @Parameter(title: "Tile 2 Display", default: .automatic)
+    var tile2DisplayMode: CodexBarWidgetTileDisplayMode
 
     @Parameter(title: "Tile 3")
     var tile3: CodexBarWidgetTileChoice?
 
+    @Parameter(title: "Tile 3 Display", default: .automatic)
+    var tile3DisplayMode: CodexBarWidgetTileDisplayMode
+
     @Parameter(title: "Tile 4")
     var tile4: CodexBarWidgetTileChoice?
+
+    @Parameter(title: "Tile 4 Display", default: .automatic)
+    var tile4DisplayMode: CodexBarWidgetTileDisplayMode
 
     @Parameter(title: "Update Preference", default: .appDefault)
     var refreshPolicy: CodexBarWidgetRefreshPolicy
@@ -161,6 +173,23 @@ enum CodexBarWidgetRefreshPolicy: String, AppEnum {
     }
 }
 
+enum CodexBarWidgetTileDisplayMode: String, AppEnum {
+    case automatic
+    case compactPercent
+    case fullBar
+    case balanceOnly
+    case urgentStatus
+
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Tile Display")
+    static let caseDisplayRepresentations: [CodexBarWidgetTileDisplayMode: DisplayRepresentation] = [
+        .automatic: "Automatic",
+        .compactPercent: "Compact Percent",
+        .fullBar: "Full Bar",
+        .balanceOnly: "Balance Only",
+        .urgentStatus: "Urgent Status",
+    ]
+}
+
 struct CodexBarWidgetTileChoice: AppEntity {
     static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Tile")
     static let defaultQuery = CodexBarWidgetTileChoiceQuery()
@@ -241,11 +270,11 @@ struct CodexBarWidgetView: View {
     var body: some View {
         switch family {
         case .accessoryInline:
-            AccessoryInlineWidget(tiles: selectedTiles)
+            AccessoryInlineWidget(tiles: selectedTiles.map(\.tile))
         case .accessoryCircular:
-            AccessoryCircularWidget(tile: selectedTiles.first)
+            AccessoryCircularWidget(tile: selectedTiles.first?.tile)
         case .accessoryRectangular:
-            AccessoryRectangularWidget(tile: selectedTiles.first)
+            AccessoryRectangularWidget(tile: selectedTiles.first?.tile)
         default:
             TileWidget(
                 tiles: selectedTiles,
@@ -255,7 +284,7 @@ struct CodexBarWidgetView: View {
         }
     }
 
-    private var selectedTiles: [CodexBarWidgetTile] {
+    private var selectedTiles: [CodexBarWidgetRenderedTile] {
         let allTiles = entry.snapshot.selectableTiles
         let configuredChoices = [
             entry.configuration.tile1,
@@ -263,20 +292,31 @@ struct CodexBarWidgetView: View {
             entry.configuration.tile3,
             entry.configuration.tile4,
         ]
+        let configuredDisplayModes = [
+            entry.configuration.tile1DisplayMode,
+            entry.configuration.tile2DisplayMode,
+            entry.configuration.tile3DisplayMode,
+            entry.configuration.tile4DisplayMode,
+        ]
 
         if configuredChoices.contains(where: { $0 != nil }) {
-            return configuredChoices
+            return zip(configuredChoices, configuredDisplayModes)
                 .prefix(tileCount)
-                .compactMap { choice in
+                .compactMap { choice, displayMode in
                     guard let choice else {
                         return nil
                     }
 
-                    return resolvedTile(for: choice, in: allTiles)
+                    return CodexBarWidgetRenderedTile(
+                        tile: resolvedTile(for: choice, in: allTiles),
+                        displayMode: displayMode
+                    )
                 }
         }
 
-        return Array(defaultTiles.prefix(tileCount))
+        return defaultTiles.prefix(tileCount).map {
+            CodexBarWidgetRenderedTile(tile: $0, displayMode: .automatic)
+        }
     }
 
     private var defaultTiles: [CodexBarWidgetTile] {
@@ -382,7 +422,7 @@ struct CodexBarWidgetView: View {
 }
 
 struct TileWidget: View {
-    let tiles: [CodexBarWidgetTile]
+    let tiles: [CodexBarWidgetRenderedTile]
     let generatedAt: Date
     let family: WidgetFamily
 
@@ -396,7 +436,7 @@ struct TileWidget: View {
                 VStack(alignment: .leading, spacing: 8) {
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(Array(tiles.enumerated()), id: \.offset) { _, tile in
-                            ProviderWidgetTile(tile: tile, style: family == .systemSmall ? .small : .standard)
+                            ProviderWidgetTile(renderedTile: tile, style: family == .systemSmall ? .small : .standard)
                         }
                     }
 
@@ -434,7 +474,7 @@ struct TileWidget: View {
 }
 
 struct DenseTileWidget: View {
-    let tiles: [CodexBarWidgetTile]
+    let tiles: [CodexBarWidgetRenderedTile]
     let generatedAt: Date
 
     var body: some View {
@@ -469,7 +509,7 @@ struct DenseTileWidget: View {
     @ViewBuilder
     private func denseTile(at index: Int) -> some View {
         if tiles.indices.contains(index) {
-            ProviderWidgetTile(tile: tiles[index], style: .dense)
+            ProviderWidgetTile(renderedTile: tiles[index], style: .dense)
         } else {
             Color.clear
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -484,16 +524,24 @@ struct ProviderWidgetTile: View {
         case dense
     }
 
-    let tile: CodexBarWidgetTile
+    let renderedTile: CodexBarWidgetRenderedTile
     let style: Style
+
+    private var tile: CodexBarWidgetTile {
+        renderedTile.tile
+    }
 
     var body: some View {
         Group {
-            switch style {
-            case .dense:
-                denseBody
-            case .small, .standard:
-                standardBody
+            if renderedTile.displayMode == .automatic {
+                switch style {
+                case .dense:
+                    automaticDenseBody
+                case .small, .standard:
+                    automaticStandardBody
+                }
+            } else {
+                configuredModeBody
             }
         }
         .padding(padding)
@@ -506,7 +554,7 @@ struct ProviderWidgetTile: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private var standardBody: some View {
+    private var automaticStandardBody: some View {
         VStack(alignment: .leading, spacing: 7) {
             header(font: .caption.weight(.semibold), logoSize: 22)
 
@@ -540,7 +588,7 @@ struct ProviderWidgetTile: View {
         }
     }
 
-    private var denseBody: some View {
+    private var automaticDenseBody: some View {
         VStack(alignment: .leading, spacing: 6) {
             header(font: .caption2.weight(.semibold), logoSize: 18)
 
@@ -591,6 +639,151 @@ struct ProviderWidgetTile: View {
         }
     }
 
+    private var configuredModeBody: some View {
+        VStack(alignment: .leading, spacing: modeSpacing) {
+            header(font: headerFont, logoSize: logoSize)
+
+            switch renderedTile.displayMode {
+            case .automatic:
+                EmptyView()
+            case .compactPercent:
+                compactPercentContent
+            case .fullBar:
+                fullBarContent
+            case .balanceOnly:
+                balanceOnlyContent
+            case .urgentStatus:
+                urgentStatusContent
+            }
+
+            if style == .dense {
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var compactPercentContent: some View {
+        VStack(alignment: .leading, spacing: modeSpacing) {
+            Text(primaryMetric)
+                .font(primaryMetricFont)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+
+            Text(compactDetail)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(style == .dense ? 2 : 1)
+                .minimumScaleFactor(0.65)
+
+            if let bar = tile.bar {
+                ProgressView(value: bar.fractionUsed)
+                    .tint(bar.severity.tint)
+            }
+        }
+    }
+
+    private var fullBarContent: some View {
+        VStack(alignment: .leading, spacing: modeSpacing) {
+            if let bar = tile.bar {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(bar.label)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                    Spacer(minLength: 4)
+                    Text(bar.usageText)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+                ProgressView(value: bar.fractionUsed)
+                    .tint(bar.severity.tint)
+
+                if let resetDescription = bar.resetDescription {
+                    Text(resetDescription)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                }
+            } else if let creditsRemaining = tile.creditsRemaining {
+                Text(widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00")
+                    .font(primaryMetricFont)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.58)
+
+                Text(tile.title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Text(tile.subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(style == .dense ? 3 : 2)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+    }
+
+    private var balanceOnlyContent: some View {
+        VStack(alignment: .leading, spacing: modeSpacing) {
+            if let creditsRemaining = tile.creditsRemaining {
+                Text(widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00")
+                    .font(primaryMetricFont)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+
+                Text("Balance")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else if let bar = tile.bar {
+                Text(bar.usageText)
+                    .font(primaryMetricFont)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+
+                Text("Usage tile - no balance data")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(style == .dense ? 2 : 1)
+                    .minimumScaleFactor(0.65)
+            } else {
+                Text("No balance data")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(tile.severity.tint)
+                    .lineLimit(1)
+
+                Text(tile.subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(style == .dense ? 2 : 1)
+            }
+        }
+    }
+
+    private var urgentStatusContent: some View {
+        VStack(alignment: .leading, spacing: modeSpacing) {
+            Text(statusLabel)
+                .font(primaryMetricFont)
+                .foregroundStyle(tile.severity.tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.58)
+
+            Text(statusDetail)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(style == .dense ? 3 : 2)
+                .minimumScaleFactor(0.65)
+        }
+    }
+
     private func header(font: Font, logoSize: CGFloat) -> some View {
         HStack(spacing: 5) {
             ProviderLogo(providerID: tile.providerID, size: logoSize)
@@ -607,7 +800,7 @@ struct ProviderWidgetTile: View {
     private var padding: CGFloat {
         switch style {
         case .dense:
-            8
+            renderedTile.displayMode == .automatic ? 8 : 7
         case .small, .standard:
             10
         }
@@ -622,6 +815,79 @@ struct ProviderWidgetTile: View {
         case .dense:
             0
         }
+    }
+
+    private var modeSpacing: CGFloat {
+        style == .dense ? 5 : 6
+    }
+
+    private var headerFont: Font {
+        style == .dense ? .caption2.weight(.semibold) : .caption.weight(.semibold)
+    }
+
+    private var logoSize: CGFloat {
+        style == .dense ? 18 : 22
+    }
+
+    private var primaryMetricFont: Font {
+        switch style {
+        case .dense:
+            .system(size: 24, weight: .semibold, design: .rounded)
+        case .standard:
+            .system(size: 22, weight: .semibold, design: .rounded)
+        case .small:
+            .system(size: 20, weight: .semibold, design: .rounded)
+        }
+    }
+
+    private var primaryMetric: String {
+        if let creditsRemaining = tile.creditsRemaining {
+            return widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
+        }
+
+        if let bar = tile.bar {
+            return bar.usageText
+        }
+
+        return statusLabel
+    }
+
+    private var compactDetail: String {
+        if tile.creditsRemaining != nil {
+            return tile.title
+        }
+
+        if let bar = tile.bar {
+            return bar.label
+        }
+
+        return tile.subtitle
+    }
+
+    private var statusLabel: String {
+        switch tile.severity {
+        case .normal:
+            "OK"
+        case .warning:
+            "Warning"
+        case .critical:
+            "Critical"
+        }
+    }
+
+    private var statusDetail: String {
+        if let bar = tile.bar {
+            return [bar.usageText, bar.resetDescription]
+                .compactMap { $0 }
+                .joined(separator: " - ")
+        }
+
+        if let creditsRemaining = tile.creditsRemaining {
+            let balance = widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
+            return "\(balance) balance"
+        }
+
+        return tile.subtitle
     }
 }
 
@@ -776,6 +1042,15 @@ struct CodexBarWidgetTile: Identifiable {
             creditsRemaining: nil,
             severity: .warning
         )
+    }
+}
+
+struct CodexBarWidgetRenderedTile: Identifiable {
+    let tile: CodexBarWidgetTile
+    let displayMode: CodexBarWidgetTileDisplayMode
+
+    var id: String {
+        "\(tile.id).\(displayMode.rawValue)"
     }
 }
 
