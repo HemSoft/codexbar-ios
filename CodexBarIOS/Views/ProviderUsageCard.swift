@@ -3,6 +3,7 @@ import SwiftUI
 struct ProviderUsageCard: View {
     let result: ProviderUsageResult
     let statusText: String
+    let trend: UsageTrendSummary?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -65,6 +66,10 @@ struct ProviderUsageCard: View {
                     }
                 }
             }
+
+            if let trend {
+                UsageTrendRow(trend: trend)
+            }
         }
         .padding(16)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
@@ -78,6 +83,87 @@ struct ProviderUsageCard: View {
         formatter.maximumFractionDigits = 2
         return formatter
     }()
+}
+
+struct UsageTrendRow: View {
+    let trend: UsageTrendSummary
+
+    var body: some View {
+        HStack(spacing: 10) {
+            UsageTrendSparkline(points: trend.points, tint: tint)
+                .frame(width: 62, height: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(trend.valueDescription)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Text(trend.windowDescription)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var tint: Color {
+        switch trend.direction {
+        case .flat:
+            .secondary
+        case .up where trend.isBalance:
+            .green
+        case .down where trend.isBalance:
+            .orange
+        case .up:
+            .orange
+        case .down:
+            .green
+        }
+    }
+}
+
+struct UsageTrendSparkline: View {
+    let points: [Double]
+    let tint: Color
+
+    var body: some View {
+        Canvas { context, size in
+            guard points.count >= 2 else {
+                return
+            }
+
+            let minValue = points.min() ?? 0
+            let maxValue = points.max() ?? 1
+            let span = max(maxValue - minValue, 0.0001)
+            let isFlat = abs(maxValue - minValue) < 0.0001
+            let step = size.width / CGFloat(points.count - 1)
+            var path = Path()
+
+            for (index, point) in points.enumerated() {
+                let x = CGFloat(index) * step
+                let y = isFlat ? size.height / 2 : size.height - CGFloat((point - minValue) / span) * size.height
+                let resolvedPoint = CGPoint(x: x, y: y)
+
+                if index == 0 {
+                    path.move(to: resolvedPoint)
+                } else {
+                    path.addLine(to: resolvedPoint)
+                }
+            }
+
+            context.stroke(
+                path,
+                with: .color(tint),
+                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .accessibilityHidden(true)
+    }
 }
 
 private extension ProviderID {
@@ -179,7 +265,15 @@ private struct UsageProgressBar: View {
             ],
             fetchedAt: Date()
         ),
-        statusText: "Not configured - demo data"
+        statusText: "Not configured - demo data",
+        trend: UsageTrendSummary(
+            accountID: "codex",
+            points: [0.34, 0.46, 0.52, 0.45, 0.62],
+            valueDescription: "+17 pts since last snapshot",
+            windowDescription: "5 snapshots / 7d",
+            isBalance: false,
+            direction: .up
+        )
     )
     .padding()
     .background(Color(.systemGroupedBackground))

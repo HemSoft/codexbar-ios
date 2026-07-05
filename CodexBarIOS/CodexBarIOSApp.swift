@@ -4,6 +4,7 @@ import SwiftUI
 struct CodexBarIOSApp: App {
     @StateObject private var refreshService = UsageRefreshService.live()
     @StateObject private var configurationStore = ProviderConfigurationStore()
+    @StateObject private var historyStore = UsageHistoryStore()
     #if DEBUG
     @State private var debugProviderSettingsProviderID = DebugLaunchRoute.providerSettingsProviderID
     #endif
@@ -49,7 +50,8 @@ struct CodexBarIOSApp: App {
     private var mainContentView: some View {
         ContentView(
             refreshService: refreshService,
-            configurationStore: configurationStore
+            configurationStore: configurationStore,
+            historyStore: historyStore
         )
     }
 }
