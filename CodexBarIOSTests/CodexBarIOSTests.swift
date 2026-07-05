@@ -263,6 +263,32 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderConfigurationsSortByGroupName() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let beta = try! XCTUnwrap(store.addGroup(named: "Beta"))
+        let alpha = try! XCTUnwrap(store.addGroup(named: "Alpha"))
+        let ungrouped = store.addAccount(for: .openRouter)
+        var betaAccount = store.addAccount(for: .codex)
+        var alphaAccount = store.addAccount(for: .claude)
+        betaAccount.groupID = beta.id
+        alphaAccount.groupID = alpha.id
+
+        XCTAssertTrue(store.update(betaAccount))
+        XCTAssertTrue(store.update(alphaAccount))
+
+        XCTAssertEqual(
+            store.configurations.map(\.id),
+            [ungrouped.id, alphaAccount.id, betaAccount.id]
+        )
+    }
+
+    @MainActor
     func testUsageAlertSettingsPersistAndClamp() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

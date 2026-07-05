@@ -384,12 +384,15 @@ struct CodexBarWidgetView: View {
     }
 
     private var defaultTiles: [CodexBarWidgetTile] {
-        let groupID = entry.configuration.group?.id
-        let groupFiltered = groupID.map { selectedGroupID in
-            entry.snapshot.results.filter { provider in
+        let groupFiltered: [CodexBarWidgetProviderSnapshot]
+        if let selectedGroupID = entry.configuration.group?.id {
+            let filteredResults = entry.snapshot.results.filter { provider in
                 (provider.groupID ?? CodexBarWidgetGroupChoice.ungroupedID) == selectedGroupID
             }
-        } ?? entry.snapshot.results
+            groupFiltered = filteredResults.isEmpty ? entry.snapshot.results : filteredResults
+        } else {
+            groupFiltered = entry.snapshot.results
+        }
 
         let providers = entry.configuration.focus.providerID.map { providerID in
             groupFiltered.filter { $0.providerID == providerID }
@@ -1167,7 +1170,7 @@ private extension CodexBarWidgetSnapshot {
             choices.append(
                 CodexBarWidgetGroupChoice(
                     id: id,
-                    title: provider.groupName ?? "Ungrouped"
+                    title: widgetGroupTitle(for: provider)
                 )
             )
         }
@@ -1183,6 +1186,17 @@ private extension CodexBarWidgetSnapshot {
 
             return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
+    }
+
+    private func widgetGroupTitle(for provider: CodexBarWidgetProviderSnapshot) -> String {
+        let title = provider.groupName ?? "Ungrouped"
+        if provider.groupID != nil,
+           title.localizedCaseInsensitiveCompare("Ungrouped") == .orderedSame
+        {
+            return "Ungrouped (group)"
+        }
+
+        return title
     }
 }
 

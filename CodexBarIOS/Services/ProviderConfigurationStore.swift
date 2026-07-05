@@ -43,6 +43,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.dashboardCardOrder = Self.loadDashboardCardOrder(from: defaults)
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
         self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
+        sortConfigurations()
         refreshSecretAvailability()
     }
 
@@ -497,7 +498,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         return decoded
             .map { normalizedConfiguration($0, validGroupIDs: validGroupIDs) }
-            .sorted(by: configurationSort)
+            .sorted { configurationSort($0, $1) }
     }
 
     private static func loadGroups(from defaults: UserDefaults) -> [ProviderAccountGroup] {
@@ -606,18 +607,25 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     private func sortConfigurations() {
-        configurations.sort(by: Self.configurationSort)
+        let groupNames = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.name) })
+        configurations.sort {
+            Self.configurationSort($0, $1, groupNames: groupNames)
+        }
     }
 
     private func sortGroups() {
         groups.sort(by: Self.groupSort)
     }
 
-    private static func configurationSort(_ lhs: ProviderAccountConfiguration, _ rhs: ProviderAccountConfiguration) -> Bool {
-        let lhsGroup = lhs.groupID ?? ""
-        let rhsGroup = rhs.groupID ?? ""
+    private static func configurationSort(
+        _ lhs: ProviderAccountConfiguration,
+        _ rhs: ProviderAccountConfiguration,
+        groupNames: [String: String] = [:]
+    ) -> Bool {
+        let lhsGroup = lhs.groupID.flatMap { groupNames[$0] } ?? ""
+        let rhsGroup = rhs.groupID.flatMap { groupNames[$0] } ?? ""
         if lhsGroup != rhsGroup {
-            return lhsGroup < rhsGroup
+            return lhsGroup.localizedCaseInsensitiveCompare(rhsGroup) == .orderedAscending
         }
 
         if lhs.providerID.displayName != rhs.providerID.displayName {

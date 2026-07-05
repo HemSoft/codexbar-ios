@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var isConfirmingReset = false
     @State private var alertPermissionMessage: String?
     @State private var newGroupName = ""
+    @State private var groupNameDrafts: [String: String] = [:]
+    @FocusState private var focusedGroupID: String?
 
     var body: some View {
         NavigationStack {
@@ -86,6 +88,10 @@ struct SettingsView: View {
                             text: groupNameBinding(for: group)
                         )
                         .textInputAutocapitalization(.words)
+                        .focused($focusedGroupID, equals: group.id)
+                        .onSubmit {
+                            commitGroupName(for: group.id)
+                        }
                     }
                     .onDelete(perform: deleteGroups)
 
@@ -174,8 +180,14 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
+                        commitFocusedGroupName()
                         dismiss()
                     }
+                }
+            }
+            .onChange(of: focusedGroupID) { oldValue, newValue in
+                if let oldValue, oldValue != newValue {
+                    commitGroupName(for: oldValue)
                 }
             }
         }
@@ -271,20 +283,50 @@ struct SettingsView: View {
         let groups = configurationStore.groups
         for index in offsets {
             configurationStore.removeGroup(groups[index])
+            groupNameDrafts[groups[index].id] = nil
         }
     }
 
     private func groupNameBinding(for group: ProviderAccountGroup) -> Binding<String> {
         Binding(
             get: {
-                configurationStore.group(for: group.id)?.name ?? group.name
+                groupNameDrafts[group.id]
+                    ?? configurationStore.group(for: group.id)?.name
+                    ?? group.name
             },
             set: { name in
-                var updated = group
-                updated.name = name
-                _ = configurationStore.updateGroup(updated)
+                groupNameDrafts[group.id] = name
             }
         )
+    }
+
+    private func commitFocusedGroupName() {
+        guard let focusedGroupID else {
+            return
+        }
+
+        commitGroupName(for: focusedGroupID)
+    }
+
+    private func commitGroupName(for groupID: String) {
+        guard
+            let group = configurationStore.group(for: groupID),
+            let draftName = groupNameDrafts[groupID]
+        else {
+            return
+        }
+
+        let normalizedName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedName != group.name else {
+            groupNameDrafts[groupID] = nil
+            return
+        }
+
+        var updated = group
+        updated.name = draftName
+        if configurationStore.updateGroup(updated) {
+            groupNameDrafts[groupID] = nil
+        }
     }
 }
 
