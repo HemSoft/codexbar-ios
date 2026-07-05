@@ -6,7 +6,7 @@ public protocol UsageAlertNotifying: AnyObject {
     func requestAuthorization() async -> Bool
 
     @MainActor
-    func deliver(_ notification: UsageAlertNotification) async
+    func deliver(_ notification: UsageAlertNotification) async throws
 }
 
 public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, UNUserNotificationCenterDelegate {
@@ -30,7 +30,7 @@ public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, UNUse
     }
 
     @MainActor
-    public func deliver(_ notification: UsageAlertNotification) async {
+    public func deliver(_ notification: UsageAlertNotification) async throws {
         let content = UNMutableNotificationContent()
         content.title = notification.title
         content.body = notification.body
@@ -42,7 +42,7 @@ public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, UNUse
             trigger: nil
         )
 
-        try? await center.add(request)
+        try await center.add(request)
     }
 
     public nonisolated func userNotificationCenter(

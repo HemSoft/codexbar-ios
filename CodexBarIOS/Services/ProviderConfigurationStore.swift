@@ -153,10 +153,11 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     public func updateUsageAlertSettings(_ settings: UsageAlertSettings) {
+        let previousSettings = usageAlertSettings
         usageAlertSettings = settings
         saveUsageAlertSettings()
 
-        if !settings.isEnabled {
+        if settings != previousSettings {
             updateUsageAlertActiveIDs([])
         }
     }

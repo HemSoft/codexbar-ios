@@ -67,7 +67,7 @@ public enum UsageAlertEvaluator {
                !hasSpecificThresholdBreach,
                result.highestSeverity >= .warning
             {
-                let alertID = "severity.\(result.accountID).\(result.highestSeverity.rawValue)"
+                let alertID = "severity.\(result.accountID)"
                 nextActiveAlertIDs.insert(alertID)
 
                 if !activeAlertIDs.contains(alertID) {
@@ -89,7 +89,31 @@ public enum UsageAlertEvaluator {
     }
 
     private static func alertID(for result: ProviderUsageResult, bar: UsageBar) -> String {
-        "usage.\(result.accountID).\(normalizedKeyComponent(bar.label))"
+        "usage.\(result.accountID).\(stableUsageKey(for: bar))"
+    }
+
+    private static func stableUsageKey(for bar: UsageBar) -> String {
+        let withoutParentheticalValues = bar.label
+            .replacingOccurrences(of: #"\([^)]*\)"#, with: "", options: .regularExpression)
+        let withoutRatios = withoutParentheticalValues
+            .replacingOccurrences(
+                of: #"\$?\d[\d,]*(?:\.\d+)?\s*/\s*\$?\d[\d,]*(?:\.\d+)?"#,
+                with: "",
+                options: .regularExpression
+            )
+        let withoutStandaloneNumbers = withoutRatios
+            .replacingOccurrences(
+                of: #"\$?\d[\d,]*(?:\.\d+)?"#,
+                with: "",
+                options: .regularExpression
+            )
+
+        let normalized = normalizedKeyComponent(withoutStandaloneNumbers)
+        if !normalized.isEmpty {
+            return normalized
+        }
+
+        return normalizedKeyComponent(bar.label)
     }
 
     private static func normalizedKeyComponent(_ value: String) -> String {
@@ -111,6 +135,7 @@ public enum UsageAlertEvaluator {
     private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
         formatter.maximumFractionDigits = 2
         return formatter
     }()

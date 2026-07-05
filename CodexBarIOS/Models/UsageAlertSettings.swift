@@ -22,7 +22,7 @@ public struct UsageAlertSettings: Codable, Equatable, Sendable {
     public static let defaultBalanceThreshold = 5.00
 
     public static func normalizedUsageThreshold(_ value: Double) -> Double {
-        min(max(value, 0.01), 1.50)
+        min(max(value, 0.01), 1.0)
     }
 
     public static func normalizedBalanceThreshold(_ value: Double) -> Double {

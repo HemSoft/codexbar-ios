@@ -228,17 +228,27 @@ struct ContentView: View {
     }
 
     private func processUsageAlerts() async {
+        guard refreshService.lastRefreshError == nil else {
+            return
+        }
+
         let evaluation = UsageAlertEvaluator.evaluate(
             results: refreshService.results,
             settings: configurationStore.usageAlertSettings,
             activeAlertIDs: configurationStore.usageAlertActiveIDs
         )
 
-        configurationStore.updateUsageAlertActiveIDs(evaluation.activeAlertIDs)
+        var deliveredActiveAlertIDs = evaluation.activeAlertIDs
 
         for notification in evaluation.notifications {
-            await usageAlertNotifier.deliver(notification)
+            do {
+                try await usageAlertNotifier.deliver(notification)
+            } catch {
+                deliveredActiveAlertIDs.remove(notification.id)
+            }
         }
+
+        configurationStore.updateUsageAlertActiveIDs(deliveredActiveAlertIDs)
     }
 
     @MainActor
