@@ -59,6 +59,8 @@
 		100000000000000000000032 /* UsageAlertEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000034 /* UsageAlertEvaluator.swift */; };
 		100000000000000000000033 /* LocalUsageAlertNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000035 /* LocalUsageAlertNotifier.swift */; };
 		100000000000000000000034 /* UsageHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000036 /* UsageHistoryStore.swift */; };
+		100000000000000000000035 /* MacCompanionSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000037 /* MacCompanionSnapshot.swift */; };
+		100000000000000000000036 /* MacCompanionPopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000038 /* MacCompanionPopoverView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -147,6 +149,8 @@
 		200000000000000000000034 /* UsageAlertEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageAlertEvaluator.swift; sourceTree = "<group>"; };
 		200000000000000000000035 /* LocalUsageAlertNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalUsageAlertNotifier.swift; sourceTree = "<group>"; };
 		200000000000000000000036 /* UsageHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageHistoryStore.swift; sourceTree = "<group>"; };
+		200000000000000000000037 /* MacCompanionSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCompanionSnapshot.swift; sourceTree = "<group>"; };
+		200000000000000000000038 /* MacCompanionPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCompanionPopoverView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -255,6 +259,7 @@
 			isa = PBXGroup;
 			children = (
 				20000000000000000000000A /* ProviderUsageCard.swift */,
+				200000000000000000000038 /* MacCompanionPopoverView.swift */,
 				200000000000000000000012 /* SettingsView.swift */,
 				200000000000000000000013 /* ProviderSettingsView.swift */,
 			);
@@ -302,6 +307,7 @@
 			isa = PBXGroup;
 			children = (
 				20000000000000000000002B /* WidgetSnapshotStore.swift */,
+				200000000000000000000037 /* MacCompanionSnapshot.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -477,7 +483,9 @@
 				100000000000000000000027 /* OpenCodeZenBootstrapImporter.swift in Sources */,
 				100000000000000000000028 /* WidgetRefreshInterval.swift in Sources */,
 				100000000000000000000029 /* WidgetSnapshotStore.swift in Sources */,
+				100000000000000000000035 /* MacCompanionSnapshot.swift in Sources */,
 				10000000000000000000002A /* WidgetSnapshotPublisher.swift in Sources */,
+				100000000000000000000036 /* MacCompanionPopoverView.swift in Sources */,
 				100000000000000000000025 /* CursorWebAuthService.swift in Sources */,
 				100000000000000000000024 /* CursorUsageProvider.swift in Sources */,
 			);

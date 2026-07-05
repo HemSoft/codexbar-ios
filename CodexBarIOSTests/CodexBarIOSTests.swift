@@ -113,6 +113,69 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(WidgetSnapshotStore.loadRefreshInterval(defaults: defaults), .threeHours)
     }
 
+    func testMacCompanionSnapshotPrioritizesCriticalUsage() {
+        let generatedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let snapshot = CodexBarWidgetSnapshot(
+            generatedAt: generatedAt,
+            results: [
+                makeWidgetProvider(
+                    accountID: "openrouter.work",
+                    title: "OpenRouter",
+                    creditsRemaining: 3.50,
+                    severity: .normal
+                ),
+                makeWidgetProvider(
+                    accountID: "codex.personal",
+                    title: "ChatGPT / Codex",
+                    usageText: "94%",
+                    fractionUsed: 0.94,
+                    severity: .critical
+                ),
+            ]
+        )
+
+        let companion = MacCompanionMenuSnapshot(snapshot: snapshot)
+
+        XCTAssertEqual(companion.generatedAt, generatedAt)
+        XCTAssertEqual(companion.rows.map(\.id), ["codex.personal", "openrouter.work"])
+        XCTAssertEqual(companion.menuTitle, "Codex 94%")
+        XCTAssertEqual(companion.headline, "ChatGPT / Codex")
+    }
+
+    func testMacCompanionSnapshotUsesLowestBalanceWithinSameSeverity() {
+        let snapshot = CodexBarWidgetSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_788_475_200),
+            results: [
+                makeWidgetProvider(
+                    accountID: "openrouter.personal",
+                    title: "OpenRouter Personal",
+                    creditsRemaining: 18.25,
+                    severity: .normal
+                ),
+                makeWidgetProvider(
+                    accountID: "openrouter.work",
+                    title: "OpenRouter Work",
+                    creditsRemaining: 4.75,
+                    severity: .normal
+                ),
+            ]
+        )
+
+        let companion = MacCompanionMenuSnapshot(snapshot: snapshot)
+
+        XCTAssertEqual(companion.rows.map(\.id), ["openrouter.work", "openrouter.personal"])
+        XCTAssertEqual(companion.menuTitle, "OpenRouter Work $4.75")
+    }
+
+    func testMacCompanionSnapshotEmptyState() {
+        let companion = MacCompanionMenuSnapshot(snapshot: .empty)
+
+        XCTAssertEqual(companion.menuTitle, "CodexBar")
+        XCTAssertEqual(companion.headline, "No usage data")
+        XCTAssertEqual(companion.detail, "Open CodexBar to refresh")
+        XCTAssertTrue(companion.rows.isEmpty)
+    }
+
     @MainActor
     func testWidgetSnapshotPublisherPropagatesProviderGroup() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
@@ -2348,6 +2411,37 @@ final class CodexBarIOSTests: XCTestCase {
             bars: used.map { [UsageBar(label: "Usage", used: $0, limit: 100)] } ?? [],
             creditsRemaining: creditsRemaining,
             fetchedAt: fetchedAt
+        )
+    }
+
+    private func makeWidgetProvider(
+        accountID: String,
+        title: String,
+        usageText: String? = nil,
+        fractionUsed: Double = 0,
+        creditsRemaining: Double? = nil,
+        severity: CodexBarWidgetSeverity
+    ) -> CodexBarWidgetProviderSnapshot {
+        CodexBarWidgetProviderSnapshot(
+            accountID: accountID,
+            providerID: accountID.components(separatedBy: ".").first ?? accountID,
+            title: title,
+            subtitle: "Preview",
+            bars: usageText.map {
+                [
+                    CodexBarWidgetUsageBarSnapshot(
+                        id: "\(accountID).0",
+                        label: "Usage",
+                        fractionUsed: fractionUsed,
+                        usageText: $0,
+                        resetDescription: nil,
+                        severity: severity
+                    ),
+                ]
+            } ?? [],
+            creditsRemaining: creditsRemaining,
+            fetchedAt: Date(timeIntervalSince1970: 1_788_475_200),
+            severity: severity
         )
     }
 }
