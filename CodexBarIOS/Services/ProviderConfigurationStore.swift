@@ -8,6 +8,8 @@ public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var autoRefreshInterval: AutoRefreshInterval
     @Published public private(set) var widgetRefreshInterval: WidgetRefreshInterval
     @Published public private(set) var dashboardCardOrder: [String]
+    @Published public private(set) var usageAlertSettings: UsageAlertSettings
+    @Published public private(set) var usageAlertActiveIDs: Set<String>
     @Published public private(set) var lastError: String?
 
     private let defaults: UserDefaults
@@ -17,6 +19,8 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let autoRefreshIntervalKey = DefaultsKey.autoRefreshInterval
     private let widgetRefreshIntervalKey = DefaultsKey.widgetRefreshInterval
     private let dashboardCardOrderKey = DefaultsKey.dashboardCardOrder
+    private let usageAlertSettingsKey = DefaultsKey.usageAlertSettings
+    private let usageAlertActiveIDsKey = DefaultsKey.usageAlertActiveIDs
 
     public init(
         defaults: UserDefaults = .standard,
@@ -30,6 +34,8 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.autoRefreshInterval = Self.loadAutoRefreshInterval(from: defaults)
         self.widgetRefreshInterval = Self.loadWidgetRefreshInterval(from: defaults)
         self.dashboardCardOrder = Self.loadDashboardCardOrder(from: defaults)
+        self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
+        self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
         refreshSecretAvailability()
     }
 
@@ -113,8 +119,10 @@ public final class ProviderConfigurationStore: ObservableObject {
             configurations = []
             secretAvailability = [:]
             dashboardCardOrder = []
+            usageAlertActiveIDs = []
             defaults.removeObject(forKey: configurationsKey)
             defaults.removeObject(forKey: dashboardCardOrderKey)
+            defaults.removeObject(forKey: usageAlertActiveIDsKey)
             lastError = nil
         } catch {
             lastError = error.localizedDescription
@@ -142,6 +150,45 @@ public final class ProviderConfigurationStore: ObservableObject {
         var seenAccountIDs = Set<String>()
         dashboardCardOrder = accountIDs.filter { seenAccountIDs.insert($0).inserted }
         defaults.set(dashboardCardOrder, forKey: dashboardCardOrderKey)
+    }
+
+    public func updateUsageAlertSettings(_ settings: UsageAlertSettings) {
+        let previousSettings = usageAlertSettings
+        usageAlertSettings = settings
+        saveUsageAlertSettings()
+
+        if settings != previousSettings {
+            updateUsageAlertActiveIDs([])
+        }
+    }
+
+    public func updateUsageAlertsEnabled(_ isEnabled: Bool) {
+        var settings = usageAlertSettings
+        settings.isEnabled = isEnabled
+        updateUsageAlertSettings(settings)
+    }
+
+    public func updateUsageAlertUsageThreshold(_ threshold: Double) {
+        var settings = usageAlertSettings
+        settings.usageThreshold = UsageAlertSettings.normalizedUsageThreshold(threshold)
+        updateUsageAlertSettings(settings)
+    }
+
+    public func updateUsageAlertBalanceThreshold(_ threshold: Double) {
+        var settings = usageAlertSettings
+        settings.balanceThreshold = UsageAlertSettings.normalizedBalanceThreshold(threshold)
+        updateUsageAlertSettings(settings)
+    }
+
+    public func updateUsageAlertIncludesSeverityAlerts(_ includesSeverityAlerts: Bool) {
+        var settings = usageAlertSettings
+        settings.includesSeverityAlerts = includesSeverityAlerts
+        updateUsageAlertSettings(settings)
+    }
+
+    public func updateUsageAlertActiveIDs(_ activeIDs: Set<String>) {
+        usageAlertActiveIDs = activeIDs
+        defaults.set(Array(activeIDs).sorted(), forKey: usageAlertActiveIDsKey)
     }
 
     public func saveSecret(_ secret: String, for providerID: ProviderID) {
@@ -303,6 +350,16 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 
+    private func saveUsageAlertSettings() {
+        do {
+            let data = try JSONEncoder().encode(usageAlertSettings)
+            defaults.set(data, forKey: usageAlertSettingsKey)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     public nonisolated static func keychainAccount(for providerID: ProviderID) -> String {
         "provider.\(providerID.rawValue).credential"
     }
@@ -329,6 +386,8 @@ public final class ProviderConfigurationStore: ObservableObject {
         static let autoRefreshInterval = "autoRefreshInterval"
         static let widgetRefreshInterval = "widgetRefreshInterval"
         static let dashboardCardOrder = "dashboardCardOrder"
+        static let usageAlertSettings = "usageAlertSettings"
+        static let usageAlertActiveIDs = "usageAlertActiveIDs"
     }
 
     private static func loadConfigurations(from defaults: UserDefaults) -> [ProviderAccountConfiguration] {
@@ -382,6 +441,26 @@ public final class ProviderConfigurationStore: ObservableObject {
         var seenAccountIDs = Set<String>()
         return (defaults.stringArray(forKey: DefaultsKey.dashboardCardOrder) ?? [])
             .filter { seenAccountIDs.insert($0).inserted }
+    }
+
+    private static func loadUsageAlertSettings(from defaults: UserDefaults) -> UsageAlertSettings {
+        guard
+            let data = defaults.data(forKey: DefaultsKey.usageAlertSettings),
+            let decoded = try? JSONDecoder().decode(UsageAlertSettings.self, from: data)
+        else {
+            return UsageAlertSettings()
+        }
+
+        return UsageAlertSettings(
+            isEnabled: decoded.isEnabled,
+            usageThreshold: decoded.usageThreshold,
+            balanceThreshold: decoded.balanceThreshold,
+            includesSeverityAlerts: decoded.includesSeverityAlerts
+        )
+    }
+
+    private static func loadUsageAlertActiveIDs(from defaults: UserDefaults) -> Set<String> {
+        Set(defaults.stringArray(forKey: DefaultsKey.usageAlertActiveIDs) ?? [])
     }
 
     private static func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
