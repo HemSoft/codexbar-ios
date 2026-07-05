@@ -82,8 +82,14 @@ struct CodexBarWidgetConfigurationIntent: WidgetConfigurationIntent {
     @Parameter(title: "Tile 4 Display", default: .automatic)
     var tile4DisplayMode: CodexBarWidgetTileDisplayMode
 
+    @Parameter(title: "Tile 5")
+    var tile5: CodexBarWidgetTileChoice?
+
     @Parameter(title: "Tile 5 Display", default: .automatic)
     var tile5DisplayMode: CodexBarWidgetTileDisplayMode
+
+    @Parameter(title: "Tile 6")
+    var tile6: CodexBarWidgetTileChoice?
 
     @Parameter(title: "Tile 6 Display", default: .automatic)
     var tile6DisplayMode: CodexBarWidgetTileDisplayMode
@@ -297,6 +303,8 @@ struct CodexBarWidgetView: View {
             entry.configuration.tile2,
             entry.configuration.tile3,
             entry.configuration.tile4,
+            entry.configuration.tile5,
+            entry.configuration.tile6,
         ]
         let configuredDisplayModes = [
             entry.configuration.tile1DisplayMode,
@@ -529,7 +537,7 @@ struct DenseTileWidget: View {
     }
 
     private var columns: [GridItem] {
-        let columnCount = family == .systemExtraLarge ? 3 : 2
+        let columnCount = family == .systemExtraLarge && displayedTiles.count > 4 ? 3 : 2
         return Array(repeating: GridItem(.flexible(), spacing: 8), count: columnCount)
     }
 }
