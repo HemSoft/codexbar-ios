@@ -11,7 +11,8 @@ enum WidgetSnapshotPublisher {
         let now = Date()
         let displayable = orderedDisplayableResults(
             results: results,
-            configurationStore: configurationStore
+            configurationStore: configurationStore,
+            now: now
         )
 
         let snapshot = CodexBarWidgetSnapshot(
@@ -59,7 +60,8 @@ enum WidgetSnapshotPublisher {
 
     private static func orderedDisplayableResults(
         results: [ProviderUsageResult],
-        configurationStore: ProviderConfigurationStore
+        configurationStore: ProviderConfigurationStore,
+        now: Date
     ) -> [ProviderUsageResult] {
         let displayable = results.filter { result in
             configurationStore.configuration(accountID: result.accountID)
@@ -69,7 +71,8 @@ enum WidgetSnapshotPublisher {
         return DashboardUsageSorter.orderedResults(
             displayable,
             mode: configurationStore.dashboardOrderingMode,
-            manualOrder: configurationStore.dashboardCardOrder
+            manualOrder: configurationStore.dashboardCardOrder,
+            now: now
         )
     }
 

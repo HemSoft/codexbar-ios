@@ -43,7 +43,7 @@ struct ContentView: View {
                             }
 
                             ForEach(section.results) { result in
-                                ProviderUsageCard(
+                                let card = ProviderUsageCard(
                                     result: result,
                                     statusText: dashboardStatusText(for: result),
                                     trend: historyStore.trendSummary(for: result)
@@ -52,19 +52,28 @@ struct ContentView: View {
                                 .onTapGesture {
                                     selectedHistoryResult = result
                                 }
-                                .onDrag {
-                                    draggedCardID = result.id
-                                    return NSItemProvider(object: result.id as NSString)
+
+                                if isManualDashboardOrdering {
+                                    card
+                                        .onDrag {
+                                            draggedCardID = result.id
+                                            return NSItemProvider(object: result.id as NSString)
+                                        }
+                                        .onDrop(
+                                            of: [UTType.text],
+                                            delegate: ProviderUsageCardDropDelegate(
+                                                targetID: result.id,
+                                                draggedCardID: $draggedCardID,
+                                                moveCard: moveCard,
+                                                finishDrag: finishCardDrag
+                                            )
+                                        )
+                                } else {
+                                    card
+                                        .accessibilityHint(
+                                            Text("Smart ordering is active.")
+                                        )
                                 }
-                                .onDrop(
-                                    of: [UTType.text],
-                                    delegate: ProviderUsageCardDropDelegate(
-                                        targetID: result.id,
-                                        draggedCardID: $draggedCardID,
-                                        moveCard: moveCard,
-                                        finishDrag: finishCardDrag
-                                    )
-                                )
                             }
                         }
                     }
@@ -236,6 +245,10 @@ struct ContentView: View {
         dashboardSections.flatMap(\.results).map(\.id)
     }
 
+    private var isManualDashboardOrdering: Bool {
+        configurationStore.dashboardOrderingMode == .manual
+    }
+
     private func dashboardStatusText(for result: ProviderUsageResult) -> String {
         guard let configuration = configurationStore.configuration(accountID: result.accountID) else {
             return result.subtitle
@@ -260,6 +273,10 @@ struct ContentView: View {
     }
 
     private func moveCard(_ draggedID: String, to targetID: String) {
+        guard isManualDashboardOrdering else {
+            return
+        }
+
         var orderedIDs = visibleDashboardOrder
         guard
             dashboardGroupID(for: draggedID) == dashboardGroupID(for: targetID),
@@ -285,11 +302,20 @@ struct ContentView: View {
     }
 
     private func finishCardDrag() {
+        guard isManualDashboardOrdering else {
+            draggedCardID = nil
+            return
+        }
+
         persistVisibleCardOrder(visibleDashboardOrder)
         draggedCardID = nil
     }
 
     private func persistVisibleCardOrder(_ orderedVisibleIDs: [String]) {
+        guard isManualDashboardOrdering else {
+            return
+        }
+
         let visibleIDs = Set(displayedResults.map(\.id))
         let hiddenOrderedIDs = configurationStore.dashboardCardOrder.filter { !visibleIDs.contains($0) }
         configurationStore.updateDashboardCardOrder(orderedVisibleIDs + hiddenOrderedIDs)

@@ -494,6 +494,53 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(ordered.map(\.accountID), ["normal", "critical"])
     }
 
+    func testDashboardUsageSorterKeepsExhaustedProjectionsAheadOfFutureHits() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let periodStart = now.addingTimeInterval(-60 * 60)
+        let periodEnd = now.addingTimeInterval(4 * 60 * 60)
+        let exhausted = makeHistoryResult(
+            accountID: "projection.exhausted",
+            providerID: .codex,
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 100,
+                    limit: 100,
+                    projectionCurrent: 120,
+                    projectionLimit: 100,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+        let futureHit = makeHistoryResult(
+            accountID: "projection.future",
+            providerID: .codex,
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 95,
+                    limit: 100,
+                    projectionCurrent: 80,
+                    projectionLimit: 100,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+
+        let ordered = DashboardUsageSorter.orderedResults(
+            [futureHit, exhausted],
+            mode: .smart,
+            manualOrder: [],
+            now: now
+        )
+
+        XCTAssertEqual(ordered.map(\.accountID), ["projection.exhausted", "projection.future"])
+    }
+
     @MainActor
     func testProviderGroupsPersistAndAssignAccounts() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"

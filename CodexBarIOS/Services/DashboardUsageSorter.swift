@@ -141,8 +141,7 @@ private extension UsageBar {
             let projectionPeriodStart,
             let projectionPeriodEnd,
             projectionCurrent > 0,
-            projectionLimit > 0,
-            projectionCurrent < projectionLimit
+            projectionLimit > 0
         else {
             return nil
         }
