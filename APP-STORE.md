@@ -9,6 +9,7 @@ Status last reviewed: 2026-07-05
 - App builds, installs, and launches on the connected development iPhone.
 - Main dashboard, provider settings, widget support, and snapshot trend improvements are on `main`.
 - Development signing is stable through the dedicated CodexBar keychain documented in `AGENTS.md`.
+- Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store production distribution, TestFlight upload, product metadata, and review materials are not done yet.
 
 ## Apple Requirements To Keep Current
@@ -32,7 +33,7 @@ Reference links:
 
 ### 1. App Store Connect Setup
 
-- [ ] Confirm Apple Developer Program membership and team ownership.
+- [x] Confirm Apple Developer Program membership and team ownership. Membership confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - [ ] Create the App Store Connect app record.
 - [ ] Confirm bundle ID, SKU, primary language, category, and age rating.
 - [ ] Decide initial availability: iPhone and iPad.
