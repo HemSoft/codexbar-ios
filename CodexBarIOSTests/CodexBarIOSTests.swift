@@ -84,6 +84,8 @@ final class CodexBarIOSTests: XCTestCase {
                     providerID: "openCodeZen",
                     title: "OpenCode ZEN",
                     subtitle: "Balance",
+                    groupID: "work",
+                    groupName: "Work",
                     bars: [
                         CodexBarWidgetUsageBarSnapshot(
                             id: "codex.personal.0.five-hour",
@@ -109,6 +111,62 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults), snapshot)
         XCTAssertEqual(WidgetSnapshotStore.loadRefreshInterval(defaults: defaults), .threeHours)
+    }
+
+    @MainActor
+    func testWidgetSnapshotPublisherPropagatesProviderGroup() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let generatedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let group = try XCTUnwrap(store.addGroup(named: "Work"))
+        var configuration = store.addAccount(for: .openCodeZen)
+        configuration.groupID = group.id
+        configuration.openCodeWorkspaceId = "workspace"
+        XCTAssertTrue(store.update(configuration))
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openCodeZen,
+            title: "OpenCode ZEN",
+            subtitle: "Balance",
+            bars: [
+                UsageBar(label: "Balance", used: 1, limit: 4),
+            ],
+            creditsRemaining: 12.25,
+            fetchedAt: generatedAt
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+
+        let provider = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first)
+        XCTAssertEqual(provider.groupID, group.id)
+        XCTAssertEqual(provider.groupName, "Work")
+    }
+
+    func testProviderAccountConfigurationDecodesLegacyAccountWithoutGroup() throws {
+        let json = """
+        {
+          "id": "codex.personal",
+          "providerID": "codex",
+          "isEnabled": true,
+          "accountLabel": "Personal",
+          "authMethod": "browserSession"
+        }
+        """
+
+        let configuration = try JSONDecoder().decode(
+            ProviderAccountConfiguration.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertNil(configuration.groupID)
     }
 
     func testWidgetSnapshotStoreDecodesLegacyUsageBarsWithoutProjectionFields() throws {
@@ -181,6 +239,99 @@ final class CodexBarIOSTests: XCTestCase {
 
         let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
         XCTAssertEqual(reloadedStore.dashboardCardOrder, ["claude", "codex", "copilot"])
+    }
+
+    @MainActor
+    func testProviderGroupsPersistAndAssignAccounts() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let group = store.addGroup(named: " Work ")
+        var account = store.addAccount(for: .codex)
+        account.groupID = group?.id
+
+        XCTAssertTrue(store.update(account))
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        XCTAssertEqual(reloadedStore.groups.map(\.name), ["Work"])
+        XCTAssertEqual(reloadedStore.configuration(accountID: account.id)?.groupID, group?.id)
+    }
+
+    @MainActor
+    func testRemovingProviderGroupUngroupsAssignedAccounts() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let group = try XCTUnwrap(store.addGroup(named: "Relias"))
+        var account = store.addAccount(for: .copilot)
+        account.groupID = group.id
+        XCTAssertTrue(store.update(account))
+
+        store.removeGroup(group)
+
+        XCTAssertTrue(store.groups.isEmpty)
+        XCTAssertNil(store.configuration(accountID: account.id)?.groupID)
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        XCTAssertNil(reloadedStore.configuration(accountID: account.id)?.groupID)
+    }
+
+    @MainActor
+    func testProviderGroupNamesMustBeUnique() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+
+        XCTAssertNotNil(store.addGroup(named: "Engineering"))
+        XCTAssertNil(store.addGroup(named: " engineering "))
+        XCTAssertEqual(store.lastError, "Group names must be unique.")
+    }
+
+    @MainActor
+    func testProviderConfigurationsSortByGroupName() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let beta = try XCTUnwrap(store.addGroup(named: "Beta"))
+        let alpha = try XCTUnwrap(store.addGroup(named: "Alpha"))
+        let ungrouped = store.addAccount(for: .openRouter)
+        var betaAccount = store.addAccount(for: .codex)
+        var alphaAccount = store.addAccount(for: .claude)
+        betaAccount.groupID = beta.id
+        alphaAccount.groupID = alpha.id
+
+        XCTAssertTrue(store.update(betaAccount))
+        XCTAssertTrue(store.update(alphaAccount))
+
+        XCTAssertEqual(
+            store.configurations.map(\.id),
+            [ungrouped.id, alphaAccount.id, betaAccount.id]
+        )
+
+        var renamedBeta = beta
+        renamedBeta.name = "Aardvark"
+        XCTAssertTrue(store.updateGroup(renamedBeta))
+
+        XCTAssertEqual(
+            store.configurations.map(\.id),
+            [ungrouped.id, betaAccount.id, alphaAccount.id]
+        )
     }
 
     @MainActor

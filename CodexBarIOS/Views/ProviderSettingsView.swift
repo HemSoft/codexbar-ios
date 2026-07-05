@@ -57,6 +57,13 @@ struct ProviderSettingsView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
+                Picker("Group", selection: $configuration.groupID) {
+                    Text(ProviderAccountGroup.ungroupedDisplayName).tag(Optional<String>.none)
+                    ForEach(configurationStore.groups) { group in
+                        Text(group.name).tag(Optional(group.id))
+                    }
+                }
+
                 Picker("Auth method", selection: $configuration.authMethod) {
                     ForEach(availableAuthMethods) { method in
                         Text(authMethodDisplayName(method)).tag(method)

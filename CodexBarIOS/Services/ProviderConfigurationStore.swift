@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
+    @Published public private(set) var groups: [ProviderAccountGroup]
     @Published public private(set) var secretAvailability: [String: Bool]
     @Published public private(set) var appAppearance: AppAppearance
     @Published public private(set) var autoRefreshInterval: AutoRefreshInterval
@@ -15,6 +16,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let defaults: UserDefaults
     private let secretStore: SecretStore
     private let configurationsKey = DefaultsKey.configurations
+    private let groupsKey = DefaultsKey.groups
     private let appAppearanceKey = DefaultsKey.appAppearance
     private let autoRefreshIntervalKey = DefaultsKey.autoRefreshInterval
     private let widgetRefreshIntervalKey = DefaultsKey.widgetRefreshInterval
@@ -26,9 +28,14 @@ public final class ProviderConfigurationStore: ObservableObject {
         defaults: UserDefaults = .standard,
         secretStore: SecretStore = KeychainService()
     ) {
+        let loadedGroups = Self.loadGroups(from: defaults)
         self.defaults = defaults
         self.secretStore = secretStore
-        self.configurations = Self.loadConfigurations(from: defaults)
+        self.groups = loadedGroups
+        self.configurations = Self.loadConfigurations(
+            from: defaults,
+            validGroupIDs: Set(loadedGroups.map(\.id))
+        )
         self.secretAvailability = [:]
         self.appAppearance = Self.loadAppAppearance(from: defaults)
         self.autoRefreshInterval = Self.loadAutoRefreshInterval(from: defaults)
@@ -36,6 +43,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.dashboardCardOrder = Self.loadDashboardCardOrder(from: defaults)
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
         self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
+        sortConfigurations()
         refreshSecretAvailability()
     }
 
@@ -50,6 +58,79 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     public func configurations(for providerID: ProviderID) -> [ProviderAccountConfiguration] {
         configurations.filter { $0.providerID == providerID }
+    }
+
+    public func group(for groupID: String?) -> ProviderAccountGroup? {
+        guard let groupID else {
+            return nil
+        }
+
+        return groups.first { $0.id == groupID }
+    }
+
+    public func groupName(for groupID: String?) -> String {
+        group(for: groupID)?.name ?? ProviderAccountGroup.ungroupedDisplayName
+    }
+
+    @discardableResult
+    public func addGroup(named name: String) -> ProviderAccountGroup? {
+        let normalizedName = Self.normalizedGroupName(name)
+        guard !normalizedName.isEmpty else {
+            lastError = "Group names cannot be empty."
+            return nil
+        }
+
+        guard isGroupNameUnique(normalizedName) else {
+            lastError = "Group names must be unique."
+            return nil
+        }
+
+        let group = ProviderAccountGroup(name: normalizedName)
+        groups.append(group)
+        sortGroups()
+        saveGroups()
+        return group
+    }
+
+    @discardableResult
+    public func updateGroup(_ group: ProviderAccountGroup) -> Bool {
+        let normalizedName = Self.normalizedGroupName(group.name)
+        guard !normalizedName.isEmpty else {
+            lastError = "Group names cannot be empty."
+            return false
+        }
+
+        guard isGroupNameUnique(normalizedName, excluding: group.id) else {
+            lastError = "Group names must be unique."
+            return false
+        }
+
+        guard let index = groups.firstIndex(where: { $0.id == group.id }) else {
+            lastError = "Group no longer exists."
+            return false
+        }
+
+        groups[index].name = normalizedName
+        sortGroups()
+        sortConfigurations()
+        saveGroups()
+        saveConfigurations()
+        return true
+    }
+
+    public func removeGroup(_ group: ProviderAccountGroup) {
+        groups.removeAll { $0.id == group.id }
+        configurations = configurations.map { configuration in
+            var updated = configuration
+            if updated.groupID == group.id {
+                updated.groupID = nil
+            }
+            return updated
+        }
+        sortGroups()
+        sortConfigurations()
+        saveGroups()
+        saveConfigurations()
     }
 
     @discardableResult
@@ -75,7 +156,10 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     @discardableResult
     public func update(_ configuration: ProviderAccountConfiguration) -> Bool {
-        let normalized = Self.normalizedConfiguration(configuration)
+        let normalized = Self.normalizedConfiguration(
+            configuration,
+            validGroupIDs: Set(groups.map(\.id))
+        )
         guard isAccountNameUnique(normalized) else {
             lastError = "Account names must be unique."
             return false
@@ -117,10 +201,12 @@ public final class ProviderConfigurationStore: ObservableObject {
             }
 
             configurations = []
+            groups = []
             secretAvailability = [:]
             dashboardCardOrder = []
             usageAlertActiveIDs = []
             defaults.removeObject(forKey: configurationsKey)
+            defaults.removeObject(forKey: groupsKey)
             defaults.removeObject(forKey: dashboardCardOrderKey)
             defaults.removeObject(forKey: usageAlertActiveIDsKey)
             lastError = nil
@@ -350,6 +436,16 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 
+    private func saveGroups() {
+        do {
+            let data = try JSONEncoder().encode(groups)
+            defaults.set(data, forKey: groupsKey)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     private func saveUsageAlertSettings() {
         do {
             let data = try JSONEncoder().encode(usageAlertSettings)
@@ -382,6 +478,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     private enum DefaultsKey {
         static let configurations = "providerConfigurations"
+        static let groups = "providerAccountGroups"
         static let appAppearance = "appAppearance"
         static let autoRefreshInterval = "autoRefreshInterval"
         static let widgetRefreshInterval = "widgetRefreshInterval"
@@ -390,7 +487,10 @@ public final class ProviderConfigurationStore: ObservableObject {
         static let usageAlertActiveIDs = "usageAlertActiveIDs"
     }
 
-    private static func loadConfigurations(from defaults: UserDefaults) -> [ProviderAccountConfiguration] {
+    private static func loadConfigurations(
+        from defaults: UserDefaults,
+        validGroupIDs: Set<String>? = nil
+    ) -> [ProviderAccountConfiguration] {
         guard
             let data = defaults.data(forKey: DefaultsKey.configurations),
             let decoded = try? JSONDecoder().decode([ProviderAccountConfiguration].self, from: data)
@@ -399,8 +499,33 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         return decoded
-            .map(normalizedConfiguration)
-            .sorted(by: configurationSort)
+            .map { normalizedConfiguration($0, validGroupIDs: validGroupIDs) }
+            .sorted { configurationSort($0, $1) }
+    }
+
+    private static func loadGroups(from defaults: UserDefaults) -> [ProviderAccountGroup] {
+        guard
+            let data = defaults.data(forKey: DefaultsKey.groups),
+            let decoded = try? JSONDecoder().decode([ProviderAccountGroup].self, from: data)
+        else {
+            return []
+        }
+
+        var seenIDs = Set<String>()
+        var seenNames = Set<String>()
+        return decoded.compactMap { group in
+            let name = normalizedGroupName(group.name)
+            let nameKey = name.lowercased()
+            guard !name.isEmpty,
+                  seenIDs.insert(group.id).inserted,
+                  seenNames.insert(nameKey).inserted
+            else {
+                return nil
+            }
+
+            return ProviderAccountGroup(id: group.id, name: name)
+        }
+        .sorted(by: groupSort)
     }
 
     private static func loadAppAppearance(from defaults: UserDefaults) -> AppAppearance {
@@ -463,8 +588,15 @@ public final class ProviderConfigurationStore: ObservableObject {
         Set(defaults.stringArray(forKey: DefaultsKey.usageAlertActiveIDs) ?? [])
     }
 
-    private static func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
+    private static func normalizedConfiguration(
+        _ configuration: ProviderAccountConfiguration,
+        validGroupIDs: Set<String>? = nil
+    ) -> ProviderAccountConfiguration {
         var normalized = configuration
+        if let validGroupIDs, let groupID = normalized.groupID, !validGroupIDs.contains(groupID) {
+            normalized.groupID = nil
+        }
+
         switch configuration.providerID {
         case .codex:
             normalized.authMethod = .browserSession
@@ -477,15 +609,36 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     private func sortConfigurations() {
-        configurations.sort(by: Self.configurationSort)
+        let groupNames = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.name) })
+        configurations.sort {
+            Self.configurationSort($0, $1, groupNames: groupNames)
+        }
     }
 
-    private static func configurationSort(_ lhs: ProviderAccountConfiguration, _ rhs: ProviderAccountConfiguration) -> Bool {
+    private func sortGroups() {
+        groups.sort(by: Self.groupSort)
+    }
+
+    private static func configurationSort(
+        _ lhs: ProviderAccountConfiguration,
+        _ rhs: ProviderAccountConfiguration,
+        groupNames: [String: String] = [:]
+    ) -> Bool {
+        let lhsGroup = lhs.groupID.flatMap { groupNames[$0] } ?? ""
+        let rhsGroup = rhs.groupID.flatMap { groupNames[$0] } ?? ""
+        if lhsGroup != rhsGroup {
+            return lhsGroup.localizedCaseInsensitiveCompare(rhsGroup) == .orderedAscending
+        }
+
         if lhs.providerID.displayName != rhs.providerID.displayName {
             return lhs.providerID.displayName < rhs.providerID.displayName
         }
 
         return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+    }
+
+    private static func groupSort(_ lhs: ProviderAccountGroup, _ rhs: ProviderAccountGroup) -> Bool {
+        lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
     }
 
     private func isAccountNameUnique(_ configuration: ProviderAccountConfiguration) -> Bool {
@@ -495,6 +648,17 @@ public final class ProviderConfigurationStore: ObservableObject {
             $0.id != configuration.id
                 && $0.displayName.localizedCaseInsensitiveCompare(name) == .orderedSame
         }
+    }
+
+    private func isGroupNameUnique(_ name: String, excluding groupID: String? = nil) -> Bool {
+        !groups.contains {
+            $0.id != groupID
+                && $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
+        }
+    }
+
+    private static func normalizedGroupName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func suggestedAccountLabel(for providerID: ProviderID) -> String {
