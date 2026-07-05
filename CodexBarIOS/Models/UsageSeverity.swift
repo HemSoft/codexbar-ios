@@ -1,6 +1,6 @@
 import SwiftUI
 
-public enum UsageSeverity: Int, Comparable, Sendable {
+public enum UsageSeverity: Int, Codable, Comparable, Sendable {
     case normal
     case warning
     case critical

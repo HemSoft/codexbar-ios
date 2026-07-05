@@ -2069,6 +2069,150 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(bar.fractionUsed, 1)
     }
 
+    @MainActor
+    func testUsageHistoryStoreRecordsAndPersistsSnapshots() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = makeHistoryResult(accountID: "codex.personal", fetchedAt: fetchedAt, used: 42)
+
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [result], now: fetchedAt)
+
+        let reloadedStore = UsageHistoryStore(defaults: defaults)
+        XCTAssertEqual(reloadedStore.snapshots.count, 1)
+        XCTAssertEqual(reloadedStore.snapshots.first?.accountID, "codex.personal")
+        XCTAssertEqual(reloadedStore.snapshots.first?.bars.first?.fractionUsed, 0.42)
+        XCTAssertNil(reloadedStore.snapshots.first?.creditsRemaining)
+    }
+
+    @MainActor
+    func testUsageHistoryStorePrunesRetentionAndPerAccountLimit() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = UsageHistoryStore(defaults: defaults, retentionDays: 7, maxSnapshotsPerAccount: 2)
+
+        store.record(results: [
+            makeHistoryResult(accountID: "codex.personal", fetchedAt: now.addingTimeInterval(-8 * 24 * 60 * 60), used: 10),
+        ], now: now)
+        store.record(results: [
+            makeHistoryResult(accountID: "codex.personal", fetchedAt: now.addingTimeInterval(-3 * 24 * 60 * 60), used: 20),
+        ], now: now)
+        store.record(results: [
+            makeHistoryResult(accountID: "codex.personal", fetchedAt: now.addingTimeInterval(-2 * 24 * 60 * 60), used: 30),
+        ], now: now)
+        store.record(results: [
+            makeHistoryResult(accountID: "codex.personal", fetchedAt: now.addingTimeInterval(-24 * 60 * 60), used: 40),
+        ], now: now)
+
+        let snapshots = store.snapshots(for: "codex.personal")
+        XCTAssertEqual(snapshots.count, 2)
+        XCTAssertEqual(snapshots.compactMap { $0.bars.first?.used }, [30, 40])
+    }
+
+    @MainActor
+    func testUsageHistoryStoreRemovesDeletedAccounts() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(results: [
+            makeHistoryResult(accountID: "codex.personal", fetchedAt: now, used: 42),
+            makeHistoryResult(accountID: "openrouter.work", providerID: .openRouter, fetchedAt: now, creditsRemaining: 19.25),
+        ], now: now)
+        store.removeSnapshotsForMissingAccounts(validAccountIDs: ["codex.personal"], now: now)
+
+        XCTAssertEqual(store.snapshots.map(\.accountID), ["codex.personal"])
+    }
+
+    @MainActor
+    func testUsageHistoryStoreSkipsEmptyProviderStates() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = ProviderUsageResult(
+            accountID: "codex.personal",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Not configured",
+            bars: [],
+            fetchedAt: now
+        )
+
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [result], now: now)
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+    }
+
+    @MainActor
+    func testUsageHistoryTrendSummaryReportsUsageMovement() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = UsageHistoryStore(defaults: defaults)
+        let first = makeHistoryResult(accountID: "codex.personal", fetchedAt: now.addingTimeInterval(-60), used: 25)
+        let second = makeHistoryResult(accountID: "codex.personal", fetchedAt: now, used: 40)
+
+        store.record(results: [first], now: now)
+        store.record(results: [second], now: now)
+
+        let summary = try XCTUnwrap(store.trendSummary(for: second, now: now))
+        XCTAssertEqual(summary.points, [0.25, 0.4])
+        XCTAssertEqual(summary.direction, .up)
+        XCTAssertFalse(summary.isBalance)
+        XCTAssertEqual(summary.valueDescription, "+15 pts since last snapshot")
+    }
+
+    @MainActor
+    func testUsageHistoryTrendSummaryReportsBalanceMovement() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = UsageHistoryStore(defaults: defaults)
+        let first = makeHistoryResult(
+            accountID: "openrouter.work",
+            providerID: .openRouter,
+            fetchedAt: now.addingTimeInterval(-60),
+            creditsRemaining: 22
+        )
+        let second = makeHistoryResult(
+            accountID: "openrouter.work",
+            providerID: .openRouter,
+            fetchedAt: now,
+            creditsRemaining: 19.25
+        )
+
+        store.record(results: [first], now: now)
+        store.record(results: [second], now: now)
+
+        let summary = try XCTUnwrap(store.trendSummary(for: second, now: now))
+        XCTAssertEqual(summary.points, [22, 19.25])
+        XCTAssertEqual(summary.direction, .down)
+        XCTAssertTrue(summary.isBalance)
+        XCTAssertEqual(summary.valueDescription, "Down $2.75 since last snapshot")
+    }
+
     func testCodexUsageWithoutCredentialIsNotDemoData() async throws {
         let provider = CodexUsageProvider(secretStore: EmptySecretStore())
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
@@ -2187,6 +2331,24 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.providerID, .openCodeZen)
         XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 12.25, accuracy: 0.0001)
         XCTAssertEqual(service.results.map(\.accountID), [openCode.id])
+    }
+
+    private func makeHistoryResult(
+        accountID: String,
+        providerID: ProviderID = .codex,
+        fetchedAt: Date,
+        used: Double? = nil,
+        creditsRemaining: Double? = nil
+    ) -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: accountID,
+            providerID: providerID,
+            title: providerID.displayName,
+            subtitle: "Test data",
+            bars: used.map { [UsageBar(label: "Usage", used: $0, limit: 100)] } ?? [],
+            creditsRemaining: creditsRemaining,
+            fetchedAt: fetchedAt
+        )
     }
 }
 

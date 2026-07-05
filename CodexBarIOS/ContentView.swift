@@ -4,9 +4,11 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @ObservedObject var refreshService: UsageRefreshService
     @ObservedObject var configurationStore: ProviderConfigurationStore
+    @ObservedObject var historyStore: UsageHistoryStore
     private let usageAlertNotifier: any UsageAlertNotifying
 
     @State private var isShowingSettings = false
+    @State private var selectedHistoryResult: ProviderUsageResult?
     @State private var autoRefreshSchedule: AutoRefreshSchedule?
     @State private var autoRefreshResetID = UUID()
     @State private var draggedCardID: String?
@@ -14,10 +16,12 @@ struct ContentView: View {
     init(
         refreshService: UsageRefreshService,
         configurationStore: ProviderConfigurationStore,
+        historyStore: UsageHistoryStore,
         usageAlertNotifier: any UsageAlertNotifying = LocalUsageAlertNotifier.shared
     ) {
         self.refreshService = refreshService
         self.configurationStore = configurationStore
+        self.historyStore = historyStore
         self.usageAlertNotifier = usageAlertNotifier
     }
 
@@ -41,9 +45,13 @@ struct ContentView: View {
                             ForEach(section.results) { result in
                                 ProviderUsageCard(
                                     result: result,
-                                    statusText: dashboardStatusText(for: result)
+                                    statusText: dashboardStatusText(for: result),
+                                    trend: historyStore.trendSummary(for: result)
                                 )
                                 .contentShape(Rectangle())
+                                .onTapGesture {
+                                    selectedHistoryResult = result
+                                }
                                 .onDrag {
                                     draggedCardID = result.id
                                     return NSItemProvider(object: result.id as NSString)
@@ -110,6 +118,7 @@ struct ContentView: View {
                 },
                 onAccountRefresh: { configuration in
                     let result = await refreshService.refresh(configuration: configuration)
+                    recordUsageHistoryIfAvailable()
                     publishWidgetSnapshot()
                     await processUsageAlerts()
                     return result
@@ -119,8 +128,19 @@ struct ContentView: View {
                 }
             )
         }
+        .sheet(item: $selectedHistoryResult) { result in
+            ProviderUsageHistoryDetailView(
+                result: result,
+                snapshots: historyStore.snapshots(
+                    for: result.accountID,
+                    since: Date().addingTimeInterval(-7 * 24 * 60 * 60)
+                ),
+                trend: historyStore.trendSummary(for: result)
+            )
+        }
         .task {
             await refreshService.refresh(configurations: configurationStore.configurations)
+            recordUsageHistoryIfAvailable()
             publishWidgetSnapshot()
             await processUsageAlerts()
         }
@@ -129,6 +149,9 @@ struct ContentView: View {
         }
         .onChange(of: refreshService.results) { _, _ in
             publishWidgetSnapshot()
+        }
+        .onChange(of: configurationStore.configurations) { _, configurations in
+            historyStore.removeSnapshotsForMissingAccounts(validAccountIDs: Set(configurations.map(\.id)))
         }
         .onChange(of: configurationStore.dashboardCardOrder) { _, _ in
             publishWidgetSnapshot()
@@ -275,6 +298,15 @@ struct ContentView: View {
         )
     }
 
+    private func recordUsageHistoryIfAvailable() {
+        guard refreshService.lastRefreshError == nil else {
+            return
+        }
+
+        historyStore.record(results: refreshService.results)
+        historyStore.removeSnapshotsForMissingAccounts(validAccountIDs: Set(configurationStore.configurations.map(\.id)))
+    }
+
     private var refreshAccessibilityLabel: String {
         guard let autoRefreshSchedule else {
             return "Refresh usage"
@@ -285,6 +317,7 @@ struct ContentView: View {
 
     private func refreshNow() async {
         await refreshService.refresh(configurations: configurationStore.configurations)
+        recordUsageHistoryIfAvailable()
         publishWidgetSnapshot()
         await processUsageAlerts()
         if configurationStore.autoRefreshInterval.seconds != nil {
@@ -337,6 +370,7 @@ struct ContentView: View {
             }
 
             await refreshService.refresh(configurations: configurationStore.configurations)
+            recordUsageHistoryIfAvailable()
             publishWidgetSnapshot()
             await processUsageAlerts()
         }
@@ -479,9 +513,82 @@ private struct AutoRefreshRing: View {
     }
 }
 
+private struct ProviderUsageHistoryDetailView: View {
+    let result: ProviderUsageResult
+    let snapshots: [UsageHistorySnapshot]
+    let trend: UsageTrendSummary?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let trend {
+                    Section {
+                        UsageTrendRow(trend: trend)
+                            .padding(.vertical, 4)
+                    }
+                }
+
+                Section("Recent") {
+                    ForEach(snapshots.reversed()) { snapshot in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(valueText(for: snapshot))
+                                    .font(.body.weight(.semibold))
+                                    .monospacedDigit()
+
+                                Text(snapshotDateFormatter.string(from: snapshot.capturedAt))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Circle()
+                                .fill(snapshot.highestSeverity.tint)
+                                .frame(width: 9, height: 9)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(result.title)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func valueText(for snapshot: UsageHistorySnapshot) -> String {
+        if let creditsRemaining = snapshot.creditsRemaining {
+            return currencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
+        }
+
+        guard let value = snapshot.primaryValue else {
+            return "No data"
+        }
+
+        return "\(Int((value * 100).rounded()))%"
+    }
+
+    private var currencyFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }
+
+    private var snapshotDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }
+}
+
 #Preview {
     ContentView(
         refreshService: .demo(),
-        configurationStore: ProviderConfigurationStore()
+        configurationStore: ProviderConfigurationStore(),
+        historyStore: UsageHistoryStore()
     )
 }
