@@ -11,11 +11,11 @@ public enum CopilotUsageParser {
         var bars: [UsageBar] = []
 
         if let premium = response.quotaSnapshots?.premiumInteractions {
-            bars.append(makeUsageBar(snapshot: premium, label: "Premium interactions", reset: reset))
+            bars.append(makeUsageBar(snapshot: premium, label: "Premium interactions", reset: reset, fetchedAt: fetchedAt))
         }
 
-        if let chat = response.quotaSnapshots?.chat {
-            bars.append(makeUsageBar(snapshot: chat, label: "Chat", reset: reset))
+        if let chat = response.quotaSnapshots?.chat, !chat.unlimited, chat.entitlement > 0 {
+            bars.append(makeUsageBar(snapshot: chat, label: "Chat", reset: reset, fetchedAt: fetchedAt))
         }
 
         return ProviderUsageResult(
@@ -31,7 +31,12 @@ public enum CopilotUsageParser {
         (try? JSONDecoder().decode(CopilotUserResponse.self, from: data))?.login
     }
 
-    private static func makeUsageBar(snapshot: CopilotQuotaSnapshot, label: String, reset: CopilotReset) -> UsageBar {
+    private static func makeUsageBar(
+        snapshot: CopilotQuotaSnapshot,
+        label: String,
+        reset: CopilotReset,
+        fetchedAt: Date
+    ) -> UsageBar {
         guard snapshot.entitlement > 0 else {
             return UsageBar(
                 label: snapshot.unlimited ? "\(label) - unlimited" : "\(label) - no quota",
@@ -44,13 +49,32 @@ public enum CopilotUsageParser {
 
         let used = max(0, snapshot.entitlement - snapshot.remaining)
         let formattedLabel = "\(label) (\(formatNumber(used)) / \(formatNumber(snapshot.entitlement)))"
+        let projectionPeriod = monthlyProjectionPeriod(resetDate: reset.date, fetchedAt: fetchedAt)
         return UsageBar(
             label: formattedLabel,
             used: Double(used),
             limit: Double(snapshot.entitlement),
-            resetDescription: reset.description,
-            resetsAt: reset.date
+            resetDescription: reset.description ?? formatMonthlyReset(projectionPeriod.end, fetchedAt: fetchedAt),
+            resetsAt: projectionPeriod.end,
+            projectionCurrent: Double(used),
+            projectionLimit: Double(snapshot.entitlement),
+            projectionPeriodStart: projectionPeriod.start,
+            projectionPeriodEnd: projectionPeriod.end,
+            showProjectionOnCurrentBar: true
         )
+    }
+
+    private static func monthlyProjectionPeriod(resetDate: Date?, fetchedAt: Date) -> (start: Date, end: Date) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        if let resetDate {
+            return (calendar.date(byAdding: .month, value: -1, to: resetDate) ?? resetDate, resetDate)
+        }
+
+        let components = calendar.dateComponents([.year, .month], from: fetchedAt)
+        let start = calendar.date(from: components) ?? fetchedAt
+        let end = calendar.date(byAdding: .month, value: 1, to: start) ?? start
+        return (start, end)
     }
 
     private static func formatDisplayName(username: String?, plan: String?) -> String {
@@ -99,6 +123,22 @@ public enum CopilotUsageParser {
         return CopilotReset(date: date, description: description)
     }
 
+    private static func formatMonthlyReset(_ date: Date, fetchedAt: Date) -> String {
+        let remaining = date.timeIntervalSince(fetchedAt)
+        if remaining <= 0 {
+            return "Reset overdue"
+        }
+
+        let days = Int(remaining / 86_400)
+        let hours = Int(remaining.truncatingRemainder(dividingBy: 86_400) / 3_600)
+        if days > 0 {
+            return "Resets in \(days)d \(hours)h"
+        }
+
+        let minutes = Int(remaining.truncatingRemainder(dividingBy: 3_600) / 60)
+        return "Resets in \(hours)h \(minutes)m"
+    }
+
     private static func formatNumber(_ value: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -139,4 +179,188 @@ private struct CopilotQuotaSnapshot: Decodable {
 private struct CopilotReset {
     let date: Date?
     let description: String?
+}
+
+public enum CopilotBillingUsageParser {
+    public static func parse(
+        _ data: Data,
+        configuration: ProviderAccountConfiguration,
+        fetchedAt: Date = Date(),
+        totalAllotment: Double? = nil
+    ) -> ProviderUsageResult? {
+        guard let response = try? JSONDecoder().decode(CopilotBillingUsageResponse.self, from: data) else {
+            return nil
+        }
+
+        let consumed = response.usageItems
+            .filter { item in
+                item.product?.localizedCaseInsensitiveCompare("Copilot") == .orderedSame
+                    || item.sku?.localizedCaseInsensitiveContains("Copilot") == true
+            }
+            .reduce(0) { $0 + $1.grossQuantity }
+        let periodStart = response.timePeriod.periodStart ?? monthStart(for: fetchedAt)
+        let periodEnd = monthEnd(after: periodStart)
+        let resetDescription = formatReset(periodEnd, fetchedAt: fetchedAt)
+        let total = totalAllotment ?? configuration.copilotTotalAllotment
+        let bars = makeBars(
+            consumed: consumed,
+            total: total,
+            periodStart: periodStart,
+            periodEnd: periodEnd,
+            resetDescription: resetDescription,
+            fetchedAt: fetchedAt
+        )
+        let organization = configuration.githubOrganization.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .copilot,
+            title: configuration.displayName,
+            subtitle: organization.isEmpty ? "Live GitHub Copilot organization usage" : "Live GitHub Copilot usage for \(organization)",
+            bars: bars,
+            fetchedAt: fetchedAt
+        )
+    }
+
+    private static func makeBars(
+        consumed: Double,
+        total: Double?,
+        periodStart: Date,
+        periodEnd: Date,
+        resetDescription: String,
+        fetchedAt: Date
+    ) -> [UsageBar] {
+        guard let total, total > 0 else {
+            let projected = projectedPeriodEndUsage(
+                consumed: consumed,
+                periodStart: periodStart,
+                periodEnd: periodEnd,
+                now: fetchedAt
+            )
+            let projectionDescription = projected > consumed
+                ? "Projected month end at current pace - \(formatNumber(projected)) AI credits"
+                : nil
+            return [
+                UsageBar(
+                    label: "AI credits used (\(formatNumber(consumed)))",
+                    used: consumed,
+                    limit: 0,
+                    resetDescription: resetDescription,
+                    resetsAt: periodEnd,
+                    projectionCurrent: consumed,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd,
+                    projectionDescriptionOverride: projectionDescription
+                ),
+            ]
+        }
+
+        return [
+            UsageBar(
+                label: "Current AI credits (\(formatNumber(consumed)) / \(formatNumber(total)))",
+                used: consumed,
+                limit: total,
+                resetDescription: resetDescription,
+                resetsAt: periodEnd,
+                projectionCurrent: consumed,
+                projectionLimit: total,
+                projectionPeriodStart: periodStart,
+                projectionPeriodEnd: periodEnd,
+                showProjectionOnCurrentBar: true
+            ),
+        ]
+    }
+
+    private static func monthStart(for date: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: components) ?? date
+    }
+
+    private static func monthEnd(after periodStart: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar.date(byAdding: .month, value: 1, to: periodStart) ?? periodStart
+    }
+
+    private static func projectedPeriodEndUsage(consumed: Double, periodStart: Date, periodEnd: Date, now: Date) -> Double {
+        guard now > periodStart, now < periodEnd, consumed > 0 else {
+            return consumed
+        }
+
+        let elapsed = now.timeIntervalSince(periodStart)
+        let total = periodEnd.timeIntervalSince(periodStart)
+        return consumed * total / elapsed
+    }
+
+    private static func formatReset(_ date: Date, fetchedAt: Date) -> String {
+        let remaining = date.timeIntervalSince(fetchedAt)
+        if remaining <= 0 {
+            return "Reset overdue"
+        }
+
+        let days = Int(remaining / 86_400)
+        let hours = Int(remaining.truncatingRemainder(dividingBy: 86_400) / 3_600)
+        if days > 0 {
+            return "Resets in \(days)d \(hours)h"
+        }
+
+        let minutes = Int(remaining.truncatingRemainder(dividingBy: 3_600) / 60)
+        return "Resets in \(hours)h \(minutes)m"
+    }
+
+    private static func formatNumber(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter.string(from: NSNumber(value: value.rounded())) ?? "\(Int(value.rounded()))"
+    }
+}
+
+private struct CopilotBillingUsageResponse: Decodable {
+    let timePeriod: CopilotBillingTimePeriod
+    let usageItems: [CopilotBillingUsageItem]
+}
+
+private struct CopilotBillingTimePeriod: Decodable {
+    let year: Int?
+    let month: Int?
+    let day: Int?
+
+    var periodStart: Date? {
+        guard let year, let month else {
+            return nil
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar.date(from: DateComponents(year: year, month: month, day: day ?? 1))
+    }
+}
+
+private struct CopilotBillingUsageItem: Decodable {
+    let product: String?
+    let sku: String?
+    let grossQuantity: Double
+}
+
+public enum CopilotSeatCountParser {
+    public static func parse(_ data: Data) -> Int? {
+        (try? JSONDecoder().decode(CopilotBillingSeatsResponse.self, from: data))?
+            .seatBreakdown?
+            .total
+    }
+}
+
+private struct CopilotBillingSeatsResponse: Decodable {
+    let seatBreakdown: CopilotSeatBreakdown?
+
+    enum CodingKeys: String, CodingKey {
+        case seatBreakdown = "seat_breakdown"
+    }
+}
+
+private struct CopilotSeatBreakdown: Decodable {
+    let total: Int?
 }

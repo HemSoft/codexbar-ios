@@ -12,7 +12,7 @@ public final class UsageRefreshService: ObservableObject {
         self.providers = providers
     }
 
-    public func refresh() async {
+    public func refresh(configurations: [ProviderAccountConfiguration]) async {
         guard !isRefreshing else {
             return
         }
@@ -24,8 +24,11 @@ public final class UsageRefreshService: ObservableObject {
 
         do {
             var nextResults: [ProviderUsageResult] = []
-            for provider in providers {
-                nextResults.append(try await provider.fetchUsage())
+            for configuration in configurations where configuration.isEnabled {
+                guard let provider = providers.first(where: { $0.providerID == configuration.providerID }) else {
+                    continue
+                }
+                nextResults.append(try await provider.fetchUsage(for: configuration))
             }
 
             results = nextResults.sorted { $0.title < $1.title }
@@ -33,6 +36,36 @@ public final class UsageRefreshService: ObservableObject {
         } catch {
             lastRefreshError = error.localizedDescription
         }
+    }
+
+    @discardableResult
+    public func refresh(configuration: ProviderAccountConfiguration) async -> ProviderUsageResult? {
+        guard
+            configuration.isEnabled,
+            let provider = providers.first(where: { $0.providerID == configuration.providerID })
+        else {
+            return nil
+        }
+
+        do {
+            let result = try await provider.fetchUsage(for: configuration)
+            replaceResult(result)
+            lastRefreshError = nil
+            return result
+        } catch {
+            lastRefreshError = error.localizedDescription
+            return nil
+        }
+    }
+
+    public func refresh() async {
+        await refresh(configurations: ProviderID.allCases.map(ProviderAccountConfiguration.defaultConfiguration))
+    }
+
+    private func replaceResult(_ result: ProviderUsageResult) {
+        var nextResults = results.filter { $0.accountID != result.accountID }
+        nextResults.append(result)
+        results = nextResults.sorted { $0.title < $1.title }
     }
 }
 
@@ -46,6 +79,10 @@ public extension UsageRefreshService {
             providers: [
                 CodexUsageProvider(),
                 CopilotUsageProvider(),
+                ClaudeUsageProvider(),
+                OpenRouterUsageProvider(),
+                OpenCodeZenUsageProvider(),
+                CursorUsageProvider(),
             ]
         )
     }

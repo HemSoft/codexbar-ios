@@ -1,32 +1,115 @@
 import Foundation
 
 public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Sendable {
+    public let id: String
     public let providerID: ProviderID
     public var isEnabled: Bool
     public var accountLabel: String
     public var authMethod: ProviderAuthMethod
     public var oauthClientID: String?
+    public var copilotAccountScope: CopilotAccountScope
+    public var githubOrganization: String
+    public var githubEnterprise: String
+    public var copilotTotalAllotment: Double?
+    public var openCodeWorkspaceId: String
 
     public init(
+        id: String? = nil,
         providerID: ProviderID,
         isEnabled: Bool = true,
         accountLabel: String = "",
         authMethod: ProviderAuthMethod,
-        oauthClientID: String? = nil
+        oauthClientID: String? = nil,
+        copilotAccountScope: CopilotAccountScope = .personal,
+        githubOrganization: String = "",
+        githubEnterprise: String = "",
+        copilotTotalAllotment: Double? = nil,
+        openCodeWorkspaceId: String = ""
     ) {
+        self.id = id ?? providerID.rawValue
         self.providerID = providerID
         self.isEnabled = isEnabled
         self.accountLabel = accountLabel
         self.authMethod = authMethod
         self.oauthClientID = oauthClientID
-    }
-
-    public var id: ProviderID {
-        providerID
+        self.copilotAccountScope = copilotAccountScope
+        self.githubOrganization = githubOrganization
+        self.githubEnterprise = githubEnterprise
+        self.copilotTotalAllotment = copilotTotalAllotment
+        self.openCodeWorkspaceId = openCodeWorkspaceId
     }
 
     public var requiresSecret: Bool {
         authMethod.requiresSecret
+    }
+
+    public var displayName: String {
+        let label = accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return label.isEmpty ? providerID.displayName : label
+    }
+
+    public func withNewAccountID() -> ProviderAccountConfiguration {
+        ProviderAccountConfiguration(
+            id: "\(providerID.rawValue).\(UUID().uuidString)",
+            providerID: providerID,
+            isEnabled: isEnabled,
+            accountLabel: accountLabel,
+            authMethod: authMethod,
+            oauthClientID: oauthClientID,
+            copilotAccountScope: copilotAccountScope,
+            githubOrganization: githubOrganization,
+            githubEnterprise: githubEnterprise,
+            copilotTotalAllotment: copilotTotalAllotment,
+            openCodeWorkspaceId: openCodeWorkspaceId
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case providerID
+        case isEnabled
+        case accountLabel
+        case authMethod
+        case oauthClientID
+        case copilotAccountScope
+        case githubOrganization
+        case githubEnterprise
+        case copilotTotalAllotment
+        case openCodeWorkspaceId
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let providerID = try container.decode(ProviderID.self, forKey: .providerID)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? providerID.rawValue
+        self.providerID = providerID
+        self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        self.accountLabel = try container.decodeIfPresent(String.self, forKey: .accountLabel) ?? ""
+        self.authMethod = try container.decode(ProviderAuthMethod.self, forKey: .authMethod)
+        self.oauthClientID = try container.decodeIfPresent(String.self, forKey: .oauthClientID)
+        self.copilotAccountScope = try container.decodeIfPresent(CopilotAccountScope.self, forKey: .copilotAccountScope) ?? .personal
+        self.githubOrganization = try container.decodeIfPresent(String.self, forKey: .githubOrganization) ?? ""
+        self.githubEnterprise = try container.decodeIfPresent(String.self, forKey: .githubEnterprise) ?? ""
+        self.copilotTotalAllotment = try container.decodeIfPresent(Double.self, forKey: .copilotTotalAllotment)
+        self.openCodeWorkspaceId = try container.decodeIfPresent(String.self, forKey: .openCodeWorkspaceId) ?? ""
+    }
+}
+
+public enum CopilotAccountScope: String, Codable, CaseIterable, Identifiable, Sendable {
+    case personal
+    case organization
+
+    public var id: String {
+        rawValue
+    }
+
+    public var displayName: String {
+        switch self {
+        case .personal:
+            "Personal User"
+        case .organization:
+            "Organization"
+        }
     }
 }
 
@@ -76,6 +159,8 @@ public extension ProviderAccountConfiguration {
         case .claude:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .openRouter:
+            ProviderAccountConfiguration(providerID: providerID, authMethod: .apiKey)
+        case .openCodeZen:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .apiKey)
         case .cursor:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)

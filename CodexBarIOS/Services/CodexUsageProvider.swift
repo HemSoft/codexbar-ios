@@ -17,12 +17,12 @@ public final class CodexUsageProvider: UsageProvider {
         self.usageEndpoint = usageEndpoint
     }
 
-    public func fetchUsage() async throws -> ProviderUsageResult {
+    public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         guard
-            let storedSecret = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: .codex)),
+            let storedSecret = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
             let credentials = CodexCredentialsParser.parse(storedSecret)
         else {
-            return failureResult("Not configured - sign in with ChatGPT.")
+            return failureResult("Not configured - sign in with ChatGPT.", configuration: configuration)
         }
 
         var request = URLRequest(url: usageEndpoint)
@@ -37,26 +37,44 @@ public final class CodexUsageProvider: UsageProvider {
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            return failureResult("ChatGPT usage returned an invalid response.")
+            return failureResult("ChatGPT usage returned an invalid response.", configuration: configuration)
         }
 
         switch httpResponse.statusCode {
         case 200..<300:
-            return CodexUsageParser.parse(data) ?? failureResult("Could not parse ChatGPT usage.")
+            return applyAccountMetadata(
+                to: CodexUsageParser.parse(data) ?? failureResult("Could not parse ChatGPT usage.", configuration: configuration),
+                configuration: configuration
+            )
         case 401, 403:
-            return failureResult("ChatGPT / Codex credential expired.")
+            return failureResult("ChatGPT / Codex credential expired.", configuration: configuration)
         default:
-            return failureResult("ChatGPT usage returned HTTP \(httpResponse.statusCode).")
+            return failureResult("ChatGPT usage returned HTTP \(httpResponse.statusCode).", configuration: configuration)
         }
     }
 
-    private func failureResult(_ message: String) -> ProviderUsageResult {
+    private func failureResult(_ message: String, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
         ProviderUsageResult(
+            accountID: configuration.id,
             providerID: .codex,
-            title: ProviderID.codex.displayName,
+            title: configuration.displayName,
             subtitle: message,
             bars: [],
             fetchedAt: Date()
+        )
+    }
+
+    private func applyAccountMetadata(
+        to result: ProviderUsageResult,
+        configuration: ProviderAccountConfiguration
+    ) -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: result.providerID,
+            title: configuration.displayName,
+            subtitle: result.subtitle,
+            bars: result.bars,
+            fetchedAt: result.fetchedAt
         )
     }
 }

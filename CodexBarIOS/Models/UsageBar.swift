@@ -12,6 +12,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
     public let projectionPeriodStart: Date?
     public let projectionPeriodEnd: Date?
     public let showProjectionOnCurrentBar: Bool
+    public let projectionDescriptionOverride: String?
 
     public init(
         id: UUID = UUID(),
@@ -24,7 +25,8 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         projectionLimit: Double? = nil,
         projectionPeriodStart: Date? = nil,
         projectionPeriodEnd: Date? = nil,
-        showProjectionOnCurrentBar: Bool = false
+        showProjectionOnCurrentBar: Bool = false,
+        projectionDescriptionOverride: String? = nil
     ) {
         self.id = id
         self.label = label
@@ -37,6 +39,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         self.projectionPeriodStart = projectionPeriodStart
         self.projectionPeriodEnd = projectionPeriodEnd
         self.showProjectionOnCurrentBar = showProjectionOnCurrentBar
+        self.projectionDescriptionOverride = projectionDescriptionOverride
     }
 
     public var fractionUsed: Double {
@@ -82,6 +85,10 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
     }
 
     public func projectionDescription(at now: Date = Date()) -> String? {
+        if let projectionDescriptionOverride {
+            return projectionDescriptionOverride
+        }
+
         guard
             showProjectionOnCurrentBar,
             let projectionCurrent,

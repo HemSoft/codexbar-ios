@@ -3,18 +3,22 @@ import Foundation
 public struct DemoUsageProvider: UsageProvider {
     public let providerID: ProviderID
     public let bars: [UsageBar]
+    public let creditsRemaining: Double?
 
-    public init(providerID: ProviderID, bars: [UsageBar]) {
+    public init(providerID: ProviderID, bars: [UsageBar], creditsRemaining: Double? = nil) {
         self.providerID = providerID
         self.bars = bars
+        self.creditsRemaining = creditsRemaining
     }
 
-    public func fetchUsage() async throws -> ProviderUsageResult {
+    public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         ProviderUsageResult(
+            accountID: configuration.id,
             providerID: providerID,
-            title: providerID.displayName,
+            title: configuration.displayName,
             subtitle: "Demo usage until provider auth is implemented",
             bars: bars,
+            creditsRemaining: creditsRemaining,
             fetchedAt: Date()
         )
     }
@@ -38,9 +42,13 @@ public extension DemoUsageProvider {
             ),
             DemoUsageProvider(
                 providerID: .openRouter,
-                bars: [
-                    UsageBar(label: "Credits", used: 81, limit: 100)
-                ]
+                bars: [],
+                creditsRemaining: 18.72
+            ),
+            DemoUsageProvider(
+                providerID: .openCodeZen,
+                bars: [],
+                creditsRemaining: 12.48
             )
         ]
     }

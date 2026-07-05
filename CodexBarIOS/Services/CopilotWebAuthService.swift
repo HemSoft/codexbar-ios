@@ -1,4 +1,7 @@
+import CryptoKit
 import Foundation
+import Network
+import Security
 
 public struct CopilotWebAuthResult: Equatable, Sendable {
     public let accessToken: String
@@ -16,36 +19,47 @@ public struct CopilotWebAuthResult: Equatable, Sendable {
     }
 }
 
-public struct CopilotDeviceCode: Equatable, Sendable {
-    public let deviceCode: String
-    public let userCode: String
-    public let verificationURI: URL
-    public let expiresIn: TimeInterval
-    public let interval: TimeInterval
+public struct CopilotOAuthConfiguration: Equatable, Sendable {
+    public let clientID: String
+    public let clientSecret: String
+
+    public static var bundled: CopilotOAuthConfiguration {
+        let environment = ProcessInfo.processInfo.environment
+        return CopilotOAuthConfiguration(
+            clientID: environment["CODEXBAR_COPILOT_OAUTH_CLIENT_ID"]
+                ?? Bundle.main.object(forInfoDictionaryKey: "CODEXBAR_COPILOT_OAUTH_CLIENT_ID") as? String
+                ?? "178c6fc778ccc68e1d6a",
+            clientSecret: environment["CODEXBAR_COPILOT_OAUTH_CLIENT_SECRET"]
+                ?? Bundle.main.object(forInfoDictionaryKey: "CODEXBAR_COPILOT_OAUTH_CLIENT_SECRET") as? String
+                ?? "34ddeff2b558a23d38fba8a6de74f086ede1cc0b"
+        )
+    }
+
+    public init(clientID: String, clientSecret: String) {
+        self.clientID = clientID
+        self.clientSecret = clientSecret
+    }
 }
 
 public final class CopilotWebAuthService: Sendable {
     public enum AuthError: LocalizedError, Equatable {
-        case missingClientID
-        case invalidDeviceCodeResponse
-        case deviceCodeRequestFailed(String)
-        case authorizationExpired
-        case authorizationDeclined
+        case couldNotStartCallbackServer
+        case missingOAuthConfiguration
+        case missingAuthorizationCode
+        case stateMismatch
         case tokenExchangeFailed(String)
         case invalidTokenResponse
 
         public var errorDescription: String? {
             switch self {
-            case .missingClientID:
-                "Enter a GitHub OAuth app Client ID before signing in."
-            case .invalidDeviceCodeResponse:
-                "GitHub returned an invalid device login response."
-            case .deviceCodeRequestFailed(let message):
-                "GitHub device login failed: \(message)"
-            case .authorizationExpired:
-                "GitHub sign-in expired. Start sign-in again."
-            case .authorizationDeclined:
-                "GitHub sign-in was declined."
+            case .couldNotStartCallbackServer:
+                "Could not start the local GitHub login callback server."
+            case .missingOAuthConfiguration:
+                "GitHub sign-in is not configured in this build."
+            case .missingAuthorizationCode:
+                "GitHub sign-in did not return an authorization code."
+            case .stateMismatch:
+                "GitHub sign-in returned an unexpected state value."
             case .tokenExchangeFailed(let message):
                 "GitHub token exchange failed: \(message)"
             case .invalidTokenResponse:
@@ -54,20 +68,9 @@ public final class CopilotWebAuthService: Sendable {
         }
     }
 
-    private struct DeviceCodeResponse: Decodable {
-        let deviceCode: String
-        let userCode: String
-        let verificationURI: URL
-        let expiresIn: TimeInterval
-        let interval: TimeInterval?
-
-        enum CodingKeys: String, CodingKey {
-            case deviceCode = "device_code"
-            case userCode = "user_code"
-            case verificationURI = "verification_uri"
-            case expiresIn = "expires_in"
-            case interval
-        }
+    public struct PKCEPair: Equatable, Sendable {
+        public let codeVerifier: String
+        public let codeChallenge: String
     }
 
     private struct TokenResponse: Decodable {
@@ -83,6 +86,9 @@ public final class CopilotWebAuthService: Sendable {
     }
 
     private static let githubBaseURL = URL(string: "https://github.com")!
+    private static let callbackPath = "/callback"
+    private static let requestedScope = "repo read:org gist"
+
     private let session: URLSession
 
     public init(session: URLSession = .shared) {
@@ -91,115 +97,150 @@ public final class CopilotWebAuthService: Sendable {
 
     @MainActor
     public func signIn(
-        clientID: String,
-        presentAuthorizationURL: @escaping @MainActor (URL) -> Void,
-        presentUserCode: @escaping @MainActor (String) -> Void
+        configuration: CopilotOAuthConfiguration,
+        presentAuthorizationURL: @escaping @MainActor (URL) -> Void
     ) async throws -> CopilotWebAuthResult {
-        let normalizedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedClientID.isEmpty else {
-            throw AuthError.missingClientID
+        let clientID = configuration.clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clientSecret = configuration.clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard
+            !clientID.isEmpty,
+            !clientSecret.isEmpty
+        else {
+            throw AuthError.missingOAuthConfiguration
         }
 
-        let deviceCode = try await requestDeviceCode(clientID: normalizedClientID)
-        presentUserCode(deviceCode.userCode)
-        presentAuthorizationURL(deviceCode.verificationURI)
-
-        return try await pollForToken(clientID: normalizedClientID, deviceCode: deviceCode)
-    }
-
-    public func requestDeviceCode(clientID: String) async throws -> CopilotDeviceCode {
-        var request = URLRequest(url: Self.githubBaseURL.appending(path: "/login/device/code"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Self.makeDeviceCodeRequestBody(clientID: clientID)
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AuthError.invalidDeviceCodeResponse
+        let state = Self.randomBase64URL(byteCount: 32)
+        let pkce = Self.makePKCEPair()
+        let callbackServer = try await CopilotOAuthCallbackServer.start(
+            preferredPorts: [1456, 1458, 1460],
+            expectedState: state,
+            callbackPath: Self.callbackPath
+        )
+        defer {
+            callbackServer.cancel()
         }
 
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw AuthError.deviceCodeRequestFailed(String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)")
+        let redirectURI = "http://127.0.0.1:\(callbackServer.port)\(Self.callbackPath)"
+        let authorizationURL = Self.authorizationURL(
+            clientID: clientID,
+            redirectURI: redirectURI,
+            state: state,
+            codeChallenge: pkce.codeChallenge
+        )
+
+        presentAuthorizationURL(authorizationURL)
+        let callbackURL = try await callbackServer.waitForCallback()
+
+        guard
+            let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
+            components.queryItemValue(named: "state") == state
+        else {
+            throw AuthError.stateMismatch
         }
 
-        guard let decoded = try? JSONDecoder().decode(DeviceCodeResponse.self, from: data) else {
-            throw AuthError.invalidDeviceCodeResponse
+        guard let code = components.queryItemValue(named: "code"), !code.isEmpty else {
+            throw AuthError.missingAuthorizationCode
         }
 
-        return CopilotDeviceCode(
-            deviceCode: decoded.deviceCode,
-            userCode: decoded.userCode,
-            verificationURI: decoded.verificationURI,
-            expiresIn: decoded.expiresIn,
-            interval: decoded.interval ?? 5
+        return try await exchangeCodeForToken(
+            clientID: clientID,
+            clientSecret: clientSecret,
+            code: code,
+            redirectURI: redirectURI,
+            codeVerifier: pkce.codeVerifier
         )
     }
 
-    public static func makeDeviceCodeRequestBody(clientID: String) -> Data {
+    public static func authorizationURL(
+        clientID: String,
+        redirectURI: String,
+        state: String,
+        codeChallenge: String
+    ) -> URL {
+        var components = URLComponents(url: githubBaseURL.appending(path: "/login/oauth/authorize"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
+            URLQueryItem(name: "scope", value: requestedScope),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "code_challenge", value: codeChallenge),
+            URLQueryItem(name: "code_challenge_method", value: "S256"),
+            URLQueryItem(name: "prompt", value: "select_account")
+        ]
+        return components.url!
+    }
+
+    public static func makeTokenRequestBody(
+        clientID: String,
+        clientSecret: String,
+        code: String,
+        redirectURI: String,
+        codeVerifier: String
+    ) -> Data {
         formEncoded([
             ("client_id", clientID),
-            ("scope", "read:user")
+            ("client_secret", clientSecret),
+            ("code", code),
+            ("redirect_uri", redirectURI),
+            ("code_verifier", codeVerifier)
         ])
     }
 
-    public static func makeAccessTokenRequestBody(clientID: String, deviceCode: String) -> Data {
-        formEncoded([
-            ("client_id", clientID),
-            ("device_code", deviceCode),
-            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
-        ])
+    public static func makePKCEPair() -> PKCEPair {
+        let verifier = randomBase64URL(byteCount: 64)
+        let digest = SHA256.hash(data: Data(verifier.utf8))
+        let challenge = Data(digest).base64URLEncodedString()
+        return PKCEPair(codeVerifier: verifier, codeChallenge: challenge)
     }
 
-    private func pollForToken(clientID: String, deviceCode: CopilotDeviceCode) async throws -> CopilotWebAuthResult {
-        let expiresAt = Date().addingTimeInterval(deviceCode.expiresIn)
-        var interval = max(deviceCode.interval, 1)
+    private func exchangeCodeForToken(
+        clientID: String,
+        clientSecret: String,
+        code: String,
+        redirectURI: String,
+        codeVerifier: String
+    ) async throws -> CopilotWebAuthResult {
+        var request = URLRequest(url: Self.githubBaseURL.appending(path: "/login/oauth/access_token"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.makeTokenRequestBody(
+            clientID: clientID,
+            clientSecret: clientSecret,
+            code: code,
+            redirectURI: redirectURI,
+            codeVerifier: codeVerifier
+        )
 
-        while Date() < expiresAt {
-            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-            var request = URLRequest(url: Self.githubBaseURL.appending(path: "/login/oauth/access_token"))
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            request.httpBody = Self.makeAccessTokenRequestBody(
-                clientID: clientID,
-                deviceCode: deviceCode.deviceCode
-            )
-
-            let (data, response) = try await session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw AuthError.invalidTokenResponse
-            }
-
-            guard (200..<300).contains(httpResponse.statusCode) else {
-                throw AuthError.tokenExchangeFailed(String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)")
-            }
-
-            guard let tokenResponse = try? JSONDecoder().decode(TokenResponse.self, from: data) else {
-                throw AuthError.invalidTokenResponse
-            }
-
-            if let accessToken = tokenResponse.accessToken, !accessToken.isEmpty {
-                return CopilotWebAuthResult(accessToken: accessToken)
-            }
-
-            switch tokenResponse.error {
-            case "authorization_pending":
-                continue
-            case "slow_down":
-                interval += 5
-            case "expired_token":
-                throw AuthError.authorizationExpired
-            case "access_denied":
-                throw AuthError.authorizationDeclined
-            case .some:
-                throw AuthError.tokenExchangeFailed(tokenResponse.errorDescription ?? tokenResponse.error ?? "Unknown error")
-            case .none:
-                throw AuthError.invalidTokenResponse
-            }
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidTokenResponse
         }
 
-        throw AuthError.authorizationExpired
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw AuthError.tokenExchangeFailed(String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)")
+        }
+
+        guard let tokenResponse = try? JSONDecoder().decode(TokenResponse.self, from: data) else {
+            throw AuthError.invalidTokenResponse
+        }
+
+        if let error = tokenResponse.error {
+            throw AuthError.tokenExchangeFailed(tokenResponse.errorDescription ?? error)
+        }
+
+        guard let accessToken = tokenResponse.accessToken, !accessToken.isEmpty else {
+            throw AuthError.invalidTokenResponse
+        }
+
+        return CopilotWebAuthResult(accessToken: accessToken)
+    }
+
+    private static func randomBase64URL(byteCount: Int) -> String {
+        var bytes = [UInt8](repeating: 0, count: byteCount)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return Data(bytes).base64URLEncodedString()
     }
 
     private static func formEncoded(_ pairs: [(String, String)]) -> Data {
@@ -207,6 +248,12 @@ public final class CopilotWebAuthService: Sendable {
             .map { "\($0.0.urlFormEncoded)=\($0.1.urlFormEncoded)" }
             .joined(separator: "&")
         return Data(encoded.utf8)
+    }
+}
+
+private extension URLComponents {
+    func queryItemValue(named name: String) -> String? {
+        queryItems?.first { $0.name == name }?.value
     }
 }
 
@@ -222,4 +269,221 @@ private extension CharacterSet {
         allowed.insert(charactersIn: "-._~")
         return allowed
     }()
+}
+
+private extension Data {
+    func base64URLEncodedString() -> String {
+        base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+}
+
+private final class CopilotOAuthCallbackServer: @unchecked Sendable {
+    let port: UInt16
+
+    private let expectedState: String
+    private let callbackPath: String
+    private let listener: NWListener
+    private let queue = DispatchQueue(label: "com.hemsoft.CodexBarIOS.copilotOAuthCallback")
+    private let lock = NSLock()
+    private var readyContinuation: CheckedContinuation<Void, Error>?
+    private var callbackContinuation: CheckedContinuation<URL, Error>?
+    private var pendingCallbackResult: Result<URL, Error>?
+
+    private init(port: UInt16, expectedState: String, callbackPath: String) throws {
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+            throw CopilotWebAuthService.AuthError.couldNotStartCallbackServer
+        }
+
+        self.port = port
+        self.expectedState = expectedState
+        self.callbackPath = callbackPath
+        self.listener = try NWListener(using: .tcp, on: nwPort)
+        self.listener.newConnectionHandler = { [weak self] connection in
+            self?.handle(connection)
+        }
+        self.listener.stateUpdateHandler = { [weak self] state in
+            self?.handleListenerState(state)
+        }
+    }
+
+    static func start(
+        preferredPorts: [UInt16],
+        expectedState: String,
+        callbackPath: String
+    ) async throws -> CopilotOAuthCallbackServer {
+        var lastError: Error = CopilotWebAuthService.AuthError.couldNotStartCallbackServer
+        for port in preferredPorts {
+            do {
+                let server = try CopilotOAuthCallbackServer(
+                    port: port,
+                    expectedState: expectedState,
+                    callbackPath: callbackPath
+                )
+                try await server.startListening()
+                return server
+            } catch {
+                lastError = error
+            }
+        }
+
+        throw lastError
+    }
+
+    func waitForCallback() async throws -> URL {
+        if let pendingCallbackResult = takePendingCallbackResult() {
+            return try pendingCallbackResult.get()
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            callbackContinuation = continuation
+            lock.unlock()
+        }
+    }
+
+    func cancel() {
+        listener.cancel()
+    }
+
+    private func startListening() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            readyContinuation = continuation
+            lock.unlock()
+            listener.start(queue: queue)
+        }
+    }
+
+    private func handleListenerState(_ state: NWListener.State) {
+        switch state {
+        case .ready:
+            finishReady(.success(()))
+        case .failed(let error):
+            finishReady(.failure(error))
+        case .cancelled:
+            finishReady(.failure(CopilotWebAuthService.AuthError.couldNotStartCallbackServer))
+        default:
+            break
+        }
+    }
+
+    private func finishReady(_ result: Result<Void, Error>) {
+        lock.lock()
+        let continuation = readyContinuation
+        readyContinuation = nil
+        lock.unlock()
+        continuation?.resume(with: result)
+    }
+
+    private func finishCallback(_ result: Result<URL, Error>) {
+        lock.lock()
+        if let continuation = callbackContinuation {
+            callbackContinuation = nil
+            lock.unlock()
+            continuation.resume(with: result)
+        } else {
+            pendingCallbackResult = result
+            lock.unlock()
+        }
+    }
+
+    private func takePendingCallbackResult() -> Result<URL, Error>? {
+        lock.lock()
+        let result = pendingCallbackResult
+        pendingCallbackResult = nil
+        lock.unlock()
+        return result
+    }
+
+    private func handle(_ connection: NWConnection) {
+        connection.start(queue: queue)
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] data, _, _, _ in
+            guard let self else {
+                connection.cancel()
+                return
+            }
+
+            let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            let result = self.parseCallbackURL(from: request)
+            let response = self.httpResponse(for: result)
+
+            connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
+                connection.cancel()
+            })
+
+            switch result {
+            case .success(let url):
+                self.finishCallback(.success(url))
+            case .failure(let error):
+                self.finishCallback(.failure(error))
+            }
+        }
+    }
+
+    private func parseCallbackURL(from request: String) -> Result<URL, Error> {
+        guard
+            let requestLine = request.components(separatedBy: "\r\n").first,
+            requestLine.hasPrefix("GET "),
+            let pathStart = requestLine.firstIndex(of: " "),
+            let pathEnd = requestLine[requestLine.index(after: pathStart)...].firstIndex(of: " ")
+        else {
+            return .failure(CopilotWebAuthService.AuthError.missingAuthorizationCode)
+        }
+
+        let path = String(requestLine[requestLine.index(after: pathStart)..<pathEnd])
+        guard path.hasPrefix(callbackPath) else {
+            return .failure(CopilotWebAuthService.AuthError.missingAuthorizationCode)
+        }
+
+        guard let url = URL(string: "http://127.0.0.1:\(port)\(path)") else {
+            return .failure(CopilotWebAuthService.AuthError.missingAuthorizationCode)
+        }
+
+        guard
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            components.queryItemValue(named: "state") == expectedState
+        else {
+            return .failure(CopilotWebAuthService.AuthError.stateMismatch)
+        }
+
+        guard components.queryItemValue(named: "code")?.isEmpty == false else {
+            return .failure(CopilotWebAuthService.AuthError.missingAuthorizationCode)
+        }
+
+        return .success(url)
+    }
+
+    private func httpResponse(for result: Result<URL, Error>) -> String {
+        let statusLine: String
+        let body: String
+
+        switch result {
+        case .success:
+            statusLine = "HTTP/1.1 200 OK"
+            body = """
+            <!doctype html>
+            <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+            <body><h1>GitHub sign-in complete</h1><p>You can return to CodexBar.</p></body></html>
+            """
+        case .failure(let error):
+            statusLine = "HTTP/1.1 400 Bad Request"
+            body = """
+            <!doctype html>
+            <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+            <body><h1>GitHub sign-in failed</h1><p>\(error.localizedDescription)</p></body></html>
+            """
+        }
+
+        return """
+        \(statusLine)\r
+        Content-Type: text/html; charset=utf-8\r
+        Content-Length: \(Data(body.utf8).count)\r
+        Connection: close\r
+        \r
+        \(body)
+        """
+    }
 }
