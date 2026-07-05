@@ -629,7 +629,7 @@ struct ProviderWidgetTile: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             } else if let bar = tile.bar {
-                Text(bar.usageText)
+                Text(metricText(for: bar))
                     .font(.system(size: 25, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
@@ -851,7 +851,7 @@ struct ProviderWidgetTile: View {
 
     private var primaryMetric: String {
         if let bar = tile.bar {
-            return bar.usageText
+            return metricText(for: bar)
         }
 
         if let creditsRemaining = tile.creditsRemaining {
@@ -923,7 +923,7 @@ private struct WidgetUsageProgressBar: View {
                 }
 
                 Capsule()
-                    .fill(bar.effectiveSeverity.tint)
+                    .fill(bar.severity.tint)
                     .frame(width: actualWidth)
             }
         }
@@ -1153,7 +1153,18 @@ private func summary(for tile: CodexBarWidgetTile) -> String {
         return widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
     }
 
-    return tile.bar?.usageText ?? "No data"
+    return tile.bar.map(metricText(for:)) ?? "No data"
+}
+
+private func metricText(for bar: CodexBarWidgetUsageBarSnapshot) -> String {
+    guard
+        let projectedFraction = bar.projectedFraction,
+        bar.effectiveSeverity > bar.severity
+    else {
+        return bar.usageText
+    }
+
+    return "Proj \(Int((projectedFraction * 100).rounded()))%"
 }
 
 private let widgetCurrencyFormatter: NumberFormatter = {
