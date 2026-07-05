@@ -84,10 +84,22 @@ final class CodexBarIOSTests: XCTestCase {
                     providerID: "openCodeZen",
                     title: "OpenCode ZEN",
                     subtitle: "Balance",
-                    bars: [],
+                    bars: [
+                        CodexBarWidgetUsageBarSnapshot(
+                            id: "codex.personal.0.five-hour",
+                            label: "5 hour usage limit",
+                            fractionUsed: 0.25,
+                            usageText: "25%",
+                            resetDescription: "Resets 4h",
+                            severity: .normal,
+                            projectedFraction: 1,
+                            projectionDescription: "Projected 100% at current pace - Limit hit Wed 11:00 PM EST - 1h early",
+                            projectedSeverity: .critical
+                        ),
+                    ],
                     creditsRemaining: 42.25,
                     fetchedAt: generatedAt,
-                    severity: .normal
+                    severity: .critical
                 ),
             ]
         )
@@ -97,6 +109,44 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults), snapshot)
         XCTAssertEqual(WidgetSnapshotStore.loadRefreshInterval(defaults: defaults), .threeHours)
+    }
+
+    func testWidgetSnapshotStoreDecodesLegacyUsageBarsWithoutProjectionFields() throws {
+        let json = """
+        {
+          "generatedAt": 1788475200,
+          "results": [
+            {
+              "accountID": "codex.personal",
+              "providerID": "codex",
+              "title": "Codex",
+              "subtitle": "Pro",
+              "bars": [
+                {
+                  "id": "codex.personal.0.five-hour",
+                  "label": "5 hour usage limit",
+                  "fractionUsed": 0.25,
+                  "usageText": "25%",
+                  "resetDescription": "Resets 4h",
+                  "severity": "normal"
+                }
+              ],
+              "creditsRemaining": null,
+              "fetchedAt": 1788475200,
+              "severity": "normal"
+            }
+          ]
+        }
+        """
+
+        let snapshot = try JSONDecoder().decode(CodexBarWidgetSnapshot.self, from: Data(json.utf8))
+        let bar = try XCTUnwrap(snapshot.results.first?.bars.first)
+
+        XCTAssertNil(bar.projectedFraction)
+        XCTAssertNil(bar.projectionDescription)
+        XCTAssertNil(bar.projectedSeverity)
+        XCTAssertEqual(bar.effectiveSeverity, .normal)
+        XCTAssertEqual(bar.effectiveFractionUsed, 0.25)
     }
 
     @MainActor
@@ -1832,10 +1882,33 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(bar.usageText, "25%")
         XCTAssertEqual(bar.projectedFraction(at: now), 1)
+        XCTAssertEqual(bar.projectedSeverity(at: now), .critical)
+        XCTAssertEqual(bar.effectiveSeverity(at: now), .critical)
         XCTAssertEqual(
             bar.projectionDescription(at: now),
             "Projected 100% at current pace - Limit hit Wed 11:00 PM EST - 1h early"
         )
+    }
+
+    func testUsageBarShowsSafeProjectionWhenPaceStaysBelowLimit() {
+        let start = Date(timeIntervalSince1970: 1_767_225_600)
+        let now = start.addingTimeInterval(60 * 60)
+        let end = start.addingTimeInterval(5 * 60 * 60)
+        let bar = UsageBar(
+            label: "5 hour usage limit",
+            used: 8,
+            limit: 100,
+            projectionCurrent: 0.08,
+            projectionLimit: 1,
+            projectionPeriodStart: start,
+            projectionPeriodEnd: end,
+            showProjectionOnCurrentBar: true
+        )
+
+        XCTAssertEqual(bar.projectedFraction(at: now), 0.4)
+        XCTAssertEqual(bar.projectedSeverity(at: now), .normal)
+        XCTAssertEqual(bar.effectiveSeverity(at: now), .normal)
+        XCTAssertEqual(bar.projectionDescription(at: now), "Projected to stay under limit")
     }
 
     func testUsageBarKeepsOverLimitPercentVisible() {
