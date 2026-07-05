@@ -25,10 +25,7 @@ public enum UsageAlertEvaluator {
         var notifications: [UsageAlertNotification] = []
 
         for result in results {
-            var hasSpecificThresholdBreach = false
-
             for bar in result.bars where bar.fractionUsed >= settings.usageThreshold {
-                hasSpecificThresholdBreach = true
                 let alertID = alertID(for: result, bar: bar)
                 nextActiveAlertIDs.insert(alertID)
 
@@ -48,7 +45,6 @@ public enum UsageAlertEvaluator {
             if let creditsRemaining = result.creditsRemaining,
                creditsRemaining <= settings.balanceThreshold
             {
-                hasSpecificThresholdBreach = true
                 let alertID = "balance.\(result.accountID)"
                 nextActiveAlertIDs.insert(alertID)
 
@@ -64,7 +60,6 @@ public enum UsageAlertEvaluator {
             }
 
             if settings.includesSeverityAlerts,
-               !hasSpecificThresholdBreach,
                result.highestSeverity >= .warning
             {
                 let alertID = "severity.\(result.accountID)"

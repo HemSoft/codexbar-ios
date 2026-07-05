@@ -191,7 +191,11 @@ final class CodexBarIOSTests: XCTestCase {
             ],
             fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
         )
-        let settings = UsageAlertSettings(isEnabled: true, usageThreshold: 0.80)
+        let settings = UsageAlertSettings(
+            isEnabled: true,
+            usageThreshold: 0.80,
+            includesSeverityAlerts: false
+        )
 
         let first = UsageAlertEvaluator.evaluate(results: [result], settings: settings, activeAlertIDs: [])
         XCTAssertEqual(first.notifications.count, 1)
@@ -327,6 +331,41 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(evaluation.notifications.count, 1)
         XCTAssertEqual(evaluation.notifications.first?.title, "Cursor Warning")
         XCTAssertTrue(evaluation.activeAlertIDs.contains("severity.cursor.main"))
+    }
+
+    func testUsageAlertEvaluatorReportsSeverityAlongsideSpecificThresholds() {
+        let result = ProviderUsageResult(
+            accountID: "codex.personal",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(
+                    id: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!,
+                    label: "Weekly usage limit",
+                    used: 95,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+        )
+        let settings = UsageAlertSettings(
+            isEnabled: true,
+            usageThreshold: 0.80,
+            balanceThreshold: 5,
+            includesSeverityAlerts: true
+        )
+
+        let first = UsageAlertEvaluator.evaluate(results: [result], settings: settings, activeAlertIDs: [])
+        let repeated = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: settings,
+            activeAlertIDs: first.activeAlertIDs
+        )
+
+        XCTAssertEqual(first.notifications.map(\.title), ["Codex Weekly usage limit", "Codex Critical"])
+        XCTAssertEqual(first.activeAlertIDs, ["usage.codex.personal.weekly-usage-limit", "severity.codex.personal"])
+        XCTAssertTrue(repeated.notifications.isEmpty)
     }
 
     @MainActor
