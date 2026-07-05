@@ -356,6 +356,7 @@ struct CodexBarWidgetView: View {
     private var selectedTiles: [CodexBarWidgetRenderedTile] {
         let allTiles = scopedSelectableTiles
         let builderConfiguration = WidgetSnapshotStore.loadBuilderConfiguration()
+        let usesBuilderDefaults = usesBuilderDefaults(builderConfiguration)
         let configuredChoices = [
             entry.configuration.tile1,
             entry.configuration.tile2,
@@ -373,7 +374,10 @@ struct CodexBarWidgetView: View {
             entry.configuration.tile6DisplayMode,
         ]
 
-        let maximumTiles = tileCount(builderConfiguration: builderConfiguration)
+        let maximumTiles = tileCount(
+            builderConfiguration: builderConfiguration,
+            usesBuilderDefaults: usesBuilderDefaults
+        )
         let fallbackTiles = Array(defaultTiles.prefix(maximumTiles))
 
         if configuredChoices.contains(where: { $0 != nil }) {
@@ -389,7 +393,7 @@ struct CodexBarWidgetView: View {
             }
         }
 
-        if builderConfiguration.hasSelectedTiles {
+        if usesBuilderDefaults {
             return (0..<maximumTiles).compactMap { index in
                 guard let tileID = builderConfiguration.tileID(at: index) else {
                     return nil
@@ -408,6 +412,12 @@ struct CodexBarWidgetView: View {
                 displayMode: displayMode(at: index, in: configuredDisplayModes)
             )
         }
+    }
+
+    private func usesBuilderDefaults(_ configuration: CodexBarWidgetBuilderConfiguration) -> Bool {
+        configuration.hasSelectedTiles
+            && entry.configuration.focus == .dashboardOrder
+            && entry.configuration.group == nil
     }
 
     private var defaultTiles: [CodexBarWidgetTile] {
@@ -508,8 +518,11 @@ struct CodexBarWidgetView: View {
         CodexBarWidgetTileDisplayMode(rawValue: displayMode.rawValue) ?? .automatic
     }
 
-    private func tileCount(builderConfiguration: CodexBarWidgetBuilderConfiguration) -> Int {
-        if entry.configuration.layout == .automatic {
+    private func tileCount(
+        builderConfiguration: CodexBarWidgetBuilderConfiguration,
+        usesBuilderDefaults: Bool
+    ) -> Int {
+        if entry.configuration.layout == .automatic, usesBuilderDefaults {
             return builderConfiguration.layout.tileCount(
                 maximum: maximumTileCount,
                 automaticCount: automaticTileCount
