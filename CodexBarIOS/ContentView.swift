@@ -222,6 +222,7 @@ struct ContentView: View {
     private func moveCard(_ draggedID: String, to targetID: String) {
         var orderedIDs = visibleDashboardOrder
         guard
+            dashboardGroupID(for: draggedID) == dashboardGroupID(for: targetID),
             let sourceIndex = orderedIDs.firstIndex(of: draggedID),
             let targetIndex = orderedIDs.firstIndex(of: targetID),
             sourceIndex != targetIndex
@@ -236,6 +237,11 @@ struct ContentView: View {
             )
             persistVisibleCardOrder(orderedIDs)
         }
+    }
+
+    private func dashboardGroupID(for accountID: String) -> String {
+        configurationStore.configuration(accountID: accountID)?.groupID
+            ?? DashboardSection.ungroupedID
     }
 
     private func finishCardDrag() {
