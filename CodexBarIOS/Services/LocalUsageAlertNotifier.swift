@@ -20,6 +20,12 @@ public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, UNUse
         center.delegate = self
     }
 
+    deinit {
+        if center.delegate === self {
+            center.delegate = nil
+        }
+    }
+
     @MainActor
     public func requestAuthorization() async -> Bool {
         do {

@@ -284,6 +284,30 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(repeated.activeAlertIDs, ["usage.cursor.main.on-demand"])
     }
 
+    func testUsageAlertEvaluatorDeduplicatesBarsWithSameStableKey() {
+        let result = ProviderUsageResult(
+            accountID: "cursor.main",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(label: "On-demand $12.00 / $20.00", used: 12, limit: 20),
+                UsageBar(label: "On-demand $18.00 / $30.00", used: 18, limit: 30),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+        )
+        let settings = UsageAlertSettings(
+            isEnabled: true,
+            usageThreshold: 0.50,
+            includesSeverityAlerts: false
+        )
+
+        let evaluation = UsageAlertEvaluator.evaluate(results: [result], settings: settings, activeAlertIDs: [])
+
+        XCTAssertEqual(evaluation.notifications.count, 1)
+        XCTAssertEqual(evaluation.activeAlertIDs, ["usage.cursor.main.on-demand"])
+    }
+
     func testUsageAlertEvaluatorReportsBalanceThreshold() {
         let result = ProviderUsageResult(
             accountID: "openRouter.main",

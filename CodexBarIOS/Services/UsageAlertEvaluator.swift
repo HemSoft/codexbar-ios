@@ -27,9 +27,12 @@ public enum UsageAlertEvaluator {
         for result in results {
             for bar in result.bars where bar.fractionUsed >= settings.usageThreshold {
                 let alertID = alertID(for: result, bar: bar)
+                let hasAlreadyQueuedAlert = nextActiveAlertIDs.contains(alertID)
                 nextActiveAlertIDs.insert(alertID)
 
-                guard !activeAlertIDs.contains(alertID) else {
+                guard !activeAlertIDs.contains(alertID),
+                      !hasAlreadyQueuedAlert
+                else {
                     continue
                 }
 
