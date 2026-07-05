@@ -314,8 +314,8 @@ struct CodexBarWidgetView: View {
                 }
         }
 
-        return defaultTiles.prefix(tileCount).map {
-            CodexBarWidgetRenderedTile(tile: $0, displayMode: .automatic)
+        return zip(defaultTiles.prefix(tileCount), configuredDisplayModes).map { tile, displayMode in
+            CodexBarWidgetRenderedTile(tile: tile, displayMode: displayMode)
         }
     }
 
@@ -742,18 +742,6 @@ struct ProviderWidgetTile: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-            } else if let bar = tile.bar {
-                Text(bar.usageText)
-                    .font(primaryMetricFont)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-
-                Text("Usage tile - no balance data")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(style == .dense ? 2 : 1)
-                    .minimumScaleFactor(0.65)
             } else {
                 Text("No balance data")
                     .font(.caption2.weight(.semibold))
