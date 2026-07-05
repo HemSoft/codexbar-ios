@@ -123,32 +123,43 @@ public final class UsageHistoryStore: ObservableObject {
             return nil
         }
 
-        let values = recent.compactMap(\.primaryValue)
-        guard values.count >= 2, let previous = values.dropLast().last, let current = values.last else {
+        let valuedSnapshots = recent.compactMap { snapshot -> (snapshot: UsageHistorySnapshot, value: Double)? in
+            guard let value = snapshot.primaryValue else {
+                return nil
+            }
+
+            return (snapshot, value)
+        }
+        guard
+            valuedSnapshots.count >= 2,
+            let previous = valuedSnapshots.dropLast().last,
+            let current = valuedSnapshots.last
+        else {
             return nil
         }
 
-        let delta = current - previous
+        let values = valuedSnapshots.map(\.value)
+        let delta = current.value - previous.value
         let isBalance = result.creditsRemaining != nil
         let direction: UsageTrendSummary.Direction
         let description: String
 
         if abs(delta) < 0.0001 {
             direction = .flat
-            description = isBalance ? "Balance unchanged" : "Usage unchanged"
+            description = "No change"
         } else if isBalance {
             direction = delta > 0 ? .up : .down
-            description = "\(delta > 0 ? "Up" : "Down") \(Self.formatCurrency(abs(delta))) since last snapshot"
+            description = "Changed \(delta > 0 ? "+" : "-")\(Self.formatCurrency(abs(delta)))"
         } else {
             direction = delta > 0 ? .up : .down
-            description = "\(delta > 0 ? "+" : "-")\(Int((abs(delta) * 100).rounded())) pts since last snapshot"
+            description = "Changed \(delta > 0 ? "+" : "-")\(Int((abs(delta) * 100).rounded())) pts"
         }
 
         return UsageTrendSummary(
             accountID: result.accountID,
             points: values,
             valueDescription: description,
-            windowDescription: "\(recent.count) snapshots / 7d",
+            windowDescription: "Since \(Self.formatSnapshotDate(previous.snapshot.capturedAt))",
             isBalance: isBalance,
             direction: direction
         )
@@ -208,12 +219,23 @@ public final class UsageHistoryStore: ObservableObject {
         currencyFormatter.string(from: NSNumber(value: value)) ?? "$0.00"
     }
 
+    private static func formatSnapshotDate(_ date: Date) -> String {
+        snapshotDateFormatter.string(from: date)
+    }
+
     private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         formatter.minimumFractionDigits = 2
         formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+
+    private static let snapshotDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
         return formatter
     }()
 }

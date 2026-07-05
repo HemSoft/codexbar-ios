@@ -269,8 +269,8 @@ private struct UsageProgressBar: View {
         trend: UsageTrendSummary(
             accountID: "codex",
             points: [0.34, 0.46, 0.52, 0.45, 0.62],
-            valueDescription: "+17 pts since last snapshot",
-            windowDescription: "5 snapshots / 7d",
+            valueDescription: "Changed +17 pts",
+            windowDescription: "Since Sep 3, 2026 at 6:39 PM",
             isBalance: false,
             direction: .up
         )

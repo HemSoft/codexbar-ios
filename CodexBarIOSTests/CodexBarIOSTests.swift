@@ -2478,7 +2478,9 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(summary.points, [0.25, 0.4])
         XCTAssertEqual(summary.direction, .up)
         XCTAssertFalse(summary.isBalance)
-        XCTAssertEqual(summary.valueDescription, "+15 pts since last snapshot")
+        XCTAssertEqual(summary.valueDescription, "Changed +15 pts")
+        XCTAssertTrue(summary.windowDescription.hasPrefix("Since "))
+        XCTAssertTrue(summary.windowDescription.contains(" at "))
     }
 
     @MainActor
@@ -2510,7 +2512,9 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(summary.points, [22, 19.25])
         XCTAssertEqual(summary.direction, .down)
         XCTAssertTrue(summary.isBalance)
-        XCTAssertEqual(summary.valueDescription, "Down $2.75 since last snapshot")
+        XCTAssertEqual(summary.valueDescription, "Changed -$2.75")
+        XCTAssertTrue(summary.windowDescription.hasPrefix("Since "))
+        XCTAssertTrue(summary.windowDescription.contains(" at "))
     }
 
     func testCodexUsageWithoutCredentialIsNotDemoData() async throws {
