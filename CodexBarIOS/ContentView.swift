@@ -192,6 +192,10 @@ struct ContentView: View {
         }
     }
 
+    private var visibleDashboardOrder: [String] {
+        dashboardSections.flatMap(\.results).map(\.id)
+    }
+
     private func dashboardStatusText(for result: ProviderUsageResult) -> String {
         guard let configuration = configurationStore.configuration(accountID: result.accountID) else {
             return result.subtitle
@@ -216,7 +220,7 @@ struct ContentView: View {
     }
 
     private func moveCard(_ draggedID: String, to targetID: String) {
-        var orderedIDs = orderedDisplayedResults.map(\.id)
+        var orderedIDs = visibleDashboardOrder
         guard
             let sourceIndex = orderedIDs.firstIndex(of: draggedID),
             let targetIndex = orderedIDs.firstIndex(of: targetID),
@@ -235,7 +239,7 @@ struct ContentView: View {
     }
 
     private func finishCardDrag() {
-        persistVisibleCardOrder(orderedDisplayedResults.map(\.id))
+        persistVisibleCardOrder(visibleDashboardOrder)
         draggedCardID = nil
     }
 
