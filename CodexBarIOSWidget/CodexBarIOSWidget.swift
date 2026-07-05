@@ -355,6 +355,8 @@ struct CodexBarWidgetView: View {
 
     private var selectedTiles: [CodexBarWidgetRenderedTile] {
         let allTiles = scopedSelectableTiles
+        let builderConfiguration = WidgetSnapshotStore.loadBuilderConfiguration()
+        let usesBuilderDefaults = usesBuilderDefaults(builderConfiguration)
         let configuredChoices = [
             entry.configuration.tile1,
             entry.configuration.tile2,
@@ -372,7 +374,10 @@ struct CodexBarWidgetView: View {
             entry.configuration.tile6DisplayMode,
         ]
 
-        let maximumTiles = tileCount
+        let maximumTiles = tileCount(
+            builderConfiguration: builderConfiguration,
+            usesBuilderDefaults: usesBuilderDefaults
+        )
         let fallbackTiles = Array(defaultTiles.prefix(maximumTiles))
 
         if configuredChoices.contains(where: { $0 != nil }) {
@@ -388,12 +393,40 @@ struct CodexBarWidgetView: View {
             }
         }
 
+        if usesBuilderDefaults {
+            return (0..<maximumTiles).compactMap { index in
+                let tile: CodexBarWidgetTile?
+                if let tileID = builderConfiguration.tileID(at: index) {
+                    tile = resolvedTile(for: tileID, in: allTiles)
+                } else if fallbackTiles.indices.contains(index) {
+                    tile = fallbackTiles[index]
+                } else {
+                    tile = nil
+                }
+
+                guard let tile else {
+                    return nil
+                }
+
+                return CodexBarWidgetRenderedTile(
+                    tile: tile,
+                    displayMode: displayMode(from: builderConfiguration.displayMode(at: index))
+                )
+            }
+        }
+
         return fallbackTiles.enumerated().map { index, tile in
             CodexBarWidgetRenderedTile(
                 tile: tile,
                 displayMode: displayMode(at: index, in: configuredDisplayModes)
             )
         }
+    }
+
+    private func usesBuilderDefaults(_ configuration: CodexBarWidgetBuilderConfiguration) -> Bool {
+        configuration.hasCustomizations
+            && entry.configuration.focus == .dashboardOrder
+            && entry.configuration.group == nil
     }
 
     private var defaultTiles: [CodexBarWidgetTile] {
@@ -428,6 +461,27 @@ struct CodexBarWidgetView: View {
         }
 
         return .unavailable(choice: choice)
+    }
+
+    private func resolvedTile(
+        for tileID: String,
+        in allTiles: [CodexBarWidgetTile]
+    ) -> CodexBarWidgetTile {
+        if let exactMatch = allTiles.first(where: { $0.id == tileID }) {
+            return exactMatch
+        }
+
+        if let legacyMatch = legacyBarTile(for: tileID) {
+            return legacyMatch
+        }
+
+        return .unavailable(
+            choice: CodexBarWidgetTileChoice(
+                id: tileID,
+                title: "Saved Tile",
+                subtitle: "Open CodexBar to refresh"
+            )
+        )
     }
 
     private func legacyBarTile(for choiceID: String) -> CodexBarWidgetTile? {
@@ -469,27 +523,45 @@ struct CodexBarWidgetView: View {
         displayModes.indices.contains(index) ? displayModes[index] : .automatic
     }
 
-    private var tileCount: Int {
+    private func displayMode(from displayMode: CodexBarWidgetBuilderDisplayMode) -> CodexBarWidgetTileDisplayMode {
+        CodexBarWidgetTileDisplayMode(rawValue: displayMode.rawValue) ?? .automatic
+    }
+
+    private func tileCount(
+        builderConfiguration: CodexBarWidgetBuilderConfiguration,
+        usesBuilderDefaults: Bool
+    ) -> Int {
+        if entry.configuration.layout == .automatic, usesBuilderDefaults {
+            return builderConfiguration.layout.tileCount(
+                maximum: maximumTileCount,
+                automaticCount: automaticTileCount
+            )
+        }
+
         switch entry.configuration.layout {
         case .automatic:
-            switch family {
-            case .systemSmall:
-                1
-            case .systemMedium:
-                2
-            case .systemLarge:
-                4
-            case .systemExtraLarge:
-                6
-            default:
-                1
-            }
+            return automaticTileCount
         case .oneTile:
-            1
+            return 1
         case .twoTiles:
-            min(maximumTileCount, 2)
+            return min(maximumTileCount, 2)
         case .fourTiles:
-            min(maximumTileCount, 4)
+            return min(maximumTileCount, 4)
+        }
+    }
+
+    private var automaticTileCount: Int {
+        switch family {
+        case .systemSmall:
+            1
+        case .systemMedium:
+            2
+        case .systemLarge:
+            4
+        case .systemExtraLarge:
+            6
+        default:
+            1
         }
     }
 

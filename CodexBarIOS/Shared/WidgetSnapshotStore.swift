@@ -124,6 +124,7 @@ public enum CodexBarWidgetSeverity: String, Codable, Comparable, Sendable {
 public enum WidgetSnapshotStore {
     private static let snapshotKey = "widgetUsageSnapshot"
     private static let refreshIntervalKey = "widgetRefreshInterval"
+    private static let builderConfigurationKey = "widgetBuilderConfiguration"
 
     public static func userDefaults(suiteName: String = CodexBarWidgetConstants.appGroupIdentifier) -> UserDefaults? {
         UserDefaults(suiteName: suiteName)
@@ -167,5 +168,33 @@ public enum WidgetSnapshotStore {
         defaults: UserDefaults? = userDefaults()
     ) {
         defaults?.set(interval.rawValue, forKey: refreshIntervalKey)
+    }
+
+    public static func loadBuilderConfiguration(
+        defaults: UserDefaults? = userDefaults()
+    ) -> CodexBarWidgetBuilderConfiguration {
+        guard
+            let data = defaults?.data(forKey: builderConfigurationKey),
+            let configuration = try? JSONDecoder().decode(CodexBarWidgetBuilderConfiguration.self, from: data)
+        else {
+            return .default
+        }
+
+        return CodexBarWidgetBuilderConfiguration(
+            layout: configuration.layout,
+            selectedTileIDs: configuration.selectedTileIDs,
+            displayModes: configuration.displayModes
+        )
+    }
+
+    public static func saveBuilderConfiguration(
+        _ configuration: CodexBarWidgetBuilderConfiguration,
+        defaults: UserDefaults? = userDefaults()
+    ) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+
+        defaults?.set(data, forKey: builderConfigurationKey)
     }
 }
