@@ -8,6 +8,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var appAppearance: AppAppearance
     @Published public private(set) var autoRefreshInterval: AutoRefreshInterval
     @Published public private(set) var widgetRefreshInterval: WidgetRefreshInterval
+    @Published public private(set) var dashboardOrderingMode: DashboardOrderingMode
     @Published public private(set) var dashboardCardOrder: [String]
     @Published public private(set) var usageAlertSettings: UsageAlertSettings
     @Published public private(set) var usageAlertActiveIDs: Set<String>
@@ -20,6 +21,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let appAppearanceKey = DefaultsKey.appAppearance
     private let autoRefreshIntervalKey = DefaultsKey.autoRefreshInterval
     private let widgetRefreshIntervalKey = DefaultsKey.widgetRefreshInterval
+    private let dashboardOrderingModeKey = DefaultsKey.dashboardOrderingMode
     private let dashboardCardOrderKey = DefaultsKey.dashboardCardOrder
     private let usageAlertSettingsKey = DefaultsKey.usageAlertSettings
     private let usageAlertActiveIDsKey = DefaultsKey.usageAlertActiveIDs
@@ -40,6 +42,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.appAppearance = Self.loadAppAppearance(from: defaults)
         self.autoRefreshInterval = Self.loadAutoRefreshInterval(from: defaults)
         self.widgetRefreshInterval = Self.loadWidgetRefreshInterval(from: defaults)
+        self.dashboardOrderingMode = Self.loadDashboardOrderingMode(from: defaults)
         self.dashboardCardOrder = Self.loadDashboardCardOrder(from: defaults)
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
         self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
@@ -230,6 +233,11 @@ public final class ProviderConfigurationStore: ObservableObject {
         widgetRefreshInterval = interval
         defaults.set(interval.rawValue, forKey: widgetRefreshIntervalKey)
         WidgetSnapshotStore.saveRefreshInterval(interval)
+    }
+
+    public func updateDashboardOrderingMode(_ mode: DashboardOrderingMode) {
+        dashboardOrderingMode = mode
+        defaults.set(mode.rawValue, forKey: dashboardOrderingModeKey)
     }
 
     public func updateDashboardCardOrder(_ accountIDs: [String]) {
@@ -482,6 +490,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         static let appAppearance = "appAppearance"
         static let autoRefreshInterval = "autoRefreshInterval"
         static let widgetRefreshInterval = "widgetRefreshInterval"
+        static let dashboardOrderingMode = "dashboardOrderingMode"
         static let dashboardCardOrder = "dashboardCardOrder"
         static let usageAlertSettings = "usageAlertSettings"
         static let usageAlertActiveIDs = "usageAlertActiveIDs"
@@ -560,6 +569,17 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         WidgetSnapshotStore.saveRefreshInterval(interval)
         return interval
+    }
+
+    private static func loadDashboardOrderingMode(from defaults: UserDefaults) -> DashboardOrderingMode {
+        guard
+            let rawValue = defaults.string(forKey: DefaultsKey.dashboardOrderingMode),
+            let mode = DashboardOrderingMode(rawValue: rawValue)
+        else {
+            return .manual
+        }
+
+        return mode
     }
 
     private static func loadDashboardCardOrder(from defaults: UserDefaults) -> [String] {

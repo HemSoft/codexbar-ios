@@ -62,6 +62,8 @@
 		100000000000000000000035 /* WidgetBuilderConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000037 /* WidgetBuilderConfiguration.swift */; };
 		100000000000000000000036 /* WidgetBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000038 /* WidgetBuilderView.swift */; };
 		100000000000000000000037 /* WidgetBuilderConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000037 /* WidgetBuilderConfiguration.swift */; };
+		100000000000000000000038 /* DashboardOrderingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000039 /* DashboardOrderingMode.swift */; };
+		100000000000000000000039 /* DashboardUsageSorter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003A /* DashboardUsageSorter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -152,6 +154,8 @@
 		200000000000000000000036 /* UsageHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageHistoryStore.swift; sourceTree = "<group>"; };
 		200000000000000000000037 /* WidgetBuilderConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBuilderConfiguration.swift; sourceTree = "<group>"; };
 		200000000000000000000038 /* WidgetBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBuilderView.swift; sourceTree = "<group>"; };
+		200000000000000000000039 /* DashboardOrderingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardOrderingMode.swift; sourceTree = "<group>"; };
+		20000000000000000000003A /* DashboardUsageSorter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardUsageSorter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -213,6 +217,7 @@
 				200000000000000000000006 /* UsageSeverity.swift */,
 				200000000000000000000019 /* AppAppearance.swift */,
 				20000000000000000000001F /* AutoRefreshInterval.swift */,
+				200000000000000000000039 /* DashboardOrderingMode.swift */,
 				20000000000000000000002A /* WidgetRefreshInterval.swift */,
 				200000000000000000000033 /* UsageAlertSettings.swift */,
 				20000000000000000000000F /* ProviderAccountConfiguration.swift */,
@@ -232,6 +237,7 @@
 				200000000000000000000036 /* UsageHistoryStore.swift */,
 				200000000000000000000010 /* KeychainService.swift */,
 				200000000000000000000011 /* ProviderConfigurationStore.swift */,
+				20000000000000000000003A /* DashboardUsageSorter.swift */,
 				200000000000000000000034 /* UsageAlertEvaluator.swift */,
 				200000000000000000000035 /* LocalUsageAlertNotifier.swift */,
 				200000000000000000000015 /* CodexCredentialsParser.swift */,
@@ -474,6 +480,7 @@
 				10000000000000000000001B /* CopilotUsageParser.swift in Sources */,
 				10000000000000000000001C /* CopilotUsageProvider.swift in Sources */,
 				10000000000000000000001D /* AutoRefreshInterval.swift in Sources */,
+				100000000000000000000038 /* DashboardOrderingMode.swift in Sources */,
 				10000000000000000000001E /* ClaudeCredentials.swift in Sources */,
 				10000000000000000000001F /* ClaudeCredentialsParser.swift in Sources */,
 				100000000000000000000020 /* ClaudeWebAuthService.swift in Sources */,
@@ -482,6 +489,7 @@
 				100000000000000000000023 /* OpenRouterUsageProvider.swift in Sources */,
 				100000000000000000000026 /* OpenCodeZenUsageProvider.swift in Sources */,
 				100000000000000000000027 /* OpenCodeZenBootstrapImporter.swift in Sources */,
+				100000000000000000000039 /* DashboardUsageSorter.swift in Sources */,
 				100000000000000000000028 /* WidgetRefreshInterval.swift in Sources */,
 				100000000000000000000029 /* WidgetSnapshotStore.swift in Sources */,
 				100000000000000000000035 /* WidgetBuilderConfiguration.swift in Sources */,

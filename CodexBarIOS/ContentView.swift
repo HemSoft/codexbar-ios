@@ -153,6 +153,9 @@ struct ContentView: View {
         .onChange(of: configurationStore.dashboardCardOrder) { _, _ in
             publishWidgetSnapshot()
         }
+        .onChange(of: configurationStore.dashboardOrderingMode) { _, _ in
+            publishWidgetSnapshot()
+        }
         .onChange(of: configurationStore.groups) { _, _ in
             publishWidgetSnapshot()
         }
@@ -169,23 +172,11 @@ struct ContentView: View {
     }
 
     private var orderedDisplayedResults: [ProviderUsageResult] {
-        let order = Dictionary(
-            uniqueKeysWithValues: configurationStore.dashboardCardOrder.enumerated().map { index, accountID in
-                (accountID, index)
-            }
+        DashboardUsageSorter.orderedResults(
+            displayedResults,
+            mode: configurationStore.dashboardOrderingMode,
+            manualOrder: configurationStore.dashboardCardOrder
         )
-
-        return displayedResults.enumerated()
-            .sorted { lhs, rhs in
-                let lhsOrder = order[lhs.element.id] ?? Int.max
-                let rhsOrder = order[rhs.element.id] ?? Int.max
-                if lhsOrder != rhsOrder {
-                    return lhsOrder < rhsOrder
-                }
-
-                return lhs.offset < rhs.offset
-            }
-            .map(\.element)
     }
 
     private var dashboardSections: [DashboardSection] {
