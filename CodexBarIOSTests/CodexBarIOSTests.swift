@@ -286,6 +286,15 @@ final class CodexBarIOSTests: XCTestCase {
             store.configurations.map(\.id),
             [ungrouped.id, alphaAccount.id, betaAccount.id]
         )
+
+        var renamedBeta = beta
+        renamedBeta.name = "Aardvark"
+        XCTAssertTrue(store.updateGroup(renamedBeta))
+
+        XCTAssertEqual(
+            store.configurations.map(\.id),
+            [ungrouped.id, betaAccount.id, alphaAccount.id]
+        )
     }
 
     @MainActor

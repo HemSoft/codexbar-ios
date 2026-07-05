@@ -112,6 +112,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         groups[index].name = normalizedName
         sortGroups()
+        sortConfigurations()
         saveGroups()
         return true
     }

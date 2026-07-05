@@ -180,11 +180,13 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
-                        commitFocusedGroupName()
-                        dismiss()
+                        if commitFocusedGroupName() {
+                            dismiss()
+                        }
                     }
                 }
             }
+            .interactiveDismissDisabled(!groupNameDrafts.isEmpty)
             .onChange(of: focusedGroupID) { oldValue, newValue in
                 if let oldValue, oldValue != newValue {
                     commitGroupName(for: oldValue)
@@ -300,33 +302,37 @@ struct SettingsView: View {
         )
     }
 
-    private func commitFocusedGroupName() {
+    private func commitFocusedGroupName() -> Bool {
         guard let focusedGroupID else {
-            return
+            return true
         }
 
-        commitGroupName(for: focusedGroupID)
+        return commitGroupName(for: focusedGroupID)
     }
 
-    private func commitGroupName(for groupID: String) {
+    @discardableResult
+    private func commitGroupName(for groupID: String) -> Bool {
         guard
             let group = configurationStore.group(for: groupID),
             let draftName = groupNameDrafts[groupID]
         else {
-            return
+            return true
         }
 
         let normalizedName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalizedName != group.name else {
             groupNameDrafts[groupID] = nil
-            return
+            return true
         }
 
         var updated = group
         updated.name = draftName
         if configurationStore.updateGroup(updated) {
             groupNameDrafts[groupID] = nil
+            return true
         }
+
+        return false
     }
 }
 
