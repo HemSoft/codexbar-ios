@@ -82,6 +82,12 @@ struct CodexBarWidgetConfigurationIntent: WidgetConfigurationIntent {
     @Parameter(title: "Tile 4 Display", default: .automatic)
     var tile4DisplayMode: CodexBarWidgetTileDisplayMode
 
+    @Parameter(title: "Tile 5 Display", default: .automatic)
+    var tile5DisplayMode: CodexBarWidgetTileDisplayMode
+
+    @Parameter(title: "Tile 6 Display", default: .automatic)
+    var tile6DisplayMode: CodexBarWidgetTileDisplayMode
+
     @Parameter(title: "Update Preference", default: .appDefault)
     var refreshPolicy: CodexBarWidgetRefreshPolicy
 }
@@ -297,6 +303,8 @@ struct CodexBarWidgetView: View {
             entry.configuration.tile2DisplayMode,
             entry.configuration.tile3DisplayMode,
             entry.configuration.tile4DisplayMode,
+            entry.configuration.tile5DisplayMode,
+            entry.configuration.tile6DisplayMode,
         ]
 
         let maximumTiles = tileCount
