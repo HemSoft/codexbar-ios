@@ -12,7 +12,7 @@ Status last reviewed: 2026-07-05
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
 - Initial simulator App Store screenshots have been captured and uploaded for iPhone and iPad using safe demo data.
-- App Store production distribution upload has succeeded for build `1.0 (1)`. TestFlight processing, product metadata, and review materials are not done yet.
+- App Store production distribution upload has succeeded for build `1.0 (1)`, and App Store Connect reports the build as valid. Product metadata and review materials are not done yet.
 
 ## Apple Requirements To Keep Current
 
@@ -47,7 +47,7 @@ Reference links:
 - [ ] Archive a release build from Xcode or `xcodebuild`.
 - [ ] Validate the archive.
 - [ ] Upload the build to App Store Connect.
-- [ ] Confirm TestFlight processing completes for both app and widget extension.
+- [x] Confirm TestFlight processing completes for both app and widget extension. App Store Connect reports uploaded build `1.0 (1)` as valid.
 
 ### 3. Product Page Assets
 
@@ -94,7 +94,7 @@ Reference links:
 
 ### 7. TestFlight
 
-- [x] Upload the first TestFlight build. Build `1.0 (1)` uploaded successfully from Xcode on 2026-07-05.
+- [x] Upload the first TestFlight build. Build `1.0 (1)` uploaded successfully from Xcode on 2026-07-05 and later reported `VALID` by App Store Connect.
 - [ ] Install from TestFlight on iPhone.
 - [ ] Install from TestFlight on iPad.
 - [ ] Verify widgets after TestFlight install.
