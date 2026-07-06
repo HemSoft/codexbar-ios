@@ -2549,7 +2549,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(
             service.results.map(\.providerID),
-            [.codex, .copilot, .openCodeZen, .openRouter]
+            [.codex, .claude, .cursor, .copilot, .openCodeZen, .openRouter]
         )
         XCTAssertFalse(service.isRefreshing)
         XCTAssertNil(service.lastRefreshError)

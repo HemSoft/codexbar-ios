@@ -2,12 +2,25 @@ import SwiftUI
 
 @main
 struct CodexBarIOSApp: App {
-    @StateObject private var refreshService = UsageRefreshService.live()
-    @StateObject private var configurationStore = ProviderConfigurationStore()
+    @StateObject private var refreshService: UsageRefreshService
+    @StateObject private var configurationStore: ProviderConfigurationStore
     @StateObject private var historyStore = UsageHistoryStore()
     #if DEBUG
     @State private var debugProviderSettingsProviderID = DebugLaunchRoute.providerSettingsProviderID
     #endif
+
+    init() {
+        #if DEBUG
+        if AppStoreScreenshotMode.isEnabled {
+            _refreshService = StateObject(wrappedValue: UsageRefreshService.demo())
+            _configurationStore = StateObject(wrappedValue: ProviderConfigurationStore.appStoreScreenshotDemo())
+            return
+        }
+        #endif
+
+        _refreshService = StateObject(wrappedValue: UsageRefreshService.live())
+        _configurationStore = StateObject(wrappedValue: ProviderConfigurationStore())
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -82,6 +95,13 @@ private enum DebugLaunchRoute {
         }
 
         return ProviderID(rawValue: arguments[routeIndex + 1])
+    }
+}
+
+private enum AppStoreScreenshotMode {
+    static var isEnabled: Bool {
+        ProcessInfo.processInfo.arguments.contains("--app-store-screenshots")
+            || ProcessInfo.processInfo.environment["CODEXBAR_APP_STORE_SCREENSHOTS"] == "1"
     }
 }
 #endif

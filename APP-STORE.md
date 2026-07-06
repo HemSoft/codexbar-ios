@@ -11,6 +11,7 @@ Status last reviewed: 2026-07-05
 - Development signing is stable through the dedicated CodexBar keychain documented in `AGENTS.md`.
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
+- Initial simulator App Store screenshots have been captured for iPhone and iPad using safe demo data. Upload is still pending because the Codex in-app browser cannot attach local files.
 - App Store production distribution, TestFlight upload, product metadata, and review materials are not done yet.
 
 ## Apple Requirements To Keep Current
@@ -57,8 +58,9 @@ Reference links:
 - [ ] Provide support URL.
 - [ ] Provide marketing URL if desired.
 - [ ] Provide privacy policy URL.
-- [ ] Prepare screenshots for required iPhone sizes.
-- [ ] Prepare screenshots for required iPad sizes.
+- [ ] Prepare screenshots for required iPhone sizes. Initial dashboard screenshot is in `AppStore/Screenshots`; upload is pending.
+- [ ] Prepare screenshots for required iPad sizes. Initial dashboard screenshot is in `AppStore/Screenshots`; upload is pending.
+- [ ] Confirm Apple Watch screenshots are not needed. Current repo has no watchOS app target, so Apple Watch screenshots are not required unless a watchOS app is added.
 - [ ] Consider an app preview video after the first TestFlight build is stable.
 - [ ] Verify the App Store icon renders correctly and has no transparency.
 

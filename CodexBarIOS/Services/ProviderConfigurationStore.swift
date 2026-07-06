@@ -696,3 +696,87 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 }
+
+#if DEBUG
+public extension ProviderConfigurationStore {
+    static func appStoreScreenshotDemo() -> ProviderConfigurationStore {
+        let suiteName = "com.hemsoft.CodexBarIOS.appStoreScreenshots"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            return ProviderConfigurationStore(secretStore: AppStoreScreenshotSecretStore(accounts: []))
+        }
+
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let usageGroup = ProviderAccountGroup(id: "app-store-screenshots.usage", name: "Usage Limits")
+        let balanceGroup = ProviderAccountGroup(id: "app-store-screenshots.balances", name: "API Balances")
+        let configurations = [
+            ProviderAccountConfiguration(
+                id: "app-store-screenshots.codex",
+                providerID: .codex,
+                accountLabel: "Personal Codex",
+                groupID: usageGroup.id,
+                authMethod: .browserSession
+            ),
+            ProviderAccountConfiguration(
+                id: "app-store-screenshots.copilot",
+                providerID: .copilot,
+                accountLabel: "Fableton Labs",
+                groupID: usageGroup.id,
+                authMethod: .browserSession,
+                copilotAccountScope: .organization,
+                githubOrganization: "fableton-labs"
+            ),
+            ProviderAccountConfiguration(
+                id: "app-store-screenshots.claude",
+                providerID: .claude,
+                accountLabel: "Claude Pro",
+                groupID: usageGroup.id,
+                authMethod: .browserSession
+            ),
+            ProviderAccountConfiguration(
+                id: "app-store-screenshots.cursor",
+                providerID: .cursor,
+                accountLabel: "Cursor Pro",
+                groupID: usageGroup.id,
+                authMethod: .browserSession
+            ),
+            ProviderAccountConfiguration(
+                id: "app-store-screenshots.openrouter",
+                providerID: .openRouter,
+                accountLabel: "OpenRouter",
+                groupID: balanceGroup.id,
+                authMethod: .apiKey
+            ),
+            ProviderAccountConfiguration(
+                id: "app-store-screenshots.opencodzen",
+                providerID: .openCodeZen,
+                accountLabel: "OpenCode ZEN",
+                groupID: balanceGroup.id,
+                authMethod: .apiKey,
+                openCodeWorkspaceId: "demo-workspace"
+            )
+        ]
+
+        let encoder = JSONEncoder()
+        defaults.set(try? encoder.encode([usageGroup, balanceGroup]), forKey: DefaultsKey.groups)
+        defaults.set(try? encoder.encode(configurations), forKey: DefaultsKey.configurations)
+        defaults.set(DashboardOrderingMode.manual.rawValue, forKey: DefaultsKey.dashboardOrderingMode)
+        defaults.set(configurations.map(\.id), forKey: DefaultsKey.dashboardCardOrder)
+
+        let accounts = Set(configurations.map(Self.keychainAccount(for:)))
+        return ProviderConfigurationStore(defaults: defaults, secretStore: AppStoreScreenshotSecretStore(accounts: accounts))
+    }
+}
+
+private struct AppStoreScreenshotSecretStore: SecretStore {
+    let accounts: Set<String>
+
+    func readSecret(account: String) throws -> String? {
+        accounts.contains(account) ? "app-store-screenshot-secret" : nil
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {}
+
+    func deleteSecret(account: String) throws {}
+}
+#endif
