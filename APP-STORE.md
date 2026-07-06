@@ -11,8 +11,8 @@ Status last reviewed: 2026-07-05
 - Development signing is stable through the dedicated CodexBar keychain documented in `AGENTS.md`.
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
-- Initial simulator App Store screenshots have been captured for iPhone and iPad using safe demo data. Upload is still pending because the Codex in-app browser cannot attach local files.
-- App Store production distribution, TestFlight upload, product metadata, and review materials are not done yet.
+- Initial simulator App Store screenshots have been captured and uploaded for iPhone and iPad using safe demo data.
+- App Store production distribution upload has succeeded for build `1.0 (1)`. TestFlight processing, product metadata, and review materials are not done yet.
 
 ## Apple Requirements To Keep Current
 
@@ -58,8 +58,8 @@ Reference links:
 - [ ] Provide support URL.
 - [ ] Provide marketing URL if desired.
 - [ ] Provide privacy policy URL.
-- [ ] Prepare screenshots for required iPhone sizes. Initial dashboard screenshot is in `AppStore/Screenshots`; upload is pending.
-- [ ] Prepare screenshots for required iPad sizes. Initial dashboard screenshot is in `AppStore/Screenshots`; upload is pending.
+- [x] Prepare and upload screenshots for required iPhone sizes. Initial dashboard screenshot is in `AppStore/Screenshots` and uploaded to App Store Connect.
+- [x] Prepare and upload screenshots for required iPad sizes. Initial dashboard screenshot is in `AppStore/Screenshots` and uploaded to App Store Connect.
 - [ ] Confirm Apple Watch screenshots are not needed. Current repo has no watchOS app target, so Apple Watch screenshots are not required unless a watchOS app is added.
 - [ ] Consider an app preview video after the first TestFlight build is stable.
 - [ ] Verify the App Store icon renders correctly and has no transparency.
@@ -94,7 +94,7 @@ Reference links:
 
 ### 7. TestFlight
 
-- [ ] Upload the first TestFlight build.
+- [x] Upload the first TestFlight build. Build `1.0 (1)` uploaded successfully from Xcode on 2026-07-05.
 - [ ] Install from TestFlight on iPhone.
 - [ ] Install from TestFlight on iPad.
 - [ ] Verify widgets after TestFlight install.
@@ -106,7 +106,7 @@ Reference links:
 ### 8. Final Submission
 
 - [ ] Select the final build in App Store Connect.
-- [ ] Complete export compliance.
+- [x] Complete export compliance project prep. `ITSAppUsesNonExemptEncryption` is set to `false` for the app and widget because CodexBar only uses exempt Apple platform encryption such as HTTPS and Keychain.
 - [ ] Complete content rights.
 - [ ] Complete age rating.
 - [ ] Complete review contact info.
