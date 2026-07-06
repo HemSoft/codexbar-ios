@@ -13,6 +13,8 @@ Status last reviewed: 2026-07-06
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
 - Initial simulator App Store screenshots have been captured and uploaded for iPhone and iPad using safe demo data.
 - App Store production distribution upload has succeeded for build `1.0 (1)`, and App Store Connect reports the build as valid and App Store eligible.
+- Build `1.0 (1)` is selected for the App Store version.
+- Product metadata, support URL, privacy policy URL, copyright, and App Review notes have been added in App Store Connect.
 - TestFlight install has been confirmed by the user on iPhone and iPad.
 - App Store Connect app information is set to primary category `Developer Tools`, secondary category `Utilities`, and age rating `4+`.
 
@@ -45,7 +47,7 @@ Reference links:
 
 ### 2. Production Signing And Upload
 
-- [ ] Confirm the project has App Store distribution signing available for the app and widget extension.
+- [x] Confirm the project has App Store distribution signing available for the app and widget extension.
 - [x] Archive a release build from Xcode or `xcodebuild`. Release archive created for version `1.0` build `1`.
 - [x] Validate the archive.
 - [x] Upload the build to App Store Connect. Build `1.0 (1)` uploaded successfully.
@@ -53,13 +55,13 @@ Reference links:
 
 ### 3. Product Page Assets
 
-- [x] Finalize app name and subtitle. App name is `CodexBar Usage Monitor`; proposed subtitle is `AI usage, limits, and balances`.
-- [x] Write promotional text.
-- [x] Write the full app description.
-- [x] Write keywords.
-- [x] Provide support URL. Public support page is `https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md`.
+- [x] Finalize app name and subtitle. App name is `CodexBar Usage Monitor`; subtitle is `AI usage, limits, and balances`.
+- [x] Write promotional text and add it to App Store Connect.
+- [x] Write the full app description and add it to App Store Connect.
+- [x] Write keywords and add them to App Store Connect.
+- [x] Provide support URL and add it to App Store Connect. Public support page is `https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md`.
 - [ ] Provide marketing URL if desired.
-- [x] Provide privacy policy URL. Public privacy policy is `https://github.com/HemSoft/codexbar-ios/blob/main/PRIVACY.md`.
+- [x] Provide privacy policy URL and add it to App Store Connect. Public privacy policy is `https://github.com/HemSoft/codexbar-ios/blob/main/PRIVACY.md`.
 - [x] Prepare and upload screenshots for required iPhone sizes. Initial dashboard screenshot is in `AppStore/Screenshots` and uploaded to App Store Connect.
 - [x] Prepare and upload screenshots for required iPad sizes. Initial dashboard screenshot is in `AppStore/Screenshots` and uploaded to App Store Connect.
 - [x] Confirm Apple Watch screenshots are not needed. Current repo has no watchOS app target, so Apple Watch screenshots are not required unless a watchOS app is added.
@@ -107,12 +109,12 @@ Reference links:
 
 ### 8. Final Submission
 
-- [ ] Select the final build in App Store Connect. Candidate build is `1.0 (1)`, build ID `ccdc123f-9635-485c-b472-7b0093e026ac`.
+- [x] Select the final build in App Store Connect. Selected build is `1.0 (1)`, build ID `ccdc123f-9635-485c-b472-7b0093e026ac`.
 - [x] Complete export compliance project prep. `ITSAppUsesNonExemptEncryption` is set to `false` for the app and widget because CodexBar only uses exempt Apple platform encryption such as HTTPS and Keychain.
 - [ ] Complete content rights.
 - [x] Complete age rating. App Store Connect reports `4+`.
-- [ ] Complete review contact info.
-- [ ] Add App Review notes and demo credentials/video link if needed.
+- [x] Complete review contact info.
+- [x] Add App Review notes. Demo sign-in fields are filled in App Store Connect.
 - [ ] Submit for review.
 - [ ] Track reviewer questions or rejections here until approved.
 
