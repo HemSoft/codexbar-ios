@@ -1,0 +1,15 @@
+CodexBar Usage Monitor keeps your AI service usage in one place.
+
+Track usage limits, balances, and refresh status for the services you connect, including Codex, Claude, Copilot, Cursor, OpenRouter, and OpenCode ZEN. CodexBar is designed for people who move between multiple AI tools and want a quick way to see what is available before starting work.
+
+CodexBar stores credentials locally on your device using Keychain where appropriate and reads usage data directly from the services you configure. Widgets let you pin the usage tiles that matter most on iPhone and iPad.
+
+Features:
+
+- Monitor multiple AI subscriptions and API balances
+- View limits, usage bars, and snapshot changes
+- Configure Home Screen widgets with one, two, or four tiles
+- Refresh provider data from a focused dashboard
+- Keep provider credentials on device
+
+CodexBar is an independent tool and is not affiliated with the providers it can display.

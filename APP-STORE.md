@@ -2,7 +2,7 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-07-05
+Status last reviewed: 2026-07-06
 
 ## Current Status
 
@@ -12,7 +12,9 @@ Status last reviewed: 2026-07-05
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
 - Initial simulator App Store screenshots have been captured and uploaded for iPhone and iPad using safe demo data.
-- App Store production distribution upload has succeeded for build `1.0 (1)`, and App Store Connect reports the build as valid. Product metadata and review materials are not done yet.
+- App Store production distribution upload has succeeded for build `1.0 (1)`, and App Store Connect reports the build as valid and App Store eligible.
+- TestFlight install has been confirmed by the user on iPhone and iPad.
+- App Store Connect app information is set to primary category `Developer Tools`, secondary category `Utilities`, and age rating `4+`.
 
 ## Apple Requirements To Keep Current
 
@@ -37,40 +39,40 @@ Reference links:
 
 - [x] Confirm Apple Developer Program membership and team ownership. Membership confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - [x] Create the App Store Connect app record. Created as `CodexBar Usage Monitor`, app ID `6787769891`, on 2026-07-05.
-- [ ] Confirm bundle ID, SKU, primary language, category, and age rating. Initial record uses bundle ID `com.hemsoft.CodexBarIOS`, SKU `codexbar-ios`, and primary language `English (U.S.)`.
-- [ ] Decide initial availability: iPhone and iPad.
+- [x] Confirm bundle ID, SKU, primary language, category, and age rating. App Store Connect uses bundle ID `com.hemsoft.CodexBarIOS`, SKU `codexbar-ios`, primary language `English (U.S.)`, primary category `Developer Tools`, secondary category `Utilities`, and age rating `4+`.
+- [x] Decide initial availability: iPhone and iPad.
 - [ ] Decide pricing: likely free unless a paid distribution plan is introduced.
 
 ### 2. Production Signing And Upload
 
 - [ ] Confirm the project has App Store distribution signing available for the app and widget extension.
-- [ ] Archive a release build from Xcode or `xcodebuild`.
-- [ ] Validate the archive.
-- [ ] Upload the build to App Store Connect.
+- [x] Archive a release build from Xcode or `xcodebuild`. Release archive created for version `1.0` build `1`.
+- [x] Validate the archive.
+- [x] Upload the build to App Store Connect. Build `1.0 (1)` uploaded successfully.
 - [x] Confirm TestFlight processing completes for both app and widget extension. App Store Connect reports uploaded build `1.0 (1)` as valid.
 
 ### 3. Product Page Assets
 
-- [ ] Finalize app name and subtitle.
-- [ ] Write promotional text.
-- [ ] Write the full app description.
-- [ ] Write keywords.
-- [ ] Provide support URL.
+- [x] Finalize app name and subtitle. App name is `CodexBar Usage Monitor`; proposed subtitle is `AI usage, limits, and balances`.
+- [x] Write promotional text.
+- [x] Write the full app description.
+- [x] Write keywords.
+- [x] Provide support URL. Public support page is `https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md`.
 - [ ] Provide marketing URL if desired.
-- [ ] Provide privacy policy URL.
+- [x] Provide privacy policy URL. Public privacy policy is `https://github.com/HemSoft/codexbar-ios/blob/main/PRIVACY.md`.
 - [x] Prepare and upload screenshots for required iPhone sizes. Initial dashboard screenshot is in `AppStore/Screenshots` and uploaded to App Store Connect.
 - [x] Prepare and upload screenshots for required iPad sizes. Initial dashboard screenshot is in `AppStore/Screenshots` and uploaded to App Store Connect.
-- [ ] Confirm Apple Watch screenshots are not needed. Current repo has no watchOS app target, so Apple Watch screenshots are not required unless a watchOS app is added.
+- [x] Confirm Apple Watch screenshots are not needed. Current repo has no watchOS app target, so Apple Watch screenshots are not required unless a watchOS app is added.
 - [ ] Consider an app preview video after the first TestFlight build is stable.
 - [ ] Verify the App Store icon renders correctly and has no transparency.
 
 ### 4. Privacy And Data Handling
 
 - [ ] Inventory all network calls made by provider fetchers.
-- [ ] Confirm credentials are stored locally in Keychain and are not sent to HemSoft servers.
-- [ ] Confirm widget data is stored only in the app group container.
-- [ ] Confirm analytics/crash reporting status. If none exists, document that.
-- [ ] Draft privacy policy covering local credentials, third-party provider API calls, billing/usage data, and data retention.
+- [x] Confirm credentials are stored locally in Keychain and are not sent to HemSoft servers.
+- [x] Confirm widget data is stored only in the app group container.
+- [x] Confirm analytics/crash reporting status. No analytics, advertising, or crash-reporting SDKs are present in the current release.
+- [x] Draft privacy policy covering local credentials, third-party provider API calls, billing/usage data, and data retention.
 - [ ] Complete App Store Connect privacy nutrition labels.
 - [ ] Review third-party packages and SDKs for privacy manifests or signature requirements.
 
@@ -84,9 +86,9 @@ Reference links:
 
 ### 6. App Review Readiness
 
-- [ ] Write App Review notes explaining that CodexBar is a local companion dashboard for user-owned provider accounts.
-- [ ] Explain that provider credentials remain on device in Keychain.
-- [ ] Explain which features require user-owned third-party accounts and API keys.
+- [x] Write App Review notes explaining that CodexBar is a local companion dashboard for user-owned provider accounts.
+- [x] Explain that provider credentials remain on device in Keychain.
+- [x] Explain which features require user-owned third-party accounts and API keys.
 - [ ] Provide a reviewer path for seeing the dashboard without real paid accounts, if possible.
 - [ ] If no demo mode is appropriate, provide a concise demo video showing configured providers, widgets, and refresh behavior.
 - [ ] Verify all error states are helpful and do not strand the user.
@@ -95,8 +97,8 @@ Reference links:
 ### 7. TestFlight
 
 - [x] Upload the first TestFlight build. Build `1.0 (1)` uploaded successfully from Xcode on 2026-07-05 and later reported `VALID` by App Store Connect.
-- [ ] Install from TestFlight on iPhone.
-- [ ] Install from TestFlight on iPad.
+- [x] Install from TestFlight on iPhone.
+- [x] Install from TestFlight on iPad.
 - [ ] Verify widgets after TestFlight install.
 - [ ] Verify provider credentials survive app restarts.
 - [ ] Verify background/widget refresh behavior.
@@ -105,10 +107,10 @@ Reference links:
 
 ### 8. Final Submission
 
-- [ ] Select the final build in App Store Connect.
+- [ ] Select the final build in App Store Connect. Candidate build is `1.0 (1)`, build ID `ccdc123f-9635-485c-b472-7b0093e026ac`.
 - [x] Complete export compliance project prep. `ITSAppUsesNonExemptEncryption` is set to `false` for the app and widget because CodexBar only uses exempt Apple platform encryption such as HTTPS and Keychain.
 - [ ] Complete content rights.
-- [ ] Complete age rating.
+- [x] Complete age rating. App Store Connect reports `4+`.
 - [ ] Complete review contact info.
 - [ ] Add App Review notes and demo credentials/video link if needed.
 - [ ] Submit for review.

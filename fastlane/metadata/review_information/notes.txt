@@ -1,0 +1,3 @@
+CodexBar is a local usage dashboard for user-owned AI provider accounts. Provider credentials and API keys are stored on device using Keychain where appropriate and are used only to request the user's own usage or balance data directly from the configured provider.
+
+The app can be opened without configuring accounts. Live provider cards require valid user-owned provider accounts or API keys. Widgets display saved snapshots published by the app after provider data has been refreshed.
