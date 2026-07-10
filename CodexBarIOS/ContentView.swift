@@ -28,6 +28,7 @@ struct ContentView: View {
     var body: some View {
         let sections = dashboardSections
         let showGroupHeaders = shouldShowGroupHeaders(for: sections)
+        let usageAlertsByAccountID = currentUsageAlertsByAccountID
 
         NavigationStack {
             ScrollView {
@@ -46,7 +47,8 @@ struct ContentView: View {
                                 let card = ProviderUsageCard(
                                     result: result,
                                     statusText: dashboardStatusText(for: result),
-                                    trend: historyStore.trendSummary(for: result)
+                                    trend: historyStore.trendSummary(for: result),
+                                    alerts: usageAlertsByAccountID[result.accountID] ?? []
                                 )
                                 .contentShape(Rectangle())
                                 .onTapGesture {
@@ -247,6 +249,16 @@ struct ContentView: View {
 
     private var isManualDashboardOrdering: Bool {
         configurationStore.dashboardOrderingMode == .manual
+    }
+
+    private var currentUsageAlertsByAccountID: [String: [UsageAlertDetail]] {
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: refreshService.results,
+            settings: configurationStore.usageAlertSettings,
+            activeAlertIDs: configurationStore.usageAlertActiveIDs
+        )
+
+        return Dictionary(grouping: evaluation.activeAlerts, by: \.accountID)
     }
 
     private func dashboardStatusText(for result: ProviderUsageResult) -> String {

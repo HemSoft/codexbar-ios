@@ -12,8 +12,15 @@ struct CodexBarIOSApp: App {
     init() {
         #if DEBUG
         if AppStoreScreenshotMode.isEnabled {
+            let configurationStore = ProviderConfigurationStore.appStoreScreenshotDemo()
+            if DebugUsageAlertMode.isEnabled {
+                configurationStore.updateUsageAlertsEnabled(true)
+                configurationStore.updateUsageAlertUsageThreshold(0.65)
+                configurationStore.updateUsageAlertBalanceThreshold(15)
+            }
+
             _refreshService = StateObject(wrappedValue: UsageRefreshService.demo())
-            _configurationStore = StateObject(wrappedValue: ProviderConfigurationStore.appStoreScreenshotDemo())
+            _configurationStore = StateObject(wrappedValue: configurationStore)
             return
         }
         #endif
@@ -102,6 +109,13 @@ private enum AppStoreScreenshotMode {
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains("--app-store-screenshots")
             || ProcessInfo.processInfo.environment["CODEXBAR_APP_STORE_SCREENSHOTS"] == "1"
+    }
+}
+
+private enum DebugUsageAlertMode {
+    static var isEnabled: Bool {
+        ProcessInfo.processInfo.arguments.contains("--debug-usage-alerts")
+            || ProcessInfo.processInfo.environment["CODEXBAR_DEBUG_USAGE_ALERTS"] == "1"
     }
 }
 #endif

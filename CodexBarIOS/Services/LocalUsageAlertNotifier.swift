@@ -41,6 +41,10 @@ public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, UNUse
         content.title = notification.title
         content.body = notification.body
         content.sound = .default
+        content.userInfo = [
+            "accountID": notification.accountID,
+            "kind": notification.kind.rawValue,
+        ]
 
         let request = UNNotificationRequest(
             identifier: notification.id,
