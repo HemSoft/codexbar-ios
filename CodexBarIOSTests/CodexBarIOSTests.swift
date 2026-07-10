@@ -2763,6 +2763,39 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertGreaterThan(overdrawnSeries.chartDomain.upperBound, -3)
     }
 
+    @MainActor
+    func testProviderUsageCardPreservesStoredHistoryAfterEmptyRefresh() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let failedResult = ProviderUsageResult(
+            accountID: "codex.personal",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Session expired",
+            bars: [],
+            fetchedAt: now
+        )
+        let history = UsageHistorySeries(
+            accountID: failedResult.accountID,
+            points: [
+                UsageHistoryPoint(
+                    id: "prior-sample",
+                    capturedAt: now.addingTimeInterval(-60),
+                    value: 0.42,
+                    severity: .normal
+                ),
+            ],
+            isBalance: false
+        )
+
+        let card = ProviderUsageCard(
+            result: failedResult,
+            statusText: failedResult.subtitle,
+            history: history
+        )
+
+        XCTAssertTrue(card.showsHistory)
+    }
+
     func testCodexUsageWithoutCredentialIsNotDemoData() async throws {
         let provider = CodexUsageProvider(secretStore: EmptySecretStore())
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)

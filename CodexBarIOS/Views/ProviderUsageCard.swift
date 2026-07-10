@@ -88,7 +88,7 @@ struct ProviderUsageCard: View {
                 }
             }
 
-            if result.creditsRemaining != nil || !result.bars.isEmpty {
+            if showsHistory {
                 UsageHistoryCompactView(
                     series: history,
                     onShowHistory: onShowHistory
@@ -101,6 +101,10 @@ struct ProviderUsageCard: View {
 
     private var cardSeverity: UsageSeverity {
         max(result.highestSeverity, alerts.map(\.severity).max() ?? .normal)
+    }
+
+    var showsHistory: Bool {
+        result.creditsRemaining != nil || !result.bars.isEmpty || !history.points.isEmpty
     }
 
     private static let currencyFormatter: NumberFormatter = {
