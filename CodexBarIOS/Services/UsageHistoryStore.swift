@@ -1,5 +1,20 @@
 import Foundation
 
+private enum UsageHistoryFormatting {
+    static func formatCurrency(_ value: Double) -> String {
+        currencyFormatter.string(from: NSNumber(value: value)) ?? "$0.00"
+    }
+
+    private static let currencyFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+}
+
 public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
     public let label: String
     public let fractionUsed: Double
@@ -110,7 +125,7 @@ public struct UsageHistorySeries: Equatable, Sendable {
             return "No range yet"
         }
 
-        if abs(maximum - minimum) < 0.0001 {
+        if abs(maximum - minimum) < Self.flatDeltaThreshold {
             return "Flat at \(valueDescription(for: maximum))"
         }
 
@@ -118,23 +133,20 @@ public struct UsageHistorySeries: Equatable, Sendable {
     }
 
     public var changeDescription: String {
-        guard points.count >= 2 else {
+        guard let latestDelta else {
             return points.isEmpty ? "No history yet" : "Collecting history"
         }
 
-        let previous = points[points.count - 2].value
-        let latest = points[points.count - 1].value
-        let delta = latest - previous
-        guard abs(delta) >= 0.0001 else {
+        guard direction != .flat else {
             return "No change"
         }
 
-        let direction = delta > 0 ? "Up" : "Down"
+        let directionDescription = direction == .up ? "Up" : "Down"
         if isBalance {
-            return "\(direction) \(Self.formatCurrency(abs(delta)))"
+            return "\(directionDescription) \(UsageHistoryFormatting.formatCurrency(abs(latestDelta)))"
         }
 
-        return "\(direction) \(Int((abs(delta) * 100).rounded())) pts"
+        return "\(directionDescription) \(Int((abs(latestDelta) * 100).rounded())) pts"
     }
 
     public var sampleWindowDescription: String {
@@ -148,20 +160,19 @@ public struct UsageHistorySeries: Equatable, Sendable {
             return "\(sampleText) - \(Self.shortDateFormatter.string(from: last.capturedAt))"
         }
 
-        return "\(sampleText) - \(Self.shortDateFormatter.string(from: first.capturedAt))-\(Self.shortDateFormatter.string(from: last.capturedAt))"
+        return "\(sampleText) - \(Self.shortDateFormatter.string(from: first.capturedAt)) - \(Self.shortDateFormatter.string(from: last.capturedAt))"
     }
 
     public var direction: UsageTrendSummary.Direction {
-        guard points.count >= 2 else {
+        guard let latestDelta else {
             return .flat
         }
 
-        let delta = points[points.count - 1].value - points[points.count - 2].value
-        if abs(delta) < 0.0001 {
+        if abs(latestDelta) < Self.flatDeltaThreshold {
             return .flat
         }
 
-        return delta > 0 ? .up : .down
+        return latestDelta > 0 ? .up : .down
     }
 
     public var chartDomain: ClosedRange<Double> {
@@ -187,24 +198,21 @@ public struct UsageHistorySeries: Equatable, Sendable {
 
     public func valueDescription(for value: Double) -> String {
         if isBalance {
-            return Self.formatCurrency(value)
+            return UsageHistoryFormatting.formatCurrency(value)
         }
 
         return "\(Int((value * 100).rounded()))%"
     }
 
-    private static func formatCurrency(_ value: Double) -> String {
-        currencyFormatter.string(from: NSNumber(value: value)) ?? "$0.00"
+    fileprivate var latestDelta: Double? {
+        guard points.count >= 2 else {
+            return nil
+        }
+
+        return points[points.count - 1].value - points[points.count - 2].value
     }
 
-    private static let currencyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
+    private static let flatDeltaThreshold = 0.0001
 
     private static let shortDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -288,23 +296,19 @@ public final class UsageHistoryStore: ObservableObject {
         guard
             series.points.count >= 2,
             let previous = series.points.dropLast().last,
-            let current = series.points.last
+            let delta = series.latestDelta
         else {
             return nil
         }
 
-        let delta = current.value - previous.value
-        let direction: UsageTrendSummary.Direction
+        let direction = series.direction
         let description: String
 
-        if abs(delta) < 0.0001 {
-            direction = .flat
+        if direction == .flat {
             description = "No change"
         } else if series.isBalance {
-            direction = delta > 0 ? .up : .down
-            description = "Changed \(delta > 0 ? "+" : "-")\(Self.formatCurrency(abs(delta)))"
+            description = "Changed \(delta > 0 ? "+" : "-")\(UsageHistoryFormatting.formatCurrency(abs(delta)))"
         } else {
-            direction = delta > 0 ? .up : .down
             description = "Changed \(delta > 0 ? "+" : "-")\(Int((abs(delta) * 100).rounded())) pts"
         }
 
@@ -368,22 +372,9 @@ public final class UsageHistoryStore: ObservableObject {
         return snapshots.sorted { $0.capturedAt < $1.capturedAt }
     }
 
-    private static func formatCurrency(_ value: Double) -> String {
-        currencyFormatter.string(from: NSNumber(value: value)) ?? "$0.00"
-    }
-
     private static func formatSnapshotDate(_ date: Date) -> String {
         snapshotDateFormatter.string(from: date)
     }
-
-    private static let currencyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
 
     private static let snapshotDateFormatter: DateFormatter = {
         let formatter = DateFormatter()

@@ -2706,6 +2706,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(series.rangeDescription, "Range 20% to 95%")
         XCTAssertEqual(series.changeDescription, "Down 55 pts")
         XCTAssertEqual(series.direction, .down)
+        XCTAssertEqual(series.sampleWindowDescription.components(separatedBy: " - ").count, 3)
         XCTAssertEqual(series.chartDomain, 0...1)
 
         let flatResult = makeHistoryResult(
