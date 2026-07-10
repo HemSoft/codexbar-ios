@@ -2765,27 +2765,29 @@ final class CodexBarIOSTests: XCTestCase {
 
     @MainActor
     func testProviderUsageCardPreservesStoredHistoryAfterEmptyRefresh() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
         let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let priorResult = makeHistoryResult(
+            accountID: "openrouter.personal",
+            providerID: .openRouter,
+            fetchedAt: now.addingTimeInterval(-60),
+            creditsRemaining: 19.25
+        )
         let failedResult = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
+            accountID: priorResult.accountID,
+            providerID: .openRouter,
+            title: "OpenRouter",
             subtitle: "Session expired",
             bars: [],
             fetchedAt: now
         )
-        let history = UsageHistorySeries(
-            accountID: failedResult.accountID,
-            points: [
-                UsageHistoryPoint(
-                    id: "prior-sample",
-                    capturedAt: now.addingTimeInterval(-60),
-                    value: 0.42,
-                    severity: .normal
-                ),
-            ],
-            isBalance: false
-        )
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [priorResult], now: now)
+        let history = store.historySeries(for: failedResult)
 
         let card = ProviderUsageCard(
             result: failedResult,
@@ -2794,6 +2796,8 @@ final class CodexBarIOSTests: XCTestCase {
         )
 
         XCTAssertTrue(card.showsHistory)
+        XCTAssertTrue(history.isBalance)
+        XCTAssertEqual(history.latestValueDescription, "$19.25")
     }
 
     func testCodexUsageWithoutCredentialIsNotDemoData() async throws {

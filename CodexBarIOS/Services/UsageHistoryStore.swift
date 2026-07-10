@@ -277,14 +277,23 @@ public final class UsageHistoryStore: ObservableObject {
         for result: ProviderUsageResult,
         since start: Date? = nil
     ) -> UsageHistorySeries {
-        let points = snapshots(for: result.accountID, since: start).compactMap { snapshot in
+        let accountSnapshots = snapshots(for: result.accountID, since: start)
+        let points = accountSnapshots.compactMap { snapshot in
             snapshot.primaryValue.map { UsageHistoryPoint(snapshot: snapshot, value: $0) }
+        }
+        let isBalance: Bool
+        if result.creditsRemaining != nil {
+            isBalance = true
+        } else if !result.bars.isEmpty {
+            isBalance = false
+        } else {
+            isBalance = accountSnapshots.last?.creditsRemaining != nil
         }
 
         return UsageHistorySeries(
             accountID: result.accountID,
             points: points,
-            isBalance: result.creditsRemaining != nil
+            isBalance: isBalance
         )
     }
 
