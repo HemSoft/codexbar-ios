@@ -2748,6 +2748,18 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(series.rangeDescription, "Flat at $19.25")
         XCTAssertLessThan(series.chartDomain.lowerBound, 19.25)
         XCTAssertGreaterThan(series.chartDomain.upperBound, 19.25)
+
+        let overdrawnResult = makeHistoryResult(
+            accountID: "openrouter.overdrawn",
+            providerID: .openRouter,
+            fetchedAt: now,
+            creditsRemaining: -3
+        )
+        store.record(results: [overdrawnResult], now: now)
+
+        let overdrawnSeries = store.historySeries(for: overdrawnResult)
+        XCTAssertLessThan(overdrawnSeries.chartDomain.lowerBound, -3)
+        XCTAssertGreaterThan(overdrawnSeries.chartDomain.upperBound, -3)
     }
 
     func testCodexUsageWithoutCredentialIsNotDemoData() async throws {

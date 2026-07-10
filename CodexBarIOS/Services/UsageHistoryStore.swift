@@ -180,7 +180,7 @@ public struct UsageHistorySeries: Equatable, Sendable {
         let padding = span > 0
             ? max(span * 0.15, 0.25)
             : max(abs(maximum) * 0.08, 1)
-        let lowerBound = max(0, minimum - padding)
+        let lowerBound = minimum < 0 ? minimum - padding : max(0, minimum - padding)
         let upperBound = max(maximum + padding, lowerBound + 1)
         return lowerBound...upperBound
     }
