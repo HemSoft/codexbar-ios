@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 public protocol UsageAlertNotifying: AnyObject {
     @MainActor
@@ -9,6 +9,7 @@ public protocol UsageAlertNotifying: AnyObject {
     func deliver(_ notification: UsageAlertNotification) async throws
 }
 
+@MainActor
 public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, UNUserNotificationCenterDelegate {
     public static let shared = LocalUsageAlertNotifier()
 
@@ -18,12 +19,6 @@ public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, UNUse
         self.center = center
         super.init()
         center.delegate = self
-    }
-
-    deinit {
-        if center.delegate === self {
-            center.delegate = nil
-        }
     }
 
     @MainActor

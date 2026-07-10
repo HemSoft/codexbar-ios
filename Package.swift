@@ -24,6 +24,7 @@ let package = Package(
             path: "CodexBarIOS",
             exclude: [
                 "CodexBarIOSApp.swift",
+                "CodexBarIOS.entitlements",
                 "ContentView.swift",
                 "Resources",
                 "Views"

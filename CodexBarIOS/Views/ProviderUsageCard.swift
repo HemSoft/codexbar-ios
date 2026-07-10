@@ -1,21 +1,25 @@
+import Charts
 import SwiftUI
 
 struct ProviderUsageCard: View {
     let result: ProviderUsageResult
     let statusText: String
-    let trend: UsageTrendSummary?
+    let history: UsageHistorySeries
     let alerts: [UsageAlertDetail]
+    let onShowHistory: () -> Void
 
     init(
         result: ProviderUsageResult,
         statusText: String,
-        trend: UsageTrendSummary?,
-        alerts: [UsageAlertDetail] = []
+        history: UsageHistorySeries,
+        alerts: [UsageAlertDetail] = [],
+        onShowHistory: @escaping () -> Void = {}
     ) {
         self.result = result
         self.statusText = statusText
-        self.trend = trend
+        self.history = history
         self.alerts = alerts
+        self.onShowHistory = onShowHistory
     }
 
     var body: some View {
@@ -84,8 +88,11 @@ struct ProviderUsageCard: View {
                 }
             }
 
-            if let trend {
-                UsageTrendRow(trend: trend)
+            if result.creditsRemaining != nil || !result.bars.isEmpty {
+                UsageHistoryCompactView(
+                    series: history,
+                    onShowHistory: onShowHistory
+                )
             }
         }
         .padding(16)
@@ -143,69 +150,91 @@ private struct UsageAlertSummaryView: View {
     }
 }
 
-struct UsageTrendRow: View {
-    let trend: UsageTrendSummary
+private struct UsageHistoryCompactView: View {
+    let series: UsageHistorySeries
+    let onShowHistory: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            UsageTrendSparkline(points: trend.points, tint: tint)
-                .frame(width: 62, height: 22)
+        Button(action: onShowHistory) {
+            HStack(spacing: 12) {
+                UsageTrendSparkline(series: series, tint: series.tint)
+                    .frame(width: 88, height: 38)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(trend.valueDescription)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(series.latestValueDescription)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .monospacedDigit()
+
+                        Text(series.changeDescription)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(series.tint)
+                            .lineLimit(1)
+                    }
+
+                    Text(series.rangeDescription)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Text(series.sampleWindowDescription)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-
-                Text(trend.windowDescription)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
-
-            Spacer(minLength: 0)
+            .contentShape(Rectangle())
         }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var tint: Color {
-        switch trend.direction {
-        case .flat:
-            .secondary
-        case .up where trend.isBalance:
-            .green
-        case .down where trend.isBalance:
-            .orange
-        case .up:
-            .orange
-        case .down:
-            .green
-        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "Usage history. Latest \(series.latestValueDescription). \(series.changeDescription). \(series.rangeDescription)."
+        )
+        .accessibilityHint("Shows the expanded history graph.")
     }
 }
 
-struct UsageTrendSparkline: View {
-    let points: [Double]
+private struct UsageTrendSparkline: View {
+    let series: UsageHistorySeries
     let tint: Color
 
     var body: some View {
         Canvas { context, size in
-            guard points.count >= 2 else {
+            guard !series.points.isEmpty else {
+                var placeholder = Path()
+                placeholder.move(to: CGPoint(x: 0, y: size.height / 2))
+                placeholder.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+                context.stroke(
+                    placeholder,
+                    with: .color(tint.opacity(0.35)),
+                    style: StrokeStyle(lineWidth: 1.5, dash: [3, 3])
+                )
                 return
             }
 
-            let minValue = points.min() ?? 0
-            let maxValue = points.max() ?? 1
-            let span = max(maxValue - minValue, 0.0001)
-            let isFlat = abs(maxValue - minValue) < 0.0001
-            let step = size.width / CGFloat(points.count - 1)
+            let firstDate = series.points.first?.capturedAt ?? Date()
+            let lastDate = series.points.last?.capturedAt ?? firstDate
+            let timeSpan = max(lastDate.timeIntervalSince(firstDate), 1)
+            let valueSpan = max(series.chartDomain.upperBound - series.chartDomain.lowerBound, 0.0001)
             var path = Path()
+            var lastResolvedPoint = CGPoint(x: size.width / 2, y: size.height / 2)
 
-            for (index, point) in points.enumerated() {
-                let x = CGFloat(index) * step
-                let y = isFlat ? size.height / 2 : size.height - CGFloat((point - minValue) / span) * size.height
+            for (index, point) in series.points.enumerated() {
+                let x = series.points.count == 1
+                    ? size.width / 2
+                    : CGFloat(point.capturedAt.timeIntervalSince(firstDate) / timeSpan) * size.width
+                let normalizedValue = (point.value - series.chartDomain.lowerBound) / valueSpan
+                let y = size.height - CGFloat(min(max(normalizedValue, 0), 1)) * size.height
                 let resolvedPoint = CGPoint(x: x, y: y)
+                lastResolvedPoint = resolvedPoint
 
                 if index == 0 {
                     path.move(to: resolvedPoint)
@@ -214,13 +243,338 @@ struct UsageTrendSparkline: View {
                 }
             }
 
-            context.stroke(
-                path,
-                with: .color(tint),
-                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+            if series.points.count >= 2 {
+                context.stroke(
+                    path,
+                    with: .color(tint),
+                    style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+                )
+            }
+
+            context.fill(
+                Path(ellipseIn: CGRect(
+                    x: lastResolvedPoint.x - 3,
+                    y: lastResolvedPoint.y - 3,
+                    width: 6,
+                    height: 6
+                )),
+                with: .color(tint)
             )
         }
         .accessibilityHidden(true)
+    }
+}
+
+struct ProviderUsageHistoryDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let result: ProviderUsageResult
+    let series: UsageHistorySeries
+
+    @State private var selectedDate: Date?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    accountHeader
+
+                    if series.points.isEmpty {
+                        ContentUnavailableView(
+                            "No History Yet",
+                            systemImage: "chart.xyaxis.line",
+                            description: Text("A history graph will appear after usage has been refreshed.")
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 320)
+                    } else {
+                        chartSection
+                        statisticsSection
+                        recentSamplesSection
+                    }
+                }
+                .frame(maxWidth: 720, alignment: .leading)
+                .padding(20)
+                .frame(maxWidth: .infinity)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("History")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private var accountHeader: some View {
+        HStack(spacing: 10) {
+            ProviderLogoTile(providerID: result.providerID)
+                .frame(width: 30, height: 30)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(result.title)
+                    .font(.headline)
+
+                Text(series.sampleWindowDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var chartSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayedPoint.map { series.valueDescription(for: $0.value) } ?? series.latestValueDescription)
+                        .font(.system(size: 30, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+
+                    if let displayedPoint {
+                        Text(Self.detailDateFormatter.string(from: displayedPoint.capturedAt))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                Text(series.changeDescription)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(series.tint)
+            }
+
+            Chart {
+                ForEach(series.points) { point in
+                    if series.points.count >= 2 {
+                        AreaMark(
+                            x: .value("Time", point.capturedAt),
+                            yStart: .value("Baseline", series.chartDomain.lowerBound),
+                            yEnd: .value("Value", point.value)
+                        )
+                        .foregroundStyle(series.tint.opacity(0.1))
+
+                        LineMark(
+                            x: .value("Time", point.capturedAt),
+                            y: .value("Value", point.value)
+                        )
+                        .foregroundStyle(series.tint)
+                        .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    }
+
+                    if series.points.count <= 12 {
+                        PointMark(
+                            x: .value("Time", point.capturedAt),
+                            y: .value("Value", point.value)
+                        )
+                        .foregroundStyle(series.tint.opacity(0.75))
+                        .symbolSize(24)
+                    }
+                }
+
+                if !series.isBalance {
+                    RuleMark(y: .value("Limit", 1.0))
+                        .foregroundStyle(Color.secondary.opacity(0.6))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .annotation(position: .top, alignment: .trailing) {
+                            Text("100% limit")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                }
+
+                if let displayedPoint {
+                    RuleMark(x: .value("Selected time", displayedPoint.capturedAt))
+                        .foregroundStyle(Color.secondary.opacity(0.5))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+
+                    PointMark(
+                        x: .value("Selected time", displayedPoint.capturedAt),
+                        y: .value("Selected value", displayedPoint.value)
+                    )
+                    .foregroundStyle(series.tint)
+                    .symbolSize(52)
+                }
+            }
+            .chartYScale(domain: series.chartDomain)
+            .chartXAxis {
+                AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                    AxisGridLine()
+                        .foregroundStyle(Color.secondary.opacity(0.15))
+                    AxisTick()
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(axisDateText(for: date))
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
+                    AxisGridLine()
+                        .foregroundStyle(Color.secondary.opacity(0.15))
+                    AxisTick()
+                    AxisValueLabel {
+                        if let numericValue = value.as(Double.self) {
+                            Text(series.valueDescription(for: numericValue))
+                        }
+                    }
+                }
+            }
+            .chartXSelection(value: $selectedDate)
+            .frame(height: 260)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(result.title) history chart")
+            .accessibilityValue(
+                "\(series.sampleWindowDescription). Latest \(series.latestValueDescription). \(series.changeDescription). \(series.rangeDescription)."
+            )
+            .accessibilityHint("Drag across the chart to inspect historical values.")
+
+            if series.points.count == 1 {
+                Text("More samples will appear after future refreshes.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var statisticsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Summary")
+                .font(.headline)
+
+            Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 14) {
+                GridRow {
+                    HistoryMetricView(title: "Latest", value: series.latestValueDescription)
+                    HistoryMetricView(title: "Change", value: series.changeDescription)
+                }
+
+                Divider()
+                    .gridCellColumns(2)
+
+                GridRow {
+                    HistoryMetricView(title: "Low", value: series.minimumValueDescription)
+                    HistoryMetricView(title: "High", value: series.maximumValueDescription)
+                }
+            }
+        }
+    }
+
+    private var recentSamplesSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Recent Samples")
+                .font(.headline)
+                .padding(.bottom, 8)
+
+            ForEach(Array(series.points.suffix(20).reversed())) { point in
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(series.valueDescription(for: point.value))
+                            .font(.body.weight(.semibold))
+                            .monospacedDigit()
+
+                        Text(Self.detailDateFormatter.string(from: point.capturedAt))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Circle()
+                        .fill(point.severity.tint)
+                        .frame(width: 9, height: 9)
+                        .accessibilityHidden(true)
+                }
+                .padding(.vertical, 10)
+
+                Divider()
+            }
+        }
+    }
+
+    private var displayedPoint: UsageHistoryPoint? {
+        guard let selectedDate else {
+            return series.points.last
+        }
+
+        return series.points.min { lhs, rhs in
+            abs(lhs.capturedAt.timeIntervalSince(selectedDate))
+                < abs(rhs.capturedAt.timeIntervalSince(selectedDate))
+        }
+    }
+
+    private func axisDateText(for date: Date) -> String {
+        guard
+            let first = series.points.first?.capturedAt,
+            let last = series.points.last?.capturedAt
+        else {
+            return ""
+        }
+
+        if last.timeIntervalSince(first) < 24 * 60 * 60 {
+            return Self.axisTimeFormatter.string(from: date)
+        }
+
+        return Self.axisDateFormatter.string(from: date)
+    }
+
+    private static let detailDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static let axisDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
+
+    private static let axisTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
+private struct HistoryMetricView: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private extension UsageHistorySeries {
+    var tint: Color {
+        switch direction {
+        case .flat:
+            .secondary
+        case .up where isBalance:
+            .green
+        case .down where isBalance:
+            .orange
+        case .up:
+            .orange
+        case .down:
+            .green
+        }
     }
 }
 
@@ -337,13 +691,17 @@ private struct UsageProgressBar: View {
             fetchedAt: Date()
         ),
         statusText: "Not configured - demo data",
-        trend: UsageTrendSummary(
+        history: UsageHistorySeries(
             accountID: "codex",
-            points: [0.34, 0.46, 0.52, 0.45, 0.62],
-            valueDescription: "Changed +17 pts",
-            windowDescription: "Since Sep 3, 2026 at 6:39 PM",
-            isBalance: false,
-            direction: .up
+            points: [0.34, 0.46, 0.52, 0.45, 0.62].enumerated().map { index, value in
+                UsageHistoryPoint(
+                    id: "preview.\(index)",
+                    capturedAt: Date().addingTimeInterval(TimeInterval(index - 4) * 24 * 60 * 60),
+                    value: value,
+                    severity: UsageSeverity(fractionUsed: value)
+                )
+            },
+            isBalance: false
         ),
         alerts: [
             UsageAlertDetail(

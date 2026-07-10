@@ -2639,6 +2639,117 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(summary.windowDescription.contains(" at "))
     }
 
+    @MainActor
+    func testUsageHistorySeriesHandlesEmptyAndSingleSampleStates() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = makeHistoryResult(accountID: "codex.personal", fetchedAt: now, used: 42)
+        let store = UsageHistoryStore(defaults: defaults)
+
+        let emptySeries = store.historySeries(for: result)
+        XCTAssertTrue(emptySeries.points.isEmpty)
+        XCTAssertEqual(emptySeries.latestValueDescription, "No data")
+        XCTAssertEqual(emptySeries.rangeDescription, "No range yet")
+        XCTAssertEqual(emptySeries.changeDescription, "No history yet")
+        XCTAssertEqual(emptySeries.sampleWindowDescription, "No samples")
+        XCTAssertEqual(emptySeries.chartDomain, 0...1)
+
+        store.record(results: [result], now: now)
+
+        let singleSampleSeries = store.historySeries(for: result)
+        XCTAssertEqual(singleSampleSeries.points.count, 1)
+        XCTAssertEqual(singleSampleSeries.latestValueDescription, "42%")
+        XCTAssertEqual(singleSampleSeries.minimumValueDescription, "42%")
+        XCTAssertEqual(singleSampleSeries.maximumValueDescription, "42%")
+        XCTAssertEqual(singleSampleSeries.rangeDescription, "Flat at 42%")
+        XCTAssertEqual(singleSampleSeries.changeDescription, "Collecting history")
+        XCTAssertTrue(singleSampleSeries.sampleWindowDescription.hasPrefix("1 sample - "))
+    }
+
+    @MainActor
+    func testUsageHistorySeriesReportsFlatValuesSpikesAndTimestampOrder() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = UsageHistoryStore(defaults: defaults)
+        let samples = [
+            makeHistoryResult(
+                accountID: "codex.personal",
+                fetchedAt: now.addingTimeInterval(-2 * 24 * 60 * 60),
+                used: 20
+            ),
+            makeHistoryResult(
+                accountID: "codex.personal",
+                fetchedAt: now.addingTimeInterval(-24 * 60 * 60),
+                used: 95
+            ),
+            makeHistoryResult(accountID: "codex.personal", fetchedAt: now, used: 40),
+        ]
+
+        for sample in samples.reversed() {
+            store.record(results: [sample], now: now)
+        }
+
+        let series = store.historySeries(for: samples[2])
+        XCTAssertEqual(series.points.map(\.capturedAt), samples.map(\.fetchedAt))
+        XCTAssertEqual(series.points.map(\.value), [0.2, 0.95, 0.4])
+        XCTAssertEqual(series.latestValueDescription, "40%")
+        XCTAssertEqual(series.minimumValueDescription, "20%")
+        XCTAssertEqual(series.maximumValueDescription, "95%")
+        XCTAssertEqual(series.rangeDescription, "Range 20% to 95%")
+        XCTAssertEqual(series.changeDescription, "Down 55 pts")
+        XCTAssertEqual(series.direction, .down)
+        XCTAssertEqual(series.chartDomain, 0...1)
+
+        let flatResult = makeHistoryResult(
+            accountID: "flat.usage",
+            fetchedAt: now.addingTimeInterval(-60),
+            used: 40
+        )
+        store.record(results: [flatResult], now: now)
+        store.record(
+            results: [makeHistoryResult(accountID: "flat.usage", fetchedAt: now, used: 40)],
+            now: now
+        )
+
+        let flatSeries = store.historySeries(for: flatResult)
+        XCTAssertEqual(flatSeries.rangeDescription, "Flat at 40%")
+        XCTAssertEqual(flatSeries.changeDescription, "No change")
+        XCTAssertEqual(flatSeries.direction, .flat)
+    }
+
+    @MainActor
+    func testUsageHistorySeriesPadsFlatBalanceChartDomain() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = makeHistoryResult(
+            accountID: "openrouter.work",
+            providerID: .openRouter,
+            fetchedAt: now,
+            creditsRemaining: 19.25
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [result], now: now)
+
+        let series = store.historySeries(for: result)
+        XCTAssertTrue(series.isBalance)
+        XCTAssertEqual(series.latestValueDescription, "$19.25")
+        XCTAssertEqual(series.rangeDescription, "Flat at $19.25")
+        XCTAssertLessThan(series.chartDomain.lowerBound, 19.25)
+        XCTAssertGreaterThan(series.chartDomain.upperBound, 19.25)
+    }
+
     func testCodexUsageWithoutCredentialIsNotDemoData() async throws {
         let provider = CodexUsageProvider(secretStore: EmptySecretStore())
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
