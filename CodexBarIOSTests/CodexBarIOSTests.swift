@@ -93,6 +93,40 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(nextVersion.registerSuccessfulRefresh(at: start.addingTimeInterval(120 * 24 * 60 * 60)))
     }
 
+    func testAppReviewPromptEligibilityRequiresSuccessfulRefreshWithUsableData() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let emptyResult = ProviderUsageResult(
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Usage",
+            bars: [],
+            fetchedAt: fetchedAt
+        )
+        let barsResult = ProviderUsageResult(
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Usage",
+            bars: [UsageBar(label: "Weekly", used: 1, limit: 10)],
+            fetchedAt: fetchedAt
+        )
+        let creditsResult = ProviderUsageResult(
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Balance",
+            bars: [],
+            creditsRemaining: 5,
+            fetchedAt: fetchedAt
+        )
+
+        XCTAssertFalse(
+            AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: "Offline", results: [barsResult])
+        )
+        XCTAssertFalse(AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: nil, results: []))
+        XCTAssertFalse(AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: nil, results: [emptyResult]))
+        XCTAssertTrue(AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: nil, results: [barsResult]))
+        XCTAssertTrue(AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: nil, results: [creditsResult]))
+    }
+
     @MainActor
     func testAutoRefreshIntervalDefaultsToOffAndPersists() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"

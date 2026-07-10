@@ -7,6 +7,17 @@ enum AppReviewLinks {
     static let supportURL = URL(string: "https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md")!
 }
 
+enum AppReviewPromptEligibility {
+    static func hasSuccessfulUsage(
+        lastRefreshError: String?,
+        results: [ProviderUsageResult]
+    ) -> Bool {
+        lastRefreshError == nil && results.contains {
+            !$0.bars.isEmpty || $0.creditsRemaining != nil
+        }
+    }
+}
+
 struct AppReviewPromptPolicy {
     static let defaultMinimumSuccessfulRefreshes = 5
     static let defaultMinimumEngagementDuration: TimeInterval = 7 * 24 * 60 * 60

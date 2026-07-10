@@ -382,10 +382,10 @@ struct ContentView: View {
     }
 
     private func requestReviewAfterSuccessfulRefreshIfEligible() {
-        guard refreshService.lastRefreshError == nil else {
-            return
-        }
-        guard refreshService.results.contains(where: { !$0.bars.isEmpty || $0.creditsRemaining != nil }) else {
+        guard AppReviewPromptEligibility.hasSuccessfulUsage(
+            lastRefreshError: refreshService.lastRefreshError,
+            results: refreshService.results
+        ) else {
             return
         }
         guard appReviewPromptPolicy.registerSuccessfulRefresh() else {
