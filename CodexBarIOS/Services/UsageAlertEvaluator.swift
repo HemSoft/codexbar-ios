@@ -1,7 +1,40 @@
 import Foundation
 
+public enum UsageAlertKind: String, Equatable, Sendable {
+    case usage
+    case balance
+    case severity
+}
+
+public struct UsageAlertDetail: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let accountID: String
+    public let kind: UsageAlertKind
+    public let title: String
+    public let message: String
+    public let severity: UsageSeverity
+
+    public init(
+        id: String,
+        accountID: String,
+        kind: UsageAlertKind,
+        title: String,
+        message: String,
+        severity: UsageSeverity
+    ) {
+        self.id = id
+        self.accountID = accountID
+        self.kind = kind
+        self.title = title
+        self.message = message
+        self.severity = severity
+    }
+}
+
 public struct UsageAlertNotification: Equatable, Sendable {
     public let id: String
+    public let accountID: String
+    public let kind: UsageAlertKind
     public let title: String
     public let body: String
 }
@@ -9,19 +42,22 @@ public struct UsageAlertNotification: Equatable, Sendable {
 public struct UsageAlertEvaluation: Equatable, Sendable {
     public let notifications: [UsageAlertNotification]
     public let activeAlertIDs: Set<String>
+    public let activeAlerts: [UsageAlertDetail]
 }
 
 public enum UsageAlertEvaluator {
     public static func evaluate(
         results: [ProviderUsageResult],
         settings: UsageAlertSettings,
-        activeAlertIDs: Set<String>
+        activeAlertIDs: Set<String>,
+        now: Date = Date()
     ) -> UsageAlertEvaluation {
         guard settings.isEnabled else {
-            return UsageAlertEvaluation(notifications: [], activeAlertIDs: [])
+            return UsageAlertEvaluation(notifications: [], activeAlertIDs: [], activeAlerts: [])
         }
 
         var nextActiveAlertIDs = Set<String>()
+        var activeAlerts: [UsageAlertDetail] = []
         var notifications: [UsageAlertNotification] = []
 
         for result in results {
@@ -30,17 +66,29 @@ public enum UsageAlertEvaluator {
                 let hasAlreadyQueuedAlert = nextActiveAlertIDs.contains(alertID)
                 nextActiveAlertIDs.insert(alertID)
 
-                guard !activeAlertIDs.contains(alertID),
-                      !hasAlreadyQueuedAlert
-                else {
+                guard !hasAlreadyQueuedAlert else {
+                    continue
+                }
+
+                let detail = usageAlertDetail(
+                    id: alertID,
+                    result: result,
+                    bar: bar,
+                    threshold: settings.usageThreshold
+                )
+                activeAlerts.append(detail)
+
+                guard !activeAlertIDs.contains(alertID) else {
                     continue
                 }
 
                 notifications.append(
                     UsageAlertNotification(
                         id: alertID,
-                        title: "\(result.title) \(bar.label)",
-                        body: "\(bar.usageText) used. Threshold \(formatPercent(settings.usageThreshold)) reached."
+                        accountID: result.accountID,
+                        kind: .usage,
+                        title: "\(result.title) \(bar.label) alert",
+                        body: detail.notificationBody
                     )
                 )
             }
@@ -51,29 +99,50 @@ public enum UsageAlertEvaluator {
                 let alertID = "balance.\(result.accountID)"
                 nextActiveAlertIDs.insert(alertID)
 
+                let detail = balanceAlertDetail(
+                    id: alertID,
+                    result: result,
+                    creditsRemaining: creditsRemaining,
+                    threshold: settings.balanceThreshold
+                )
+                activeAlerts.append(detail)
+
                 if !activeAlertIDs.contains(alertID) {
                     notifications.append(
                         UsageAlertNotification(
                             id: alertID,
-                            title: "\(result.title) Balance",
-                            body: "\(formatCurrency(creditsRemaining)) remaining. Threshold \(formatCurrency(settings.balanceThreshold)) reached."
+                            accountID: result.accountID,
+                            kind: .balance,
+                            title: "\(result.title) balance alert",
+                            body: detail.notificationBody
                         )
                     )
                 }
             }
 
+            let highestSeverity = result.highestSeverity(at: now)
             if settings.includesSeverityAlerts,
-               result.highestSeverity >= .warning
+               highestSeverity >= .warning
             {
                 let alertID = "severity.\(result.accountID)"
                 nextActiveAlertIDs.insert(alertID)
+
+                let detail = severityAlertDetail(
+                    id: alertID,
+                    result: result,
+                    severity: highestSeverity,
+                    now: now
+                )
+                activeAlerts.append(detail)
 
                 if !activeAlertIDs.contains(alertID) {
                     notifications.append(
                         UsageAlertNotification(
                             id: alertID,
-                            title: "\(result.title) \(result.highestSeverity.displayName)",
-                            body: result.subtitle
+                            accountID: result.accountID,
+                            kind: .severity,
+                            title: "\(result.title) \(highestSeverity.displayName) alert",
+                            body: detail.notificationBody
                         )
                     )
                 }
@@ -82,7 +151,76 @@ public enum UsageAlertEvaluator {
 
         return UsageAlertEvaluation(
             notifications: notifications,
-            activeAlertIDs: nextActiveAlertIDs
+            activeAlertIDs: nextActiveAlertIDs,
+            activeAlerts: activeAlerts
+        )
+    }
+
+    private static func usageAlertDetail(
+        id: String,
+        result: ProviderUsageResult,
+        bar: UsageBar,
+        threshold: Double
+    ) -> UsageAlertDetail {
+        let thresholdText = formatPercent(threshold)
+        let usageAmountText = formatUsageAmount(used: bar.used, limit: bar.limit)
+        let resetText = bar.resetDescription.map { " \($0)." } ?? ""
+
+        return UsageAlertDetail(
+            id: id,
+            accountID: result.accountID,
+            kind: .usage,
+            title: "\(bar.label) at \(bar.usageText)",
+            message: "\(usageAmountText) used. Alert threshold: \(thresholdText).\(resetText)",
+            severity: max(bar.severity, .warning)
+        )
+    }
+
+    private static func balanceAlertDetail(
+        id: String,
+        result: ProviderUsageResult,
+        creditsRemaining: Double,
+        threshold: Double
+    ) -> UsageAlertDetail {
+        UsageAlertDetail(
+            id: id,
+            accountID: result.accountID,
+            kind: .balance,
+            title: "Balance below \(formatCurrency(threshold))",
+            message: "\(formatCurrency(creditsRemaining)) remaining for \(result.title).",
+            severity: .warning
+        )
+    }
+
+    private static func severityAlertDetail(
+        id: String,
+        result: ProviderUsageResult,
+        severity: UsageSeverity,
+        now: Date
+    ) -> UsageAlertDetail {
+        let affectedBar = result.bars
+            .first { $0.effectiveSeverity(at: now) == severity }
+        let message: String
+
+        if let affectedBar {
+            if affectedBar.severity < severity,
+               let projectedFraction = affectedBar.projectedFraction(at: now)
+            {
+                message = "\(affectedBar.label) is projected to reach \(formatPercent(projectedFraction))."
+            } else {
+                message = "\(affectedBar.label) is currently at \(affectedBar.usageText)."
+            }
+        } else {
+            message = result.subtitle
+        }
+
+        return UsageAlertDetail(
+            id: id,
+            accountID: result.accountID,
+            kind: .severity,
+            title: "\(severity.displayName) status",
+            message: message,
+            severity: severity
         )
     }
 
@@ -130,6 +268,14 @@ public enum UsageAlertEvaluator {
         currencyFormatter.string(from: NSNumber(value: value)) ?? "$\(String(format: "%.2f", value))"
     }
 
+    private static func formatUsageAmount(used: Double, limit: Double) -> String {
+        "\(formatNumber(used)) of \(formatNumber(limit))"
+    }
+
+    private static func formatNumber(_ value: Double) -> String {
+        numberFormatter.string(from: NSNumber(value: value)) ?? String(format: "%.0f", value)
+    }
+
     private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -137,6 +283,19 @@ public enum UsageAlertEvaluator {
         formatter.maximumFractionDigits = 2
         return formatter
     }()
+
+    private static let numberFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }()
+}
+
+private extension UsageAlertDetail {
+    var notificationBody: String {
+        "\(title). \(message)"
+    }
 }
 
 private extension UsageSeverity {

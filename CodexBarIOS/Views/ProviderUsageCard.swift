@@ -4,6 +4,19 @@ struct ProviderUsageCard: View {
     let result: ProviderUsageResult
     let statusText: String
     let trend: UsageTrendSummary?
+    let alerts: [UsageAlertDetail]
+
+    init(
+        result: ProviderUsageResult,
+        statusText: String,
+        trend: UsageTrendSummary?,
+        alerts: [UsageAlertDetail] = []
+    ) {
+        self.result = result
+        self.statusText = statusText
+        self.trend = trend
+        self.alerts = alerts
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -24,9 +37,13 @@ struct ProviderUsageCard: View {
                 Spacer()
 
                 Circle()
-                    .fill(result.highestSeverity.tint)
+                    .fill(cardSeverity.tint)
                     .frame(width: 10, height: 10)
                     .accessibilityHidden(true)
+            }
+
+            if !alerts.isEmpty {
+                UsageAlertSummaryView(alerts: alerts)
             }
 
             if let creditsRemaining = result.creditsRemaining {
@@ -75,6 +92,10 @@ struct ProviderUsageCard: View {
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
     }
 
+    private var cardSeverity: UsageSeverity {
+        max(result.highestSeverity, alerts.map(\.severity).max() ?? .normal)
+    }
+
     private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -83,6 +104,43 @@ struct ProviderUsageCard: View {
         formatter.maximumFractionDigits = 2
         return formatter
     }()
+}
+
+private struct UsageAlertSummaryView: View {
+    let alerts: [UsageAlertDetail]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(alerts) { alert in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: alert.kind.systemImageName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(alert.severity.tint)
+                        .frame(width: 16)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(alert.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(alert.message)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        alerts
+            .map { "\($0.title). \($0.message)" }
+            .joined(separator: " ")
+    }
 }
 
 struct UsageTrendRow: View {
@@ -163,6 +221,19 @@ struct UsageTrendSparkline: View {
             )
         }
         .accessibilityHidden(true)
+    }
+}
+
+private extension UsageAlertKind {
+    var systemImageName: String {
+        switch self {
+        case .usage:
+            "gauge.with.dots.needle.67percent"
+        case .balance:
+            "creditcard"
+        case .severity:
+            "exclamationmark.triangle.fill"
+        }
     }
 }
 
@@ -273,7 +344,17 @@ private struct UsageProgressBar: View {
             windowDescription: "Since Sep 3, 2026 at 6:39 PM",
             isBalance: false,
             direction: .up
-        )
+        ),
+        alerts: [
+            UsageAlertDetail(
+                id: "usage.codex.weekly-usage-limit",
+                accountID: "codex",
+                kind: .usage,
+                title: "Weekly usage limit at 92%",
+                message: "92 of 100 used. Alert threshold: 80%. Resets 2d 4h.",
+                severity: .critical
+            ),
+        ]
     )
     .padding()
     .background(Color(.systemGroupedBackground))
