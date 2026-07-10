@@ -35,3 +35,5 @@ building, testing, or releasing the app.
   its password after wake.
 - Documented the verified iPhone deployment and signing-recovery workflow in
   `AGENTS.md`.
+- Established changelog maintenance rules so App Store release notes and
+  marketing copy are derived from accurate, versioned product history.

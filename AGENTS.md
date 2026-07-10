@@ -1,5 +1,31 @@
 # CodexBar iOS Agent Notes
 
+## Changelog and Release History
+
+`CHANGELOG.md` is the source of truth for CodexBar release history. Maintaining
+it is part of completing a change, not a cleanup task for the end of a release.
+The history is used to prepare App Store **What's New** text, release notes,
+support responses, launch announcements, and other marketing material, so it
+must remain accurate, readable, and useful to people outside the codebase.
+
+- Update the current `Unreleased` version in the same branch or PR as every
+  user-visible addition, change, fix, or removal.
+- Describe the user benefit and observable behavior. Avoid implementation-only
+  language in customer-facing sections.
+- Keep development, build, signing, and release-process changes under a
+  separate `Developer Experience` heading so they do not leak into App Store
+  copy.
+- Link the relevant GitHub issue when it provides useful context, and make sure
+  the changelog never promises work that is only planned or still incomplete.
+- Preserve published version sections as historical records. Do not rewrite or
+  remove released entries except to correct a factual error.
+- Before an App Store submission, replace `Unreleased` with the release date,
+  verify the section matches the shipped `MARKETING_VERSION`, and derive the
+  App Store and marketing copy from those verified entries.
+- After cutting a release, start the next version's `Unreleased` section before
+  additional product work lands. Do not reconstruct release history from git
+  commits at the last minute.
+
 ## Deploying to a Connected iPhone
 
 Use Xcode explicitly; the active `xcode-select` path may point at Command Line Tools.
