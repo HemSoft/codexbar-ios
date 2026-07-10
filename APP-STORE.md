@@ -95,6 +95,10 @@ Reference links:
 - [ ] If no demo mode is appropriate, provide a concise demo video showing configured providers, widgets, and refresh behavior.
 - [ ] Verify all error states are helpful and do not strand the user.
 - [ ] Verify settings can add, edit, refresh, and remove each provider cleanly.
+- [x] Provide persistent Settings links for writing an App Store review and
+  opening the public support channel.
+- [x] Gate native rating requests behind sustained successful use, with no
+  first-launch, onboarding, automatic-refresh, incentive, or sentiment gate.
 
 ### 7. TestFlight
 
@@ -106,6 +110,11 @@ Reference links:
 - [ ] Verify background/widget refresh behavior.
 - [ ] Verify accessibility basics: Dynamic Type, VoiceOver labels, contrast, and tappable target sizes.
 - [ ] Collect crash logs and fix any launch, widget, or auth issues.
+
+Review-request test note: development-signed builds expose **Test Rating
+Prompt** in Settings and StoreKit displays the native request for UI testing.
+The native request has no effect in TestFlight, so TestFlight verification must
+use the persistent **Rate CodexBar** link instead.
 
 ### 8. Final Submission
 

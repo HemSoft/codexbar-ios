@@ -64,6 +64,7 @@
 		100000000000000000000037 /* WidgetBuilderConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000037 /* WidgetBuilderConfiguration.swift */; };
 		100000000000000000000038 /* DashboardOrderingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000039 /* DashboardOrderingMode.swift */; };
 		100000000000000000000039 /* DashboardUsageSorter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003A /* DashboardUsageSorter.swift */; };
+		10000000000000000000003A /* AppReviewPromptPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003B /* AppReviewPromptPolicy.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -156,6 +157,7 @@
 		200000000000000000000038 /* WidgetBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBuilderView.swift; sourceTree = "<group>"; };
 		200000000000000000000039 /* DashboardOrderingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardOrderingMode.swift; sourceTree = "<group>"; };
 		20000000000000000000003A /* DashboardUsageSorter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardUsageSorter.swift; sourceTree = "<group>"; };
+		20000000000000000000003B /* AppReviewPromptPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewPromptPolicy.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -238,6 +240,7 @@
 				200000000000000000000010 /* KeychainService.swift */,
 				200000000000000000000011 /* ProviderConfigurationStore.swift */,
 				20000000000000000000003A /* DashboardUsageSorter.swift */,
+				20000000000000000000003B /* AppReviewPromptPolicy.swift */,
 				200000000000000000000034 /* UsageAlertEvaluator.swift */,
 				200000000000000000000035 /* LocalUsageAlertNotifier.swift */,
 				200000000000000000000015 /* CodexCredentialsParser.swift */,
@@ -490,6 +493,7 @@
 				100000000000000000000026 /* OpenCodeZenUsageProvider.swift in Sources */,
 				100000000000000000000027 /* OpenCodeZenBootstrapImporter.swift in Sources */,
 				100000000000000000000039 /* DashboardUsageSorter.swift in Sources */,
+				10000000000000000000003A /* AppReviewPromptPolicy.swift in Sources */,
 				100000000000000000000028 /* WidgetRefreshInterval.swift in Sources */,
 				100000000000000000000029 /* WidgetSnapshotStore.swift in Sources */,
 				100000000000000000000035 /* WidgetBuilderConfiguration.swift in Sources */,

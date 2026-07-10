@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -7,6 +8,7 @@ struct SettingsView: View {
     var onAlertAuthorizationRequest: @MainActor () async -> Bool = { false }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.requestReview) private var requestReview
     @State private var isConfirmingReset = false
     @State private var alertPermissionMessage: String?
     @State private var newGroupName = ""
@@ -168,6 +170,26 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Accounts")
+                }
+
+                Section {
+                    Link(destination: AppReviewLinks.writeReviewURL) {
+                        Label("Rate CodexBar", systemImage: "star")
+                    }
+
+                    Link(destination: AppReviewLinks.supportURL) {
+                        Label("Get Support", systemImage: "questionmark.circle")
+                    }
+
+                    #if DEBUG
+                    Button {
+                        requestReview()
+                    } label: {
+                        Label("Test Rating Prompt", systemImage: "star.bubble")
+                    }
+                    #endif
+                } header: {
+                    Text("CodexBar")
                 }
 
                 Section {

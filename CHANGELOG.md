@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added persistent **Rate CodexBar** and **Get Support** actions in Settings,
+  plus a restrained native rating request after sustained successful use.
+  ([#19](https://github.com/HemSoft/codexbar-ios/issues/19))
 - Added richer compact history graphs with latest value, change, range, and
   sample-window context on each usage card. ([#18](https://github.com/HemSoft/codexbar-ios/issues/18))
 - Added a tappable expanded history view with a selectable native chart,
