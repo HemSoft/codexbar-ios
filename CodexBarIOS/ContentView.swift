@@ -44,16 +44,16 @@ struct ContentView: View {
                             }
 
                             ForEach(section.results) { result in
+                                let history = historyStore.historySeries(for: result)
                                 let card = ProviderUsageCard(
                                     result: result,
                                     statusText: dashboardStatusText(for: result),
-                                    trend: historyStore.trendSummary(for: result),
-                                    alerts: usageAlertsByAccountID[result.accountID] ?? []
+                                    history: history,
+                                    alerts: usageAlertsByAccountID[result.accountID] ?? [],
+                                    onShowHistory: {
+                                        selectedHistoryResult = result
+                                    }
                                 )
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    selectedHistoryResult = result
-                                }
 
                                 if isManualDashboardOrdering {
                                     card
@@ -142,8 +142,7 @@ struct ContentView: View {
         .sheet(item: $selectedHistoryResult) { result in
             ProviderUsageHistoryDetailView(
                 result: result,
-                snapshots: historyStore.snapshots(for: result.accountID),
-                trend: historyStore.trendSummary(for: result)
+                series: historyStore.historySeries(for: result)
             )
         }
         .task {
@@ -561,84 +560,6 @@ private struct AutoRefreshRing: View {
             .red
         }
     }
-}
-
-private struct ProviderUsageHistoryDetailView: View {
-    let result: ProviderUsageResult
-    let snapshots: [UsageHistorySnapshot]
-    let trend: UsageTrendSummary?
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if let trend {
-                    Section {
-                        UsageTrendRow(trend: trend)
-                            .padding(.vertical, 4)
-                    }
-                }
-
-                Section("Recent") {
-                    if snapshots.isEmpty {
-                        Text("No history recorded yet.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    ForEach(snapshots.reversed()) { snapshot in
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(valueText(for: snapshot))
-                                    .font(.body.weight(.semibold))
-                                    .monospacedDigit()
-
-                                Text(Self.snapshotDateFormatter.string(from: snapshot.capturedAt))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Circle()
-                                .fill(snapshot.highestSeverity.tint)
-                                .frame(width: 9, height: 9)
-                                .accessibilityHidden(true)
-                        }
-                    }
-                }
-            }
-            .navigationTitle(result.title)
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    private func valueText(for snapshot: UsageHistorySnapshot) -> String {
-        if let creditsRemaining = snapshot.creditsRemaining {
-            return Self.currencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
-        }
-
-        guard let value = snapshot.primaryValue else {
-            return "No data"
-        }
-
-        return "\(Int((value * 100).rounded()))%"
-    }
-
-    private static let currencyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
-
-    private static let snapshotDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
 }
 
 #Preview {

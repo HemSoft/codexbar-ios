@@ -1,5 +1,20 @@
 import Foundation
 
+private enum UsageHistoryFormatting {
+    static func formatCurrency(_ value: Double) -> String {
+        currencyFormatter.string(from: NSNumber(value: value)) ?? "$0.00"
+    }
+
+    private static let currencyFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+}
+
 public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
     public let label: String
     public let fractionUsed: Double
@@ -62,6 +77,150 @@ public struct UsageTrendSummary: Equatable, Sendable {
     public let direction: Direction
 }
 
+public struct UsageHistoryPoint: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let capturedAt: Date
+    public let value: Double
+    public let severity: UsageSeverity
+
+    public init(id: String, capturedAt: Date, value: Double, severity: UsageSeverity) {
+        self.id = id
+        self.capturedAt = capturedAt
+        self.value = value
+        self.severity = severity
+    }
+
+    public init(snapshot: UsageHistorySnapshot, value: Double) {
+        self.init(
+            id: snapshot.id,
+            capturedAt: snapshot.capturedAt,
+            value: value,
+            severity: snapshot.highestSeverity
+        )
+    }
+}
+
+public struct UsageHistorySeries: Equatable, Sendable {
+    public let accountID: String
+    public let points: [UsageHistoryPoint]
+    public let isBalance: Bool
+
+    public var latestValueDescription: String {
+        points.last.map { valueDescription(for: $0.value) } ?? "No data"
+    }
+
+    public var minimumValueDescription: String {
+        points.map(\.value).min().map(valueDescription(for:)) ?? "--"
+    }
+
+    public var maximumValueDescription: String {
+        points.map(\.value).max().map(valueDescription(for:)) ?? "--"
+    }
+
+    public var rangeDescription: String {
+        guard
+            let minimum = points.map(\.value).min(),
+            let maximum = points.map(\.value).max()
+        else {
+            return "No range yet"
+        }
+
+        if abs(maximum - minimum) < Self.flatDeltaThreshold {
+            return "Flat at \(valueDescription(for: maximum))"
+        }
+
+        return "Range \(valueDescription(for: minimum)) to \(valueDescription(for: maximum))"
+    }
+
+    public var changeDescription: String {
+        guard let latestDelta else {
+            return points.isEmpty ? "No history yet" : "Collecting history"
+        }
+
+        guard direction != .flat else {
+            return "No change"
+        }
+
+        let directionDescription = direction == .up ? "Up" : "Down"
+        if isBalance {
+            return "\(directionDescription) \(UsageHistoryFormatting.formatCurrency(abs(latestDelta)))"
+        }
+
+        return "\(directionDescription) \(Int((abs(latestDelta) * 100).rounded())) pts"
+    }
+
+    public var sampleWindowDescription: String {
+        guard let first = points.first, let last = points.last else {
+            return "No samples"
+        }
+
+        let count = points.count
+        let sampleText = "\(count) sample\(count == 1 ? "" : "s")"
+        if Calendar.current.isDate(first.capturedAt, inSameDayAs: last.capturedAt) {
+            return "\(sampleText) - \(Self.shortDateFormatter.string(from: last.capturedAt))"
+        }
+
+        return "\(sampleText) - \(Self.shortDateFormatter.string(from: first.capturedAt)) - \(Self.shortDateFormatter.string(from: last.capturedAt))"
+    }
+
+    public var direction: UsageTrendSummary.Direction {
+        guard let latestDelta else {
+            return .flat
+        }
+
+        if abs(latestDelta) < Self.flatDeltaThreshold {
+            return .flat
+        }
+
+        return latestDelta > 0 ? .up : .down
+    }
+
+    public var chartDomain: ClosedRange<Double> {
+        guard isBalance else {
+            return 0...1
+        }
+
+        guard
+            let minimum = points.map(\.value).min(),
+            let maximum = points.map(\.value).max()
+        else {
+            return 0...1
+        }
+
+        let span = maximum - minimum
+        let padding = span > 0
+            ? max(span * 0.15, 0.25)
+            : max(abs(maximum) * 0.08, 1)
+        let lowerBound = minimum < 0 ? minimum - padding : max(0, minimum - padding)
+        let upperBound = max(maximum + padding, lowerBound + 1)
+        return lowerBound...upperBound
+    }
+
+    public func valueDescription(for value: Double) -> String {
+        if isBalance {
+            return UsageHistoryFormatting.formatCurrency(value)
+        }
+
+        return "\(Int((value * 100).rounded()))%"
+    }
+
+    fileprivate var latestDelta: Double? {
+        guard points.count >= 2 else {
+            return nil
+        }
+
+        return points[points.count - 1].value - points[points.count - 2].value
+    }
+
+    private static let flatDeltaThreshold = 0.0001
+
+    private static let shortDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
+}
+
 @MainActor
 public final class UsageHistoryStore: ObservableObject {
     @Published public private(set) var snapshots: [UsageHistorySnapshot]
@@ -114,53 +273,60 @@ public final class UsageHistoryStore: ObservableObject {
             .sorted { $0.capturedAt < $1.capturedAt }
     }
 
+    public func historySeries(
+        for result: ProviderUsageResult,
+        since start: Date? = nil
+    ) -> UsageHistorySeries {
+        let accountSnapshots = snapshots(for: result.accountID, since: start)
+        let points = accountSnapshots.compactMap { snapshot in
+            snapshot.primaryValue.map { UsageHistoryPoint(snapshot: snapshot, value: $0) }
+        }
+        let isBalance: Bool
+        if result.creditsRemaining != nil {
+            isBalance = true
+        } else if !result.bars.isEmpty {
+            isBalance = false
+        } else {
+            isBalance = accountSnapshots.last?.creditsRemaining != nil
+        }
+
+        return UsageHistorySeries(
+            accountID: result.accountID,
+            points: points,
+            isBalance: isBalance
+        )
+    }
+
     public func trendSummary(for result: ProviderUsageResult, now: Date = Date()) -> UsageTrendSummary? {
-        let recent = snapshots(
-            for: result.accountID,
+        let series = historySeries(
+            for: result,
             since: now.addingTimeInterval(-7 * 24 * 60 * 60)
         )
-        guard recent.count >= 2 else {
-            return nil
-        }
-
-        let valuedSnapshots = recent.compactMap { snapshot -> (snapshot: UsageHistorySnapshot, value: Double)? in
-            guard let value = snapshot.primaryValue else {
-                return nil
-            }
-
-            return (snapshot, value)
-        }
         guard
-            valuedSnapshots.count >= 2,
-            let previous = valuedSnapshots.dropLast().last,
-            let current = valuedSnapshots.last
+            series.points.count >= 2,
+            let previous = series.points.dropLast().last,
+            let delta = series.latestDelta
         else {
             return nil
         }
 
-        let values = valuedSnapshots.map(\.value)
-        let delta = current.value - previous.value
-        let isBalance = result.creditsRemaining != nil
-        let direction: UsageTrendSummary.Direction
+        let direction = series.direction
         let description: String
 
-        if abs(delta) < 0.0001 {
-            direction = .flat
+        if direction == .flat {
             description = "No change"
-        } else if isBalance {
-            direction = delta > 0 ? .up : .down
-            description = "Changed \(delta > 0 ? "+" : "-")\(Self.formatCurrency(abs(delta)))"
+        } else if series.isBalance {
+            description = "Changed \(delta > 0 ? "+" : "-")\(UsageHistoryFormatting.formatCurrency(abs(delta)))"
         } else {
-            direction = delta > 0 ? .up : .down
             description = "Changed \(delta > 0 ? "+" : "-")\(Int((abs(delta) * 100).rounded())) pts"
         }
 
         return UsageTrendSummary(
             accountID: result.accountID,
-            points: values,
+            points: series.points.map(\.value),
             valueDescription: description,
-            windowDescription: "Since \(Self.formatSnapshotDate(previous.snapshot.capturedAt))",
-            isBalance: isBalance,
+            windowDescription: "Since \(Self.formatSnapshotDate(previous.capturedAt))",
+            isBalance: series.isBalance,
             direction: direction
         )
     }
@@ -215,22 +381,9 @@ public final class UsageHistoryStore: ObservableObject {
         return snapshots.sorted { $0.capturedAt < $1.capturedAt }
     }
 
-    private static func formatCurrency(_ value: Double) -> String {
-        currencyFormatter.string(from: NSNumber(value: value)) ?? "$0.00"
-    }
-
     private static func formatSnapshotDate(_ date: Date) -> String {
         snapshotDateFormatter.string(from: date)
     }
-
-    private static let currencyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
 
     private static let snapshotDateFormatter: DateFormatter = {
         let formatter = DateFormatter()

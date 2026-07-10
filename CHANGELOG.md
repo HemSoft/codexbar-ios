@@ -8,6 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added richer compact history graphs with latest value, change, range, and
+  sample-window context on each usage card. ([#18](https://github.com/HemSoft/codexbar-ios/issues/18))
+- Added a tappable expanded history view with a selectable native chart,
+  labeled axes, summary statistics, and recent timestamped samples.
 - Added account-scoped usage, balance, and severity alert details to each
   dashboard card, including the triggering value, configured threshold, and
   reset context where available. ([#17](https://github.com/HemSoft/codexbar-ios/issues/17))
@@ -19,6 +23,8 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Updated history presentation to handle empty, single-sample, flat, spiking,
+  and balance data with dedicated scales and readable states.
 - Updated alert notification titles and bodies to identify the affected account
   and condition more clearly.
 - Updated dashboard status indicators to reflect the strongest active alert for
@@ -29,6 +35,8 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Restored Swift 6 package-build compatibility for the main-actor notification
+  service singleton.
 - Added dedicated CodexBar signing-keychain reset and scoped-command helpers.
 - Kept the lock-on-sleep signing keychain out of the normal macOS keychain
   search list, preventing unrelated system services from repeatedly requesting
