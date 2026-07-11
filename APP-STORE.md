@@ -2,7 +2,7 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-07-06
+Status last reviewed: 2026-07-11
 
 ## Current Status
 
@@ -11,7 +11,7 @@ Status last reviewed: 2026-07-06
 - Development signing is stable through the dedicated CodexBar keychain documented in `AGENTS.md`.
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
-- Initial simulator App Store screenshots have been captured and uploaded for iPhone and iPad using safe demo data.
+- The expanded Issue #22 six-scene screenshot set was regenerated and reviewed at full size for iPhone and iPad on 2026-07-11 using safe demo data. App Store Connect sync and preview remain before submission.
 - App Store production distribution upload has succeeded for build `1.0 (1)`, and App Store Connect reports the build as valid and App Store eligible.
 - Build `1.0 (1)` is selected for the App Store version.
 - Product metadata, support URL, privacy policy URL, copyright, and App Review notes have been added in App Store Connect.
@@ -56,17 +56,130 @@ Reference links:
 ### 3. Product Page Assets
 
 - [x] Finalize app name and subtitle. App name is `CodexBar Usage Monitor`; subtitle is `AI usage, limits, and balances`.
-- [x] Write promotional text and add it to App Store Connect.
-- [x] Write the full app description and add it to App Store Connect.
-- [x] Write keywords and add them to App Store Connect.
+- [x] Prepare promotional text in `fastlane/metadata/en-US/promotional_text.txt`.
+- [x] Prepare the full app description in `fastlane/metadata/en-US/description.txt`.
+- [x] Prepare keywords in `fastlane/metadata/en-US/keywords.txt`.
+- [ ] Sync the Issue #22 promotional text, description, and keywords to App Store Connect and verify their previews.
 - [x] Provide support URL and add it to App Store Connect. Public support page is `https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md`.
 - [ ] Provide marketing URL if desired.
 - [x] Provide privacy policy URL and add it to App Store Connect. Public privacy policy is `https://github.com/HemSoft/codexbar-ios/blob/main/PRIVACY.md`.
-- [x] Prepare and upload screenshots for required iPhone sizes. Initial dashboard screenshot is in `AppStore/Screenshots` and uploaded to App Store Connect.
-- [x] Prepare and upload screenshots for required iPad sizes. Initial dashboard screenshot is in `AppStore/Screenshots` and uploaded to App Store Connect.
+- [x] Prepare screenshots for required iPhone sizes. Six deterministic iPhone 17 Pro Max images at `1320x2868` were generated and reviewed at full size on 2026-07-11.
+- [x] Prepare screenshots for required iPad sizes. Six deterministic iPad Pro 13-inch (M5) images at `2064x2752` were generated and reviewed at full size on 2026-07-11.
+- [ ] Upload the Issue #22 iPhone and iPad screenshot sets to App Store Connect and verify their order and cropping.
 - [x] Confirm Apple Watch screenshots are not needed. Current repo has no watchOS app target, so Apple Watch screenshots are not required unless a watchOS app is added.
 - [ ] Consider an app preview video after the first TestFlight build is stable.
 - [ ] Verify the App Store icon renders correctly and has no transparency.
+
+### Product Claim Matrix
+
+| Product-page claim | Verified source or constraint | App Store wording guidance |
+| --- | --- | --- |
+| Tracks ChatGPT / Codex, GitHub Copilot, Claude, Cursor, OpenRouter, and OpenCode ZEN | Current provider list used by the app and screenshot plan | Name exactly these providers; do not imply official affiliation. |
+| Shows usage, limits, balances, reset timing, refresh state, alerts, and history | Provider data varies by API/account type | Say metrics appear where each provider makes them available. |
+| Supports multiple accounts and provider groups | Current app configuration model | Say multiple accounts/groups, not team management or shared org administration. |
+| Offers Home Screen and Lock Screen widgets | Widget extension and configurable widget surfaces | Say configurable widgets; do not promise real-time refresh because iOS controls widget timing. |
+| Stores credentials locally and uses Keychain where appropriate | Privacy policy and app behavior | Say credentials stay on device and are stored in Keychain where appropriate. |
+| Makes provider requests directly from the device | Current network architecture | Say no CodexBar account and no HemSoft backend for provider credentials or usage data. |
+| Independent provider dashboard | Legal/brand constraint | Include a clear non-affiliation disclaimer wherever provider names are used prominently. |
+
+### Product Narrative
+
+CodexBar is a local companion dashboard for people who use several AI coding
+and assistant services. The App Store page should emphasize quick status
+checking before work: what account is close to a limit, which balance changed,
+what refreshed recently, and which widgets keep the most important providers
+visible. Keep the tone practical and privacy-forward. Avoid claims about
+provider completeness, guaranteed metric availability, automatic background
+accuracy, official partnerships, or server-side syncing.
+
+### Screenshot Regeneration Workflow
+
+Use the deterministic simulator capture script whenever the App Store
+screenshots need to be refreshed:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/capture-app-store-screenshots.sh
+```
+
+The app contract for each launch is:
+
+```text
+--app-store-screenshots --app-store-scene <scene> --app-store-appearance <light|dark> --app-store-settle-seconds <seconds>
+```
+
+The capture script defaults the scene-settling window to two seconds. Override
+it with `SCREENSHOT_SETTLE_SECONDS` when a slower simulator or CI runner needs
+more render time; the app clamps the supplied value to the `0...30` second
+range before signaling readiness.
+
+Readiness is complete only when this command returns the requested scene:
+
+```sh
+cat "$(xcrun simctl get_app_container <device-udid> com.hemsoft.CodexBarIOS data)/Library/Caches/app-store-screenshot-ready"
+```
+
+The script polls a marker in the app's simulator data container, with a timeout, instead of
+using a fixed delay. It deletes stale generated PNGs from both
+`AppStore/Screenshots` and `fastlane/screenshots/en-US`, builds once for the
+simulator, then performs a clean uninstall/install/launch cycle for every scene.
+Status bars are forced to `9:41` with full battery before capture.
+
+Scene order:
+
+1. `dashboard-overview` in light appearance
+2. `dashboard-dark` in dark appearance
+3. `widget-builder` in light appearance
+4. `accounts` in dark appearance
+5. `provider-copilot` in light appearance
+6. `history` in dark appearance
+
+Required output sizes:
+
+| Family | Simulator | Pixel size |
+| --- | --- | --- |
+| iPhone | iPhone 17 Pro Max | `1320x2868` |
+| iPad | iPad Pro 13-inch (M5) | `2064x2752` |
+
+Primary generated filenames include family, scene, and appearance, for example
+`iphone-17-pro-max_dashboard-overview_light.png`. The final ordered Fastlane
+copies use stable numbered names in `fastlane/screenshots/en-US`, with iPhone
+and iPad files sharing the same scene number.
+
+### Full-Size Visual QA
+
+Local QA completed on 2026-07-11 for all 12 generated images. Repeat this
+review after any regeneration:
+
+After regeneration, review the full-size PNGs before syncing:
+
+- Confirm every screenshot matches the expected dimensions above.
+- Open each image at full size, not only as Finder thumbnails.
+- Confirm status bar time is `9:41`, battery is full, and no simulator chrome
+  or debug overlays are visible.
+- Confirm light/dark appearance matches the scene plan.
+- Confirm provider/account demo data is safe, plausible, and not personally
+  identifying.
+- Confirm no text is clipped, overlapped, truncated awkwardly, or hidden behind
+  the Dynamic Island, home indicator, or iPad safe areas.
+- Confirm widgets, history, accounts, provider details, and dashboard images
+  match the marketing claims in the description.
+
+### App Store Connect Sync And Preview
+
+Issue #22 metadata and screenshots are generated and locally verified but are
+not complete until these App Store Connect steps are completed:
+
+1. [x] Regenerate screenshots with the command above.
+2. [x] Run local validation for shell syntax, metadata limits, PNG dimensions,
+   and full-size visual quality.
+3. [ ] Sync `fastlane/metadata/en-US` and `fastlane/screenshots/en-US` to App Store
+   Connect using the release operator's normal Fastlane/App Store Connect
+   workflow.
+4. [ ] Preview the iPhone and iPad product pages in App Store Connect.
+5. [ ] Verify the subtitle, promotional text, description, keywords, and ordered
+   screenshots render correctly in the preview.
+6. [ ] Record the sync date and any App Store Connect adjustments here before final
+   submission.
 
 ### 4. Privacy And Data Handling
 
@@ -140,5 +253,6 @@ use the persistent **Rate CodexBar** link instead.
 - [ ] In-app demo/sample mode for App Review and first-run exploration.
 - [ ] One-tap diagnostics export that redacts secrets.
 - [ ] Provider connection health screen.
-- [ ] App Store screenshot automation.
+- [x] Deterministic App Store screenshot automation for the six-scene iPhone
+  and iPad marketing set.
 - [ ] Release archive script that uses the same signing assumptions documented in `AGENTS.md`.

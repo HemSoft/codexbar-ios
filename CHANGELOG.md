@@ -29,6 +29,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Improved the App Store presentation with clearer screenshots, provider
+  wording, privacy expectations, and a more scannable description for people
+  evaluating CodexBar before install. ([#22](https://github.com/HemSoft/codexbar-ios/issues/22))
 - Updated history presentation to handle empty, single-sample, flat, spiking,
   and balance data with dedicated scales and readable states.
 - Updated alert notification titles and bodies to identify the affected account
@@ -41,6 +44,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added deterministic App Store screenshot capture automation for the six
+  marketing scenes across iPhone 17 Pro Max and iPad Pro 13-inch (M5),
+  including readiness polling, stable filenames, size checks, and Fastlane
+  mirroring. ([#22](https://github.com/HemSoft/codexbar-ios/issues/22))
 - Restored Swift 6 package-build compatibility for the main-actor notification
   service singleton.
 - Added dedicated CodexBar signing-keychain reset and scoped-command helpers.

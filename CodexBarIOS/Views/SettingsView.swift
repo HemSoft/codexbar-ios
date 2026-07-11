@@ -1,9 +1,14 @@
 import StoreKit
 import SwiftUI
 
+enum SettingsScrollTarget: Hashable {
+    case accounts
+}
+
 struct SettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var appUpdateController: AppUpdateController
+    var initialScrollTarget: SettingsScrollTarget? = nil
     var onAccountsChanged: @MainActor () -> Void = {}
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onAlertAuthorizationRequest: @MainActor () async -> Bool = { false }
@@ -18,6 +23,12 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
+            settingsList
+        }
+    }
+
+    private var settingsList: some View {
+        ScrollViewReader { proxy in
             List {
                 Section {
                     HStack(spacing: 12) {
@@ -223,6 +234,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Accounts")
                 }
+                .id(SettingsScrollTarget.accounts)
 
                 Section {
                     Link(destination: AppReviewLinks.writeReviewURL) {
@@ -234,10 +246,12 @@ struct SettingsView: View {
                     }
 
                     #if DEBUG
-                    Button {
-                        requestReview()
-                    } label: {
-                        Label("Test Rating Prompt", systemImage: "star.bubble")
+                    if AppStoreScreenshotConfiguration.current == nil {
+                        Button {
+                            requestReview()
+                        } label: {
+                            Label("Test Rating Prompt", systemImage: "star.bubble")
+                        }
                     }
                     #endif
                 } header: {
@@ -285,6 +299,14 @@ struct SettingsView: View {
                 if let oldValue, oldValue != newValue {
                     commitGroupName(for: oldValue)
                 }
+            }
+            .task(id: initialScrollTarget) {
+                guard let initialScrollTarget else {
+                    return
+                }
+
+                await Task.yield()
+                proxy.scrollTo(initialScrollTarget, anchor: .top)
             }
         }
     }

@@ -8,8 +8,12 @@ public final class UsageRefreshService: ObservableObject {
 
     private let providers: [any UsageProvider]
 
-    public init(providers: [any UsageProvider]) {
+    public init(
+        providers: [any UsageProvider],
+        initialResults: [ProviderUsageResult] = []
+    ) {
         self.providers = providers
+        self.results = initialResults
     }
 
     public func refresh(configurations: [ProviderAccountConfiguration]) async {

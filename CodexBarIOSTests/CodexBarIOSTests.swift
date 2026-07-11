@@ -35,6 +35,53 @@ final class CodexBarIOSTests: XCTestCase {
         )
     }
 
+    func testAppStoreScreenshotConfigurationParsesSceneAndAppearance() {
+        XCTAssertNil(AppStoreScreenshotConfiguration.parse(arguments: []))
+
+        let configuration = AppStoreScreenshotConfiguration.parse(
+            arguments: [
+                "CodexBarIOS",
+                "--app-store-screenshots",
+                "--app-store-scene",
+                "history",
+                "--app-store-appearance",
+                "dark",
+                "--app-store-settle-seconds",
+                "3.5",
+            ]
+        )
+
+        XCTAssertEqual(configuration?.scene, .history)
+        XCTAssertEqual(configuration?.appearance, .dark)
+        XCTAssertEqual(configuration?.settleDelay, 3.5)
+
+        let fallback = AppStoreScreenshotConfiguration.parse(
+            arguments: ["CodexBarIOS"],
+            environment: ["CODEXBAR_APP_STORE_SCREENSHOTS": "1"]
+        )
+        XCTAssertEqual(fallback?.scene, .dashboardOverview)
+        XCTAssertEqual(fallback?.appearance, .light)
+        XCTAssertEqual(fallback?.settleDelay, 2)
+    }
+
+    @MainActor
+    func testAppStoreScreenshotFixturesCoverEveryProviderAndSeedHistory() {
+        let configurationStore = ProviderConfigurationStore.appStoreScreenshotDemo()
+        let results = AppStoreScreenshotFixtures.results(for: configurationStore)
+
+        XCTAssertEqual(Set(results.map(\.providerID)), Set(ProviderID.allCases))
+        XCTAssertTrue(results.allSatisfy { $0.accountID.hasPrefix("app-store-screenshots.") })
+        XCTAssertEqual(Set(results.map(\.fetchedAt)).count, 1)
+
+        let historyStore = AppStoreScreenshotFixtures.historyStore(for: results)
+        guard let codexResult = results.first(where: { $0.providerID == .codex }) else {
+            return XCTFail("Expected a Codex screenshot fixture")
+        }
+        let series = historyStore.historySeries(for: codexResult)
+        XCTAssertEqual(series.points.count, 8)
+        XCTAssertEqual(series.direction, .up)
+    }
+
     func testInstalledAppVersionFormatsBundleValues() {
         let version = InstalledAppVersion(marketingVersion: "1.1", buildNumber: "2")
 
