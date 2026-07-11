@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -6,7 +7,9 @@ struct ContentView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var historyStore: UsageHistoryStore
     private let usageAlertNotifier: any UsageAlertNotifying
+    private let appReviewPromptPolicy: AppReviewPromptPolicy
 
+    @Environment(\.requestReview) private var requestReview
     @State private var isShowingSettings = false
     @State private var selectedHistoryResult: ProviderUsageResult?
     @State private var autoRefreshSchedule: AutoRefreshSchedule?
@@ -17,12 +20,14 @@ struct ContentView: View {
         refreshService: UsageRefreshService,
         configurationStore: ProviderConfigurationStore,
         historyStore: UsageHistoryStore,
-        usageAlertNotifier: any UsageAlertNotifying = LocalUsageAlertNotifier.shared
+        usageAlertNotifier: any UsageAlertNotifying = LocalUsageAlertNotifier.shared,
+        appReviewPromptPolicy: AppReviewPromptPolicy = AppReviewPromptPolicy()
     ) {
         self.refreshService = refreshService
         self.configurationStore = configurationStore
         self.historyStore = historyStore
         self.usageAlertNotifier = usageAlertNotifier
+        self.appReviewPromptPolicy = appReviewPromptPolicy
     }
 
     var body: some View {
@@ -97,7 +102,7 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task {
-                            await refreshNow()
+                            await refreshNow(considerReviewPrompt: true)
                         }
                     } label: {
                         RefreshButtonLabel(
@@ -363,14 +368,31 @@ struct ContentView: View {
         return "Refresh usage. \(autoRefreshSchedule.accessibilityDescription(at: Date()))"
     }
 
-    private func refreshNow() async {
+    private func refreshNow(considerReviewPrompt: Bool = false) async {
         await refreshService.refresh(configurations: configurationStore.configurations)
         recordUsageHistoryIfAvailable()
         publishWidgetSnapshot()
         await processUsageAlerts()
+        if considerReviewPrompt {
+            requestReviewAfterSuccessfulRefreshIfEligible()
+        }
         if configurationStore.autoRefreshInterval.seconds != nil {
             autoRefreshResetID = UUID()
         }
+    }
+
+    private func requestReviewAfterSuccessfulRefreshIfEligible() {
+        guard AppReviewPromptEligibility.hasSuccessfulUsage(
+            lastRefreshError: refreshService.lastRefreshError,
+            results: refreshService.results
+        ) else {
+            return
+        }
+        guard appReviewPromptPolicy.registerSuccessfulRefresh() else {
+            return
+        }
+
+        requestReview()
     }
 
     private func processUsageAlerts() async {
