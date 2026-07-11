@@ -19,7 +19,7 @@ struct ContentView: View {
     @State private var autoRefreshSchedule: AutoRefreshSchedule?
     @State private var autoRefreshResetID = UUID()
     @State private var draggedCardID: String?
-    @State private var lastSystemDateTimeRefresh = Date.distantPast
+    @State private var lastSystemDateTimeRefresh: ContinuousClock.Instant?
 
     init(
         refreshService: UsageRefreshService,
@@ -335,11 +335,13 @@ struct ContentView: View {
     }
 
     private func handleSystemDateTimeChange() {
-        let now = Date()
-        guard
-            performsLifecycleWork,
-            now.timeIntervalSince(lastSystemDateTimeRefresh) >= 1
-        else {
+        guard performsLifecycleWork else {
+            return
+        }
+
+        let now = ContinuousClock.now
+        if let lastSystemDateTimeRefresh,
+           lastSystemDateTimeRefresh.duration(to: now) < .seconds(1) {
             return
         }
         lastSystemDateTimeRefresh = now
