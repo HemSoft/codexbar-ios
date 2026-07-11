@@ -6,6 +6,7 @@ struct ContentView: View {
     @ObservedObject var refreshService: UsageRefreshService
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var historyStore: UsageHistoryStore
+    @ObservedObject var appUpdateController: AppUpdateController
     private let usageAlertNotifier: any UsageAlertNotifying
     private let appReviewPromptPolicy: AppReviewPromptPolicy
 
@@ -20,12 +21,14 @@ struct ContentView: View {
         refreshService: UsageRefreshService,
         configurationStore: ProviderConfigurationStore,
         historyStore: UsageHistoryStore,
+        appUpdateController: AppUpdateController,
         usageAlertNotifier: any UsageAlertNotifying = LocalUsageAlertNotifier.shared,
         appReviewPromptPolicy: AppReviewPromptPolicy = AppReviewPromptPolicy()
     ) {
         self.refreshService = refreshService
         self.configurationStore = configurationStore
         self.historyStore = historyStore
+        self.appUpdateController = appUpdateController
         self.usageAlertNotifier = usageAlertNotifier
         self.appReviewPromptPolicy = appReviewPromptPolicy
     }
@@ -38,6 +41,14 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
+                    if !displayedResults.isEmpty,
+                       let release = appUpdateController.dashboardRelease {
+                        AppUpdateNotice(
+                            release: release,
+                            onDismiss: appUpdateController.dismissDashboardNotice
+                        )
+                    }
+
                     ForEach(sections) { section in
                         VStack(alignment: .leading, spacing: 8) {
                             if showGroupHeaders {
@@ -116,17 +127,28 @@ struct ContentView: View {
             }
             .overlay {
                 if displayedResults.isEmpty {
-                    ContentUnavailableView(
-                        "No Usage Data",
-                        systemImage: "gauge.with.dots.needle.50percent",
-                        description: Text("Configure providers in Settings to start tracking live usage.")
-                    )
+                    VStack(spacing: 16) {
+                        if let release = appUpdateController.dashboardRelease {
+                            AppUpdateNotice(
+                                release: release,
+                                onDismiss: appUpdateController.dismissDashboardNotice
+                            )
+                        }
+
+                        ContentUnavailableView(
+                            "No Usage Data",
+                            systemImage: "gauge.with.dots.needle.50percent",
+                            description: Text("Configure providers in Settings to start tracking live usage.")
+                        )
+                    }
+                    .padding()
                 }
             }
         }
         .sheet(isPresented: $isShowingSettings, onDismiss: refreshAfterSettingsDismissed) {
             SettingsView(
                 configurationStore: configurationStore,
+                appUpdateController: appUpdateController,
                 onAccountsChanged: {
                     Task {
                         await refreshNow()
@@ -149,6 +171,9 @@ struct ContentView: View {
                 result: result,
                 series: historyStore.historySeries(for: result)
             )
+        }
+        .task {
+            await appUpdateController.checkForUpdates()
         }
         .task {
             await refreshService.refresh(configurations: configurationStore.configurations)
@@ -523,6 +548,47 @@ private struct DashboardSection: Identifiable {
     var results: [ProviderUsageResult]
 }
 
+private struct AppUpdateNotice: View {
+    let release: AppStoreRelease
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.down.app.fill")
+                .font(.title3)
+                .foregroundStyle(.tint)
+                .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Version \(release.version) available")
+                    .font(.subheadline.weight(.semibold))
+                Text("A newer CodexBar release is on the App Store.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 4)
+
+            Link("Update", destination: release.productURL)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Dismiss version \(release.version) update notice")
+            .help("Dismiss update notice")
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .contain)
+    }
+}
+
 private struct RefreshButtonLabel: View {
     let isRefreshing: Bool
     let schedule: AutoRefreshSchedule?
@@ -588,6 +654,7 @@ private struct AutoRefreshRing: View {
     ContentView(
         refreshService: .demo(),
         configurationStore: ProviderConfigurationStore(),
-        historyStore: UsageHistoryStore()
+        historyStore: UsageHistoryStore(),
+        appUpdateController: AppUpdateController()
     )
 }

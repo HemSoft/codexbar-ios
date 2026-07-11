@@ -5,6 +5,7 @@ struct CodexBarIOSApp: App {
     @StateObject private var refreshService: UsageRefreshService
     @StateObject private var configurationStore: ProviderConfigurationStore
     @StateObject private var historyStore = UsageHistoryStore()
+    @StateObject private var appUpdateController = AppUpdateController()
     #if DEBUG
     @State private var debugProviderSettingsProviderID = DebugLaunchRoute.providerSettingsProviderID
     #endif
@@ -71,7 +72,8 @@ struct CodexBarIOSApp: App {
         ContentView(
             refreshService: refreshService,
             configurationStore: configurationStore,
-            historyStore: historyStore
+            historyStore: historyStore,
+            appUpdateController: appUpdateController
         )
     }
 }

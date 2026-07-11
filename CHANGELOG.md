@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added installed version and build details to Settings, plus a quiet,
+  dismissible notice and App Store link when a newer CodexBar release is
+  available. ([#20](https://github.com/HemSoft/codexbar-ios/issues/20))
 - Added persistent **Rate CodexBar** and **Get Support** actions in Settings,
   plus a restrained native rating request after sustained successful use.
   ([#19](https://github.com/HemSoft/codexbar-ios/issues/19))

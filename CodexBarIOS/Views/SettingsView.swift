@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
+    @ObservedObject var appUpdateController: AppUpdateController
     var onAccountsChanged: @MainActor () -> Void = {}
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onAlertAuthorizationRequest: @MainActor () async -> Bool = { false }
@@ -18,6 +19,57 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    HStack(spacing: 12) {
+                        Image(systemName: "gauge.with.dots.needle.50percent")
+                            .font(.title2)
+                            .foregroundStyle(.tint)
+                            .frame(width: 36, height: 36)
+                            .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("CodexBar")
+                                .font(.headline)
+                            Text(appUpdateController.installedVersion.displayText)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(
+                        "CodexBar, \(appUpdateController.installedVersion.displayText)"
+                    )
+
+                    if let release = appUpdateController.availableRelease {
+                        LabeledContent {
+                            Text("Version \(release.version)")
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label("Update Available", systemImage: "arrow.down.app")
+                        }
+
+                        Link(destination: release.productURL) {
+                            Label("Update", systemImage: "arrow.up.forward.app")
+                        }
+                    }
+
+                    Button {
+                        Task {
+                            await appUpdateController.checkForUpdates(force: true)
+                        }
+                    } label: {
+                        HStack {
+                            Label("Check for Updates", systemImage: "arrow.clockwise")
+                            Spacer()
+                            if appUpdateController.isChecking {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+                    }
+                    .disabled(appUpdateController.isChecking)
+                }
+
                 Section {
                     Picker("Color Scheme", selection: appearanceBinding) {
                         ForEach(AppAppearance.allCases) { appearance in
@@ -189,7 +241,7 @@ struct SettingsView: View {
                     }
                     #endif
                 } header: {
-                    Text("CodexBar")
+                    Text("Support")
                 }
 
                 Section {
@@ -456,5 +508,8 @@ private extension ProviderID {
 }
 
 #Preview {
-    SettingsView(configurationStore: ProviderConfigurationStore())
+    SettingsView(
+        configurationStore: ProviderConfigurationStore(),
+        appUpdateController: AppUpdateController()
+    )
 }
