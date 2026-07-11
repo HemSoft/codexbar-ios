@@ -11,7 +11,7 @@ Status last reviewed: 2026-07-11
 - Development signing is stable through the dedicated CodexBar keychain documented in `AGENTS.md`.
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
-- The expanded Issue #22 six-scene screenshot set was regenerated and reviewed at full size for iPhone and iPad on 2026-07-11 using safe demo data. App Store Connect sync and preview remain before submission.
+- The expanded Issue #22 six-scene screenshot set was regenerated, reviewed at full size, and synced to the App Store Connect 1.1 draft for iPhone and iPad on 2026-07-11 using safe demo data.
 - App Store production distribution upload has succeeded for build `1.0 (1)`, and App Store Connect reports the build as valid and App Store eligible.
 - Build `1.0 (1)` is selected for the App Store version.
 - Product metadata, support URL, privacy policy URL, copyright, and App Review notes have been added in App Store Connect.
@@ -59,13 +59,13 @@ Reference links:
 - [x] Prepare promotional text in `fastlane/metadata/en-US/promotional_text.txt`.
 - [x] Prepare the full app description in `fastlane/metadata/en-US/description.txt`.
 - [x] Prepare keywords in `fastlane/metadata/en-US/keywords.txt`.
-- [ ] Sync the Issue #22 promotional text, description, and keywords to App Store Connect and verify their previews.
+- [x] Sync the Issue #22 promotional text, description, and keywords to App Store Connect and verify their previews. The 1.1 draft was updated and verified on 2026-07-11.
 - [x] Provide support URL and add it to App Store Connect. Public support page is `https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md`.
 - [ ] Provide marketing URL if desired.
 - [x] Provide privacy policy URL and add it to App Store Connect. Public privacy policy is `https://github.com/HemSoft/codexbar-ios/blob/main/PRIVACY.md`.
 - [x] Prepare screenshots for required iPhone sizes. Six deterministic iPhone 17 Pro Max images at `1320x2868` were generated and reviewed at full size on 2026-07-11.
 - [x] Prepare screenshots for required iPad sizes. Six deterministic iPad Pro 13-inch (M5) images at `2064x2752` were generated and reviewed at full size on 2026-07-11.
-- [ ] Upload the Issue #22 iPhone and iPad screenshot sets to App Store Connect and verify their order and cropping.
+- [x] Upload the Issue #22 iPhone and iPad screenshot sets to App Store Connect and verify their order and cropping. Both device sets contain six ordered screenshots in the 1.1 draft as of 2026-07-11.
 - [x] Confirm Apple Watch screenshots are not needed. Current repo has no watchOS app target, so Apple Watch screenshots are not required unless a watchOS app is added.
 - [ ] Consider an app preview video after the first TestFlight build is stable.
 - [ ] Verify the App Store icon renders correctly and has no transparency.
@@ -166,20 +166,24 @@ After regeneration, review the full-size PNGs before syncing:
 
 ### App Store Connect Sync And Preview
 
-Issue #22 metadata and screenshots are generated and locally verified but are
-not complete until these App Store Connect steps are completed:
+Issue #22 metadata and screenshots were generated, locally verified, and synced
+to the App Store Connect 1.1 draft on 2026-07-11:
 
 1. [x] Regenerate screenshots with the command above.
 2. [x] Run local validation for shell syntax, metadata limits, PNG dimensions,
    and full-size visual quality.
-3. [ ] Sync `fastlane/metadata/en-US` and `fastlane/screenshots/en-US` to App Store
-   Connect using the release operator's normal Fastlane/App Store Connect
-   workflow.
-4. [ ] Preview the iPhone and iPad product pages in App Store Connect.
-5. [ ] Verify the subtitle, promotional text, description, keywords, and ordered
+3. [x] Sync `fastlane/metadata/en-US` and `fastlane/screenshots/en-US` to App Store
+   Connect. The metadata and twelve screenshots were added to the 1.1 draft in
+   Safari on 2026-07-11.
+4. [x] Preview the iPhone and iPad product pages in App Store Connect.
+5. [x] Verify the subtitle, promotional text, description, keywords, and ordered
    screenshots render correctly in the preview.
-6. [ ] Record the sync date and any App Store Connect adjustments here before final
-   submission.
+6. [x] Record the sync date and any App Store Connect adjustments here before final
+   submission. The two inherited 1.0 screenshots per device class were replaced
+   with the six-scene 1.1 sets. Files were uploaded individually to preserve the
+   intended numbered order after App Store Connect shuffled an initial batch
+   upload. The prepared subtitle required no adjustment, and 1.1 release notes
+   were added from `fastlane/metadata/en-US/release_notes.txt`.
 
 ### 4. Privacy And Data Handling
 

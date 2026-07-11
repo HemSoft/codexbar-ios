@@ -1,0 +1,7 @@
+CodexBar 1.1 makes usage monitoring clearer and easier to act on:
+
+- See richer history summaries on each card and tap through to detailed charts with recent samples.
+- Get account-specific alert details, including thresholds, current values, projections, and reset context.
+- Find the installed version in Settings and receive a quiet notice when an update is available.
+- Rate CodexBar or get support directly from Settings.
+- Enjoy additional reliability and presentation improvements.
