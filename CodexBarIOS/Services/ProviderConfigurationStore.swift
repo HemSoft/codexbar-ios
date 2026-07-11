@@ -720,7 +720,7 @@ public extension ProviderConfigurationStore {
             ProviderAccountConfiguration(
                 id: "app-store-screenshots.copilot",
                 providerID: .copilot,
-                accountLabel: "Fableton Labs",
+                accountLabel: "GitHub Copilot",
                 groupID: usageGroup.id,
                 authMethod: .browserSession,
                 copilotAccountScope: .organization,

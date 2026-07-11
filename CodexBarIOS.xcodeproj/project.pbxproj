@@ -66,6 +66,7 @@
 		100000000000000000000039 /* DashboardUsageSorter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003A /* DashboardUsageSorter.swift */; };
 		10000000000000000000003A /* AppReviewPromptPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003B /* AppReviewPromptPolicy.swift */; };
 		10000000000000000000003B /* AppUpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003C /* AppUpdateService.swift */; };
+		10000000000000000000003C /* AppStoreScreenshotFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003D /* AppStoreScreenshotFixtures.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -160,6 +161,7 @@
 		20000000000000000000003A /* DashboardUsageSorter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardUsageSorter.swift; sourceTree = "<group>"; };
 		20000000000000000000003B /* AppReviewPromptPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewPromptPolicy.swift; sourceTree = "<group>"; };
 		20000000000000000000003C /* AppUpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateService.swift; sourceTree = "<group>"; };
+		20000000000000000000003D /* AppStoreScreenshotFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotFixtures.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -244,6 +246,7 @@
 				20000000000000000000003A /* DashboardUsageSorter.swift */,
 				20000000000000000000003B /* AppReviewPromptPolicy.swift */,
 				20000000000000000000003C /* AppUpdateService.swift */,
+				20000000000000000000003D /* AppStoreScreenshotFixtures.swift */,
 				200000000000000000000034 /* UsageAlertEvaluator.swift */,
 				200000000000000000000035 /* LocalUsageAlertNotifier.swift */,
 				200000000000000000000015 /* CodexCredentialsParser.swift */,
@@ -498,6 +501,7 @@
 				100000000000000000000039 /* DashboardUsageSorter.swift in Sources */,
 				10000000000000000000003A /* AppReviewPromptPolicy.swift in Sources */,
 				10000000000000000000003B /* AppUpdateService.swift in Sources */,
+				10000000000000000000003C /* AppStoreScreenshotFixtures.swift in Sources */,
 				100000000000000000000028 /* WidgetRefreshInterval.swift in Sources */,
 				100000000000000000000029 /* WidgetSnapshotStore.swift in Sources */,
 				100000000000000000000035 /* WidgetBuilderConfiguration.swift in Sources */,

@@ -1,15 +1,28 @@
-CodexBar Usage Monitor keeps your AI service usage in one place.
+CodexBar Usage Monitor keeps your AI usage, limits, balances, and refresh status in one focused iPhone and iPad dashboard.
 
-Track usage limits, balances, and refresh status for the services you connect, including Codex, Claude, Copilot, Cursor, OpenRouter, and OpenCode ZEN. CodexBar is designed for people who move between multiple AI tools and want a quick way to see what is available before starting work.
+Built for people who move between multiple AI coding and assistant tools, CodexBar helps you check what is available before starting work.
 
-CodexBar stores credentials locally on your device using Keychain where appropriate and reads usage data directly from the services you configure. Widgets let you pin the usage tiles that matter most on iPhone and iPad.
+Supported providers:
 
-Features:
+- ChatGPT / Codex
+- GitHub Copilot
+- Claude
+- Cursor
+- OpenRouter
+- OpenCode ZEN
 
-- Monitor multiple AI subscriptions and API balances
-- View limits, usage bars, and snapshot changes
-- Configure Home Screen widgets with one, two, or four tiles
-- Refresh provider data from a focused dashboard
-- Keep provider credentials on device
+What you can track:
 
-CodexBar is an independent tool and is not affiliated with the providers it can display.
+- Usage limits, balance details, reset timing, refresh status, and alerts where each provider makes those metrics available
+- Multiple accounts and grouped provider configurations, so work, personal, and team accounts can stay organized
+- Recent history and trend context for configured accounts
+- Home Screen and Lock Screen widgets with configurable tiles for the providers you care about most
+
+Privacy and account model:
+
+- CodexBar does not require a CodexBar account
+- CodexBar does not send your provider credentials or usage data to a HemSoft backend
+- Credentials are stored locally on your device using Keychain where appropriate
+- Usage and balance requests are made directly from your device to the providers you configure
+
+CodexBar is an independent tool and is not affiliated with, endorsed by, or sponsored by the providers it can display. Provider names are used only to identify the services you choose to connect.

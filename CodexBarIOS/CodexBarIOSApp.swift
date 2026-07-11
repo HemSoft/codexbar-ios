@@ -4,30 +4,55 @@ import SwiftUI
 struct CodexBarIOSApp: App {
     @StateObject private var refreshService: UsageRefreshService
     @StateObject private var configurationStore: ProviderConfigurationStore
-    @StateObject private var historyStore = UsageHistoryStore()
+    @StateObject private var historyStore: UsageHistoryStore
     @StateObject private var appUpdateController = AppUpdateController()
     #if DEBUG
+    private let screenshotConfiguration = AppStoreScreenshotConfiguration.current
     @State private var debugProviderSettingsProviderID = DebugLaunchRoute.providerSettingsProviderID
     #endif
 
     init() {
         #if DEBUG
-        if AppStoreScreenshotMode.isEnabled {
+        if let screenshotConfiguration {
             let configurationStore = ProviderConfigurationStore.appStoreScreenshotDemo()
+            configurationStore.updateAppAppearance(screenshotConfiguration.appearance)
+            if screenshotConfiguration.scene == .dashboardDark {
+                configurationStore.updateDashboardCardOrder([
+                    "app-store-screenshots.openrouter",
+                    "app-store-screenshots.opencodzen",
+                    "app-store-screenshots.cursor",
+                    "app-store-screenshots.codex",
+                    "app-store-screenshots.copilot",
+                    "app-store-screenshots.claude",
+                ])
+            }
             if DebugUsageAlertMode.isEnabled {
                 configurationStore.updateUsageAlertsEnabled(true)
                 configurationStore.updateUsageAlertUsageThreshold(0.65)
                 configurationStore.updateUsageAlertBalanceThreshold(15)
             }
 
-            _refreshService = StateObject(wrappedValue: UsageRefreshService.demo())
+            let results = AppStoreScreenshotFixtures.results(for: configurationStore)
+            let historyStore = AppStoreScreenshotFixtures.historyStore(for: results)
+            AppStoreScreenshotFixtures.seedWidgetPreview(
+                results: results,
+                configurationStore: configurationStore
+            )
+            _refreshService = StateObject(
+                wrappedValue: UsageRefreshService(
+                    providers: DemoUsageProvider.samples,
+                    initialResults: results
+                )
+            )
             _configurationStore = StateObject(wrappedValue: configurationStore)
+            _historyStore = StateObject(wrappedValue: historyStore)
             return
         }
         #endif
 
         _refreshService = StateObject(wrappedValue: UsageRefreshService.live())
         _configurationStore = StateObject(wrappedValue: ProviderConfigurationStore())
+        _historyStore = StateObject(wrappedValue: UsageHistoryStore())
     }
 
     var body: some Scene {
@@ -36,6 +61,12 @@ struct CodexBarIOSApp: App {
                 .preferredColorScheme(configurationStore.appAppearance.colorScheme)
                 .task {
                     OpenCodeZenBootstrapImporter.importIfNeeded(configurationStore: configurationStore)
+                    #if DEBUG
+                    if let screenshotConfiguration {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        AppStoreScreenshotFixtures.markReady(scene: screenshotConfiguration.scene)
+                    }
+                    #endif
                 }
         }
     }
@@ -43,7 +74,9 @@ struct CodexBarIOSApp: App {
     @ViewBuilder
     private var rootView: some View {
         #if DEBUG
-        if let providerID = debugProviderSettingsProviderID {
+        if let screenshotConfiguration {
+            screenshotRootView(for: screenshotConfiguration.scene)
+        } else if let providerID = debugProviderSettingsProviderID {
             NavigationStack {
                 ProviderSettingsView(
                     configurationStore: configurationStore,
@@ -61,14 +94,14 @@ struct CodexBarIOSApp: App {
                 }
             }
         } else {
-            mainContentView
+            mainContentView()
         }
         #else
-        mainContentView
+        mainContentView()
         #endif
     }
 
-    private var mainContentView: some View {
+    private func mainContentView() -> some View {
         ContentView(
             refreshService: refreshService,
             configurationStore: configurationStore,
@@ -76,6 +109,44 @@ struct CodexBarIOSApp: App {
             appUpdateController: appUpdateController
         )
     }
+
+    #if DEBUG
+    @ViewBuilder
+    private func screenshotRootView(for scene: AppStoreScreenshotScene) -> some View {
+        switch scene {
+        case .dashboardOverview:
+            mainContentView()
+        case .dashboardDark:
+            mainContentView()
+        case .widgetBuilder:
+            NavigationStack {
+                WidgetBuilderView()
+            }
+        case .accounts:
+            SettingsView(
+                configurationStore: configurationStore,
+                appUpdateController: appUpdateController,
+                initialScrollTarget: .accounts
+            )
+        case .providerCopilot:
+            NavigationStack {
+                ProviderSettingsView(
+                    configurationStore: configurationStore,
+                    accountID: "app-store-screenshots.copilot"
+                )
+            }
+        case .history:
+            if let result = refreshService.results.first(where: { $0.providerID == .codex }) {
+                ProviderUsageHistoryDetailView(
+                    result: result,
+                    series: historyStore.historySeries(for: result)
+                )
+            } else {
+                ContentUnavailableView("No History", systemImage: "chart.xyaxis.line")
+            }
+        }
+    }
+    #endif
 }
 
 #if DEBUG
@@ -104,13 +175,6 @@ private enum DebugLaunchRoute {
         }
 
         return ProviderID(rawValue: arguments[routeIndex + 1])
-    }
-}
-
-private enum AppStoreScreenshotMode {
-    static var isEnabled: Bool {
-        ProcessInfo.processInfo.arguments.contains("--app-store-screenshots")
-            || ProcessInfo.processInfo.environment["CODEXBAR_APP_STORE_SCREENSHOTS"] == "1"
     }
 }
 
