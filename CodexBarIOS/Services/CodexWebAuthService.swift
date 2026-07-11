@@ -5,33 +5,19 @@ import Security
 
 public struct CodexWebAuthResult: Equatable, Sendable {
     public let accessToken: String
-    public let refreshToken: String
-    public let idToken: String
+    public let refreshToken: String?
+    public let idToken: String?
     public let accountID: String?
+    public let expiresAt: Int64?
 
     public var storedCredential: String {
-        let tokenPairs = [
-            jsonPair("id_token", idToken),
-            jsonPair("access_token", accessToken),
-            jsonPair("refresh_token", refreshToken),
-            accountID.map { jsonPair("account_id", $0) }
-        ].compactMap { $0 }
-
-        return """
-        {
-          "auth_mode": "chatgpt",
-          "tokens": {
-            \(tokenPairs.joined(separator: ",\n    "))
-          }
-        }
-        """
-    }
-
-    private func jsonPair(_ key: String, _ value: String) -> String {
-        let encodedValue = (try? JSONEncoder().encode(value))
-            .flatMap { String(data: $0, encoding: .utf8) }
-            ?? "\"\""
-        return "\"\(key)\": \(encodedValue)"
+        CodexCredentialsParser.storedCredential(from: CodexCredentials(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            idToken: idToken,
+            accountID: accountID,
+            expiresAt: expiresAt
+        ))
     }
 }
 
@@ -65,20 +51,25 @@ public final class CodexWebAuthService: Sendable {
     }
 
     private struct TokenResponse: Decodable {
-        let idToken: String
+        let idToken: String?
         let accessToken: String
-        let refreshToken: String
+        let refreshToken: String?
+        let expiresIn: Int64?
+        let expiresAt: Int64?
 
         enum CodingKeys: String, CodingKey {
             case idToken = "id_token"
             case accessToken = "access_token"
             case refreshToken = "refresh_token"
+            case expiresIn = "expires_in"
+            case expiresAt = "expires_at"
         }
     }
 
     private static let callbackPath = "/auth/callback"
     private static let issuer = URL(string: "https://auth.openai.com")!
-    private static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
+    static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
+    static let tokenEndpoint = issuer.appending(path: "/oauth/token")
     private static let originator = "codex_cli_rs"
 
     private let session: URLSession
@@ -163,6 +154,14 @@ public final class CodexWebAuthService: Sendable {
         ])
     }
 
+    public static func makeRefreshTokenRequestBody(refreshToken: String) -> Data {
+        formEncoded([
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refreshToken),
+            ("client_id", clientID),
+        ])
+    }
+
     public static func makePKCEPair() -> CodexPKCEPair {
         let verifier = randomBase64URL(byteCount: 64)
         let digest = SHA256.hash(data: Data(verifier.utf8))
@@ -191,7 +190,7 @@ public final class CodexWebAuthService: Sendable {
         redirectURI: String,
         codeVerifier: String
     ) async throws -> CodexWebAuthResult {
-        var request = URLRequest(url: Self.issuer.appending(path: "/oauth/token"))
+        var request = URLRequest(url: Self.tokenEndpoint)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = Self.makeTokenRequestBody(
@@ -206,20 +205,30 @@ public final class CodexWebAuthService: Sendable {
         }
 
         guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)"
-            throw AuthError.tokenExchangeFailed(message)
+            throw AuthError.tokenExchangeFailed("HTTP \(httpResponse.statusCode)")
         }
 
         guard let tokens = try? JSONDecoder().decode(TokenResponse.self, from: data) else {
             throw AuthError.invalidTokenResponse
         }
 
+        let now = Date()
+        let parsedAccessToken = CodexCredentialsParser.parse(tokens.accessToken)
+        let parsedIDToken = tokens.idToken.flatMap(CodexCredentialsParser.parse)
         return CodexWebAuthResult(
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
             idToken: tokens.idToken,
-            accountID: Self.accountID(from: tokens.idToken)
+            accountID: tokens.idToken.flatMap(Self.accountID) ?? Self.accountID(from: tokens.accessToken),
+            expiresAt: tokens.expiresAt.map(Self.normalizeEpochToSeconds)
+                ?? tokens.expiresIn.map { Int64(now.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970) }
+                ?? parsedAccessToken?.expiresAt
+                ?? parsedIDToken?.expiresAt
         )
+    }
+
+    private static func normalizeEpochToSeconds(_ value: Int64) -> Int64 {
+        value >= 1_000_000_000_000 ? value / 1_000 : value
     }
 
     private static func randomBase64URL(byteCount: Int) -> String {

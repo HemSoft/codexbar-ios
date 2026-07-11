@@ -21,4 +21,12 @@ public enum CopilotCredentialsParser {
 
         return credentials
     }
+
+    public static func storedCredential(from credentials: CopilotCredentials) -> String {
+        guard let data = try? JSONEncoder().encode(credentials),
+              let json = String(data: data, encoding: .utf8) else {
+            return credentials.accessToken
+        }
+        return json
+    }
 }

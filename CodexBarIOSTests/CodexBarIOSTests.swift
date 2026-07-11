@@ -1603,6 +1603,18 @@ final class CodexBarIOSTests: XCTestCase {
         )
     }
 
+    func testCodexRefreshTokenRequestBodyUsesRefreshGrant() {
+        let body = String(
+            data: CodexWebAuthService.makeRefreshTokenRequestBody(refreshToken: "refresh value"),
+            encoding: .utf8
+        )
+
+        XCTAssertEqual(
+            body,
+            "grant_type=refresh_token&refresh_token=refresh%20value&client_id=app_EMoamEEZ73f0CkXaXp7hrann"
+        )
+    }
+
     func testCodexAuthExtractsChatGPTAccountID() {
         let header = #"{"alg":"none"}"#.base64URLEncodedForTest()
         let payload = #"{"chatgpt_account_id":"account-id"}"#.base64URLEncodedForTest()
@@ -1622,6 +1634,35 @@ final class CodexBarIOSTests: XCTestCase {
         """)
 
         XCTAssertEqual(credentials, CodexCredentials(accessToken: "access-token", accountID: "account-id"))
+    }
+
+    func testCodexCredentialsParserRetainsOAuthLifecycleFieldsAndLegacyTokens() throws {
+        let credentials = try XCTUnwrap(CodexCredentialsParser.parse("""
+        {
+          "tokens": {
+            "access_token": "access-token",
+            "refresh_token": "refresh-token",
+            "id_token": "id-token",
+            "account_id": "account-id",
+            "expires_at": 2000000000000
+          }
+        }
+        """))
+
+        XCTAssertEqual(credentials.accessToken, "access-token")
+        XCTAssertEqual(credentials.refreshToken, "refresh-token")
+        XCTAssertEqual(credentials.idToken, "id-token")
+        XCTAssertEqual(credentials.accountID, "account-id")
+        XCTAssertEqual(credentials.expiresAt, 2_000_000_000)
+        XCTAssertEqual(
+            CodexCredentialsParser.parse("legacy-access-token"),
+            CodexCredentials(accessToken: "legacy-access-token")
+        )
+
+        let roundTripped = try XCTUnwrap(
+            CodexCredentialsParser.parse(CodexCredentialsParser.storedCredential(from: credentials))
+        )
+        XCTAssertEqual(roundTripped, credentials)
     }
 
     func testCopilotAuthURLUsesGitHubBrowserCallbackFlow() throws {
@@ -1661,6 +1702,22 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(
             body,
             "client_id=client&client_secret=secret&code=code%20value&redirect_uri=http%3A%2F%2F127.0.0.1%3A1456%2Fcallback&code_verifier=verifier%20value"
+        )
+    }
+
+    func testCopilotRefreshTokenRequestBodyUsesRefreshGrant() {
+        let body = String(
+            data: CopilotWebAuthService.makeRefreshTokenRequestBody(
+                clientID: "client",
+                clientSecret: "secret",
+                refreshToken: "refresh value"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertEqual(
+            body,
+            "client_id=client&client_secret=secret&grant_type=refresh_token&refresh_token=refresh%20value"
         )
     }
 
@@ -1808,6 +1865,23 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(
             CopilotCredentialsParser.parse("gho_raw_token"),
             CopilotCredentials(accessToken: "gho_raw_token")
+        )
+    }
+
+    func testCopilotCredentialsParserRetainsRefreshAndExpiryFields() throws {
+        let credentials = CopilotCredentials(
+            accessToken: "access-token",
+            username: "octocat",
+            refreshToken: "refresh-token",
+            expiresAt: 2_000_000_000,
+            refreshTokenExpiresAt: 2_100_000_000
+        )
+
+        let stored = CopilotCredentialsParser.storedCredential(from: credentials)
+        XCTAssertEqual(try XCTUnwrap(CopilotCredentialsParser.parse(stored)), credentials)
+        XCTAssertEqual(
+            CopilotCredentialsParser.parse("legacy-token"),
+            CopilotCredentials(accessToken: "legacy-token")
         )
     }
 
@@ -3427,6 +3501,423 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(history.latestValueDescription, "$19.25")
     }
 
+    func testCodexUsageProviderProactivelyRefreshesAndPersistsRotation() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        let account = ProviderConfigurationStore.keychainAccount(for: configuration)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "old-access",
+                refreshToken: "old-refresh",
+                idToken: "old-id",
+                accountID: "account-id",
+                expiresAt: 2_000_000_060
+            )),
+            account: account
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/codex-token")!,
+            now: { now }
+        )
+        var requestCount = 0
+
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            if request.url?.path == "/codex-token" {
+                XCTAssertEqual(request.httpMethod, "POST")
+                XCTAssertEqual(
+                    String(data: try XCTUnwrap(requestBodyData(from: request)), encoding: .utf8),
+                    "grant_type=refresh_token&refresh_token=old-refresh&client_id=app_EMoamEEZ73f0CkXaXp7hrann"
+                )
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}"#.utf8)
+                )
+            }
+
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer new-access")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-Id"), "account-id")
+            let persisted = try XCTUnwrap(
+                CodexCredentialsParser.parse(try XCTUnwrap(secretStore.readSecret(account: account)))
+            )
+            XCTAssertEqual(persisted.accessToken, "new-access")
+            XCTAssertEqual(persisted.refreshToken, "new-refresh")
+            XCTAssertEqual(persisted.expiresAt, 2_000_003_600)
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(result.bars.first?.used, 25)
+    }
+
+    func testCodexUsageProviderExplainsExpiredCredentialWithoutRefreshToken() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "expired-access",
+                expiresAt: 1_999_999_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let provider = CodexUsageProvider(secretStore: secretStore, now: { now })
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(
+            result.subtitle,
+            "ChatGPT / Codex credential expired and cannot be renewed. Sign in again."
+        )
+    }
+
+    func testCodexUsageProviderDoesNotUseCredentialWhenKeychainRotationFails() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        let stored = CodexCredentialsParser.storedCredential(from: CodexCredentials(
+            accessToken: "expired-access",
+            refreshToken: "refresh-token",
+            expiresAt: 1_999_999_000
+        ))
+        let secretStore = FailingSaveSecretStore(secret: stored)
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/codex-token")!,
+            now: { now }
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.path, "/codex-token")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"access_token":"new-access","refresh_token":"rotated","expires_in":3600}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(
+            result.subtitle,
+            "Could not securely save the renewed ChatGPT / Codex credential. Try again."
+        )
+    }
+
+    func testCodexUsageProviderRetriesOnlyOnceAfterAuthenticationRejection() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "old-access",
+                refreshToken: "refresh-token"
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/codex-token")!
+        )
+        var usageRequests = 0
+        var refreshRequests = 0
+
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/codex-token" {
+                refreshRequests += 1
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"new-access","refresh_token":"rotated-refresh","expires_in":3600}"#.utf8)
+                )
+            }
+            usageRequests += 1
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 401, httpVersion: nil, headerFields: nil)!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(usageRequests, 2)
+        XCTAssertEqual(refreshRequests, 1)
+        XCTAssertEqual(result.subtitle, "ChatGPT / Codex authorization was revoked. Sign in again.")
+    }
+
+    func testCodexUsageProviderExplainsRejectedRefreshAndLegacyRejection() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        let account = ProviderConfigurationStore.keychainAccount(for: configuration)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "expired-access",
+                refreshToken: "rejected-refresh",
+                expiresAt: 1_999_999_000
+            )),
+            account: account
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            tokenEndpoint: URL(string: "https://example.test/codex-token")!,
+            now: { now }
+        )
+        MockURLProtocol.handler = { request in
+            (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 400, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"error":"invalid_grant","access_token":"must-not-leak"}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let rejected = try await provider.fetchUsage(for: configuration)
+        XCTAssertEqual(rejected.subtitle, "ChatGPT / Codex credential renewal was rejected. Sign in again.")
+        XCTAssertFalse(rejected.subtitle.contains("must-not-leak"))
+
+        try secretStore.saveSecret("legacy-access", account: account)
+        MockURLProtocol.handler = { request in
+            (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 401, httpVersion: nil, headerFields: nil)!,
+                Data()
+            )
+        }
+        let legacy = try await provider.fetchUsage(for: configuration)
+        XCTAssertEqual(legacy.subtitle, "ChatGPT / Codex credential was rejected. Sign in again.")
+    }
+
+    func testCopilotUsageProviderProactivelyRefreshesAndPersistsRotation() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        let account = ProviderConfigurationStore.keychainAccount(for: configuration)
+        try secretStore.saveSecret(
+            CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+                accessToken: "old-access",
+                username: "octocat",
+                refreshToken: "old-refresh",
+                expiresAt: 2_000_000_060,
+                refreshTokenExpiresAt: 2_100_000_000
+            )),
+            account: account
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now }
+        )
+        var requestCount = 0
+
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            if request.url?.path == "/github-token" {
+                XCTAssertEqual(
+                    String(data: try XCTUnwrap(requestBodyData(from: request)), encoding: .utf8),
+                    "client_id=client&client_secret=secret&grant_type=refresh_token&refresh_token=old-refresh"
+                )
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":28800,"refresh_token_expires_in":15897600}"#.utf8)
+                )
+            }
+
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "token new-access")
+            let persisted = try XCTUnwrap(
+                CopilotCredentialsParser.parse(try XCTUnwrap(secretStore.readSecret(account: account)))
+            )
+            XCTAssertEqual(persisted.accessToken, "new-access")
+            XCTAssertEqual(persisted.refreshToken, "new-refresh")
+            XCTAssertEqual(persisted.username, "octocat")
+            XCTAssertEqual(persisted.expiresAt, 2_000_028_800)
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(result.bars.first?.used, 25)
+    }
+
+    func testCopilotUsageProviderExplainsExpiredCredentialWithoutRefreshToken() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        try secretStore.saveSecret(
+            CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+                accessToken: "expired-access",
+                expiresAt: 1_999_999_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let provider = CopilotUsageProvider(secretStore: secretStore, now: { now })
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(
+            result.subtitle,
+            "GitHub credential expired and cannot be renewed. Sign in again."
+        )
+    }
+
+    func testCopilotUsageProviderExplainsRejectedRefreshWithoutLeakingResponse() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        try secretStore.saveSecret(
+            CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+                accessToken: "expired-access",
+                refreshToken: "rejected-refresh",
+                expiresAt: 1_999_999_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now }
+        )
+        MockURLProtocol.handler = { request in
+            (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 400, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"error":"bad_refresh_token","access_token":"must-not-leak"}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.subtitle, "GitHub credential renewal was rejected. Sign in again.")
+        XCTAssertFalse(result.subtitle.contains("must-not-leak"))
+    }
+
+    func testCopilotUsageProviderRetriesOnceAndSeparatesPermissionFailures() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        try secretStore.saveSecret(
+            CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+                accessToken: "old-access",
+                refreshToken: "refresh-token"
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
+        )
+        var usageRequests = 0
+        var refreshRequests = 0
+
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/github-token" {
+                refreshRequests += 1
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"new-access","refresh_token":"rotated","expires_in":28800}"#.utf8)
+                )
+            }
+            usageRequests += 1
+            let status = usageRequests <= 2 ? 401 : 403
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: status, httpVersion: nil, headerFields: nil)!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let rejected = try await provider.fetchUsage(for: configuration)
+        XCTAssertEqual(usageRequests, 2)
+        XCTAssertEqual(refreshRequests, 1)
+        XCTAssertEqual(rejected.subtitle, "GitHub authorization was revoked. Sign in again.")
+
+        try secretStore.saveSecret("legacy-access", account: ProviderConfigurationStore.keychainAccount(for: configuration))
+        let forbidden = try await provider.fetchUsage(for: configuration)
+        XCTAssertEqual(forbidden.subtitle, "This GitHub account does not have access to Copilot usage.")
+    }
+
+    func testCopilotOrganizationUsageExplainsOrganizationPermissionFailure() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration(
+            providerID: .copilot,
+            authMethod: .browserSession,
+            copilotAccountScope: .organization,
+            githubOrganization: "HemSoft"
+        )
+        try secretStore.saveSecret(
+            "legacy-access",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            githubAPIBaseURL: URL(string: "https://example.test")!
+        )
+        MockURLProtocol.handler = { request in
+            (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 403, httpVersion: nil, headerFields: nil)!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(
+            result.subtitle,
+            "This GitHub account lacks permission to read the configured Copilot organization billing data."
+        )
+    }
+
     func testCodexUsageWithoutCredentialIsNotDemoData() async throws {
         let provider = CodexUsageProvider(secretStore: EmptySecretStore())
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
@@ -3615,6 +4106,24 @@ private final class MemorySecretStore: SecretStore, @unchecked Sendable {
     func deleteSecret(account: String) throws {
         secrets.removeValue(forKey: account)
     }
+}
+
+private final class FailingSaveSecretStore: SecretStore, @unchecked Sendable {
+    private let secret: String
+
+    init(secret: String) {
+        self.secret = secret
+    }
+
+    func readSecret(account: String) throws -> String? {
+        secret
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {
+        throw KeychainError.unhandledStatus(-25308)
+    }
+
+    func deleteSecret(account: String) throws {}
 }
 
 private func requestBodyData(from request: URLRequest) -> Data? {

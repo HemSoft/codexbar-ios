@@ -5,17 +5,18 @@ import Security
 
 public struct CopilotWebAuthResult: Equatable, Sendable {
     public let accessToken: String
+    public let refreshToken: String?
+    public let expiresAt: Int64?
+    public let refreshTokenExpiresAt: Int64?
 
     public func storedCredential(username: String? = nil) -> String {
-        let credentials = CopilotCredentials(accessToken: accessToken, username: username)
-        guard
-            let data = try? JSONEncoder().encode(credentials),
-            let json = String(data: data, encoding: .utf8)
-        else {
-            return accessToken
-        }
-
-        return json
+        CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+            accessToken: accessToken,
+            username: username,
+            refreshToken: refreshToken,
+            expiresAt: expiresAt,
+            refreshTokenExpiresAt: refreshTokenExpiresAt
+        ))
     }
 }
 
@@ -75,17 +76,24 @@ public final class CopilotWebAuthService: Sendable {
 
     private struct TokenResponse: Decodable {
         let accessToken: String?
+        let refreshToken: String?
+        let expiresIn: Int64?
+        let refreshTokenExpiresIn: Int64?
         let error: String?
         let errorDescription: String?
 
         enum CodingKeys: String, CodingKey {
             case accessToken = "access_token"
+            case refreshToken = "refresh_token"
+            case expiresIn = "expires_in"
+            case refreshTokenExpiresIn = "refresh_token_expires_in"
             case error
             case errorDescription = "error_description"
         }
     }
 
     private static let githubBaseURL = URL(string: "https://github.com")!
+    static let tokenEndpoint = githubBaseURL.appending(path: "/login/oauth/access_token")
     private static let callbackPath = "/callback"
     private static let requestedScope = "repo read:org gist"
 
@@ -187,6 +195,19 @@ public final class CopilotWebAuthService: Sendable {
         ])
     }
 
+    public static func makeRefreshTokenRequestBody(
+        clientID: String,
+        clientSecret: String,
+        refreshToken: String
+    ) -> Data {
+        formEncoded([
+            ("client_id", clientID),
+            ("client_secret", clientSecret),
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refreshToken),
+        ])
+    }
+
     public static func makePKCEPair() -> PKCEPair {
         let verifier = randomBase64URL(byteCount: 64)
         let digest = SHA256.hash(data: Data(verifier.utf8))
@@ -201,7 +222,7 @@ public final class CopilotWebAuthService: Sendable {
         redirectURI: String,
         codeVerifier: String
     ) async throws -> CopilotWebAuthResult {
-        var request = URLRequest(url: Self.githubBaseURL.appending(path: "/login/oauth/access_token"))
+        var request = URLRequest(url: Self.tokenEndpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -219,7 +240,7 @@ public final class CopilotWebAuthService: Sendable {
         }
 
         guard (200..<300).contains(httpResponse.statusCode) else {
-            throw AuthError.tokenExchangeFailed(String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)")
+            throw AuthError.tokenExchangeFailed("HTTP \(httpResponse.statusCode)")
         }
 
         guard let tokenResponse = try? JSONDecoder().decode(TokenResponse.self, from: data) else {
@@ -234,7 +255,17 @@ public final class CopilotWebAuthService: Sendable {
             throw AuthError.invalidTokenResponse
         }
 
-        return CopilotWebAuthResult(accessToken: accessToken)
+        let now = Date()
+        return CopilotWebAuthResult(
+            accessToken: accessToken,
+            refreshToken: tokenResponse.refreshToken,
+            expiresAt: tokenResponse.expiresIn.map {
+                Int64(now.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
+            },
+            refreshTokenExpiresAt: tokenResponse.refreshTokenExpiresIn.map {
+                Int64(now.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
+            }
+        )
     }
 
     private static func randomBase64URL(byteCount: Int) -> String {
