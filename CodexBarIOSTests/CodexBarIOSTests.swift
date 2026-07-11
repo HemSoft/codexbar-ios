@@ -448,7 +448,7 @@ final class CodexBarIOSTests: XCTestCase {
                             resetDescription: "Resets 4h",
                             severity: .normal,
                             projectedFraction: 1,
-                            projectionDescription: "Projected 100% at current pace - Limit hit Wed 11:00 PM EST - 1h early",
+                            projectionDescription: "Projected 100% at current pace - Limit hit Wed 11:00 PM local time - 1h early",
                             projectedSeverity: .critical
                         ),
                     ],
@@ -2711,6 +2711,10 @@ final class CodexBarIOSTests: XCTestCase {
 
     func testCodexUsageParserReadsUsageWindows() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
+        let formatter = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(identifier: "Europe/Berlin")),
+            locale: Locale(identifier: "en_US")
+        )
         let payload = """
         {
           "plan_type": "pro",
@@ -2729,13 +2733,29 @@ final class CodexBarIOSTests: XCTestCase {
         }
         """
 
-        let result = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8), fetchedAt: fetchedAt))
+        let result = try XCTUnwrap(CodexUsageParser.parse(
+            Data(payload.utf8),
+            fetchedAt: fetchedAt,
+            dateTimeFormatter: formatter
+        ))
 
         XCTAssertEqual(result.title, "ChatGPT / Codex (Pro)")
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
         XCTAssertEqual(result.bars.map(\.used), [42, 81])
         XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%"])
-        XCTAssertEqual(result.bars.first?.resetDescription, "Resets 1d 0h (Mon 7:00 PM EST)")
+        let resetDescription = try XCTUnwrap(result.bars.first?.resetDescription)
+        XCTAssertTrue(resetDescription.hasPrefix("Resets 1d 0h (Tue 1:00"))
+        XCTAssertTrue(resetDescription.hasSuffix("GMT+1)"))
+        let newYorkFormatter = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(identifier: "America/New_York")),
+            locale: Locale(identifier: "en_US")
+        )
+        let reformattedReset = try XCTUnwrap(result.bars.first?.localizedResetDescription(
+            at: fetchedAt,
+            dateTimeFormatter: newYorkFormatter
+        ))
+        XCTAssertTrue(reformattedReset.hasSuffix("EST)"))
+        XCTAssertFalse(reformattedReset.contains("GMT+1"))
         XCTAssertEqual(result.bars.first?.projectionCurrent, 0.42)
         XCTAssertEqual(result.bars.first?.projectionLimit, 1)
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_893_438_000))
@@ -2744,6 +2764,10 @@ final class CodexBarIOSTests: XCTestCase {
 
     func testClaudeUsageParserReadsOAuthUsageWindows() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
+        let formatter = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(identifier: "Europe/Berlin")),
+            locale: Locale(identifier: "de_DE")
+        )
         let payload = """
         {
           "five_hour": {
@@ -2760,7 +2784,8 @@ final class CodexBarIOSTests: XCTestCase {
         let result = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(payload.utf8),
             subscriptionType: "pro",
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            dateTimeFormatter: formatter
         ))
 
         XCTAssertEqual(result.providerID, .claude)
@@ -2768,6 +2793,9 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
         XCTAssertEqual(result.bars.map(\.used), [42, 81])
         XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%"])
+        let resetDescription = try XCTUnwrap(result.bars.first?.resetDescription)
+        XCTAssertTrue(resetDescription.contains("Di. 01:00"))
+        XCTAssertTrue(resetDescription.hasSuffix("GMT+1)"))
         XCTAssertEqual(result.bars.first?.projectionCurrent, 0.42)
         XCTAssertEqual(result.bars.first?.projectionLimit, 1)
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_893_438_000))
@@ -2791,7 +2819,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.projectionCurrent, 0.25)
     }
 
-    func testUsageBarFormatsPercentAndProjection() {
+    func testUsageBarFormatsPercentAndProjection() throws {
         let start = Date(timeIntervalSince1970: 1_767_225_600)
         let now = start.addingTimeInterval(60 * 60)
         let end = start.addingTimeInterval(5 * 60 * 60)
@@ -2810,10 +2838,218 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(bar.projectedFraction(at: now), 1)
         XCTAssertEqual(bar.projectedSeverity(at: now), .critical)
         XCTAssertEqual(bar.effectiveSeverity(at: now), .critical)
-        XCTAssertEqual(
-            bar.projectionDescription(at: now),
-            "Projected 100% at current pace - Limit hit Wed 11:00 PM EST - 1h early"
+        let projection = try XCTUnwrap(bar.projectionDescription(at: now))
+        XCTAssertTrue(projection.hasPrefix("Projected 100% at current pace - Limit hit "))
+        XCTAssertTrue(projection.hasSuffix(" - 1h early"))
+    }
+
+    func testUserFacingDateTimeFormatterUsesTimezoneAtDisplayedInstant() throws {
+        let winter = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-01-15T12:00:00Z"))
+        let summer = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-15T12:00:00Z"))
+        let marchMismatch = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-03-20T12:00:00Z"))
+        let octoberMismatch = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-29T12:00:00Z"))
+        let locale = Locale(identifier: "en_US")
+        let cases: [(String, String, String)] = [
+            ("Europe/Berlin", "GMT+1", "GMT+2"),
+            ("America/New_York", "EST", "EDT"),
+            ("Asia/Kathmandu", "GMT+5:45", "GMT+5:45"),
+        ]
+
+        for (identifier, winterZone, summerZone) in cases {
+            let formatter = UserFacingDateTimeFormatter(
+                timeZone: try XCTUnwrap(TimeZone(identifier: identifier)),
+                locale: locale
+            )
+
+            XCTAssertTrue(formatter.timeWithZone(winter, includesWeekday: false).hasSuffix(winterZone))
+            XCTAssertTrue(formatter.timeWithZone(summer, includesWeekday: false).hasSuffix(summerZone))
+        }
+
+        let berlin = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(identifier: "Europe/Berlin")),
+            locale: locale
         )
+        let newYork = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(identifier: "America/New_York")),
+            locale: locale
+        )
+        XCTAssertTrue(berlin.timeWithZone(marchMismatch, includesWeekday: false).hasSuffix("GMT+1"))
+        XCTAssertTrue(newYork.timeWithZone(marchMismatch, includesWeekday: false).hasSuffix("EDT"))
+        XCTAssertTrue(berlin.timeWithZone(octoberMismatch, includesWeekday: false).hasSuffix("GMT+1"))
+        XCTAssertTrue(newYork.timeWithZone(octoberMismatch, includesWeekday: false).hasSuffix("EDT"))
+    }
+
+    func testUserFacingDateTimeFormatterHonorsLocaleAndLocalWeekday() throws {
+        let instant = try XCTUnwrap(ISO8601DateFormatter().date(from: "2030-01-01T00:00:00Z"))
+        let newYork = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let berlin = try XCTUnwrap(TimeZone(identifier: "Europe/Berlin"))
+        let usFormatter = UserFacingDateTimeFormatter(
+            timeZone: newYork,
+            locale: Locale(identifier: "en_US")
+        )
+        let germanFormatter = UserFacingDateTimeFormatter(
+            timeZone: berlin,
+            locale: Locale(identifier: "de_DE")
+        )
+
+        let newYorkValue = usFormatter.timeWithZone(instant, includesWeekday: true)
+        let berlinValue = germanFormatter.timeWithZone(instant, includesWeekday: true)
+        XCTAssertTrue(newYorkValue.contains("Mon"))
+        XCTAssertTrue(newYorkValue.contains("PM"))
+        XCTAssertTrue(berlinValue.contains("Di."))
+        XCTAssertTrue(berlinValue.contains("01:00"))
+        XCTAssertFalse(berlinValue.contains("AM"))
+        XCTAssertFalse(berlinValue.contains("PM"))
+    }
+
+    func testUserFacingDateTimeFormatterReevaluatesTimezoneProvider() throws {
+        let instant = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-01-15T12:00:00Z"))
+        var timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let formatter = UserFacingDateTimeFormatter(
+            timeZoneProvider: { timeZone },
+            localeProvider: { Locale(identifier: "en_US") }
+        )
+
+        XCTAssertTrue(formatter.timeWithZone(instant, includesWeekday: false).hasSuffix("EST"))
+        timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Berlin"))
+        let updatedValue = formatter.timeWithZone(instant, includesWeekday: false)
+        XCTAssertTrue(updatedValue.hasSuffix("GMT+1"))
+        XCTAssertFalse(updatedValue.contains("EST"))
+    }
+
+    func testCodexResetDescriptionsCoverRelativeAndExpiredRanges() throws {
+        let resetAt = Date(timeIntervalSince1970: 1_893_456_000)
+        let formatter = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(identifier: "Europe/Berlin")),
+            locale: Locale(identifier: "en_US")
+        )
+        let payload = """
+        {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 42,
+              "reset_at": 1893456000,
+              "limit_window_seconds": 18000
+            }
+          }
+        }
+        """
+        let cases: [(Date, String)] = [
+            (resetAt.addingTimeInterval(60), "Resets now"),
+            (resetAt.addingTimeInterval(-30 * 60), "Resets 30m"),
+            (resetAt.addingTimeInterval(-2 * 60 * 60), "Resets 2h 0m"),
+            (resetAt.addingTimeInterval(-(2 * 24 + 4) * 60 * 60), "Resets 2d 4h"),
+        ]
+
+        for (fetchedAt, expectedPrefix) in cases {
+            let result = try XCTUnwrap(CodexUsageParser.parse(
+                Data(payload.utf8),
+                fetchedAt: fetchedAt,
+                dateTimeFormatter: formatter
+            ))
+            XCTAssertTrue(try XCTUnwrap(result.bars.first?.resetDescription).hasPrefix(expectedPrefix))
+        }
+    }
+
+    func testUsageBarFormatsProjectedLimitInInjectedTimezone() throws {
+        let start = Date(timeIntervalSince1970: 1_767_225_600)
+        let now = start.addingTimeInterval(60 * 60)
+        let end = start.addingTimeInterval(5 * 60 * 60)
+        let formatter = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Kathmandu")),
+            locale: Locale(identifier: "en_US")
+        )
+
+        let description = UsageBar.formatLimitHit(
+            current: 0.25,
+            limit: 1,
+            periodStart: start,
+            periodEnd: end,
+            now: now,
+            dateTimeFormatter: formatter
+        )
+
+        XCTAssertTrue(description.contains("Thu 9:45"))
+        XCTAssertTrue(description.contains("GMT+5:45"))
+        XCTAssertTrue(description.hasSuffix(" - 1h early"))
+    }
+
+    @MainActor
+    func testWidgetSnapshotReformatsResetAndProjectionForChangedTimezone() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let configuration = store.addAccount(for: .codex)
+        store.saveSecret("test-token", for: configuration)
+        let start = Date(timeIntervalSince1970: 1_767_225_600)
+        let now = start.addingTimeInterval(60 * 60)
+        let resetAt = start.addingTimeInterval(3 * 60 * 60)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "ChatGPT / Codex",
+            subtitle: "Live ChatGPT usage",
+            bars: [
+                UsageBar(
+                    label: "5 hour usage limit",
+                    used: 25,
+                    limit: 100,
+                    resetDescription: "Resets 2h (10:00 PM EST)",
+                    resetsAt: resetAt,
+                    resetDisplayStyle: .relativeWithLocalTime,
+                    projectionCurrent: 0.25,
+                    projectionLimit: 1,
+                    projectionPeriodStart: start,
+                    projectionPeriodEnd: start.addingTimeInterval(5 * 60 * 60),
+                    showProjectionOnCurrentBar: true
+                ),
+            ],
+            fetchedAt: now
+        )
+        let newYork = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(identifier: "America/New_York")),
+            locale: Locale(identifier: "en_US")
+        )
+        let berlin = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(identifier: "Europe/Berlin")),
+            locale: Locale(identifier: "en_US")
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults,
+            now: now,
+            dateTimeFormatter: newYork
+        )
+        let storedBar = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.bars.first
+        )
+        let easternProjection = try XCTUnwrap(storedBar.localizedProjectionDescription(
+            dateTimeFormatter: newYork
+        ))
+        let easternReset = try XCTUnwrap(storedBar.localizedResetDescription(
+            at: now,
+            dateTimeFormatter: newYork
+        ))
+        XCTAssertTrue(easternProjection.contains("EST"))
+        XCTAssertTrue(easternReset.contains("EST"))
+
+        let localProjection = try XCTUnwrap(storedBar.localizedProjectionDescription(
+            dateTimeFormatter: berlin
+        ))
+        let localReset = try XCTUnwrap(storedBar.localizedResetDescription(
+            at: now,
+            dateTimeFormatter: berlin
+        ))
+        XCTAssertTrue(localProjection.contains("GMT+1"))
+        XCTAssertFalse(localProjection.contains("EST"))
+        XCTAssertTrue(localReset.contains("GMT+1"))
+        XCTAssertFalse(localReset.contains("EST"))
     }
 
     func testUsageBarShowsSafeProjectionWhenPaceStaysBelowLimit() {

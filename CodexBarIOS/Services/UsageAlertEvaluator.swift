@@ -164,7 +164,7 @@ public enum UsageAlertEvaluator {
     ) -> UsageAlertDetail {
         let thresholdText = formatPercent(threshold)
         let usageAmountText = formatUsageAmount(used: bar.used, limit: bar.limit)
-        let resetText = bar.resetDescription.map { " \($0)." } ?? ""
+        let resetText = bar.localizedResetDescription().map { " \($0)." } ?? ""
 
         return UsageAlertDetail(
             id: id,

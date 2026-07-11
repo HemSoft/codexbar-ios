@@ -30,7 +30,8 @@ public enum ClaudeUsageParser {
     public static func parse(
         _ data: Data,
         subscriptionType: String?,
-        fetchedAt: Date = Date()
+        fetchedAt: Date = Date(),
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
     ) -> ProviderUsageResult? {
         guard let usage = try? JSONDecoder().decode(UsageResponse.self, from: data) else {
             return nil
@@ -41,7 +42,8 @@ public enum ClaudeUsageParser {
             label: "5 hour usage limit",
             window: usage.fiveHour,
             durationSeconds: 18_000,
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            dateTimeFormatter: dateTimeFormatter
         ) {
             bars.append(bar)
         }
@@ -54,7 +56,8 @@ public enum ClaudeUsageParser {
             label: "Weekly usage limit",
             window: weeklyWindow,
             durationSeconds: 604_800,
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            dateTimeFormatter: dateTimeFormatter
         ) {
             bars.append(bar)
         }
@@ -75,7 +78,8 @@ public enum ClaudeUsageParser {
     public static func parseRateLimitHeaders(
         _ fields: [AnyHashable: Any],
         subscriptionType: String?,
-        fetchedAt: Date = Date()
+        fetchedAt: Date = Date(),
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
     ) -> ProviderUsageResult? {
         var bars: [UsageBar] = []
         if let bar = usageBarFromHeaders(
@@ -84,7 +88,8 @@ public enum ClaudeUsageParser {
             resetKey: "anthropic-ratelimit-unified-5h-reset",
             durationSeconds: 18_000,
             fields: fields,
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            dateTimeFormatter: dateTimeFormatter
         ) {
             bars.append(bar)
         }
@@ -95,7 +100,8 @@ public enum ClaudeUsageParser {
             resetKey: "anthropic-ratelimit-unified-7d-reset",
             durationSeconds: 604_800,
             fields: fields,
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            dateTimeFormatter: dateTimeFormatter
         ) {
             bars.append(bar)
         }
@@ -117,7 +123,8 @@ public enum ClaudeUsageParser {
         label: String,
         window: UsageWindow?,
         durationSeconds: TimeInterval,
-        fetchedAt: Date
+        fetchedAt: Date,
+        dateTimeFormatter: UserFacingDateTimeFormatter
     ) -> UsageBar? {
         guard
             let utilization = window?.utilization,
@@ -131,7 +138,8 @@ public enum ClaudeUsageParser {
             utilization: utilization,
             reset: reset,
             durationSeconds: durationSeconds,
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            dateTimeFormatter: dateTimeFormatter
         )
     }
 
@@ -141,7 +149,8 @@ public enum ClaudeUsageParser {
         resetKey: String,
         durationSeconds: TimeInterval,
         fields: [AnyHashable: Any],
-        fetchedAt: Date
+        fetchedAt: Date,
+        dateTimeFormatter: UserFacingDateTimeFormatter
     ) -> UsageBar? {
         guard
             let utilization = doubleHeader(fields[utilizationKey]),
@@ -155,7 +164,8 @@ public enum ClaudeUsageParser {
             utilization: utilization,
             reset: reset,
             durationSeconds: durationSeconds,
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            dateTimeFormatter: dateTimeFormatter
         )
     }
 
@@ -164,15 +174,21 @@ public enum ClaudeUsageParser {
         utilization: Double,
         reset: Date,
         durationSeconds: TimeInterval,
-        fetchedAt: Date
+        fetchedAt: Date,
+        dateTimeFormatter: UserFacingDateTimeFormatter
     ) -> UsageBar {
         let usedFraction = min(max(utilization, 0), 1)
         return UsageBar(
             label: label,
             used: usedFraction * 100,
             limit: 100,
-            resetDescription: formatReset(reset, now: fetchedAt),
+            resetDescription: formatReset(
+                reset,
+                now: fetchedAt,
+                dateTimeFormatter: dateTimeFormatter
+            ),
             resetsAt: reset,
+            resetDisplayStyle: .relativeWithLocalTime,
             projectionCurrent: usedFraction,
             projectionLimit: 1,
             projectionPeriodStart: reset.addingTimeInterval(-durationSeconds),
@@ -215,38 +231,17 @@ public enum ClaudeUsageParser {
         return Date(timeIntervalSince1970: seconds)
     }
 
-    private static func formatReset(_ resetAt: Date, now: Date) -> String {
-        let remaining = resetAt.timeIntervalSince(now)
-        let easternReset = formatEasternResetTime(resetAt, remaining: remaining)
-
-        if remaining <= 0 {
-            return "Resets now (\(easternReset))"
-        }
-
-        let relativeReset: String
-        if remaining >= 86_400 {
-            let days = Int(remaining / 86_400)
-            let hours = Int(remaining.truncatingRemainder(dividingBy: 86_400) / 3_600)
-            relativeReset = "Resets \(days)d \(hours)h"
-        } else if remaining >= 3_600 {
-            let hours = Int(remaining / 3_600)
-            let minutes = Int(remaining.truncatingRemainder(dividingBy: 3_600) / 60)
-            relativeReset = "Resets \(hours)h \(minutes)m"
-        } else {
-            relativeReset = "Resets \(max(1, Int(remaining / 60)))m"
-        }
-
-        return "\(relativeReset) (\(easternReset))"
-    }
-
-    private static func formatEasternResetTime(_ resetAt: Date, remaining: TimeInterval) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "America/New_York")
-        formatter.dateFormat = remaining >= 86_400 ? "EEE h:mm a" : "h:mm a"
-
-        let abbreviation = formatter.timeZone.abbreviation(for: resetAt) ?? "ET"
-        return "\(formatter.string(from: resetAt)) \(abbreviation)"
+    private static func formatReset(
+        _ resetAt: Date,
+        now: Date,
+        dateTimeFormatter: UserFacingDateTimeFormatter
+    ) -> String {
+        dateTimeFormatter.resetDescription(
+            resetAt: resetAt,
+            now: now,
+            style: .relativeWithLocalTime,
+            fallback: nil
+        ) ?? "Resets now"
     }
 
     private static func formatDisplayName(subscriptionType: String?) -> String {

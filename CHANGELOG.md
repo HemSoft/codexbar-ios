@@ -29,6 +29,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Displayed reset, projection, history, and billing times in the user's current
+  timezone and locale, including refreshed app and widget content after system
+  time changes. ([#23](https://github.com/HemSoft/codexbar-ios/issues/23))
 - Improved the App Store presentation with clearer screenshots, provider
   wording, privacy expectations, and a more scannable description for people
   evaluating CodexBar before install. ([#22](https://github.com/HemSoft/codexbar-ios/issues/22))

@@ -776,7 +776,7 @@ struct ProviderWidgetTile: View {
 
                 WidgetUsageProgressBar(bar: bar)
 
-                if let detail = bar.projectionDescription ?? bar.resetDescription {
+                if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
                     Text(detail)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -855,7 +855,7 @@ struct ProviderWidgetTile: View {
 
                 WidgetUsageProgressBar(bar: bar)
 
-                if let detail = bar.projectionDescription ?? bar.resetDescription {
+                if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
                     Text(detail)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -1019,11 +1019,11 @@ struct ProviderWidgetTile: View {
 
     private var statusDetail: String {
         if let bar = tile.bar {
-            if let projectionDescription = bar.projectionDescription {
+            if let projectionDescription = bar.localizedProjectionDescription() {
                 return projectionDescription
             }
 
-            return [bar.usageText, bar.resetDescription]
+            return [bar.usageText, bar.localizedResetDescription()]
                 .compactMap { $0 }
                 .joined(separator: " - ")
         }

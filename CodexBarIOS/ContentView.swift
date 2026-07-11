@@ -1,5 +1,7 @@
+import Foundation
 import StoreKit
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct ContentView: View {
@@ -17,6 +19,7 @@ struct ContentView: View {
     @State private var autoRefreshSchedule: AutoRefreshSchedule?
     @State private var autoRefreshResetID = UUID()
     @State private var draggedCardID: String?
+    @State private var lastSystemDateTimeRefresh = Date.distantPast
 
     init(
         refreshService: UsageRefreshService,
@@ -214,6 +217,12 @@ struct ContentView: View {
         .onChange(of: configurationStore.widgetRefreshInterval) { _, _ in
             WidgetSnapshotPublisher.publishSettings(configurationStore: configurationStore)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            handleSystemDateTimeChange()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            handleSystemDateTimeChange()
+        }
     }
 
     private var displayedResults: [ProviderUsageResult] {
@@ -322,6 +331,22 @@ struct ContentView: View {
         configurationStore.refreshSecretAvailability()
         Task {
             await refreshNow()
+        }
+    }
+
+    private func handleSystemDateTimeChange() {
+        let now = Date()
+        guard
+            performsLifecycleWork,
+            now.timeIntervalSince(lastSystemDateTimeRefresh) >= 1
+        else {
+            return
+        }
+        lastSystemDateTimeRefresh = now
+
+        Task {
+            await refreshService.refresh(configurations: configurationStore.configurations)
+            publishWidgetSnapshot()
         }
     }
 
