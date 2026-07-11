@@ -1,6 +1,8 @@
 import Foundation
 
 public final class CopilotUsageProvider: UsageProvider {
+    private static let refreshCoordinator = CredentialRefreshCoordinator<CopilotCredentialRefreshResult>()
+
     private static let editorVersion = "vscode/1.96.2"
     private static let editorPluginVersion = "copilot-chat/0.26.7"
     private static let userAgentProduct = "GitHubCopilotChat/0.26.7"
@@ -278,7 +280,7 @@ public final class CopilotUsageProvider: UsageProvider {
             return CopilotBillingUsageParser.parse(
                 data,
                 configuration: configuration,
-                fetchedAt: Date(),
+                fetchedAt: now(),
                 totalAllotment: effectiveAllotment
             ) ?? failureResult("Could not parse GitHub Copilot organization usage.", configuration: configuration)
         case 401 where canRefresh && credentials.refreshToken?.isEmpty == false:
@@ -322,6 +324,15 @@ public final class CopilotUsageProvider: UsageProvider {
     }
 
     private func refreshCredentials(
+        _ credentials: CopilotCredentials,
+        keychainAccount: String
+    ) async -> CopilotCredentialRefreshResult {
+        await Self.refreshCoordinator.run(for: keychainAccount) { [self] in
+            await performCredentialRefresh(credentials, keychainAccount: keychainAccount)
+        }
+    }
+
+    private func performCredentialRefresh(
         _ credentials: CopilotCredentials,
         keychainAccount: String
     ) async -> CopilotCredentialRefreshResult {
@@ -452,7 +463,7 @@ public final class CopilotUsageProvider: UsageProvider {
     }
 }
 
-private enum CopilotCredentialRefreshResult {
+private enum CopilotCredentialRefreshResult: Sendable {
     case success(CopilotCredentials)
     case rejected
     case temporarilyUnavailable

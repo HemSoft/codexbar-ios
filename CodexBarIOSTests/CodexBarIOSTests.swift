@@ -3819,6 +3819,63 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.used, 25)
     }
 
+    func testCopilotUsageProviderSharesConcurrentRefreshForSameAccount() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        try secretStore.saveSecret(
+            CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+                accessToken: "old-access",
+                refreshToken: "single-use-refresh",
+                expiresAt: 1_999_999_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now }
+        )
+        let counterLock = NSLock()
+        var refreshRequests = 0
+        var usageRequests = 0
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/github-token" {
+                counterLock.lock()
+                refreshRequests += 1
+                counterLock.unlock()
+                Thread.sleep(forTimeInterval: 0.1)
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"new-access","refresh_token":"rotated","expires_in":28800}"#.utf8)
+                )
+            }
+
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "token new-access")
+            counterLock.lock()
+            usageRequests += 1
+            counterLock.unlock()
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        async let first = provider.fetchUsage(for: configuration)
+        async let second = provider.fetchUsage(for: configuration)
+        let results = try await [first, second]
+
+        XCTAssertEqual(refreshRequests, 1)
+        XCTAssertEqual(usageRequests, 2)
+        XCTAssertTrue(results.allSatisfy { $0.bars.first?.used == 25 })
+    }
+
     func testCopilotUsageProviderExplainsExpiredCredentialWithoutRefreshToken() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let secretStore = MemorySecretStore()
@@ -4182,17 +4239,24 @@ private actor StubAppStoreReleaseFetcher: AppStoreReleaseFetching {
 }
 
 private final class MemorySecretStore: SecretStore, @unchecked Sendable {
+    private let lock = NSLock()
     private var secrets: [String: String] = [:]
 
     func readSecret(account: String) throws -> String? {
-        secrets[account]
+        lock.lock()
+        defer { lock.unlock() }
+        return secrets[account]
     }
 
     func saveSecret(_ secret: String, account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
         secrets[account] = secret
     }
 
     func deleteSecret(account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
         secrets.removeValue(forKey: account)
     }
 }

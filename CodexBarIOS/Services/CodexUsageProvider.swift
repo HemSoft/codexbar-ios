@@ -1,6 +1,8 @@
 import Foundation
 
 public final class CodexUsageProvider: UsageProvider {
+    private static let refreshCoordinator = CredentialRefreshCoordinator<CredentialRefreshResult>()
+
     private let secretStore: SecretStore
     private let session: URLSession
     private let usageEndpoint: URL
@@ -155,6 +157,15 @@ public final class CodexUsageProvider: UsageProvider {
         _ credentials: CodexCredentials,
         keychainAccount: String
     ) async -> CredentialRefreshResult {
+        await Self.refreshCoordinator.run(for: keychainAccount) { [self] in
+            await performCredentialRefresh(credentials, keychainAccount: keychainAccount)
+        }
+    }
+
+    private func performCredentialRefresh(
+        _ credentials: CodexCredentials,
+        keychainAccount: String
+    ) async -> CredentialRefreshResult {
         guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
             return .rejected
         }
@@ -250,7 +261,7 @@ public final class CodexUsageProvider: UsageProvider {
     }
 }
 
-private enum CredentialRefreshResult {
+private enum CredentialRefreshResult: Sendable {
     case success(CodexCredentials)
     case rejected
     case temporarilyUnavailable

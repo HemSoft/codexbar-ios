@@ -29,9 +29,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
-- Kept ChatGPT / Codex and GitHub Copilot accounts signed in through normal
-  OAuth token expiration by renewing credentials securely in Keychain, while
-  showing clearer guidance when access is revoked or permissions are missing.
+- Kept ChatGPT / Codex and GitHub Copilot accounts signed in automatically
+  instead of prompting users to reauthenticate unnecessarily, while showing
+  clearer guidance when access is revoked or permissions are missing.
   ([#26](https://github.com/HemSoft/codexbar-ios/issues/26))
 - Displayed reset, projection, history, and billing times in the user's current
   timezone and locale, including refreshed app and widget content after system
