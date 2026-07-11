@@ -1,7 +1,11 @@
 import Foundation
 
 public enum CodexUsageParser {
-    public static func parse(_ data: Data, fetchedAt: Date = Date()) -> ProviderUsageResult? {
+    public static func parse(
+        _ data: Data,
+        fetchedAt: Date = Date(),
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
+    ) -> ProviderUsageResult? {
         guard
             let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let rateLimit = root["rate_limit"] as? [String: Any]
@@ -24,8 +28,13 @@ public enum CodexUsageParser {
                 label: label(forDuration: window.durationSeconds),
                 used: window.usedPercent,
                 limit: 100,
-                resetDescription: formatReset(window.resetsAt, now: fetchedAt),
+                resetDescription: formatReset(
+                    window.resetsAt,
+                    now: fetchedAt,
+                    dateTimeFormatter: dateTimeFormatter
+                ),
                 resetsAt: window.resetsAt,
+                resetDisplayStyle: .relativeWithLocalTime,
                 projectionCurrent: usedFraction,
                 projectionLimit: 1,
                 projectionPeriodStart: window.resetsAt.addingTimeInterval(TimeInterval(-window.durationSeconds)),
@@ -73,38 +82,17 @@ public enum CodexUsageParser {
         }
     }
 
-    private static func formatReset(_ resetAt: Date, now: Date) -> String {
-        let remaining = resetAt.timeIntervalSince(now)
-        let easternReset = formatEasternResetTime(resetAt, remaining: remaining)
-
-        if remaining <= 0 {
-            return "Resets now (\(easternReset))"
-        }
-
-        let relativeReset: String
-        if remaining >= 86_400 {
-            let days = Int(remaining / 86_400)
-            let hours = Int(remaining.truncatingRemainder(dividingBy: 86_400) / 3_600)
-            relativeReset = "Resets \(days)d \(hours)h"
-        } else if remaining >= 3_600 {
-            let hours = Int(remaining / 3_600)
-            let minutes = Int(remaining.truncatingRemainder(dividingBy: 3_600) / 60)
-            relativeReset = "Resets \(hours)h \(minutes)m"
-        } else {
-            relativeReset = "Resets \(max(1, Int(remaining / 60)))m"
-        }
-
-        return "\(relativeReset) (\(easternReset))"
-    }
-
-    private static func formatEasternResetTime(_ resetAt: Date, remaining: TimeInterval) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "America/New_York")
-        formatter.dateFormat = remaining >= 86_400 ? "EEE h:mm a" : "h:mm a"
-
-        let abbreviation = formatter.timeZone.abbreviation(for: resetAt) ?? "ET"
-        return "\(formatter.string(from: resetAt)) \(abbreviation)"
+    private static func formatReset(
+        _ resetAt: Date,
+        now: Date,
+        dateTimeFormatter: UserFacingDateTimeFormatter
+    ) -> String {
+        dateTimeFormatter.resetDescription(
+            resetAt: resetAt,
+            now: now,
+            style: .relativeWithLocalTime,
+            fallback: nil
+        ) ?? "Resets now"
     }
 
     private static func formatDisplayName(planType: String?) -> String {

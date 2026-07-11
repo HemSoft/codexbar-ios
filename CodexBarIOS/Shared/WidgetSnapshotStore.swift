@@ -64,9 +64,14 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
     public let fractionUsed: Double
     public let usageText: String
     public let resetDescription: String?
+    public let resetsAt: Date?
+    public let resetDisplayStyle: UsageResetDisplayStyle?
     public let severity: CodexBarWidgetSeverity
     public let projectedFraction: Double?
     public let projectionDescription: String?
+    public let projectionLeadingText: String?
+    public let projectionTimestamp: Date?
+    public let projectionTrailingText: String?
     public let projectedSeverity: CodexBarWidgetSeverity?
 
     public init(
@@ -75,9 +80,14 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
         fractionUsed: Double,
         usageText: String,
         resetDescription: String?,
+        resetsAt: Date? = nil,
+        resetDisplayStyle: UsageResetDisplayStyle? = nil,
         severity: CodexBarWidgetSeverity,
         projectedFraction: Double? = nil,
         projectionDescription: String? = nil,
+        projectionLeadingText: String? = nil,
+        projectionTimestamp: Date? = nil,
+        projectionTrailingText: String? = nil,
         projectedSeverity: CodexBarWidgetSeverity? = nil
     ) {
         self.id = id
@@ -85,9 +95,14 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
         self.fractionUsed = fractionUsed
         self.usageText = usageText
         self.resetDescription = resetDescription
+        self.resetsAt = resetsAt
+        self.resetDisplayStyle = resetDisplayStyle
         self.severity = severity
         self.projectedFraction = projectedFraction
         self.projectionDescription = projectionDescription
+        self.projectionLeadingText = projectionLeadingText
+        self.projectionTimestamp = projectionTimestamp
+        self.projectionTrailingText = projectionTrailingText
         self.projectedSeverity = projectedSeverity
     }
 
@@ -97,6 +112,32 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
 
     public var effectiveFractionUsed: Double {
         max(fractionUsed, projectedFraction ?? 0)
+    }
+
+    public func localizedResetDescription(
+        at now: Date = Date(),
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
+    ) -> String? {
+        dateTimeFormatter.resetDescription(
+            resetAt: resetsAt,
+            now: now,
+            style: resetDisplayStyle ?? .verbatim,
+            fallback: resetDescription
+        )
+    }
+
+    public func localizedProjectionDescription(
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
+    ) -> String? {
+        guard let projectionLeadingText else {
+            return projectionDescription
+        }
+
+        guard let projectionTimestamp else {
+            return projectionLeadingText
+        }
+
+        return "\(projectionLeadingText)\(dateTimeFormatter.timeWithZone(projectionTimestamp, includesWeekday: true))\(projectionTrailingText ?? "")"
     }
 }
 

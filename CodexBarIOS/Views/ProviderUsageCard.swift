@@ -68,7 +68,7 @@ struct ProviderUsageCard: View {
                         }
                         .font(.footnote)
 
-                        if let resetDescription = bar.resetDescription {
+                        if let resetDescription = bar.localizedResetDescription() {
                             Text(resetDescription)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
@@ -338,7 +338,7 @@ struct ProviderUsageHistoryDetailView: View {
                         .monospacedDigit()
 
                     if let displayedPoint {
-                        Text(Self.detailDateFormatter.string(from: displayedPoint.capturedAt))
+                        Text(UserFacingDateTimeFormatter.current.dateAndTime(displayedPoint.capturedAt))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -480,7 +480,7 @@ struct ProviderUsageHistoryDetailView: View {
                             .font(.body.weight(.semibold))
                             .monospacedDigit()
 
-                        Text(Self.detailDateFormatter.string(from: point.capturedAt))
+                        Text(UserFacingDateTimeFormatter.current.dateAndTime(point.capturedAt))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -519,30 +519,11 @@ struct ProviderUsageHistoryDetailView: View {
         }
 
         if last.timeIntervalSince(first) < 24 * 60 * 60 {
-            return Self.axisTimeFormatter.string(from: date)
+            return UserFacingDateTimeFormatter.current.time(date)
         }
 
-        return Self.axisDateFormatter.string(from: date)
+        return UserFacingDateTimeFormatter.current.shortDate(date)
     }
-
-    private static let detailDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
-    private static let axisDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
-
-    private static let axisTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter
-    }()
 }
 
 private struct HistoryMetricView: View {
@@ -667,6 +648,11 @@ private struct UsageProgressBar: View {
 }
 
 #Preview {
+    let fiveHourReset = Date().addingTimeInterval(8_100)
+    let weeklyReset = Date().addingTimeInterval(2 * 24 * 60 * 60 + 4 * 60 * 60)
+    let formatter = UserFacingDateTimeFormatter.current
+    let fiveHourResetDescription = "Resets 2h 15m (\(formatter.timeWithZone(fiveHourReset, includesWeekday: false)))"
+    let weeklyResetDescription = "Resets 2d 4h (\(formatter.timeWithZone(weeklyReset, includesWeekday: true)))"
     ProviderUsageCard(
         result: ProviderUsageResult(
             providerID: .codex,
@@ -677,8 +663,8 @@ private struct UsageProgressBar: View {
                     label: "5 hour usage limit",
                     used: 45,
                     limit: 100,
-                    resetDescription: "Resets 2h 15m (3:42 PM EDT)",
-                    resetsAt: Date().addingTimeInterval(8_100),
+                    resetDescription: fiveHourResetDescription,
+                    resetsAt: fiveHourReset,
                     projectionCurrent: 0.45,
                     projectionLimit: 1,
                     projectionPeriodStart: Date().addingTimeInterval(-3_600),
@@ -689,7 +675,7 @@ private struct UsageProgressBar: View {
                     label: "Weekly usage limit",
                     used: 92,
                     limit: 100,
-                    resetDescription: "Resets 2d 4h (Thu 4:00 AM EDT)"
+                    resetDescription: weeklyResetDescription
                 )
             ],
             fetchedAt: Date()

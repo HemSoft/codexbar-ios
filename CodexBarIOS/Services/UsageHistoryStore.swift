@@ -156,11 +156,12 @@ public struct UsageHistorySeries: Equatable, Sendable {
 
         let count = points.count
         let sampleText = "\(count) sample\(count == 1 ? "" : "s")"
-        if Calendar.current.isDate(first.capturedAt, inSameDayAs: last.capturedAt) {
-            return "\(sampleText) - \(Self.shortDateFormatter.string(from: last.capturedAt))"
+        if Calendar.autoupdatingCurrent.isDate(first.capturedAt, inSameDayAs: last.capturedAt) {
+            return "\(sampleText) - \(UserFacingDateTimeFormatter.current.shortDate(last.capturedAt))"
         }
 
-        return "\(sampleText) - \(Self.shortDateFormatter.string(from: first.capturedAt)) - \(Self.shortDateFormatter.string(from: last.capturedAt))"
+        let formatter = UserFacingDateTimeFormatter.current
+        return "\(sampleText) - \(formatter.shortDate(first.capturedAt)) - \(formatter.shortDate(last.capturedAt))"
     }
 
     public var direction: UsageTrendSummary.Direction {
@@ -214,11 +215,6 @@ public struct UsageHistorySeries: Equatable, Sendable {
 
     private static let flatDeltaThreshold = 0.0001
 
-    private static let shortDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
 }
 
 @MainActor
@@ -382,13 +378,6 @@ public final class UsageHistoryStore: ObservableObject {
     }
 
     private static func formatSnapshotDate(_ date: Date) -> String {
-        snapshotDateFormatter.string(from: date)
+        UserFacingDateTimeFormatter.current.dateAndTime(date)
     }
-
-    private static let snapshotDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
-        return formatter
-    }()
 }

@@ -157,7 +157,8 @@ public final class CursorUsageProvider: UsageProvider {
             used: min(max(percent, 0), 100),
             limit: 100,
             resetDescription: resetDescription,
-            resetsAt: reset
+            resetsAt: reset,
+            resetDisplayStyle: .shortLocalDate
         )
     }
 
@@ -188,12 +189,8 @@ public final class CursorUsageProvider: UsageProvider {
         return Date(timeIntervalSince1970: milliseconds / 1000)
     }
 
-    private static func formatReset(_ resetAt: Date, now: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "MMM d"
-        return "Resets \(formatter.string(from: resetAt))"
+    private static func formatReset(_ resetAt: Date, now _: Date) -> String {
+        "Resets \(UserFacingDateTimeFormatter.current.shortDate(resetAt))"
     }
 
     private static func formatPercent(_ value: Double) -> String {

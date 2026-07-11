@@ -1,5 +1,25 @@
 import Foundation
 
+public struct UsageProjectionDescriptionParts: Equatable, Sendable {
+    public let leadingText: String
+    public let timestamp: Date?
+    public let trailingText: String
+
+    public init(leadingText: String, timestamp: Date? = nil, trailingText: String = "") {
+        self.leadingText = leadingText
+        self.timestamp = timestamp
+        self.trailingText = trailingText
+    }
+
+    public func formatted(using formatter: UserFacingDateTimeFormatter) -> String {
+        guard let timestamp else {
+            return leadingText
+        }
+
+        return "\(leadingText)\(formatter.timeWithZone(timestamp, includesWeekday: true))\(trailingText)"
+    }
+}
+
 public struct UsageBar: Identifiable, Equatable, Sendable {
     public let id: UUID
     public let label: String
@@ -7,6 +27,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
     public let limit: Double
     public let resetDescription: String?
     public let resetsAt: Date?
+    public let resetDisplayStyle: UsageResetDisplayStyle
     public let projectionCurrent: Double?
     public let projectionLimit: Double?
     public let projectionPeriodStart: Date?
@@ -21,6 +42,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         limit: Double,
         resetDescription: String? = nil,
         resetsAt: Date? = nil,
+        resetDisplayStyle: UsageResetDisplayStyle = .verbatim,
         projectionCurrent: Double? = nil,
         projectionLimit: Double? = nil,
         projectionPeriodStart: Date? = nil,
@@ -34,6 +56,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         self.limit = limit
         self.resetDescription = resetDescription
         self.resetsAt = resetsAt
+        self.resetDisplayStyle = resetDisplayStyle
         self.projectionCurrent = projectionCurrent
         self.projectionLimit = projectionLimit
         self.projectionPeriodStart = projectionPeriodStart
@@ -74,6 +97,18 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         return "\(Int((used / limit * 100).rounded()))%"
     }
 
+    public func localizedResetDescription(
+        at now: Date = Date(),
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
+    ) -> String? {
+        dateTimeFormatter.resetDescription(
+            resetAt: resetsAt,
+            now: now,
+            style: resetDisplayStyle,
+            fallback: resetDescription
+        )
+    }
+
     public func projectedFraction(at now: Date = Date()) -> Double? {
         guard
             let projectionCurrent,
@@ -96,9 +131,16 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         return min(max(projected / projectionLimit, 0), 1)
     }
 
-    public func projectionDescription(at now: Date = Date()) -> String? {
+    public func projectionDescription(
+        at now: Date = Date(),
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
+    ) -> String? {
+        projectionDescriptionParts(at: now)?.formatted(using: dateTimeFormatter)
+    }
+
+    public func projectionDescriptionParts(at now: Date = Date()) -> UsageProjectionDescriptionParts? {
         if let projectionDescriptionOverride {
-            return projectionDescriptionOverride
+            return UsageProjectionDescriptionParts(leadingText: projectionDescriptionOverride)
         }
 
         guard
@@ -113,7 +155,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
             return nil
         }
 
-        let limitHit = Self.formatLimitHit(
+        let limitHit = Self.limitHitDescriptionParts(
             current: projectionCurrent,
             limit: projectionLimit,
             periodStart: projectionPeriodStart,
@@ -121,11 +163,15 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
             now: now
         )
 
-        guard limitHit != Self.limitNotReachedDescription else {
-            return "Projected to stay under limit"
+        guard limitHit.leadingText != Self.limitNotReachedDescription else {
+            return UsageProjectionDescriptionParts(leadingText: "Projected to stay under limit")
         }
 
-        return "Projected \(Int((projectedFraction * 100).rounded()))% at current pace - \(limitHit)"
+        return UsageProjectionDescriptionParts(
+            leadingText: "Projected \(Int((projectedFraction * 100).rounded()))% at current pace - \(limitHit.leadingText)",
+            timestamp: limitHit.timestamp,
+            trailingText: limitHit.trailingText
+        )
     }
 
     private static let limitNotReachedDescription = "Limit not reached"
@@ -145,43 +191,54 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         limit: Double,
         periodStart: Date,
         periodEnd: Date,
-        now: Date = Date()
+        now: Date = Date(),
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
     ) -> String {
+        limitHitDescriptionParts(
+            current: current,
+            limit: limit,
+            periodStart: periodStart,
+            periodEnd: periodEnd,
+            now: now
+        ).formatted(using: dateTimeFormatter)
+    }
+
+    private static func limitHitDescriptionParts(
+        current: Double,
+        limit: Double,
+        periodStart: Date,
+        periodEnd: Date,
+        now: Date
+    ) -> UsageProjectionDescriptionParts {
         if current >= limit {
-            return "Limit reached"
+            return UsageProjectionDescriptionParts(leadingText: "Limit reached")
         }
 
         let elapsed = now.timeIntervalSince(periodStart)
         guard elapsed > 0 else {
-            return "Limit hit unknown"
+            return UsageProjectionDescriptionParts(leadingText: "Limit hit unknown")
         }
 
         let ratePerSecond = current / elapsed
         guard ratePerSecond > 0 else {
-            return "Limit hit unknown"
+            return UsageProjectionDescriptionParts(leadingText: "Limit hit unknown")
         }
 
         let secondsToLimit = limit / ratePerSecond
         let hitAt = periodStart.addingTimeInterval(secondsToLimit)
         if hitAt > periodEnd {
-            return limitNotReachedDescription
+            return UsageProjectionDescriptionParts(leadingText: limitNotReachedDescription)
         }
 
         let earlyDescription = hitAt < periodEnd
             ? " - \(formatEarlyDuration(periodEnd.timeIntervalSince(hitAt))) early"
             : ""
 
-        return "Limit hit \(formatEasternTime(hitAt))\(earlyDescription)"
-    }
-
-    private static func formatEasternTime(_ timestamp: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "America/New_York")
-        formatter.dateFormat = "EEE h:mm a"
-
-        let abbreviation = formatter.timeZone.abbreviation(for: timestamp) ?? "ET"
-        return "\(formatter.string(from: timestamp)) \(abbreviation)"
+        return UsageProjectionDescriptionParts(
+            leadingText: "Limit hit ",
+            timestamp: hitAt,
+            trailingText: earlyDescription
+        )
     }
 
     private static func formatEarlyDuration(_ duration: TimeInterval) -> String {

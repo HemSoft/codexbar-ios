@@ -6,9 +6,10 @@ enum WidgetSnapshotPublisher {
     static func publish(
         results: [ProviderUsageResult],
         configurationStore: ProviderConfigurationStore,
-        snapshotDefaults: UserDefaults? = WidgetSnapshotStore.userDefaults()
+        snapshotDefaults: UserDefaults? = WidgetSnapshotStore.userDefaults(),
+        now: Date = Date(),
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
     ) {
-        let now = Date()
         let displayable = orderedDisplayableResults(
             results: results,
             configurationStore: configurationStore,
@@ -29,15 +30,24 @@ enum WidgetSnapshotPublisher {
                     bars: result.bars.enumerated().map { index, bar in
                         let projectedFraction = bar.projectedFraction(at: now)
                         let projectedSeverity = bar.projectedSeverity(at: now)
+                        let projectionParts = bar.projectionDescriptionParts(at: now)
                         return CodexBarWidgetUsageBarSnapshot(
                             id: stableBarID(accountID: result.accountID, bar: bar, index: index),
                             label: bar.label,
                             fractionUsed: bar.fractionUsed,
                             usageText: bar.usageText,
-                            resetDescription: bar.resetDescription,
+                            resetDescription: bar.localizedResetDescription(
+                                at: now,
+                                dateTimeFormatter: dateTimeFormatter
+                            ),
+                            resetsAt: bar.resetsAt,
+                            resetDisplayStyle: bar.resetDisplayStyle,
                             severity: CodexBarWidgetSeverity(bar.severity),
                             projectedFraction: projectedFraction,
-                            projectionDescription: bar.projectionDescription(at: now),
+                            projectionDescription: projectionParts?.formatted(using: dateTimeFormatter),
+                            projectionLeadingText: projectionParts?.leadingText,
+                            projectionTimestamp: projectionParts?.timestamp,
+                            projectionTrailingText: projectionParts?.trailingText,
                             projectedSeverity: projectedSeverity.map(CodexBarWidgetSeverity.init)
                         )
                     },
