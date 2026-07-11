@@ -27,7 +27,7 @@ public final class CopilotUsageProvider: UsageProvider {
         githubAPIBaseURL: URL = URL(string: "https://api.github.com")!,
         tokenEndpoint: URL = URL(string: "https://github.com/login/oauth/access_token")!,
         oauthConfiguration: CopilotOAuthConfiguration = .bundled,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.secretStore = secretStore
         self.session = session
@@ -71,7 +71,9 @@ public final class CopilotUsageProvider: UsageProvider {
             case .rejected:
                 return failureResult("GitHub credential renewal was rejected. Sign in again.", configuration: configuration)
             case .temporarilyUnavailable:
-                return failureResult("Could not renew the GitHub credential. Try again.", configuration: configuration)
+                if credentials.isExpired(at: now()) {
+                    return failureResult("Could not renew the GitHub credential. Try again.", configuration: configuration)
+                }
             case .persistenceFailed:
                 return failureResult("Could not securely save the renewed GitHub credential. Try again.", configuration: configuration)
             }

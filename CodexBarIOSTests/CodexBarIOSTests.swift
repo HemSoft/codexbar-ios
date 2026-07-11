@@ -3584,6 +3584,50 @@ final class CodexBarIOSTests: XCTestCase {
         )
     }
 
+    func testCodexUsageProviderUsesValidTokenWhenProactiveRefreshIsTemporarilyUnavailable() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "still-valid-access",
+                refreshToken: "refresh-token",
+                expiresAt: 2_000_000_060
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/codex-token")!,
+            now: { now }
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            if request.url?.path == "/codex-token" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer still-valid-access")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(result.bars.first?.used, 25)
+    }
+
     func testCodexUsageProviderDoesNotUseCredentialWhenKeychainRotationFails() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
@@ -3794,6 +3838,51 @@ final class CodexBarIOSTests: XCTestCase {
             result.subtitle,
             "GitHub credential expired and cannot be renewed. Sign in again."
         )
+    }
+
+    func testCopilotUsageProviderUsesValidTokenWhenProactiveRefreshIsTemporarilyUnavailable() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        try secretStore.saveSecret(
+            CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+                accessToken: "still-valid-access",
+                refreshToken: "refresh-token",
+                expiresAt: 2_000_000_060
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now }
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            if request.url?.path == "/github-token" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "token still-valid-access")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(result.bars.first?.used, 25)
     }
 
     func testCopilotUsageProviderExplainsRejectedRefreshWithoutLeakingResponse() async throws {

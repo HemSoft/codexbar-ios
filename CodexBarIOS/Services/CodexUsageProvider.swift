@@ -14,7 +14,7 @@ public final class CodexUsageProvider: UsageProvider {
         session: URLSession = .shared,
         usageEndpoint: URL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!,
         tokenEndpoint: URL = URL(string: "https://auth.openai.com/oauth/token")!,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.secretStore = secretStore
         self.session = session
@@ -59,10 +59,12 @@ public final class CodexUsageProvider: UsageProvider {
                     configuration: configuration
                 )
             case .temporarilyUnavailable:
-                return failureResult(
-                    "Could not renew the ChatGPT / Codex credential. Try again.",
-                    configuration: configuration
-                )
+                if credentials.isExpired(at: now()) {
+                    return failureResult(
+                        "Could not renew the ChatGPT / Codex credential. Try again.",
+                        configuration: configuration
+                    )
+                }
             case .persistenceFailed:
                 return failureResult(
                     "Could not securely save the renewed ChatGPT / Codex credential. Try again.",
