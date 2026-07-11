@@ -35,6 +35,220 @@ final class CodexBarIOSTests: XCTestCase {
         )
     }
 
+    func testInstalledAppVersionFormatsBundleValues() {
+        let version = InstalledAppVersion(marketingVersion: "1.1", buildNumber: "2")
+
+        XCTAssertEqual(version.displayText, "Version 1.1 (2)")
+    }
+
+    func testAppVersionComparesDottedComponentsNumerically() throws {
+        XCTAssertLessThan(try XCTUnwrap(AppVersion("1.9")), try XCTUnwrap(AppVersion("1.10")))
+        XCTAssertEqual(try XCTUnwrap(AppVersion("1.2")), try XCTUnwrap(AppVersion("1.2.0")))
+        XCTAssertGreaterThan(try XCTUnwrap(AppVersion("2.0")), try XCTUnwrap(AppVersion("1.99.99")))
+        XCTAssertNil(AppVersion("1.2-beta"))
+        XCTAssertNil(AppVersion("1..2"))
+        XCTAssertNil(AppVersion(""))
+    }
+
+    func testAppStoreReleaseLookupDecodesReturnedURLAndUsesFallback() throws {
+        let returnedURL = "https://apps.apple.com/de/app/codexbar/id6787769891?uo=4"
+        let returnedRelease = try AppStoreReleaseService.decodeRelease(
+            from: Data(
+                """
+                {"resultCount":1,"results":[{"version":"1.2","trackViewUrl":"\(returnedURL)"}]}
+                """.utf8
+            )
+        )
+        XCTAssertEqual(returnedRelease.version, "1.2")
+        XCTAssertEqual(returnedRelease.productURL.absoluteString, returnedURL)
+
+        let fallbackRelease = try AppStoreReleaseService.decodeRelease(
+            from: Data(#"{"resultCount":1,"results":[{"version":"1.2","trackViewUrl":"invalid"}]}"#.utf8)
+        )
+        XCTAssertEqual(fallbackRelease.productURL, AppStoreReleaseService.fallbackProductURL)
+
+        XCTAssertThrowsError(
+            try AppStoreReleaseService.decodeRelease(
+                from: Data(#"{"resultCount":0,"results":[]}"#.utf8)
+            )
+        ) { error in
+            XCTAssertEqual(error as? AppStoreReleaseError, .missingRelease)
+        }
+
+        XCTAssertThrowsError(
+            try AppStoreReleaseService.decodeRelease(from: Data("not-json".utf8))
+        ) { error in
+            XCTAssertTrue(error is DecodingError)
+        }
+    }
+
+    func testAppStoreReleaseServiceUsesIDLookupAndRejectsHTTPFailure() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let service = AppStoreReleaseService(session: session)
+
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.host, "itunes.apple.com")
+            XCTAssertEqual(
+                URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?
+                    .queryItemValue(named: "id"),
+                "6787769891"
+            )
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"resultCount":1,"results":[{"version":"1.2","trackViewUrl":"https://apps.apple.com/us/app/id6787769891"}]}"#.utf8
+                )
+            )
+        }
+        defer {
+            MockURLProtocol.handler = nil
+        }
+
+        let fetchedRelease = try await service.fetchRelease()
+        XCTAssertEqual(fetchedRelease.version, "1.2")
+
+        MockURLProtocol.handler = { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 503,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data()
+            )
+        }
+
+        do {
+            _ = try await service.fetchRelease()
+            XCTFail("Expected an HTTP status error")
+        } catch {
+            XCTAssertEqual(error as? AppStoreReleaseError, .httpStatus(503))
+        }
+    }
+
+    func testAppUpdateComparisonNeverOffersCurrentReleaseOrDowngrade() {
+        let productURL = AppStoreReleaseService.fallbackProductURL
+
+        XCTAssertNil(
+            AppUpdateController.newerRelease(
+                AppStoreRelease(version: "1.1", productURL: productURL),
+                than: "1.1"
+            )
+        )
+        XCTAssertNil(
+            AppUpdateController.newerRelease(
+                AppStoreRelease(version: "1.0", productURL: productURL),
+                than: "1.1"
+            )
+        )
+        XCTAssertEqual(
+            AppUpdateController.newerRelease(
+                AppStoreRelease(version: "1.10", productURL: productURL),
+                than: "1.9"
+            )?.version,
+            "1.10"
+        )
+    }
+
+    @MainActor
+    func testAppUpdateControllerCachesAndRateLimitsSuccessfulChecks() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let release = AppStoreRelease(version: "1.2", productURL: AppStoreReleaseService.fallbackProductURL)
+        let fetcher = StubAppStoreReleaseFetcher(result: .success(release))
+        let installedVersion = InstalledAppVersion(marketingVersion: "1.1", buildNumber: "2")
+        let checkInterval: TimeInterval = 2 * 60 * 60
+        let controller = AppUpdateController(
+            installedVersion: installedVersion,
+            defaults: defaults,
+            releaseFetcher: fetcher,
+            checkInterval: checkInterval
+        )
+
+        await controller.checkForUpdates(at: now)
+
+        XCTAssertEqual(controller.availableRelease, release)
+        let initialFetchCount = await fetcher.currentFetchCount()
+        XCTAssertEqual(initialFetchCount, 1)
+
+        let reloadedController = AppUpdateController(
+            installedVersion: installedVersion,
+            defaults: defaults,
+            releaseFetcher: fetcher,
+            checkInterval: checkInterval
+        )
+        XCTAssertEqual(reloadedController.availableRelease, release)
+
+        await reloadedController.checkForUpdates(at: now.addingTimeInterval(60 * 60))
+        let rateLimitedFetchCount = await fetcher.currentFetchCount()
+        XCTAssertEqual(rateLimitedFetchCount, 1)
+
+        await reloadedController.checkForUpdates(force: true, at: now.addingTimeInterval(60 * 60))
+        let forcedFetchCount = await fetcher.currentFetchCount()
+        XCTAssertEqual(forcedFetchCount, 2)
+    }
+
+    @MainActor
+    func testAppUpdateControllerFailsQuietlyAndDismissesOnlyDetectedVersion() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let firstRelease = AppStoreRelease(
+            version: "1.2",
+            productURL: AppStoreReleaseService.fallbackProductURL
+        )
+        let fetcher = StubAppStoreReleaseFetcher(result: .success(firstRelease))
+        let controller = AppUpdateController(
+            installedVersion: InstalledAppVersion(marketingVersion: "1.1", buildNumber: "2"),
+            defaults: defaults,
+            releaseFetcher: fetcher
+        )
+
+        await controller.checkForUpdates(at: now)
+        controller.dismissDashboardNotice()
+
+        XCTAssertEqual(controller.availableRelease, firstRelease)
+        XCTAssertNil(controller.dashboardRelease)
+
+        let reloadedController = AppUpdateController(
+            installedVersion: InstalledAppVersion(marketingVersion: "1.1", buildNumber: "2"),
+            defaults: defaults,
+            releaseFetcher: fetcher
+        )
+        XCTAssertEqual(reloadedController.availableRelease, firstRelease)
+        XCTAssertNil(reloadedController.dashboardRelease)
+
+        await fetcher.setResult(.failure(.invalidResponse))
+        await controller.checkForUpdates(force: true, at: now.addingTimeInterval(1))
+        XCTAssertEqual(controller.availableRelease, firstRelease)
+        XCTAssertNil(controller.dashboardRelease)
+
+        let nextRelease = AppStoreRelease(
+            version: "1.3",
+            productURL: AppStoreReleaseService.fallbackProductURL
+        )
+        await fetcher.setResult(.success(nextRelease))
+        await controller.checkForUpdates(force: true, at: now.addingTimeInterval(2))
+
+        XCTAssertEqual(controller.availableRelease, nextRelease)
+        XCTAssertEqual(controller.dashboardRelease, nextRelease)
+    }
+
     func testAppReviewLinksTargetProductionListingAndSupport() {
         XCTAssertEqual(AppReviewLinks.writeReviewURL.host, "apps.apple.com")
         XCTAssertTrue(AppReviewLinks.writeReviewURL.path.hasSuffix("/id6787769891"))
@@ -3041,6 +3255,28 @@ private struct EmptySecretStore: SecretStore {
     }
 
     func deleteSecret(account: String) throws {
+    }
+}
+
+private actor StubAppStoreReleaseFetcher: AppStoreReleaseFetching {
+    private var result: Result<AppStoreRelease, AppStoreReleaseError>
+    private var fetchCount = 0
+
+    init(result: Result<AppStoreRelease, AppStoreReleaseError>) {
+        self.result = result
+    }
+
+    func fetchRelease() async throws -> AppStoreRelease {
+        fetchCount += 1
+        return try result.get()
+    }
+
+    func setResult(_ result: Result<AppStoreRelease, AppStoreReleaseError>) {
+        self.result = result
+    }
+
+    func currentFetchCount() -> Int {
+        fetchCount
     }
 }
 
