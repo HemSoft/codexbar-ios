@@ -44,10 +44,7 @@ enum WidgetSnapshotPublisher {
                             resetDisplayStyle: bar.resetDisplayStyle,
                             severity: CodexBarWidgetSeverity(bar.severity),
                             projectedFraction: projectedFraction,
-                            projectionDescription: bar.projectionDescription(
-                                at: now,
-                                dateTimeFormatter: dateTimeFormatter
-                            ),
+                            projectionDescription: projectionParts?.formatted(using: dateTimeFormatter),
                             projectionLeadingText: projectionParts?.leadingText,
                             projectionTimestamp: projectionParts?.timestamp,
                             projectionTrailingText: projectionParts?.trailingText,

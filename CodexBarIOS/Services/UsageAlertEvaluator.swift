@@ -74,7 +74,8 @@ public enum UsageAlertEvaluator {
                     id: alertID,
                     result: result,
                     bar: bar,
-                    threshold: settings.usageThreshold
+                    threshold: settings.usageThreshold,
+                    now: now
                 )
                 activeAlerts.append(detail)
 
@@ -160,11 +161,12 @@ public enum UsageAlertEvaluator {
         id: String,
         result: ProviderUsageResult,
         bar: UsageBar,
-        threshold: Double
+        threshold: Double,
+        now: Date
     ) -> UsageAlertDetail {
         let thresholdText = formatPercent(threshold)
         let usageAmountText = formatUsageAmount(used: bar.used, limit: bar.limit)
-        let resetText = bar.localizedResetDescription().map { " \($0)." } ?? ""
+        let resetText = bar.localizedResetDescription(at: now).map { " \($0)." } ?? ""
 
         return UsageAlertDetail(
             id: id,

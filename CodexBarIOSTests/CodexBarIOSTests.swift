@@ -1099,6 +1099,44 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(crossedAgain.notifications.count, 1)
     }
 
+    func testUsageAlertEvaluatorUsesInjectedNowForResetDescription() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let resetAt = now.addingTimeInterval(2 * 60 * 60)
+        let result = ProviderUsageResult(
+            accountID: "codex.personal",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(
+                    label: "5-hour",
+                    used: 81,
+                    limit: 100,
+                    resetDescription: "stale reset text",
+                    resetsAt: resetAt,
+                    resetDisplayStyle: .relativeWithLocalTime
+                ),
+            ],
+            fetchedAt: now
+        )
+        let settings = UsageAlertSettings(
+            isEnabled: true,
+            usageThreshold: 0.80,
+            includesSeverityAlerts: false
+        )
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: settings,
+            activeAlertIDs: [],
+            now: now
+        )
+
+        let body = try XCTUnwrap(evaluation.notifications.first?.body)
+        XCTAssertTrue(body.contains("Resets 2h 0m"))
+        XCTAssertFalse(body.contains("stale reset text"))
+    }
+
     func testUsageAlertEvaluatorUsesStableUsageKeysForMutableLabels() {
         let firstResult = ProviderUsageResult(
             accountID: "cursor.main",
