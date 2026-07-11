@@ -15,6 +15,9 @@ export DEVELOPER_DIR
 
 PHONE_DEVICE="${PHONE_DEVICE:-iPhone 17 Pro Max}"
 IPAD_DEVICE="${IPAD_DEVICE:-iPad Pro 13-inch (M5)}"
+IPHONE_FAMILY="iphone-17-pro-max"
+IPAD_FAMILY="ipad-pro-13-m5"
+SCREENSHOT_SETTLE_SECONDS="${SCREENSHOT_SETTLE_SECONDS:-2}"
 
 SCENES=(
   "dashboard-overview:light"
@@ -41,7 +44,20 @@ xcodebuild \
 
 simulator_udid() {
   local device_name="$1"
-  xcrun simctl list devices available | { grep -F "$device_name" || true; } | head -n 1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/'
+  xcrun simctl list devices available | awk -v expected="$device_name" '
+    {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      if (match(line, / \([A-F0-9-]+\)/)) {
+        name = substr(line, 1, RSTART - 1)
+        if (name == expected) {
+          udid = substr(line, RSTART + 2, RLENGTH - 3)
+          print udid
+          exit
+        }
+      }
+    }
+  '
 }
 
 boot_device() {
@@ -110,15 +126,14 @@ capture_scene() {
 
   echo "Capturing $family / $scene / $appearance..."
   xcrun simctl terminate "$booted_device" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
-  xcrun simctl uninstall "$booted_device" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
-  xcrun simctl install "$booted_device" "$APP_PATH"
   data_container="$(xcrun simctl get_app_container "$booted_device" "$APP_BUNDLE_ID" data)"
   ready_file="$data_container/Library/Caches/$READY_FILE_NAME"
   rm -f "$ready_file"
   xcrun simctl launch --terminate-running-process "$booted_device" "$APP_BUNDLE_ID" \
     --app-store-screenshots \
     --app-store-scene "$scene" \
-    --app-store-appearance "$appearance" >/dev/null
+    --app-store-appearance "$appearance" \
+    --app-store-settle-seconds "$SCREENSHOT_SETTLE_SECONDS" >/dev/null
 
   wait_for_scene_ready "$ready_file" "$scene"
   xcrun simctl io "$booted_device" screenshot --type=png "$output_path"
@@ -142,6 +157,9 @@ capture_for_device() {
   fi
 
   boot_device "$device_name" "$booted_device"
+  xcrun simctl terminate "$booted_device" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
+  xcrun simctl uninstall "$booted_device" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
+  xcrun simctl install "$booted_device" "$APP_PATH"
 
   for scene_entry in "${SCENES[@]}"; do
     IFS=":" read -r scene appearance <<< "$scene_entry"
@@ -161,18 +179,18 @@ mirror_fastlane_screenshots() {
     IFS=":" read -r scene appearance <<< "$scene_entry"
     padded="$(printf "%02d" "$number")"
 
-    source_path="$OUTPUT_DIR/iphone-17-pro-max_${scene}_${appearance}.png"
+    source_path="$OUTPUT_DIR/${IPHONE_FAMILY}_${scene}_${appearance}.png"
     cp "$source_path" "$FASTLANE_OUTPUT_DIR/${padded}_iphone_6_9_${scene}_${appearance}.png"
 
-    source_path="$OUTPUT_DIR/ipad-pro-13-m5_${scene}_${appearance}.png"
+    source_path="$OUTPUT_DIR/${IPAD_FAMILY}_${scene}_${appearance}.png"
     cp "$source_path" "$FASTLANE_OUTPUT_DIR/${padded}_ipad_13_${scene}_${appearance}.png"
 
     number=$((number + 1))
   done
 }
 
-capture_for_device "$PHONE_DEVICE" "iphone-17-pro-max" "1320" "2868"
-capture_for_device "$IPAD_DEVICE" "ipad-pro-13-m5" "2064" "2752"
+capture_for_device "$PHONE_DEVICE" "$IPHONE_FAMILY" "1320" "2868"
+capture_for_device "$IPAD_DEVICE" "$IPAD_FAMILY" "2064" "2752"
 mirror_fastlane_screenshots
 
 echo "Screenshots are in $OUTPUT_DIR and mirrored to $FASTLANE_OUTPUT_DIR"

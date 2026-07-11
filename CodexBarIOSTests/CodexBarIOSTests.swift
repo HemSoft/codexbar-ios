@@ -46,11 +46,14 @@ final class CodexBarIOSTests: XCTestCase {
                 "history",
                 "--app-store-appearance",
                 "dark",
+                "--app-store-settle-seconds",
+                "3.5",
             ]
         )
 
         XCTAssertEqual(configuration?.scene, .history)
         XCTAssertEqual(configuration?.appearance, .dark)
+        XCTAssertEqual(configuration?.settleDelay, 3.5)
 
         let fallback = AppStoreScreenshotConfiguration.parse(
             arguments: ["CodexBarIOS"],
@@ -58,6 +61,7 @@ final class CodexBarIOSTests: XCTestCase {
         )
         XCTAssertEqual(fallback?.scene, .dashboardOverview)
         XCTAssertEqual(fallback?.appearance, .light)
+        XCTAssertEqual(fallback?.settleDelay, 2)
     }
 
     @MainActor

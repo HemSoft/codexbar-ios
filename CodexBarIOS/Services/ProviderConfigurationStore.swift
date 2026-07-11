@@ -707,18 +707,18 @@ public extension ProviderConfigurationStore {
 
         defaults.removePersistentDomain(forName: suiteName)
 
-        let usageGroup = ProviderAccountGroup(id: "app-store-screenshots.usage", name: "Usage Limits")
-        let balanceGroup = ProviderAccountGroup(id: "app-store-screenshots.balances", name: "API Balances")
+        let usageGroup = ProviderAccountGroup(id: AppStoreScreenshotFixtureID.usageGroup, name: "Usage Limits")
+        let balanceGroup = ProviderAccountGroup(id: AppStoreScreenshotFixtureID.balanceGroup, name: "API Balances")
         let configurations = [
             ProviderAccountConfiguration(
-                id: "app-store-screenshots.codex",
+                id: AppStoreScreenshotFixtureID.codexAccount,
                 providerID: .codex,
                 accountLabel: "Personal Codex",
                 groupID: usageGroup.id,
                 authMethod: .browserSession
             ),
             ProviderAccountConfiguration(
-                id: "app-store-screenshots.copilot",
+                id: AppStoreScreenshotFixtureID.copilotAccount,
                 providerID: .copilot,
                 accountLabel: "GitHub Copilot",
                 groupID: usageGroup.id,
@@ -727,28 +727,28 @@ public extension ProviderConfigurationStore {
                 githubOrganization: "fableton-labs"
             ),
             ProviderAccountConfiguration(
-                id: "app-store-screenshots.claude",
+                id: AppStoreScreenshotFixtureID.claudeAccount,
                 providerID: .claude,
                 accountLabel: "Claude Pro",
                 groupID: usageGroup.id,
                 authMethod: .browserSession
             ),
             ProviderAccountConfiguration(
-                id: "app-store-screenshots.cursor",
+                id: AppStoreScreenshotFixtureID.cursorAccount,
                 providerID: .cursor,
                 accountLabel: "Cursor Pro",
                 groupID: usageGroup.id,
                 authMethod: .browserSession
             ),
             ProviderAccountConfiguration(
-                id: "app-store-screenshots.openrouter",
+                id: AppStoreScreenshotFixtureID.openRouterAccount,
                 providerID: .openRouter,
                 accountLabel: "OpenRouter",
                 groupID: balanceGroup.id,
                 authMethod: .apiKey
             ),
             ProviderAccountConfiguration(
-                id: "app-store-screenshots.opencodzen",
+                id: AppStoreScreenshotFixtureID.openCodeZenAccount,
                 providerID: .openCodeZen,
                 accountLabel: "OpenCode ZEN",
                 groupID: balanceGroup.id,

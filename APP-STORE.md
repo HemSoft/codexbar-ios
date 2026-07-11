@@ -56,14 +56,16 @@ Reference links:
 ### 3. Product Page Assets
 
 - [x] Finalize app name and subtitle. App name is `CodexBar Usage Monitor`; subtitle is `AI usage, limits, and balances`.
-- [x] Write promotional text and add it to App Store Connect. Issue #22 copy updates are in `fastlane/metadata/en-US/promotional_text.txt` and still need App Store Connect sync/preview.
-- [x] Write the full app description and add it to App Store Connect. Issue #22 copy updates are in `fastlane/metadata/en-US/description.txt` and still need App Store Connect sync/preview.
-- [x] Write keywords and add them to App Store Connect. Issue #22 copy updates are in `fastlane/metadata/en-US/keywords.txt` and still need App Store Connect sync/preview.
+- [x] Prepare promotional text in `fastlane/metadata/en-US/promotional_text.txt`.
+- [x] Prepare the full app description in `fastlane/metadata/en-US/description.txt`.
+- [x] Prepare keywords in `fastlane/metadata/en-US/keywords.txt`.
+- [ ] Sync the Issue #22 promotional text, description, and keywords to App Store Connect and verify their previews.
 - [x] Provide support URL and add it to App Store Connect. Public support page is `https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md`.
 - [ ] Provide marketing URL if desired.
 - [x] Provide privacy policy URL and add it to App Store Connect. Public privacy policy is `https://github.com/HemSoft/codexbar-ios/blob/main/PRIVACY.md`.
-- [x] Prepare screenshots for required iPhone sizes. Six deterministic iPhone 17 Pro Max images at `1320x2868` were generated and reviewed at full size on 2026-07-11; App Store Connect sync/preview remains.
-- [x] Prepare screenshots for required iPad sizes. Six deterministic iPad Pro 13-inch (M5) images at `2064x2752` were generated and reviewed at full size on 2026-07-11; App Store Connect sync/preview remains.
+- [x] Prepare screenshots for required iPhone sizes. Six deterministic iPhone 17 Pro Max images at `1320x2868` were generated and reviewed at full size on 2026-07-11.
+- [x] Prepare screenshots for required iPad sizes. Six deterministic iPad Pro 13-inch (M5) images at `2064x2752` were generated and reviewed at full size on 2026-07-11.
+- [ ] Upload the Issue #22 iPhone and iPad screenshot sets to App Store Connect and verify their order and cropping.
 - [x] Confirm Apple Watch screenshots are not needed. Current repo has no watchOS app target, so Apple Watch screenshots are not required unless a watchOS app is added.
 - [ ] Consider an app preview video after the first TestFlight build is stable.
 - [ ] Verify the App Store icon renders correctly and has no transparency.
@@ -102,8 +104,13 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/capture-app-s
 The app contract for each launch is:
 
 ```text
---app-store-screenshots --app-store-scene <scene> --app-store-appearance <light|dark>
+--app-store-screenshots --app-store-scene <scene> --app-store-appearance <light|dark> --app-store-settle-seconds <seconds>
 ```
+
+The capture script defaults the scene-settling window to two seconds. Override
+it with `SCREENSHOT_SETTLE_SECONDS` when a slower simulator or CI runner needs
+more render time; the app clamps the supplied value to the `0...30` second
+range before signaling readiness.
 
 Readiness is complete only when this command returns the requested scene:
 

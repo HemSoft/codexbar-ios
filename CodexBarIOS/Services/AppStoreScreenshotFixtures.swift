@@ -10,11 +10,23 @@ enum AppStoreScreenshotScene: String {
     case history
 }
 
+enum AppStoreScreenshotFixtureID {
+    static let usageGroup = "app-store-screenshots.usage"
+    static let balanceGroup = "app-store-screenshots.balances"
+    static let codexAccount = "app-store-screenshots.codex"
+    static let copilotAccount = "app-store-screenshots.copilot"
+    static let claudeAccount = "app-store-screenshots.claude"
+    static let cursorAccount = "app-store-screenshots.cursor"
+    static let openRouterAccount = "app-store-screenshots.openrouter"
+    static let openCodeZenAccount = "app-store-screenshots.opencodzen"
+}
+
 struct AppStoreScreenshotConfiguration {
     static let readyFileName = "app-store-screenshot-ready"
 
     let scene: AppStoreScreenshotScene
     let appearance: AppAppearance
+    let settleDelay: TimeInterval
 
     static var current: AppStoreScreenshotConfiguration? {
         parse(
@@ -39,8 +51,16 @@ struct AppStoreScreenshotConfiguration {
         let appearance = value(after: "--app-store-appearance", in: arguments)
             .flatMap(AppAppearance.init(rawValue:))
             ?? .light
+        let settleDelay = value(after: "--app-store-settle-seconds", in: arguments)
+            .flatMap(TimeInterval.init)
+            ?? environment["CODEXBAR_APP_STORE_SETTLE_SECONDS"].flatMap(TimeInterval.init)
+            ?? 2
 
-        return AppStoreScreenshotConfiguration(scene: scene, appearance: appearance)
+        return AppStoreScreenshotConfiguration(
+            scene: scene,
+            appearance: appearance,
+            settleDelay: min(max(settleDelay, 0), 30)
+        )
     }
 
     private static func value(after argument: String, in arguments: [String]) -> String? {
@@ -134,10 +154,10 @@ enum AppStoreScreenshotFixtures {
             CodexBarWidgetBuilderConfiguration(
                 layout: .fourTiles,
                 selectedTileIDs: [
-                    "provider.app-store-screenshots.codex",
-                    "provider.app-store-screenshots.copilot",
-                    "provider.app-store-screenshots.openrouter",
-                    "provider.app-store-screenshots.opencodzen",
+                    "provider.\(AppStoreScreenshotFixtureID.codexAccount)",
+                    "provider.\(AppStoreScreenshotFixtureID.copilotAccount)",
+                    "provider.\(AppStoreScreenshotFixtureID.openRouterAccount)",
+                    "provider.\(AppStoreScreenshotFixtureID.openCodeZenAccount)",
                 ],
                 displayModes: [.fullBar, .compactPercent, .balanceOnly, .balanceOnly]
             ),

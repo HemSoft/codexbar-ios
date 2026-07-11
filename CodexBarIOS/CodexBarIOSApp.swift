@@ -18,12 +18,12 @@ struct CodexBarIOSApp: App {
             configurationStore.updateAppAppearance(screenshotConfiguration.appearance)
             if screenshotConfiguration.scene == .dashboardDark {
                 configurationStore.updateDashboardCardOrder([
-                    "app-store-screenshots.openrouter",
-                    "app-store-screenshots.opencodzen",
-                    "app-store-screenshots.cursor",
-                    "app-store-screenshots.codex",
-                    "app-store-screenshots.copilot",
-                    "app-store-screenshots.claude",
+                    AppStoreScreenshotFixtureID.openRouterAccount,
+                    AppStoreScreenshotFixtureID.openCodeZenAccount,
+                    AppStoreScreenshotFixtureID.cursorAccount,
+                    AppStoreScreenshotFixtureID.codexAccount,
+                    AppStoreScreenshotFixtureID.copilotAccount,
+                    AppStoreScreenshotFixtureID.claudeAccount,
                 ])
             }
             if DebugUsageAlertMode.isEnabled {
@@ -62,7 +62,10 @@ struct CodexBarIOSApp: App {
                 .task {
                     #if DEBUG
                     if let screenshotConfiguration {
-                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        let settleNanoseconds = UInt64(
+                            screenshotConfiguration.settleDelay * 1_000_000_000
+                        )
+                        try? await Task.sleep(nanoseconds: settleNanoseconds)
                         AppStoreScreenshotFixtures.markReady(scene: screenshotConfiguration.scene)
                     } else {
                         OpenCodeZenBootstrapImporter.importIfNeeded(configurationStore: configurationStore)
@@ -136,7 +139,7 @@ struct CodexBarIOSApp: App {
             NavigationStack {
                 ProviderSettingsView(
                     configurationStore: configurationStore,
-                    accountID: "app-store-screenshots.copilot"
+                    accountID: AppStoreScreenshotFixtureID.copilotAccount
                 )
             }
         case .history:
