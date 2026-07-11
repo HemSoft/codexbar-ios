@@ -345,8 +345,7 @@ struct ContentView: View {
         lastSystemDateTimeRefresh = now
 
         Task {
-            await refreshService.refresh(configurations: configurationStore.configurations)
-            publishWidgetSnapshot()
+            await refreshNow()
         }
     }
 
