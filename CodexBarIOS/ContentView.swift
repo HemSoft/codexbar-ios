@@ -9,6 +9,7 @@ struct ContentView: View {
     @ObservedObject var appUpdateController: AppUpdateController
     private let usageAlertNotifier: any UsageAlertNotifying
     private let appReviewPromptPolicy: AppReviewPromptPolicy
+    private let performsLifecycleWork: Bool
 
     @Environment(\.requestReview) private var requestReview
     @State private var isShowingSettings = false
@@ -23,7 +24,8 @@ struct ContentView: View {
         historyStore: UsageHistoryStore,
         appUpdateController: AppUpdateController,
         usageAlertNotifier: any UsageAlertNotifying = LocalUsageAlertNotifier.shared,
-        appReviewPromptPolicy: AppReviewPromptPolicy = AppReviewPromptPolicy()
+        appReviewPromptPolicy: AppReviewPromptPolicy = AppReviewPromptPolicy(),
+        performsLifecycleWork: Bool = true
     ) {
         self.refreshService = refreshService
         self.configurationStore = configurationStore
@@ -31,6 +33,7 @@ struct ContentView: View {
         self.appUpdateController = appUpdateController
         self.usageAlertNotifier = usageAlertNotifier
         self.appReviewPromptPolicy = appReviewPromptPolicy
+        self.performsLifecycleWork = performsLifecycleWork
     }
 
     var body: some View {
@@ -173,15 +176,24 @@ struct ContentView: View {
             )
         }
         .task {
+            guard performsLifecycleWork else {
+                return
+            }
             await appUpdateController.checkForUpdates()
         }
         .task {
+            guard performsLifecycleWork else {
+                return
+            }
             await refreshService.refresh(configurations: configurationStore.configurations)
             recordUsageHistoryIfAvailable()
             publishWidgetSnapshot()
             await processUsageAlerts()
         }
         .task(id: AutoRefreshTaskID(interval: configurationStore.autoRefreshInterval, resetID: autoRefreshResetID)) {
+            guard performsLifecycleWork else {
+                return
+            }
             await runAutoRefreshLoop()
         }
         .onChange(of: refreshService.results) { _, _ in

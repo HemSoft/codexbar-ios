@@ -60,12 +60,15 @@ struct CodexBarIOSApp: App {
             rootView
                 .preferredColorScheme(configurationStore.appAppearance.colorScheme)
                 .task {
-                    OpenCodeZenBootstrapImporter.importIfNeeded(configurationStore: configurationStore)
                     #if DEBUG
                     if let screenshotConfiguration {
                         try? await Task.sleep(nanoseconds: 2_000_000_000)
                         AppStoreScreenshotFixtures.markReady(scene: screenshotConfiguration.scene)
+                    } else {
+                        OpenCodeZenBootstrapImporter.importIfNeeded(configurationStore: configurationStore)
                     }
+                    #else
+                    OpenCodeZenBootstrapImporter.importIfNeeded(configurationStore: configurationStore)
                     #endif
                 }
         }
@@ -101,12 +104,13 @@ struct CodexBarIOSApp: App {
         #endif
     }
 
-    private func mainContentView() -> some View {
+    private func mainContentView(performsLifecycleWork: Bool = true) -> some View {
         ContentView(
             refreshService: refreshService,
             configurationStore: configurationStore,
             historyStore: historyStore,
-            appUpdateController: appUpdateController
+            appUpdateController: appUpdateController,
+            performsLifecycleWork: performsLifecycleWork
         )
     }
 
@@ -115,9 +119,9 @@ struct CodexBarIOSApp: App {
     private func screenshotRootView(for scene: AppStoreScreenshotScene) -> some View {
         switch scene {
         case .dashboardOverview:
-            mainContentView()
+            mainContentView(performsLifecycleWork: false)
         case .dashboardDark:
-            mainContentView()
+            mainContentView(performsLifecycleWork: false)
         case .widgetBuilder:
             NavigationStack {
                 WidgetBuilderView()
