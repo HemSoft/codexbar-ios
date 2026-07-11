@@ -47,6 +47,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(AppVersion("2.0")), try XCTUnwrap(AppVersion("1.99.99")))
         XCTAssertNil(AppVersion("1.2-beta"))
         XCTAssertNil(AppVersion("1..2"))
+        XCTAssertNil(AppVersion(""))
     }
 
     func testAppStoreReleaseLookupDecodesReturnedURLAndUsesFallback() throws {
@@ -72,6 +73,12 @@ final class CodexBarIOSTests: XCTestCase {
             )
         ) { error in
             XCTAssertEqual(error as? AppStoreReleaseError, .missingRelease)
+        }
+
+        XCTAssertThrowsError(
+            try AppStoreReleaseService.decodeRelease(from: Data("not-json".utf8))
+        ) { error in
+            XCTAssertTrue(error is DecodingError)
         }
     }
 
@@ -162,10 +169,12 @@ final class CodexBarIOSTests: XCTestCase {
         let release = AppStoreRelease(version: "1.2", productURL: AppStoreReleaseService.fallbackProductURL)
         let fetcher = StubAppStoreReleaseFetcher(result: .success(release))
         let installedVersion = InstalledAppVersion(marketingVersion: "1.1", buildNumber: "2")
+        let checkInterval: TimeInterval = 2 * 60 * 60
         let controller = AppUpdateController(
             installedVersion: installedVersion,
             defaults: defaults,
-            releaseFetcher: fetcher
+            releaseFetcher: fetcher,
+            checkInterval: checkInterval
         )
 
         await controller.checkForUpdates(at: now)
@@ -177,7 +186,8 @@ final class CodexBarIOSTests: XCTestCase {
         let reloadedController = AppUpdateController(
             installedVersion: installedVersion,
             defaults: defaults,
-            releaseFetcher: fetcher
+            releaseFetcher: fetcher,
+            checkInterval: checkInterval
         )
         XCTAssertEqual(reloadedController.availableRelease, release)
 
