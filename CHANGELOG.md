@@ -29,6 +29,10 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Made Cursor account switching deliberate and reliable: sign-in now uses a
+  private browser session, sign-out clears stale identity labels, and an
+  existing credential remains active until replacement sign-in succeeds.
+  ([#35](https://github.com/HemSoft/codexbar-ios/issues/35))
 - Kept ChatGPT / Codex and GitHub Copilot accounts signed in automatically
   instead of prompting users to reauthenticate unnecessarily, while showing
   clearer guidance when access is revoked or permissions are missing.

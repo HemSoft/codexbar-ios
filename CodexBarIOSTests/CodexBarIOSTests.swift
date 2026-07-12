@@ -1,5 +1,8 @@
 import XCTest
 @testable import CodexBarIOS
+#if canImport(AuthenticationServices) && canImport(UIKit)
+import AuthenticationServices
+#endif
 
 final class CodexBarIOSTests: XCTestCase {
     func testUsageSeverityThresholds() {
@@ -1465,6 +1468,107 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testCursorIdentityChangeRemovesStaleEmailButPreservesCustomLabel() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        var cursor = store.addAccount(for: .cursor)
+        cursor.accountLabel = "franz_hemmer@hotmail.com"
+        XCTAssertTrue(store.update(cursor))
+
+        XCTAssertEqual(store.cursorAccountLabelAfterIdentityChange(for: cursor), "")
+
+        cursor.accountLabel = "Work Cursor"
+        XCTAssertEqual(store.cursorAccountLabelAfterIdentityChange(for: cursor), "Work Cursor")
+
+        cursor.accountLabel = "team@acme"
+        XCTAssertEqual(store.cursorAccountLabelAfterIdentityChange(for: cursor), "team@acme")
+    }
+
+    @MainActor
+    func testConnectingCursorAccountPersistsCredentialAndClearsStaleEmail() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var cursor = store.addAccount(for: .cursor)
+        cursor.accountLabel = "old@example.com"
+        XCTAssertTrue(store.update(cursor))
+
+        let connected = try XCTUnwrap(
+            store.connectCursorAccount(cursor, credential: "replacement-token")
+        )
+
+        XCTAssertEqual(connected.accountLabel, "")
+        XCTAssertEqual(connected.displayName, "Cursor")
+        XCTAssertEqual(store.configuration(accountID: cursor.id), connected)
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: cursor)),
+            "replacement-token"
+        )
+        XCTAssertTrue(store.hasSecret(for: cursor))
+    }
+
+    @MainActor
+    func testDisconnectingCursorAccountPreservesOtherCursorCredential() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var first = store.addAccount(for: .cursor)
+        first.accountLabel = "first@example.com"
+        XCTAssertTrue(store.update(first))
+        let second = store.addAccount(for: .cursor)
+        store.saveSecret("first-token", for: first)
+        store.saveSecret("second-token", for: second)
+
+        let disconnected = try XCTUnwrap(store.disconnectCursorAccount(first))
+
+        XCTAssertFalse(store.hasSecret(for: first))
+        XCTAssertEqual(disconnected.accountLabel, "")
+        XCTAssertEqual(disconnected.displayName, "Cursor")
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: second)),
+            "second-token"
+        )
+        XCTAssertTrue(store.hasSecret(for: second))
+    }
+
+    @MainActor
+    func testFailedCursorCredentialReplacementPreservesExistingIdentity() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = FailingSaveSecretStore(secret: "existing-token")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var cursor = store.addAccount(for: .cursor)
+        cursor.accountLabel = "existing@example.com"
+        XCTAssertTrue(store.update(cursor))
+
+        XCTAssertNil(store.connectCursorAccount(cursor, credential: "replacement-token"))
+        XCTAssertEqual(store.configuration(accountID: cursor.id)?.accountLabel, "existing@example.com")
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: cursor)),
+            "existing-token"
+        )
+    }
+
+    @MainActor
     func testProviderConfigurationStoreRequiresClaudeSecretForBrowserSession() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -1868,6 +1972,7 @@ final class CodexBarIOSTests: XCTestCase {
         var presentedURL: URL?
         let result = try await service.signIn { url in
             presentedURL = url
+            return true
         }
         let authURL = try XCTUnwrap(presentedURL)
         let authComponents = try XCTUnwrap(URLComponents(url: authURL, resolvingAgainstBaseURL: false))
@@ -1876,6 +1981,53 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.accessToken, "cursor-access")
         XCTAssertEqual(result.refreshToken, "cursor-refresh")
         XCTAssertTrue(result.storedCredential.contains(#""accessToken": "cursor-access""#))
+    }
+
+#if canImport(AuthenticationServices) && canImport(UIKit)
+    @MainActor
+    func testCursorBrowserSessionUsesEphemeralStorage() {
+        let session = CursorWebAuthenticationPresenter.makeSession(
+            url: URL(string: "https://cursor.com/loginDeepControl")!
+        ) { _ in }
+
+        XCTAssertTrue(session.prefersEphemeralWebBrowserSession)
+    }
+#endif
+
+    func testCursorBrowserSessionIgnoresStaleCompletionAfterRetry() {
+        var generation = CursorWebAuthenticationSessionGeneration()
+        let firstSessionID = generation.start()
+        let retrySessionID = generation.start()
+
+        XCTAssertFalse(generation.complete(firstSessionID))
+        XCTAssertTrue(generation.complete(retrySessionID))
+        XCTAssertFalse(generation.complete(retrySessionID))
+    }
+
+    @MainActor
+    func testCursorSignInStopsWhenPrivateBrowserCannotStart() async {
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        let service = CursorWebAuthService(
+            session: session,
+            pollIntervalNanoseconds: 1,
+            maxPollAttempts: 1
+        )
+        MockURLProtocol.handler = { _ in
+            XCTFail("Token polling should not start when the browser session cannot start.")
+            throw URLError(.badServerResponse)
+        }
+        defer {
+            MockURLProtocol.handler = nil
+        }
+
+        do {
+            _ = try await service.signIn { _ in false }
+            XCTFail("Expected Cursor sign-in to reject a failed browser session.")
+        } catch {
+            XCTAssertEqual(error as? CursorWebAuthService.AuthError, .couldNotStartBrowserSession)
+        }
     }
 
     func testCopilotCredentialsParserReadsStoredJSONAndRawToken() {

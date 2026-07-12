@@ -1,6 +1,10 @@
 import CryptoKit
 import Foundation
 import Security
+#if canImport(AuthenticationServices) && canImport(UIKit)
+import AuthenticationServices
+import UIKit
+#endif
 
 public struct CursorWebAuthResult: Equatable, Sendable {
     public let accessToken: String
@@ -34,6 +38,7 @@ public struct CursorWebAuthResult: Equatable, Sendable {
 public final class CursorWebAuthService: Sendable {
     public enum AuthError: LocalizedError, Equatable {
         case missingToken
+        case couldNotStartBrowserSession
         case tokenPollingTimedOut
         case tokenPollFailed(String)
         case invalidTokenResponse
@@ -42,6 +47,8 @@ public final class CursorWebAuthService: Sendable {
             switch self {
             case .missingToken:
                 "Cursor sign-in completed, but no session token was returned."
+            case .couldNotStartBrowserSession:
+                "Could not open a private Cursor sign-in session."
             case .tokenPollingTimedOut:
                 "Cursor sign-in timed out. Try again and click Yes, Log In in the browser."
             case .tokenPollFailed(let message):
@@ -93,10 +100,12 @@ public final class CursorWebAuthService: Sendable {
     }
 
     @MainActor
-    public func signIn(presentAuthorizationURL: @escaping @MainActor (URL) -> Void) async throws -> CursorWebAuthResult {
+    public func signIn(presentAuthorizationURL: @escaping @MainActor (URL) -> Bool) async throws -> CursorWebAuthResult {
         let requestID = UUID().uuidString.lowercased()
         let pkce = Self.makePKCEPair()
-        presentAuthorizationURL(Self.authorizationURL(uuid: requestID, codeChallenge: pkce.codeChallenge))
+        guard presentAuthorizationURL(Self.authorizationURL(uuid: requestID, codeChallenge: pkce.codeChallenge)) else {
+            throw AuthError.couldNotStartBrowserSession
+        }
         return try await pollForToken(uuid: requestID, codeVerifier: pkce.codeVerifier)
     }
 
@@ -189,6 +198,96 @@ public final class CursorWebAuthService: Sendable {
         var bytes = [UInt8](repeating: 0, count: byteCount)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
         return Data(bytes).base64URLEncodedString()
+    }
+}
+
+#if canImport(AuthenticationServices) && canImport(UIKit)
+@MainActor
+final class CursorWebAuthenticationPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
+    private var session: ASWebAuthenticationSession?
+    private var sessionGeneration = CursorWebAuthenticationSessionGeneration()
+    private var cancellationHandler: (() -> Void)?
+
+    func present(url: URL, onCancel: @escaping () -> Void) -> Bool {
+        finish()
+        let sessionID = sessionGeneration.start()
+        cancellationHandler = onCancel
+
+        let session = Self.makeSession(url: url) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleCompletion(sessionID: sessionID)
+            }
+        }
+        session.presentationContextProvider = self
+        self.session = session
+        guard session.start() else {
+            self.session = nil
+            sessionGeneration.invalidate()
+            cancellationHandler = nil
+            return false
+        }
+        return true
+    }
+
+    func finish() {
+        sessionGeneration.invalidate()
+        cancellationHandler = nil
+        session?.cancel()
+        session = nil
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)
+            ?? ASPresentationAnchor()
+    }
+
+    static func makeSession(
+        url: URL,
+        completion: @escaping (Error?) -> Void
+    ) -> ASWebAuthenticationSession {
+        let session = ASWebAuthenticationSession(
+            url: url,
+            callbackURLScheme: nil
+        ) { _, error in
+            completion(error)
+        }
+        session.prefersEphemeralWebBrowserSession = true
+        return session
+    }
+
+    private func handleCompletion(sessionID: UUID) {
+        guard sessionGeneration.complete(sessionID) else {
+            return
+        }
+        session = nil
+        cancellationHandler?()
+        cancellationHandler = nil
+    }
+}
+#endif
+
+struct CursorWebAuthenticationSessionGeneration {
+    private var activeSessionID: UUID?
+
+    mutating func start() -> UUID {
+        let sessionID = UUID()
+        activeSessionID = sessionID
+        return sessionID
+    }
+
+    mutating func invalidate() {
+        activeSessionID = nil
+    }
+
+    mutating func complete(_ sessionID: UUID) -> Bool {
+        guard activeSessionID == sessionID else {
+            return false
+        }
+        activeSessionID = nil
+        return true
     }
 }
 

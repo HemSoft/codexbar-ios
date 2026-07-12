@@ -13,6 +13,8 @@ struct ProviderSettingsView: View {
     @State private var isSigningInWithCopilot = false
     @State private var isSigningInWithClaude = false
     @State private var isSigningInWithCursor = false
+    @State private var cursorSignInTask: Task<Void, Never>?
+    @State private var cursorAuthPresenter = CursorWebAuthenticationPresenter()
     @State private var debugAutostartedCopilotAuth = false
     @State private var codexAuthError: String?
     @State private var copilotAuthError: String?
@@ -208,22 +210,19 @@ struct ProviderSettingsView: View {
                     }
                 } else if providerID == .cursor {
                     Button {
-                        Task {
-                            await signInWithCursor()
-                        }
+                        startCursorSignIn()
                     } label: {
                         if isSigningInWithCursor {
                             ProgressView()
                         } else {
-                            Text(configurationStore.hasSecret(for: configuration) ? "Sign in Again" : "Sign in with Cursor")
+                            Text(configurationStore.hasSecret(for: configuration) ? "Switch Cursor Account" : "Sign in with Cursor")
                         }
                     }
                     .disabled(isSigningInWithCursor)
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Sign Out", role: .destructive) {
-                            configurationStore.saveSecret("", for: configuration)
-                            onCredentialsChanged()
+                            signOutOfCursor()
                         }
                     }
 
@@ -326,6 +325,10 @@ struct ProviderSettingsView: View {
         }
         .task {
             await debugAutostartCopilotAuthIfNeeded()
+        }
+        .onDisappear {
+            cursorSignInTask?.cancel()
+            cursorAuthPresenter.finish()
         }
         .sheet(item: $authURL) { authURL in
             SafariAuthSheet(authURL: authURL)
@@ -526,34 +529,57 @@ struct ProviderSettingsView: View {
     }
 
     @MainActor
+    private func startCursorSignIn() {
+        guard cursorSignInTask == nil else {
+            return
+        }
+        cursorSignInTask = Task { @MainActor in
+            await signInWithCursor()
+        }
+    }
+
+    @MainActor
     private func signInWithCursor() async {
         isSigningInWithCursor = true
         cursorAuthError = nil
+        defer {
+            cursorAuthPresenter.finish()
+            cursorSignInTask = nil
+            isSigningInWithCursor = false
+        }
 
         do {
             let result = try await cursorAuthService.signIn { url in
-                authURL = PresentedAuthURL(url: url)
+                cursorAuthPresenter.present(url: url) {
+                    cursorSignInTask?.cancel()
+                }
             }
-            if configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                configuration.accountLabel = ProviderID.cursor.displayName
-            }
-            configuration.authMethod = .browserSession
-            guard configurationStore.update(configuration) else {
+            guard let connectedConfiguration = configurationStore.connectCursorAccount(
+                configuration,
+                credential: result.storedCredential
+            ) else {
                 cursorAuthError = configurationStore.lastError
-                authURL = nil
-                isSigningInWithCursor = false
                 return
             }
-            configurationStore.saveSecret(result.storedCredential, for: configuration)
+            configuration = connectedConfiguration
             secret = ""
             onCredentialsChanged()
-            authURL = nil
         } catch {
-            cursorAuthError = error.localizedDescription
-            authURL = nil
+            cursorAuthError = Task.isCancelled
+                ? "Cursor sign-in canceled. The existing account was not changed."
+                : error.localizedDescription
         }
+    }
 
-        isSigningInWithCursor = false
+    @MainActor
+    private func signOutOfCursor() {
+        cursorAuthError = nil
+        guard let disconnectedConfiguration = configurationStore.disconnectCursorAccount(configuration) else {
+            cursorAuthError = configurationStore.lastError
+            return
+        }
+        configuration = disconnectedConfiguration
+        onCredentialsChanged()
     }
 
     @MainActor

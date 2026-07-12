@@ -373,6 +373,95 @@ public final class ProviderConfigurationStore: ObservableObject {
         return statusText(for: configuration)
     }
 
+    public func cursorAccountLabelAfterIdentityChange(for configuration: ProviderAccountConfiguration) -> String {
+        guard configuration.providerID == .cursor else {
+            return configuration.accountLabel
+        }
+
+        let currentLabel = configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard currentLabel.isEmpty || Self.looksLikeEmailAddress(currentLabel) else {
+            return configuration.accountLabel
+        }
+
+        let base = ProviderID.cursor.displayName
+        let otherNames = configurations
+            .filter { $0.id != configuration.id }
+            .map(\.displayName)
+        if !otherNames.contains(where: { $0.localizedCaseInsensitiveCompare(base) == .orderedSame }) {
+            return ""
+        }
+
+        var index = 2
+        while otherNames.contains(where: {
+            $0.localizedCaseInsensitiveCompare("\(base) \(index)") == .orderedSame
+        }) {
+            index += 1
+        }
+        return "\(base) \(index)"
+    }
+
+    @discardableResult
+    public func connectCursorAccount(
+        _ configuration: ProviderAccountConfiguration,
+        credential: String
+    ) -> ProviderAccountConfiguration? {
+        guard configuration.providerID == .cursor else {
+            lastError = "Only Cursor accounts can be connected here."
+            return nil
+        }
+
+        var connectedConfiguration = configuration
+        connectedConfiguration.accountLabel = cursorAccountLabelAfterIdentityChange(for: configuration)
+        connectedConfiguration.authMethod = .browserSession
+        guard isAccountNameUnique(connectedConfiguration) else {
+            lastError = "Account names must be unique."
+            return nil
+        }
+
+        do {
+            try secretStore.saveSecret(credential, account: keychainAccount(for: configuration))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+
+        guard update(connectedConfiguration) else {
+            refreshSecretAvailability()
+            return nil
+        }
+        lastError = nil
+        refreshSecretAvailability()
+        return connectedConfiguration
+    }
+
+    @discardableResult
+    public func disconnectCursorAccount(
+        _ configuration: ProviderAccountConfiguration
+    ) -> ProviderAccountConfiguration? {
+        guard configuration.providerID == .cursor else {
+            lastError = "Only Cursor accounts can be disconnected here."
+            return nil
+        }
+
+        do {
+            try secretStore.deleteSecret(account: keychainAccount(for: configuration))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+
+        var disconnectedConfiguration = configuration
+        disconnectedConfiguration.accountLabel = cursorAccountLabelAfterIdentityChange(for: configuration)
+        guard update(disconnectedConfiguration) else {
+            refreshSecretAvailability()
+            return nil
+        }
+
+        lastError = nil
+        refreshSecretAvailability()
+        return disconnectedConfiguration
+    }
+
     public func statusText(for configuration: ProviderAccountConfiguration) -> String {
         if !configuration.isEnabled {
             return "Disabled"
@@ -679,6 +768,15 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     private static func normalizedGroupName(_ name: String) -> String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func looksLikeEmailAddress(_ value: String) -> Bool {
+        let parts = value.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty else {
+            return false
+        }
+        let domainParts = parts[1].split(separator: ".", omittingEmptySubsequences: false)
+        return domainParts.count >= 2 && domainParts.allSatisfy { !$0.isEmpty }
     }
 
     private func suggestedAccountLabel(for providerID: ProviderID) -> String {
