@@ -3124,6 +3124,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.projectionLimit, 1)
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_893_438_000))
         XCTAssertEqual(result.bars.first?.projectionPeriodEnd, Date(timeIntervalSince1970: 1_893_456_000))
+
     }
 
     func testClaudeUsageParserReadsOAuthUsageWindows() throws {
@@ -3164,6 +3165,13 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.projectionLimit, 1)
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_893_438_000))
         XCTAssertEqual(result.bars.first?.projectionPeriodEnd, Date(timeIntervalSince1970: 1_893_456_000))
+
+        let percentagePayload = #"{"five_hour":{"utilization":15},"seven_day":{"utilization":36}}"#
+        let percentageResult = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(percentagePayload.utf8),
+            subscriptionType: "pro"
+        ))
+        XCTAssertEqual(percentageResult.bars.map(\.used), [15, 36])
     }
 
     func testClaudeUsageParserReadsStructuredAndScopedLimitsWithoutDuplicates() throws {
@@ -3297,6 +3305,16 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit"])
         XCTAssertEqual(result.bars.first?.used, 25)
         XCTAssertEqual(result.bars.first?.projectionCurrent, 0.25)
+
+        let overQuota = try XCTUnwrap(ClaudeUsageParser.parseRateLimitHeaders(
+            [
+                "anthropic-ratelimit-unified-5h-utilization": "1.2",
+                "anthropic-ratelimit-unified-5h-reset": "1893456000"
+            ],
+            subscriptionType: "max",
+            fetchedAt: fetchedAt
+        ))
+        XCTAssertEqual(overQuota.bars.first?.used, 100)
     }
 
     func testUsageBarFormatsPercentAndProjection() throws {

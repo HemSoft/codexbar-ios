@@ -250,7 +250,7 @@ public enum ClaudeUsageParser {
 
         return usageBar(
             label: label,
-            usedPercent: normalizedLegacyPercent(utilization),
+            usedPercent: normalizedOAuthPercent(utilization),
             reset: parseReset(window?.resetsAt),
             durationSeconds: durationSeconds,
             fetchedAt: fetchedAt,
@@ -276,7 +276,7 @@ public enum ClaudeUsageParser {
 
         return usageBar(
             label: label,
-            usedPercent: normalizedLegacyPercent(utilization),
+            usedPercent: normalizedHeaderPercent(utilization),
             reset: reset,
             durationSeconds: durationSeconds,
             fetchedAt: fetchedAt,
@@ -405,8 +405,13 @@ public enum ClaudeUsageParser {
         return messages.filter { seen.insert($0).inserted }
     }
 
-    private static func normalizedLegacyPercent(_ value: Double) -> Double {
+    // OAuth legacy windows have shipped both 0...1 fractions and percentage values such as 15 and 36.
+    private static func normalizedOAuthPercent(_ value: Double) -> Double {
         sanitizedPercent(value <= 1 ? value * 100 : value)
+    }
+
+    private static func normalizedHeaderPercent(_ value: Double) -> Double {
+        sanitizedPercent(min(value, 1) * 100)
     }
 
     private static func sanitizedPercent(_ value: Double) -> Double {
