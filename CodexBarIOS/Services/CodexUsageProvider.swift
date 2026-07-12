@@ -223,6 +223,15 @@ public final class CodexUsageProvider: UsageProvider {
             )
 
             do {
+                guard
+                    let storedSecret = try secretStore.readSecret(account: keychainAccount),
+                    let latestCredentials = CodexCredentialsParser.parse(storedSecret)
+                else {
+                    return .rejected
+                }
+                if latestCredentials != credentials {
+                    return .success(latestCredentials)
+                }
                 try secretStore.saveSecret(
                     CodexCredentialsParser.storedCredential(from: updated),
                     account: keychainAccount

@@ -422,6 +422,15 @@ public final class CopilotUsageProvider: UsageProvider {
             )
 
             do {
+                guard
+                    let storedSecret = try secretStore.readSecret(account: keychainAccount),
+                    let latestCredentials = CopilotCredentialsParser.parse(storedSecret)
+                else {
+                    return .rejected
+                }
+                if latestCredentials != credentials {
+                    return .success(latestCredentials)
+                }
                 try secretStore.saveSecret(
                     CopilotCredentialsParser.storedCredential(from: updated),
                     account: keychainAccount

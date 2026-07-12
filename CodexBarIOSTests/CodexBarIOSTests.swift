@@ -3573,6 +3573,50 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.used, 25)
     }
 
+    func testCodexUsageProviderPreservesCredentialChangedDuringRefresh() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        let initial = CodexCredentialsParser.storedCredential(from: CodexCredentials(
+            accessToken: "old-access",
+            refreshToken: "old-refresh",
+            expiresAt: 1_999_999_000
+        ))
+        let replacement = CodexCredentialsParser.storedCredential(from: CodexCredentials(
+            accessToken: "signed-in-access",
+            refreshToken: "signed-in-refresh",
+            expiresAt: 2_000_003_600
+        ))
+        let secretStore = ReplacingThirdReadSecretStore(initialSecret: initial, replacementSecret: replacement)
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/codex-token")!,
+            now: { now }
+        )
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/codex-token" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"refreshed-old-access","refresh_token":"rotated-old-refresh","expires_in":3600}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer signed-in-access")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.bars.first?.used, 25)
+        XCTAssertEqual(secretStore.saveCount, 0)
+    }
+
     func testCodexUsageProviderExplainsExpiredCredentialWithoutRefreshToken() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let secretStore = MemorySecretStore()
@@ -3828,6 +3872,51 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(requestCount, 2)
         XCTAssertEqual(result.bars.first?.used, 25)
+    }
+
+    func testCopilotUsageProviderPreservesCredentialChangedDuringRefresh() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        let initial = CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+            accessToken: "old-access",
+            refreshToken: "old-refresh",
+            expiresAt: 1_999_999_000
+        ))
+        let replacement = CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+            accessToken: "signed-in-access",
+            refreshToken: "signed-in-refresh",
+            expiresAt: 2_000_028_800
+        ))
+        let secretStore = ReplacingThirdReadSecretStore(initialSecret: initial, replacementSecret: replacement)
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now }
+        )
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/github-token" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"refreshed-old-access","refresh_token":"rotated-old-refresh","expires_in":28800}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "token signed-in-access")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.bars.first?.used, 25)
+        XCTAssertEqual(secretStore.saveCount, 0)
     }
 
     func testCopilotUsageProviderSharesConcurrentRefreshForSameAccount() async throws {
@@ -4419,6 +4508,40 @@ private final class StaleThirdReadSecretStore: SecretStore, @unchecked Sendable 
         defer { lock.unlock() }
         currentSecret = ""
     }
+}
+
+private final class ReplacingThirdReadSecretStore: SecretStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private let initialSecret: String
+    private let replacementSecret: String
+    private var readCount = 0
+    private var storedSaveCount = 0
+
+    init(initialSecret: String, replacementSecret: String) {
+        self.initialSecret = initialSecret
+        self.replacementSecret = replacementSecret
+    }
+
+    var saveCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedSaveCount
+    }
+
+    func readSecret(account: String) throws -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        readCount += 1
+        return readCount >= 3 ? replacementSecret : initialSecret
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        storedSaveCount += 1
+    }
+
+    func deleteSecret(account: String) throws {}
 }
 
 private func requestBodyData(from request: URLRequest) -> Data? {
