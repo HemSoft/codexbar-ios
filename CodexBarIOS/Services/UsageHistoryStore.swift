@@ -1,18 +1,12 @@
 import Foundation
 
 private enum UsageHistoryFormatting {
-    static func formatCurrency(_ value: Double) -> String {
-        currencyFormatter.string(from: NSNumber(value: value)) ?? "$0.00"
+    static func formatCurrency(_ value: Double, currencyCode: String = "USD", decimalPlaces: Int = 2) -> String {
+        value.formatted(
+            .currency(code: currencyCode)
+                .precision(.fractionLength(decimalPlaces))
+        )
     }
-
-    private static let currencyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
 }
 
 public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
@@ -29,6 +23,51 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
     }
 }
 
+public struct UsageHistoryMonetaryMetricSnapshot: Equatable, Codable, Sendable {
+    public let kind: ProviderMonetaryMetricKind
+    public let label: String
+    public let minorUnits: Decimal
+    public let currencyCode: String
+    public let decimalPlaces: Int
+
+    public init(metric: ProviderMonetaryMetric) {
+        self.kind = metric.kind
+        self.label = metric.label
+        self.minorUnits = metric.minorUnits
+        self.currencyCode = metric.currencyCode
+        self.decimalPlaces = metric.decimalPlaces
+    }
+}
+
+private protocol MonetaryMetricSnapshot {
+    var metricKind: ProviderMonetaryMetricKind { get }
+    var minorUnits: Decimal { get }
+    var currencyCode: String { get }
+    var decimalPlaces: Int { get }
+}
+
+private extension MonetaryMetricSnapshot {
+    var clampedDecimalPlaces: Int {
+        min(max(decimalPlaces, 0), 6)
+    }
+
+    var doubleValue: Double {
+        var divisor = Decimal(1)
+        for _ in 0..<clampedDecimalPlaces {
+            divisor *= 10
+        }
+        return NSDecimalNumber(decimal: minorUnits / divisor).doubleValue
+    }
+}
+
+extension ProviderMonetaryMetric: MonetaryMetricSnapshot {
+    fileprivate var metricKind: ProviderMonetaryMetricKind { kind }
+}
+
+extension UsageHistoryMonetaryMetricSnapshot: MonetaryMetricSnapshot {
+    fileprivate var metricKind: ProviderMonetaryMetricKind { kind }
+}
+
 public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
     public let id: String
     public let accountID: String
@@ -38,6 +77,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
     public let capturedAt: Date
     public let bars: [UsageHistoryBarSnapshot]
     public let creditsRemaining: Double?
+    public let monetaryMetrics: [UsageHistoryMonetaryMetricSnapshot]?
     public let highestSeverity: UsageSeverity
 
     public init(result: ProviderUsageResult, capturedAt: Date? = nil) {
@@ -50,6 +90,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         self.capturedAt = capturedAt
         self.bars = result.bars.map(UsageHistoryBarSnapshot.init)
         self.creditsRemaining = result.creditsRemaining
+        self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
         self.highestSeverity = result.highestSeverity(at: capturedAt)
     }
 
@@ -58,7 +99,24 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
             return creditsRemaining
         }
 
-        return bars.map(\.fractionUsed).max()
+        if let usage = bars.map(\.fractionUsed).max() {
+            return usage
+        }
+
+        let metric = monetaryMetrics?.first(where: { $0.kind == .balance })
+            ?? monetaryMetrics?.first(where: { $0.kind == .remainingHeadroom })
+            ?? monetaryMetrics?.first
+        return metric?.doubleValue
+    }
+
+    fileprivate var monetaryPrimaryValue: Double? {
+        if let creditsRemaining {
+            return creditsRemaining
+        }
+        let metric = monetaryMetrics?.first(where: { $0.kind == .balance })
+            ?? monetaryMetrics?.first(where: { $0.kind == .remainingHeadroom })
+            ?? monetaryMetrics?.first
+        return metric?.doubleValue
     }
 }
 
@@ -104,6 +162,22 @@ public struct UsageHistorySeries: Equatable, Sendable {
     public let accountID: String
     public let points: [UsageHistoryPoint]
     public let isBalance: Bool
+    public let currencyCode: String?
+    public let decimalPlaces: Int
+
+    public init(
+        accountID: String,
+        points: [UsageHistoryPoint],
+        isBalance: Bool,
+        currencyCode: String? = nil,
+        decimalPlaces: Int = 2
+    ) {
+        self.accountID = accountID
+        self.points = points
+        self.isBalance = isBalance
+        self.currencyCode = currencyCode
+        self.decimalPlaces = decimalPlaces
+    }
 
     public var latestValueDescription: String {
         points.last.map { valueDescription(for: $0.value) } ?? "No data"
@@ -143,7 +217,12 @@ public struct UsageHistorySeries: Equatable, Sendable {
 
         let directionDescription = direction == .up ? "Up" : "Down"
         if isBalance {
-            return "\(directionDescription) \(UsageHistoryFormatting.formatCurrency(abs(latestDelta)))"
+            let formattedDelta = UsageHistoryFormatting.formatCurrency(
+                abs(latestDelta),
+                currencyCode: currencyCode ?? "USD",
+                decimalPlaces: decimalPlaces
+            )
+            return "\(directionDescription) \(formattedDelta)"
         }
 
         return "\(directionDescription) \(Int((abs(latestDelta) * 100).rounded())) pts"
@@ -199,7 +278,11 @@ public struct UsageHistorySeries: Equatable, Sendable {
 
     public func valueDescription(for value: Double) -> String {
         if isBalance {
-            return UsageHistoryFormatting.formatCurrency(value)
+            return UsageHistoryFormatting.formatCurrency(
+                value,
+                currencyCode: currencyCode ?? "USD",
+                decimalPlaces: decimalPlaces
+            )
         }
 
         return "\(Int((value * 100).rounded()))%"
@@ -215,6 +298,12 @@ public struct UsageHistorySeries: Equatable, Sendable {
 
     private static let flatDeltaThreshold = 0.0001
 
+}
+
+public struct UsageHistorySeriesOption: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let label: String
+    public let series: UsageHistorySeries
 }
 
 @MainActor
@@ -241,7 +330,7 @@ public final class UsageHistoryStore: ObservableObject {
 
     public func record(results: [ProviderUsageResult], now: Date = Date()) {
         let recordableResults = results.filter { result in
-            result.creditsRemaining != nil || !result.bars.isEmpty
+            result.creditsRemaining != nil || !result.bars.isEmpty || !result.monetaryMetrics.isEmpty
         }
         guard !recordableResults.isEmpty else {
             return
@@ -274,23 +363,97 @@ public final class UsageHistoryStore: ObservableObject {
         since start: Date? = nil
     ) -> UsageHistorySeries {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
-        let points = accountSnapshots.compactMap { snapshot in
-            snapshot.primaryValue.map { UsageHistoryPoint(snapshot: snapshot, value: $0) }
-        }
         let isBalance: Bool
         if result.creditsRemaining != nil {
             isBalance = true
         } else if !result.bars.isEmpty {
             isBalance = false
+        } else if !result.monetaryMetrics.isEmpty {
+            isBalance = true
         } else {
-            isBalance = accountSnapshots.last?.creditsRemaining != nil
+            isBalance = accountSnapshots.last.map {
+                $0.creditsRemaining != nil || !($0.monetaryMetrics ?? []).isEmpty
+            } ?? false
+        }
+        let points = accountSnapshots.compactMap { snapshot -> UsageHistoryPoint? in
+            if isBalance {
+                guard snapshot.creditsRemaining != nil || !(snapshot.monetaryMetrics ?? []).isEmpty else {
+                    return nil
+                }
+            } else {
+                guard !snapshot.bars.isEmpty else {
+                    return nil
+                }
+            }
+            let value = isBalance
+                ? snapshot.monetaryPrimaryValue
+                : snapshot.bars.map(\.fractionUsed).max()
+            return value.map { UsageHistoryPoint(snapshot: snapshot, value: $0) }
+        }
+        let monetaryFormat = primaryMonetaryMetric(in: result.monetaryMetrics).map {
+            ($0.currencyCode, $0.decimalPlaces)
+        } ?? accountSnapshots.last.flatMap { snapshot in
+            primaryMonetaryMetric(in: snapshot.monetaryMetrics ?? []).map {
+                ($0.currencyCode, $0.decimalPlaces)
+            }
         }
 
         return UsageHistorySeries(
             accountID: result.accountID,
             points: points,
-            isBalance: isBalance
+            isBalance: isBalance,
+            currencyCode: monetaryFormat?.0,
+            decimalPlaces: min(max(monetaryFormat?.1 ?? 2, 0), 6)
         )
+    }
+
+    private func primaryMonetaryMetric<T>(in metrics: [T]) -> T? where T: MonetaryMetricSnapshot {
+        metrics.first(where: { $0.metricKind == .balance })
+            ?? metrics.first(where: { $0.metricKind == .remainingHeadroom })
+            ?? metrics.first
+    }
+
+    public func historySeriesOptions(
+        for result: ProviderUsageResult,
+        since start: Date? = nil
+    ) -> [UsageHistorySeriesOption] {
+        let accountSnapshots = snapshots(for: result.accountID, since: start)
+        var options: [UsageHistorySeriesOption] = []
+
+        if !result.bars.isEmpty || result.creditsRemaining != nil {
+            options.append(UsageHistorySeriesOption(
+                id: "primary",
+                label: result.creditsRemaining == nil ? "Usage" : "Balance",
+                series: historySeries(for: result, since: start)
+            ))
+        }
+
+        for metric in result.monetaryMetrics {
+            let points = accountSnapshots.compactMap { snapshot -> UsageHistoryPoint? in
+                guard let storedMetric = snapshot.monetaryMetrics?.first(where: {
+                    $0.kind == metric.kind
+                        && $0.currencyCode == metric.currencyCode
+                }) else {
+                    return nil
+                }
+                return UsageHistoryPoint(snapshot: snapshot, value: storedMetric.doubleValue)
+            }
+            options.append(UsageHistorySeriesOption(
+                id: "money.\(metric.id)",
+                label: metric.label,
+                series: UsageHistorySeries(
+                    accountID: result.accountID,
+                    points: points,
+                    isBalance: true,
+                    currencyCode: metric.currencyCode,
+                    decimalPlaces: metric.clampedDecimalPlaces
+                )
+            ))
+        }
+
+        return options.isEmpty
+            ? [UsageHistorySeriesOption(id: "primary", label: "Usage", series: historySeries(for: result, since: start))]
+            : options
     }
 
     public func trendSummary(for result: ProviderUsageResult, now: Date = Date()) -> UsageTrendSummary? {
@@ -312,7 +475,12 @@ public final class UsageHistoryStore: ObservableObject {
         if direction == .flat {
             description = "No change"
         } else if series.isBalance {
-            description = "Changed \(delta > 0 ? "+" : "-")\(UsageHistoryFormatting.formatCurrency(abs(delta)))"
+            let formattedDelta = UsageHistoryFormatting.formatCurrency(
+                abs(delta),
+                currencyCode: series.currencyCode ?? "USD",
+                decimalPlaces: series.decimalPlaces
+            )
+            description = "Changed \(delta > 0 ? "+" : "-")\(formattedDelta)"
         } else {
             description = "Changed \(delta > 0 ? "+" : "-")\(Int((abs(delta) * 100).rounded())) pts"
         }

@@ -212,6 +212,8 @@ public enum UsageAlertEvaluator {
             } else {
                 message = "\(affectedBar.label) is currently at \(affectedBar.usageText)."
             }
+        } else if result.hasReachedSpendLimit {
+            message = "The monthly usage-credit spend limit has been reached."
         } else {
             message = result.subtitle
         }

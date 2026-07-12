@@ -716,8 +716,8 @@ struct ProviderWidgetTile: View {
         VStack(alignment: .leading, spacing: 7) {
             header(font: .caption.weight(.semibold), logoSize: 22)
 
-            if let creditsRemaining = tile.creditsRemaining {
-                Text(widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00")
+            if let monetaryValueText = tile.monetaryValueText {
+                Text(monetaryValueText)
                     .font(.system(size: style == .standard ? 22 : 20, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
@@ -749,8 +749,8 @@ struct ProviderWidgetTile: View {
         VStack(alignment: .leading, spacing: 6) {
             header(font: .caption2.weight(.semibold), logoSize: 18)
 
-            if let creditsRemaining = tile.creditsRemaining {
-                Text(widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00")
+            if let monetaryValueText = tile.monetaryValueText {
+                Text(monetaryValueText)
                     .font(.system(size: 24, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
@@ -862,8 +862,8 @@ struct ProviderWidgetTile: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
                 }
-            } else if let creditsRemaining = tile.creditsRemaining {
-                Text(widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00")
+            } else if let monetaryValueText = tile.monetaryValueText {
+                Text(monetaryValueText)
                     .font(primaryMetricFont)
                     .monospacedDigit()
                     .lineLimit(1)
@@ -885,14 +885,14 @@ struct ProviderWidgetTile: View {
 
     private var balanceOnlyContent: some View {
         VStack(alignment: .leading, spacing: modeSpacing) {
-            if let creditsRemaining = tile.creditsRemaining {
-                Text(widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00")
+            if let monetaryValueText = tile.monetaryValueText {
+                Text(monetaryValueText)
                     .font(primaryMetricFont)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
 
-                Text("Balance")
+                Text(tile.monetaryMetric?.label ?? "Balance")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -987,8 +987,8 @@ struct ProviderWidgetTile: View {
             return metricText(for: bar)
         }
 
-        if let creditsRemaining = tile.creditsRemaining {
-            return widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
+        if let monetaryValueText = tile.monetaryValueText {
+            return monetaryValueText
         }
 
         return statusLabel
@@ -999,7 +999,7 @@ struct ProviderWidgetTile: View {
             return bar.label
         }
 
-        if tile.creditsRemaining != nil {
+        if tile.monetaryValueText != nil {
             return tile.title
         }
 
@@ -1026,6 +1026,10 @@ struct ProviderWidgetTile: View {
             return [bar.usageText, bar.localizedResetDescription()]
                 .compactMap { $0 }
                 .joined(separator: " - ")
+        }
+
+        if let metric = tile.monetaryMetric {
+            return "\(metric.formattedAmount) - \(metric.label)"
         }
 
         if let creditsRemaining = tile.creditsRemaining {
@@ -1184,10 +1188,11 @@ struct CodexBarWidgetTile: Identifiable {
     let subtitle: String
     let bar: CodexBarWidgetUsageBarSnapshot?
     let creditsRemaining: Double?
+    let monetaryMetric: CodexBarWidgetMonetaryMetricSnapshot?
     let severity: CodexBarWidgetSeverity
 
     var choiceTitle: String {
-        if bar != nil {
+        if bar != nil || monetaryMetric != nil {
             "\(providerTitle) - \(title)"
         } else {
             title
@@ -1203,6 +1208,10 @@ struct CodexBarWidgetTile: Identifiable {
             return widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? subtitle
         }
 
+        if let monetaryMetric {
+            return monetaryMetric.formattedAmount
+        }
+
         return subtitle
     }
 
@@ -1215,8 +1224,18 @@ struct CodexBarWidgetTile: Identifiable {
             subtitle: "Open CodexBar to refresh this tile.",
             bar: nil,
             creditsRemaining: nil,
+            monetaryMetric: nil,
             severity: .warning
         )
+    }
+
+    var monetaryValueText: String? {
+        if let monetaryMetric {
+            return monetaryMetric.formattedAmount
+        }
+        return creditsRemaining.map {
+            widgetCurrencyFormatter.string(from: NSNumber(value: $0)) ?? "$0.00"
+        }
     }
 }
 
@@ -1235,7 +1254,9 @@ private extension CodexBarWidgetSnapshot {
         focus: CodexBarWidgetFocus = .dashboardOrder
     ) -> [CodexBarWidgetTile] {
         scopedProviders(group: group, focus: focus).flatMap { provider in
-            [provider.summaryTile] + provider.bars.map { provider.barTile($0) }
+            [provider.summaryTile]
+                + provider.bars.map { provider.barTile($0) }
+                + provider.standaloneMonetaryMetrics.map { provider.monetaryTile($0) }
         }
     }
 
@@ -1302,14 +1323,16 @@ private extension CodexBarWidgetSnapshot {
 
 private extension CodexBarWidgetProviderSnapshot {
     var summaryTile: CodexBarWidgetTile {
-        CodexBarWidgetTile(
+        let summaryMetric = summaryMonetaryMetric
+        return CodexBarWidgetTile(
             id: "provider.\(accountID)",
             providerID: providerID,
             providerTitle: title,
-            title: creditsRemaining == nil ? title : "\(title) Balance",
-            subtitle: subtitle,
+            title: summaryMetric?.label ?? (creditsRemaining == nil ? title : "\(title) Balance"),
+            subtitle: summaryMetric?.detail ?? subtitle,
             bar: representativeBar,
             creditsRemaining: creditsRemaining,
+            monetaryMetric: summaryMetric,
             severity: severity
         )
     }
@@ -1333,7 +1356,22 @@ private extension CodexBarWidgetProviderSnapshot {
             subtitle: subtitle,
             bar: bar,
             creditsRemaining: nil,
+            monetaryMetric: nil,
             severity: bar.effectiveSeverity
+        )
+    }
+
+    func monetaryTile(_ metric: CodexBarWidgetMonetaryMetricSnapshot) -> CodexBarWidgetTile {
+        CodexBarWidgetTile(
+            id: "money.\(accountID).\(metric.id)",
+            providerID: providerID,
+            providerTitle: title,
+            title: metric.label,
+            subtitle: metric.detail ?? subtitle,
+            bar: nil,
+            creditsRemaining: nil,
+            monetaryMetric: metric,
+            severity: severity
         )
     }
 }
@@ -1345,8 +1383,8 @@ private extension String {
 }
 
 private func summary(for tile: CodexBarWidgetTile) -> String {
-    if let creditsRemaining = tile.creditsRemaining {
-        return widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
+    if let monetaryValueText = tile.monetaryValueText {
+        return monetaryValueText
     }
 
     return tile.bar.map(metricText(for:)) ?? "No data"

@@ -183,7 +183,9 @@ public struct CodexBarWidgetBuilderTile: Equatable, Identifiable, Sendable {
 public extension CodexBarWidgetSnapshot {
     var builderTiles: [CodexBarWidgetBuilderTile] {
         results.flatMap { provider in
-            [provider.builderSummaryTile] + provider.bars.map { provider.builderBarTile($0) }
+            [provider.builderSummaryTile]
+                + provider.bars.map { provider.builderBarTile($0) }
+                + provider.standaloneMonetaryMetrics.map { provider.builderMonetaryTile($0) }
         }
     }
 }
@@ -191,13 +193,17 @@ public extension CodexBarWidgetSnapshot {
 private extension CodexBarWidgetProviderSnapshot {
     var builderSummaryTile: CodexBarWidgetBuilderTile {
         let bar = representativeBar
+        let monetaryMetric = summaryMonetaryMetric
         return CodexBarWidgetBuilderTile(
             id: "provider.\(accountID)",
             providerID: providerID,
             providerTitle: title,
-            title: creditsRemaining == nil ? title : "\(title) Balance",
-            subtitle: groupName ?? subtitle,
-            value: creditsRemaining.map(Self.formattedCurrency) ?? bar?.usageText ?? "No data",
+            title: monetaryMetric?.label ?? (creditsRemaining == nil ? title : "\(title) Balance"),
+            subtitle: monetaryMetric?.detail ?? groupName ?? subtitle,
+            value: creditsRemaining.map(Self.formattedCurrency)
+                ?? bar?.usageText
+                ?? monetaryMetric?.formattedAmount
+                ?? "No data",
             fractionUsed: bar?.effectiveFractionUsed,
             creditsRemaining: creditsRemaining,
             severity: severity
@@ -225,6 +231,20 @@ private extension CodexBarWidgetProviderSnapshot {
             fractionUsed: bar.effectiveFractionUsed,
             creditsRemaining: nil,
             severity: bar.effectiveSeverity
+        )
+    }
+
+    func builderMonetaryTile(_ metric: CodexBarWidgetMonetaryMetricSnapshot) -> CodexBarWidgetBuilderTile {
+        CodexBarWidgetBuilderTile(
+            id: "money.\(accountID).\(metric.id)",
+            providerID: providerID,
+            providerTitle: title,
+            title: metric.label,
+            subtitle: metric.detail ?? groupName ?? subtitle,
+            value: metric.formattedAmount,
+            fractionUsed: nil,
+            creditsRemaining: nil,
+            severity: severity
         )
     }
 

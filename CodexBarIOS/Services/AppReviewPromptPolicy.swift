@@ -13,7 +13,7 @@ enum AppReviewPromptEligibility {
         results: [ProviderUsageResult]
     ) -> Bool {
         lastRefreshError == nil && results.contains {
-            !$0.bars.isEmpty || $0.creditsRemaining != nil
+            !$0.bars.isEmpty || $0.creditsRemaining != nil || !$0.monetaryMetrics.isEmpty
         }
     }
 }

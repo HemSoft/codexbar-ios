@@ -4,17 +4,23 @@ public struct DemoUsageProvider: UsageProvider {
     public let providerID: ProviderID
     public let bars: [UsageBar]
     public let creditsRemaining: Double?
+    public let monetaryMetrics: [ProviderMonetaryMetric]
+    public let usageMessages: [String]
     public let subtitle: String
 
     public init(
         providerID: ProviderID,
         bars: [UsageBar],
         creditsRemaining: Double? = nil,
+        monetaryMetrics: [ProviderMonetaryMetric] = [],
+        usageMessages: [String] = [],
         subtitle: String = "Ready to refresh"
     ) {
         self.providerID = providerID
         self.bars = bars
         self.creditsRemaining = creditsRemaining
+        self.monetaryMetrics = monetaryMetrics
+        self.usageMessages = usageMessages
         self.subtitle = subtitle
     }
 
@@ -26,6 +32,8 @@ public struct DemoUsageProvider: UsageProvider {
             subtitle: subtitle,
             bars: bars,
             creditsRemaining: creditsRemaining,
+            monetaryMetrics: monetaryMetrics,
+            usageMessages: usageMessages,
             fetchedAt: Date()
         )
     }
@@ -73,8 +81,39 @@ public extension DemoUsageProvider {
                         used: 36,
                         limit: 100,
                         resetDescription: "Resets in 1h 40m"
+                    ),
+                    UsageBar(
+                        label: "Weekly usage limit",
+                        used: 58,
+                        limit: 100,
+                        resetDescription: "Resets Monday"
+                    ),
+                    UsageBar(
+                        label: "Fable weekly limit",
+                        used: 71,
+                        limit: 100,
+                        resetDescription: "Resets Monday"
                     )
                 ],
+                monetaryMetrics: [
+                    ProviderMonetaryMetric(
+                        kind: .spent,
+                        label: "Usage credits spent",
+                        minorUnits: 1250,
+                        currencyCode: "USD",
+                        decimalPlaces: 2,
+                        detail: "Month to date"
+                    ),
+                    ProviderMonetaryMetric(
+                        kind: .remainingHeadroom,
+                        label: "Remaining spend headroom",
+                        minorUnits: 3750,
+                        currencyCode: "USD",
+                        decimalPlaces: 2,
+                        detail: "Not a prepaid balance"
+                    ),
+                ],
+                usageMessages: ["Fable usage is capped within the all-model weekly allowance."],
                 subtitle: "Browser session connected"
             ),
             DemoUsageProvider(

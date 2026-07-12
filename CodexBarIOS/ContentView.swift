@@ -175,7 +175,7 @@ struct ContentView: View {
         .sheet(item: $selectedHistoryResult) { result in
             ProviderUsageHistoryDetailView(
                 result: result,
-                series: historyStore.historySeries(for: result)
+                seriesOptions: historyStore.historySeriesOptions(for: result)
             )
         }
         .task {

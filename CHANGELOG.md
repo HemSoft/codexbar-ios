@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added complete Claude subscription usage details, including all-model and
+  model-scoped weekly limits plus currency-aware usage-credit spending and
+  monthly headroom shown alongside quota bars. ([#34](https://github.com/HemSoft/codexbar-ios/issues/34))
 - Added installed version and build details to Settings, plus a quiet,
   dismissible notice and App Store link when a newer CodexBar release is
   available. ([#20](https://github.com/HemSoft/codexbar-ios/issues/20))
