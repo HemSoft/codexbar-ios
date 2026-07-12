@@ -56,6 +56,13 @@ building, testing, or releasing the app.
 - Kept active alert details visible after notification deduplication, while
   continuing to suppress repeat notifications until the condition recovers.
 
+### Fixed
+
+- Kept the Codex 5-hour usage metric recognizable when ChatGPT reports a
+  slightly varied window duration, and now explains when ChatGPT omits that
+  window instead of letting it disappear silently.
+  ([#38](https://github.com/HemSoft/codexbar-ios/issues/38))
+
 ### Developer Experience
 
 - Added deterministic App Store screenshot capture automation for the six

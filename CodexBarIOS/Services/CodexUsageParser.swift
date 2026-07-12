@@ -42,12 +42,16 @@ public enum CodexUsageParser {
                 showProjectionOnCurrentBar: true
             )
         }
+        let usageMessages = windows.contains { isApproximateDuration($0.durationSeconds, expected: 18_000) }
+            ? []
+            : ["ChatGPT is not currently reporting a 5-hour usage limit for this account."]
 
         return ProviderUsageResult(
             providerID: .codex,
             title: formatDisplayName(planType: root["plan_type"] as? String),
             subtitle: "Live ChatGPT usage",
             bars: bars,
+            usageMessages: usageMessages,
             fetchedAt: fetchedAt
         )
     }
@@ -72,14 +76,18 @@ public enum CodexUsageParser {
     }
 
     private static func label(forDuration durationSeconds: Int) -> String {
-        switch durationSeconds {
-        case 18_000:
+        if isApproximateDuration(durationSeconds, expected: 18_000) {
             "5 hour usage limit"
-        case 604_800:
+        } else if isApproximateDuration(durationSeconds, expected: 604_800) {
             "Weekly usage limit"
-        default:
+        } else {
             "\(max(1, durationSeconds / 3_600)) hour usage limit"
         }
+    }
+
+    private static func isApproximateDuration(_ durationSeconds: Int, expected: Int) -> Bool {
+        let tolerance = Double(expected) * 0.05
+        return abs(Double(durationSeconds - expected)) <= tolerance
     }
 
     private static func formatReset(
