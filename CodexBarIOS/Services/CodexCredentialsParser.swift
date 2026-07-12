@@ -38,7 +38,8 @@ public enum CodexCredentialsParser {
             refreshToken: refreshToken,
             idToken: idToken,
             accountID: stringValue(in: tokens, snakeCase: "account_id", camelCase: "accountId")
-                ?? idToken.flatMap(accountID),
+                ?? idToken.flatMap(accountID)
+                ?? accountID(from: accessToken),
             expiresAt: explicitExpiry ?? tokenExpiry
         )
     }

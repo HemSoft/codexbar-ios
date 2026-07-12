@@ -1636,6 +1636,18 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(credentials, CodexCredentials(accessToken: "access-token", accountID: "account-id"))
     }
 
+    func testCodexCredentialsParserReadsAccountIDFromAccessJWT() throws {
+        let header = #"{"alg":"none"}"#.base64URLEncodedForTest()
+        let payload = #"{"chatgpt_account_id":"access-account"}"#.base64URLEncodedForTest()
+        let accessToken = "\(header).\(payload).signature"
+
+        let credentials = try XCTUnwrap(CodexCredentialsParser.parse("""
+        {"tokens":{"access_token":"\(accessToken)"}}
+        """))
+
+        XCTAssertEqual(credentials.accountID, "access-account")
+    }
+
     func testCodexCredentialsParserRetainsOAuthLifecycleFieldsAndLegacyTokens() throws {
         let credentials = try XCTUnwrap(CodexCredentialsParser.parse("""
         {
