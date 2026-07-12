@@ -211,6 +211,8 @@ public final class CodexUsageProvider: UsageProvider {
 
             let refreshedAt = now()
             let idToken = tokenResponse.idToken ?? credentials.idToken
+            let parsedAccessToken = CodexCredentialsParser.parse(accessToken)
+            let parsedIDToken = idToken.flatMap(CodexCredentialsParser.parse)
             let updated = CodexCredentials(
                 accessToken: accessToken,
                 refreshToken: tokenResponse.refreshToken ?? credentials.refreshToken,
@@ -220,6 +222,8 @@ public final class CodexUsageProvider: UsageProvider {
                     ?? tokenResponse.expiresIn.map {
                         Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
                     }
+                    ?? parsedAccessToken?.expiresAt
+                    ?? parsedIDToken?.expiresAt
             )
 
             do {

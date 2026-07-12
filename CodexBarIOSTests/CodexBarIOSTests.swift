@@ -3617,6 +3617,56 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(secretStore.saveCount, 0)
     }
 
+    func testCodexUsageProviderDerivesRefreshedExpiryFromJWT() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let expectedExpiry: Int64 = 2_000_003_600
+        let header = #"{"alg":"none"}"#.base64URLEncodedForTest()
+        let payload = #"{"exp":2000003600}"#.base64URLEncodedForTest()
+        let refreshedAccessToken = "\(header).\(payload).signature"
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        let account = ProviderConfigurationStore.keychainAccount(for: configuration)
+        let secretStore = MemorySecretStore()
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "expired-access",
+                refreshToken: "refresh-token",
+                expiresAt: 1_999_999_000
+            )),
+            account: account
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/codex-token")!,
+            now: { now }
+        )
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/codex-token" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"\#(refreshedAccessToken)","refresh_token":"rotated"}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(refreshedAccessToken)")
+            let persisted = try XCTUnwrap(
+                CodexCredentialsParser.parse(try XCTUnwrap(secretStore.readSecret(account: account)))
+            )
+            XCTAssertEqual(persisted.expiresAt, expectedExpiry)
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.bars.first?.used, 25)
+    }
+
     func testCodexUsageProviderExplainsExpiredCredentialWithoutRefreshToken() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let secretStore = MemorySecretStore()
