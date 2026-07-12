@@ -5385,6 +5385,79 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(preserved.bars.isEmpty)
     }
 
+    func testClaudeUsageProviderPreservesCachedBarsWhenPartialProbeFails() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            switch requestCount {
+            case 1, 3:
+                XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(#"{"extra_usage":{"is_enabled":true,"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8)
+                )
+            case 2:
+                XCTAssertEqual(request.url?.path, "/v1/messages")
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: [
+                            "anthropic-ratelimit-unified-5h-utilization": "0.25",
+                            "anthropic-ratelimit-unified-5h-reset": "1893456000",
+                        ]
+                    )!,
+                    Data()
+                )
+            case 4:
+                XCTAssertEqual(request.url?.path, "/v1/messages")
+                throw URLError(.timedOut)
+            default:
+                XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 429,
+                        httpVersion: nil,
+                        headerFields: ["Retry-After": "120"]
+                    )!,
+                    Data()
+                )
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let merged = try await provider.fetchUsage(for: configuration)
+        let partial = try await provider.fetchUsage(for: configuration)
+        let stale = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 5)
+        XCTAssertEqual(merged.bars.first?.used, 25)
+        XCTAssertTrue(partial.bars.isEmpty)
+        XCTAssertEqual(stale.bars, merged.bars)
+        XCTAssertEqual(stale.monetaryMetrics, partial.monetaryMetrics)
+        XCTAssertEqual(stale.fetchedAt, merged.fetchedAt)
+        XCTAssertTrue(stale.subtitle.contains("last known data"))
+    }
+
     func testClaudeUsageProviderDoesNotProbeMessagesOnlySnapshotDuringBackoff() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)

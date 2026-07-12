@@ -77,8 +77,14 @@ public final class ClaudeUsageProvider: UsageProvider {
                         return mergedResult
                     }
                 } catch {
+                    if oauthOutcome.isSuccessfulSnapshot {
+                        await snapshotCache.storePreservingBars(usageResult, accountID: configuration.id)
+                    }
                     return usageResult
                 }
+            }
+            if oauthOutcome.isSuccessfulSnapshot {
+                await snapshotCache.storePreservingBars(usageResult, accountID: configuration.id)
             }
             return usageResult
         }
@@ -124,8 +130,11 @@ public final class ClaudeUsageProvider: UsageProvider {
                 return OAuthUsageOutcome(result: nil, permitsFallbackProbe: true)
             }
             let result = applyAccountMetadata(to: parsed, configuration: configuration)
-            await snapshotCache.store(result, accountID: configuration.id)
-            return OAuthUsageOutcome(result: result, permitsFallbackProbe: false)
+            return OAuthUsageOutcome(
+                result: result,
+                permitsFallbackProbe: false,
+                isSuccessfulSnapshot: true
+            )
         case 401:
             return OAuthUsageOutcome(
                 result: failureResult("Claude credential was rejected. Sign in again.", configuration: configuration),
@@ -365,6 +374,25 @@ private actor ClaudeUsageSnapshotCache {
         retryDates[accountID] = nil
     }
 
+    func storePreservingBars(_ result: ProviderUsageResult, accountID: String) {
+        guard result.bars.isEmpty, let cached = results[accountID], !cached.bars.isEmpty else {
+            store(result, accountID: accountID)
+            return
+        }
+        results[accountID] = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: cached.bars,
+            creditsRemaining: result.creditsRemaining,
+            monetaryMetrics: result.monetaryMetrics,
+            usageMessages: result.usageMessages,
+            fetchedAt: cached.fetchedAt
+        )
+        retryDates[accountID] = nil
+    }
+
     func result(accountID: String) -> ProviderUsageResult? {
         results[accountID]
     }
@@ -381,6 +409,17 @@ private actor ClaudeUsageSnapshotCache {
 private struct OAuthUsageOutcome {
     let result: ProviderUsageResult?
     let permitsFallbackProbe: Bool
+    let isSuccessfulSnapshot: Bool
+
+    init(
+        result: ProviderUsageResult?,
+        permitsFallbackProbe: Bool,
+        isSuccessfulSnapshot: Bool = false
+    ) {
+        self.result = result
+        self.permitsFallbackProbe = permitsFallbackProbe
+        self.isSuccessfulSnapshot = isSuccessfulSnapshot
+    }
 }
 
 private struct TokenRefreshResponse: Decodable {
