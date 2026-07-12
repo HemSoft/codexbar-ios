@@ -15,7 +15,7 @@ public final class CodexUsageProvider: UsageProvider {
         secretStore: SecretStore = KeychainService(),
         session: URLSession = .shared,
         usageEndpoint: URL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!,
-        tokenEndpoint: URL = URL(string: "https://auth.openai.com/oauth/token")!,
+        tokenEndpoint: URL = CodexWebAuthService.tokenEndpoint,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.secretStore = secretStore

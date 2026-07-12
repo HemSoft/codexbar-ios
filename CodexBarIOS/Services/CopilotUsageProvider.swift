@@ -27,7 +27,7 @@ public final class CopilotUsageProvider: UsageProvider {
         session: URLSession = .shared,
         usageEndpoint: URL = URL(string: "https://api.github.com/copilot_internal/user")!,
         githubAPIBaseURL: URL = URL(string: "https://api.github.com")!,
-        tokenEndpoint: URL = URL(string: "https://github.com/login/oauth/access_token")!,
+        tokenEndpoint: URL = CopilotWebAuthService.tokenEndpoint,
         oauthConfiguration: CopilotOAuthConfiguration = .bundled,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {

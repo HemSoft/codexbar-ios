@@ -69,7 +69,7 @@ public final class CodexWebAuthService: Sendable {
     private static let callbackPath = "/auth/callback"
     private static let issuer = URL(string: "https://auth.openai.com")!
     static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
-    static let tokenEndpoint = issuer.appending(path: "/oauth/token")
+    public static let tokenEndpoint = issuer.appending(path: "/oauth/token")
     private static let originator = "codex_cli_rs"
 
     private let session: URLSession

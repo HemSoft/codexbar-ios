@@ -93,7 +93,7 @@ public final class CopilotWebAuthService: Sendable {
     }
 
     private static let githubBaseURL = URL(string: "https://github.com")!
-    static let tokenEndpoint = githubBaseURL.appending(path: "/login/oauth/access_token")
+    public static let tokenEndpoint = githubBaseURL.appending(path: "/login/oauth/access_token")
     private static let callbackPath = "/callback"
     private static let requestedScope = "repo read:org gist"
 
