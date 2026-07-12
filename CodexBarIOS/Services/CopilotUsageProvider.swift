@@ -421,7 +421,7 @@ public final class CopilotUsageProvider: UsageProvider {
                 refreshToken: rotatedRefreshToken,
                 expiresAt: tokenResponse.expiresIn.map {
                     Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
-                } ?? credentials.expiresAt,
+                },
                 refreshTokenExpiresAt: tokenResponse.refreshTokenExpiresIn.map {
                     Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
                 } ?? credentials.refreshTokenExpiresAt

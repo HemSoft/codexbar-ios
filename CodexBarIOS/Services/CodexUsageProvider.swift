@@ -217,7 +217,9 @@ public final class CodexUsageProvider: UsageProvider {
                 accessToken: accessToken,
                 refreshToken: tokenResponse.refreshToken ?? credentials.refreshToken,
                 idToken: idToken,
-                accountID: idToken.flatMap(CodexWebAuthService.accountID) ?? credentials.accountID,
+                accountID: idToken.flatMap(CodexWebAuthService.accountID)
+                    ?? parsedAccessToken?.accountID
+                    ?? credentials.accountID,
                 expiresAt: tokenResponse.expiresAt.map(CodexCredentials.normalizedEpochSeconds)
                     ?? tokenResponse.expiresIn.map {
                         Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)

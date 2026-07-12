@@ -3621,7 +3621,7 @@ final class CodexBarIOSTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let expectedExpiry: Int64 = 2_000_003_600
         let header = #"{"alg":"none"}"#.base64URLEncodedForTest()
-        let payload = #"{"exp":2000003600}"#.base64URLEncodedForTest()
+        let payload = #"{"exp":2000003600,"chatgpt_account_id":"refreshed-account"}"#.base64URLEncodedForTest()
         let refreshedAccessToken = "\(header).\(payload).signature"
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
         let account = ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -3651,10 +3651,12 @@ final class CodexBarIOSTests: XCTestCase {
                 )
             }
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(refreshedAccessToken)")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-Id"), "refreshed-account")
             let persisted = try XCTUnwrap(
                 CodexCredentialsParser.parse(try XCTUnwrap(secretStore.readSecret(account: account)))
             )
             XCTAssertEqual(persisted.expiresAt, expectedExpiry)
+            XCTAssertEqual(persisted.accountID, "refreshed-account")
             return (
                 HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
                 Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
@@ -3963,7 +3965,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.used, 25)
     }
 
-    func testCopilotUsageProviderPreservesExpiryWhenRefreshOmitsLifetime() async throws {
+    func testCopilotUsageProviderDoesNotCarryStaleExpiryWhenRefreshOmitsLifetime() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let priorExpiry: Int64 = 2_000_000_060
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
@@ -3997,7 +3999,7 @@ final class CodexBarIOSTests: XCTestCase {
             let persisted = try XCTUnwrap(
                 CopilotCredentialsParser.parse(try XCTUnwrap(secretStore.readSecret(account: account)))
             )
-            XCTAssertEqual(persisted.expiresAt, priorExpiry)
+            XCTAssertNil(persisted.expiresAt)
             return (
                 HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
                 Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)
