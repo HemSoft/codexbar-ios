@@ -772,7 +772,11 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     private static func looksLikeEmailAddress(_ value: String) -> Bool {
         let parts = value.split(separator: "@", omittingEmptySubsequences: false)
-        return parts.count == 2 && !parts[0].isEmpty && !parts[1].isEmpty
+        guard parts.count == 2, !parts[0].isEmpty else {
+            return false
+        }
+        let domainParts = parts[1].split(separator: ".", omittingEmptySubsequences: false)
+        return domainParts.count >= 2 && domainParts.allSatisfy { !$0.isEmpty }
     }
 
     private func suggestedAccountLabel(for providerID: ProviderID) -> String {

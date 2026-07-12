@@ -1482,6 +1482,37 @@ final class CodexBarIOSTests: XCTestCase {
 
         cursor.accountLabel = "Work Cursor"
         XCTAssertEqual(store.cursorAccountLabelAfterIdentityChange(for: cursor), "Work Cursor")
+
+        cursor.accountLabel = "team@acme"
+        XCTAssertEqual(store.cursorAccountLabelAfterIdentityChange(for: cursor), "team@acme")
+    }
+
+    @MainActor
+    func testConnectingCursorAccountPersistsCredentialAndClearsStaleEmail() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var cursor = store.addAccount(for: .cursor)
+        cursor.accountLabel = "old@example.com"
+        XCTAssertTrue(store.update(cursor))
+
+        let connected = try XCTUnwrap(
+            store.connectCursorAccount(cursor, credential: "replacement-token")
+        )
+
+        XCTAssertEqual(connected.accountLabel, "")
+        XCTAssertEqual(connected.displayName, "Cursor")
+        XCTAssertEqual(store.configuration(accountID: cursor.id), connected)
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: cursor)),
+            "replacement-token"
+        )
+        XCTAssertTrue(store.hasSecret(for: cursor))
     }
 
     @MainActor
