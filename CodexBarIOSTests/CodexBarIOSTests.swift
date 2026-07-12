@@ -1358,6 +1358,31 @@ final class CodexBarIOSTests: XCTestCase {
             cappedEvaluation.activeAlerts.first?.message,
             "The monthly usage-credit spend limit has been reached."
         )
+
+        let zeroCapResult = ProviderUsageResult(
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live usage",
+            bars: [],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: "Usage credits spent",
+                    minorUnits: 0,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+                ProviderMonetaryMetric(
+                    kind: .spendLimit,
+                    label: "Monthly spend limit",
+                    minorUnits: 0,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+        )
+        XCTAssertEqual(zeroCapResult.highestSeverity, .normal)
     }
 
     func testUsageAlertEvaluatorReturnsCardScopedActiveAlerts() {

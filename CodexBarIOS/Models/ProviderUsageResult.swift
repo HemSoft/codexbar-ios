@@ -112,6 +112,6 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         else {
             return false
         }
-        return spent.minorUnits >= limit.minorUnits
+        return limit.minorUnits > 0 && spent.minorUnits >= limit.minorUnits
     }
 }

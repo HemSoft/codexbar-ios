@@ -391,7 +391,7 @@ public enum ClaudeUsageParser {
                 decimalPlaces: decimalPlaces,
                 detail: "Not a prepaid balance"
             ))
-            if spent >= limit {
+            if limit > 0, spent >= limit {
                 messages.append("The monthly usage-credit spend limit has been reached.")
             }
         } else {
