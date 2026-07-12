@@ -102,6 +102,23 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         }
         return NSDecimalNumber(decimal: metric.minorUnits / divisor).doubleValue
     }
+
+    fileprivate var monetaryPrimaryValue: Double? {
+        if let creditsRemaining {
+            return creditsRemaining
+        }
+        let metric = monetaryMetrics?.first(where: { $0.kind == .balance })
+            ?? monetaryMetrics?.first(where: { $0.kind == .remainingHeadroom })
+            ?? monetaryMetrics?.first
+        guard let metric else {
+            return nil
+        }
+        var divisor = Decimal(1)
+        for _ in 0..<metric.decimalPlaces {
+            divisor *= 10
+        }
+        return NSDecimalNumber(decimal: metric.minorUnits / divisor).doubleValue
+    }
 }
 
 public struct UsageTrendSummary: Equatable, Sendable {
@@ -369,7 +386,10 @@ public final class UsageHistoryStore: ObservableObject {
                     return nil
                 }
             }
-            return snapshot.primaryValue.map { UsageHistoryPoint(snapshot: snapshot, value: $0) }
+            let value = isBalance
+                ? snapshot.monetaryPrimaryValue
+                : snapshot.bars.map(\.fractionUsed).max()
+            return value.map { UsageHistoryPoint(snapshot: snapshot, value: $0) }
         }
         let monetaryFormat = primaryMonetaryMetric(in: result.monetaryMetrics).map {
             ($0.currencyCode, $0.decimalPlaces)

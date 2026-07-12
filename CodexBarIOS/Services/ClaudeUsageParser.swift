@@ -118,10 +118,11 @@ public enum ClaudeUsageParser {
             else {
                 continue
             }
+            let fallbackKey = definition.scopedName.flatMap(legacyScopedKey(for:)) ?? definition.key
             bars.append(usageBar(
                 label: definition.label,
                 usedPercent: sanitizedPercent(percent),
-                reset: parseReset(limit.resetsAt),
+                reset: parseReset(limit.resetsAt) ?? legacyReset(for: fallbackKey, usage: usage),
                 durationSeconds: definition.duration,
                 fetchedAt: fetchedAt,
                 dateTimeFormatter: dateTimeFormatter
@@ -445,6 +446,23 @@ public enum ClaudeUsageParser {
             return "weekly-scoped-opus"
         }
         return nil
+    }
+
+    private static func legacyReset(for key: String, usage: UsageResponse) -> Date? {
+        let window: UsageWindow?
+        switch key {
+        case "session":
+            window = usage.fiveHour
+        case "weekly-all":
+            window = usage.sevenDay ?? usage.sevenDayOAuthApps
+        case "weekly-scoped-sonnet":
+            window = usage.sevenDaySonnet
+        case "weekly-scoped-opus":
+            window = usage.sevenDayOpus
+        default:
+            window = nil
+        }
+        return parseReset(window?.resetsAt)
     }
 
     private static func parseReset(_ value: String?) -> Date? {

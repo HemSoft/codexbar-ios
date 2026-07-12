@@ -129,7 +129,9 @@ public final class ClaudeUsageProvider: UsageProvider {
             return nil
         }
 
-        return applyAccountMetadata(to: parsed, configuration: configuration)
+        let result = applyAccountMetadata(to: parsed, configuration: configuration)
+        await snapshotCache.store(result, accountID: configuration.id)
+        return result
     }
 
     private func refreshedCredentialsIfNeeded(
