@@ -3963,6 +3963,53 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.used, 25)
     }
 
+    func testCopilotUsageProviderPreservesExpiryWhenRefreshOmitsLifetime() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let priorExpiry: Int64 = 2_000_000_060
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        let account = ProviderConfigurationStore.keychainAccount(for: configuration)
+        let secretStore = MemorySecretStore()
+        try secretStore.saveSecret(
+            CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+                accessToken: "old-access",
+                refreshToken: "old-refresh",
+                expiresAt: priorExpiry
+            )),
+            account: account
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now }
+        )
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/github-token" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"new-access","refresh_token":"new-refresh"}"#.utf8)
+                )
+            }
+            let persisted = try XCTUnwrap(
+                CopilotCredentialsParser.parse(try XCTUnwrap(secretStore.readSecret(account: account)))
+            )
+            XCTAssertEqual(persisted.expiresAt, priorExpiry)
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.bars.first?.used, 25)
+    }
+
     func testCopilotUsageProviderPreservesCredentialChangedDuringRefresh() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
