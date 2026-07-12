@@ -1,8 +1,10 @@
-import AuthenticationServices
 import CryptoKit
 import Foundation
 import Security
+#if canImport(AuthenticationServices) && canImport(UIKit)
+import AuthenticationServices
 import UIKit
+#endif
 
 public struct CursorWebAuthResult: Equatable, Sendable {
     public let accessToken: String
@@ -199,6 +201,7 @@ public final class CursorWebAuthService: Sendable {
     }
 }
 
+#if canImport(AuthenticationServices) && canImport(UIKit)
 @MainActor
 final class CursorWebAuthenticationPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
     private var session: ASWebAuthenticationSession?
@@ -264,6 +267,7 @@ final class CursorWebAuthenticationPresenter: NSObject, ASWebAuthenticationPrese
         cancellationHandler = nil
     }
 }
+#endif
 
 struct CursorWebAuthenticationSessionGeneration {
     private var activeSessionID: UUID?

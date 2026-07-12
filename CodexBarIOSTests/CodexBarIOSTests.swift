@@ -1,6 +1,8 @@
-import AuthenticationServices
 import XCTest
 @testable import CodexBarIOS
+#if canImport(AuthenticationServices) && canImport(UIKit)
+import AuthenticationServices
+#endif
 
 final class CodexBarIOSTests: XCTestCase {
     func testUsageSeverityThresholds() {
@@ -1981,6 +1983,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(result.storedCredential.contains(#""accessToken": "cursor-access""#))
     }
 
+#if canImport(AuthenticationServices) && canImport(UIKit)
     @MainActor
     func testCursorBrowserSessionUsesEphemeralStorage() {
         let session = CursorWebAuthenticationPresenter.makeSession(
@@ -1989,6 +1992,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertTrue(session.prefersEphemeralWebBrowserSession)
     }
+#endif
 
     func testCursorBrowserSessionIgnoresStaleCompletionAfterRetry() {
         var generation = CursorWebAuthenticationSessionGeneration()
