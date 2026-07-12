@@ -3743,6 +3743,28 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(options[1].series.currencyCode, "EUR")
         XCTAssertEqual(options[2].series.points.map(\.value), [37.5])
 
+        let relabeledResult = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: result.bars,
+            monetaryMetrics: result.monetaryMetrics.map { metric in
+                ProviderMonetaryMetric(
+                    kind: metric.kind,
+                    label: "Updated \(metric.label)",
+                    minorUnits: metric.minorUnits,
+                    currencyCode: metric.currencyCode,
+                    decimalPlaces: metric.decimalPlaces,
+                    detail: metric.detail
+                )
+            },
+            fetchedAt: result.fetchedAt
+        )
+        let relabeledOptions = store.historySeriesOptions(for: relabeledResult)
+        XCTAssertEqual(relabeledOptions[1].series.points.map(\.value), [12.5])
+        XCTAssertEqual(relabeledOptions[2].series.points.map(\.value), [37.5])
+
         let monetaryOnlyResult = ProviderUsageResult(
             accountID: "claude.monetary-only",
             providerID: .claude,
@@ -5156,6 +5178,61 @@ final class CodexBarIOSTests: XCTestCase {
         clock.advance(by: 121)
         _ = try await provider.fetchUsage(for: configuration)
         XCTAssertEqual(requestCount, 3)
+    }
+
+    func testClaudeUsageProviderClearsBackoffWhenCredentialChanges() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: configuration)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "old-token")),
+            account: keychainAccount
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            if request.value(forHTTPHeaderField: "Authorization") == "Bearer old-token" {
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 429,
+                        httpVersion: nil,
+                        headerFields: ["Retry-After": "3600"]
+                    )!,
+                    Data()
+                )
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer new-token")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"limits":[{"kind":"weekly_all","percent":24,"is_active":true}]}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let rateLimited = try await provider.fetchUsage(for: configuration)
+        XCTAssertTrue(rateLimited.subtitle.contains("rate-limited"))
+
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "new-token")),
+            account: keychainAccount
+        )
+        let refreshed = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(refreshed.bars.first?.used, 24)
+        XCTAssertFalse(refreshed.subtitle.contains("rate-limited"))
     }
 
     func testClaudeUsageProviderCachesSuccessfulHeaderFallbackForLaterRateLimit() async throws {

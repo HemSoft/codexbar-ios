@@ -44,14 +44,11 @@ public struct ProviderMonetaryMetric: Identifiable, Codable, Equatable, Sendable
     }
 
     public func formattedAmount(locale: Locale = .autoupdatingCurrent) -> String {
-        let formatter = NumberFormatter()
-        formatter.locale = locale
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currencyCode
-        formatter.minimumFractionDigits = decimalPlaces
-        formatter.maximumFractionDigits = decimalPlaces
-        return formatter.string(from: NSDecimalNumber(decimal: amount))
-            ?? "\(currencyCode) \(NSDecimalNumber(decimal: amount).stringValue)"
+        amount.formatted(
+            .currency(code: currencyCode)
+                .precision(.fractionLength(decimalPlaces))
+                .locale(locale)
+        )
     }
 }
 

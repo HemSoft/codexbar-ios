@@ -110,13 +110,11 @@ public struct CodexBarWidgetMonetaryMetricSnapshot: Codable, Equatable, Identifi
         for _ in 0..<decimalPlaces {
             divisor *= 10
         }
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currencyCode
-        formatter.minimumFractionDigits = decimalPlaces
-        formatter.maximumFractionDigits = decimalPlaces
         let amount = NSDecimalNumber(decimal: minorUnits / divisor)
-        return formatter.string(from: amount) ?? "\(currencyCode) \(amount.stringValue)"
+        return amount.decimalValue.formatted(
+            .currency(code: currencyCode)
+                .precision(.fractionLength(decimalPlaces))
+        )
     }
 }
 

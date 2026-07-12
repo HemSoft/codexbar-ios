@@ -40,6 +40,7 @@ public final class ClaudeUsageProvider: UsageProvider {
         guard let token = credentials.accessToken, !token.isEmpty else {
             return failureResult("Claude credential is missing an access token.", configuration: configuration)
         }
+        await snapshotCache.prepare(accountID: configuration.id, credential: token)
 
         let oauthOutcome = try await fetchOAuthUsage(
             configuration: configuration,
@@ -346,6 +347,18 @@ public final class ClaudeUsageProvider: UsageProvider {
 private actor ClaudeUsageSnapshotCache {
     private var results: [String: ProviderUsageResult] = [:]
     private var retryDates: [String: Date] = [:]
+    private var credentials: [String: String] = [:]
+
+    func prepare(accountID: String, credential: String) {
+        guard credentials[accountID] != credential else {
+            return
+        }
+        if credentials[accountID] != nil {
+            results[accountID] = nil
+            retryDates[accountID] = nil
+        }
+        credentials[accountID] = credential
+    }
 
     func store(_ result: ProviderUsageResult, accountID: String) {
         results[accountID] = result

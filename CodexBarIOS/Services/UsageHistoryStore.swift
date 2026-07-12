@@ -2,12 +2,10 @@ import Foundation
 
 private enum UsageHistoryFormatting {
     static func formatCurrency(_ value: Double, currencyCode: String = "USD", decimalPlaces: Int = 2) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currencyCode
-        formatter.minimumFractionDigits = decimalPlaces
-        formatter.maximumFractionDigits = decimalPlaces
-        return formatter.string(from: NSNumber(value: value)) ?? "\(currencyCode) \(value)"
+        value.formatted(
+            .currency(code: currencyCode)
+                .precision(.fractionLength(decimalPlaces))
+        )
     }
 }
 
@@ -43,8 +41,23 @@ public struct UsageHistoryMonetaryMetricSnapshot: Equatable, Codable, Sendable {
 
 private protocol MonetaryMetricSnapshot {
     var metricKind: ProviderMonetaryMetricKind { get }
+    var minorUnits: Decimal { get }
     var currencyCode: String { get }
     var decimalPlaces: Int { get }
+}
+
+private extension MonetaryMetricSnapshot {
+    var clampedDecimalPlaces: Int {
+        min(max(decimalPlaces, 0), 6)
+    }
+
+    var doubleValue: Double {
+        var divisor = Decimal(1)
+        for _ in 0..<clampedDecimalPlaces {
+            divisor *= 10
+        }
+        return NSDecimalNumber(decimal: minorUnits / divisor).doubleValue
+    }
 }
 
 extension ProviderMonetaryMetric: MonetaryMetricSnapshot {
@@ -93,14 +106,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         let metric = monetaryMetrics?.first(where: { $0.kind == .balance })
             ?? monetaryMetrics?.first(where: { $0.kind == .remainingHeadroom })
             ?? monetaryMetrics?.first
-        guard let metric else {
-            return nil
-        }
-        var divisor = Decimal(1)
-        for _ in 0..<max(metric.decimalPlaces, 0) {
-            divisor *= 10
-        }
-        return NSDecimalNumber(decimal: metric.minorUnits / divisor).doubleValue
+        return metric?.doubleValue
     }
 
     fileprivate var monetaryPrimaryValue: Double? {
@@ -110,14 +116,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         let metric = monetaryMetrics?.first(where: { $0.kind == .balance })
             ?? monetaryMetrics?.first(where: { $0.kind == .remainingHeadroom })
             ?? monetaryMetrics?.first
-        guard let metric else {
-            return nil
-        }
-        var divisor = Decimal(1)
-        for _ in 0..<max(metric.decimalPlaces, 0) {
-            divisor *= 10
-        }
-        return NSDecimalNumber(decimal: metric.minorUnits / divisor).doubleValue
+        return metric?.doubleValue
     }
 }
 
@@ -433,17 +432,11 @@ public final class UsageHistoryStore: ObservableObject {
             let points = accountSnapshots.compactMap { snapshot -> UsageHistoryPoint? in
                 guard let storedMetric = snapshot.monetaryMetrics?.first(where: {
                     $0.kind == metric.kind
-                        && $0.label == metric.label
                         && $0.currencyCode == metric.currencyCode
                 }) else {
                     return nil
                 }
-                var divisor = Decimal(1)
-                for _ in 0..<max(storedMetric.decimalPlaces, 0) {
-                    divisor *= 10
-                }
-                let value = NSDecimalNumber(decimal: storedMetric.minorUnits / divisor).doubleValue
-                return UsageHistoryPoint(snapshot: snapshot, value: value)
+                return UsageHistoryPoint(snapshot: snapshot, value: storedMetric.doubleValue)
             }
             options.append(UsageHistorySeriesOption(
                 id: "money.\(metric.id)",
@@ -453,7 +446,7 @@ public final class UsageHistoryStore: ObservableObject {
                     points: points,
                     isBalance: true,
                     currencyCode: metric.currencyCode,
-                    decimalPlaces: metric.decimalPlaces
+                    decimalPlaces: metric.clampedDecimalPlaces
                 )
             ))
         }
