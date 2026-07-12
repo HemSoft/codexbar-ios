@@ -602,6 +602,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(tile.subtitle, "Month to date")
         XCTAssertTrue(tile.value.contains("12"))
         XCTAssertTrue(tile.value.contains("50"))
+        XCTAssertEqual(snapshot.results.first?.summaryMonetaryMetric?.label, "Usage credits spent")
     }
 
     @MainActor
@@ -3176,7 +3177,7 @@ final class CodexBarIOSTests: XCTestCase {
             {"kind":"weekly_all","percent":36,"resets_at":"2030-01-08T00:00:00Z","is_active":true},
             {"kind":"weekly_scoped","percent":71,"resets_at":"2030-01-08T00:00:00.838164+00:00","scope":{"model":{"display_name":"Fable"}},"is_active":true},
             {"kind":"weekly_scoped","percent":112,"scope":{"model":{"display_name":"Future Model"}},"is_active":true},
-            {"kind":"weekly_scoped","percent":49,"scope":{"model":{"display_name":"Sonnet"}},"is_active":true},
+            {"kind":"weekly_scoped","percent":49,"scope":{"model":{"display_name":"Claude Sonnet 4.5"}},"is_active":true},
             {"kind":"internal_codename","percent":100,"scope":{"model":{"display_name":"Do Not Show"}},"is_active":true},
             {"kind":"weekly_scoped","percent":90,"scope":{"model":{"id":"internal-only"}},"is_active":true}
           ]
@@ -3193,11 +3194,12 @@ final class CodexBarIOSTests: XCTestCase {
             "Weekly usage limit",
             "Fable weekly limit",
             "Future Model weekly limit",
-            "Sonnet weekly limit",
+            "Claude Sonnet 4.5 weekly limit",
         ])
         XCTAssertEqual(result.bars.map(\.used), [15, 36, 71, 112, 49])
         XCTAssertEqual(result.bars[3].usageText, "112%")
         XCTAssertNil(result.bars[3].resetsAt)
+        XCTAssertNotNil(result.bars[2].resetsAt)
         XCTAssertTrue(result.usageMessages.contains {
             $0 == "Fable usage is capped within the all-model weekly allowance."
         })
@@ -3268,6 +3270,16 @@ final class CodexBarIOSTests: XCTestCase {
             subscriptionType: nil
         ))
         XCTAssertEqual(unknownState.usageMessages, ["Usage-credit status is temporarily unavailable."])
+
+        let missingSpend = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"extra_usage":{"is_enabled":true,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8),
+            subscriptionType: nil
+        ))
+        XCTAssertTrue(missingSpend.monetaryMetrics.isEmpty)
+        XCTAssertEqual(
+            missingSpend.usageMessages,
+            ["Usage credits are enabled, but monetary details are temporarily unavailable."]
+        )
     }
 
     func testClaudeUsageParserReadsRateLimitHeaders() throws {
@@ -3618,6 +3630,22 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(options[1].series.points.map(\.value), [12.5])
         XCTAssertEqual(options[1].series.currencyCode, "EUR")
         XCTAssertEqual(options[2].series.points.map(\.value), [37.5])
+
+        let monetaryOnlyResult = ProviderUsageResult(
+            accountID: "claude.monetary-only",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live Claude usage",
+            bars: [],
+            monetaryMetrics: result.monetaryMetrics,
+            fetchedAt: fetchedAt
+        )
+        store.record(results: [monetaryOnlyResult], now: fetchedAt)
+        let compactSeries = store.historySeries(for: monetaryOnlyResult)
+        XCTAssertEqual(compactSeries.currencyCode, "EUR")
+        XCTAssertEqual(compactSeries.decimalPlaces, 2)
+        XCTAssertTrue(compactSeries.latestValueDescription.contains("37.50"))
+        XCTAssertFalse(compactSeries.latestValueDescription.contains("$"))
     }
 
     @MainActor

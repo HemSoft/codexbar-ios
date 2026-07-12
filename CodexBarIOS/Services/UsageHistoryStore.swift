@@ -41,6 +41,20 @@ public struct UsageHistoryMonetaryMetricSnapshot: Equatable, Codable, Sendable {
     }
 }
 
+private protocol MonetaryMetricSnapshot {
+    var metricKind: ProviderMonetaryMetricKind { get }
+    var currencyCode: String { get }
+    var decimalPlaces: Int { get }
+}
+
+extension ProviderMonetaryMetric: MonetaryMetricSnapshot {
+    fileprivate var metricKind: ProviderMonetaryMetricKind { kind }
+}
+
+extension UsageHistoryMonetaryMetricSnapshot: MonetaryMetricSnapshot {
+    fileprivate var metricKind: ProviderMonetaryMetricKind { kind }
+}
+
 public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
     public let id: String
     public let accountID: String
@@ -348,12 +362,27 @@ public final class UsageHistoryStore: ObservableObject {
                 $0.creditsRemaining != nil || !($0.monetaryMetrics ?? []).isEmpty
             } ?? false
         }
+        let monetaryFormat = primaryMonetaryMetric(in: result.monetaryMetrics).map {
+            ($0.currencyCode, $0.decimalPlaces)
+        } ?? accountSnapshots.last.flatMap { snapshot in
+            primaryMonetaryMetric(in: snapshot.monetaryMetrics ?? []).map {
+                ($0.currencyCode, $0.decimalPlaces)
+            }
+        }
 
         return UsageHistorySeries(
             accountID: result.accountID,
             points: points,
-            isBalance: isBalance
+            isBalance: isBalance,
+            currencyCode: monetaryFormat?.0,
+            decimalPlaces: monetaryFormat?.1 ?? 2
         )
+    }
+
+    private func primaryMonetaryMetric<T>(in metrics: [T]) -> T? where T: MonetaryMetricSnapshot {
+        metrics.first(where: { $0.metricKind == .balance })
+            ?? metrics.first(where: { $0.metricKind == .remainingHeadroom })
+            ?? metrics.first
     }
 
     public func historySeriesOptions(

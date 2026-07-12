@@ -127,6 +127,9 @@ public enum ClaudeUsageParser {
                 dateTimeFormatter: dateTimeFormatter
             ))
             if let scopedName = definition.scopedName {
+                if let legacyKey = legacyScopedKey(for: scopedName) {
+                    semanticKeys.insert(legacyKey)
+                }
                 usageMessages.append("\(scopedName) usage is capped within the all-model weekly allowance.")
             }
         }
@@ -353,12 +356,13 @@ public enum ClaudeUsageParser {
         guard
             let currency = extraUsage.currency?.trimmingCharacters(in: .whitespacesAndNewlines),
             currency.count == 3,
-            let decimalPlaces = extraUsage.decimalPlaces
+            let decimalPlaces = extraUsage.decimalPlaces,
+            let usedCredits = extraUsage.usedCredits
         else {
             return ([], ["Usage credits are enabled, but monetary details are temporarily unavailable."])
         }
 
-        let spent = max(extraUsage.usedCredits ?? 0, 0)
+        let spent = max(usedCredits, 0)
         var metrics = [ProviderMonetaryMetric(
             kind: .spent,
             label: "Usage credits spent",
@@ -420,6 +424,17 @@ public enum ClaudeUsageParser {
         value.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
+    private static func legacyScopedKey(for modelName: String) -> String? {
+        let key = normalizedKey(modelName)
+        if key.contains("sonnet") {
+            return "weekly-scoped-sonnet"
+        }
+        if key.contains("opus") {
+            return "weekly-scoped-opus"
+        }
+        return nil
+    }
+
     private static func parseReset(_ value: String?) -> Date? {
         guard let value, !value.isEmpty else {
             return nil
@@ -430,7 +445,9 @@ public enum ClaudeUsageParser {
             return Date(timeIntervalSince1970: seconds)
         }
 
-        return ISO8601DateFormatter().date(from: value)
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractionalFormatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 
     private static func doubleHeader(_ value: Any?) -> Double? {

@@ -1318,15 +1318,16 @@ private extension CodexBarWidgetSnapshot {
 
 private extension CodexBarWidgetProviderSnapshot {
     var summaryTile: CodexBarWidgetTile {
-        CodexBarWidgetTile(
+        let summaryMetric = summaryMonetaryMetric
+        return CodexBarWidgetTile(
             id: "provider.\(accountID)",
             providerID: providerID,
             providerTitle: title,
-            title: creditsRemaining == nil ? title : "\(title) Balance",
-            subtitle: subtitle,
+            title: summaryMetric?.label ?? (creditsRemaining == nil ? title : "\(title) Balance"),
+            subtitle: summaryMetric?.detail ?? subtitle,
             bar: representativeBar,
             creditsRemaining: creditsRemaining,
-            monetaryMetric: nil,
+            monetaryMetric: summaryMetric,
             severity: severity
         )
     }

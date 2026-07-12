@@ -62,6 +62,13 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
     public var id: String {
         accountID
     }
+
+    public var summaryMonetaryMetric: CodexBarWidgetMonetaryMetricSnapshot? {
+        guard bars.isEmpty, creditsRemaining == nil else {
+            return nil
+        }
+        return monetaryMetrics?.first
+    }
 }
 
 public struct CodexBarWidgetMonetaryMetricSnapshot: Codable, Equatable, Identifiable, Sendable {
