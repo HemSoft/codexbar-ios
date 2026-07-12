@@ -5272,6 +5272,27 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.used, 25)
         XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
         XCTAssertEqual(result.usageMessages, ["Usage-credit enabled status was not reported."])
+
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/api/oauth/usage" {
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(#"{"extra_usage":{"is_enabled":true,"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8)
+                )
+            }
+            throw URLError(.timedOut)
+        }
+        let preserved = try await ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        ).fetchUsage(for: configuration)
+        XCTAssertEqual(preserved.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
+        XCTAssertTrue(preserved.bars.isEmpty)
     }
 
     func testClaudeUsageProviderDoesNotProbeMessagesOnlySnapshotDuringBackoff() async throws {

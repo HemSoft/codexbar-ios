@@ -41,35 +41,43 @@ public final class ClaudeUsageProvider: UsageProvider {
             return failureResult("Claude credential is missing an access token.", configuration: configuration)
         }
 
-        if let usageResult = try await fetchOAuthUsage(configuration: configuration, credentials: credentials, accessToken: token) {
+        let oauthOutcome = try await fetchOAuthUsage(
+            configuration: configuration,
+            credentials: credentials,
+            accessToken: token
+        )
+        if let usageResult = oauthOutcome.result {
             let retryAt = await snapshotCache.retryAt(accountID: configuration.id)
             let canProbe = retryAt.map { $0 <= now() } ?? true
             let hasOAuthStateWithoutBars = usageResult.bars.isEmpty
                 && (!usageResult.monetaryMetrics.isEmpty || !usageResult.usageMessages.isEmpty)
-            let hasServerFailureOnly = usageResult.bars.isEmpty
+            let hasServerFailureOnly = oauthOutcome.permitsFallbackProbe
+                && usageResult.bars.isEmpty
                 && usageResult.monetaryMetrics.isEmpty
                 && usageResult.usageMessages.isEmpty
-                && usageResult.subtitle.contains("server error")
-            if canProbe,
-               hasOAuthStateWithoutBars || hasServerFailureOnly,
-               let rateLimitResult = try await fetchRateLimitUsage(
-                   configuration: configuration,
-                   credentials: credentials,
-                   accessToken: token
-               )
-            {
-                let mergedResult = ProviderUsageResult(
-                    accountID: rateLimitResult.accountID,
-                    providerID: rateLimitResult.providerID,
-                    title: rateLimitResult.title,
-                    subtitle: rateLimitResult.subtitle,
-                    bars: rateLimitResult.bars,
-                    monetaryMetrics: usageResult.monetaryMetrics + rateLimitResult.monetaryMetrics,
-                    usageMessages: usageResult.usageMessages + rateLimitResult.usageMessages,
-                    fetchedAt: rateLimitResult.fetchedAt
-                )
-                await snapshotCache.store(mergedResult, accountID: configuration.id)
-                return mergedResult
+            if canProbe, hasOAuthStateWithoutBars || hasServerFailureOnly {
+                do {
+                    if let rateLimitResult = try await fetchRateLimitUsage(
+                        configuration: configuration,
+                        credentials: credentials,
+                        accessToken: token
+                    ), !rateLimitResult.bars.isEmpty {
+                        let mergedResult = ProviderUsageResult(
+                            accountID: rateLimitResult.accountID,
+                            providerID: rateLimitResult.providerID,
+                            title: rateLimitResult.title,
+                            subtitle: rateLimitResult.subtitle,
+                            bars: rateLimitResult.bars,
+                            monetaryMetrics: usageResult.monetaryMetrics + rateLimitResult.monetaryMetrics,
+                            usageMessages: usageResult.usageMessages + rateLimitResult.usageMessages,
+                            fetchedAt: rateLimitResult.fetchedAt
+                        )
+                        await snapshotCache.store(mergedResult, accountID: configuration.id)
+                        return mergedResult
+                    }
+                } catch {
+                    return usageResult
+                }
             }
             return usageResult
         }
@@ -85,18 +93,24 @@ public final class ClaudeUsageProvider: UsageProvider {
         configuration: ProviderAccountConfiguration,
         credentials: ClaudeCredentials,
         accessToken: String
-    ) async throws -> ProviderUsageResult? {
+    ) async throws -> OAuthUsageOutcome {
         let fetchedAt = now()
         if let retryAt = await snapshotCache.retryAt(accountID: configuration.id), retryAt > fetchedAt {
-            return await staleOrFailureResult(
-                "Claude usage is rate-limited until \(Self.formatRetryDate(retryAt)).",
-                configuration: configuration
+            return OAuthUsageOutcome(
+                result: await staleOrFailureResult(
+                    "Claude usage is rate-limited until \(Self.formatRetryDate(retryAt)).",
+                    configuration: configuration
+                ),
+                permitsFallbackProbe: false
             )
         }
 
         let (data, response) = try await session.data(for: makeOAuthUsageRequest(accessToken: accessToken))
         guard let httpResponse = response as? HTTPURLResponse else {
-            return failureResult("Claude usage returned an invalid response.", configuration: configuration)
+            return OAuthUsageOutcome(
+                result: failureResult("Claude usage returned an invalid response.", configuration: configuration),
+                permitsFallbackProbe: false
+            )
         }
 
         switch httpResponse.statusCode {
@@ -106,32 +120,47 @@ public final class ClaudeUsageProvider: UsageProvider {
                 subscriptionType: credentials.subscriptionType,
                 fetchedAt: fetchedAt
             ) else {
-                return nil
+                return OAuthUsageOutcome(result: nil, permitsFallbackProbe: true)
             }
             let result = applyAccountMetadata(to: parsed, configuration: configuration)
             await snapshotCache.store(result, accountID: configuration.id)
-            return result
+            return OAuthUsageOutcome(result: result, permitsFallbackProbe: false)
         case 401:
-            return failureResult("Claude credential was rejected. Sign in again.", configuration: configuration)
+            return OAuthUsageOutcome(
+                result: failureResult("Claude credential was rejected. Sign in again.", configuration: configuration),
+                permitsFallbackProbe: false
+            )
         case 403:
-            return failureResult("Claude credential lacks permission to read subscription usage.", configuration: configuration)
+            return OAuthUsageOutcome(
+                result: failureResult("Claude credential lacks permission to read subscription usage.", configuration: configuration),
+                permitsFallbackProbe: false
+            )
         case 404:
-            return failureResult("Claude subscription usage is unavailable for this account.", configuration: configuration)
+            return OAuthUsageOutcome(
+                result: failureResult("Claude subscription usage is unavailable for this account.", configuration: configuration),
+                permitsFallbackProbe: false
+            )
         case 429:
             let retryAt = retryDate(httpResponse, now: fetchedAt)
             await snapshotCache.setRetryAt(retryAt, accountID: configuration.id)
-            return await staleOrFailureResult(
-                retryAt.map { "Claude usage is rate-limited until \(Self.formatRetryDate($0))." }
-                    ?? "Claude usage is rate-limited.",
-                configuration: configuration
+            return OAuthUsageOutcome(
+                result: await staleOrFailureResult(
+                    retryAt.map { "Claude usage is rate-limited until \(Self.formatRetryDate($0))." }
+                        ?? "Claude usage is rate-limited.",
+                    configuration: configuration
+                ),
+                permitsFallbackProbe: false
             )
         case 500..<600:
-            return await staleOrFailureResult(
-                "Claude usage is temporarily unavailable (server error \(httpResponse.statusCode)).",
-                configuration: configuration
+            return OAuthUsageOutcome(
+                result: await staleOrFailureResult(
+                    "Claude usage is temporarily unavailable (server error \(httpResponse.statusCode)).",
+                    configuration: configuration
+                ),
+                permitsFallbackProbe: true
             )
         default:
-            return nil
+            return OAuthUsageOutcome(result: nil, permitsFallbackProbe: true)
         }
     }
 
@@ -334,6 +363,11 @@ private actor ClaudeUsageSnapshotCache {
     func retryAt(accountID: String) -> Date? {
         retryDates[accountID]
     }
+}
+
+private struct OAuthUsageOutcome {
+    let result: ProviderUsageResult?
+    let permitsFallbackProbe: Bool
 }
 
 private struct TokenRefreshResponse: Decodable {
