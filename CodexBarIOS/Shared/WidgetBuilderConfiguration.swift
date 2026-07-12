@@ -183,7 +183,9 @@ public struct CodexBarWidgetBuilderTile: Equatable, Identifiable, Sendable {
 public extension CodexBarWidgetSnapshot {
     var builderTiles: [CodexBarWidgetBuilderTile] {
         results.flatMap { provider in
-            [provider.builderSummaryTile] + provider.bars.map { provider.builderBarTile($0) }
+            [provider.builderSummaryTile]
+                + provider.bars.map { provider.builderBarTile($0) }
+                + (provider.monetaryMetrics ?? []).map { provider.builderMonetaryTile($0) }
         }
     }
 }
@@ -225,6 +227,20 @@ private extension CodexBarWidgetProviderSnapshot {
             fractionUsed: bar.effectiveFractionUsed,
             creditsRemaining: nil,
             severity: bar.effectiveSeverity
+        )
+    }
+
+    func builderMonetaryTile(_ metric: CodexBarWidgetMonetaryMetricSnapshot) -> CodexBarWidgetBuilderTile {
+        CodexBarWidgetBuilderTile(
+            id: "money.\(accountID).\(metric.id)",
+            providerID: providerID,
+            providerTitle: title,
+            title: metric.label,
+            subtitle: metric.detail ?? groupName ?? subtitle,
+            value: metric.formattedAmount,
+            fractionUsed: nil,
+            creditsRemaining: nil,
+            severity: .normal
         )
     }
 

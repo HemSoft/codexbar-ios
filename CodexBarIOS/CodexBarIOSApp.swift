@@ -146,7 +146,7 @@ struct CodexBarIOSApp: App {
             if let result = refreshService.results.first(where: { $0.providerID == .codex }) {
                 ProviderUsageHistoryDetailView(
                     result: result,
-                    series: historyStore.historySeries(for: result)
+                    seriesOptions: historyStore.historySeriesOptions(for: result)
                 )
             } else {
                 ContentUnavailableView("No History", systemImage: "chart.xyaxis.line")

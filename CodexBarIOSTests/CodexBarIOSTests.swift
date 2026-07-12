@@ -75,6 +75,9 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(Set(results.map(\.providerID)), Set(ProviderID.allCases))
         XCTAssertTrue(results.allSatisfy { $0.accountID.hasPrefix("app-store-screenshots.") })
         XCTAssertEqual(Set(results.map(\.fetchedAt)).count, 1)
+        let claudeResult = results.first(where: { $0.providerID == .claude })
+        XCTAssertEqual(claudeResult?.monetaryMetrics.count, 2)
+        XCTAssertFalse(claudeResult?.usageMessages.isEmpty ?? true)
 
         let historyStore = AppStoreScreenshotFixtures.historyStore(for: results)
         guard let codexResult = results.first(where: { $0.providerID == .codex }) else {
@@ -566,6 +569,41 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(tiles.first { $0.id == "provider.openRouter.work" }).value, "$9.75")
     }
 
+    func testWidgetSnapshotBuilderIncludesCurrencyAwareMonetaryTiles() throws {
+        let snapshot = CodexBarWidgetSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_788_475_200),
+            results: [
+                CodexBarWidgetProviderSnapshot(
+                    accountID: "claude.personal",
+                    providerID: "claude",
+                    title: "Claude",
+                    subtitle: "Live Claude usage",
+                    bars: [],
+                    creditsRemaining: nil,
+                    monetaryMetrics: [
+                        CodexBarWidgetMonetaryMetricSnapshot(
+                            kind: ProviderMonetaryMetricKind.spent.rawValue,
+                            label: "Usage credits spent",
+                            minorUnits: 1250,
+                            currencyCode: "EUR",
+                            decimalPlaces: 2,
+                            detail: "Month to date"
+                        ),
+                    ],
+                    fetchedAt: Date(timeIntervalSince1970: 1_788_475_200),
+                    severity: .normal
+                ),
+            ]
+        )
+
+        let tile = try XCTUnwrap(snapshot.builderTiles.first { $0.id.hasPrefix("money.claude.personal") })
+
+        XCTAssertEqual(tile.title, "Usage credits spent")
+        XCTAssertEqual(tile.subtitle, "Month to date")
+        XCTAssertTrue(tile.value.contains("12"))
+        XCTAssertTrue(tile.value.contains("50"))
+    }
+
     @MainActor
     func testWidgetSnapshotPublisherPropagatesProviderGroup() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
@@ -708,6 +746,8 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertNil(bar.projectedSeverity)
         XCTAssertEqual(bar.effectiveSeverity, .normal)
         XCTAssertEqual(bar.effectiveFractionUsed, 0.25)
+        XCTAssertNil(snapshot.results.first?.monetaryMetrics)
+        XCTAssertNil(snapshot.results.first?.usageMessages)
     }
 
     @MainActor
@@ -1231,6 +1271,44 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(evaluation.activeAlertIDs.contains("balance.openRouter.main"))
         XCTAssertEqual(evaluation.activeAlerts.first?.title, "Balance below $5.00")
         XCTAssertEqual(evaluation.activeAlerts.first?.message, "$4.50 remaining for OpenRouter.")
+    }
+
+    func testUsageAlertEvaluatorAlertsScopedClaudeBarsWithoutTreatingHeadroomAsBalance() {
+        let result = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(label: "Fable weekly limit", used: 85, limit: 100),
+            ],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .remainingHeadroom,
+                    label: "Remaining spend headroom",
+                    minorUnits: 250,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+        )
+        let settings = UsageAlertSettings(
+            isEnabled: true,
+            usageThreshold: 0.80,
+            balanceThreshold: 5,
+            includesSeverityAlerts: false
+        )
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: settings,
+            activeAlertIDs: []
+        )
+
+        XCTAssertEqual(evaluation.notifications.map(\.kind), [.usage])
+        XCTAssertEqual(evaluation.notifications.first?.title, "Claude Fable weekly limit alert")
+        XCTAssertFalse(evaluation.activeAlertIDs.contains("balance.claude.personal"))
     }
 
     func testUsageAlertEvaluatorReturnsCardScopedActiveAlerts() {
@@ -3087,6 +3165,111 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.projectionPeriodEnd, Date(timeIntervalSince1970: 1_893_456_000))
     }
 
+    func testClaudeUsageParserReadsStructuredAndScopedLimitsWithoutDuplicates() throws {
+        let payload = """
+        {
+          "five_hour": {"utilization": 0.99, "resets_at": "2030-01-01T00:00:00Z"},
+          "seven_day": {"utilization": 0.88, "resets_at": "2030-01-08T00:00:00Z"},
+          "seven_day_sonnet": {"utilization": 0.44, "resets_at": "2030-01-08T00:00:00Z"},
+          "limits": [
+            {"kind":"session","percent":15,"resets_at":"2030-01-01T00:00:00Z","is_active":true},
+            {"kind":"weekly_all","percent":36,"resets_at":"2030-01-08T00:00:00Z","is_active":true},
+            {"kind":"weekly_scoped","percent":71,"resets_at":"2030-01-08T00:00:00.838164+00:00","scope":{"model":{"display_name":"Fable"}},"is_active":true},
+            {"kind":"weekly_scoped","percent":112,"scope":{"model":{"display_name":"Future Model"}},"is_active":true},
+            {"kind":"weekly_scoped","percent":49,"scope":{"model":{"display_name":"Sonnet"}},"is_active":true},
+            {"kind":"internal_codename","percent":100,"scope":{"model":{"display_name":"Do Not Show"}},"is_active":true},
+            {"kind":"weekly_scoped","percent":90,"scope":{"model":{"id":"internal-only"}},"is_active":true}
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max_20x"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), [
+            "5 hour usage limit",
+            "Weekly usage limit",
+            "Fable weekly limit",
+            "Future Model weekly limit",
+            "Sonnet weekly limit",
+        ])
+        XCTAssertEqual(result.bars.map(\.used), [15, 36, 71, 112, 49])
+        XCTAssertEqual(result.bars[3].usageText, "112%")
+        XCTAssertNil(result.bars[3].resetsAt)
+        XCTAssertTrue(result.usageMessages.contains {
+            $0 == "Fable usage is capped within the all-model weekly allowance."
+        })
+        XCTAssertFalse(result.bars.contains { $0.label.contains("Do Not Show") })
+
+        let incompleteStructured = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"five_hour":{"utilization":0.42},"limits":[{"kind":"session","percent":null}]}"#.utf8),
+            subscriptionType: nil
+        ))
+        XCTAssertEqual(incompleteStructured.bars.first?.used, 42)
+    }
+
+    func testClaudeUsageParserReadsCurrencyAwareUsageCredits() throws {
+        let payload = """
+        {
+          "limits": [{"kind":"weekly_all","percent":24,"is_active":true}],
+          "extra_usage": {
+            "is_enabled": true,
+            "monthly_limit": 5000,
+            "used_credits": 1250,
+            "currency": "EUR",
+            "decimal_places": 2
+          }
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertEqual(result.bars.first?.used, 24)
+        XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
+        XCTAssertEqual(result.monetaryMetrics.map(\.minorUnits), [Decimal(1250), Decimal(5000), Decimal(3750)])
+        XCTAssertEqual(result.monetaryMetrics.map(\.amount), [Decimal(string: "12.5")!, Decimal(50), Decimal(string: "37.5")!])
+        XCTAssertEqual(result.monetaryMetrics.map(\.currencyCode), ["EUR", "EUR", "EUR"])
+        XCTAssertEqual(result.monetaryMetrics.last?.detail, "Not a prepaid balance")
+        XCTAssertNil(result.creditsRemaining)
+    }
+
+    func testClaudeUsageParserRepresentsDisabledUnlimitedAndMalformedExtraUsage() throws {
+        let disabled = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"extra_usage":{"is_enabled":false,"disabled_reason":"Not funded"}}"#.utf8),
+            subscriptionType: nil
+        ))
+        XCTAssertEqual(disabled.usageMessages, ["Usage credits are disabled: Not funded."])
+        XCTAssertTrue(disabled.monetaryMetrics.isEmpty)
+
+        let unlimited = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"extra_usage":{"is_enabled":true,"used_credits":250,"currency":"GBP","decimal_places":2}}"#.utf8),
+            subscriptionType: nil
+        ))
+        XCTAssertEqual(unlimited.monetaryMetrics.map(\.kind), [.spent])
+        XCTAssertEqual(unlimited.usageMessages, ["Usage credits are enabled with no monthly spend limit reported."])
+
+        let malformed = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"limits":[{"kind":"unknown","percent":50}],"extra_usage":{"is_enabled":true,"used_credits":10}}"#.utf8),
+            subscriptionType: nil
+        ))
+        XCTAssertTrue(malformed.monetaryMetrics.isEmpty)
+        XCTAssertEqual(
+            malformed.usageMessages,
+            ["Usage credits are enabled, but monetary details are temporarily unavailable."]
+        )
+
+        let unknownState = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"extra_usage":{"currency":"USD","decimal_places":2}}"#.utf8),
+            subscriptionType: nil
+        ))
+        XCTAssertEqual(unknownState.usageMessages, ["Usage-credit status is temporarily unavailable."])
+    }
+
     func testClaudeUsageParserReadsRateLimitHeaders() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
         let result = try XCTUnwrap(ClaudeUsageParser.parseRateLimitHeaders(
@@ -3383,6 +3566,58 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(reloadedStore.snapshots.first?.accountID, "codex.personal")
         XCTAssertEqual(reloadedStore.snapshots.first?.bars.first?.fractionUsed, 0.42)
         XCTAssertNil(reloadedStore.snapshots.first?.creditsRemaining)
+    }
+
+    @MainActor
+    func testUsageHistoryStorePersistsAllMonetaryMetricsAlongsideBars() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live Claude usage",
+            bars: [UsageBar(label: "Weekly usage limit", used: 40, limit: 100)],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: "Usage credits spent",
+                    minorUnits: 1250,
+                    currencyCode: "EUR",
+                    decimalPlaces: 2
+                ),
+                ProviderMonetaryMetric(
+                    kind: .remainingHeadroom,
+                    label: "Remaining spend headroom",
+                    minorUnits: 3750,
+                    currencyCode: "EUR",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [result], now: fetchedAt)
+
+        let snapshot = try XCTUnwrap(UsageHistoryStore(defaults: defaults).snapshots.first)
+        XCTAssertEqual(snapshot.monetaryMetrics?.map(\.kind), [.spent, .remainingHeadroom])
+        XCTAssertEqual(snapshot.monetaryMetrics?.map(\.currencyCode), ["EUR", "EUR"])
+        XCTAssertEqual(snapshot.primaryValue, 0.4)
+
+        let options = store.historySeriesOptions(for: result)
+        XCTAssertEqual(options.map(\.label), [
+            "Usage",
+            "Usage credits spent",
+            "Remaining spend headroom",
+        ])
+        XCTAssertEqual(options[1].series.points.map(\.value), [12.5])
+        XCTAssertEqual(options[1].series.currencyCode, "EUR")
+        XCTAssertEqual(options[2].series.points.map(\.value), [37.5])
     }
 
     @MainActor
@@ -4703,6 +4938,114 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(result.bars.isEmpty)
     }
 
+    func testClaudeUsageProviderPreservesStaleSnapshotOnRateLimitWithoutProbe() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(
+                subscriptionType: "pro",
+                rateLimitTier: nil,
+                expiresAt: 0,
+                accessToken: "claude-token",
+                refreshToken: nil
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let clock = TestDateProvider(Date(timeIntervalSince1970: 1_800_000_000))
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: urlSessionConfiguration),
+            now: { clock.now() }
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+            if requestCount == 1 {
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(#"{"limits":[{"kind":"weekly_all","percent":36,"is_active":true}]}"#.utf8)
+                )
+            }
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 429,
+                    httpVersion: nil,
+                    headerFields: ["Retry-After": "120"]
+                )!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let fresh = try await provider.fetchUsage(for: configuration)
+        let stale = try await provider.fetchUsage(for: configuration)
+        let backedOff = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(fresh.bars, stale.bars)
+        XCTAssertEqual(stale.bars, backedOff.bars)
+        XCTAssertEqual(fresh.fetchedAt, stale.fetchedAt)
+        XCTAssertTrue(stale.subtitle.contains("rate-limited"))
+        XCTAssertTrue(stale.subtitle.contains("last known data"))
+
+        clock.advance(by: 121)
+        _ = try await provider.fetchUsage(for: configuration)
+        XCTAssertEqual(requestCount, 3)
+    }
+
+    func testClaudeUsageProviderDistinguishesOAuthUsageFailures() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(
+                accessToken: "claude-token"
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: urlSessionConfiguration)
+        )
+        var statusCode = 401
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: statusCode,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let unauthorized = try await provider.fetchUsage(for: configuration)
+        statusCode = 403
+        let forbidden = try await provider.fetchUsage(for: configuration)
+        statusCode = 404
+        let missing = try await provider.fetchUsage(for: configuration)
+        statusCode = 503
+        let unavailable = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(unauthorized.subtitle, "Claude credential was rejected. Sign in again.")
+        XCTAssertEqual(forbidden.subtitle, "Claude credential lacks permission to read subscription usage.")
+        XCTAssertEqual(missing.subtitle, "Claude subscription usage is unavailable for this account.")
+        XCTAssertEqual(unavailable.subtitle, "Claude usage is temporarily unavailable (server error 503).")
+    }
+
     @MainActor
     func testDemoRefreshReturnsSortedResults() async {
         let service = UsageRefreshService.demo()
@@ -5013,6 +5356,25 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
+}
+
+private final class TestDateProvider: @unchecked Sendable {
+    private let lock = NSLock()
+    private var date: Date
+
+    init(_ date: Date) {
+        self.date = date
+    }
+
+    func now() -> Date {
+        lock.withLock { date }
+    }
+
+    func advance(by interval: TimeInterval) {
+        lock.withLock {
+            date.addTimeInterval(interval)
+        }
+    }
 }
 
 private struct HangingUsageProvider: UsageProvider {

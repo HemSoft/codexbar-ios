@@ -26,6 +26,8 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
     public let groupName: String?
     public let bars: [CodexBarWidgetUsageBarSnapshot]
     public let creditsRemaining: Double?
+    public let monetaryMetrics: [CodexBarWidgetMonetaryMetricSnapshot]?
+    public let usageMessages: [String]?
     public let fetchedAt: Date
     public let severity: CodexBarWidgetSeverity
 
@@ -38,6 +40,8 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
         groupName: String? = nil,
         bars: [CodexBarWidgetUsageBarSnapshot],
         creditsRemaining: Double?,
+        monetaryMetrics: [CodexBarWidgetMonetaryMetricSnapshot] = [],
+        usageMessages: [String] = [],
         fetchedAt: Date,
         severity: CodexBarWidgetSeverity
     ) {
@@ -49,12 +53,57 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
         self.groupName = groupName
         self.bars = bars
         self.creditsRemaining = creditsRemaining
+        self.monetaryMetrics = monetaryMetrics
+        self.usageMessages = usageMessages
         self.fetchedAt = fetchedAt
         self.severity = severity
     }
 
     public var id: String {
         accountID
+    }
+}
+
+public struct CodexBarWidgetMonetaryMetricSnapshot: Codable, Equatable, Identifiable, Sendable {
+    public let kind: String
+    public let label: String
+    public let minorUnits: Decimal
+    public let currencyCode: String
+    public let decimalPlaces: Int
+    public let detail: String?
+
+    public init(
+        kind: String,
+        label: String,
+        minorUnits: Decimal,
+        currencyCode: String,
+        decimalPlaces: Int,
+        detail: String?
+    ) {
+        self.kind = kind
+        self.label = label
+        self.minorUnits = minorUnits
+        self.currencyCode = currencyCode
+        self.decimalPlaces = decimalPlaces
+        self.detail = detail
+    }
+
+    public var id: String {
+        "\(kind).\(label).\(currencyCode)"
+    }
+
+    public var formattedAmount: String {
+        var divisor = Decimal(1)
+        for _ in 0..<decimalPlaces {
+            divisor *= 10
+        }
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currencyCode
+        formatter.minimumFractionDigits = decimalPlaces
+        formatter.maximumFractionDigits = decimalPlaces
+        let amount = NSDecimalNumber(decimal: minorUnits / divisor)
+        return formatter.string(from: amount) ?? "\(currencyCode) \(amount.stringValue)"
     }
 }
 

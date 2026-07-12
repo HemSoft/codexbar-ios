@@ -93,6 +93,8 @@ enum AppStoreScreenshotFixtures {
                 subtitle: sample.subtitle,
                 bars: sample.bars,
                 creditsRemaining: sample.creditsRemaining,
+                monetaryMetrics: sample.monetaryMetrics,
+                usageMessages: sample.usageMessages,
                 fetchedAt: capturedAt
             )
         }

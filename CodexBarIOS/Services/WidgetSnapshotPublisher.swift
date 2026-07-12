@@ -52,6 +52,17 @@ enum WidgetSnapshotPublisher {
                         )
                     },
                     creditsRemaining: result.creditsRemaining,
+                    monetaryMetrics: result.monetaryMetrics.map { metric in
+                        CodexBarWidgetMonetaryMetricSnapshot(
+                            kind: metric.kind.rawValue,
+                            label: metric.label,
+                            minorUnits: metric.minorUnits,
+                            currencyCode: metric.currencyCode,
+                            decimalPlaces: metric.decimalPlaces,
+                            detail: metric.detail
+                        )
+                    },
+                    usageMessages: result.usageMessages,
                     fetchedAt: result.fetchedAt,
                     severity: CodexBarWidgetSeverity(result.highestSeverity(at: now))
                 )

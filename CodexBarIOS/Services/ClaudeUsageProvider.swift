@@ -11,15 +11,19 @@ public final class ClaudeUsageProvider: UsageProvider {
 
     private let secretStore: SecretStore
     private let session: URLSession
+    private let now: @Sendable () -> Date
+    private let snapshotCache = ClaudeUsageSnapshotCache()
 
     public let providerID = ProviderID.claude
 
     public init(
         secretStore: SecretStore = KeychainService(),
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.secretStore = secretStore
         self.session = session
+        self.now = now
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
@@ -53,7 +57,14 @@ public final class ClaudeUsageProvider: UsageProvider {
         credentials: ClaudeCredentials,
         accessToken: String
     ) async throws -> ProviderUsageResult? {
-        let fetchedAt = Date()
+        let fetchedAt = now()
+        if let retryAt = await snapshotCache.retryAt(accountID: configuration.id), retryAt > fetchedAt {
+            return await staleOrFailureResult(
+                "Claude usage is rate-limited until \(Self.formatRetryDate(retryAt)).",
+                configuration: configuration
+            )
+        }
+
         let (data, response) = try await session.data(for: makeOAuthUsageRequest(accessToken: accessToken))
         guard let httpResponse = response as? HTTPURLResponse else {
             return failureResult("Claude usage returned an invalid response.", configuration: configuration)
@@ -68,9 +79,28 @@ public final class ClaudeUsageProvider: UsageProvider {
             ) else {
                 return nil
             }
-            return applyAccountMetadata(to: parsed, configuration: configuration)
-        case 401, 403:
-            return failureResult("Claude credential expired or lacks Claude Code access.", configuration: configuration)
+            let result = applyAccountMetadata(to: parsed, configuration: configuration)
+            await snapshotCache.store(result, accountID: configuration.id)
+            return result
+        case 401:
+            return failureResult("Claude credential was rejected. Sign in again.", configuration: configuration)
+        case 403:
+            return failureResult("Claude credential lacks permission to read subscription usage.", configuration: configuration)
+        case 404:
+            return failureResult("Claude subscription usage is unavailable for this account.", configuration: configuration)
+        case 429:
+            let retryAt = retryDate(httpResponse, now: fetchedAt)
+            await snapshotCache.setRetryAt(retryAt, accountID: configuration.id)
+            return await staleOrFailureResult(
+                retryAt.map { "Claude usage is rate-limited until \(Self.formatRetryDate($0))." }
+                    ?? "Claude usage is rate-limited.",
+                configuration: configuration
+            )
+        case 500..<600:
+            return await staleOrFailureResult(
+                "Claude usage is temporarily unavailable (server error \(httpResponse.statusCode)).",
+                configuration: configuration
+            )
         default:
             return nil
         }
@@ -188,6 +218,49 @@ public final class ClaudeUsageProvider: UsageProvider {
         )
     }
 
+    private func staleOrFailureResult(
+        _ message: String,
+        configuration: ProviderAccountConfiguration
+    ) async -> ProviderUsageResult {
+        guard let cached = await snapshotCache.result(accountID: configuration.id) else {
+            return failureResult(message, configuration: configuration)
+        }
+
+        return ProviderUsageResult(
+            accountID: cached.accountID,
+            providerID: cached.providerID,
+            title: configuration.displayName,
+            subtitle: "\(message) Showing last known data.",
+            bars: cached.bars,
+            creditsRemaining: cached.creditsRemaining,
+            monetaryMetrics: cached.monetaryMetrics,
+            usageMessages: cached.usageMessages,
+            fetchedAt: cached.fetchedAt
+        )
+    }
+
+    private func retryDate(_ response: HTTPURLResponse, now: Date) -> Date? {
+        guard let retryAfter = response.value(forHTTPHeaderField: "Retry-After") else {
+            return nil
+        }
+        if let seconds = TimeInterval(retryAfter), seconds >= 0 {
+            return now.addingTimeInterval(seconds)
+        }
+        return Self.httpDateFormatter.date(from: retryAfter)
+    }
+
+    private static func formatRetryDate(_ date: Date) -> String {
+        UserFacingDateTimeFormatter.current.dateAndTime(date)
+    }
+
+    private static let httpDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+        return formatter
+    }()
+
     private func applyAccountMetadata(
         to result: ProviderUsageResult,
         configuration: ProviderAccountConfiguration
@@ -198,12 +271,36 @@ public final class ClaudeUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: result.subtitle,
             bars: result.bars,
+            monetaryMetrics: result.monetaryMetrics,
+            usageMessages: result.usageMessages,
             fetchedAt: result.fetchedAt
         )
     }
 
     private func normalizeEpochToSeconds(_ value: Int64) -> Int64 {
         value >= 1_000_000_000_000 ? value / 1000 : value
+    }
+}
+
+private actor ClaudeUsageSnapshotCache {
+    private var results: [String: ProviderUsageResult] = [:]
+    private var retryDates: [String: Date] = [:]
+
+    func store(_ result: ProviderUsageResult, accountID: String) {
+        results[accountID] = result
+        retryDates[accountID] = nil
+    }
+
+    func result(accountID: String) -> ProviderUsageResult? {
+        results[accountID]
+    }
+
+    func setRetryAt(_ date: Date?, accountID: String) {
+        retryDates[accountID] = date
+    }
+
+    func retryAt(accountID: String) -> Date? {
+        retryDates[accountID]
     }
 }
 

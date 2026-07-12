@@ -50,42 +50,75 @@ struct ProviderUsageCard: View {
                 UsageAlertSummaryView(alerts: alerts)
             }
 
-            if let creditsRemaining = result.creditsRemaining {
+            if let creditsRemaining = result.creditsRemaining, result.bars.isEmpty {
                 Text(Self.currencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00")
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.primary)
                     .monospacedDigit()
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
-            } else {
-                ForEach(result.bars) { bar in
+            }
+
+            ForEach(result.bars) { bar in
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack {
+                        Text(bar.label)
+                        Spacer()
+                        Text(bar.usageText)
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.footnote)
+
+                    if let resetDescription = bar.localizedResetDescription() {
+                        Text(resetDescription)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    UsageProgressBar(bar: bar)
+
+                    if let projectionDescription = bar.projectionDescription() {
+                        Text(projectionDescription)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            if !result.monetaryMetrics.isEmpty {
+                Divider()
+
+                ForEach(result.monetaryMetrics) { metric in
                     VStack(alignment: .leading, spacing: 7) {
                         HStack {
-                            Text(bar.label)
+                            Text(metric.label)
                             Spacer()
-                            Text(bar.usageText)
-                                .foregroundStyle(.secondary)
+                            Text(metric.formattedAmount())
+                                .fontWeight(.semibold)
+                                .monospacedDigit()
                         }
                         .font(.footnote)
 
-                        if let resetDescription = bar.localizedResetDescription() {
-                            Text(resetDescription)
+                        if let detail = metric.detail {
+                            Text(detail)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-
-                        UsageProgressBar(bar: bar)
-
-                        if let projectionDescription = bar.projectionDescription() {
-                            Text(projectionDescription)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(monetaryAccessibilityLabel(metric))
                 }
+            }
+
+            ForEach(result.usageMessages, id: \.self) { message in
+                Label(message, systemImage: "info.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(message)
             }
 
             if showsHistory {
@@ -104,7 +137,10 @@ struct ProviderUsageCard: View {
     }
 
     var showsHistory: Bool {
-        result.creditsRemaining != nil || !result.bars.isEmpty || !history.points.isEmpty
+        result.creditsRemaining != nil
+            || !result.bars.isEmpty
+            || !result.monetaryMetrics.isEmpty
+            || !history.points.isEmpty
     }
 
     private static let currencyFormatter: NumberFormatter = {
@@ -115,6 +151,12 @@ struct ProviderUsageCard: View {
         formatter.maximumFractionDigits = 2
         return formatter
     }()
+
+    private func monetaryAccessibilityLabel(_ metric: ProviderMonetaryMetric) -> String {
+        [metric.label, metric.formattedAmount(), metric.detail]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+    }
 }
 
 private struct UsageAlertSummaryView: View {
@@ -273,15 +315,34 @@ struct ProviderUsageHistoryDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     let result: ProviderUsageResult
-    let series: UsageHistorySeries
+    let seriesOptions: [UsageHistorySeriesOption]
 
     @State private var selectedDate: Date?
+    @State private var selectedSeriesID: String
+
+    init(result: ProviderUsageResult, seriesOptions: [UsageHistorySeriesOption]) {
+        self.result = result
+        self.seriesOptions = seriesOptions
+        _selectedSeriesID = State(initialValue: seriesOptions.first?.id ?? "primary")
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     accountHeader
+
+                    if seriesOptions.count > 1 {
+                        Picker("History metric", selection: $selectedSeriesID) {
+                            ForEach(seriesOptions) { option in
+                                Text(option.label).tag(option.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: selectedSeriesID) {
+                            selectedDate = nil
+                        }
+                    }
 
                     if series.points.isEmpty {
                         ContentUnavailableView(
@@ -311,6 +372,12 @@ struct ProviderUsageHistoryDetailView: View {
                 }
             }
         }
+    }
+
+    private var series: UsageHistorySeries {
+        seriesOptions.first(where: { $0.id == selectedSeriesID })?.series
+            ?? seriesOptions.first?.series
+            ?? UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false)
     }
 
     private var accountHeader: some View {
