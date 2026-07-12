@@ -5494,6 +5494,56 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(unavailable.subtitle, "Claude usage is temporarily unavailable (server error 503).")
     }
 
+    func testClaudeUsageProviderFallsBackToHeadersWhenOAuthUsageIsUnavailable() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            if request.url?.path == "/api/oauth/usage" {
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 404,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data()
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/v1/messages")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: [
+                        "anthropic-ratelimit-unified-5h-utilization": "0.25",
+                        "anthropic-ratelimit-unified-5h-reset": "1893456000",
+                    ]
+                )!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(result.bars.first?.used, 25)
+        XCTAssertFalse(result.subtitle.contains("unavailable"))
+    }
+
     @MainActor
     func testDemoRefreshReturnsSortedResults() async {
         let service = UsageRefreshService.demo()

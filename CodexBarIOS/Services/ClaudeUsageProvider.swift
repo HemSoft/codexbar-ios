@@ -139,7 +139,7 @@ public final class ClaudeUsageProvider: UsageProvider {
         case 404:
             return OAuthUsageOutcome(
                 result: failureResult("Claude subscription usage is unavailable for this account.", configuration: configuration),
-                permitsFallbackProbe: false
+                permitsFallbackProbe: true
             )
         case 429:
             let retryAt = retryDate(httpResponse, now: fetchedAt)
