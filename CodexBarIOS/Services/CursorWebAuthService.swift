@@ -202,23 +202,24 @@ public final class CursorWebAuthService: Sendable {
 @MainActor
 final class CursorWebAuthenticationPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
     private var session: ASWebAuthenticationSession?
+    private var sessionGeneration = CursorWebAuthenticationSessionGeneration()
     private var cancellationHandler: (() -> Void)?
-    private var isFinishing = false
 
     func present(url: URL, onCancel: @escaping () -> Void) -> Bool {
         finish()
-        isFinishing = false
+        let sessionID = sessionGeneration.start()
         cancellationHandler = onCancel
 
         let session = Self.makeSession(url: url) { [weak self] _ in
             Task { @MainActor in
-                self?.handleCompletion()
+                self?.handleCompletion(sessionID: sessionID)
             }
         }
         session.presentationContextProvider = self
         self.session = session
         guard session.start() else {
             self.session = nil
+            sessionGeneration.invalidate()
             cancellationHandler = nil
             return false
         }
@@ -226,7 +227,7 @@ final class CursorWebAuthenticationPresenter: NSObject, ASWebAuthenticationPrese
     }
 
     func finish() {
-        isFinishing = true
+        sessionGeneration.invalidate()
         cancellationHandler = nil
         session?.cancel()
         session = nil
@@ -254,13 +255,35 @@ final class CursorWebAuthenticationPresenter: NSObject, ASWebAuthenticationPrese
         return session
     }
 
-    private func handleCompletion() {
-        session = nil
-        guard !isFinishing else {
+    private func handleCompletion(sessionID: UUID) {
+        guard sessionGeneration.complete(sessionID) else {
             return
         }
+        session = nil
         cancellationHandler?()
         cancellationHandler = nil
+    }
+}
+
+struct CursorWebAuthenticationSessionGeneration {
+    private var activeSessionID: UUID?
+
+    mutating func start() -> UUID {
+        let sessionID = UUID()
+        activeSessionID = sessionID
+        return sessionID
+    }
+
+    mutating func invalidate() {
+        activeSessionID = nil
+    }
+
+    mutating func complete(_ sessionID: UUID) -> Bool {
+        guard activeSessionID == sessionID else {
+            return false
+        }
+        activeSessionID = nil
+        return true
     }
 }
 

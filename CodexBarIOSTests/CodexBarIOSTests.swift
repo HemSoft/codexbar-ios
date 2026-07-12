@@ -1990,6 +1990,16 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(session.prefersEphemeralWebBrowserSession)
     }
 
+    func testCursorBrowserSessionIgnoresStaleCompletionAfterRetry() {
+        var generation = CursorWebAuthenticationSessionGeneration()
+        let firstSessionID = generation.start()
+        let retrySessionID = generation.start()
+
+        XCTAssertFalse(generation.complete(firstSessionID))
+        XCTAssertTrue(generation.complete(retrySessionID))
+        XCTAssertFalse(generation.complete(retrySessionID))
+    }
+
     @MainActor
     func testCursorSignInStopsWhenPrivateBrowserCannotStart() async {
         let urlSessionConfiguration = URLSessionConfiguration.ephemeral
