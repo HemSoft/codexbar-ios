@@ -64,3 +64,6 @@ building, testing, or releasing the app.
 - Added an automated Claude Code Review GitHub Actions workflow that reviews
   each pull request and posts inline findings, requiring the Claude GitHub App
   and an `ANTHROPIC_API_KEY` repository secret.
+- Extended the Claude Code Review workflow to run on demand when `@claude` is
+  mentioned in a pull-request or review comment, in addition to automatic runs
+  on pull-request open and push.
