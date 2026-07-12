@@ -44,15 +44,14 @@ public final class ClaudeUsageProvider: UsageProvider {
         if let usageResult = try await fetchOAuthUsage(configuration: configuration, credentials: credentials, accessToken: token) {
             let retryAt = await snapshotCache.retryAt(accountID: configuration.id)
             let canProbe = retryAt.map { $0 <= now() } ?? true
-            let hasMessagesOnly = usageResult.bars.isEmpty
-                && usageResult.monetaryMetrics.isEmpty
-                && !usageResult.usageMessages.isEmpty
+            let hasOAuthStateWithoutBars = usageResult.bars.isEmpty
+                && (!usageResult.monetaryMetrics.isEmpty || !usageResult.usageMessages.isEmpty)
             let hasServerFailureOnly = usageResult.bars.isEmpty
                 && usageResult.monetaryMetrics.isEmpty
                 && usageResult.usageMessages.isEmpty
                 && usageResult.subtitle.contains("server error")
             if canProbe,
-               hasMessagesOnly || hasServerFailureOnly,
+               hasOAuthStateWithoutBars || hasServerFailureOnly,
                let rateLimitResult = try await fetchRateLimitUsage(
                    configuration: configuration,
                    credentials: credentials,
@@ -65,7 +64,7 @@ public final class ClaudeUsageProvider: UsageProvider {
                     title: rateLimitResult.title,
                     subtitle: rateLimitResult.subtitle,
                     bars: rateLimitResult.bars,
-                    monetaryMetrics: rateLimitResult.monetaryMetrics,
+                    monetaryMetrics: usageResult.monetaryMetrics + rateLimitResult.monetaryMetrics,
                     usageMessages: usageResult.usageMessages + rateLimitResult.usageMessages,
                     fetchedAt: rateLimitResult.fetchedAt
                 )

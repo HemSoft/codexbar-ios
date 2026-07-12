@@ -5223,7 +5223,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(stale.subtitle.contains("last known data"))
     }
 
-    func testClaudeUsageProviderMergesMessagesOnlyOAuthStateWithHeaderFallback() async throws {
+    func testClaudeUsageProviderMergesOAuthOnlyStateWithHeaderFallback() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
         try secretStore.saveSecret(
@@ -5247,7 +5247,7 @@ final class CodexBarIOSTests: XCTestCase {
                         httpVersion: nil,
                         headerFields: nil
                     )!,
-                    Data(#"{"extra_usage":{"is_enabled":false}}"#.utf8)
+                    Data(#"{"extra_usage":{"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8)
                 )
             }
             XCTAssertEqual(request.url?.path, "/v1/messages")
@@ -5270,7 +5270,8 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(requestCount, 2)
         XCTAssertEqual(result.bars.first?.used, 25)
-        XCTAssertEqual(result.usageMessages, ["Usage credits are disabled."])
+        XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
+        XCTAssertEqual(result.usageMessages, ["Usage-credit enabled status was not reported."])
     }
 
     func testClaudeUsageProviderDoesNotProbeMessagesOnlySnapshotDuringBackoff() async throws {
