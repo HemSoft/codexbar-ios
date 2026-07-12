@@ -1,6 +1,8 @@
 import Foundation
 
 public final class CopilotUsageProvider: UsageProvider {
+    private static let refreshCoordinator = CredentialRefreshCoordinator<CopilotCredentialRefreshResult>()
+
     private static let editorVersion = "vscode/1.96.2"
     private static let editorPluginVersion = "copilot-chat/0.26.7"
     private static let userAgentProduct = "GitHubCopilotChat/0.26.7"
@@ -14,6 +16,9 @@ public final class CopilotUsageProvider: UsageProvider {
     private let session: URLSession
     private let usageEndpoint: URL
     private let githubAPIBaseURL: URL
+    private let tokenEndpoint: URL
+    private let oauthConfiguration: CopilotOAuthConfiguration
+    private let now: @Sendable () -> Date
 
     public let providerID = ProviderID.copilot
 
@@ -21,24 +26,87 @@ public final class CopilotUsageProvider: UsageProvider {
         secretStore: SecretStore = KeychainService(),
         session: URLSession = .shared,
         usageEndpoint: URL = URL(string: "https://api.github.com/copilot_internal/user")!,
-        githubAPIBaseURL: URL = URL(string: "https://api.github.com")!
+        githubAPIBaseURL: URL = URL(string: "https://api.github.com")!,
+        tokenEndpoint: URL = CopilotWebAuthService.tokenEndpoint,
+        oauthConfiguration: CopilotOAuthConfiguration = .bundled,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.secretStore = secretStore
         self.session = session
         self.usageEndpoint = usageEndpoint
         self.githubAPIBaseURL = githubAPIBaseURL
+        self.tokenEndpoint = tokenEndpoint
+        self.oauthConfiguration = oauthConfiguration
+        self.now = now
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         guard
             let storedSecret = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
-            let credentials = CopilotCredentialsParser.parse(storedSecret)
+            var credentials = CopilotCredentialsParser.parse(storedSecret)
         else {
             return failureResult("Not configured - sign in with GitHub.", configuration: configuration)
         }
 
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: configuration)
+        var didRefresh = false
+        if credentials.shouldRefresh(at: now()) {
+            guard credentials.refreshToken?.isEmpty == false else {
+                if credentials.isExpired(at: now()) {
+                    return failureResult(
+                        "GitHub credential expired and cannot be renewed. Sign in again.",
+                        configuration: configuration
+                    )
+                }
+                return try await fetchUsage(
+                    configuration: configuration,
+                    credentials: credentials,
+                    keychainAccount: keychainAccount,
+                    canRefresh: false
+                )
+            }
+
+            switch await refreshCredentials(credentials, keychainAccount: keychainAccount) {
+            case .success(let refreshed):
+                credentials = refreshed
+                didRefresh = true
+            case .expired:
+                return failureResult(
+                    "GitHub credential expired and cannot be renewed. Sign in again.",
+                    configuration: configuration
+                )
+            case .rejected:
+                return failureResult("GitHub credential renewal was rejected. Sign in again.", configuration: configuration)
+            case .temporarilyUnavailable:
+                if credentials.isExpired(at: now()) {
+                    return failureResult("Could not renew the GitHub credential. Try again.", configuration: configuration)
+                }
+            case .persistenceFailed:
+                return failureResult("Could not securely save the renewed GitHub credential. Sign in again.", configuration: configuration)
+            }
+        }
+
+        return try await fetchUsage(
+            configuration: configuration,
+            credentials: credentials,
+            keychainAccount: keychainAccount,
+            canRefresh: !didRefresh
+        )
+    }
+
+    private func fetchUsage(
+        configuration: ProviderAccountConfiguration,
+        credentials: CopilotCredentials,
+        keychainAccount: String,
+        canRefresh: Bool
+    ) async throws -> ProviderUsageResult {
         if configuration.copilotAccountScope == .organization {
-            return try await fetchOrganizationUsage(configuration: configuration, accessToken: credentials.accessToken)
+            return try await fetchOrganizationUsage(
+                configuration: configuration,
+                credentials: credentials,
+                keychainAccount: keychainAccount,
+                canRefresh: canRefresh
+            )
         }
 
         let (data, response) = try await session.data(for: makeUsageRequest(accessToken: credentials.accessToken))
@@ -49,11 +117,22 @@ public final class CopilotUsageProvider: UsageProvider {
         switch httpResponse.statusCode {
         case 200..<300:
             return applyAccountMetadata(
-                to: CopilotUsageParser.parse(data) ?? failureResult("Could not parse GitHub Copilot usage.", configuration: configuration),
+                to: CopilotUsageParser.parse(data, fetchedAt: now())
+                    ?? failureResult("Could not parse GitHub Copilot usage.", configuration: configuration),
                 configuration: configuration
             )
-        case 401, 403:
-            return failureResult("GitHub Copilot credential expired or lacks Copilot access.", configuration: configuration)
+        case 401 where canRefresh && credentials.refreshToken?.isEmpty == false:
+            return try await retryAfterRefresh(
+                configuration: configuration,
+                credentials: credentials,
+                keychainAccount: keychainAccount
+            )
+        case 401:
+            return failureResult(authenticationFailureMessage(for: credentials), configuration: configuration)
+        case 403 where Self.isRateLimited(httpResponse):
+            return failureResult("GitHub rate limit reached. Try again later.", configuration: configuration)
+        case 403:
+            return failureResult("This GitHub account does not have access to Copilot usage.", configuration: configuration)
         default:
             return failureResult("GitHub Copilot usage returned HTTP \(httpResponse.statusCode).", configuration: configuration)
         }
@@ -182,9 +261,15 @@ public final class CopilotUsageProvider: UsageProvider {
 
     private func fetchOrganizationUsage(
         configuration: ProviderAccountConfiguration,
-        accessToken: String
+        credentials: CopilotCredentials,
+        keychainAccount: String,
+        canRefresh: Bool
     ) async throws -> ProviderUsageResult {
-        guard let request = makeOrganizationBillingRequest(accessToken: accessToken, configuration: configuration) else {
+        guard let request = makeOrganizationBillingRequest(
+            accessToken: credentials.accessToken,
+            configuration: configuration,
+            date: now()
+        ) else {
             return failureResult("Not configured - enter organization.", configuration: configuration)
         }
 
@@ -197,18 +282,171 @@ public final class CopilotUsageProvider: UsageProvider {
         case 200..<300:
             let effectiveAllotment = try await resolveOrganizationAllotment(
                 configuration: configuration,
-                accessToken: accessToken
+                accessToken: credentials.accessToken,
+                date: now()
             )
             return CopilotBillingUsageParser.parse(
                 data,
                 configuration: configuration,
-                fetchedAt: Date(),
+                fetchedAt: now(),
                 totalAllotment: effectiveAllotment
             ) ?? failureResult("Could not parse GitHub Copilot organization usage.", configuration: configuration)
-        case 401, 403:
-            return failureResult("GitHub credential lacks access to this Copilot organization billing data.", configuration: configuration)
+        case 401 where canRefresh && credentials.refreshToken?.isEmpty == false:
+            return try await retryAfterRefresh(
+                configuration: configuration,
+                credentials: credentials,
+                keychainAccount: keychainAccount
+            )
+        case 401:
+            return failureResult(authenticationFailureMessage(for: credentials), configuration: configuration)
+        case 403 where Self.isRateLimited(httpResponse):
+            return failureResult("GitHub rate limit reached. Try again later.", configuration: configuration)
+        case 403:
+            return failureResult(
+                "This GitHub account lacks permission to read the configured Copilot organization billing data.",
+                configuration: configuration
+            )
+        case 404:
+            return failureResult(
+                "GitHub Copilot organization not found. Check the configured organization name.",
+                configuration: configuration
+            )
         default:
             return failureResult("GitHub Copilot organization usage returned HTTP \(httpResponse.statusCode).", configuration: configuration)
+        }
+    }
+
+    private func retryAfterRefresh(
+        configuration: ProviderAccountConfiguration,
+        credentials: CopilotCredentials,
+        keychainAccount: String
+    ) async throws -> ProviderUsageResult {
+        switch await refreshCredentials(credentials, keychainAccount: keychainAccount) {
+        case .success(let refreshed):
+            return try await fetchUsage(
+                configuration: configuration,
+                credentials: refreshed,
+                keychainAccount: keychainAccount,
+                canRefresh: false
+            )
+        case .expired:
+            return failureResult(
+                "GitHub credential expired and cannot be renewed. Sign in again.",
+                configuration: configuration
+            )
+        case .rejected:
+            return failureResult("GitHub credential renewal was rejected. Sign in again.", configuration: configuration)
+        case .temporarilyUnavailable:
+            return failureResult("Could not renew the GitHub credential. Try again.", configuration: configuration)
+        case .persistenceFailed:
+            return failureResult("Could not securely save the renewed GitHub credential. Sign in again.", configuration: configuration)
+        }
+    }
+
+    private func refreshCredentials(
+        _ credentials: CopilotCredentials,
+        keychainAccount: String
+    ) async -> CopilotCredentialRefreshResult {
+        await Self.refreshCoordinator.run(for: keychainAccount) { [self] in
+            await performCredentialRefresh(credentials, keychainAccount: keychainAccount)
+        }
+    }
+
+    private func performCredentialRefresh(
+        _ credentials: CopilotCredentials,
+        keychainAccount: String
+    ) async -> CopilotCredentialRefreshResult {
+        do {
+            guard
+                let storedSecret = try secretStore.readSecret(account: keychainAccount),
+                let latestCredentials = CopilotCredentialsParser.parse(storedSecret)
+            else {
+                return .rejected
+            }
+            if latestCredentials != credentials {
+                return .success(latestCredentials)
+            }
+        } catch {
+            return .temporarilyUnavailable
+        }
+
+        let refreshedAt = now()
+        guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
+            return .rejected
+        }
+        if let refreshTokenExpiresAt = credentials.refreshTokenExpiresAt,
+           Date(timeIntervalSince1970: TimeInterval(refreshTokenExpiresAt)) <= refreshedAt {
+            return .expired
+        }
+
+        let clientID = oauthConfiguration.clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clientSecret = oauthConfiguration.clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clientID.isEmpty, !clientSecret.isEmpty else {
+            return .temporarilyUnavailable
+        }
+
+        var request = URLRequest(url: tokenEndpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = CopilotWebAuthService.makeRefreshTokenRequestBody(
+            clientID: clientID,
+            clientSecret: clientSecret,
+            refreshToken: refreshToken
+        )
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .temporarilyUnavailable
+            }
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                return [400, 401, 403].contains(httpResponse.statusCode) ? .rejected : .temporarilyUnavailable
+            }
+            guard let tokenResponse = try? JSONDecoder().decode(CopilotTokenRefreshResponse.self, from: data) else {
+                return .temporarilyUnavailable
+            }
+            if tokenResponse.error != nil {
+                return .rejected
+            }
+            guard let accessToken = tokenResponse.accessToken, !accessToken.isEmpty else {
+                return .temporarilyUnavailable
+            }
+
+            let rotatedRefreshToken = tokenResponse.refreshToken ?? credentials.refreshToken
+            let updated = CopilotCredentials(
+                accessToken: accessToken,
+                username: credentials.username,
+                refreshToken: rotatedRefreshToken,
+                expiresAt: tokenResponse.expiresIn.map {
+                    Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
+                },
+                refreshTokenExpiresAt: tokenResponse.refreshTokenExpiresIn.map {
+                    Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
+                } ?? (tokenResponse.refreshToken == nil ? credentials.refreshTokenExpiresAt : nil)
+            )
+
+            do {
+                guard
+                    let storedSecret = try secretStore.readSecret(account: keychainAccount),
+                    let latestCredentials = CopilotCredentialsParser.parse(storedSecret)
+                else {
+                    return .rejected
+                }
+                if latestCredentials != credentials {
+                    return .success(latestCredentials)
+                }
+                try secretStore.saveSecret(
+                    CopilotCredentialsParser.storedCredential(from: updated),
+                    account: keychainAccount
+                )
+            } catch {
+                return .persistenceFailed
+            }
+            return .success(updated)
+        } catch {
+            return .temporarilyUnavailable
         }
     }
 
@@ -244,6 +482,21 @@ public final class CopilotUsageProvider: UsageProvider {
         return Double(seatCount * Self.creditsPerSeat(year: year, month: month))
     }
 
+    private func authenticationFailureMessage(for credentials: CopilotCredentials) -> String {
+        if credentials.isExpired(at: now()) {
+            return "GitHub credential expired. Sign in again."
+        }
+        if credentials.expiresAt != nil {
+            return "GitHub authorization was revoked. Sign in again."
+        }
+        return "GitHub credential was rejected. Sign in again."
+    }
+
+    private static func isRateLimited(_ response: HTTPURLResponse) -> Bool {
+        response.value(forHTTPHeaderField: "Retry-After") != nil
+            || response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
+    }
+
     private func applyAccountMetadata(
         to result: ProviderUsageResult,
         configuration: ProviderAccountConfiguration
@@ -256,5 +509,29 @@ public final class CopilotUsageProvider: UsageProvider {
             bars: result.bars,
             fetchedAt: result.fetchedAt
         )
+    }
+}
+
+private enum CopilotCredentialRefreshResult: Sendable {
+    case success(CopilotCredentials)
+    case expired
+    case rejected
+    case temporarilyUnavailable
+    case persistenceFailed
+}
+
+private struct CopilotTokenRefreshResponse: Decodable {
+    let accessToken: String?
+    let refreshToken: String?
+    let expiresIn: Int64?
+    let refreshTokenExpiresIn: Int64?
+    let error: String?
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case expiresIn = "expires_in"
+        case refreshTokenExpiresIn = "refresh_token_expires_in"
+        case error
     }
 }
