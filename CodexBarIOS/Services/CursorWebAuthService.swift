@@ -1,6 +1,8 @@
+import AuthenticationServices
 import CryptoKit
 import Foundation
 import Security
+import UIKit
 
 public struct CursorWebAuthResult: Equatable, Sendable {
     public let accessToken: String
@@ -34,6 +36,7 @@ public struct CursorWebAuthResult: Equatable, Sendable {
 public final class CursorWebAuthService: Sendable {
     public enum AuthError: LocalizedError, Equatable {
         case missingToken
+        case couldNotStartBrowserSession
         case tokenPollingTimedOut
         case tokenPollFailed(String)
         case invalidTokenResponse
@@ -42,6 +45,8 @@ public final class CursorWebAuthService: Sendable {
             switch self {
             case .missingToken:
                 "Cursor sign-in completed, but no session token was returned."
+            case .couldNotStartBrowserSession:
+                "Could not open a private Cursor sign-in session."
             case .tokenPollingTimedOut:
                 "Cursor sign-in timed out. Try again and click Yes, Log In in the browser."
             case .tokenPollFailed(let message):
@@ -93,10 +98,12 @@ public final class CursorWebAuthService: Sendable {
     }
 
     @MainActor
-    public func signIn(presentAuthorizationURL: @escaping @MainActor (URL) -> Void) async throws -> CursorWebAuthResult {
+    public func signIn(presentAuthorizationURL: @escaping @MainActor (URL) -> Bool) async throws -> CursorWebAuthResult {
         let requestID = UUID().uuidString.lowercased()
         let pkce = Self.makePKCEPair()
-        presentAuthorizationURL(Self.authorizationURL(uuid: requestID, codeChallenge: pkce.codeChallenge))
+        guard presentAuthorizationURL(Self.authorizationURL(uuid: requestID, codeChallenge: pkce.codeChallenge)) else {
+            throw AuthError.couldNotStartBrowserSession
+        }
         return try await pollForToken(uuid: requestID, codeVerifier: pkce.codeVerifier)
     }
 
@@ -189,6 +196,71 @@ public final class CursorWebAuthService: Sendable {
         var bytes = [UInt8](repeating: 0, count: byteCount)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
         return Data(bytes).base64URLEncodedString()
+    }
+}
+
+@MainActor
+final class CursorWebAuthenticationPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
+    private var session: ASWebAuthenticationSession?
+    private var cancellationHandler: (() -> Void)?
+    private var isFinishing = false
+
+    func present(url: URL, onCancel: @escaping () -> Void) -> Bool {
+        finish()
+        isFinishing = false
+        cancellationHandler = onCancel
+
+        let session = Self.makeSession(url: url) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleCompletion()
+            }
+        }
+        session.presentationContextProvider = self
+        self.session = session
+        guard session.start() else {
+            self.session = nil
+            cancellationHandler = nil
+            return false
+        }
+        return true
+    }
+
+    func finish() {
+        isFinishing = true
+        cancellationHandler = nil
+        session?.cancel()
+        session = nil
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)
+            ?? ASPresentationAnchor()
+    }
+
+    static func makeSession(
+        url: URL,
+        completion: @escaping (Error?) -> Void
+    ) -> ASWebAuthenticationSession {
+        let session = ASWebAuthenticationSession(
+            url: url,
+            callbackURLScheme: nil
+        ) { _, error in
+            completion(error)
+        }
+        session.prefersEphemeralWebBrowserSession = true
+        return session
+    }
+
+    private func handleCompletion() {
+        session = nil
+        guard !isFinishing else {
+            return
+        }
+        cancellationHandler?()
+        cancellationHandler = nil
     }
 }
 
