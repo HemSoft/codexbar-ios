@@ -892,7 +892,7 @@ struct ProviderWidgetTile: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
 
-                Text("Balance")
+                Text(tile.monetaryMetric?.label ?? "Balance")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

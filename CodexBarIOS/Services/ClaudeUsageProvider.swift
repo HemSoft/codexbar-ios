@@ -111,7 +111,7 @@ public final class ClaudeUsageProvider: UsageProvider {
         credentials: ClaudeCredentials,
         accessToken: String
     ) async throws -> ProviderUsageResult? {
-        let fetchedAt = Date()
+        let fetchedAt = now()
         let (_, response) = try await session.data(for: makeRateLimitProbeRequest(accessToken: accessToken))
         guard let httpResponse = response as? HTTPURLResponse else {
             return nil
