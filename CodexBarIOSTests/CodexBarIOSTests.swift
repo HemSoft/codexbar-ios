@@ -3230,7 +3230,7 @@ final class CodexBarIOSTests: XCTestCase {
         let outsideTolerance = try XCTUnwrap(CodexUsageParser.parse(Data(outsideTolerancePayload.utf8)))
 
         XCTAssertEqual(outsideTolerance.bars.map(\.label), ["315 minute usage limit"])
-        XCTAssertEqual(outsideTolerance.usageMessages.count, 1)
+        XCTAssertTrue(outsideTolerance.usageMessages.isEmpty)
     }
 
     func testClaudeUsageParserReadsOAuthUsageWindows() throws {
