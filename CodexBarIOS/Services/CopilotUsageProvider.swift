@@ -117,7 +117,8 @@ public final class CopilotUsageProvider: UsageProvider {
         switch httpResponse.statusCode {
         case 200..<300:
             return applyAccountMetadata(
-                to: CopilotUsageParser.parse(data) ?? failureResult("Could not parse GitHub Copilot usage.", configuration: configuration),
+                to: CopilotUsageParser.parse(data, fetchedAt: now())
+                    ?? failureResult("Could not parse GitHub Copilot usage.", configuration: configuration),
                 configuration: configuration
             )
         case 401 where canRefresh && credentials.refreshToken?.isEmpty == false:
