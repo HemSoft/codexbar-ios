@@ -3245,6 +3245,12 @@ final class CodexBarIOSTests: XCTestCase {
             subscriptionType: "pro"
         ))
         XCTAssertEqual(percentageResult.bars.map(\.used), [15, 36])
+
+        let onePercentResult = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"five_hour":{"utilization":1}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+        XCTAssertEqual(onePercentResult.bars.first?.used, 1)
     }
 
     func testClaudeUsageParserReadsStructuredAndScopedLimitsWithoutDuplicates() throws {

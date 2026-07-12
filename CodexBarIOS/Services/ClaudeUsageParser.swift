@@ -405,7 +405,7 @@ public enum ClaudeUsageParser {
 
     // OAuth legacy windows have shipped both 0...1 fractions and percentage values such as 15 and 36.
     private static func normalizedOAuthPercent(_ value: Double) -> Double {
-        sanitizedPercent(value <= 1 ? value * 100 : value)
+        sanitizedPercent(value < 1 ? value * 100 : value)
     }
 
     private static func normalizedHeaderPercent(_ value: Double) -> Double {
