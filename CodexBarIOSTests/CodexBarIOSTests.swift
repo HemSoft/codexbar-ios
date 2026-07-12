@@ -3338,7 +3338,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(unlimited.usageMessages, ["Usage credits are enabled with no monthly spend limit reported."])
 
         let malformed = try XCTUnwrap(ClaudeUsageParser.parse(
-            Data(#"{"limits":[{"kind":"unknown","percent":50}],"extra_usage":{"is_enabled":true,"used_credits":10}}"#.utf8),
+            Data(#"{"limits":[{"kind":"unknown","percent":50}],"extra_usage":{"is_enabled":true,"used_credits":10,"currency":"US"}}"#.utf8),
             subscriptionType: nil
         ))
         XCTAssertTrue(malformed.monetaryMetrics.isEmpty)
@@ -3346,6 +3346,13 @@ final class CodexBarIOSTests: XCTestCase {
             malformed.usageMessages,
             ["Usage credits are enabled, but monetary details are temporarily unavailable."]
         )
+
+        let missingCurrency = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"extra_usage":{"is_enabled":true,"used_credits":1250,"monthly_limit":5000,"decimal_places":2}}"#.utf8),
+            subscriptionType: nil
+        ))
+        XCTAssertEqual(missingCurrency.monetaryMetrics.map(\.currencyCode), ["USD", "USD", "USD"])
+        XCTAssertEqual(missingCurrency.monetaryMetrics.map(\.amount), [12.5, 50, 37.5])
 
         let unknownState = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(#"{"extra_usage":{"currency":"USD","decimal_places":2}}"#.utf8),

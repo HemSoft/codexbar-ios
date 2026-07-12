@@ -351,11 +351,9 @@ public enum ClaudeUsageParser {
             }
             return ([], ["Usage credits are disabled."])
         }
-        guard
-            let currency = extraUsage.currency?.trimmingCharacters(in: .whitespacesAndNewlines),
-            currency.count == 3,
-            let usedCredits = extraUsage.usedCredits
-        else {
+        let reportedCurrency = extraUsage.currency?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currency = reportedCurrency.flatMap { $0.isEmpty ? nil : $0 } ?? "USD"
+        guard currency.count == 3, let usedCredits = extraUsage.usedCredits else {
             return ([], ["Usage credits are enabled, but monetary details are temporarily unavailable."])
         }
         let decimalPlaces = extraUsage.decimalPlaces ?? currencyDecimalPlaces(currency)
