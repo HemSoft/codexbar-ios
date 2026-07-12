@@ -3326,7 +3326,10 @@ final class CodexBarIOSTests: XCTestCase {
             Data(#"{"extra_usage":{"currency":"USD","decimal_places":2}}"#.utf8),
             subscriptionType: nil
         ))
-        XCTAssertEqual(unknownState.usageMessages, ["Usage-credit status is temporarily unavailable."])
+        XCTAssertEqual(
+            unknownState.usageMessages,
+            ["Usage credits are enabled, but monetary details are temporarily unavailable."]
+        )
 
         let missingSpend = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(#"{"extra_usage":{"is_enabled":true,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8),
@@ -3344,6 +3347,16 @@ final class CodexBarIOSTests: XCTestCase {
         ))
         XCTAssertEqual(inferredPrecision.monetaryMetrics.map(\.decimalPlaces), [2, 2, 2])
         XCTAssertEqual(inferredPrecision.monetaryMetrics.map(\.amount), [12.5, 50, 37.5])
+
+        let unreportedEnabledState = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"extra_usage":{"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8),
+            subscriptionType: nil
+        ))
+        XCTAssertEqual(unreportedEnabledState.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
+        XCTAssertEqual(
+            unreportedEnabledState.usageMessages,
+            ["Usage-credit enabled status was not reported."]
+        )
     }
 
     func testClaudeUsageParserReadsRateLimitHeaders() throws {
@@ -5141,7 +5154,7 @@ final class CodexBarIOSTests: XCTestCase {
                 return (
                     HTTPURLResponse(
                         url: try XCTUnwrap(request.url),
-                        statusCode: 200,
+                        statusCode: 503,
                         httpVersion: nil,
                         headerFields: nil
                     )!,
@@ -5312,6 +5325,17 @@ final class CodexBarIOSTests: XCTestCase {
         )
         var statusCode = 401
         MockURLProtocol.handler = { request in
+            if request.url?.path == "/v1/messages" {
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data()
+                )
+            }
             XCTAssertEqual(request.url?.path, "/api/oauth/usage")
             return (
                 HTTPURLResponse(

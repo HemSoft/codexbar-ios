@@ -344,10 +344,7 @@ public enum ClaudeUsageParser {
         guard let extraUsage else {
             return ([], [])
         }
-        guard let isEnabled = extraUsage.isEnabled else {
-            return ([], ["Usage-credit status is temporarily unavailable."])
-        }
-        guard isEnabled else {
+        if extraUsage.isEnabled == false {
             let reason = extraUsage.disabledReason?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let reason, !reason.isEmpty {
                 return ([], ["Usage credits are disabled: \(reason)."])
@@ -372,7 +369,9 @@ public enum ClaudeUsageParser {
             decimalPlaces: decimalPlaces,
             detail: "Month to date"
         )]
-        var messages: [String] = []
+        var messages: [String] = extraUsage.isEnabled == nil
+            ? ["Usage-credit enabled status was not reported."]
+            : []
 
         if let monthlyLimit = extraUsage.monthlyLimit {
             let limit = max(monthlyLimit, 0)

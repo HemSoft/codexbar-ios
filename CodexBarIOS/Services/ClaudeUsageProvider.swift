@@ -44,10 +44,15 @@ public final class ClaudeUsageProvider: UsageProvider {
         if let usageResult = try await fetchOAuthUsage(configuration: configuration, credentials: credentials, accessToken: token) {
             let retryAt = await snapshotCache.retryAt(accountID: configuration.id)
             let canProbe = retryAt.map { $0 <= now() } ?? true
+            let hasMessagesOnly = usageResult.bars.isEmpty
+                && usageResult.monetaryMetrics.isEmpty
+                && !usageResult.usageMessages.isEmpty
+            let hasServerFailureOnly = usageResult.bars.isEmpty
+                && usageResult.monetaryMetrics.isEmpty
+                && usageResult.usageMessages.isEmpty
+                && usageResult.subtitle.contains("server error")
             if canProbe,
-               usageResult.bars.isEmpty,
-               usageResult.monetaryMetrics.isEmpty,
-               !usageResult.usageMessages.isEmpty,
+               hasMessagesOnly || hasServerFailureOnly,
                let rateLimitResult = try await fetchRateLimitUsage(
                    configuration: configuration,
                    credentials: credentials,
