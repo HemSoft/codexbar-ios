@@ -85,8 +85,10 @@ public enum CodexUsageParser {
             "5 hour usage limit"
         } else if isApproximateDuration(durationSeconds, expected: weeklyDurationSeconds) {
             "Weekly usage limit"
-        } else {
+        } else if durationSeconds.isMultiple(of: 3_600) {
             "\(max(1, durationSeconds / 3_600)) hour usage limit"
+        } else {
+            "\(max(1, Int((Double(durationSeconds) / 60).rounded()))) minute usage limit"
         }
     }
 

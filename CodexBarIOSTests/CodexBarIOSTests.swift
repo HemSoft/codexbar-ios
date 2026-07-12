@@ -3225,6 +3225,12 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(drifted.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
         XCTAssertTrue(drifted.usageMessages.isEmpty)
+
+        let outsideTolerancePayload = #"{"rate_limit":{"primary_window":{"used_percent":10,"reset_at":1893456000,"limit_window_seconds":18901}}}"#
+        let outsideTolerance = try XCTUnwrap(CodexUsageParser.parse(Data(outsideTolerancePayload.utf8)))
+
+        XCTAssertEqual(outsideTolerance.bars.map(\.label), ["315 minute usage limit"])
+        XCTAssertEqual(outsideTolerance.usageMessages.count, 1)
     }
 
     func testClaudeUsageParserReadsOAuthUsageWindows() throws {
