@@ -45,10 +45,18 @@ public enum CodexCredentialsParser {
 
     public static func storedCredential(from credentials: CodexCredentials) -> String {
         var tokens: [String: Any] = ["access_token": credentials.accessToken]
-        tokens["refresh_token"] = credentials.refreshToken
-        tokens["id_token"] = credentials.idToken
-        tokens["account_id"] = credentials.accountID
-        tokens["expires_at"] = credentials.expiresAt
+        if let refreshToken = credentials.refreshToken {
+            tokens["refresh_token"] = refreshToken
+        }
+        if let idToken = credentials.idToken {
+            tokens["id_token"] = idToken
+        }
+        if let accountID = credentials.accountID {
+            tokens["account_id"] = accountID
+        }
+        if let expiresAt = credentials.expiresAt {
+            tokens["expires_at"] = expiresAt
+        }
 
         let root: [String: Any] = [
             "auth_mode": "chatgpt",

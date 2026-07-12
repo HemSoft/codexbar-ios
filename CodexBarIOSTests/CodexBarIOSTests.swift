@@ -1663,6 +1663,15 @@ final class CodexBarIOSTests: XCTestCase {
             CodexCredentialsParser.parse(CodexCredentialsParser.storedCredential(from: credentials))
         )
         XCTAssertEqual(roundTripped, credentials)
+
+        let accessOnly = CodexCredentialsParser.storedCredential(from: CodexCredentials(accessToken: "access-only"))
+        let accessOnlyData = try XCTUnwrap(accessOnly.data(using: .utf8))
+        let accessOnlyRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: accessOnlyData) as? [String: Any]
+        )
+        let accessOnlyTokens = try XCTUnwrap(accessOnlyRoot["tokens"] as? [String: Any])
+        XCTAssertEqual(accessOnlyTokens.count, 1)
+        XCTAssertEqual(accessOnlyTokens["access_token"] as? String, "access-only")
     }
 
     func testCopilotAuthURLUsesGitHubBrowserCallbackFlow() throws {
