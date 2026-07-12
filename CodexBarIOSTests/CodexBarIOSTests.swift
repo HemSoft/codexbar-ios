@@ -3541,6 +3541,7 @@ final class CodexBarIOSTests: XCTestCase {
             requestCount += 1
             if request.url?.path == "/codex-token" {
                 XCTAssertEqual(request.httpMethod, "POST")
+                XCTAssertEqual(request.timeoutInterval, 15)
                 XCTAssertEqual(
                     String(data: try XCTUnwrap(requestBodyData(from: request)), encoding: .utf8),
                     "grant_type=refresh_token&refresh_token=old-refresh&client_id=app_EMoamEEZ73f0CkXaXp7hrann"
@@ -3797,6 +3798,7 @@ final class CodexBarIOSTests: XCTestCase {
         MockURLProtocol.handler = { request in
             requestCount += 1
             if request.url?.path == "/github-token" {
+                XCTAssertEqual(request.timeoutInterval, 15)
                 XCTAssertEqual(
                     String(data: try XCTUnwrap(requestBodyData(from: request)), encoding: .utf8),
                     "client_id=client&client_secret=secret&grant_type=refresh_token&refresh_token=old-refresh"
@@ -3938,6 +3940,29 @@ final class CodexBarIOSTests: XCTestCase {
             CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
                 accessToken: "expired-access",
                 expiresAt: 1_999_999_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let provider = CopilotUsageProvider(secretStore: secretStore, now: { now })
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(
+            result.subtitle,
+            "GitHub credential expired and cannot be renewed. Sign in again."
+        )
+    }
+
+    func testCopilotUsageProviderExplainsExpiredRefreshToken() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        try secretStore.saveSecret(
+            CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+                accessToken: "expired-access",
+                refreshToken: "expired-refresh",
+                expiresAt: 1_999_999_000,
+                refreshTokenExpiresAt: 1_999_999_500
             )),
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
         )

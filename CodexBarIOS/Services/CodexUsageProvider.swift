@@ -186,6 +186,7 @@ public final class CodexUsageProvider: UsageProvider {
 
         var request = URLRequest(url: tokenEndpoint)
         request.httpMethod = "POST"
+        request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = CodexWebAuthService.makeRefreshTokenRequestBody(refreshToken: refreshToken)

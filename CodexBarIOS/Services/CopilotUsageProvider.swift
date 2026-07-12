@@ -70,6 +70,11 @@ public final class CopilotUsageProvider: UsageProvider {
             case .success(let refreshed):
                 credentials = refreshed
                 didRefresh = true
+            case .expired:
+                return failureResult(
+                    "GitHub credential expired and cannot be renewed. Sign in again.",
+                    configuration: configuration
+                )
             case .rejected:
                 return failureResult("GitHub credential renewal was rejected. Sign in again.", configuration: configuration)
             case .temporarilyUnavailable:
@@ -314,6 +319,11 @@ public final class CopilotUsageProvider: UsageProvider {
                 keychainAccount: keychainAccount,
                 canRefresh: false
             )
+        case .expired:
+            return failureResult(
+                "GitHub credential expired and cannot be renewed. Sign in again.",
+                configuration: configuration
+            )
         case .rejected:
             return failureResult("GitHub credential renewal was rejected. Sign in again.", configuration: configuration)
         case .temporarilyUnavailable:
@@ -356,7 +366,7 @@ public final class CopilotUsageProvider: UsageProvider {
         }
         if let refreshTokenExpiresAt = credentials.refreshTokenExpiresAt,
            Date(timeIntervalSince1970: TimeInterval(refreshTokenExpiresAt)) <= refreshedAt {
-            return .rejected
+            return .expired
         }
 
         let clientID = oauthConfiguration.clientID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -367,6 +377,7 @@ public final class CopilotUsageProvider: UsageProvider {
 
         var request = URLRequest(url: tokenEndpoint)
         request.httpMethod = "POST"
+        request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = CopilotWebAuthService.makeRefreshTokenRequestBody(
@@ -479,6 +490,7 @@ public final class CopilotUsageProvider: UsageProvider {
 
 private enum CopilotCredentialRefreshResult: Sendable {
     case success(CopilotCredentials)
+    case expired
     case rejected
     case temporarilyUnavailable
     case persistenceFailed
