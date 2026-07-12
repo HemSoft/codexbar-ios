@@ -97,7 +97,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
             return nil
         }
         var divisor = Decimal(1)
-        for _ in 0..<metric.decimalPlaces {
+        for _ in 0..<max(metric.decimalPlaces, 0) {
             divisor *= 10
         }
         return NSDecimalNumber(decimal: metric.minorUnits / divisor).doubleValue
@@ -114,7 +114,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
             return nil
         }
         var divisor = Decimal(1)
-        for _ in 0..<metric.decimalPlaces {
+        for _ in 0..<max(metric.decimalPlaces, 0) {
             divisor *= 10
         }
         return NSDecimalNumber(decimal: metric.minorUnits / divisor).doubleValue
@@ -404,7 +404,7 @@ public final class UsageHistoryStore: ObservableObject {
             points: points,
             isBalance: isBalance,
             currencyCode: monetaryFormat?.0,
-            decimalPlaces: monetaryFormat?.1 ?? 2
+            decimalPlaces: min(max(monetaryFormat?.1 ?? 2, 0), 6)
         )
     }
 
@@ -439,7 +439,7 @@ public final class UsageHistoryStore: ObservableObject {
                     return nil
                 }
                 var divisor = Decimal(1)
-                for _ in 0..<storedMetric.decimalPlaces {
+                for _ in 0..<max(storedMetric.decimalPlaces, 0) {
                     divisor *= 10
                 }
                 let value = NSDecimalNumber(decimal: storedMetric.minorUnits / divisor).doubleValue

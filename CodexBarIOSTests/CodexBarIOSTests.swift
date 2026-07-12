@@ -606,6 +606,16 @@ final class CodexBarIOSTests: XCTestCase {
         let summaryTile = try XCTUnwrap(snapshot.builderTiles.first { $0.id == "provider.claude.personal" })
         XCTAssertEqual(summaryTile.title, "Usage credits spent")
         XCTAssertEqual(summaryTile.value, tile.value)
+
+        let malformedMetric = CodexBarWidgetMonetaryMetricSnapshot(
+            kind: "spent",
+            label: "Malformed persisted metric",
+            minorUnits: 10,
+            currencyCode: "USD",
+            decimalPlaces: -1,
+            detail: nil
+        )
+        XCTAssertFalse(malformedMetric.formattedAmount.isEmpty)
     }
 
     @MainActor

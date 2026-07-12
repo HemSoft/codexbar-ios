@@ -100,6 +100,7 @@ public struct CodexBarWidgetMonetaryMetricSnapshot: Codable, Equatable, Identifi
     }
 
     public var formattedAmount: String {
+        let decimalPlaces = min(max(self.decimalPlaces, 0), 6)
         var divisor = Decimal(1)
         for _ in 0..<decimalPlaces {
             divisor *= 10

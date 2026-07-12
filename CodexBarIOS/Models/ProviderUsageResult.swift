@@ -37,7 +37,7 @@ public struct ProviderMonetaryMetric: Identifiable, Codable, Equatable, Sendable
 
     public var amount: Decimal {
         var divisor = Decimal(1)
-        for _ in 0..<decimalPlaces {
+        for _ in 0..<max(decimalPlaces, 0) {
             divisor *= 10
         }
         return minorUnits / divisor
