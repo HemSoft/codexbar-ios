@@ -42,7 +42,10 @@ public final class ClaudeUsageProvider: UsageProvider {
         }
 
         if let usageResult = try await fetchOAuthUsage(configuration: configuration, credentials: credentials, accessToken: token) {
-            if usageResult.bars.isEmpty,
+            let retryAt = await snapshotCache.retryAt(accountID: configuration.id)
+            let canProbe = retryAt.map { $0 <= now() } ?? true
+            if canProbe,
+               usageResult.bars.isEmpty,
                usageResult.monetaryMetrics.isEmpty,
                !usageResult.usageMessages.isEmpty,
                let rateLimitResult = try await fetchRateLimitUsage(
@@ -295,6 +298,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: result.subtitle,
             bars: result.bars,
+            creditsRemaining: result.creditsRemaining,
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
             fetchedAt: result.fetchedAt

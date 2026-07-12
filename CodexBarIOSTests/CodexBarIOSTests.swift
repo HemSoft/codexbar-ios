@@ -1322,6 +1322,42 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(evaluation.notifications.map(\.kind), [.usage])
         XCTAssertEqual(evaluation.notifications.first?.title, "Claude Fable weekly limit alert")
         XCTAssertFalse(evaluation.activeAlertIDs.contains("balance.claude.personal"))
+
+        let cappedResult = ProviderUsageResult(
+            accountID: "claude.capped",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live usage",
+            bars: [],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: "Usage credits spent",
+                    minorUnits: 5000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+                ProviderMonetaryMetric(
+                    kind: .spendLimit,
+                    label: "Monthly spend limit",
+                    minorUnits: 5000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+        )
+        let cappedEvaluation = UsageAlertEvaluator.evaluate(
+            results: [cappedResult],
+            settings: UsageAlertSettings(isEnabled: true, includesSeverityAlerts: true),
+            activeAlertIDs: []
+        )
+        XCTAssertEqual(cappedResult.highestSeverity, .critical)
+        XCTAssertEqual(cappedEvaluation.notifications.map(\.kind), [.severity])
+        XCTAssertEqual(
+            cappedEvaluation.activeAlerts.first?.message,
+            "The monthly usage-credit spend limit has been reached."
+        )
     }
 
     func testUsageAlertEvaluatorReturnsCardScopedActiveAlerts() {
@@ -5197,6 +5233,66 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(requestCount, 2)
         XCTAssertEqual(result.bars.first?.used, 25)
         XCTAssertEqual(result.usageMessages, ["Usage credits are disabled."])
+    }
+
+    func testClaudeUsageProviderDoesNotProbeMessagesOnlySnapshotDuringBackoff() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            if requestCount == 1 {
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(#"{"extra_usage":{"is_enabled":false}}"#.utf8)
+                )
+            }
+            if requestCount == 2 {
+                XCTAssertEqual(request.url?.path, "/v1/messages")
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data()
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 429,
+                    httpVersion: nil,
+                    headerFields: ["Retry-After": "120"]
+                )!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let messagesOnly = try await provider.fetchUsage(for: configuration)
+        let stale = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 3)
+        XCTAssertEqual(messagesOnly.usageMessages, stale.usageMessages)
+        XCTAssertTrue(stale.subtitle.contains("rate-limited"))
     }
 
     func testClaudeUsageProviderDistinguishesOAuthUsageFailures() async throws {

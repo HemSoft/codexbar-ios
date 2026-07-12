@@ -97,6 +97,21 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     }
 
     public func highestSeverity(at now: Date = Date()) -> UsageSeverity {
-        bars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal
+        max(
+            bars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal,
+            hasReachedSpendLimit ? .critical : .normal
+        )
+    }
+
+    public var hasReachedSpendLimit: Bool {
+        guard
+            let spent = monetaryMetrics.first(where: { $0.kind == .spent }),
+            let limit = monetaryMetrics.first(where: { $0.kind == .spendLimit }),
+            spent.currencyCode == limit.currencyCode,
+            spent.decimalPlaces == limit.decimalPlaces
+        else {
+            return false
+        }
+        return spent.minorUnits >= limit.minorUnits
     }
 }
