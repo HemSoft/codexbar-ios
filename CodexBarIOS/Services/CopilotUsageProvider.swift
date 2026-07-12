@@ -336,6 +336,20 @@ public final class CopilotUsageProvider: UsageProvider {
         _ credentials: CopilotCredentials,
         keychainAccount: String
     ) async -> CopilotCredentialRefreshResult {
+        do {
+            guard
+                let storedSecret = try secretStore.readSecret(account: keychainAccount),
+                let latestCredentials = CopilotCredentialsParser.parse(storedSecret)
+            else {
+                return .rejected
+            }
+            if latestCredentials != credentials {
+                return .success(latestCredentials)
+            }
+        } catch {
+            return .temporarilyUnavailable
+        }
+
         let refreshedAt = now()
         guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
             return .rejected

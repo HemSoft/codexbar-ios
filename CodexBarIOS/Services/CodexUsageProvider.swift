@@ -166,6 +166,20 @@ public final class CodexUsageProvider: UsageProvider {
         _ credentials: CodexCredentials,
         keychainAccount: String
     ) async -> CredentialRefreshResult {
+        do {
+            guard
+                let storedSecret = try secretStore.readSecret(account: keychainAccount),
+                let latestCredentials = CodexCredentialsParser.parse(storedSecret)
+            else {
+                return .rejected
+            }
+            if latestCredentials != credentials {
+                return .success(latestCredentials)
+            }
+        } catch {
+            return .temporarilyUnavailable
+        }
+
         guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
             return .rejected
         }

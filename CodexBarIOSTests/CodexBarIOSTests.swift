@@ -3876,6 +3876,51 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(results.allSatisfy { $0.bars.first?.used == 25 })
     }
 
+    func testCopilotUsageProviderDoesNotReuseRotatedTokenFromLateStaleRead() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        let stored = CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+            accessToken: "old-access",
+            refreshToken: "single-use-refresh",
+            expiresAt: 1_999_999_000
+        ))
+        let secretStore = StaleThirdReadSecretStore(initialSecret: stored)
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now }
+        )
+        var refreshRequests = 0
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/github-token" {
+                refreshRequests += 1
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"new-access","refresh_token":"rotated-refresh","expires_in":28800}"#.utf8)
+                )
+            }
+
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "token new-access")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let first = try await provider.fetchUsage(for: configuration)
+        let second = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(refreshRequests, 1)
+        XCTAssertEqual(first.bars.first?.used, 25)
+        XCTAssertEqual(second.bars.first?.used, 25)
+    }
+
     func testCopilotUsageProviderExplainsExpiredCredentialWithoutRefreshToken() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let secretStore = MemorySecretStore()
@@ -4277,6 +4322,37 @@ private final class FailingSaveSecretStore: SecretStore, @unchecked Sendable {
     }
 
     func deleteSecret(account: String) throws {}
+}
+
+private final class StaleThirdReadSecretStore: SecretStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private let initialSecret: String
+    private var currentSecret: String
+    private var readCount = 0
+
+    init(initialSecret: String) {
+        self.initialSecret = initialSecret
+        self.currentSecret = initialSecret
+    }
+
+    func readSecret(account: String) throws -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        readCount += 1
+        return readCount == 3 ? initialSecret : currentSecret
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        currentSecret = secret
+    }
+
+    func deleteSecret(account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        currentSecret = ""
+    }
 }
 
 private func requestBodyData(from request: URLRequest) -> Data? {
