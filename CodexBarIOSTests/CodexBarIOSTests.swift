@@ -4267,7 +4267,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.subtitle, "GitHub rate limit reached. Try again later.")
     }
 
-    func testCopilotOrganizationUsageExplainsOrganizationPermissionFailure() async throws {
+    func testCopilotOrganizationUsageDistinguishesPermissionFailureFromMissingOrganization() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration(
             providerID: .copilot,
@@ -4287,9 +4287,10 @@ final class CodexBarIOSTests: XCTestCase {
             session: session,
             githubAPIBaseURL: URL(string: "https://example.test")!
         )
+        var statusCode = 403
         MockURLProtocol.handler = { request in
             (
-                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 403, httpVersion: nil, headerFields: nil)!,
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: statusCode, httpVersion: nil, headerFields: nil)!,
                 Data()
             )
         }
@@ -4300,6 +4301,13 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(
             result.subtitle,
             "This GitHub account lacks permission to read the configured Copilot organization billing data."
+        )
+
+        statusCode = 404
+        let missing = try await provider.fetchUsage(for: configuration)
+        XCTAssertEqual(
+            missing.subtitle,
+            "GitHub Copilot organization not found. Check the configured organization name."
         )
     }
 

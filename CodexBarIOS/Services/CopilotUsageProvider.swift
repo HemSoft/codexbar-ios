@@ -301,9 +301,14 @@ public final class CopilotUsageProvider: UsageProvider {
             return failureResult(authenticationFailureMessage(for: credentials), configuration: configuration)
         case 403 where Self.isRateLimited(httpResponse):
             return failureResult("GitHub rate limit reached. Try again later.", configuration: configuration)
-        case 403, 404:
+        case 403:
             return failureResult(
                 "This GitHub account lacks permission to read the configured Copilot organization billing data.",
+                configuration: configuration
+            )
+        case 404:
+            return failureResult(
+                "GitHub Copilot organization not found. Check the configured organization name.",
                 configuration: configuration
             )
         default:
