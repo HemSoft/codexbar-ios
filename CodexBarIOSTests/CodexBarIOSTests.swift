@@ -3217,7 +3217,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(weeklyOnly.bars.map(\.label), ["Weekly usage limit"])
         XCTAssertEqual(
             weeklyOnly.usageMessages,
-            ["ChatGPT is not currently reporting a 5-hour usage limit for this account."]
+            ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
         )
 
         let driftedPayload = #"{"rate_limit":{"primary_window":{"used_percent":20,"reset_at":1894060800,"limit_window_seconds":604800},"secondary_window":{"used_percent":10,"reset_at":1893456000,"limit_window_seconds":17999}}}"#
@@ -3230,7 +3230,10 @@ final class CodexBarIOSTests: XCTestCase {
         let outsideTolerance = try XCTUnwrap(CodexUsageParser.parse(Data(outsideTolerancePayload.utf8)))
 
         XCTAssertEqual(outsideTolerance.bars.map(\.label), ["315 minute usage limit"])
-        XCTAssertTrue(outsideTolerance.usageMessages.isEmpty)
+        XCTAssertEqual(
+            outsideTolerance.usageMessages,
+            ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
+        )
     }
 
     func testClaudeUsageParserReadsOAuthUsageWindows() throws {
@@ -4235,7 +4238,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.label), ["Weekly usage limit"])
         XCTAssertEqual(
             result.usageMessages,
-            ["ChatGPT is not currently reporting a 5-hour usage limit for this account."]
+            ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
         )
     }
 
