@@ -128,6 +128,8 @@ public final class CopilotUsageProvider: UsageProvider {
             )
         case 401:
             return failureResult(authenticationFailureMessage(for: credentials), configuration: configuration)
+        case 403 where Self.isRateLimited(httpResponse):
+            return failureResult("GitHub rate limit reached. Try again later.", configuration: configuration)
         case 403:
             return failureResult("This GitHub account does not have access to Copilot usage.", configuration: configuration)
         default:
@@ -296,6 +298,8 @@ public final class CopilotUsageProvider: UsageProvider {
             )
         case 401:
             return failureResult(authenticationFailureMessage(for: credentials), configuration: configuration)
+        case 403 where Self.isRateLimited(httpResponse):
+            return failureResult("GitHub rate limit reached. Try again later.", configuration: configuration)
         case 403, 404:
             return failureResult(
                 "This GitHub account lacks permission to read the configured Copilot organization billing data.",
@@ -471,6 +475,11 @@ public final class CopilotUsageProvider: UsageProvider {
             return "GitHub authorization was revoked. Sign in again."
         }
         return "GitHub credential was rejected. Sign in again."
+    }
+
+    private static func isRateLimited(_ response: HTTPURLResponse) -> Bool {
+        response.value(forHTTPHeaderField: "Retry-After") != nil
+            || response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
     }
 
     private func applyAccountMetadata(

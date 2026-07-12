@@ -216,7 +216,7 @@ public final class CodexUsageProvider: UsageProvider {
                 refreshToken: tokenResponse.refreshToken ?? credentials.refreshToken,
                 idToken: idToken,
                 accountID: idToken.flatMap(CodexWebAuthService.accountID) ?? credentials.accountID,
-                expiresAt: tokenResponse.expiresAt.map(Self.normalizeEpochToSeconds)
+                expiresAt: tokenResponse.expiresAt.map(CodexCredentials.normalizedEpochSeconds)
                     ?? tokenResponse.expiresIn.map {
                         Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
                     }
@@ -271,9 +271,6 @@ public final class CodexUsageProvider: UsageProvider {
         )
     }
 
-    private static func normalizeEpochToSeconds(_ value: Int64) -> Int64 {
-        value >= 1_000_000_000_000 ? value / 1_000 : value
-    }
 }
 
 private enum CredentialRefreshResult: Sendable {

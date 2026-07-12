@@ -30,7 +30,7 @@ public enum CodexCredentialsParser {
         let refreshToken = stringValue(in: tokens, snakeCase: "refresh_token", camelCase: "refreshToken")
         let idToken = stringValue(in: tokens, snakeCase: "id_token", camelCase: "idToken")
         let explicitExpiry = integerValue(in: tokens, snakeCase: "expires_at", camelCase: "expiresAt")
-            .map(normalizeEpochToSeconds)
+            .map(CodexCredentials.normalizedEpochSeconds)
         let tokenExpiry = tokenExpiry(from: accessToken) ?? idToken.flatMap(tokenExpiry)
 
         return CodexCredentials(
@@ -117,7 +117,4 @@ public enum CodexCredentialsParser {
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
-    private static func normalizeEpochToSeconds(_ value: Int64) -> Int64 {
-        value >= 1_000_000_000_000 ? value / 1_000 : value
-    }
 }

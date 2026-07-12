@@ -220,15 +220,11 @@ public final class CodexWebAuthService: Sendable {
             refreshToken: tokens.refreshToken,
             idToken: tokens.idToken,
             accountID: tokens.idToken.flatMap(Self.accountID) ?? Self.accountID(from: tokens.accessToken),
-            expiresAt: tokens.expiresAt.map(Self.normalizeEpochToSeconds)
+            expiresAt: tokens.expiresAt.map(CodexCredentials.normalizedEpochSeconds)
                 ?? tokens.expiresIn.map { Int64(now.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970) }
                 ?? parsedAccessToken?.expiresAt
                 ?? parsedIDToken?.expiresAt
         )
-    }
-
-    private static func normalizeEpochToSeconds(_ value: Int64) -> Int64 {
-        value >= 1_000_000_000_000 ? value / 1_000 : value
     }
 
     private static func randomBase64URL(byteCount: Int) -> String {

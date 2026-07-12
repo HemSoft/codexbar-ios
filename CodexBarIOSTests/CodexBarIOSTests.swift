@@ -4107,6 +4107,38 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(forbidden.subtitle, "This GitHub account does not have access to Copilot usage.")
     }
 
+    func testCopilotUsageProviderSeparatesRateLimitFromMissingAccess() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        try secretStore.saveSecret(
+            "legacy-access",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!
+        )
+        MockURLProtocol.handler = { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 403,
+                    httpVersion: nil,
+                    headerFields: ["X-RateLimit-Remaining": "0"]
+                )!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.subtitle, "GitHub rate limit reached. Try again later.")
+    }
+
     func testCopilotOrganizationUsageExplainsOrganizationPermissionFailure() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration(
