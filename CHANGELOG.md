@@ -61,3 +61,6 @@ building, testing, or releasing the app.
   `AGENTS.md`.
 - Established changelog maintenance rules so App Store release notes and
   marketing copy are derived from accurate, versioned product history.
+- Added an automated Claude Code Review GitHub Actions workflow that reviews
+  each pull request and posts inline findings, requiring the Claude GitHub App
+  and an `ANTHROPIC_API_KEY` repository secret.
