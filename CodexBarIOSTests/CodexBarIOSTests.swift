@@ -3975,7 +3975,8 @@ final class CodexBarIOSTests: XCTestCase {
             CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
                 accessToken: "old-access",
                 refreshToken: "old-refresh",
-                expiresAt: priorExpiry
+                expiresAt: priorExpiry,
+                refreshTokenExpiresAt: 2_100_000_000
             )),
             account: account
         )
@@ -4000,6 +4001,7 @@ final class CodexBarIOSTests: XCTestCase {
                 CopilotCredentialsParser.parse(try XCTUnwrap(secretStore.readSecret(account: account)))
             )
             XCTAssertNil(persisted.expiresAt)
+            XCTAssertNil(persisted.refreshTokenExpiresAt)
             return (
                 HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
                 Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)

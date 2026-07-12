@@ -424,7 +424,7 @@ public final class CopilotUsageProvider: UsageProvider {
                 },
                 refreshTokenExpiresAt: tokenResponse.refreshTokenExpiresIn.map {
                     Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
-                } ?? credentials.refreshTokenExpiresAt
+                } ?? (tokenResponse.refreshToken == nil ? credentials.refreshTokenExpiresAt : nil)
             )
 
             do {
