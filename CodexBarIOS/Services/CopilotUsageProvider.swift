@@ -82,7 +82,7 @@ public final class CopilotUsageProvider: UsageProvider {
                     return failureResult("Could not renew the GitHub credential. Try again.", configuration: configuration)
                 }
             case .persistenceFailed:
-                return failureResult("Could not securely save the renewed GitHub credential. Try again.", configuration: configuration)
+                return failureResult("Could not securely save the renewed GitHub credential. Sign in again.", configuration: configuration)
             }
         }
 
@@ -333,7 +333,7 @@ public final class CopilotUsageProvider: UsageProvider {
         case .temporarilyUnavailable:
             return failureResult("Could not renew the GitHub credential. Try again.", configuration: configuration)
         case .persistenceFailed:
-            return failureResult("Could not securely save the renewed GitHub credential. Try again.", configuration: configuration)
+            return failureResult("Could not securely save the renewed GitHub credential. Sign in again.", configuration: configuration)
         }
     }
 

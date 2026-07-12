@@ -3717,7 +3717,46 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(requestCount, 1)
         XCTAssertEqual(
             result.subtitle,
-            "Could not securely save the renewed ChatGPT / Codex credential. Try again."
+            "Could not securely save the renewed ChatGPT / Codex credential. Sign in again."
+        )
+    }
+
+    func testCopilotUsageProviderRequestsSignInWhenKeychainRotationFails() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
+        let stored = CopilotCredentialsParser.storedCredential(from: CopilotCredentials(
+            accessToken: "expired-access",
+            refreshToken: "refresh-token",
+            expiresAt: 1_999_999_000
+        ))
+        let secretStore = FailingSaveSecretStore(secret: stored)
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now }
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.path, "/github-token")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"access_token":"new-access","refresh_token":"rotated","expires_in":28800}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(
+            result.subtitle,
+            "Could not securely save the renewed GitHub credential. Sign in again."
         )
     }
 

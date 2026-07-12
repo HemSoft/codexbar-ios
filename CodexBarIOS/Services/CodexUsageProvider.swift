@@ -69,7 +69,7 @@ public final class CodexUsageProvider: UsageProvider {
                 }
             case .persistenceFailed:
                 return failureResult(
-                    "Could not securely save the renewed ChatGPT / Codex credential. Try again.",
+                    "Could not securely save the renewed ChatGPT / Codex credential. Sign in again.",
                     configuration: configuration
                 )
             }
@@ -122,7 +122,7 @@ public final class CodexUsageProvider: UsageProvider {
                 )
             case .persistenceFailed:
                 return failureResult(
-                    "Could not securely save the renewed ChatGPT / Codex credential. Try again.",
+                    "Could not securely save the renewed ChatGPT / Codex credential. Sign in again.",
                     configuration: configuration
                 )
             }
