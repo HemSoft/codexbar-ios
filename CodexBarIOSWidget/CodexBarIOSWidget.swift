@@ -1371,7 +1371,7 @@ private extension CodexBarWidgetProviderSnapshot {
             bar: nil,
             creditsRemaining: nil,
             monetaryMetric: metric,
-            severity: .normal
+            severity: severity
         )
     }
 }

@@ -403,7 +403,7 @@ public enum ClaudeUsageParser {
         return messages.filter { seen.insert($0).inserted }
     }
 
-    // OAuth legacy windows have shipped both 0...1 fractions and percentage values such as 15 and 36.
+    // Current OAuth windows use percentages; values below 1 retain legacy fraction compatibility.
     private static func normalizedOAuthPercent(_ value: Double) -> Double {
         sanitizedPercent(value < 1 ? value * 100 : value)
     }

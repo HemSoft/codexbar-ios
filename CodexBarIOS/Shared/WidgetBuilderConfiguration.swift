@@ -244,7 +244,7 @@ private extension CodexBarWidgetProviderSnapshot {
             value: metric.formattedAmount,
             fractionUsed: nil,
             creditsRemaining: nil,
-            severity: .normal
+            severity: severity
         )
     }
 

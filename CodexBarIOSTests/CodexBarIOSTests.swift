@@ -589,9 +589,17 @@ final class CodexBarIOSTests: XCTestCase {
                             decimalPlaces: 2,
                             detail: "Month to date"
                         ),
+                        CodexBarWidgetMonetaryMetricSnapshot(
+                            kind: ProviderMonetaryMetricKind.remainingHeadroom.rawValue,
+                            label: "Remaining spend headroom",
+                            minorUnits: 0,
+                            currencyCode: "EUR",
+                            decimalPlaces: 2,
+                            detail: "Not a prepaid balance"
+                        ),
                     ],
                     fetchedAt: Date(timeIntervalSince1970: 1_788_475_200),
-                    severity: .normal
+                    severity: .critical
                 ),
             ]
         )
@@ -603,8 +611,9 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(tile.value.contains("12"))
         XCTAssertTrue(tile.value.contains("50"))
         XCTAssertEqual(snapshot.results.first?.summaryMonetaryMetric?.label, "Usage credits spent")
-        XCTAssertTrue(snapshot.results.first?.standaloneMonetaryMetrics.isEmpty ?? false)
-        XCTAssertEqual(snapshot.builderTiles.count, 1)
+        XCTAssertEqual(snapshot.results.first?.standaloneMonetaryMetrics.count, 1)
+        XCTAssertEqual(snapshot.builderTiles.count, 2)
+        XCTAssertEqual(snapshot.builderTiles.last?.severity, .critical)
 
         let malformedMetric = CodexBarWidgetMonetaryMetricSnapshot(
             kind: "spent",
@@ -5170,7 +5179,7 @@ final class CodexBarIOSTests: XCTestCase {
                     url: try XCTUnwrap(request.url),
                     statusCode: 429,
                     httpVersion: nil,
-                    headerFields: ["Retry-After": "120"]
+                    headerFields: nil
                 )!,
                 Data()
             )
@@ -5188,7 +5197,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(stale.subtitle.contains("rate-limited"))
         XCTAssertTrue(stale.subtitle.contains("last known data"))
 
-        clock.advance(by: 121)
+        clock.advance(by: 61)
         _ = try await provider.fetchUsage(for: configuration)
         XCTAssertEqual(requestCount, 3)
     }

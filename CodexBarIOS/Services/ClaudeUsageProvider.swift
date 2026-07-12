@@ -152,11 +152,11 @@ public final class ClaudeUsageProvider: UsageProvider {
             )
         case 429:
             let retryAt = retryDate(httpResponse, now: fetchedAt)
+                ?? fetchedAt.addingTimeInterval(60)
             await snapshotCache.setRetryAt(retryAt, accountID: configuration.id)
             return OAuthUsageOutcome(
                 result: await staleOrFailureResult(
-                    retryAt.map { "Claude usage is rate-limited until \(Self.formatRetryDate($0))." }
-                        ?? "Claude usage is rate-limited.",
+                    "Claude usage is rate-limited until \(Self.formatRetryDate(retryAt)).",
                     configuration: configuration
                 ),
                 permitsFallbackProbe: false
