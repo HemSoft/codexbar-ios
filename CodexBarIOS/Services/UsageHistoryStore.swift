@@ -347,9 +347,6 @@ public final class UsageHistoryStore: ObservableObject {
         since start: Date? = nil
     ) -> UsageHistorySeries {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
-        let points = accountSnapshots.compactMap { snapshot in
-            snapshot.primaryValue.map { UsageHistoryPoint(snapshot: snapshot, value: $0) }
-        }
         let isBalance: Bool
         if result.creditsRemaining != nil {
             isBalance = true
@@ -361,6 +358,18 @@ public final class UsageHistoryStore: ObservableObject {
             isBalance = accountSnapshots.last.map {
                 $0.creditsRemaining != nil || !($0.monetaryMetrics ?? []).isEmpty
             } ?? false
+        }
+        let points = accountSnapshots.compactMap { snapshot -> UsageHistoryPoint? in
+            if isBalance {
+                guard snapshot.creditsRemaining != nil || !(snapshot.monetaryMetrics ?? []).isEmpty else {
+                    return nil
+                }
+            } else {
+                guard !snapshot.bars.isEmpty else {
+                    return nil
+                }
+            }
+            return snapshot.primaryValue.map { UsageHistoryPoint(snapshot: snapshot, value: $0) }
         }
         let monetaryFormat = primaryMonetaryMetric(in: result.monetaryMetrics).map {
             ($0.currencyCode, $0.decimalPlaces)

@@ -603,6 +603,9 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(tile.value.contains("12"))
         XCTAssertTrue(tile.value.contains("50"))
         XCTAssertEqual(snapshot.results.first?.summaryMonetaryMetric?.label, "Usage credits spent")
+        let summaryTile = try XCTUnwrap(snapshot.builderTiles.first { $0.id == "provider.claude.personal" })
+        XCTAssertEqual(summaryTile.title, "Usage credits spent")
+        XCTAssertEqual(summaryTile.value, tile.value)
     }
 
     @MainActor
@@ -3288,6 +3291,13 @@ final class CodexBarIOSTests: XCTestCase {
             missingSpend.usageMessages,
             ["Usage credits are enabled, but monetary details are temporarily unavailable."]
         )
+
+        let inferredPrecision = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"extra_usage":{"is_enabled":true,"used_credits":1250,"monthly_limit":5000,"currency":"USD"}}"#.utf8),
+            subscriptionType: nil
+        ))
+        XCTAssertEqual(inferredPrecision.monetaryMetrics.map(\.decimalPlaces), [2, 2, 2])
+        XCTAssertEqual(inferredPrecision.monetaryMetrics.map(\.amount), [12.5, 50, 37.5])
     }
 
     func testClaudeUsageParserReadsRateLimitHeaders() throws {
@@ -3664,6 +3674,20 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(compactSeries.decimalPlaces, 2)
         XCTAssertTrue(compactSeries.latestValueDescription.contains("37.50"))
         XCTAssertFalse(compactSeries.latestValueDescription.contains("$"))
+
+        let transientMonetaryOnly = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Partial Claude usage",
+            bars: [],
+            monetaryMetrics: result.monetaryMetrics,
+            fetchedAt: fetchedAt.addingTimeInterval(60)
+        )
+        store.record(results: [transientMonetaryOnly], now: fetchedAt.addingTimeInterval(60))
+        let usageSeries = store.historySeries(for: result)
+        XCTAssertEqual(usageSeries.points.count, 1)
+        XCTAssertEqual(usageSeries.points.first?.value, 0.4)
     }
 
     @MainActor

@@ -193,13 +193,17 @@ public extension CodexBarWidgetSnapshot {
 private extension CodexBarWidgetProviderSnapshot {
     var builderSummaryTile: CodexBarWidgetBuilderTile {
         let bar = representativeBar
+        let monetaryMetric = summaryMonetaryMetric
         return CodexBarWidgetBuilderTile(
             id: "provider.\(accountID)",
             providerID: providerID,
             providerTitle: title,
-            title: creditsRemaining == nil ? title : "\(title) Balance",
-            subtitle: groupName ?? subtitle,
-            value: creditsRemaining.map(Self.formattedCurrency) ?? bar?.usageText ?? "No data",
+            title: monetaryMetric?.label ?? (creditsRemaining == nil ? title : "\(title) Balance"),
+            subtitle: monetaryMetric?.detail ?? groupName ?? subtitle,
+            value: creditsRemaining.map(Self.formattedCurrency)
+                ?? bar?.usageText
+                ?? monetaryMetric?.formattedAmount
+                ?? "No data",
             fractionUsed: bar?.effectiveFractionUsed,
             creditsRemaining: creditsRemaining,
             severity: severity

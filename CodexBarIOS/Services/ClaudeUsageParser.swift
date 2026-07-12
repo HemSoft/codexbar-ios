@@ -356,11 +356,11 @@ public enum ClaudeUsageParser {
         guard
             let currency = extraUsage.currency?.trimmingCharacters(in: .whitespacesAndNewlines),
             currency.count == 3,
-            let decimalPlaces = extraUsage.decimalPlaces,
             let usedCredits = extraUsage.usedCredits
         else {
             return ([], ["Usage credits are enabled, but monetary details are temporarily unavailable."])
         }
+        let decimalPlaces = extraUsage.decimalPlaces ?? currencyDecimalPlaces(currency)
 
         let spent = max(usedCredits, 0)
         var metrics = [ProviderMonetaryMetric(
@@ -412,6 +412,13 @@ public enum ClaudeUsageParser {
 
     private static func normalizedHeaderPercent(_ value: Double) -> Double {
         sanitizedPercent(min(value, 1) * 100)
+    }
+
+    private static func currencyDecimalPlaces(_ currencyCode: String) -> Int {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currencyCode.uppercased()
+        return formatter.maximumFractionDigits
     }
 
     private static func sanitizedPercent(_ value: Double) -> Double {
