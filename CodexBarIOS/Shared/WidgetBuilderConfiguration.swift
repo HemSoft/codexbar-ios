@@ -185,7 +185,7 @@ public extension CodexBarWidgetSnapshot {
         results.flatMap { provider in
             [provider.builderSummaryTile]
                 + provider.bars.map { provider.builderBarTile($0) }
-                + (provider.monetaryMetrics ?? []).map { provider.builderMonetaryTile($0) }
+                + provider.standaloneMonetaryMetrics.map { provider.builderMonetaryTile($0) }
         }
     }
 }

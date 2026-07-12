@@ -1256,7 +1256,7 @@ private extension CodexBarWidgetSnapshot {
         scopedProviders(group: group, focus: focus).flatMap { provider in
             [provider.summaryTile]
                 + provider.bars.map { provider.barTile($0) }
-                + (provider.monetaryMetrics ?? []).map { provider.monetaryTile($0) }
+                + provider.standaloneMonetaryMetrics.map { provider.monetaryTile($0) }
         }
     }
 

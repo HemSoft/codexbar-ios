@@ -69,6 +69,11 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
         }
         return monetaryMetrics?.first
     }
+
+    public var standaloneMonetaryMetrics: [CodexBarWidgetMonetaryMetricSnapshot] {
+        let summaryMetricID = summaryMonetaryMetric?.id
+        return (monetaryMetrics ?? []).filter { $0.id != summaryMetricID }
+    }
 }
 
 public struct CodexBarWidgetMonetaryMetricSnapshot: Codable, Equatable, Identifiable, Sendable {

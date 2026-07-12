@@ -596,16 +596,15 @@ final class CodexBarIOSTests: XCTestCase {
             ]
         )
 
-        let tile = try XCTUnwrap(snapshot.builderTiles.first { $0.id.hasPrefix("money.claude.personal") })
+        let tile = try XCTUnwrap(snapshot.builderTiles.first { $0.id == "provider.claude.personal" })
 
         XCTAssertEqual(tile.title, "Usage credits spent")
         XCTAssertEqual(tile.subtitle, "Month to date")
         XCTAssertTrue(tile.value.contains("12"))
         XCTAssertTrue(tile.value.contains("50"))
         XCTAssertEqual(snapshot.results.first?.summaryMonetaryMetric?.label, "Usage credits spent")
-        let summaryTile = try XCTUnwrap(snapshot.builderTiles.first { $0.id == "provider.claude.personal" })
-        XCTAssertEqual(summaryTile.title, "Usage credits spent")
-        XCTAssertEqual(summaryTile.value, tile.value)
+        XCTAssertTrue(snapshot.results.first?.standaloneMonetaryMetrics.isEmpty ?? false)
+        XCTAssertEqual(snapshot.builderTiles.count, 1)
 
         let malformedMetric = CodexBarWidgetMonetaryMetricSnapshot(
             kind: "spent",
@@ -5148,6 +5147,56 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(fallback.bars, stale.bars)
         XCTAssertEqual(fallback.fetchedAt, stale.fetchedAt)
         XCTAssertTrue(stale.subtitle.contains("last known data"))
+    }
+
+    func testClaudeUsageProviderMergesMessagesOnlyOAuthStateWithHeaderFallback() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            if request.url?.path == "/api/oauth/usage" {
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(#"{"extra_usage":{"is_enabled":false}}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/v1/messages")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: [
+                        "anthropic-ratelimit-unified-5h-utilization": "0.25",
+                        "anthropic-ratelimit-unified-5h-reset": "1893456000",
+                    ]
+                )!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(result.bars.first?.used, 25)
+        XCTAssertEqual(result.usageMessages, ["Usage credits are disabled."])
     }
 
     func testClaudeUsageProviderDistinguishesOAuthUsageFailures() async throws {

@@ -42,6 +42,28 @@ public final class ClaudeUsageProvider: UsageProvider {
         }
 
         if let usageResult = try await fetchOAuthUsage(configuration: configuration, credentials: credentials, accessToken: token) {
+            if usageResult.bars.isEmpty,
+               usageResult.monetaryMetrics.isEmpty,
+               !usageResult.usageMessages.isEmpty,
+               let rateLimitResult = try await fetchRateLimitUsage(
+                   configuration: configuration,
+                   credentials: credentials,
+                   accessToken: token
+               )
+            {
+                let mergedResult = ProviderUsageResult(
+                    accountID: rateLimitResult.accountID,
+                    providerID: rateLimitResult.providerID,
+                    title: rateLimitResult.title,
+                    subtitle: rateLimitResult.subtitle,
+                    bars: rateLimitResult.bars,
+                    monetaryMetrics: rateLimitResult.monetaryMetrics,
+                    usageMessages: usageResult.usageMessages + rateLimitResult.usageMessages,
+                    fetchedAt: rateLimitResult.fetchedAt
+                )
+                await snapshotCache.store(mergedResult, accountID: configuration.id)
+                return mergedResult
+            }
             return usageResult
         }
 
