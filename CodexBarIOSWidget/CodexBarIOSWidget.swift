@@ -1028,8 +1028,13 @@ struct ProviderWidgetTile: View {
                 .joined(separator: " - ")
         }
 
-        if let monetaryValueText = tile.monetaryValueText {
-            return "\(monetaryValueText) - \(tile.title)"
+        if let metric = tile.monetaryMetric {
+            return "\(metric.formattedAmount) - \(metric.label)"
+        }
+
+        if let creditsRemaining = tile.creditsRemaining {
+            let balance = widgetCurrencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00"
+            return "\(balance) balance"
         }
 
         return tile.subtitle
