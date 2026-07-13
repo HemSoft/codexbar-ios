@@ -3,6 +3,19 @@ import Foundation
 enum ClaudeUsageIdentity {
     static let allModelsWeeklyStableKey = "weekly-all"
     static let allModelsWeeklyLegacyKey = "weekly-usage-limit"
+    static let sonnetWeeklyLegacyKey = "sonnet-weekly-limit"
+    static let opusWeeklyLegacyKey = "opus-weekly-limit"
+
+    static func legacyScopedWeeklyKey(for stableKey: String?) -> String? {
+        switch stableKey {
+        case sonnetWeeklyLegacyKey:
+            return sonnetWeeklyLegacyKey
+        case opusWeeklyLegacyKey:
+            return opusWeeklyLegacyKey
+        default:
+            return nil
+        }
+    }
 }
 
 public enum ClaudeUsageParser {
@@ -197,6 +210,7 @@ public enum ClaudeUsageParser {
         )
         appendLegacyBar(
             key: "weekly-scoped-sonnet",
+            stableBarKey: ClaudeUsageIdentity.sonnetWeeklyLegacyKey,
             label: "Sonnet weekly usage limit",
             window: usage.sevenDaySonnet,
             durationSeconds: 604_800,
@@ -207,6 +221,7 @@ public enum ClaudeUsageParser {
         )
         appendLegacyBar(
             key: "weekly-scoped-opus",
+            stableBarKey: ClaudeUsageIdentity.opusWeeklyLegacyKey,
             label: "Opus weekly usage limit",
             window: usage.sevenDayOpus,
             durationSeconds: 604_800,

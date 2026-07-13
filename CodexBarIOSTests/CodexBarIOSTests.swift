@@ -3490,7 +3490,13 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.stableKey), ["weekly-all"])
     }
 
+    @MainActor
     func testClaudeUsageParserUsesConsistentLegacyScopedWeeklyLabels() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
         let payload = """
         {
           "seven_day_sonnet": {"utilization":44},
@@ -3512,6 +3518,36 @@ final class CodexBarIOSTests: XCTestCase {
             "Opus weekly usage limit",
         ])
         XCTAssertEqual(result.bars.map(\.used), [5, 44, 32])
+        XCTAssertEqual(result.bars.map(\.stableKey), [
+            "weekly-scoped-fable",
+            "sonnet-weekly-limit",
+            "opus-weekly-limit",
+        ])
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .claude)
+        store.saveSecret("claude-token", for: configuration)
+        let accountResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: result.bars,
+            fetchedAt: result.fetchedAt
+        )
+        WidgetSnapshotPublisher.publish(
+            results: [accountResult],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let widgetProvider = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        )
+        XCTAssertEqual(widgetProvider.bars.map(\.id), [
+            "\(configuration.id).0.fable-weekly-usage-limit",
+            "\(configuration.id).1.sonnet-weekly-limit",
+            "\(configuration.id).2.opus-weekly-limit",
+        ])
     }
 
     @MainActor

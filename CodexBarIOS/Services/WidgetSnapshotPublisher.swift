@@ -121,6 +121,9 @@ enum WidgetSnapshotPublisher {
         if bar.stableKey == ClaudeUsageIdentity.allModelsWeeklyStableKey {
             return "\(accountID).\(index).\(ClaudeUsageIdentity.allModelsWeeklyLegacyKey)"
         }
+        if let legacyKey = ClaudeUsageIdentity.legacyScopedWeeklyKey(for: bar.stableKey) {
+            return "\(accountID).\(index).\(legacyKey)"
+        }
 
         let normalizedLabel = bar.label
             .lowercased()
