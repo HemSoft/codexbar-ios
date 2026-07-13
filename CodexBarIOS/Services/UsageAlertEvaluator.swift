@@ -233,6 +233,13 @@ public enum UsageAlertEvaluator {
     }
 
     private static func stableUsageKey(for bar: UsageBar) -> String {
+        if let stableKey = bar.stableKey {
+            let normalized = normalizedKeyComponent(stableKey)
+            if !normalized.isEmpty {
+                return normalized
+            }
+        }
+
         let withoutParentheticalValues = bar.label
             .replacingOccurrences(of: #"\([^)]*\)"#, with: "", options: .regularExpression)
         let withoutRatios = withoutParentheticalValues
