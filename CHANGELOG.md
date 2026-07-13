@@ -59,8 +59,8 @@ building, testing, or releasing the app.
 ### Fixed
 
 - Kept the Codex 5-hour usage metric recognizable when ChatGPT reports a
-  slightly varied window duration, and now explains when ChatGPT omits that
-  window instead of letting it disappear silently.
+  slightly varied window duration, while quietly showing only the available
+  weekly limit when ChatGPT temporarily omits the 5-hour window.
   ([#38](https://github.com/HemSoft/codexbar-ios/issues/38))
 
 ### Developer Experience
