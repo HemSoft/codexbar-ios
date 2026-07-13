@@ -3189,6 +3189,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
         XCTAssertEqual(result.bars.map(\.used), [42, 81])
         XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%"])
+        XCTAssertTrue(result.usageMessages.isEmpty)
         let resetDescription = try XCTUnwrap(result.bars.first?.resetDescription)
         XCTAssertTrue(resetDescription.hasPrefix("Resets 1d 0h (Tue 1:00"))
         XCTAssertTrue(resetDescription.hasSuffix("GMT+1)"))
@@ -3207,6 +3208,32 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_893_438_000))
         XCTAssertEqual(result.bars.first?.projectionPeriodEnd, Date(timeIntervalSince1970: 1_893_456_000))
 
+    }
+
+    func testCodexUsageParserExplainsMissingFiveHourWindowAndAcceptsDurationDrift() throws {
+        let weeklyOnlyPayload = #"{"plan_type":"prolite","rate_limit":{"primary_window":{"used_percent":30,"reset_at":1894060800,"limit_window_seconds":604800},"secondary_window":null}}"#
+        let weeklyOnly = try XCTUnwrap(CodexUsageParser.parse(Data(weeklyOnlyPayload.utf8)))
+
+        XCTAssertEqual(weeklyOnly.bars.map(\.label), ["Weekly usage limit"])
+        XCTAssertEqual(
+            weeklyOnly.usageMessages,
+            ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
+        )
+
+        let driftedPayload = #"{"rate_limit":{"primary_window":{"used_percent":20,"reset_at":1894060800,"limit_window_seconds":604800},"secondary_window":{"used_percent":10,"reset_at":1893456000,"limit_window_seconds":17999}}}"#
+        let drifted = try XCTUnwrap(CodexUsageParser.parse(Data(driftedPayload.utf8)))
+
+        XCTAssertEqual(drifted.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
+        XCTAssertTrue(drifted.usageMessages.isEmpty)
+
+        let outsideTolerancePayload = #"{"rate_limit":{"primary_window":{"used_percent":10,"reset_at":1893456000,"limit_window_seconds":18901}}}"#
+        let outsideTolerance = try XCTUnwrap(CodexUsageParser.parse(Data(outsideTolerancePayload.utf8)))
+
+        XCTAssertEqual(outsideTolerance.bars.map(\.label), ["315 minute usage limit"])
+        XCTAssertEqual(
+            outsideTolerance.usageMessages,
+            ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
+        )
     }
 
     func testClaudeUsageParserReadsOAuthUsageWindows() throws {
@@ -4170,6 +4197,49 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(requestCount, 2)
         XCTAssertEqual(result.bars.first?.used, 25)
+    }
+
+    func testCodexUsageProviderPreservesMissingFiveHourExplanation() async throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "codex-access",
+                expiresAt: 2_000_003_600
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            now: { now }
+        )
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/codex-usage")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"plan_type":"prolite","rate_limit":{"primary_window":{"used_percent":30,"reset_at":2000604800,"limit_window_seconds":604800},"secondary_window":null}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.accountID, configuration.id)
+        XCTAssertEqual(result.bars.map(\.label), ["Weekly usage limit"])
+        XCTAssertEqual(
+            result.usageMessages,
+            ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
+        )
     }
 
     func testCodexUsageProviderPreservesCredentialChangedDuringRefresh() async throws {

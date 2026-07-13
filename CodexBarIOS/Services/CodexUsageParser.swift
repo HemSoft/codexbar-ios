@@ -1,6 +1,9 @@
 import Foundation
 
 public enum CodexUsageParser {
+    private static let fiveHourDurationSeconds = 18_000
+    private static let weeklyDurationSeconds = 604_800
+
     public static func parse(
         _ data: Data,
         fetchedAt: Date = Date(),
@@ -42,12 +45,19 @@ public enum CodexUsageParser {
                 showProjectionOnCurrentBar: true
             )
         }
+        let hasFiveHourWindow = windows.contains { window in
+            isApproximateDuration(window.durationSeconds, expected: fiveHourDurationSeconds)
+        }
+        let usageMessages = hasFiveHourWindow
+            ? []
+            : ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
 
         return ProviderUsageResult(
             providerID: .codex,
             title: formatDisplayName(planType: root["plan_type"] as? String),
             subtitle: "Live ChatGPT usage",
             bars: bars,
+            usageMessages: usageMessages,
             fetchedAt: fetchedAt
         )
     }
@@ -72,14 +82,20 @@ public enum CodexUsageParser {
     }
 
     private static func label(forDuration durationSeconds: Int) -> String {
-        switch durationSeconds {
-        case 18_000:
+        if isApproximateDuration(durationSeconds, expected: fiveHourDurationSeconds) {
             "5 hour usage limit"
-        case 604_800:
+        } else if isApproximateDuration(durationSeconds, expected: weeklyDurationSeconds) {
             "Weekly usage limit"
-        default:
+        } else if durationSeconds.isMultiple(of: 3_600) {
             "\(max(1, durationSeconds / 3_600)) hour usage limit"
+        } else {
+            "\(max(1, Int((Double(durationSeconds) / 60).rounded()))) minute usage limit"
         }
+    }
+
+    private static func isApproximateDuration(_ durationSeconds: Int, expected: Int) -> Bool {
+        let tolerance = Double(expected) * 0.05
+        return abs(Double(durationSeconds - expected)) <= tolerance
     }
 
     private static func formatReset(

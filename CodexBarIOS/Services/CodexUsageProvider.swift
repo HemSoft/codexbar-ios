@@ -282,6 +282,9 @@ public final class CodexUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: result.subtitle,
             bars: result.bars,
+            creditsRemaining: result.creditsRemaining,
+            monetaryMetrics: result.monetaryMetrics,
+            usageMessages: result.usageMessages,
             fetchedAt: result.fetchedAt
         )
     }
