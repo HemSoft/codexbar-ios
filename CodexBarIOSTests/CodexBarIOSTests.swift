@@ -3398,8 +3398,47 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(inactiveScoped.bars.map(\.used), [25])
     }
 
+    func testClaudeUsageParserShowsObservedInactiveFableWeeklyLimit() throws {
+        let payload = """
+        {
+          "five_hour": {"utilization":11,"resets_at":"2030-01-01T02:00:00Z"},
+          "seven_day": {"utilization":9,"resets_at":"2030-01-08T04:00:00Z"},
+          "limits": [
+            {"kind":"session","group":"session","percent":11,"resets_at":"2030-01-01T02:00:00Z","scope":null,"is_active":true},
+            {"kind":"weekly_all","group":"weekly","percent":9,"resets_at":"2030-01-08T04:00:00Z","scope":null,"is_active":false},
+            {"kind":"weekly_scoped","group":"weekly","percent":5,"resets_at":"2030-01-08T04:00:00Z","scope":{"model":{"id":null,"display_name":"Fable"}},"is_active":false}
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), [
+            "5 hour usage limit",
+            "All models weekly usage limit",
+            "Fable weekly usage limit",
+        ])
+        XCTAssertEqual(result.bars.map(\.used), [11, 9, 5])
+        XCTAssertEqual(result.bars.map(\.stableKey), [
+            "session",
+            "weekly-all",
+            "weekly-scoped-fable",
+        ])
+        XCTAssertEqual(
+            result.bars.map(\.resetsAt),
+            [
+                ISO8601DateFormatter().date(from: "2030-01-01T02:00:00Z"),
+                ISO8601DateFormatter().date(from: "2030-01-08T04:00:00Z"),
+                ISO8601DateFormatter().date(from: "2030-01-08T04:00:00Z"),
+            ]
+        )
+    }
+
     @MainActor
-    func testClaudeFiveHourMetricsRemainDistinctAcrossHistoryWidgetsAndAlerts() throws {
+    func testClaudeWeeklyMetricsRemainDistinctAcrossHistoryWidgetsAndAlerts() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         let secretStore = MemorySecretStore()
@@ -3410,8 +3449,9 @@ final class CodexBarIOSTests: XCTestCase {
         let payload = """
         {
           "limits": [
-            {"kind":"session","percent":27,"resets_at":"2030-01-01T02:00:00Z","is_active":true},
-            {"kind":"session","percent":64,"resets_at":"2030-01-01T04:00:00Z","scope":{"model":{"display_name":"Fable"}},"is_active":true}
+            {"kind":"session","group":"session","percent":27,"resets_at":"2030-01-01T02:00:00Z","is_active":true},
+            {"kind":"weekly_all","group":"weekly","percent":64,"resets_at":"2030-01-08T04:00:00Z","is_active":false},
+            {"kind":"weekly_scoped","group":"weekly","percent":71,"resets_at":"2030-01-08T06:00:00Z","scope":{"model":{"display_name":"Fable"}},"is_active":false}
           ]
         }
         """
@@ -3434,7 +3474,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         let historySnapshot = UsageHistorySnapshot(result: result)
         XCTAssertEqual(historySnapshot.bars.map(\.label), result.bars.map(\.label))
-        XCTAssertEqual(Set(historySnapshot.bars.map(\.label)).count, 2)
+        XCTAssertEqual(Set(historySnapshot.bars.map(\.label)).count, 3)
 
         let evaluation = UsageAlertEvaluator.evaluate(
             results: [result],
@@ -3445,10 +3485,11 @@ final class CodexBarIOSTests: XCTestCase {
             ),
             activeAlertIDs: []
         )
-        XCTAssertEqual(evaluation.notifications.count, 2)
+        XCTAssertEqual(evaluation.notifications.count, 3)
         XCTAssertEqual(evaluation.activeAlertIDs, [
             "usage.\(configuration.id).session",
-            "usage.\(configuration.id).session-scoped-fable",
+            "usage.\(configuration.id).weekly-all",
+            "usage.\(configuration.id).weekly-scoped-fable",
         ])
 
         WidgetSnapshotPublisher.publish(
@@ -3461,10 +3502,11 @@ final class CodexBarIOSTests: XCTestCase {
             WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
         )
         XCTAssertEqual(widgetProvider.bars.map(\.label), result.bars.map(\.label))
-        XCTAssertEqual(Set(widgetProvider.bars.map(\.id)).count, 2)
+        XCTAssertEqual(Set(widgetProvider.bars.map(\.id)).count, 3)
         XCTAssertEqual(widgetProvider.bars.map(\.id), [
-            "\(configuration.id).0.other-models-5-hour-usage-limit",
-            "\(configuration.id).1.fable-5-hour-usage-limit",
+            "\(configuration.id).0.5-hour-usage-limit",
+            "\(configuration.id).1.all-models-weekly-usage-limit",
+            "\(configuration.id).2.fable-weekly-usage-limit",
         ])
     }
 
@@ -3583,10 +3625,10 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(result.bars.map(\.label), [
             "5 hour usage limit",
-            "Weekly usage limit",
-            "Fable weekly limit",
-            "Future Model weekly limit",
-            "Claude Sonnet 4.5 weekly limit",
+            "All models weekly usage limit",
+            "Fable weekly usage limit",
+            "Future Model weekly usage limit",
+            "Claude Sonnet 4.5 weekly usage limit",
         ])
         XCTAssertEqual(result.bars.map(\.used), [15, 36, 71, 112, 49])
         XCTAssertEqual(result.bars[3].usageText, "112%")

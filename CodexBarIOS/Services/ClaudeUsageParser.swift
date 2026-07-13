@@ -33,6 +33,7 @@ public enum ClaudeUsageParser {
 
     private struct StructuredLimit: Decodable {
         let kind: String?
+        let group: String?
         let percent: Double?
         let resetsAt: String?
         let scope: LimitScope?
@@ -40,6 +41,7 @@ public enum ClaudeUsageParser {
 
         enum CodingKeys: String, CodingKey {
             case kind
+            case group
             case percent
             case resetsAt = "resets_at"
             case scope
@@ -62,9 +64,11 @@ public enum ClaudeUsageParser {
     }
 
     private struct LimitModel: Decodable {
+        let id: String?
         let displayName: String?
 
         enum CodingKeys: String, CodingKey {
+            case id
             case displayName = "display_name"
         }
     }
@@ -108,8 +112,14 @@ public enum ClaudeUsageParser {
                 && limit.percent != nil
                 && sanitizedModelName(limit.scope?.model?.displayName) != nil
         }
+        let hasScopedWeeklyLimit = structuredLimits.contains { limit in
+            limit.kind == "weekly_scoped"
+                && (limit.group == nil || limit.group == "weekly")
+                && limit.percent != nil
+                && sanitizedModelName(limit.scope?.model?.displayName) != nil
+        }
 
-        for limit in structuredLimits where limit.isActive != false {
+        for limit in structuredLimits where shouldIncludeStructuredLimit(limit) {
             guard let percent = limit.percent else {
                 continue
             }
@@ -117,7 +127,8 @@ public enum ClaudeUsageParser {
             guard
                 let definition = structuredLimitDefinition(
                     for: limit,
-                    hasScopedSessionLimit: hasScopedSessionLimit
+                    hasScopedSessionLimit: hasScopedSessionLimit,
+                    hasScopedWeeklyLimit: hasScopedWeeklyLimit
                 ),
                 semanticKeys.insert(definition.key).inserted
             else {
@@ -154,7 +165,10 @@ public enum ClaudeUsageParser {
         )
         appendLegacyBar(
             key: "weekly-all",
-            label: "Weekly usage limit",
+            stableBarKey: "weekly-all",
+            label: hasScopedWeeklyLimit
+                ? "All models weekly usage limit"
+                : "Weekly usage limit",
             window: usage.sevenDay ?? usage.sevenDayOAuthApps,
             durationSeconds: 604_800,
             semanticKeys: &semanticKeys,
@@ -441,7 +455,8 @@ public enum ClaudeUsageParser {
 
     private static func structuredLimitDefinition(
         for limit: StructuredLimit,
-        hasScopedSessionLimit: Bool
+        hasScopedSessionLimit: Bool,
+        hasScopedWeeklyLimit: Bool
     ) -> StructuredLimitDefinition? {
         switch limit.kind {
         case "session":
@@ -471,23 +486,30 @@ public enum ClaudeUsageParser {
         case "weekly_all":
             return StructuredLimitDefinition(
                 key: "weekly-all",
-                stableBarKey: nil,
-                label: "Weekly usage limit",
+                stableBarKey: "weekly-all",
+                label: hasScopedWeeklyLimit
+                    ? "All models weekly usage limit"
+                    : "Weekly usage limit",
                 duration: 604_800,
                 legacyFallbackKey: "weekly-all",
                 legacySemanticKey: nil,
                 usageMessage: nil
             )
         case "weekly_scoped":
-            guard let modelName = sanitizedModelName(limit.scope?.model?.displayName) else {
+            guard
+                limit.group == nil || limit.group == "weekly",
+                let modelName = sanitizedModelName(limit.scope?.model?.displayName)
+            else {
                 return nil
             }
             let legacyKey = legacyScopedKey(for: modelName)
-            let key = "weekly-scoped-\(normalizedKey(modelName))"
+            let identity = sanitizedModelName(limit.scope?.model?.id) ?? modelName
+            let normalizedIdentity = normalizedKey(identity)
+            let key = "weekly-scoped-\(normalizedIdentity.isEmpty ? normalizedKey(modelName) : normalizedIdentity)"
             return StructuredLimitDefinition(
                 key: key,
                 stableBarKey: key,
-                label: "\(modelName) weekly limit",
+                label: "\(modelName) weekly usage limit",
                 duration: 604_800,
                 legacyFallbackKey: legacyKey,
                 legacySemanticKey: legacyKey,
@@ -495,6 +517,16 @@ public enum ClaudeUsageParser {
             )
         default:
             return nil
+        }
+    }
+
+    private static func shouldIncludeStructuredLimit(_ limit: StructuredLimit) -> Bool {
+        switch limit.kind {
+        case "weekly_all", "weekly_scoped":
+            // Anthropic reports enforceable weekly limits with is_active false.
+            return true
+        default:
+            return limit.isActive != false
         }
     }
 
