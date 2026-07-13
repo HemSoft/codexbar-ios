@@ -6,6 +6,7 @@ struct ProviderUsageCard: View {
     let statusText: String
     let history: UsageHistorySeries
     let alerts: [UsageAlertDetail]
+    let isHistoryEnabled: Bool
     let onShowHistory: () -> Void
 
     init(
@@ -13,12 +14,14 @@ struct ProviderUsageCard: View {
         statusText: String,
         history: UsageHistorySeries,
         alerts: [UsageAlertDetail] = [],
+        isHistoryEnabled: Bool = true,
         onShowHistory: @escaping () -> Void = {}
     ) {
         self.result = result
         self.statusText = statusText
         self.history = history
         self.alerts = alerts
+        self.isHistoryEnabled = isHistoryEnabled
         self.onShowHistory = onShowHistory
     }
 
@@ -137,10 +140,10 @@ struct ProviderUsageCard: View {
     }
 
     var showsHistory: Bool {
-        result.creditsRemaining != nil
+        isHistoryEnabled && (result.creditsRemaining != nil
             || !result.bars.isEmpty
             || !result.monetaryMetrics.isEmpty
-            || !history.points.isEmpty
+            || !history.points.isEmpty)
     }
 
     private static let currencyFormatter: NumberFormatter = {

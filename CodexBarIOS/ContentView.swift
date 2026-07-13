@@ -72,6 +72,9 @@ struct ContentView: View {
                                     statusText: dashboardStatusText(for: result),
                                     history: history,
                                     alerts: usageAlertsByAccountID[result.accountID] ?? [],
+                                    isHistoryEnabled: configurationStore
+                                        .configuration(accountID: result.accountID)?
+                                        .showsHistory ?? true,
                                     onShowHistory: {
                                         selectedHistoryResult = result
                                     }
