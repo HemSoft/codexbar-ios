@@ -3514,6 +3514,9 @@ final class CodexBarIOSTests: XCTestCase {
           ]
         }
         """
+        let legacyPayload = """
+        {"five_hour":{"utilization":0.42,"resets_at":"2030-01-01T02:00:00Z"}}
+        """
         let unscopedResult = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(unscopedPayload.utf8),
             subscriptionType: "max"
@@ -3522,11 +3525,37 @@ final class CodexBarIOSTests: XCTestCase {
             Data(scopedPayload.utf8),
             subscriptionType: "max"
         ))
+        let legacyResult = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(legacyPayload.utf8),
+            subscriptionType: "max"
+        ))
+        let headerResult = try XCTUnwrap(ClaudeUsageParser.parseRateLimitHeaders(
+            [
+                "anthropic-ratelimit-unified-5h-utilization": "0.42",
+                "anthropic-ratelimit-unified-5h-reset": "1893456000",
+            ],
+            subscriptionType: "max"
+        ))
 
         XCTAssertEqual(unscopedResult.bars.first?.label, "5 hour usage limit")
         XCTAssertEqual(scopedResult.bars.first?.label, "Other models 5 hour usage limit")
         XCTAssertEqual(unscopedResult.bars.first?.stableKey, "session")
         XCTAssertEqual(scopedResult.bars.first?.stableKey, "session")
+        XCTAssertEqual(legacyResult.bars.first?.stableKey, "session")
+        XCTAssertEqual(headerResult.bars.first?.stableKey, "session")
+
+        for result in [unscopedResult, legacyResult, headerResult] {
+            let evaluation = UsageAlertEvaluator.evaluate(
+                results: [result],
+                settings: UsageAlertSettings(
+                    isEnabled: true,
+                    usageThreshold: 0.20,
+                    includesSeverityAlerts: false
+                ),
+                activeAlertIDs: []
+            )
+            XCTAssertEqual(evaluation.activeAlertIDs, ["usage.claude.session"])
+        }
     }
 
     func testClaudeUsageParserReadsStructuredAndScopedLimitsWithoutDuplicates() throws {
@@ -3686,6 +3715,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(result.title, "Claude (Max)")
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit"])
+        XCTAssertEqual(result.bars.first?.stableKey, "session")
         XCTAssertEqual(result.bars.first?.used, 25)
         XCTAssertEqual(result.bars.first?.projectionCurrent, 0.25)
 

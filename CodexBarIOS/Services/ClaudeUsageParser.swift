@@ -143,6 +143,7 @@ public enum ClaudeUsageParser {
 
         appendLegacyBar(
             key: "session",
+            stableBarKey: "session",
             label: "5 hour usage limit",
             window: usage.fiveHour,
             durationSeconds: 18_000,
@@ -208,6 +209,7 @@ public enum ClaudeUsageParser {
     ) -> ProviderUsageResult? {
         var bars: [UsageBar] = []
         if let bar = usageBarFromHeaders(
+            stableKey: "session",
             label: "5 hour usage limit",
             utilizationKey: "anthropic-ratelimit-unified-5h-utilization",
             resetKey: "anthropic-ratelimit-unified-5h-reset",
@@ -268,6 +270,7 @@ public enum ClaudeUsageParser {
     }
 
     private static func usageBarFromHeaders(
+        stableKey: String? = nil,
         label: String,
         utilizationKey: String,
         resetKey: String,
@@ -284,6 +287,7 @@ public enum ClaudeUsageParser {
         }
 
         return usageBar(
+            stableKey: stableKey,
             label: label,
             usedPercent: normalizedHeaderPercent(utilization),
             reset: reset,
@@ -324,6 +328,7 @@ public enum ClaudeUsageParser {
 
     private static func appendLegacyBar(
         key: String,
+        stableBarKey: String? = nil,
         label: String,
         window: UsageWindow?,
         durationSeconds: TimeInterval,
@@ -335,6 +340,7 @@ public enum ClaudeUsageParser {
         guard
             !semanticKeys.contains(key),
             let bar = usageBar(
+                stableKey: stableBarKey,
                 label: label,
                 window: window,
                 durationSeconds: durationSeconds,
