@@ -64,11 +64,9 @@ public enum ClaudeUsageParser {
     }
 
     private struct LimitModel: Decodable {
-        let id: String?
         let displayName: String?
 
         enum CodingKeys: String, CodingKey {
-            case id
             case displayName = "display_name"
         }
     }
@@ -503,9 +501,7 @@ public enum ClaudeUsageParser {
                 return nil
             }
             let legacyKey = legacyScopedKey(for: modelName)
-            let identity = sanitizedModelName(limit.scope?.model?.id) ?? modelName
-            let normalizedIdentity = normalizedKey(identity)
-            let key = "weekly-scoped-\(normalizedIdentity.isEmpty ? normalizedKey(modelName) : normalizedIdentity)"
+            let key = "weekly-scoped-\(normalizedKey(modelName))"
             return StructuredLimitDefinition(
                 key: key,
                 stableBarKey: key,

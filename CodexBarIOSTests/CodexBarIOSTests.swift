@@ -3505,7 +3505,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(Set(widgetProvider.bars.map(\.id)).count, 3)
         XCTAssertEqual(widgetProvider.bars.map(\.id), [
             "\(configuration.id).0.5-hour-usage-limit",
-            "\(configuration.id).1.all-models-weekly-usage-limit",
+            "\(configuration.id).1.weekly-usage-limit",
             "\(configuration.id).2.fable-weekly-usage-limit",
         ])
     }

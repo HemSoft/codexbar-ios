@@ -117,6 +117,11 @@ enum WidgetSnapshotPublisher {
     }
 
     private static func stableBarID(accountID: String, bar: UsageBar, index: Int) -> String {
+        // Keep existing saved Claude weekly tiles resolvable when the visible label becomes more specific.
+        if bar.stableKey == "weekly-all" {
+            return "\(accountID).\(index).weekly-usage-limit"
+        }
+
         let normalizedLabel = bar.label
             .lowercased()
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
