@@ -3469,6 +3469,26 @@ final class CodexBarIOSTests: XCTestCase {
         )
     }
 
+    func testClaudeUsageParserPrefersActiveDuplicateWeeklyLimit() throws {
+        let payload = """
+        {
+          "limits": [
+            {"kind":"weekly_all","group":"weekly","percent":9,"is_active":false},
+            {"kind":"weekly_all","group":"weekly","percent":14,"is_active":true}
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), ["Weekly usage limit"])
+        XCTAssertEqual(result.bars.map(\.used), [14])
+        XCTAssertEqual(result.bars.map(\.stableKey), ["weekly-all"])
+    }
+
     @MainActor
     func testClaudeWeeklyMetricsRemainDistinctAcrossHistoryWidgetsAndAlerts() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"

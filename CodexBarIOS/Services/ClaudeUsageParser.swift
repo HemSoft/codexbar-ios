@@ -127,9 +127,25 @@ public enum ClaudeUsageParser {
                     for: limit,
                     hasScopedSessionLimit: hasScopedSessionLimit,
                     hasScopedWeeklyLimit: hasScopedWeeklyLimit
-                ),
-                semanticKeys.insert(definition.key).inserted
+                )
             else {
+                continue
+            }
+            if limit.isActive == false,
+               structuredLimits.contains(where: { candidate in
+                   guard candidate.isActive != false, candidate.percent != nil else {
+                       return false
+                   }
+                   return structuredLimitDefinition(
+                       for: candidate,
+                       hasScopedSessionLimit: hasScopedSessionLimit,
+                       hasScopedWeeklyLimit: hasScopedWeeklyLimit
+                   )?.key == definition.key
+               })
+            {
+                continue
+            }
+            guard semanticKeys.insert(definition.key).inserted else {
                 continue
             }
             bars.append(usageBar(
