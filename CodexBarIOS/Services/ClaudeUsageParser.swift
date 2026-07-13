@@ -134,6 +134,9 @@ public enum ClaudeUsageParser {
                 && limit.percent != nil
                 && sanitizedModelName(limit.scope?.model?.displayName) != nil
         }
+        let legacyCompatibleModelKeys = legacyCompatibleScopedWeeklyModelKeys(
+            in: structuredLimits
+        )
 
         for limit in structuredLimits where shouldIncludeStructuredLimit(limit) {
             guard let percent = limit.percent else {
@@ -144,7 +147,8 @@ public enum ClaudeUsageParser {
                 let definition = structuredLimitDefinition(
                     for: limit,
                     hasScopedSessionLimit: hasScopedSessionLimit,
-                    hasScopedWeeklyLimit: hasScopedWeeklyLimit
+                    hasScopedWeeklyLimit: hasScopedWeeklyLimit,
+                    legacyCompatibleScopedWeeklyModelKeys: legacyCompatibleModelKeys
                 )
             else {
                 continue
@@ -157,7 +161,8 @@ public enum ClaudeUsageParser {
                    return structuredLimitDefinition(
                        for: candidate,
                        hasScopedSessionLimit: hasScopedSessionLimit,
-                       hasScopedWeeklyLimit: hasScopedWeeklyLimit
+                       hasScopedWeeklyLimit: hasScopedWeeklyLimit,
+                       legacyCompatibleScopedWeeklyModelKeys: legacyCompatibleModelKeys
                    )?.key == definition.key
                })
             {
@@ -490,7 +495,8 @@ public enum ClaudeUsageParser {
     private static func structuredLimitDefinition(
         for limit: StructuredLimit,
         hasScopedSessionLimit: Bool,
-        hasScopedWeeklyLimit: Bool
+        hasScopedWeeklyLimit: Bool,
+        legacyCompatibleScopedWeeklyModelKeys: Set<String>
     ) -> StructuredLimitDefinition? {
         switch limit.kind {
         case "session":
@@ -539,8 +545,11 @@ public enum ClaudeUsageParser {
             else {
                 return nil
             }
-            let legacyIdentity = legacyScopedIdentity(for: modelName)
-            let key = "weekly-scoped-\(normalizedKey(modelName))"
+            let modelKey = normalizedKey(modelName)
+            let legacyIdentity = legacyCompatibleScopedWeeklyModelKeys.contains(modelKey)
+                ? legacyScopedIdentity(for: modelName)
+                : nil
+            let key = "weekly-scoped-\(modelKey)"
             return StructuredLimitDefinition(
                 key: key,
                 stableBarKey: legacyIdentity?.stableBarKey ?? key,
@@ -587,6 +596,28 @@ public enum ClaudeUsageParser {
             return ("weekly-scoped-opus", ClaudeUsageIdentity.opusWeeklyLegacyKey)
         }
         return nil
+    }
+
+    private static func legacyCompatibleScopedWeeklyModelKeys(
+        in limits: [StructuredLimit]
+    ) -> Set<String> {
+        var modelKeysByLegacySemanticKey: [String: Set<String>] = [:]
+        for limit in limits where limit.kind == "weekly_scoped" {
+            guard
+                limit.group == nil || limit.group == "weekly",
+                limit.percent != nil,
+                let modelName = sanitizedModelName(limit.scope?.model?.displayName),
+                let legacyIdentity = legacyScopedIdentity(for: modelName)
+            else {
+                continue
+            }
+            modelKeysByLegacySemanticKey[legacyIdentity.semanticKey, default: []]
+                .insert(normalizedKey(modelName))
+        }
+
+        return Set(modelKeysByLegacySemanticKey.values.compactMap { modelKeys in
+            modelKeys.count == 1 ? modelKeys.first : nil
+        })
     }
 
     private static func legacyReset(for key: String, usage: UsageResponse) -> Date? {

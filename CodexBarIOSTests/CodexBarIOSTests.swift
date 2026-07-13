@@ -3580,6 +3580,66 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testClaudeStructuredScopedWeeklyLimitsKeepModelVersionsDistinct() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let payload = """
+        {
+          "limits": [
+            {"kind":"weekly_scoped","group":"weekly","percent":42,"scope":{"model":{"display_name":"Claude Sonnet 4"}},"is_active":true},
+            {"kind":"weekly_scoped","group":"weekly","percent":68,"scope":{"model":{"display_name":"Claude Sonnet 4.5"}},"is_active":true}
+          ]
+        }
+        """
+        let parsed = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max"
+        ))
+        XCTAssertEqual(parsed.bars.map(\.stableKey), [
+            "weekly-scoped-claudesonnet4",
+            "weekly-scoped-claudesonnet45",
+        ])
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .claude)
+        store.saveSecret("claude-token", for: configuration)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: parsed.providerID,
+            title: parsed.title,
+            subtitle: parsed.subtitle,
+            bars: parsed.bars,
+            fetchedAt: parsed.fetchedAt
+        )
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.20,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: []
+        )
+        XCTAssertEqual(evaluation.activeAlertIDs, [
+            "usage.\(configuration.id).weekly-scoped-claudesonnet4",
+            "usage.\(configuration.id).weekly-scoped-claudesonnet45",
+        ])
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let widgetBars = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        ).bars
+        XCTAssertEqual(Set(widgetBars.map(\.id)).count, 2)
+    }
+
+    @MainActor
     func testClaudeWeeklyMetricsRemainDistinctAcrossHistoryWidgetsAndAlerts() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
