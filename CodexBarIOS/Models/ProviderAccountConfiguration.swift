@@ -6,6 +6,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
     public var isEnabled: Bool
     public var accountLabel: String
     public var groupID: String?
+    public var showsHistory: Bool
     public var authMethod: ProviderAuthMethod
     public var oauthClientID: String?
     public var copilotAccountScope: CopilotAccountScope
@@ -20,6 +21,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         isEnabled: Bool = true,
         accountLabel: String = "",
         groupID: String? = nil,
+        showsHistory: Bool = true,
         authMethod: ProviderAuthMethod,
         oauthClientID: String? = nil,
         copilotAccountScope: CopilotAccountScope = .personal,
@@ -33,6 +35,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         self.isEnabled = isEnabled
         self.accountLabel = accountLabel
         self.groupID = groupID
+        self.showsHistory = showsHistory
         self.authMethod = authMethod
         self.oauthClientID = oauthClientID
         self.copilotAccountScope = copilotAccountScope
@@ -58,6 +61,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
             isEnabled: isEnabled,
             accountLabel: accountLabel,
             groupID: groupID,
+            showsHistory: showsHistory,
             authMethod: authMethod,
             oauthClientID: oauthClientID,
             copilotAccountScope: copilotAccountScope,
@@ -74,6 +78,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         case isEnabled
         case accountLabel
         case groupID
+        case showsHistory
         case authMethod
         case oauthClientID
         case copilotAccountScope
@@ -91,6 +96,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.accountLabel = try container.decodeIfPresent(String.self, forKey: .accountLabel) ?? ""
         self.groupID = try container.decodeIfPresent(String.self, forKey: .groupID)
+        self.showsHistory = try container.decodeIfPresent(Bool.self, forKey: .showsHistory) ?? true
         self.authMethod = try container.decode(ProviderAuthMethod.self, forKey: .authMethod)
         self.oauthClientID = try container.decodeIfPresent(String.self, forKey: .oauthClientID)
         self.copilotAccountScope = try container.decodeIfPresent(CopilotAccountScope.self, forKey: .copilotAccountScope) ?? .personal

@@ -8,6 +8,8 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added a per-account **Show History** setting so each provider card can hide
+  its History section without discarding collected samples. ([#41](https://github.com/HemSoft/codexbar-ios/issues/41))
 - Added complete Claude subscription usage details, including all-model and
   model-scoped weekly limits plus currency-aware usage-credit spending and
   monthly headroom shown alongside quota bars. ([#34](https://github.com/HemSoft/codexbar-ios/issues/34))

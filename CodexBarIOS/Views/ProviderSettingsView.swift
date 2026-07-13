@@ -53,6 +53,7 @@ struct ProviderSettingsView: View {
         Form {
             Section {
                 Toggle("Enabled", isOn: $configuration.isEnabled)
+                Toggle("Show History", isOn: $configuration.showsHistory)
 
                 TextField("Account label", text: $configuration.accountLabel)
                     .textContentType(.username)

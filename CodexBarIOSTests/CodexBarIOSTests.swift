@@ -730,6 +730,38 @@ final class CodexBarIOSTests: XCTestCase {
         )
 
         XCTAssertNil(configuration.groupID)
+        XCTAssertTrue(configuration.showsHistory)
+    }
+
+    @MainActor
+    func testProviderHistoryVisibilityPersistsIndependentlyAcrossAccounts() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let group = try XCTUnwrap(store.addGroup(named: "Personal"))
+        var codex = store.addAccount(for: .codex)
+        let claude = store.addAccount(for: .claude)
+
+        XCTAssertTrue(codex.showsHistory)
+        XCTAssertTrue(claude.showsHistory)
+
+        codex.showsHistory = false
+        codex.accountLabel = "Primary Codex"
+        codex.groupID = group.id
+        XCTAssertTrue(store.update(codex))
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let reloadedCodex = try XCTUnwrap(reloadedStore.configuration(accountID: codex.id))
+        let reloadedClaude = try XCTUnwrap(reloadedStore.configuration(accountID: claude.id))
+
+        XCTAssertFalse(reloadedCodex.showsHistory)
+        XCTAssertEqual(reloadedCodex.accountLabel, "Primary Codex")
+        XCTAssertEqual(reloadedCodex.groupID, group.id)
+        XCTAssertTrue(reloadedClaude.showsHistory)
     }
 
     func testWidgetSnapshotStoreDecodesLegacyUsageBarsWithoutProjectionFields() throws {
@@ -4094,7 +4126,7 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
-    func testProviderUsageCardPreservesStoredHistoryAfterEmptyRefresh() {
+    func testProviderUsageCardHistoryVisibilityDoesNotDiscardStoredHistory() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -4119,13 +4151,22 @@ final class CodexBarIOSTests: XCTestCase {
         store.record(results: [priorResult], now: now)
         let history = store.historySeries(for: failedResult)
 
-        let card = ProviderUsageCard(
+        let hiddenCard = ProviderUsageCard(
             result: failedResult,
             statusText: failedResult.subtitle,
-            history: history
+            history: history,
+            showsHistory: false
+        )
+        let visibleCard = ProviderUsageCard(
+            result: failedResult,
+            statusText: failedResult.subtitle,
+            history: history,
+            showsHistory: true
         )
 
-        XCTAssertTrue(card.showsHistory)
+        XCTAssertFalse(hiddenCard.showsHistory)
+        XCTAssertTrue(visibleCard.showsHistory)
+        XCTAssertFalse(history.points.isEmpty)
         XCTAssertTrue(history.isBalance)
         XCTAssertEqual(history.latestValueDescription, "$19.25")
     }
