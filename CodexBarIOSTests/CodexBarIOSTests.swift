@@ -3558,14 +3558,25 @@ final class CodexBarIOSTests: XCTestCase {
             configurationStore: store,
             snapshotDefaults: defaults
         )
-        let widgetProvider = try XCTUnwrap(
-            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
-        )
+        let snapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        let widgetProvider = try XCTUnwrap(snapshot.results.first)
         XCTAssertEqual(widgetProvider.bars.map(\.id), [
             "\(configuration.id).0.fable-weekly-usage-limit",
-            "\(configuration.id).1.sonnet-weekly-limit",
-            "\(configuration.id).2.opus-weekly-limit",
+            "\(configuration.id).sonnet-weekly-limit",
+            "\(configuration.id).opus-weekly-limit",
         ])
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).0.sonnet-weekly-limit"
+            )?.title,
+            "Claude Sonnet 4.5 weekly usage limit"
+        )
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).1.opus-weekly-limit"
+            )?.title,
+            "Claude Opus 4.1 weekly usage limit"
+        )
     }
 
     @MainActor
@@ -3636,7 +3647,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(Set(widgetProvider.bars.map(\.id)).count, 3)
         XCTAssertEqual(widgetProvider.bars.map(\.id), [
             "\(configuration.id).0.5-hour-usage-limit",
-            "\(configuration.id).1.weekly-usage-limit",
+            "\(configuration.id).weekly-usage-limit",
             "\(configuration.id).2.fable-weekly-usage-limit",
         ])
     }

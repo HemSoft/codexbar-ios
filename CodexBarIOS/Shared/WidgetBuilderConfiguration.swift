@@ -188,6 +188,57 @@ public extension CodexBarWidgetSnapshot {
                 + provider.standaloneMonetaryMetrics.map { provider.builderMonetaryTile($0) }
         }
     }
+
+    func builderTile(resolvingSavedID tileID: String) -> CodexBarWidgetBuilderTile? {
+        if let exactMatch = builderTiles.first(where: { $0.id == tileID }) {
+            return exactMatch
+        }
+
+        for provider in results.sorted(by: { $0.accountID.count > $1.accountID.count }) {
+            if let bar = provider.bars.first(where: {
+                $0.matchesSavedBuilderTileID(tileID, accountID: provider.accountID)
+            }) {
+                return provider.builderBarTile(bar)
+            }
+        }
+
+        return nil
+    }
+}
+
+public extension CodexBarWidgetUsageBarSnapshot {
+    func matchesSavedBuilderTileID(_ tileID: String, accountID: String) -> Bool {
+        let savedBarID = tileID.hasPrefix("bar.")
+            ? String(tileID.dropFirst("bar.".count))
+            : tileID
+        if savedBarID == id
+            || savedBarID == "\(accountID).\(id)"
+        {
+            return true
+        }
+
+        guard
+            let savedSuffix = Self.identitySuffix(in: savedBarID, accountID: accountID),
+            let currentSuffix = Self.identitySuffix(in: id, accountID: accountID)
+        else {
+            return false
+        }
+        return savedSuffix == currentSuffix
+    }
+
+    private static func identitySuffix(in barID: String, accountID: String) -> String? {
+        let accountPrefix = "\(accountID)."
+        guard barID.hasPrefix(accountPrefix) else {
+            return nil
+        }
+
+        let accountSuffix = String(barID.dropFirst(accountPrefix.count))
+        let components = accountSuffix.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
+        if components.count == 2, Int(components[0]) != nil {
+            return String(components[1])
+        }
+        return accountSuffix
+    }
 }
 
 private extension CodexBarWidgetProviderSnapshot {

@@ -119,10 +119,10 @@ enum WidgetSnapshotPublisher {
     private static func stableBarID(accountID: String, bar: UsageBar, index: Int) -> String {
         // Keep existing saved Claude weekly tiles resolvable when the visible label becomes more specific.
         if bar.stableKey == ClaudeUsageIdentity.allModelsWeeklyStableKey {
-            return "\(accountID).\(index).\(ClaudeUsageIdentity.allModelsWeeklyLegacyKey)"
+            return "\(accountID).\(ClaudeUsageIdentity.allModelsWeeklyLegacyKey)"
         }
         if let legacyKey = ClaudeUsageIdentity.legacyScopedWeeklyKey(for: bar.stableKey) {
-            return "\(accountID).\(index).\(legacyKey)"
+            return "\(accountID).\(legacyKey)"
         }
 
         let normalizedLabel = bar.label
