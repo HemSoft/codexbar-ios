@@ -4155,13 +4155,13 @@ final class CodexBarIOSTests: XCTestCase {
             result: failedResult,
             statusText: failedResult.subtitle,
             history: history,
-            showsHistory: false
+            isHistoryEnabled: false
         )
         let visibleCard = ProviderUsageCard(
             result: failedResult,
             statusText: failedResult.subtitle,
             history: history,
-            showsHistory: true
+            isHistoryEnabled: true
         )
 
         XCTAssertFalse(hiddenCard.showsHistory)

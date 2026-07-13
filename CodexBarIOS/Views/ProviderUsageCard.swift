@@ -14,14 +14,14 @@ struct ProviderUsageCard: View {
         statusText: String,
         history: UsageHistorySeries,
         alerts: [UsageAlertDetail] = [],
-        showsHistory: Bool = true,
+        isHistoryEnabled: Bool = true,
         onShowHistory: @escaping () -> Void = {}
     ) {
         self.result = result
         self.statusText = statusText
         self.history = history
         self.alerts = alerts
-        self.isHistoryEnabled = showsHistory
+        self.isHistoryEnabled = isHistoryEnabled
         self.onShowHistory = onShowHistory
     }
 
