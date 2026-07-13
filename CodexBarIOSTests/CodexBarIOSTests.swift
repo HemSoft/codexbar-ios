@@ -3577,6 +3577,12 @@ final class CodexBarIOSTests: XCTestCase {
             )?.title,
             "Claude Opus 4.1 weekly usage limit"
         )
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).2.fable-weekly-limit"
+            )?.title,
+            "Fable weekly usage limit"
+        )
     }
 
     @MainActor
@@ -3588,6 +3594,7 @@ final class CodexBarIOSTests: XCTestCase {
         }
         let payload = """
         {
+          "seven_day_sonnet": {"utilization":55},
           "limits": [
             {"kind":"weekly_scoped","group":"weekly","percent":42,"scope":{"model":{"display_name":"Claude Sonnet 4"}},"is_active":true},
             {"kind":"weekly_scoped","group":"weekly","percent":68,"scope":{"model":{"display_name":"Claude Sonnet 4.5"}},"is_active":true}
@@ -3602,6 +3609,7 @@ final class CodexBarIOSTests: XCTestCase {
             "weekly-scoped-claudesonnet4",
             "weekly-scoped-claudesonnet45",
         ])
+        XCTAssertEqual(parsed.bars.map(\.used), [42, 68])
 
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
         let configuration = store.addAccount(for: .claude)

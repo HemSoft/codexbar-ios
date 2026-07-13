@@ -546,17 +546,18 @@ public enum ClaudeUsageParser {
                 return nil
             }
             let modelKey = normalizedKey(modelName)
-            let legacyIdentity = legacyCompatibleScopedWeeklyModelKeys.contains(modelKey)
-                ? legacyScopedIdentity(for: modelName)
+            let legacyFamilyIdentity = legacyScopedIdentity(for: modelName)
+            let stableLegacyIdentity = legacyCompatibleScopedWeeklyModelKeys.contains(modelKey)
+                ? legacyFamilyIdentity
                 : nil
             let key = "weekly-scoped-\(modelKey)"
             return StructuredLimitDefinition(
                 key: key,
-                stableBarKey: legacyIdentity?.stableBarKey ?? key,
+                stableBarKey: stableLegacyIdentity?.stableBarKey ?? key,
                 label: "\(modelName) weekly usage limit",
                 duration: 604_800,
-                legacyFallbackKey: legacyIdentity?.semanticKey,
-                legacySemanticKey: legacyIdentity?.semanticKey,
+                legacyFallbackKey: legacyFamilyIdentity?.semanticKey,
+                legacySemanticKey: legacyFamilyIdentity?.semanticKey,
                 usageMessage: "\(modelName) usage is capped within the all-model weekly allowance."
             )
         default:

@@ -223,7 +223,8 @@ public extension CodexBarWidgetUsageBarSnapshot {
         else {
             return false
         }
-        return savedSuffix == currentSuffix
+        return Self.canonicalIdentitySuffix(savedSuffix)
+            == Self.canonicalIdentitySuffix(currentSuffix)
     }
 
     private static func identitySuffix(in barID: String, accountID: String) -> String? {
@@ -238,6 +239,14 @@ public extension CodexBarWidgetUsageBarSnapshot {
             return String(components[1])
         }
         return accountSuffix
+    }
+
+    private static func canonicalIdentitySuffix(_ suffix: String) -> String {
+        let oldScopedWeeklySuffix = "-weekly-limit"
+        guard suffix.hasSuffix(oldScopedWeeklySuffix) else {
+            return suffix
+        }
+        return String(suffix.dropLast(oldScopedWeeklySuffix.count)) + "-weekly-usage-limit"
     }
 }
 
