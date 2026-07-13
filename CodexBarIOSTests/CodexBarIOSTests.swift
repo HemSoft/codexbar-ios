@@ -3489,6 +3489,30 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.stableKey), ["weekly-all"])
     }
 
+    func testClaudeUsageParserUsesConsistentLegacyScopedWeeklyLabels() throws {
+        let payload = """
+        {
+          "seven_day_sonnet": {"utilization":44},
+          "seven_day_opus": {"utilization":32},
+          "limits": [
+            {"kind":"weekly_scoped","group":"weekly","percent":5,"scope":{"model":{"display_name":"Fable"}},"is_active":false}
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), [
+            "Fable weekly usage limit",
+            "Sonnet weekly usage limit",
+            "Opus weekly usage limit",
+        ])
+        XCTAssertEqual(result.bars.map(\.used), [5, 44, 32])
+    }
+
     @MainActor
     func testClaudeWeeklyMetricsRemainDistinctAcrossHistoryWidgetsAndAlerts() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"

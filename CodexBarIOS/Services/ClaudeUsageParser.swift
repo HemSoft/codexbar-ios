@@ -192,7 +192,7 @@ public enum ClaudeUsageParser {
         )
         appendLegacyBar(
             key: "weekly-scoped-sonnet",
-            label: "Sonnet weekly limit",
+            label: "Sonnet weekly usage limit",
             window: usage.sevenDaySonnet,
             durationSeconds: 604_800,
             semanticKeys: &semanticKeys,
@@ -202,7 +202,7 @@ public enum ClaudeUsageParser {
         )
         appendLegacyBar(
             key: "weekly-scoped-opus",
-            label: "Opus weekly limit",
+            label: "Opus weekly usage limit",
             window: usage.sevenDayOpus,
             durationSeconds: 604_800,
             semanticKeys: &semanticKeys,
