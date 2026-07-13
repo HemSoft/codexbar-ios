@@ -49,6 +49,7 @@ public enum ClaudeUsageParser {
 
     private struct StructuredLimitDefinition {
         let key: String
+        let stableBarKey: String?
         let label: String
         let duration: TimeInterval
         let legacyFallbackKey: String?
@@ -123,6 +124,7 @@ public enum ClaudeUsageParser {
                 continue
             }
             bars.append(usageBar(
+                stableKey: definition.stableBarKey,
                 label: definition.label,
                 usedPercent: sanitizedPercent(percent),
                 reset: parseReset(limit.resetsAt)
@@ -243,6 +245,7 @@ public enum ClaudeUsageParser {
     }
 
     private static func usageBar(
+        stableKey: String? = nil,
         label: String,
         window: UsageWindow?,
         durationSeconds: TimeInterval,
@@ -254,6 +257,7 @@ public enum ClaudeUsageParser {
         }
 
         return usageBar(
+            stableKey: stableKey,
             label: label,
             usedPercent: normalizedOAuthPercent(utilization),
             reset: parseReset(window?.resetsAt),
@@ -290,6 +294,7 @@ public enum ClaudeUsageParser {
     }
 
     private static func usageBar(
+        stableKey: String? = nil,
         label: String,
         usedPercent: Double,
         reset: Date?,
@@ -298,6 +303,7 @@ public enum ClaudeUsageParser {
         dateTimeFormatter: UserFacingDateTimeFormatter
     ) -> UsageBar {
         return UsageBar(
+            stableKey: stableKey,
             label: label,
             used: usedPercent,
             limit: 100,
@@ -434,8 +440,10 @@ public enum ClaudeUsageParser {
         switch limit.kind {
         case "session":
             if let modelName = sanitizedModelName(limit.scope?.model?.displayName) {
+                let key = "session-scoped-\(normalizedKey(modelName))"
                 return StructuredLimitDefinition(
-                    key: "session-scoped-\(normalizedKey(modelName))",
+                    key: key,
+                    stableBarKey: key,
                     label: "\(modelName) 5 hour usage limit",
                     duration: 18_000,
                     legacyFallbackKey: nil,
@@ -445,6 +453,7 @@ public enum ClaudeUsageParser {
             }
             return StructuredLimitDefinition(
                 key: "session",
+                stableBarKey: nil,
                 label: hasScopedSessionLimit
                     ? "Other models 5 hour usage limit"
                     : "5 hour usage limit",
@@ -456,6 +465,7 @@ public enum ClaudeUsageParser {
         case "weekly_all":
             return StructuredLimitDefinition(
                 key: "weekly-all",
+                stableBarKey: nil,
                 label: "Weekly usage limit",
                 duration: 604_800,
                 legacyFallbackKey: "weekly-all",
@@ -467,8 +477,10 @@ public enum ClaudeUsageParser {
                 return nil
             }
             let legacyKey = legacyScopedKey(for: modelName)
+            let key = "weekly-scoped-\(normalizedKey(modelName))"
             return StructuredLimitDefinition(
-                key: "weekly-scoped-\(normalizedKey(modelName))",
+                key: key,
+                stableBarKey: key,
                 label: "\(modelName) weekly limit",
                 duration: 604_800,
                 legacyFallbackKey: legacyKey,

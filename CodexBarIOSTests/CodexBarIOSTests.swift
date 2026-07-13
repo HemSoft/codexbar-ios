@@ -3447,8 +3447,8 @@ final class CodexBarIOSTests: XCTestCase {
         )
         XCTAssertEqual(evaluation.notifications.count, 2)
         XCTAssertEqual(evaluation.activeAlertIDs, [
-            "usage.\(configuration.id).fable-hour-usage-limit",
             "usage.\(configuration.id).other-models-hour-usage-limit",
+            "usage.\(configuration.id).session-scoped-fable",
         ])
 
         WidgetSnapshotPublisher.publish(
@@ -3465,6 +3465,40 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(widgetProvider.bars.map(\.id), [
             "\(configuration.id).0.other-models-5-hour-usage-limit",
             "\(configuration.id).1.fable-5-hour-usage-limit",
+        ])
+    }
+
+    func testClaudeScopedAlertKeysPreserveModelVersions() throws {
+        let payload = """
+        {
+          "limits": [
+            {"kind":"session","percent":42,"scope":{"model":{"display_name":"Claude Sonnet 4"}},"is_active":true},
+            {"kind":"session","percent":68,"scope":{"model":{"display_name":"Claude Sonnet 4.5"}},"is_active":true}
+          ]
+        }
+        """
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.stableKey), [
+            "session-scoped-claudesonnet4",
+            "session-scoped-claudesonnet45",
+        ])
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.20,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: []
+        )
+        XCTAssertEqual(evaluation.notifications.count, 2)
+        XCTAssertEqual(evaluation.activeAlertIDs, [
+            "usage.claude.session-scoped-claudesonnet4",
+            "usage.claude.session-scoped-claudesonnet45",
         ])
     }
 
