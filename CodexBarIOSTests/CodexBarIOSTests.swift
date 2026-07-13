@@ -1602,6 +1602,38 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(repeated.notifications.isEmpty)
     }
 
+    func testUsageAlertEvaluatorPreservesClaudeWeeklyAlertIdentity() {
+        let result = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(
+                    stableKey: "weekly-all",
+                    label: "All models weekly usage limit",
+                    used: 90,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+        )
+        let legacyAlertID = "usage.claude.personal.weekly-usage-limit"
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.80,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: [legacyAlertID]
+        )
+
+        XCTAssertTrue(evaluation.notifications.isEmpty)
+        XCTAssertEqual(evaluation.activeAlertIDs, [legacyAlertID])
+    }
+
     @MainActor
     func testProviderConfigurationStoreStartsWithoutAccounts() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
@@ -3398,8 +3430,225 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(inactiveScoped.bars.map(\.used), [25])
     }
 
+    func testClaudeUsageParserShowsObservedInactiveFableWeeklyLimit() throws {
+        let payload = """
+        {
+          "five_hour": {"utilization":11,"resets_at":"2030-01-01T02:00:00Z"},
+          "seven_day": {"utilization":9,"resets_at":"2030-01-08T04:00:00Z"},
+          "limits": [
+            {"kind":"session","group":"session","percent":11,"resets_at":"2030-01-01T02:00:00Z","scope":null,"is_active":true},
+            {"kind":"weekly_all","group":"weekly","percent":9,"resets_at":"2030-01-08T04:00:00Z","scope":null,"is_active":false},
+            {"kind":"weekly_scoped","group":"weekly","percent":5,"resets_at":"2030-01-08T04:00:00Z","scope":{"model":{"id":null,"display_name":"Fable"}},"is_active":false}
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), [
+            "5 hour usage limit",
+            "All models weekly usage limit",
+            "Fable weekly usage limit",
+        ])
+        XCTAssertEqual(result.bars.map(\.used), [11, 9, 5])
+        XCTAssertEqual(result.bars.map(\.stableKey), [
+            "session",
+            "weekly-all",
+            "weekly-scoped-fable",
+        ])
+        XCTAssertEqual(
+            result.bars.map(\.resetsAt),
+            [
+                ISO8601DateFormatter().date(from: "2030-01-01T02:00:00Z"),
+                ISO8601DateFormatter().date(from: "2030-01-08T04:00:00Z"),
+                ISO8601DateFormatter().date(from: "2030-01-08T04:00:00Z"),
+            ]
+        )
+    }
+
+    func testClaudeUsageParserPrefersActiveDuplicateWeeklyLimit() throws {
+        let payload = """
+        {
+          "limits": [
+            {"kind":"weekly_all","group":"monthly","percent":99,"is_active":true},
+            {"kind":"weekly_all","group":"weekly","percent":9,"is_active":false},
+            {"kind":"weekly_all","group":"weekly","percent":14,"is_active":true}
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), ["Weekly usage limit"])
+        XCTAssertEqual(result.bars.map(\.used), [14])
+        XCTAssertEqual(result.bars.map(\.stableKey), ["weekly-all"])
+    }
+
     @MainActor
-    func testClaudeFiveHourMetricsRemainDistinctAcrossHistoryWidgetsAndAlerts() throws {
+    func testClaudeStructuredScopedWeeklyLimitsPreserveLegacyIdentities() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let payload = """
+        {
+          "seven_day_sonnet": {"utilization":44},
+          "seven_day_opus": {"utilization":32},
+          "limits": [
+            {"kind":"weekly_scoped","group":"weekly","percent":5,"scope":{"model":{"display_name":"Fable"}},"is_active":false},
+            {"kind":"weekly_scoped","group":"weekly","percent":45,"scope":{"model":{"display_name":"Claude Sonnet 4.5"}},"is_active":false},
+            {"kind":"weekly_scoped","group":"weekly","percent":33,"scope":{"model":{"display_name":"Claude Opus 4.1"}},"is_active":false}
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), [
+            "Fable weekly usage limit",
+            "Claude Sonnet 4.5 weekly usage limit",
+            "Claude Opus 4.1 weekly usage limit",
+        ])
+        XCTAssertEqual(result.bars.map(\.used), [5, 45, 33])
+        XCTAssertEqual(result.bars.map(\.stableKey), [
+            "weekly-scoped-fable",
+            "sonnet-weekly-limit",
+            "opus-weekly-limit",
+        ])
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .claude)
+        store.saveSecret("claude-token", for: configuration)
+        let accountResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: result.bars,
+            fetchedAt: result.fetchedAt
+        )
+        let existingAlertIDs: Set<String> = [
+            "usage.\(configuration.id).sonnet-weekly-limit",
+            "usage.\(configuration.id).opus-weekly-limit",
+        ]
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [accountResult],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.20,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: existingAlertIDs
+        )
+        XCTAssertTrue(evaluation.notifications.isEmpty)
+        XCTAssertEqual(evaluation.activeAlertIDs, existingAlertIDs)
+
+        WidgetSnapshotPublisher.publish(
+            results: [accountResult],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let snapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        let widgetProvider = try XCTUnwrap(snapshot.results.first)
+        XCTAssertEqual(widgetProvider.bars.map(\.id), [
+            "\(configuration.id).0.fable-weekly-usage-limit",
+            "\(configuration.id).sonnet-weekly-limit",
+            "\(configuration.id).opus-weekly-limit",
+        ])
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).0.sonnet-weekly-limit"
+            )?.title,
+            "Claude Sonnet 4.5 weekly usage limit"
+        )
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).1.opus-weekly-limit"
+            )?.title,
+            "Claude Opus 4.1 weekly usage limit"
+        )
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).2.fable-weekly-limit"
+            )?.title,
+            "Fable weekly usage limit"
+        )
+    }
+
+    @MainActor
+    func testClaudeStructuredScopedWeeklyLimitsKeepModelVersionsDistinct() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let payload = """
+        {
+          "seven_day_sonnet": {"utilization":55},
+          "limits": [
+            {"kind":"weekly_scoped","group":"weekly","percent":42,"scope":{"model":{"display_name":"Claude Sonnet 4"}},"is_active":true},
+            {"kind":"weekly_scoped","group":"weekly","percent":68,"scope":{"model":{"display_name":"Claude Sonnet 4.5"}},"is_active":true}
+          ]
+        }
+        """
+        let parsed = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max"
+        ))
+        XCTAssertEqual(parsed.bars.map(\.stableKey), [
+            "weekly-scoped-claudesonnet4",
+            "weekly-scoped-claudesonnet45",
+        ])
+        XCTAssertEqual(parsed.bars.map(\.used), [42, 68])
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .claude)
+        store.saveSecret("claude-token", for: configuration)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: parsed.providerID,
+            title: parsed.title,
+            subtitle: parsed.subtitle,
+            bars: parsed.bars,
+            fetchedAt: parsed.fetchedAt
+        )
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.20,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: []
+        )
+        XCTAssertEqual(evaluation.activeAlertIDs, [
+            "usage.\(configuration.id).weekly-scoped-claudesonnet4",
+            "usage.\(configuration.id).weekly-scoped-claudesonnet45",
+        ])
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let widgetBars = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        ).bars
+        XCTAssertEqual(Set(widgetBars.map(\.id)).count, 2)
+    }
+
+    @MainActor
+    func testClaudeWeeklyMetricsRemainDistinctAcrossHistoryWidgetsAndAlerts() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         let secretStore = MemorySecretStore()
@@ -3410,8 +3659,9 @@ final class CodexBarIOSTests: XCTestCase {
         let payload = """
         {
           "limits": [
-            {"kind":"session","percent":27,"resets_at":"2030-01-01T02:00:00Z","is_active":true},
-            {"kind":"session","percent":64,"resets_at":"2030-01-01T04:00:00Z","scope":{"model":{"display_name":"Fable"}},"is_active":true}
+            {"kind":"session","group":"session","percent":27,"resets_at":"2030-01-01T02:00:00Z","is_active":true},
+            {"kind":"weekly_all","group":"weekly","percent":64,"resets_at":"2030-01-08T04:00:00Z","is_active":false},
+            {"kind":"weekly_scoped","group":"weekly","percent":71,"resets_at":"2030-01-08T06:00:00Z","scope":{"model":{"display_name":"Fable"}},"is_active":false}
           ]
         }
         """
@@ -3434,7 +3684,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         let historySnapshot = UsageHistorySnapshot(result: result)
         XCTAssertEqual(historySnapshot.bars.map(\.label), result.bars.map(\.label))
-        XCTAssertEqual(Set(historySnapshot.bars.map(\.label)).count, 2)
+        XCTAssertEqual(Set(historySnapshot.bars.map(\.label)).count, 3)
 
         let evaluation = UsageAlertEvaluator.evaluate(
             results: [result],
@@ -3445,10 +3695,11 @@ final class CodexBarIOSTests: XCTestCase {
             ),
             activeAlertIDs: []
         )
-        XCTAssertEqual(evaluation.notifications.count, 2)
+        XCTAssertEqual(evaluation.notifications.count, 3)
         XCTAssertEqual(evaluation.activeAlertIDs, [
             "usage.\(configuration.id).session",
-            "usage.\(configuration.id).session-scoped-fable",
+            "usage.\(configuration.id).weekly-usage-limit",
+            "usage.\(configuration.id).weekly-scoped-fable",
         ])
 
         WidgetSnapshotPublisher.publish(
@@ -3461,10 +3712,11 @@ final class CodexBarIOSTests: XCTestCase {
             WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
         )
         XCTAssertEqual(widgetProvider.bars.map(\.label), result.bars.map(\.label))
-        XCTAssertEqual(Set(widgetProvider.bars.map(\.id)).count, 2)
+        XCTAssertEqual(Set(widgetProvider.bars.map(\.id)).count, 3)
         XCTAssertEqual(widgetProvider.bars.map(\.id), [
-            "\(configuration.id).0.other-models-5-hour-usage-limit",
-            "\(configuration.id).1.fable-5-hour-usage-limit",
+            "\(configuration.id).0.5-hour-usage-limit",
+            "\(configuration.id).weekly-usage-limit",
+            "\(configuration.id).2.fable-weekly-usage-limit",
         ])
     }
 
@@ -3583,10 +3835,10 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(result.bars.map(\.label), [
             "5 hour usage limit",
-            "Weekly usage limit",
-            "Fable weekly limit",
-            "Future Model weekly limit",
-            "Claude Sonnet 4.5 weekly limit",
+            "All models weekly usage limit",
+            "Fable weekly usage limit",
+            "Future Model weekly usage limit",
+            "Claude Sonnet 4.5 weekly usage limit",
         ])
         XCTAssertEqual(result.bars.map(\.used), [15, 36, 71, 112, 49])
         XCTAssertEqual(result.bars[3].usageText, "112%")

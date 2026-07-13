@@ -60,9 +60,11 @@ building, testing, or releasing the app.
 
 ### Fixed
 
-- Preserved Claude's separate Fable and other-model 5-hour allowances as
-  distinct usage bars with their own values, reset times, projections,
-  history, widget entries, and alerts. ([#43](https://github.com/HemSoft/codexbar-ios/issues/43))
+- Preserved Claude's shared 5-hour session, all-models weekly allowance, and
+  model-scoped weekly allowances such as Fable as distinct usage bars with
+  their own values, reset times, projections, history, widget entries, and
+  alerts, while keeping existing weekly alerts and saved widget tiles intact
+  across the upgrade. ([#43](https://github.com/HemSoft/codexbar-ios/issues/43))
 - Kept the Codex 5-hour usage metric recognizable when ChatGPT reports a
   slightly varied window duration, while quietly showing only the available
   weekly limit when ChatGPT temporarily omits the 5-hour window.

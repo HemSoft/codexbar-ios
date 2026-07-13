@@ -86,13 +86,12 @@ struct WidgetBuilderView: View {
     }
 
     private var previewTiles: [CodexBarWidgetBuilderTile] {
-        let tileByID = Dictionary(uniqueKeysWithValues: availableTiles.map { ($0.id, $0) })
         let fallbackTiles = Array(availableTiles.prefix(slotCount))
 
         if configuration.hasCustomizations {
             return (0..<slotCount).compactMap { index -> CodexBarWidgetBuilderTile? in
                 if let tileID = configuration.tileID(at: index) {
-                    return tileByID[tileID] ?? .unavailable(id: tileID)
+                    return snapshot.builderTile(resolvingSavedID: tileID) ?? .unavailable(id: tileID)
                 }
 
                 return fallbackTiles.indices.contains(index) ? fallbackTiles[index] : nil
@@ -114,7 +113,12 @@ struct WidgetBuilderView: View {
 
     private func tileBinding(for index: Int) -> Binding<String?> {
         Binding(
-            get: { configuration.tileID(at: index) },
+            get: {
+                guard let tileID = configuration.tileID(at: index) else {
+                    return nil
+                }
+                return snapshot.builderTile(resolvingSavedID: tileID)?.id ?? tileID
+            },
             set: { tileID in
                 configuration.setTileID(tileID, at: index)
                 saveConfiguration()

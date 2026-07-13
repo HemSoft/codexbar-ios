@@ -233,6 +233,11 @@ public enum UsageAlertEvaluator {
     }
 
     private static func stableUsageKey(for bar: UsageBar) -> String {
+        // Preserve the alert identity used before Claude's weekly label became more specific.
+        if bar.stableKey == ClaudeUsageIdentity.allModelsWeeklyStableKey {
+            return ClaudeUsageIdentity.allModelsWeeklyLegacyKey
+        }
+
         if let stableKey = bar.stableKey {
             let normalized = normalizedKeyComponent(stableKey)
             if !normalized.isEmpty {

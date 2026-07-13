@@ -83,13 +83,13 @@ public extension DemoUsageProvider {
                         resetDescription: "Resets in 1h 40m"
                     ),
                     UsageBar(
-                        label: "Weekly usage limit",
+                        label: "All models weekly usage limit",
                         used: 58,
                         limit: 100,
                         resetDescription: "Resets Monday"
                     ),
                     UsageBar(
-                        label: "Fable weekly limit",
+                        label: "Fable weekly usage limit",
                         used: 71,
                         limit: 100,
                         resetDescription: "Resets Monday"

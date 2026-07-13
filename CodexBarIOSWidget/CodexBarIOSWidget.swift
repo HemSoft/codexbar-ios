@@ -498,12 +498,8 @@ struct CodexBarWidgetView: View {
             .sorted { $0.accountID.count > $1.accountID.count }
 
         for provider in providers {
-            let savedAccountSuffix = savedBarID.droppingPrefix("\(provider.accountID).")
-
-            if let matchingBar = provider.bars.first(where: { bar in
-                savedBarID == bar.id
-                    || savedAccountSuffix == bar.id
-                    || savedBarID == "\(provider.accountID).\(bar.id)"
+            if let matchingBar = provider.bars.first(where: {
+                $0.matchesSavedBuilderTileID(choiceID, accountID: provider.accountID)
             }) {
                 return provider.barTile(matchingBar)
             }
