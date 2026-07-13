@@ -141,7 +141,7 @@ public enum ClaudeUsageParser {
 
         appendLegacyBar(
             key: "session",
-            label: hasScopedSessionLimit ? "Other models 5 hour usage limit" : "5 hour usage limit",
+            label: "5 hour usage limit",
             window: usage.fiveHour,
             durationSeconds: 18_000,
             semanticKeys: &semanticKeys,

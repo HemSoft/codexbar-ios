@@ -3370,7 +3370,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(legacyAndScoped.bars.map(\.label), [
             "Fable 5 hour usage limit",
-            "Other models 5 hour usage limit",
+            "5 hour usage limit",
         ])
         XCTAssertEqual(legacyAndScoped.bars.map(\.used), [44, 31])
         XCTAssertEqual(
@@ -3380,6 +3380,22 @@ final class CodexBarIOSTests: XCTestCase {
                 ISO8601DateFormatter().date(from: "2030-01-01T06:00:00Z"),
             ]
         )
+
+        let inactiveScopedPayload = """
+        {
+          "five_hour": {"utilization": 0.25},
+          "limits": [
+            {"kind":"session","percent":80,"scope":{"model":{"display_name":"Fable"}},"is_active":false}
+          ]
+        }
+        """
+        let inactiveScoped = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(inactiveScopedPayload.utf8),
+            subscriptionType: "max",
+            fetchedAt: fetchedAt
+        ))
+        XCTAssertEqual(inactiveScoped.bars.map(\.label), ["5 hour usage limit"])
+        XCTAssertEqual(inactiveScoped.bars.map(\.used), [25])
     }
 
     @MainActor
