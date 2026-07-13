@@ -1602,6 +1602,38 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(repeated.notifications.isEmpty)
     }
 
+    func testUsageAlertEvaluatorPreservesClaudeWeeklyAlertIdentity() {
+        let result = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(
+                    stableKey: "weekly-all",
+                    label: "All models weekly usage limit",
+                    used: 90,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+        )
+        let legacyAlertID = "usage.claude.personal.weekly-usage-limit"
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.80,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: [legacyAlertID]
+        )
+
+        XCTAssertTrue(evaluation.notifications.isEmpty)
+        XCTAssertEqual(evaluation.activeAlertIDs, [legacyAlertID])
+    }
+
     @MainActor
     func testProviderConfigurationStoreStartsWithoutAccounts() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
@@ -3488,7 +3520,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(evaluation.notifications.count, 3)
         XCTAssertEqual(evaluation.activeAlertIDs, [
             "usage.\(configuration.id).session",
-            "usage.\(configuration.id).weekly-all",
+            "usage.\(configuration.id).weekly-usage-limit",
             "usage.\(configuration.id).weekly-scoped-fable",
         ])
 
