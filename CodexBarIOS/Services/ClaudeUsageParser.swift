@@ -1,5 +1,10 @@
 import Foundation
 
+enum ClaudeUsageIdentity {
+    static let allModelsWeeklyStableKey = "weekly-all"
+    static let allModelsWeeklyLegacyKey = "weekly-usage-limit"
+}
+
 public enum ClaudeUsageParser {
     private struct UsageResponse: Decodable {
         let fiveHour: UsageWindow?
@@ -178,8 +183,8 @@ public enum ClaudeUsageParser {
             dateTimeFormatter: dateTimeFormatter
         )
         appendLegacyBar(
-            key: "weekly-all",
-            stableBarKey: "weekly-all",
+            key: ClaudeUsageIdentity.allModelsWeeklyStableKey,
+            stableBarKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
             label: hasScopedWeeklyLimit
                 ? "All models weekly usage limit"
                 : "Weekly usage limit",
@@ -498,14 +503,17 @@ public enum ClaudeUsageParser {
                 usageMessage: nil
             )
         case "weekly_all":
+            guard limit.group == nil || limit.group == "weekly" else {
+                return nil
+            }
             return StructuredLimitDefinition(
-                key: "weekly-all",
-                stableBarKey: "weekly-all",
+                key: ClaudeUsageIdentity.allModelsWeeklyStableKey,
+                stableBarKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
                 label: hasScopedWeeklyLimit
                     ? "All models weekly usage limit"
                     : "Weekly usage limit",
                 duration: 604_800,
-                legacyFallbackKey: "weekly-all",
+                legacyFallbackKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
                 legacySemanticKey: nil,
                 usageMessage: nil
             )

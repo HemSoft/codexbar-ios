@@ -3473,6 +3473,7 @@ final class CodexBarIOSTests: XCTestCase {
         let payload = """
         {
           "limits": [
+            {"kind":"weekly_all","group":"monthly","percent":99,"is_active":true},
             {"kind":"weekly_all","group":"weekly","percent":9,"is_active":false},
             {"kind":"weekly_all","group":"weekly","percent":14,"is_active":true}
           ]
