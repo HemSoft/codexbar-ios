@@ -45,19 +45,12 @@ public enum CodexUsageParser {
                 showProjectionOnCurrentBar: true
             )
         }
-        let hasFiveHourWindow = windows.contains { window in
-            isApproximateDuration(window.durationSeconds, expected: fiveHourDurationSeconds)
-        }
-        let usageMessages = hasFiveHourWindow
-            ? []
-            : ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
-
         return ProviderUsageResult(
             providerID: .codex,
             title: formatDisplayName(planType: root["plan_type"] as? String),
             subtitle: "Live ChatGPT usage",
             bars: bars,
-            usageMessages: usageMessages,
+            usageMessages: [],
             fetchedAt: fetchedAt
         )
     }

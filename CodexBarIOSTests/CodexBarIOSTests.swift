@@ -3210,15 +3210,12 @@ final class CodexBarIOSTests: XCTestCase {
 
     }
 
-    func testCodexUsageParserExplainsMissingFiveHourWindowAndAcceptsDurationDrift() throws {
+    func testCodexUsageParserSilentlyAcceptsMissingFiveHourWindowAndDurationDrift() throws {
         let weeklyOnlyPayload = #"{"plan_type":"prolite","rate_limit":{"primary_window":{"used_percent":30,"reset_at":1894060800,"limit_window_seconds":604800},"secondary_window":null}}"#
         let weeklyOnly = try XCTUnwrap(CodexUsageParser.parse(Data(weeklyOnlyPayload.utf8)))
 
         XCTAssertEqual(weeklyOnly.bars.map(\.label), ["Weekly usage limit"])
-        XCTAssertEqual(
-            weeklyOnly.usageMessages,
-            ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
-        )
+        XCTAssertTrue(weeklyOnly.usageMessages.isEmpty)
 
         let driftedPayload = #"{"rate_limit":{"primary_window":{"used_percent":20,"reset_at":1894060800,"limit_window_seconds":604800},"secondary_window":{"used_percent":10,"reset_at":1893456000,"limit_window_seconds":17999}}}"#
         let drifted = try XCTUnwrap(CodexUsageParser.parse(Data(driftedPayload.utf8)))
@@ -3230,10 +3227,7 @@ final class CodexBarIOSTests: XCTestCase {
         let outsideTolerance = try XCTUnwrap(CodexUsageParser.parse(Data(outsideTolerancePayload.utf8)))
 
         XCTAssertEqual(outsideTolerance.bars.map(\.label), ["315 minute usage limit"])
-        XCTAssertEqual(
-            outsideTolerance.usageMessages,
-            ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
-        )
+        XCTAssertTrue(outsideTolerance.usageMessages.isEmpty)
     }
 
     func testClaudeUsageParserReadsOAuthUsageWindows() throws {
@@ -4199,7 +4193,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.used, 25)
     }
 
-    func testCodexUsageProviderPreservesMissingFiveHourExplanation() async throws {
+    func testCodexUsageProviderSilentlyPreservesWeeklyOnlyUsage() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
@@ -4236,10 +4230,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(result.accountID, configuration.id)
         XCTAssertEqual(result.bars.map(\.label), ["Weekly usage limit"])
-        XCTAssertEqual(
-            result.usageMessages,
-            ["ChatGPT is not currently reporting its standard 5-hour usage limit for this account."]
-        )
+        XCTAssertTrue(result.usageMessages.isEmpty)
     }
 
     func testCodexUsageProviderPreservesCredentialChangedDuringRefresh() async throws {
