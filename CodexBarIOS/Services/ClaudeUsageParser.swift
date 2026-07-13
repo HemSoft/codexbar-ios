@@ -539,15 +539,15 @@ public enum ClaudeUsageParser {
             else {
                 return nil
             }
-            let legacyKey = legacyScopedKey(for: modelName)
+            let legacyIdentity = legacyScopedIdentity(for: modelName)
             let key = "weekly-scoped-\(normalizedKey(modelName))"
             return StructuredLimitDefinition(
                 key: key,
-                stableBarKey: key,
+                stableBarKey: legacyIdentity?.stableBarKey ?? key,
                 label: "\(modelName) weekly usage limit",
                 duration: 604_800,
-                legacyFallbackKey: legacyKey,
-                legacySemanticKey: legacyKey,
+                legacyFallbackKey: legacyIdentity?.semanticKey,
+                legacySemanticKey: legacyIdentity?.semanticKey,
                 usageMessage: "\(modelName) usage is capped within the all-model weekly allowance."
             )
         default:
@@ -576,13 +576,15 @@ public enum ClaudeUsageParser {
         value.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
-    private static func legacyScopedKey(for modelName: String) -> String? {
+    private static func legacyScopedIdentity(
+        for modelName: String
+    ) -> (semanticKey: String, stableBarKey: String)? {
         let key = normalizedKey(modelName)
         if key.contains("sonnet") {
-            return "weekly-scoped-sonnet"
+            return ("weekly-scoped-sonnet", ClaudeUsageIdentity.sonnetWeeklyLegacyKey)
         }
         if key.contains("opus") {
-            return "weekly-scoped-opus"
+            return ("weekly-scoped-opus", ClaudeUsageIdentity.opusWeeklyLegacyKey)
         }
         return nil
     }

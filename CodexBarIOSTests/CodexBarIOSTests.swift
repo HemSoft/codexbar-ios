@@ -3491,7 +3491,7 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
-    func testClaudeUsageParserUsesConsistentLegacyScopedWeeklyLabels() throws {
+    func testClaudeStructuredScopedWeeklyLimitsPreserveLegacyIdentities() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -3502,7 +3502,9 @@ final class CodexBarIOSTests: XCTestCase {
           "seven_day_sonnet": {"utilization":44},
           "seven_day_opus": {"utilization":32},
           "limits": [
-            {"kind":"weekly_scoped","group":"weekly","percent":5,"scope":{"model":{"display_name":"Fable"}},"is_active":false}
+            {"kind":"weekly_scoped","group":"weekly","percent":5,"scope":{"model":{"display_name":"Fable"}},"is_active":false},
+            {"kind":"weekly_scoped","group":"weekly","percent":45,"scope":{"model":{"display_name":"Claude Sonnet 4.5"}},"is_active":false},
+            {"kind":"weekly_scoped","group":"weekly","percent":33,"scope":{"model":{"display_name":"Claude Opus 4.1"}},"is_active":false}
           ]
         }
         """
@@ -3514,10 +3516,10 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(result.bars.map(\.label), [
             "Fable weekly usage limit",
-            "Sonnet weekly usage limit",
-            "Opus weekly usage limit",
+            "Claude Sonnet 4.5 weekly usage limit",
+            "Claude Opus 4.1 weekly usage limit",
         ])
-        XCTAssertEqual(result.bars.map(\.used), [5, 44, 32])
+        XCTAssertEqual(result.bars.map(\.used), [5, 45, 33])
         XCTAssertEqual(result.bars.map(\.stableKey), [
             "weekly-scoped-fable",
             "sonnet-weekly-limit",
@@ -3535,6 +3537,22 @@ final class CodexBarIOSTests: XCTestCase {
             bars: result.bars,
             fetchedAt: result.fetchedAt
         )
+        let existingAlertIDs: Set<String> = [
+            "usage.\(configuration.id).sonnet-weekly-limit",
+            "usage.\(configuration.id).opus-weekly-limit",
+        ]
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [accountResult],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.20,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: existingAlertIDs
+        )
+        XCTAssertTrue(evaluation.notifications.isEmpty)
+        XCTAssertEqual(evaluation.activeAlertIDs, existingAlertIDs)
+
         WidgetSnapshotPublisher.publish(
             results: [accountResult],
             configurationStore: store,
