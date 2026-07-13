@@ -3447,7 +3447,7 @@ final class CodexBarIOSTests: XCTestCase {
         )
         XCTAssertEqual(evaluation.notifications.count, 2)
         XCTAssertEqual(evaluation.activeAlertIDs, [
-            "usage.\(configuration.id).other-models-hour-usage-limit",
+            "usage.\(configuration.id).session",
             "usage.\(configuration.id).session-scoped-fable",
         ])
 
@@ -3500,6 +3500,33 @@ final class CodexBarIOSTests: XCTestCase {
             "usage.claude.session-scoped-claudesonnet4",
             "usage.claude.session-scoped-claudesonnet45",
         ])
+    }
+
+    func testClaudeUnscopedAlertKeySurvivesScopedLabelChange() throws {
+        let unscopedPayload = """
+        {"limits":[{"kind":"session","percent":42,"is_active":true}]}
+        """
+        let scopedPayload = """
+        {
+          "limits": [
+            {"kind":"session","percent":42,"is_active":true},
+            {"kind":"session","percent":68,"scope":{"model":{"display_name":"Fable"}},"is_active":true}
+          ]
+        }
+        """
+        let unscopedResult = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(unscopedPayload.utf8),
+            subscriptionType: "max"
+        ))
+        let scopedResult = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(scopedPayload.utf8),
+            subscriptionType: "max"
+        ))
+
+        XCTAssertEqual(unscopedResult.bars.first?.label, "5 hour usage limit")
+        XCTAssertEqual(scopedResult.bars.first?.label, "Other models 5 hour usage limit")
+        XCTAssertEqual(unscopedResult.bars.first?.stableKey, "session")
+        XCTAssertEqual(scopedResult.bars.first?.stableKey, "session")
     }
 
     func testClaudeUsageParserReadsStructuredAndScopedLimitsWithoutDuplicates() throws {

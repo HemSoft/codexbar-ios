@@ -453,7 +453,7 @@ public enum ClaudeUsageParser {
             }
             return StructuredLimitDefinition(
                 key: "session",
-                stableBarKey: nil,
+                stableBarKey: "session",
                 label: hasScopedSessionLimit
                     ? "Other models 5 hour usage limit"
                     : "5 hour usage limit",
