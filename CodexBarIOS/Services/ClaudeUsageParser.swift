@@ -47,6 +47,15 @@ public enum ClaudeUsageParser {
         }
     }
 
+    private struct StructuredLimitDefinition {
+        let key: String
+        let label: String
+        let duration: TimeInterval
+        let legacyFallbackKey: String?
+        let legacySemanticKey: String?
+        let usageMessage: String?
+    }
+
     private struct LimitScope: Decodable {
         let model: LimitModel?
     }
@@ -91,53 +100,48 @@ public enum ClaudeUsageParser {
         var semanticKeys = Set<String>()
         var usageMessages: [String] = []
 
-        for limit in usage.limits ?? [] where limit.isActive != false {
+        let structuredLimits = usage.limits ?? []
+        let hasScopedSessionLimit = structuredLimits.contains { limit in
+            limit.kind == "session"
+                && limit.isActive != false
+                && limit.percent != nil
+                && sanitizedModelName(limit.scope?.model?.displayName) != nil
+        }
+
+        for limit in structuredLimits where limit.isActive != false {
             guard let percent = limit.percent else {
                 continue
             }
 
-            let definition: (key: String, label: String, duration: TimeInterval, scopedName: String?)?
-            switch limit.kind {
-            case "session":
-                definition = ("session", "5 hour usage limit", 18_000, nil)
-            case "weekly_all":
-                definition = ("weekly-all", "Weekly usage limit", 604_800, nil)
-            case "weekly_scoped":
-                guard let modelName = sanitizedModelName(limit.scope?.model?.displayName) else {
-                    continue
-                }
-                let key = "weekly-scoped-\(normalizedKey(modelName))"
-                definition = (key, "\(modelName) weekly limit", 604_800, modelName)
-            default:
-                definition = nil
-            }
-
             guard
-                let definition,
+                let definition = structuredLimitDefinition(
+                    for: limit,
+                    hasScopedSessionLimit: hasScopedSessionLimit
+                ),
                 semanticKeys.insert(definition.key).inserted
             else {
                 continue
             }
-            let fallbackKey = definition.scopedName.flatMap(legacyScopedKey(for:)) ?? definition.key
             bars.append(usageBar(
                 label: definition.label,
                 usedPercent: sanitizedPercent(percent),
-                reset: parseReset(limit.resetsAt) ?? legacyReset(for: fallbackKey, usage: usage),
+                reset: parseReset(limit.resetsAt)
+                    ?? definition.legacyFallbackKey.flatMap { legacyReset(for: $0, usage: usage) },
                 durationSeconds: definition.duration,
                 fetchedAt: fetchedAt,
                 dateTimeFormatter: dateTimeFormatter
             ))
-            if let scopedName = definition.scopedName {
-                if let legacyKey = legacyScopedKey(for: scopedName) {
-                    semanticKeys.insert(legacyKey)
-                }
-                usageMessages.append("\(scopedName) usage is capped within the all-model weekly allowance.")
+            if let legacySemanticKey = definition.legacySemanticKey {
+                semanticKeys.insert(legacySemanticKey)
+            }
+            if let usageMessage = definition.usageMessage {
+                usageMessages.append(usageMessage)
             }
         }
 
         appendLegacyBar(
             key: "session",
-            label: "5 hour usage limit",
+            label: hasScopedSessionLimit ? "Other models 5 hour usage limit" : "5 hour usage limit",
             window: usage.fiveHour,
             durationSeconds: 18_000,
             semanticKeys: &semanticKeys,
@@ -421,6 +425,59 @@ public enum ClaudeUsageParser {
 
     private static func sanitizedPercent(_ value: Double) -> Double {
         value.isFinite ? max(value, 0) : 0
+    }
+
+    private static func structuredLimitDefinition(
+        for limit: StructuredLimit,
+        hasScopedSessionLimit: Bool
+    ) -> StructuredLimitDefinition? {
+        switch limit.kind {
+        case "session":
+            if let modelName = sanitizedModelName(limit.scope?.model?.displayName) {
+                return StructuredLimitDefinition(
+                    key: "session-scoped-\(normalizedKey(modelName))",
+                    label: "\(modelName) 5 hour usage limit",
+                    duration: 18_000,
+                    legacyFallbackKey: nil,
+                    legacySemanticKey: nil,
+                    usageMessage: nil
+                )
+            }
+            return StructuredLimitDefinition(
+                key: "session",
+                label: hasScopedSessionLimit
+                    ? "Other models 5 hour usage limit"
+                    : "5 hour usage limit",
+                duration: 18_000,
+                legacyFallbackKey: "session",
+                legacySemanticKey: nil,
+                usageMessage: nil
+            )
+        case "weekly_all":
+            return StructuredLimitDefinition(
+                key: "weekly-all",
+                label: "Weekly usage limit",
+                duration: 604_800,
+                legacyFallbackKey: "weekly-all",
+                legacySemanticKey: nil,
+                usageMessage: nil
+            )
+        case "weekly_scoped":
+            guard let modelName = sanitizedModelName(limit.scope?.model?.displayName) else {
+                return nil
+            }
+            let legacyKey = legacyScopedKey(for: modelName)
+            return StructuredLimitDefinition(
+                key: "weekly-scoped-\(normalizedKey(modelName))",
+                label: "\(modelName) weekly limit",
+                duration: 604_800,
+                legacyFallbackKey: legacyKey,
+                legacySemanticKey: legacyKey,
+                usageMessage: "\(modelName) usage is capped within the all-model weekly allowance."
+            )
+        default:
+            return nil
+        }
     }
 
     private static func sanitizedModelName(_ value: String?) -> String? {

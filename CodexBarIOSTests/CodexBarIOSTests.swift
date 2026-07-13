@@ -3315,6 +3315,143 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(onePercentResult.bars.first?.used, 1)
     }
 
+    func testClaudeUsageParserPreservesScopedFiveHourLimits() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
+        let payload = """
+        {
+          "five_hour": {"utilization": 0.99, "resets_at": "2030-01-01T06:00:00Z"},
+          "limits": [
+            {"kind":"session","percent":27,"resets_at":"2030-01-01T02:00:00Z","is_active":true},
+            {"kind":"session","percent":64,"resets_at":"2030-01-01T04:00:00Z","scope":{"model":{"display_name":"Fable"}},"is_active":true},
+            {"kind":"session","percent":91,"scope":{"model":{"display_name":"Fable"}},"is_active":true}
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max",
+            fetchedAt: fetchedAt
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), [
+            "Other models 5 hour usage limit",
+            "Fable 5 hour usage limit",
+        ])
+        XCTAssertEqual(result.bars.map(\.used), [27, 64])
+        XCTAssertEqual(
+            result.bars.map(\.resetsAt),
+            [
+                ISO8601DateFormatter().date(from: "2030-01-01T02:00:00Z"),
+                ISO8601DateFormatter().date(from: "2030-01-01T04:00:00Z"),
+            ]
+        )
+        XCTAssertEqual(
+            result.bars.map(\.projectionPeriodStart),
+            [
+                ISO8601DateFormatter().date(from: "2029-12-31T21:00:00Z"),
+                ISO8601DateFormatter().date(from: "2029-12-31T23:00:00Z"),
+            ]
+        )
+
+        let legacyAndScopedPayload = """
+        {
+          "five_hour": {"utilization": 0.31, "resets_at": "2030-01-01T06:00:00Z"},
+          "limits": [
+            {"kind":"session","percent":44,"resets_at":"2030-01-01T04:00:00Z","scope":{"model":{"display_name":"Fable"}},"is_active":true}
+          ]
+        }
+        """
+        let legacyAndScoped = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(legacyAndScopedPayload.utf8),
+            subscriptionType: "max",
+            fetchedAt: fetchedAt
+        ))
+
+        XCTAssertEqual(legacyAndScoped.bars.map(\.label), [
+            "Fable 5 hour usage limit",
+            "Other models 5 hour usage limit",
+        ])
+        XCTAssertEqual(legacyAndScoped.bars.map(\.used), [44, 31])
+        XCTAssertEqual(
+            legacyAndScoped.bars.map(\.resetsAt),
+            [
+                ISO8601DateFormatter().date(from: "2030-01-01T04:00:00Z"),
+                ISO8601DateFormatter().date(from: "2030-01-01T06:00:00Z"),
+            ]
+        )
+    }
+
+    @MainActor
+    func testClaudeFiveHourMetricsRemainDistinctAcrossHistoryWidgetsAndAlerts() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
+        let payload = """
+        {
+          "limits": [
+            {"kind":"session","percent":27,"resets_at":"2030-01-01T02:00:00Z","is_active":true},
+            {"kind":"session","percent":64,"resets_at":"2030-01-01T04:00:00Z","scope":{"model":{"display_name":"Fable"}},"is_active":true}
+          ]
+        }
+        """
+        let parsed = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "max",
+            fetchedAt: fetchedAt
+        ))
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let configuration = store.addAccount(for: .claude)
+        store.saveSecret("claude-token", for: configuration)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: parsed.providerID,
+            title: parsed.title,
+            subtitle: parsed.subtitle,
+            bars: parsed.bars,
+            fetchedAt: parsed.fetchedAt
+        )
+
+        let historySnapshot = UsageHistorySnapshot(result: result)
+        XCTAssertEqual(historySnapshot.bars.map(\.label), result.bars.map(\.label))
+        XCTAssertEqual(Set(historySnapshot.bars.map(\.label)).count, 2)
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.20,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: []
+        )
+        XCTAssertEqual(evaluation.notifications.count, 2)
+        XCTAssertEqual(evaluation.activeAlertIDs, [
+            "usage.\(configuration.id).fable-hour-usage-limit",
+            "usage.\(configuration.id).other-models-hour-usage-limit",
+        ])
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults,
+            now: fetchedAt
+        )
+        let widgetProvider = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        )
+        XCTAssertEqual(widgetProvider.bars.map(\.label), result.bars.map(\.label))
+        XCTAssertEqual(Set(widgetProvider.bars.map(\.id)).count, 2)
+        XCTAssertEqual(widgetProvider.bars.map(\.id), [
+            "\(configuration.id).0.other-models-5-hour-usage-limit",
+            "\(configuration.id).1.fable-5-hour-usage-limit",
+        ])
+    }
+
     func testClaudeUsageParserReadsStructuredAndScopedLimitsWithoutDuplicates() throws {
         let payload = """
         {
