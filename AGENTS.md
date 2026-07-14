@@ -28,7 +28,7 @@ must remain accurate, readable, and useful to people outside the codebase.
 
 ## Pull Request Reviewers
 
-This repository has four automated PR reviewers. Treat all of them as part of
+This repository has three automated PR reviewers. Treat all of them as part of
 the normal merge-readiness loop: triage actionable feedback, fix or document
 each thread, explicitly resolve addressed review threads in GitHub, and request
 fresh reviews after meaningful updates.
@@ -36,7 +36,6 @@ fresh reviews after meaningful updates.
 | Reviewer | GitHub identity / check | Trigger |
 | --- | --- | --- |
 | Codex | `chatgpt-codex-connector` | `@codex review` on the PR, or automatic Codex cloud reviews when enabled |
-| Claude | `claude` / `claude-review` check | Runs automatically on PR open and push via `.github/workflows/claude-code-review.yml`; manual rerun with `@claude` in a PR or review comment |
 | CodeRabbit | `coderabbitai` / `CodeRabbit` check | `@coderabbitai review` on the PR |
 | Cursor Bugbot | `cursor` / `Cursor Bugbot` check | `cursor review` or `bugbot run` on the PR, or automatic Bugbot reviews when enabled in the Cursor dashboard |
 
@@ -44,8 +43,6 @@ Notes for agents:
 
 - Request Codex and CodeRabbit through PR trigger comments, not the Copilot
   `requestReviewsByLogin` API path.
-- Claude reviews are GitHub Actions-driven. Do not assume a comment-only rerun
-  happened unless the `claude-review` check reran for the current head SHA.
 - Bugbot is configured on this repo through the Cursor GitHub app. Prefer
   `cursor review` when requesting a manual rerun.
 - None of these reviewers is a guaranteed branch-protection approval by itself.
@@ -59,7 +56,6 @@ Example manual review requests on a PR:
 ```text
 @codex review
 @coderabbitai review
-@claude
 cursor review
 ```
 
