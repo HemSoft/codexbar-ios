@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added pace-based usage predictions to Cursor's included, Auto, API, and
+  on-demand metrics so users can see whether each billing-cycle limit is likely
+  to be reached early. ([#46](https://github.com/HemSoft/codexbar-ios/issues/46))
 - Added a per-account **Show History** setting so each provider card can hide
   its History section without discarding collected samples. ([#41](https://github.com/HemSoft/codexbar-ios/issues/41))
 - Added complete Claude subscription usage details, including all-model and

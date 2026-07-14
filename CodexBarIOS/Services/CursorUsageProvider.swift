@@ -121,12 +121,31 @@ public final class CursorUsageProvider: UsageProvider {
         var bars: [UsageBar] = []
         let reset = parseUnixMilliseconds(usage.billingCycleEnd)
         let resetDescription = reset.map { formatReset($0, now: fetchedAt) }
+        let billingPeriod = billingPeriod(for: usage, fetchedAt: fetchedAt)
 
         if let plan = usage.planUsage {
             bars.append(contentsOf: [
-                usageBar(label: "Total", percent: plan.totalPercentUsed, reset: reset, resetDescription: resetDescription),
-                usageBar(label: "Auto", percent: plan.autoPercentUsed, reset: reset, resetDescription: resetDescription),
-                usageBar(label: "API", percent: plan.apiPercentUsed, reset: reset, resetDescription: resetDescription),
+                usageBar(
+                    label: "Total",
+                    percent: plan.totalPercentUsed,
+                    reset: reset,
+                    resetDescription: resetDescription,
+                    billingPeriod: billingPeriod
+                ),
+                usageBar(
+                    label: "Auto",
+                    percent: plan.autoPercentUsed,
+                    reset: reset,
+                    resetDescription: resetDescription,
+                    billingPeriod: billingPeriod
+                ),
+                usageBar(
+                    label: "API",
+                    percent: plan.apiPercentUsed,
+                    reset: reset,
+                    resetDescription: resetDescription,
+                    billingPeriod: billingPeriod
+                ),
             ].compactMap { $0 })
         }
 
@@ -140,26 +159,62 @@ public final class CursorUsageProvider: UsageProvider {
             bars.append(UsageBar(
                 label: "On-demand \(formatCents(used)) / \(formatCents(limit))",
                 used: used,
-                limit: limit
+                limit: limit,
+                resetDescription: resetDescription,
+                resetsAt: reset,
+                resetDisplayStyle: .shortLocalDate,
+                projectionCurrent: billingPeriod == nil ? nil : used,
+                projectionLimit: billingPeriod == nil ? nil : limit,
+                projectionPeriodStart: billingPeriod?.start,
+                projectionPeriodEnd: billingPeriod?.end,
+                showProjectionOnCurrentBar: billingPeriod != nil
             ))
         }
 
         return bars
     }
 
-    private static func usageBar(label: String, percent: Double?, reset: Date?, resetDescription: String?) -> UsageBar? {
+    private static func usageBar(
+        label: String,
+        percent: Double?,
+        reset: Date?,
+        resetDescription: String?,
+        billingPeriod: CursorBillingPeriod?
+    ) -> UsageBar? {
         guard let percent else {
             return nil
         }
 
+        let usedPercent = min(max(percent, 0), 100)
         return UsageBar(
             label: label,
-            used: min(max(percent, 0), 100),
+            used: usedPercent,
             limit: 100,
             resetDescription: resetDescription,
             resetsAt: reset,
-            resetDisplayStyle: .shortLocalDate
+            resetDisplayStyle: .shortLocalDate,
+            projectionCurrent: billingPeriod == nil ? nil : usedPercent / 100,
+            projectionLimit: billingPeriod == nil ? nil : 1,
+            projectionPeriodStart: billingPeriod?.start,
+            projectionPeriodEnd: billingPeriod?.end,
+            showProjectionOnCurrentBar: billingPeriod != nil
         )
+    }
+
+    private static func billingPeriod(
+        for usage: CursorCurrentPeriodUsage,
+        fetchedAt: Date
+    ) -> CursorBillingPeriod? {
+        guard
+            let start = parseUnixMilliseconds(usage.billingCycleStart),
+            let end = parseUnixMilliseconds(usage.billingCycleEnd),
+            start < fetchedAt,
+            fetchedAt < end
+        else {
+            return nil
+        }
+
+        return CursorBillingPeriod(start: start, end: end)
     }
 
     private static func buildUsageSubtitle(_ plan: CursorPlanUsage?) -> String {
@@ -182,7 +237,12 @@ public final class CursorUsageProvider: UsageProvider {
     }
 
     private static func parseUnixMilliseconds(_ value: String?) -> Date? {
-        guard let value, let milliseconds = Double(value) else {
+        guard
+            let value,
+            let milliseconds = Double(value),
+            milliseconds.isFinite,
+            milliseconds > 0
+        else {
             return nil
         }
 
@@ -228,9 +288,15 @@ private struct CursorCredentials: Decodable {
 }
 
 private struct CursorCurrentPeriodUsage: Decodable {
+    let billingCycleStart: String?
     let billingCycleEnd: String?
     let planUsage: CursorPlanUsage?
     let spendLimitUsage: CursorSpendLimitUsage?
+}
+
+private struct CursorBillingPeriod {
+    let start: Date
+    let end: Date
 }
 
 private struct CursorPlanUsage: Decodable {

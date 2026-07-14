@@ -3134,6 +3134,7 @@ final class CodexBarIOSTests: XCTestCase {
         configuration.accountLabel = "Cursor Pro"
         let payload = """
         {
+          "billingCycleStart": "1783036800000",
           "billingCycleEnd": "1784332800000",
           "planUsage": {
             "autoPercentUsed": 42.4,
@@ -3163,6 +3164,64 @@ final class CodexBarIOSTests: XCTestCase {
             "On-demand $12.00 / $20.00",
         ])
         XCTAssertEqual(result.bars.map(\.usageText), ["63%", "42%", "18%", "60%"])
+        XCTAssertTrue(result.bars.allSatisfy(\.showProjectionOnCurrentBar))
+        XCTAssertEqual(
+            result.bars.compactMap(\.projectionPeriodStart),
+            Array(repeating: Date(timeIntervalSince1970: 1_783_036_800), count: 4)
+        )
+        XCTAssertEqual(
+            result.bars.compactMap(\.projectionPeriodEnd),
+            Array(repeating: Date(timeIntervalSince1970: 1_784_332_800), count: 4)
+        )
+        XCTAssertEqual(try XCTUnwrap(result.bars[0].projectionCurrent), 0.626, accuracy: 0.000_001)
+        XCTAssertEqual(try XCTUnwrap(result.bars[1].projectionCurrent), 0.424, accuracy: 0.000_001)
+        XCTAssertEqual(try XCTUnwrap(result.bars[2].projectionCurrent), 0.182, accuracy: 0.000_001)
+        XCTAssertEqual(result.bars[3].projectionCurrent, 1_200)
+        XCTAssertEqual(result.bars.compactMap(\.projectionLimit), [1, 1, 1, 2_000])
+        XCTAssertTrue(try XCTUnwrap(result.bars[0].projectionDescription(at: fetchedAt)).hasPrefix(
+            "Projected 100% at current pace - Limit hit "
+        ))
+        XCTAssertEqual(result.bars[2].projectionDescription(at: fetchedAt), "Projected to stay under limit")
+        XCTAssertTrue(try XCTUnwrap(result.bars[3].projectionDescription(at: fetchedAt)).hasPrefix(
+            "Projected 100% at current pace - Limit hit "
+        ))
+    }
+
+    func testCursorUsageParserSuppressesPredictionsWithoutValidCurrentBillingPeriod() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
+        let invalidPeriods = [
+            #""billingCycleEnd": "1784332800000","#,
+            #""billingCycleStart": "invalid", "billingCycleEnd": "1784332800000","#,
+            #""billingCycleStart": "1784332800000", "billingCycleEnd": "1781740800000","#,
+            #""billingCycleStart": "1784332800000", "billingCycleEnd": "1786924800000","#,
+        ]
+
+        for periodFields in invalidPeriods {
+            let payload = """
+            {
+              \(periodFields)
+              "planUsage": {
+                "autoPercentUsed": 10,
+                "apiPercentUsed": 5,
+                "totalPercentUsed": 25
+              },
+              "spendLimitUsage": {
+                "individualLimit": 2000,
+                "individualRemaining": 1500
+              }
+            }
+            """
+
+            let result = try XCTUnwrap(CursorUsageProvider.parseUsage(
+                Data(payload.utf8),
+                configuration: .defaultConfiguration(for: .cursor),
+                fetchedAt: fetchedAt
+            ))
+
+            XCTAssertEqual(result.bars.count, 4)
+            XCTAssertTrue(result.bars.allSatisfy { !$0.showProjectionOnCurrentBar })
+            XCTAssertTrue(result.bars.allSatisfy { $0.projectionDescription(at: fetchedAt) == nil })
+        }
     }
 
     func testCursorProviderFetchesDashboardUsage() async throws {
