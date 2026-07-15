@@ -157,7 +157,7 @@ struct ContentView: View {
                 },
                 onAccountRefresh: { configuration in
                     let result = await refreshService.refresh(configuration: configuration)
-                    let successfulResults = result.map { [$0] } ?? []
+                    let successfulResults = result.map { $0.failureMessage == nil ? [$0] : [] } ?? []
                     let preservedAccountIDs = Set(configurationStore.configurations.map(\.id))
                         .subtracting(successfulResults.map(\.accountID))
                     recordUsageHistoryIfAvailable(results: successfulResults)
@@ -463,7 +463,7 @@ struct ContentView: View {
 
     private func refreshAccount(_ configuration: ProviderAccountConfiguration) async {
         let result = await refreshService.refresh(configuration: configuration)
-        let successfulResults = result.map { [$0] } ?? []
+        let successfulResults = result.map { $0.failureMessage == nil ? [$0] : [] } ?? []
         let preservedAccountIDs = Set(configurationStore.configurations.map(\.id))
             .subtracting(successfulResults.map(\.accountID))
         recordUsageHistoryIfAvailable(results: successfulResults)

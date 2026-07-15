@@ -6606,7 +6606,13 @@ final class CodexBarIOSTests: XCTestCase {
 
         await service.refresh(configurations: [configuration])
 
-        XCTAssertEqual(service.results, [cachedResult])
+        XCTAssertEqual(service.results.first?.bars, cachedResult.bars)
+        XCTAssertEqual(
+            service.results.first?.subtitle,
+            "Credential expired Showing last known data."
+        )
+        XCTAssertEqual(service.results.first?.failureMessage, "Credential expired")
+        XCTAssertEqual(service.results.first?.fetchedAt, cachedResult.fetchedAt)
         XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Credential expired")
         XCTAssertTrue(service.successfulRefreshResults.isEmpty)
         XCTAssertEqual(service.incompleteRefreshAccountIDs, [configuration.id])
@@ -6614,8 +6620,10 @@ final class CodexBarIOSTests: XCTestCase {
 
         let explicitResult = await service.refresh(configuration: configuration)
 
-        XCTAssertNil(explicitResult)
-        XCTAssertEqual(service.results, [cachedResult])
+        XCTAssertEqual(explicitResult?.failureMessage, "Credential expired")
+        XCTAssertEqual(explicitResult?.subtitle, "Credential expired")
+        XCTAssertEqual(service.results.first?.bars, cachedResult.bars)
+        XCTAssertEqual(service.results.first?.failureMessage, "Credential expired")
         XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Credential expired")
     }
 

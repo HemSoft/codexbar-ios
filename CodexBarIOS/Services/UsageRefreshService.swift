@@ -70,7 +70,8 @@ public final class UsageRefreshService: ObservableObject {
                         if let message = result.failureMessage {
                             return .failure(
                                 accountID: configuration.id,
-                                message: message
+                                message: message,
+                                result: result
                             )
                         }
                         return .success(
@@ -80,7 +81,8 @@ public final class UsageRefreshService: ObservableObject {
                     } catch {
                         return .failure(
                             accountID: configuration.id,
-                            message: error.localizedDescription
+                            message: error.localizedDescription,
+                            result: nil
                         )
                     }
                 }
@@ -92,7 +94,8 @@ public final class UsageRefreshService: ObservableObject {
                     replaceResult(result)
                     refreshErrorsByAccountID.removeValue(forKey: accountID)
                     finishRefresh(accountID: accountID)
-                case .failure(let accountID, let message):
+                case .failure(let accountID, let message, let result):
+                    preserveFailureResult(result, accountID: accountID)
                     refreshErrorsByAccountID[accountID] = message
                     errorsByAccountID[accountID] = message
                     finishRefresh(accountID: accountID)
@@ -125,9 +128,10 @@ public final class UsageRefreshService: ObservableObject {
         do {
             let result = try await provider.fetchUsage(for: configuration)
             if let message = result.failureMessage {
+                preserveFailureResult(result, accountID: configuration.id)
                 refreshErrorsByAccountID[configuration.id] = message
                 lastRefreshError = message
-                return nil
+                return result
             }
             replaceResult(result)
             refreshErrorsByAccountID.removeValue(forKey: configuration.id)
@@ -151,6 +155,37 @@ public final class UsageRefreshService: ObservableObject {
         results = nextResults.sorted { $0.title < $1.title }
     }
 
+    private func preserveFailureResult(_ failureResult: ProviderUsageResult?, accountID: String) {
+        guard let failureResult else {
+            return
+        }
+
+        let cachedResult = results.first { $0.accountID == accountID }
+        let failureHasUsageData = failureResult.creditsRemaining != nil
+            || !failureResult.bars.isEmpty
+            || !failureResult.monetaryMetrics.isEmpty
+        guard let dataResult = failureHasUsageData ? failureResult : cachedResult else {
+            return
+        }
+
+        let subtitle = failureHasUsageData
+            || failureResult.subtitle.localizedCaseInsensitiveContains("last known data")
+            ? failureResult.subtitle
+            : "\(failureResult.subtitle) Showing last known data."
+        replaceResult(ProviderUsageResult(
+            accountID: accountID,
+            providerID: failureResult.providerID,
+            title: failureResult.title,
+            subtitle: subtitle,
+            bars: dataResult.bars,
+            creditsRemaining: dataResult.creditsRemaining,
+            monetaryMetrics: dataResult.monetaryMetrics,
+            usageMessages: dataResult.usageMessages,
+            failureMessage: failureResult.failureMessage,
+            fetchedAt: dataResult.fetchedAt
+        ))
+    }
+
     private func waitForRefreshToFinish(accountID: String) async {
         while refreshingAccountIDs.contains(accountID) {
             await withCheckedContinuation { continuation in
@@ -170,7 +205,7 @@ public final class UsageRefreshService: ObservableObject {
 
 private enum AccountRefreshOutcome: Sendable {
     case success(accountID: String, result: ProviderUsageResult)
-    case failure(accountID: String, message: String)
+    case failure(accountID: String, message: String, result: ProviderUsageResult?)
 }
 
 public extension UsageRefreshService {
