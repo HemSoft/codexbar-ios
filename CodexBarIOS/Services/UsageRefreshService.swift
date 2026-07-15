@@ -28,6 +28,10 @@ public final class UsageRefreshService: ObservableObject {
         }
     }
 
+    public var incompleteRefreshAccountIDs: Set<String> {
+        Set(refreshErrorsByAccountID.keys).union(refreshingAccountIDs)
+    }
+
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
         guard !isRefreshing else {
             return

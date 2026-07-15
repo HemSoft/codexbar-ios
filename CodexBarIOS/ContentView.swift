@@ -195,7 +195,7 @@ struct ContentView: View {
             publishWidgetSnapshot()
             await processUsageAlerts(
                 results: successfulResults,
-                preserving: Set(refreshService.refreshErrorsByAccountID.keys)
+                preserving: refreshService.incompleteRefreshAccountIDs
             )
         }
         .task(id: AutoRefreshTaskID(interval: configurationStore.autoRefreshInterval, resetID: autoRefreshResetID)) {
@@ -483,7 +483,7 @@ struct ContentView: View {
         publishWidgetSnapshot()
         await processUsageAlerts(
             results: successfulResults,
-            preserving: Set(refreshService.refreshErrorsByAccountID.keys)
+            preserving: refreshService.incompleteRefreshAccountIDs
         )
         if considerReviewPrompt {
             requestReviewAfterSuccessfulRefreshIfEligible()
@@ -564,7 +564,7 @@ struct ContentView: View {
             publishWidgetSnapshot()
             await processUsageAlerts(
                 results: successfulResults,
-                preserving: Set(refreshService.refreshErrorsByAccountID.keys)
+                preserving: refreshService.incompleteRefreshAccountIDs
             )
         }
     }

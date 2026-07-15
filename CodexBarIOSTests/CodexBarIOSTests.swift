@@ -6426,6 +6426,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(service.results.map(\.accountID), [fast.id])
         XCTAssertEqual(service.refreshingAccountIDs, [slow.id])
+        XCTAssertEqual(service.incompleteRefreshAccountIDs, [slow.id])
         XCTAssertTrue(service.isRefreshing)
 
         await gate.release()
@@ -6512,6 +6513,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(service.results.first(where: { $0.accountID == failed.id }), cachedFailedResult)
         XCTAssertEqual(service.successfulRefreshResults.map(\.accountID), [successful.id])
         XCTAssertEqual(service.refreshErrorsByAccountID[failed.id], "Refresh failed")
+        XCTAssertEqual(service.incompleteRefreshAccountIDs, [failed.id])
         XCTAssertNil(service.refreshErrorsByAccountID[successful.id])
         XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
         XCTAssertNotNil(service.lastRefreshError)
