@@ -1476,6 +1476,35 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertNil(activeAlertsByAccountID["cursor.work"])
     }
 
+    func testUsageAlertEvaluatorPreservesSuppressionForExactAccountsThatDidNotRefresh() {
+        let activeAlertIDs: Set<String> = [
+            "usage.codex.weekly",
+            "usage.codex.secondary.weekly",
+            "balance.openrouter.failed",
+        ]
+
+        let preserved = UsageAlertEvaluator.activeAlertIDs(
+            activeAlertIDs,
+            belongingTo: ["codex.secondary", "openrouter.failed"],
+            knownAccountIDs: ["codex", "codex.secondary", "openrouter.failed"]
+        )
+
+        XCTAssertEqual(
+            preserved,
+            ["usage.codex.secondary.weekly", "balance.openrouter.failed"]
+        )
+    }
+
+    func testUsageAlertEvaluatorClearsSuppressionWhenNoAccountsArePreserved() {
+        let preserved = UsageAlertEvaluator.activeAlertIDs(
+            ["usage.codex.weekly"],
+            belongingTo: [],
+            knownAccountIDs: ["codex"]
+        )
+
+        XCTAssertTrue(preserved.isEmpty)
+    }
+
     func testUsageAlertEvaluatorUsesWarningPresentationBelowSeverityThreshold() {
         let result = ProviderUsageResult(
             accountID: "codex.personal",
@@ -4726,6 +4755,31 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(history.latestValueDescription, "$19.25")
     }
 
+    func testProviderUsageCardOffersRetryForCachedRefreshFailure() {
+        let result = makeHistoryResult(
+            accountID: "codex.cached",
+            providerID: .codex,
+            fetchedAt: Date(),
+            used: 25
+        )
+        let failedCard = ProviderUsageCard(
+            result: result,
+            statusText: "Refresh failed - Session expired",
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false),
+            refreshErrorMessage: "Session expired"
+        )
+        let refreshingCard = ProviderUsageCard(
+            result: result,
+            statusText: "Refreshing",
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false),
+            isRefreshing: true,
+            refreshErrorMessage: "Session expired"
+        )
+
+        XCTAssertTrue(failedCard.showsRetryAction)
+        XCTAssertFalse(refreshingCard.showsRetryAction)
+    }
+
     func testCodexUsageProviderProactivelyRefreshesAndPersistsRotation() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let secretStore = MemorySecretStore()
@@ -5780,6 +5834,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.providerID, .codex)
         XCTAssertEqual(result.accountID, configuration.id)
         XCTAssertEqual(result.subtitle, "Not configured - sign in with ChatGPT.")
+        XCTAssertEqual(result.failureMessage, result.subtitle)
         XCTAssertTrue(result.bars.isEmpty)
     }
 
@@ -5792,6 +5847,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.providerID, .claude)
         XCTAssertEqual(result.accountID, configuration.id)
         XCTAssertEqual(result.subtitle, "Not configured - sign in with Claude.")
+        XCTAssertEqual(result.failureMessage, result.subtitle)
         XCTAssertTrue(result.bars.isEmpty)
     }
 
@@ -6303,6 +6359,274 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertNil(service.lastRefreshError)
     }
 
+    func testDashboardCardItemsRepresentConfiguredAccountsBeforeResultsArrive() {
+        var codex = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        codex.accountLabel = "Personal Codex"
+        var claude = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        claude.accountLabel = "Work Claude"
+
+        let items = DashboardProviderCardItem.items(
+            configurations: [codex, claude],
+            results: [],
+            refreshingAccountIDs: [codex.id, claude.id],
+            errorsByAccountID: [:],
+            orderingMode: .manual,
+            manualOrder: [claude.id, codex.id]
+        )
+
+        XCTAssertEqual(items.map(\.id), [claude.id, codex.id])
+        XCTAssertEqual(items.map(\.configuration.displayName), ["Work Claude", "Personal Codex"])
+        XCTAssertTrue(items.allSatisfy { $0.result == nil && $0.isRefreshing })
+    }
+
+    func testDashboardCardItemsAreEmptyWhenNoProvidersAreConfigured() {
+        let staleResult = makeHistoryResult(
+            accountID: "removed.account",
+            fetchedAt: Date(),
+            used: 10
+        )
+
+        let items = DashboardProviderCardItem.items(
+            configurations: [],
+            results: [staleResult],
+            refreshingAccountIDs: [],
+            errorsByAccountID: [:],
+            orderingMode: .manual,
+            manualOrder: []
+        )
+
+        XCTAssertTrue(items.isEmpty)
+    }
+
+    func testDashboardCardItemsKeepLoadedAndFailedAccountsVisible() {
+        let codex = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        let claude = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        let codexResult = makeHistoryResult(
+            accountID: codex.id,
+            providerID: .codex,
+            fetchedAt: Date(),
+            used: 25
+        )
+
+        let items = DashboardProviderCardItem.items(
+            configurations: [codex, claude],
+            results: [codexResult],
+            refreshingAccountIDs: [codex.id],
+            errorsByAccountID: [claude.id: "Session expired"],
+            orderingMode: .manual,
+            manualOrder: []
+        )
+
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items[0].result, codexResult)
+        XCTAssertTrue(items[0].isRefreshing)
+        XCTAssertNil(items[1].result)
+        XCTAssertEqual(items[1].errorMessage, "Session expired")
+    }
+
+    @MainActor
+    func testRefreshPublishesAccountsAsEachFetchCompletes() async {
+        let gate = UsageProviderGate()
+        let slow = ProviderAccountConfiguration(
+            id: "codex.slow",
+            providerID: .codex,
+            accountLabel: "Slow Codex",
+            authMethod: .browserSession
+        )
+        let fast = ProviderAccountConfiguration(
+            id: "codex.fast",
+            providerID: .codex,
+            accountLabel: "Fast Codex",
+            authMethod: .browserSession
+        )
+        let service = UsageRefreshService(providers: [
+            GatedUsageProvider(providerID: .codex, blockedAccountID: slow.id, gate: gate),
+        ])
+
+        let refreshTask = Task {
+            await service.refresh(configurations: [slow, fast])
+        }
+        await gate.waitUntilBlocked()
+        for _ in 0..<100 where service.results.first(where: { $0.accountID == fast.id }) == nil {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(service.results.map(\.accountID), [fast.id])
+        XCTAssertEqual(service.refreshingAccountIDs, [slow.id])
+        XCTAssertEqual(service.incompleteRefreshAccountIDs, [slow.id])
+        XCTAssertTrue(service.isRefreshing)
+
+        await gate.release()
+        await refreshTask.value
+
+        XCTAssertEqual(Set(service.results.map(\.accountID)), [slow.id, fast.id])
+        XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
+        XCTAssertFalse(service.isRefreshing)
+        XCTAssertNil(service.lastRefreshError)
+    }
+
+    @MainActor
+    func testRefreshPreservesCachedResultWhileAccountIsLoading() async {
+        let gate = UsageProviderGate()
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.cached",
+            providerID: .codex,
+            accountLabel: "Cached Codex",
+            authMethod: .browserSession
+        )
+        let cachedResult = makeHistoryResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            fetchedAt: Date().addingTimeInterval(-300),
+            used: 15
+        )
+        let service = UsageRefreshService(
+            providers: [
+                GatedUsageProvider(
+                    providerID: .codex,
+                    blockedAccountID: configuration.id,
+                    gate: gate
+                ),
+            ],
+            initialResults: [cachedResult]
+        )
+
+        let refreshTask = Task {
+            await service.refresh(configurations: [configuration])
+        }
+        await gate.waitUntilBlocked()
+
+        XCTAssertEqual(service.results, [cachedResult])
+        XCTAssertEqual(service.refreshingAccountIDs, [configuration.id])
+
+        await gate.release()
+        await refreshTask.value
+
+        XCTAssertEqual(service.results.first?.accountID, configuration.id)
+        XCTAssertNotEqual(service.results.first, cachedResult)
+        XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
+    }
+
+    @MainActor
+    func testExplicitAccountRefreshQueuesBehindInFlightStartupRefresh() async {
+        let gate = UsageProviderGate()
+        let startupConfiguration = ProviderAccountConfiguration(
+            id: "codex.queued",
+            providerID: .codex,
+            accountLabel: "Original Codex",
+            authMethod: .browserSession
+        )
+        var updatedConfiguration = startupConfiguration
+        updatedConfiguration.accountLabel = "Updated Codex"
+        let service = UsageRefreshService(providers: [
+            GatedUsageProvider(
+                providerID: .codex,
+                blockedAccountID: startupConfiguration.id,
+                gate: gate
+            ),
+        ])
+
+        let startupRefresh = Task {
+            await service.refresh(configurations: [startupConfiguration])
+        }
+        await gate.waitUntilBlocked()
+        let explicitRefresh = Task {
+            await service.refresh(configuration: updatedConfiguration)
+        }
+        await Task.yield()
+
+        XCTAssertEqual(service.refreshingAccountIDs, [startupConfiguration.id])
+
+        await gate.release()
+        await startupRefresh.value
+        let updatedResult = await explicitRefresh.value
+
+        XCTAssertEqual(updatedResult?.title, "Updated Codex")
+        XCTAssertEqual(service.results.first?.title, "Updated Codex")
+        XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
+    }
+
+    @MainActor
+    func testRefreshTracksFailuresPerAccountWithoutDiscardingSuccessfulResults() async {
+        let failed = ProviderAccountConfiguration(
+            id: "codex.failed",
+            providerID: .codex,
+            accountLabel: "Failed Codex",
+            authMethod: .browserSession
+        )
+        let successful = ProviderAccountConfiguration(
+            id: "codex.successful",
+            providerID: .codex,
+            accountLabel: "Successful Codex",
+            authMethod: .browserSession
+        )
+        let cachedFailedResult = makeHistoryResult(
+            accountID: failed.id,
+            providerID: .codex,
+            fetchedAt: Date().addingTimeInterval(-300),
+            used: 75
+        )
+        let service = UsageRefreshService(
+            providers: [
+                SelectivelyFailingUsageProvider(providerID: .codex, failedAccountID: failed.id),
+            ],
+            initialResults: [cachedFailedResult]
+        )
+
+        await service.refresh(configurations: [failed, successful])
+
+        XCTAssertEqual(Set(service.results.map(\.accountID)), [failed.id, successful.id])
+        XCTAssertEqual(service.results.first(where: { $0.accountID == failed.id }), cachedFailedResult)
+        XCTAssertEqual(service.successfulRefreshResults.map(\.accountID), [successful.id])
+        XCTAssertEqual(service.refreshErrorsByAccountID[failed.id], "Refresh failed")
+        XCTAssertEqual(service.incompleteRefreshAccountIDs, [failed.id])
+        XCTAssertNil(service.refreshErrorsByAccountID[successful.id])
+        XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
+        XCTAssertNotNil(service.lastRefreshError)
+    }
+
+    @MainActor
+    func testRefreshTreatsReturnedFailureResultAsFailureAndPreservesCache() async {
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.returned-failure",
+            providerID: .codex,
+            accountLabel: "Cached Codex",
+            authMethod: .browserSession
+        )
+        let cachedResult = makeHistoryResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            fetchedAt: Date().addingTimeInterval(-300),
+            used: 75
+        )
+        let service = UsageRefreshService(
+            providers: [ReturningFailureUsageProvider(providerID: .codex)],
+            initialResults: [cachedResult]
+        )
+
+        await service.refresh(configurations: [configuration])
+
+        XCTAssertEqual(service.results.first?.bars, cachedResult.bars)
+        XCTAssertEqual(
+            service.results.first?.subtitle,
+            "Credential expired Showing last known data."
+        )
+        XCTAssertEqual(service.results.first?.failureMessage, "Credential expired")
+        XCTAssertEqual(service.results.first?.fetchedAt, cachedResult.fetchedAt)
+        XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Credential expired")
+        XCTAssertTrue(service.successfulRefreshResults.isEmpty)
+        XCTAssertEqual(service.incompleteRefreshAccountIDs, [configuration.id])
+        XCTAssertEqual(service.lastRefreshError, "Credential expired")
+
+        let explicitResult = await service.refresh(configuration: configuration)
+
+        XCTAssertEqual(explicitResult?.failureMessage, "Credential expired")
+        XCTAssertEqual(explicitResult?.subtitle, "Credential expired")
+        XCTAssertEqual(service.results.first?.bars, cachedResult.bars)
+        XCTAssertEqual(service.results.first?.failureMessage, "Credential expired")
+        XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Credential expired")
+    }
+
     @MainActor
     func testLiveRefreshIncludesOpenRouterProvider() async throws {
         let secretStore = MemorySecretStore()
@@ -6631,6 +6955,99 @@ private struct HangingUsageProvider: UsageProvider {
             title: providerID.displayName,
             subtitle: "Unexpected",
             bars: [],
+            fetchedAt: Date()
+        )
+    }
+}
+
+private actor UsageProviderGate {
+    private var shouldBlock = true
+    private var isBlocked = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        guard shouldBlock else {
+            return
+        }
+        shouldBlock = false
+        isBlocked = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilBlocked() async {
+        while !isBlocked {
+            await Task.yield()
+        }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private struct GatedUsageProvider: UsageProvider {
+    let providerID: ProviderID
+    let blockedAccountID: String
+    let gate: UsageProviderGate
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        if configuration.id == blockedAccountID {
+            await gate.wait()
+        }
+
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: providerID,
+            title: configuration.displayName,
+            subtitle: "Fresh usage",
+            bars: [UsageBar(label: "Usage", used: 20, limit: 100)],
+            fetchedAt: Date()
+        )
+    }
+}
+
+private enum TestUsageProviderError: LocalizedError {
+    case failed
+
+    var errorDescription: String? {
+        "Refresh failed"
+    }
+}
+
+private struct SelectivelyFailingUsageProvider: UsageProvider {
+    let providerID: ProviderID
+    let failedAccountID: String
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        if configuration.id == failedAccountID {
+            throw TestUsageProviderError.failed
+        }
+
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: providerID,
+            title: configuration.displayName,
+            subtitle: "Fresh usage",
+            bars: [],
+            fetchedAt: Date()
+        )
+    }
+}
+
+private struct ReturningFailureUsageProvider: UsageProvider {
+    let providerID: ProviderID
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: providerID,
+            title: configuration.displayName,
+            subtitle: "Credential expired",
+            bars: [],
+            failureMessage: "Credential expired",
             fetchedAt: Date()
         )
     }

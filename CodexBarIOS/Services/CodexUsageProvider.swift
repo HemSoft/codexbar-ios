@@ -258,6 +258,7 @@ public final class CodexUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: message,
             bars: [],
+            failureMessage: message,
             fetchedAt: now()
         )
     }
@@ -285,6 +286,7 @@ public final class CodexUsageProvider: UsageProvider {
             creditsRemaining: result.creditsRemaining,
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
+            failureMessage: result.failureMessage,
             fetchedAt: result.fetchedAt
         )
     }

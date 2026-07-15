@@ -7,7 +7,10 @@ struct ProviderUsageCard: View {
     let history: UsageHistorySeries
     let alerts: [UsageAlertDetail]
     let isHistoryEnabled: Bool
+    let isRefreshing: Bool
+    let refreshErrorMessage: String?
     let onShowHistory: () -> Void
+    let onRetry: () -> Void
 
     init(
         result: ProviderUsageResult,
@@ -15,14 +18,20 @@ struct ProviderUsageCard: View {
         history: UsageHistorySeries,
         alerts: [UsageAlertDetail] = [],
         isHistoryEnabled: Bool = true,
-        onShowHistory: @escaping () -> Void = {}
+        isRefreshing: Bool = false,
+        refreshErrorMessage: String? = nil,
+        onShowHistory: @escaping () -> Void = {},
+        onRetry: @escaping () -> Void = {}
     ) {
         self.result = result
         self.statusText = statusText
         self.history = history
         self.alerts = alerts
         self.isHistoryEnabled = isHistoryEnabled
+        self.isRefreshing = isRefreshing
+        self.refreshErrorMessage = refreshErrorMessage
         self.onShowHistory = onShowHistory
+        self.onRetry = onRetry
     }
 
     var body: some View {
@@ -43,6 +52,15 @@ struct ProviderUsageCard: View {
 
                 Spacer()
 
+                ZStack {
+                    if isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Refreshing \(result.title)")
+                    }
+                }
+                .frame(width: 16, height: 16)
+
                 Circle()
                     .fill(cardSeverity.tint)
                     .frame(width: 10, height: 10)
@@ -51,6 +69,15 @@ struct ProviderUsageCard: View {
 
             if !alerts.isEmpty {
                 UsageAlertSummaryView(alerts: alerts)
+            }
+
+            if showsRetryAction {
+                Button(action: onRetry) {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityHint("Refreshes usage for \(result.title)")
             }
 
             if let creditsRemaining = result.creditsRemaining, result.bars.isEmpty {
@@ -146,6 +173,10 @@ struct ProviderUsageCard: View {
             || !history.points.isEmpty)
     }
 
+    var showsRetryAction: Bool {
+        refreshErrorMessage != nil && !isRefreshing
+    }
+
     private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -159,6 +190,87 @@ struct ProviderUsageCard: View {
         [metric.label, metric.formattedAmount(), metric.detail]
             .compactMap { $0 }
             .joined(separator: ", ")
+    }
+}
+
+struct ProviderUsagePlaceholderCard: View {
+    let configuration: ProviderAccountConfiguration
+    let errorMessage: String?
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 8) {
+                ProviderLogoTile(providerID: configuration.providerID)
+
+                Text(configuration.displayName)
+                    .font(.headline)
+
+                Spacer()
+            }
+
+            if let errorMessage {
+                Label("Could not load usage", systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.orange)
+
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(action: onRetry) {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityHint("Refreshes usage for \(configuration.displayName)")
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+
+                    Text("Loading current usage")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading current usage for \(configuration.displayName)")
+
+                VStack(alignment: .leading, spacing: 10) {
+                    loadingRow(labelWidth: 92, valueWidth: 64)
+                    loadingRow(labelWidth: 116, valueWidth: 48)
+                }
+                .accessibilityHidden(true)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color(.separator).opacity(0.22), lineWidth: 0.5)
+        }
+    }
+
+    private func loadingRow(labelWidth: CGFloat, valueWidth: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                loadingBar(width: labelWidth, height: 11)
+                Spacer()
+                loadingBar(width: valueWidth, height: 11)
+            }
+
+            loadingBar(width: nil, height: 7)
+        }
+    }
+
+    private func loadingBar(width: CGFloat?, height: CGFloat) -> some View {
+        Capsule()
+            .fill(Color(.tertiarySystemFill))
+            .frame(width: width, height: height)
     }
 }
 

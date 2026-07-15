@@ -142,6 +142,7 @@ public final class OpenRouterUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: message,
             bars: [],
+            failureMessage: message,
             fetchedAt: Date()
         )
     }

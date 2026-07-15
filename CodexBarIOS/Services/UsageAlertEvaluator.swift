@@ -46,6 +46,37 @@ public struct UsageAlertEvaluation: Equatable, Sendable {
 }
 
 public enum UsageAlertEvaluator {
+    static func activeAlertIDs(
+        _ activeAlertIDs: Set<String>,
+        belongingTo preservedAccountIDs: Set<String>,
+        knownAccountIDs: Set<String>
+    ) -> Set<String> {
+        let accountIDsBySpecificity = knownAccountIDs.sorted { lhs, rhs in
+            lhs.count == rhs.count ? lhs < rhs : lhs.count > rhs.count
+        }
+
+        return activeAlertIDs.filter { alertID in
+            guard let accountID = Self.accountID(
+                for: alertID,
+                knownAccountIDs: accountIDsBySpecificity
+            ) else {
+                return false
+            }
+            return preservedAccountIDs.contains(accountID)
+        }
+    }
+
+    private static func accountID(
+        for alertID: String,
+        knownAccountIDs: [String]
+    ) -> String? {
+        knownAccountIDs.first { accountID in
+            alertID == "balance.\(accountID)"
+                || alertID == "severity.\(accountID)"
+                || alertID.hasPrefix("usage.\(accountID).")
+        }
+    }
+
     public static func evaluate(
         results: [ProviderUsageResult],
         settings: UsageAlertSettings,

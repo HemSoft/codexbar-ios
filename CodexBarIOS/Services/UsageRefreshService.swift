@@ -3,10 +3,12 @@ import Foundation
 @MainActor
 public final class UsageRefreshService: ObservableObject {
     @Published public private(set) var results: [ProviderUsageResult] = []
-    @Published public private(set) var isRefreshing = false
+    @Published public private(set) var refreshingAccountIDs: Set<String> = []
+    @Published public private(set) var refreshErrorsByAccountID: [String: String] = [:]
     @Published public private(set) var lastRefreshError: String?
 
     private let providers: [any UsageProvider]
+    private var refreshCompletionWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
 
     public init(
         providers: [any UsageProvider],
@@ -16,30 +18,94 @@ public final class UsageRefreshService: ObservableObject {
         self.results = initialResults
     }
 
+    public var isRefreshing: Bool {
+        !refreshingAccountIDs.isEmpty
+    }
+
+    public var successfulRefreshResults: [ProviderUsageResult] {
+        results.filter { result in
+            refreshErrorsByAccountID[result.accountID] == nil
+                && !refreshingAccountIDs.contains(result.accountID)
+        }
+    }
+
+    public var incompleteRefreshAccountIDs: Set<String> {
+        Set(refreshErrorsByAccountID.keys).union(refreshingAccountIDs)
+    }
+
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
         guard !isRefreshing else {
             return
         }
 
-        isRefreshing = true
-        defer {
-            isRefreshing = false
+        let enabledConfigurations = configurations.filter(\.isEnabled)
+        let enabledAccountIDs = Set(enabledConfigurations.map(\.id))
+        results.removeAll { !enabledAccountIDs.contains($0.accountID) }
+        refreshErrorsByAccountID = refreshErrorsByAccountID.filter { enabledAccountIDs.contains($0.key) }
+        lastRefreshError = nil
+
+        var requests: [(ProviderAccountConfiguration, any UsageProvider)] = []
+        var errorsByAccountID: [String: String] = [:]
+        for configuration in enabledConfigurations {
+            guard let provider = providers.first(where: { $0.providerID == configuration.providerID }) else {
+                let message = "This provider is unavailable."
+                refreshErrorsByAccountID[configuration.id] = message
+                errorsByAccountID[configuration.id] = message
+                continue
+            }
+            requests.append((configuration, provider))
         }
 
-        do {
-            var nextResults: [ProviderUsageResult] = []
-            for configuration in configurations where configuration.isEnabled {
-                guard let provider = providers.first(where: { $0.providerID == configuration.providerID }) else {
-                    continue
+        let requestedAccountIDs = Set(requests.map { $0.0.id })
+        refreshingAccountIDs.formUnion(requestedAccountIDs)
+        for accountID in requestedAccountIDs {
+            refreshErrorsByAccountID.removeValue(forKey: accountID)
+        }
+
+        await withTaskGroup(of: AccountRefreshOutcome.self) { group in
+            for (configuration, provider) in requests {
+                group.addTask {
+                    do {
+                        let result = try await provider.fetchUsage(for: configuration)
+                        if let message = result.failureMessage {
+                            return .failure(
+                                accountID: configuration.id,
+                                message: message,
+                                result: result
+                            )
+                        }
+                        return .success(
+                            accountID: configuration.id,
+                            result: result
+                        )
+                    } catch {
+                        return .failure(
+                            accountID: configuration.id,
+                            message: error.localizedDescription,
+                            result: nil
+                        )
+                    }
                 }
-                nextResults.append(try await provider.fetchUsage(for: configuration))
             }
 
-            results = nextResults.sorted { $0.title < $1.title }
-            lastRefreshError = nil
-        } catch {
-            lastRefreshError = error.localizedDescription
+            for await outcome in group {
+                switch outcome {
+                case .success(let accountID, let result):
+                    replaceResult(result)
+                    refreshErrorsByAccountID.removeValue(forKey: accountID)
+                    finishRefresh(accountID: accountID)
+                case .failure(let accountID, let message, let result):
+                    preserveFailureResult(result, accountID: accountID)
+                    refreshErrorsByAccountID[accountID] = message
+                    errorsByAccountID[accountID] = message
+                    finishRefresh(accountID: accountID)
+                }
+            }
         }
+
+        lastRefreshError = enabledConfigurations.lazy
+            .compactMap { errorsByAccountID[$0.id] }
+            .first
     }
 
     @discardableResult
@@ -50,14 +116,31 @@ public final class UsageRefreshService: ObservableObject {
         else {
             return nil
         }
+        await waitForRefreshToFinish(accountID: configuration.id)
+
+        refreshingAccountIDs.insert(configuration.id)
+        refreshErrorsByAccountID.removeValue(forKey: configuration.id)
+        lastRefreshError = nil
+        defer {
+            finishRefresh(accountID: configuration.id)
+        }
 
         do {
             let result = try await provider.fetchUsage(for: configuration)
+            if let message = result.failureMessage {
+                preserveFailureResult(result, accountID: configuration.id)
+                refreshErrorsByAccountID[configuration.id] = message
+                lastRefreshError = message
+                return result
+            }
             replaceResult(result)
+            refreshErrorsByAccountID.removeValue(forKey: configuration.id)
             lastRefreshError = nil
             return result
         } catch {
-            lastRefreshError = error.localizedDescription
+            let message = error.localizedDescription
+            refreshErrorsByAccountID[configuration.id] = message
+            lastRefreshError = message
             return nil
         }
     }
@@ -71,6 +154,58 @@ public final class UsageRefreshService: ObservableObject {
         nextResults.append(result)
         results = nextResults.sorted { $0.title < $1.title }
     }
+
+    private func preserveFailureResult(_ failureResult: ProviderUsageResult?, accountID: String) {
+        guard let failureResult else {
+            return
+        }
+
+        let cachedResult = results.first { $0.accountID == accountID }
+        let failureHasUsageData = failureResult.creditsRemaining != nil
+            || !failureResult.bars.isEmpty
+            || !failureResult.monetaryMetrics.isEmpty
+        guard let dataResult = failureHasUsageData ? failureResult : cachedResult else {
+            return
+        }
+
+        let subtitle = failureHasUsageData
+            || failureResult.subtitle.localizedCaseInsensitiveContains("last known data")
+            ? failureResult.subtitle
+            : "\(failureResult.subtitle) Showing last known data."
+        replaceResult(ProviderUsageResult(
+            accountID: accountID,
+            providerID: failureResult.providerID,
+            title: failureResult.title,
+            subtitle: subtitle,
+            bars: dataResult.bars,
+            creditsRemaining: dataResult.creditsRemaining,
+            monetaryMetrics: dataResult.monetaryMetrics,
+            usageMessages: dataResult.usageMessages,
+            failureMessage: failureResult.failureMessage,
+            fetchedAt: dataResult.fetchedAt
+        ))
+    }
+
+    private func waitForRefreshToFinish(accountID: String) async {
+        while refreshingAccountIDs.contains(accountID) {
+            await withCheckedContinuation { continuation in
+                refreshCompletionWaiters[accountID, default: []].append(continuation)
+            }
+        }
+    }
+
+    private func finishRefresh(accountID: String) {
+        refreshingAccountIDs.remove(accountID)
+        let waiters = refreshCompletionWaiters.removeValue(forKey: accountID) ?? []
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+}
+
+private enum AccountRefreshOutcome: Sendable {
+    case success(accountID: String, result: ProviderUsageResult)
+    case failure(accountID: String, message: String, result: ProviderUsageResult?)
 }
 
 public extension UsageRefreshService {
