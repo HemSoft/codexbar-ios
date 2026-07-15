@@ -7,6 +7,7 @@ struct ProviderUsageCard: View {
     let history: UsageHistorySeries
     let alerts: [UsageAlertDetail]
     let isHistoryEnabled: Bool
+    let isRefreshing: Bool
     let onShowHistory: () -> Void
 
     init(
@@ -15,6 +16,7 @@ struct ProviderUsageCard: View {
         history: UsageHistorySeries,
         alerts: [UsageAlertDetail] = [],
         isHistoryEnabled: Bool = true,
+        isRefreshing: Bool = false,
         onShowHistory: @escaping () -> Void = {}
     ) {
         self.result = result
@@ -22,6 +24,7 @@ struct ProviderUsageCard: View {
         self.history = history
         self.alerts = alerts
         self.isHistoryEnabled = isHistoryEnabled
+        self.isRefreshing = isRefreshing
         self.onShowHistory = onShowHistory
     }
 
@@ -42,6 +45,15 @@ struct ProviderUsageCard: View {
                 }
 
                 Spacer()
+
+                ZStack {
+                    if isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Refreshing \(result.title)")
+                    }
+                }
+                .frame(width: 16, height: 16)
 
                 Circle()
                     .fill(cardSeverity.tint)
@@ -159,6 +171,87 @@ struct ProviderUsageCard: View {
         [metric.label, metric.formattedAmount(), metric.detail]
             .compactMap { $0 }
             .joined(separator: ", ")
+    }
+}
+
+struct ProviderUsagePlaceholderCard: View {
+    let configuration: ProviderAccountConfiguration
+    let errorMessage: String?
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 8) {
+                ProviderLogoTile(providerID: configuration.providerID)
+
+                Text(configuration.displayName)
+                    .font(.headline)
+
+                Spacer()
+            }
+
+            if let errorMessage {
+                Label("Could not load usage", systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.orange)
+
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(action: onRetry) {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityHint("Refreshes usage for \(configuration.displayName)")
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+
+                    Text("Loading current usage")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading current usage for \(configuration.displayName)")
+
+                VStack(alignment: .leading, spacing: 10) {
+                    loadingRow(labelWidth: 92, valueWidth: 64)
+                    loadingRow(labelWidth: 116, valueWidth: 48)
+                }
+                .accessibilityHidden(true)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color(.separator).opacity(0.22), lineWidth: 0.5)
+        }
+    }
+
+    private func loadingRow(labelWidth: CGFloat, valueWidth: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                loadingBar(width: labelWidth, height: 11)
+                Spacer()
+                loadingBar(width: valueWidth, height: 11)
+            }
+
+            loadingBar(width: nil, height: 7)
+        }
+    }
+
+    private func loadingBar(width: CGFloat?, height: CGFloat) -> some View {
+        Capsule()
+            .fill(Color(.tertiarySystemFill))
+            .frame(width: width, height: height)
     }
 }
 

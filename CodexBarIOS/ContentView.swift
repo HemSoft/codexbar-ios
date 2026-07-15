@@ -40,6 +40,7 @@ struct ContentView: View {
     }
 
     var body: some View {
+        let cardItems = dashboardCardItems
         let sections = dashboardSections
         let showGroupHeaders = shouldShowGroupHeaders(for: sections)
         let usageAlertsByAccountID = currentUsageAlertsByAccountID
@@ -47,7 +48,7 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    if !displayedResults.isEmpty,
+                    if !cardItems.isEmpty,
                        let release = appUpdateController.dashboardRelease {
                         AppUpdateNotice(
                             release: release,
@@ -65,31 +66,22 @@ struct ContentView: View {
                                     .padding(.horizontal, 4)
                             }
 
-                            ForEach(section.results) { result in
-                                let history = historyStore.historySeries(for: result)
-                                let card = ProviderUsageCard(
-                                    result: result,
-                                    statusText: dashboardStatusText(for: result),
-                                    history: history,
-                                    alerts: usageAlertsByAccountID[result.accountID] ?? [],
-                                    isHistoryEnabled: configurationStore
-                                        .configuration(accountID: result.accountID)?
-                                        .showsHistory ?? true,
-                                    onShowHistory: {
-                                        selectedHistoryResult = result
-                                    }
+                            ForEach(section.items) { item in
+                                let card = dashboardCard(
+                                    for: item,
+                                    alerts: usageAlertsByAccountID[item.id] ?? []
                                 )
 
                                 if isManualDashboardOrdering {
                                     card
                                         .onDrag {
-                                            draggedCardID = result.id
-                                            return NSItemProvider(object: result.id as NSString)
+                                            draggedCardID = item.id
+                                            return NSItemProvider(object: item.id as NSString)
                                         }
                                         .onDrop(
                                             of: [UTType.text],
                                             delegate: ProviderUsageCardDropDelegate(
-                                                targetID: result.id,
+                                                targetID: item.id,
                                                 draggedCardID: $draggedCardID,
                                                 moveCard: moveCard,
                                                 finishDrag: finishCardDrag
@@ -135,7 +127,7 @@ struct ContentView: View {
                 }
             }
             .overlay {
-                if displayedResults.isEmpty {
+                if cardItems.isEmpty {
                     VStack(spacing: 16) {
                         if let release = appUpdateController.dashboardRelease {
                             AppUpdateNotice(
@@ -235,10 +227,15 @@ struct ContentView: View {
         }
     }
 
-    private var orderedDisplayedResults: [ProviderUsageResult] {
-        DashboardUsageSorter.orderedResults(
-            displayedResults,
-            mode: configurationStore.dashboardOrderingMode,
+    private var dashboardCardItems: [DashboardProviderCardItem] {
+        DashboardProviderCardItem.items(
+            configurations: configurationStore.configurations.filter(
+                configurationStore.shouldDisplayOnDashboard
+            ),
+            results: displayedResults,
+            refreshingAccountIDs: refreshService.refreshingAccountIDs,
+            errorsByAccountID: refreshService.refreshErrorsByAccountID,
+            orderingMode: configurationStore.dashboardOrderingMode,
             manualOrder: configurationStore.dashboardCardOrder
         )
     }
@@ -257,22 +254,22 @@ struct ContentView: View {
             }
         )
 
-        for (offset, result) in orderedDisplayedResults.enumerated() {
-            let configuration = configurationsByAccountID[result.accountID]
+        for (offset, item) in dashboardCardItems.enumerated() {
+            let configuration = configurationsByAccountID[item.id]
             let groupID = configuration?.groupID ?? DashboardSection.ungroupedID
             let title = configuration?.groupID.flatMap { groupsByID[$0]?.name }
                 ?? ProviderAccountGroup.ungroupedDisplayName
 
             if configurationStore.dashboardOrderingMode == .smart {
                 if sections.indices.last.map({ sections[$0].groupID }) == groupID {
-                    sections[sections.count - 1].results.append(result)
+                    sections[sections.count - 1].items.append(item)
                 } else {
                     sections.append(
                         DashboardSection(
                             id: "\(groupID).\(offset)",
                             groupID: groupID,
                             title: title,
-                            results: [result]
+                            items: [item]
                         )
                     )
                 }
@@ -280,10 +277,10 @@ struct ContentView: View {
             }
 
             if let sectionIndex = sectionIndexes[groupID] {
-                sections[sectionIndex].results.append(result)
+                sections[sectionIndex].items.append(item)
             } else {
                 sectionIndexes[groupID] = sections.count
-                sections.append(DashboardSection(id: groupID, groupID: groupID, title: title, results: [result]))
+                sections.append(DashboardSection(id: groupID, groupID: groupID, title: title, items: [item]))
             }
         }
 
@@ -297,7 +294,7 @@ struct ContentView: View {
     }
 
     private var visibleDashboardOrder: [String] {
-        dashboardSections.flatMap(\.results).map(\.id)
+        dashboardSections.flatMap(\.items).map(\.id)
     }
 
     private var isManualDashboardOrdering: Bool {
@@ -315,6 +312,10 @@ struct ContentView: View {
     }
 
     private func dashboardStatusText(for result: ProviderUsageResult) -> String {
+        if let error = refreshService.refreshErrorsByAccountID[result.accountID] {
+            return "Refresh failed - \(error)"
+        }
+
         guard let configuration = configurationStore.configuration(accountID: result.accountID) else {
             return result.subtitle
         }
@@ -328,6 +329,36 @@ struct ContentView: View {
         }
 
         return configurationStore.statusText(for: configuration)
+    }
+
+    @ViewBuilder
+    private func dashboardCard(
+        for item: DashboardProviderCardItem,
+        alerts: [UsageAlertDetail]
+    ) -> some View {
+        if let result = item.result {
+            ProviderUsageCard(
+                result: result,
+                statusText: dashboardStatusText(for: result),
+                history: historyStore.historySeries(for: result),
+                alerts: alerts,
+                isHistoryEnabled: item.configuration.showsHistory,
+                isRefreshing: item.isRefreshing,
+                onShowHistory: {
+                    selectedHistoryResult = result
+                }
+            )
+        } else {
+            ProviderUsagePlaceholderCard(
+                configuration: item.configuration,
+                errorMessage: item.errorMessage,
+                onRetry: {
+                    Task {
+                        await refreshAccount(item.configuration)
+                    }
+                }
+            )
+        }
     }
 
     private func refreshAfterSettingsDismissed() {
@@ -398,7 +429,7 @@ struct ContentView: View {
             return
         }
 
-        let visibleIDs = Set(displayedResults.map(\.id))
+        let visibleIDs = Set(dashboardCardItems.map(\.id))
         let hiddenOrderedIDs = configurationStore.dashboardCardOrder.filter { !visibleIDs.contains($0) }
         configurationStore.updateDashboardCardOrder(orderedVisibleIDs + hiddenOrderedIDs)
     }
@@ -424,6 +455,13 @@ struct ContentView: View {
         }
 
         historyStore.record(results: [result])
+    }
+
+    private func refreshAccount(_ configuration: ProviderAccountConfiguration) async {
+        let result = await refreshService.refresh(configuration: configuration)
+        recordUsageHistoryIfAvailable(result: result)
+        publishWidgetSnapshot()
+        await processUsageAlerts()
     }
 
     private var refreshAccessibilityLabel: String {
@@ -586,7 +624,56 @@ private struct DashboardSection: Identifiable {
     let id: String
     let groupID: String
     let title: String
-    var results: [ProviderUsageResult]
+    var items: [DashboardProviderCardItem]
+}
+
+struct DashboardProviderCardItem: Identifiable, Equatable {
+    let configuration: ProviderAccountConfiguration
+    let result: ProviderUsageResult?
+    let isRefreshing: Bool
+    let errorMessage: String?
+
+    var id: String {
+        configuration.id
+    }
+
+    static func items(
+        configurations: [ProviderAccountConfiguration],
+        results: [ProviderUsageResult],
+        refreshingAccountIDs: Set<String>,
+        errorsByAccountID: [String: String],
+        orderingMode: DashboardOrderingMode,
+        manualOrder: [String]
+    ) -> [DashboardProviderCardItem] {
+        let resultsByAccountID = Dictionary(
+            uniqueKeysWithValues: results.map { ($0.accountID, $0) }
+        )
+        let items = configurations.map { configuration in
+            DashboardProviderCardItem(
+                configuration: configuration,
+                result: resultsByAccountID[configuration.id],
+                isRefreshing: refreshingAccountIDs.contains(configuration.id),
+                errorMessage: errorsByAccountID[configuration.id]
+            )
+        }
+        let itemsByAccountID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        let orderingResults = items.map { item in
+            item.result ?? ProviderUsageResult(
+                accountID: item.id,
+                providerID: item.configuration.providerID,
+                title: item.configuration.displayName,
+                subtitle: "Loading current usage",
+                bars: [],
+                fetchedAt: .distantPast
+            )
+        }
+
+        return DashboardUsageSorter.orderedResults(
+            orderingResults,
+            mode: orderingMode,
+            manualOrder: manualOrder
+        ).compactMap { itemsByAccountID[$0.accountID] }
+    }
 }
 
 private struct AppUpdateNotice: View {

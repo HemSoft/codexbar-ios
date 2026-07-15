@@ -37,6 +37,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Kept configured provider cards visible as soon as CodexBar opens, with per-account
+  loading, cached-data refresh, failure, and retry states while current usage
+  arrives. ([#49](https://github.com/HemSoft/codexbar-ios/issues/49))
 - Made Cursor account switching deliberate and reliable: sign-in now uses a
   private browser session, sign-out clears stale identity labels, and an
   existing credential remains active until replacement sign-in succeeds.
