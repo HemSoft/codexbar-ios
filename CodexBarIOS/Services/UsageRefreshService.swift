@@ -8,6 +8,7 @@ public final class UsageRefreshService: ObservableObject {
     @Published public private(set) var lastRefreshError: String?
 
     private let providers: [any UsageProvider]
+    private var refreshCompletionWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
 
     public init(
         providers: [any UsageProvider],
@@ -83,11 +84,11 @@ public final class UsageRefreshService: ObservableObject {
                 case .success(let accountID, let result):
                     replaceResult(result)
                     refreshErrorsByAccountID.removeValue(forKey: accountID)
-                    refreshingAccountIDs.remove(accountID)
+                    finishRefresh(accountID: accountID)
                 case .failure(let accountID, let message):
                     refreshErrorsByAccountID[accountID] = message
                     errorsByAccountID[accountID] = message
-                    refreshingAccountIDs.remove(accountID)
+                    finishRefresh(accountID: accountID)
                 }
             }
         }
@@ -105,15 +106,13 @@ public final class UsageRefreshService: ObservableObject {
         else {
             return nil
         }
-        guard !refreshingAccountIDs.contains(configuration.id) else {
-            return results.first { $0.accountID == configuration.id }
-        }
+        await waitForRefreshToFinish(accountID: configuration.id)
 
         refreshingAccountIDs.insert(configuration.id)
         refreshErrorsByAccountID.removeValue(forKey: configuration.id)
         lastRefreshError = nil
         defer {
-            refreshingAccountIDs.remove(configuration.id)
+            finishRefresh(accountID: configuration.id)
         }
 
         do {
@@ -138,6 +137,22 @@ public final class UsageRefreshService: ObservableObject {
         var nextResults = results.filter { $0.accountID != result.accountID }
         nextResults.append(result)
         results = nextResults.sorted { $0.title < $1.title }
+    }
+
+    private func waitForRefreshToFinish(accountID: String) async {
+        while refreshingAccountIDs.contains(accountID) {
+            await withCheckedContinuation { continuation in
+                refreshCompletionWaiters[accountID, default: []].append(continuation)
+            }
+        }
+    }
+
+    private func finishRefresh(accountID: String) {
+        refreshingAccountIDs.remove(accountID)
+        let waiters = refreshCompletionWaiters.removeValue(forKey: accountID) ?? []
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 }
 

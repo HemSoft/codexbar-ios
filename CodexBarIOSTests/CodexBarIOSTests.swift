@@ -6481,6 +6481,45 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testExplicitAccountRefreshQueuesBehindInFlightStartupRefresh() async {
+        let gate = UsageProviderGate()
+        let startupConfiguration = ProviderAccountConfiguration(
+            id: "codex.queued",
+            providerID: .codex,
+            accountLabel: "Original Codex",
+            authMethod: .browserSession
+        )
+        var updatedConfiguration = startupConfiguration
+        updatedConfiguration.accountLabel = "Updated Codex"
+        let service = UsageRefreshService(providers: [
+            GatedUsageProvider(
+                providerID: .codex,
+                blockedAccountID: startupConfiguration.id,
+                gate: gate
+            ),
+        ])
+
+        let startupRefresh = Task {
+            await service.refresh(configurations: [startupConfiguration])
+        }
+        await gate.waitUntilBlocked()
+        let explicitRefresh = Task {
+            await service.refresh(configuration: updatedConfiguration)
+        }
+        await Task.yield()
+
+        XCTAssertEqual(service.refreshingAccountIDs, [startupConfiguration.id])
+
+        await gate.release()
+        await startupRefresh.value
+        let updatedResult = await explicitRefresh.value
+
+        XCTAssertEqual(updatedResult?.title, "Updated Codex")
+        XCTAssertEqual(service.results.first?.title, "Updated Codex")
+        XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
+    }
+
+    @MainActor
     func testRefreshTracksFailuresPerAccountWithoutDiscardingSuccessfulResults() async {
         let failed = ProviderAccountConfiguration(
             id: "codex.failed",
@@ -6853,10 +6892,15 @@ private struct HangingUsageProvider: UsageProvider {
 }
 
 private actor UsageProviderGate {
+    private var shouldBlock = true
     private var isBlocked = false
     private var continuation: CheckedContinuation<Void, Never>?
 
     func wait() async {
+        guard shouldBlock else {
+            return
+        }
+        shouldBlock = false
         isBlocked = true
         await withCheckedContinuation { continuation in
             self.continuation = continuation
