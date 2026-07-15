@@ -20,8 +20,11 @@ Status last reviewed: 2026-07-15
 - The updated social-media age-rating questions are complete for CodexBar, with
   both social-media capabilities set to `No`; the calculated rating remains
   `4+`.
-- Release archive `1.1 (1)` was uploaded to App Store Connect on 2026-07-15 and
-  is processing before final build selection and review submission.
+- Release archive `1.1 (1)` was uploaded to App Store Connect on 2026-07-15,
+  finished processing, and is selected in the version 1.1 draft submission.
+- Version 1.1 is `Ready for Review` in App Store Connect. The obsolete review
+  sign-in requirement and personal credentials were removed because CodexBar
+  opens without a CodexBar account.
 
 ## Apple Requirements To Keep Current
 
@@ -240,16 +243,18 @@ use the persistent **Rate CodexBar** link instead.
 
 ### 8. Final Submission
 
-- [ ] Select the final `1.1 (1)` build after App Store Connect finishes
-  processing it. The previous `1.0 (1)` release used build ID
-  `ccdc123f-9635-485c-b472-7b0093e026ac`.
+- [x] Select the final `1.1 (1)` build after App Store Connect finishes
+  processing it. Selected on 2026-07-15. The previous `1.0 (1)` release used
+  build ID `ccdc123f-9635-485c-b472-7b0093e026ac`.
 - [x] Complete export compliance project prep. `ITSAppUsesNonExemptEncryption` is set to `false` for the app and widget because CodexBar only uses exempt Apple platform encryption such as HTTPS and Keychain.
 - [x] Complete content rights. App Store Connect records that CodexBar has the
   necessary rights to its third-party content.
 - [x] Complete age rating. App Store Connect reports `4+`, and the 2026 social-media
   capability questions are answered `No`.
 - [x] Complete review contact info.
-- [x] Add App Review notes. Demo sign-in fields are filled in App Store Connect.
+- [x] Add App Review notes. The notes explain that the app opens without an
+  account and that live provider cards require reviewer-owned provider
+  credentials; the unnecessary review sign-in fields were removed.
 - [ ] Submit for review.
 - [ ] Track reviewer questions or rejections here until approved.
 
