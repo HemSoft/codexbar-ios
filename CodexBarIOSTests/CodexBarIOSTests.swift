@@ -1476,22 +1476,33 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertNil(activeAlertsByAccountID["cursor.work"])
     }
 
-    func testUsageAlertEvaluatorPreservesSuppressionForAccountsThatDidNotRefresh() {
+    func testUsageAlertEvaluatorPreservesSuppressionForExactAccountsThatDidNotRefresh() {
         let activeAlertIDs: Set<String> = [
-            "usage.codex.failed.weekly",
+            "usage.codex.weekly",
+            "usage.codex.secondary.weekly",
             "balance.openrouter.failed",
-            "severity.codex.successful",
         ]
 
-        let preserved = UsageAlertEvaluator.preservedActiveAlertIDs(
+        let preserved = UsageAlertEvaluator.activeAlertIDs(
             activeAlertIDs,
-            excluding: ["codex.successful"]
+            belongingTo: ["codex.secondary", "openrouter.failed"],
+            knownAccountIDs: ["codex", "codex.secondary", "openrouter.failed"]
         )
 
         XCTAssertEqual(
             preserved,
-            ["usage.codex.failed.weekly", "balance.openrouter.failed"]
+            ["usage.codex.secondary.weekly", "balance.openrouter.failed"]
         )
+    }
+
+    func testUsageAlertEvaluatorClearsSuppressionWhenNoAccountsArePreserved() {
+        let preserved = UsageAlertEvaluator.activeAlertIDs(
+            ["usage.codex.weekly"],
+            belongingTo: [],
+            knownAccountIDs: ["codex"]
+        )
+
+        XCTAssertTrue(preserved.isEmpty)
     }
 
     func testUsageAlertEvaluatorUsesWarningPresentationBelowSeverityThreshold() {
