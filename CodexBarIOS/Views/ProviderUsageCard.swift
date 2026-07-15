@@ -8,7 +8,9 @@ struct ProviderUsageCard: View {
     let alerts: [UsageAlertDetail]
     let isHistoryEnabled: Bool
     let isRefreshing: Bool
+    let refreshErrorMessage: String?
     let onShowHistory: () -> Void
+    let onRetry: () -> Void
 
     init(
         result: ProviderUsageResult,
@@ -17,7 +19,9 @@ struct ProviderUsageCard: View {
         alerts: [UsageAlertDetail] = [],
         isHistoryEnabled: Bool = true,
         isRefreshing: Bool = false,
-        onShowHistory: @escaping () -> Void = {}
+        refreshErrorMessage: String? = nil,
+        onShowHistory: @escaping () -> Void = {},
+        onRetry: @escaping () -> Void = {}
     ) {
         self.result = result
         self.statusText = statusText
@@ -25,7 +29,9 @@ struct ProviderUsageCard: View {
         self.alerts = alerts
         self.isHistoryEnabled = isHistoryEnabled
         self.isRefreshing = isRefreshing
+        self.refreshErrorMessage = refreshErrorMessage
         self.onShowHistory = onShowHistory
+        self.onRetry = onRetry
     }
 
     var body: some View {
@@ -63,6 +69,15 @@ struct ProviderUsageCard: View {
 
             if !alerts.isEmpty {
                 UsageAlertSummaryView(alerts: alerts)
+            }
+
+            if showsRetryAction {
+                Button(action: onRetry) {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityHint("Refreshes usage for \(result.title)")
             }
 
             if let creditsRemaining = result.creditsRemaining, result.bars.isEmpty {
@@ -156,6 +171,10 @@ struct ProviderUsageCard: View {
             || !result.bars.isEmpty
             || !result.monetaryMetrics.isEmpty
             || !history.points.isEmpty)
+    }
+
+    var showsRetryAction: Bool {
+        refreshErrorMessage != nil && !isRefreshing
     }
 
     private static let currencyFormatter: NumberFormatter = {

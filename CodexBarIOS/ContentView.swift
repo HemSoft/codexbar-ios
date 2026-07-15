@@ -354,8 +354,14 @@ struct ContentView: View {
                 alerts: alerts,
                 isHistoryEnabled: item.configuration.showsHistory,
                 isRefreshing: item.isRefreshing,
+                refreshErrorMessage: item.errorMessage,
                 onShowHistory: {
                     selectedHistoryResult = result
+                },
+                onRetry: {
+                    Task {
+                        await refreshAccount(item.configuration)
+                    }
                 }
             )
         } else {

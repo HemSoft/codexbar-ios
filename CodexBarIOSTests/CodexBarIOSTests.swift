@@ -4755,6 +4755,31 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(history.latestValueDescription, "$19.25")
     }
 
+    func testProviderUsageCardOffersRetryForCachedRefreshFailure() {
+        let result = makeHistoryResult(
+            accountID: "codex.cached",
+            providerID: .codex,
+            fetchedAt: Date(),
+            used: 25
+        )
+        let failedCard = ProviderUsageCard(
+            result: result,
+            statusText: "Refresh failed - Session expired",
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false),
+            refreshErrorMessage: "Session expired"
+        )
+        let refreshingCard = ProviderUsageCard(
+            result: result,
+            statusText: "Refreshing",
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false),
+            isRefreshing: true,
+            refreshErrorMessage: "Session expired"
+        )
+
+        XCTAssertTrue(failedCard.showsRetryAction)
+        XCTAssertFalse(refreshingCard.showsRetryAction)
+    }
+
     func testCodexUsageProviderProactivelyRefreshesAndPersistsRotation() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let secretStore = MemorySecretStore()
