@@ -284,6 +284,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: message,
             bars: [],
+            failureMessage: message,
             fetchedAt: Date()
         )
     }
@@ -305,6 +306,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             creditsRemaining: cached.creditsRemaining,
             monetaryMetrics: cached.monetaryMetrics,
             usageMessages: cached.usageMessages,
+            failureMessage: message,
             fetchedAt: cached.fetchedAt
         )
     }
@@ -344,6 +346,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             creditsRemaining: result.creditsRemaining,
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
+            failureMessage: result.failureMessage,
             fetchedAt: result.fetchedAt
         )
     }
@@ -388,6 +391,7 @@ private actor ClaudeUsageSnapshotCache {
             creditsRemaining: result.creditsRemaining,
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
+            failureMessage: result.failureMessage,
             fetchedAt: cached.fetchedAt
         )
         retryDates[accountID] = nil

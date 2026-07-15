@@ -66,9 +66,16 @@ public final class UsageRefreshService: ObservableObject {
             for (configuration, provider) in requests {
                 group.addTask {
                     do {
+                        let result = try await provider.fetchUsage(for: configuration)
+                        if let message = result.failureMessage {
+                            return .failure(
+                                accountID: configuration.id,
+                                message: message
+                            )
+                        }
                         return .success(
                             accountID: configuration.id,
-                            result: try await provider.fetchUsage(for: configuration)
+                            result: result
                         )
                     } catch {
                         return .failure(
@@ -117,6 +124,11 @@ public final class UsageRefreshService: ObservableObject {
 
         do {
             let result = try await provider.fetchUsage(for: configuration)
+            if let message = result.failureMessage {
+                refreshErrorsByAccountID[configuration.id] = message
+                lastRefreshError = message
+                return nil
+            }
             replaceResult(result)
             refreshErrorsByAccountID.removeValue(forKey: configuration.id)
             lastRefreshError = nil

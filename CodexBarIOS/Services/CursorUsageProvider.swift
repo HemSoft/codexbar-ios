@@ -278,6 +278,7 @@ public final class CursorUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: message,
             bars: [],
+            failureMessage: message,
             fetchedAt: Date()
         )
     }

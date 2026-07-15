@@ -393,6 +393,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: message,
             bars: [],
+            failureMessage: message,
             fetchedAt: Date()
         )
     }

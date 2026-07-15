@@ -61,6 +61,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let creditsRemaining: Double?
     public let monetaryMetrics: [ProviderMonetaryMetric]
     public let usageMessages: [String]
+    public let failureMessage: String?
     public let fetchedAt: Date
 
     public init(
@@ -72,6 +73,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         creditsRemaining: Double? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
         usageMessages: [String] = [],
+        failureMessage: String? = nil,
         fetchedAt: Date
     ) {
         self.accountID = accountID ?? providerID.rawValue
@@ -82,6 +84,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.creditsRemaining = creditsRemaining
         self.monetaryMetrics = monetaryMetrics
         self.usageMessages = usageMessages
+        self.failureMessage = failureMessage
         self.fetchedAt = fetchedAt
     }
 

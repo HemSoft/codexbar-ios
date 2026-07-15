@@ -5834,6 +5834,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.providerID, .codex)
         XCTAssertEqual(result.accountID, configuration.id)
         XCTAssertEqual(result.subtitle, "Not configured - sign in with ChatGPT.")
+        XCTAssertEqual(result.failureMessage, result.subtitle)
         XCTAssertTrue(result.bars.isEmpty)
     }
 
@@ -5846,6 +5847,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.providerID, .claude)
         XCTAssertEqual(result.accountID, configuration.id)
         XCTAssertEqual(result.subtitle, "Not configured - sign in with Claude.")
+        XCTAssertEqual(result.failureMessage, result.subtitle)
         XCTAssertTrue(result.bars.isEmpty)
     }
 
@@ -6584,6 +6586,40 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testRefreshTreatsReturnedFailureResultAsFailureAndPreservesCache() async {
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.returned-failure",
+            providerID: .codex,
+            accountLabel: "Cached Codex",
+            authMethod: .browserSession
+        )
+        let cachedResult = makeHistoryResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            fetchedAt: Date().addingTimeInterval(-300),
+            used: 75
+        )
+        let service = UsageRefreshService(
+            providers: [ReturningFailureUsageProvider(providerID: .codex)],
+            initialResults: [cachedResult]
+        )
+
+        await service.refresh(configurations: [configuration])
+
+        XCTAssertEqual(service.results, [cachedResult])
+        XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Credential expired")
+        XCTAssertTrue(service.successfulRefreshResults.isEmpty)
+        XCTAssertEqual(service.incompleteRefreshAccountIDs, [configuration.id])
+        XCTAssertEqual(service.lastRefreshError, "Credential expired")
+
+        let explicitResult = await service.refresh(configuration: configuration)
+
+        XCTAssertNil(explicitResult)
+        XCTAssertEqual(service.results, [cachedResult])
+        XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Credential expired")
+    }
+
+    @MainActor
     func testLiveRefreshIncludesOpenRouterProvider() async throws {
         let secretStore = MemorySecretStore()
         var openRouter = ProviderAccountConfiguration.defaultConfiguration(for: .openRouter)
@@ -6988,6 +7024,22 @@ private struct SelectivelyFailingUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: "Fresh usage",
             bars: [],
+            fetchedAt: Date()
+        )
+    }
+}
+
+private struct ReturningFailureUsageProvider: UsageProvider {
+    let providerID: ProviderID
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: providerID,
+            title: configuration.displayName,
+            subtitle: "Credential expired",
+            bars: [],
+            failureMessage: "Credential expired",
             fetchedAt: Date()
         )
     }

@@ -255,6 +255,7 @@ public final class CopilotUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: message,
             bars: [],
+            failureMessage: message,
             fetchedAt: Date()
         )
     }
@@ -507,6 +508,7 @@ public final class CopilotUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: result.subtitle,
             bars: result.bars,
+            failureMessage: result.failureMessage,
             fetchedAt: result.fetchedAt
         )
     }
