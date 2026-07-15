@@ -2,7 +2,7 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-07-11
+Status last reviewed: 2026-07-15
 
 ## Current Status
 
@@ -17,6 +17,11 @@ Status last reviewed: 2026-07-11
 - Product metadata, support URL, privacy policy URL, copyright, and App Review notes have been added in App Store Connect.
 - TestFlight install has been confirmed by the user on iPhone and iPad.
 - App Store Connect app information is set to primary category `Developer Tools`, secondary category `Utilities`, and age rating `4+`.
+- The updated social-media age-rating questions are complete for CodexBar, with
+  both social-media capabilities set to `No`; the calculated rating remains
+  `4+`.
+- Release archive `1.1 (1)` was uploaded to App Store Connect on 2026-07-15 and
+  is processing before final build selection and review submission.
 
 ## Apple Requirements To Keep Current
 
@@ -235,10 +240,14 @@ use the persistent **Rate CodexBar** link instead.
 
 ### 8. Final Submission
 
-- [x] Select the final build in App Store Connect. Selected build is `1.0 (1)`, build ID `ccdc123f-9635-485c-b472-7b0093e026ac`.
+- [ ] Select the final `1.1 (1)` build after App Store Connect finishes
+  processing it. The previous `1.0 (1)` release used build ID
+  `ccdc123f-9635-485c-b472-7b0093e026ac`.
 - [x] Complete export compliance project prep. `ITSAppUsesNonExemptEncryption` is set to `false` for the app and widget because CodexBar only uses exempt Apple platform encryption such as HTTPS and Keychain.
-- [ ] Complete content rights.
-- [x] Complete age rating. App Store Connect reports `4+`.
+- [x] Complete content rights. App Store Connect records that CodexBar has the
+  necessary rights to its third-party content.
+- [x] Complete age rating. App Store Connect reports `4+`, and the 2026 social-media
+  capability questions are answered `No`.
 - [x] Complete review contact info.
 - [x] Add App Review notes. Demo sign-in fields are filled in App Store Connect.
 - [ ] Submit for review.
