@@ -21,6 +21,13 @@ public final class UsageRefreshService: ObservableObject {
         !refreshingAccountIDs.isEmpty
     }
 
+    public var successfulRefreshResults: [ProviderUsageResult] {
+        results.filter { result in
+            refreshErrorsByAccountID[result.accountID] == nil
+                && !refreshingAccountIDs.contains(result.accountID)
+        }
+    }
+
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
         guard !isRefreshing else {
             return

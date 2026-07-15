@@ -157,9 +157,9 @@ struct ContentView: View {
                 },
                 onAccountRefresh: { configuration in
                     let result = await refreshService.refresh(configuration: configuration)
-                    recordUsageHistoryIfAvailable(result: result)
+                    recordUsageHistoryIfAvailable(results: result.map { [$0] } ?? [])
                     publishWidgetSnapshot()
-                    await processUsageAlerts()
+                    await processUsageAlerts(results: result.map { [$0] } ?? [])
                     return result
                 },
                 onAlertAuthorizationRequest: {
@@ -184,9 +184,10 @@ struct ContentView: View {
                 return
             }
             await refreshService.refresh(configurations: configurationStore.configurations)
-            recordUsageHistoryIfAvailable()
+            let successfulResults = refreshService.successfulRefreshResults
+            recordUsageHistoryIfAvailable(results: successfulResults)
             publishWidgetSnapshot()
-            await processUsageAlerts()
+            await processUsageAlerts(results: successfulResults)
         }
         .task(id: AutoRefreshTaskID(interval: configurationStore.autoRefreshInterval, resetID: autoRefreshResetID)) {
             guard performsLifecycleWork else {
@@ -441,27 +442,16 @@ struct ContentView: View {
         )
     }
 
-    private func recordUsageHistoryIfAvailable() {
-        guard refreshService.lastRefreshError == nil else {
-            return
-        }
-
-        historyStore.record(results: refreshService.results)
-    }
-
-    private func recordUsageHistoryIfAvailable(result: ProviderUsageResult?) {
-        guard refreshService.lastRefreshError == nil, let result else {
-            return
-        }
-
-        historyStore.record(results: [result])
+    private func recordUsageHistoryIfAvailable(results: [ProviderUsageResult]) {
+        historyStore.record(results: results)
     }
 
     private func refreshAccount(_ configuration: ProviderAccountConfiguration) async {
         let result = await refreshService.refresh(configuration: configuration)
-        recordUsageHistoryIfAvailable(result: result)
+        let successfulResults = result.map { [$0] } ?? []
+        recordUsageHistoryIfAvailable(results: successfulResults)
         publishWidgetSnapshot()
-        await processUsageAlerts()
+        await processUsageAlerts(results: successfulResults)
     }
 
     private var refreshAccessibilityLabel: String {
@@ -474,9 +464,10 @@ struct ContentView: View {
 
     private func refreshNow(considerReviewPrompt: Bool = false) async {
         await refreshService.refresh(configurations: configurationStore.configurations)
-        recordUsageHistoryIfAvailable()
+        let successfulResults = refreshService.successfulRefreshResults
+        recordUsageHistoryIfAvailable(results: successfulResults)
         publishWidgetSnapshot()
-        await processUsageAlerts()
+        await processUsageAlerts(results: successfulResults)
         if considerReviewPrompt {
             requestReviewAfterSuccessfulRefreshIfEligible()
         }
@@ -499,18 +490,26 @@ struct ContentView: View {
         requestReview()
     }
 
-    private func processUsageAlerts() async {
-        guard refreshService.lastRefreshError == nil else {
+    private func processUsageAlerts(results: [ProviderUsageResult]) async {
+        guard !results.isEmpty else {
             return
         }
 
+        let refreshedAccountIDs = Set(results.map(\.accountID))
+        let existingActiveAlertIDs = configurationStore.usageAlertActiveIDs
+        let preservedActiveAlertIDs = configurationStore.usageAlertSettings.isEnabled
+            ? UsageAlertEvaluator.preservedActiveAlertIDs(
+                existingActiveAlertIDs,
+                excluding: refreshedAccountIDs
+            )
+            : []
         let evaluation = UsageAlertEvaluator.evaluate(
-            results: refreshService.results,
+            results: results,
             settings: configurationStore.usageAlertSettings,
-            activeAlertIDs: configurationStore.usageAlertActiveIDs
+            activeAlertIDs: existingActiveAlertIDs
         )
 
-        var deliveredActiveAlertIDs = evaluation.activeAlertIDs
+        var deliveredActiveAlertIDs = preservedActiveAlertIDs.union(evaluation.activeAlertIDs)
 
         for notification in evaluation.notifications {
             do {
@@ -544,9 +543,10 @@ struct ContentView: View {
             }
 
             await refreshService.refresh(configurations: configurationStore.configurations)
-            recordUsageHistoryIfAvailable()
+            let successfulResults = refreshService.successfulRefreshResults
+            recordUsageHistoryIfAvailable(results: successfulResults)
             publishWidgetSnapshot()
-            await processUsageAlerts()
+            await processUsageAlerts(results: successfulResults)
         }
     }
 }

@@ -1476,6 +1476,24 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertNil(activeAlertsByAccountID["cursor.work"])
     }
 
+    func testUsageAlertEvaluatorPreservesSuppressionForAccountsThatDidNotRefresh() {
+        let activeAlertIDs: Set<String> = [
+            "usage.codex.failed.weekly",
+            "balance.openrouter.failed",
+            "severity.codex.successful",
+        ]
+
+        let preserved = UsageAlertEvaluator.preservedActiveAlertIDs(
+            activeAlertIDs,
+            excluding: ["codex.successful"]
+        )
+
+        XCTAssertEqual(
+            preserved,
+            ["usage.codex.failed.weekly", "balance.openrouter.failed"]
+        )
+    }
+
     func testUsageAlertEvaluatorUsesWarningPresentationBelowSeverityThreshold() {
         let result = ProviderUsageResult(
             accountID: "codex.personal",
@@ -6464,13 +6482,24 @@ final class CodexBarIOSTests: XCTestCase {
             accountLabel: "Successful Codex",
             authMethod: .browserSession
         )
-        let service = UsageRefreshService(providers: [
-            SelectivelyFailingUsageProvider(providerID: .codex, failedAccountID: failed.id),
-        ])
+        let cachedFailedResult = makeHistoryResult(
+            accountID: failed.id,
+            providerID: .codex,
+            fetchedAt: Date().addingTimeInterval(-300),
+            used: 75
+        )
+        let service = UsageRefreshService(
+            providers: [
+                SelectivelyFailingUsageProvider(providerID: .codex, failedAccountID: failed.id),
+            ],
+            initialResults: [cachedFailedResult]
+        )
 
         await service.refresh(configurations: [failed, successful])
 
-        XCTAssertEqual(service.results.map(\.accountID), [successful.id])
+        XCTAssertEqual(Set(service.results.map(\.accountID)), [failed.id, successful.id])
+        XCTAssertEqual(service.results.first(where: { $0.accountID == failed.id }), cachedFailedResult)
+        XCTAssertEqual(service.successfulRefreshResults.map(\.accountID), [successful.id])
         XCTAssertEqual(service.refreshErrorsByAccountID[failed.id], "Refresh failed")
         XCTAssertNil(service.refreshErrorsByAccountID[successful.id])
         XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
