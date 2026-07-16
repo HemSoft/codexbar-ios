@@ -2,7 +2,7 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-07-15
+Status last reviewed: 2026-07-16
 
 ## Current Status
 
@@ -22,9 +22,9 @@ Status last reviewed: 2026-07-15
   `4+`.
 - Release archive `1.1 (1)` was uploaded to App Store Connect on 2026-07-15,
   finished processing, and is selected in the version 1.1 draft submission.
-- Version 1.1 is `Ready for Review` in App Store Connect. The obsolete review
-  sign-in requirement and personal credentials were removed because CodexBar
-  opens without a CodexBar account.
+- Version 1.1 build `1.1 (1)` was submitted to App Review on 2026-07-16 and is
+  `Waiting for Review`. The obsolete review sign-in requirement and personal
+  credentials were removed because CodexBar opens without a CodexBar account.
 
 ## Apple Requirements To Keep Current
 
@@ -255,7 +255,9 @@ use the persistent **Rate CodexBar** link instead.
 - [x] Add App Review notes. The notes explain that the app opens without an
   account and that live provider cards require reviewer-owned provider
   credentials; the unnecessary review sign-in fields were removed.
-- [ ] Submit for review.
+- [x] Submit for review. Version 1.1 build `1.1 (1)` was submitted on
+  2026-07-16 and is `Waiting for Review`; App Store Connect notes that review
+  can take up to 48 hours.
 - [ ] Track reviewer questions or rejections here until approved.
 
 ## CodexBar-Specific Risks
