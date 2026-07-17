@@ -2,8 +2,9 @@
 
 CodexBar for iOS is a native SwiftUI companion app (bundle ID
 `com.hemsoft.CodexBarIOS`, scheme `CodexBarIOS`, Xcode project
-`CodexBarIOS.xcodeproj`). Targets: `CodexBarIOS` (app), `CodexBarIOSWidget`
-(widget), `CodexBarIOSTests` (unit tests), `SmokeTests` (smoke harness). See
+`CodexBarIOS.xcodeproj`). Xcode targets: `CodexBarIOS` (app),
+`CodexBarIOSWidget` (widget), and `CodexBarIOSTests` (unit tests). `Package.swift`
+also exposes the `CodexBarIOSSmokeTests` executable smoke harness. See
 `README.md` for scope and the Windows reference repo, `APP-STORE.md` for store
 metadata, `PRIVACY.md` for the privacy policy, `SUPPORT.md` for support flow,
 and `CHANGELOG.md` for release history.
@@ -78,8 +79,12 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
     -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' test
   ```
 
-- Run the `SmokeTests` harness the same way, substituting `-scheme SmokeTests`
-  if that scheme exists; otherwise run it as a separate target via Xcode.
+- Run the SwiftPM smoke harness:
+
+  ```sh
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift run \
+    CodexBarIOSSmokeTests
+  ```
 
 There is no separate lint/typecheck tool configured for this repo beyond
 Xcode/Swift compiler warnings and the test targets above.
