@@ -21,6 +21,10 @@ final class CodexBarIOSTests: XCTestCase {
             .apiKey
         )
         XCTAssertEqual(
+            ProviderAccountConfiguration.defaultConfiguration(for: .moonshot).authMethod,
+            .apiKey
+        )
+        XCTAssertEqual(
             ProviderAccountConfiguration.defaultConfiguration(for: .copilot).authMethod,
             .browserSession
         )

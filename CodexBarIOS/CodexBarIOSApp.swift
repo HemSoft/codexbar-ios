@@ -20,6 +20,7 @@ struct CodexBarIOSApp: App {
                 configurationStore.updateDashboardCardOrder([
                     AppStoreScreenshotFixtureID.openRouterAccount,
                     AppStoreScreenshotFixtureID.openCodeZenAccount,
+                    AppStoreScreenshotFixtureID.moonshotAccount,
                     AppStoreScreenshotFixtureID.cursorAccount,
                     AppStoreScreenshotFixtureID.codexAccount,
                     AppStoreScreenshotFixtureID.copilotAccount,
