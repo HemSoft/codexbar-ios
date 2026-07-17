@@ -68,7 +68,7 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
   ```sh
   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
     -project CodexBarIOS.xcodeproj -scheme CodexBarIOS \
-    -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' build
+    -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' build
   ```
 
 - Run unit tests (`CodexBarIOSTests`):
@@ -76,7 +76,7 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
   ```sh
   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
     -project CodexBarIOS.xcodeproj -scheme CodexBarIOS \
-    -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' test
+    -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' test
   ```
 
 - Run the SwiftPM smoke harness:
