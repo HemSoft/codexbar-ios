@@ -771,6 +771,8 @@ private extension ProviderID {
             "OpenRouterLogo"
         case .openCodeZen:
             "OpenCodeZenLogo"
+        case .moonshot:
+            "MoonshotLogo"
         case .cursor:
             "CursorLogo"
         }

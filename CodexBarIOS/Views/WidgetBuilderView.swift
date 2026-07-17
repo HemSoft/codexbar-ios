@@ -279,6 +279,8 @@ private struct WidgetBuilderProviderLogo: View {
             "OpenRouterLogo"
         case "openCodeZen":
             "OpenCodeZenLogo"
+        case "moonshot":
+            "MoonshotLogo"
         case "cursor":
             "CursorLogo"
         default:

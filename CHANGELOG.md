@@ -6,12 +6,19 @@ building, testing, or releasing the app.
 
 ## 1.2.0 - Unreleased
 
+### Added
+
+- Added Moonshot (Kimi) as a new provider: paste an API key from
+  platform.kimi.ai to track the available credit balance on the dashboard, in
+  history, and in widgets, alongside the existing OpenRouter and OpenCode ZEN
+  balances. ([#66](https://github.com/HemSoft/codexbar-ios/issues/66))
+
 ### Developer Experience
 
 - Clarified agent guidance for builds, tests, automated PR reviews, iPhone
   deployment, signing recovery, and browser authentication.
 - Documented the SwiftPM smoke-test command and kept its provider-order check
-  aligned with the current six-provider demo data.
+  aligned with the current seven-provider demo data.
 
 ## 1.1.0 - 2026-07-15
 

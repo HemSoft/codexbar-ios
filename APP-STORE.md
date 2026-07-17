@@ -82,7 +82,7 @@ Reference links:
 
 | Product-page claim | Verified source or constraint | App Store wording guidance |
 | --- | --- | --- |
-| Tracks ChatGPT / Codex, GitHub Copilot, Claude, Cursor, OpenRouter, and OpenCode ZEN | Current provider list used by the app and screenshot plan | Name exactly these providers; do not imply official affiliation. |
+| Tracks ChatGPT / Codex, GitHub Copilot, Claude, Cursor, OpenRouter, OpenCode ZEN, and Moonshot (Kimi) | Current provider list used by the app and screenshot plan | Name exactly these providers; do not imply official affiliation. |
 | Shows usage, limits, balances, reset timing, refresh state, alerts, and history | Provider data varies by API/account type | Say metrics appear where each provider makes them available. |
 | Supports multiple accounts and provider groups | Current app configuration model | Say multiple accounts/groups, not team management or shared org administration. |
 | Offers Home Screen and Lock Screen widgets | Widget extension and configurable widget surfaces | Say configurable widgets; do not promise real-time refresh because iOS controls widget timing. |
@@ -209,7 +209,7 @@ to the App Store Connect 1.1 draft on 2026-07-11:
 - [ ] Confirm logo usage is allowed under each provider's brand guidelines.
 - [ ] Replace any risky brand asset with a permitted mark or neutral in-app icon.
 - [ ] Add disclaimers where needed that CodexBar is not affiliated with tracked providers.
-- [ ] Confirm any OpenRouter/OpenCode ZEN/Cursor/Copilot/Codex wording is accurate and not misleading.
+- [ ] Confirm any provider-name wording (Codex, Copilot, Claude, Cursor, OpenRouter, OpenCode ZEN, Moonshot (Kimi)) is accurate and not misleading.
 
 ### 6. App Review Readiness
 

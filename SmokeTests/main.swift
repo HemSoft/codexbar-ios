@@ -33,6 +33,7 @@ struct SmokeTests {
                 .claude,
                 .cursor,
                 .copilot,
+                .moonshot,
                 .openCodeZen,
                 .openRouter,
             ],
