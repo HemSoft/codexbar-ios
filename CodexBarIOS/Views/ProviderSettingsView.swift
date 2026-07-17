@@ -364,7 +364,7 @@ struct ProviderSettingsView: View {
             [.browserSession]
         case .copilot:
             [.browserSession, .cliToken]
-        case .openRouter, .openCodeZen:
+        case .openRouter, .openCodeZen, .moonshot:
             [.apiKey]
         case .claude:
             [.browserSession]

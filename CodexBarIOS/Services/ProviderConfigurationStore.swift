@@ -711,7 +711,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             normalized.authMethod = .browserSession
         case .cursor:
             normalized.authMethod = .browserSession
-        case .copilot, .claude, .openRouter, .openCodeZen:
+        case .copilot, .claude, .openRouter, .openCodeZen, .moonshot:
             break
         }
         return normalized
@@ -852,6 +852,13 @@ public extension ProviderConfigurationStore {
                 groupID: balanceGroup.id,
                 authMethod: .apiKey,
                 openCodeWorkspaceId: "demo-workspace"
+            ),
+            ProviderAccountConfiguration(
+                id: AppStoreScreenshotFixtureID.moonshotAccount,
+                providerID: .moonshot,
+                accountLabel: "Moonshot (Kimi)",
+                groupID: balanceGroup.id,
+                authMethod: .apiKey
             )
         ]
 

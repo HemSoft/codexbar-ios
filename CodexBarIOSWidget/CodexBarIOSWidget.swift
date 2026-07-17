@@ -122,6 +122,7 @@ enum CodexBarWidgetFocus: String, AppEnum {
     case copilot
     case claude
     case cursor
+    case moonshot
     case openCodeZen
     case openRouter
 
@@ -132,6 +133,7 @@ enum CodexBarWidgetFocus: String, AppEnum {
         .copilot: "GitHub Copilot",
         .claude: "Claude",
         .cursor: "Cursor",
+        .moonshot: "Moonshot (Kimi)",
         .openCodeZen: "OpenCode ZEN",
         .openRouter: "OpenRouter",
     ]
@@ -148,6 +150,8 @@ enum CodexBarWidgetFocus: String, AppEnum {
             "claude"
         case .cursor:
             "cursor"
+        case .moonshot:
+            "moonshot"
         case .openCodeZen:
             "openCodeZen"
         case .openRouter:
@@ -1168,6 +1172,8 @@ struct ProviderLogo: View {
             "OpenRouterLogo"
         case "openCodeZen":
             "OpenCodeZenLogo"
+        case "moonshot":
+            "MoonshotLogo"
         case "cursor":
             "CursorLogo"
         default:

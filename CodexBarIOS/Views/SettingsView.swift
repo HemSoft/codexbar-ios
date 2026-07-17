@@ -523,6 +523,8 @@ private extension ProviderID {
             "network"
         case .openCodeZen:
             "dollarsign.circle"
+        case .moonshot:
+            "moon.stars"
         case .cursor:
             "cursorarrow"
         }

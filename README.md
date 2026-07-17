@@ -11,7 +11,7 @@ The Windows reference implementation is checked out beside this repo at:
 ## Current Scope
 
 - SwiftUI dashboard for provider usage cards
-- Provider abstraction ready for Codex, Copilot, Claude, OpenRouter, and Cursor adapters
+- Provider abstraction with Codex, Copilot, Claude, Cursor, OpenRouter, OpenCode ZEN, and Moonshot (Kimi) adapters
 - Settings screen for enabling providers, labeling accounts, choosing auth method, and saving API keys/tokens in Keychain
 - ChatGPT / Codex browser sign-in with Keychain-backed usage fetching
 - Refresh service with demo data for providers whose fetchers have not been ported yet

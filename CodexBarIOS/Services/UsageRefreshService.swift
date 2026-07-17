@@ -221,6 +221,7 @@ public extension UsageRefreshService {
                 ClaudeUsageProvider(),
                 OpenRouterUsageProvider(),
                 OpenCodeZenUsageProvider(),
+                MoonshotUsageProvider(),
                 CursorUsageProvider(),
             ]
         )
