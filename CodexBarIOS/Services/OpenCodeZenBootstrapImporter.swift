@@ -22,6 +22,10 @@ enum OpenCodeZenBootstrapImporter {
             try? fileManager.removeItem(at: importURL)
         }
 
+        guard protectImportFile(at: importURL, fileManager: fileManager) else {
+            return
+        }
+
         guard
             let data = try? Data(contentsOf: importURL),
             let payload = String(data: data, encoding: .utf8)
@@ -30,6 +34,22 @@ enum OpenCodeZenBootstrapImporter {
         }
 
         importPayload(payload, configurationStore: configurationStore)
+    }
+
+    @discardableResult
+    static func protectImportFile(
+        at importURL: URL,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        do {
+            try fileManager.setAttributes(
+                [.protectionKey: FileProtectionType.complete],
+                ofItemAtPath: importURL.path
+            )
+            return true
+        } catch {
+            return false
+        }
     }
 
     @discardableResult

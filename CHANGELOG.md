@@ -24,6 +24,9 @@ building, testing, or releasing the app.
 - Kept sensitive authorization details out of Claude and Cursor sign-in error
   messages while preserving the HTTP status and safe OAuth error identifier
   needed to understand failures. ([#53](https://github.com/HemSoft/codexbar-ios/issues/53))
+- Protected temporary OpenCode ZEN bootstrap credentials before reading them
+  and continued removing the staging file after every import attempt.
+  ([#54](https://github.com/HemSoft/codexbar-ios/issues/54))
 
 ### Developer Experience
 
