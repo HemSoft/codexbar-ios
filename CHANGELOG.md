@@ -21,6 +21,8 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Preserved Copilot balance, monetary usage, and status details when applying
+  configured account labels. ([#57](https://github.com/HemSoft/codexbar-ios/issues/57))
 - Kept a newer Claude sign-in from being overwritten when an older token
   refresh finishes at the same time. ([#56](https://github.com/HemSoft/codexbar-ios/issues/56))
 - Kept sensitive authorization details out of Claude and Cursor sign-in error
