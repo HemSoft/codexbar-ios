@@ -290,7 +290,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             accountID: configuration.id,
             providerID: result.providerID,
             title: configuration.displayName,
-            subtitle: result.subtitle,
+            subtitle: "\(result.subtitle) • Cached rate-limit windows",
             bars: result.bars,
             barsFetchedAt: result.barsFetchedAt,
             creditsRemaining: result.creditsRemaining,

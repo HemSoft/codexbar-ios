@@ -6670,6 +6670,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(partialAfterRefresh.barsFetchedAt, full.fetchedAt)
         XCTAssertEqual(partialAfterRefresh.fetchedAt, full.fetchedAt.addingTimeInterval(60))
         XCTAssertFalse(partialAfterRefresh.hasFreshBars)
+        XCTAssertTrue(partialAfterRefresh.subtitle.contains("Cached rate-limit windows"))
         XCTAssertEqual(
             partialAfterRefresh.monetaryMetrics.map(\.kind),
             [.spent, .spendLimit, .remainingHeadroom]
@@ -6938,6 +6939,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(partial.fetchedAt, full.fetchedAt.addingTimeInterval(60))
         XCTAssertEqual(partial.barsFetchedAt, full.fetchedAt)
         XCTAssertFalse(partial.hasFreshBars)
+        XCTAssertTrue(partial.subtitle.contains("Cached rate-limit windows"))
         XCTAssertEqual(partial.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
         XCTAssertEqual(stale.bars, full.bars)
         XCTAssertTrue(stale.subtitle.contains("last known data"))
