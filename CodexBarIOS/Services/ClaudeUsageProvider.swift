@@ -50,7 +50,10 @@ public final class ClaudeUsageProvider: UsageProvider {
             return usageResult
         }
 
-        return failureResult("Claude usage did not include rate-limit windows.", configuration: configuration)
+        return await staleOrFailureResult(
+            "Claude usage did not include rate-limit windows.",
+            configuration: configuration
+        )
     }
 
     private func fetchOAuthUsage(

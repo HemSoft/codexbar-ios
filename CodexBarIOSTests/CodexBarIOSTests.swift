@@ -4997,6 +4997,30 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testUsageHistoryStoreSkipsStaleBarsWithoutFreshValues() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let barsFetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Cached Claude usage",
+            bars: [UsageBar(label: "Weekly usage limit", used: 40, limit: 100)],
+            barsFetchedAt: barsFetchedAt,
+            fetchedAt: barsFetchedAt.addingTimeInterval(60)
+        )
+
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [result], now: result.fetchedAt)
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+    }
+
+    @MainActor
     func testUsageHistoryTrendSummaryReportsUsageMovement() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -6814,6 +6838,47 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(requestCount, 1)
         XCTAssertTrue(result.bars.isEmpty)
         XCTAssertEqual(result.subtitle, "Claude usage did not include rate-limit windows.")
+    }
+
+    func testClaudeUsageProviderPreservesCachedBarsWhenOAuthPayloadIsUnrecognized() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+            let data = requestCount == 1
+                ? Data(#"{"limits":[{"kind":"weekly_all","percent":25,"is_active":true}]}"#.utf8)
+                : Data(#"{}"#.utf8)
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                data
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let fresh = try await provider.fetchUsage(for: configuration)
+        let preserved = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(preserved.bars, fresh.bars)
+        XCTAssertEqual(preserved.failureMessage, "Claude usage did not include rate-limit windows.")
+        XCTAssertTrue(preserved.subtitle.contains("last known data"))
     }
 
     @MainActor

@@ -334,7 +334,8 @@ public final class UsageHistoryStore: ObservableObject {
 
     public func record(results: [ProviderUsageResult], now: Date = Date()) {
         let recordableResults = results.filter { result in
-            result.creditsRemaining != nil || !result.bars.isEmpty || !result.monetaryMetrics.isEmpty
+            let hasFreshBars = result.hasFreshBars && !result.bars.isEmpty
+            return result.creditsRemaining != nil || hasFreshBars || !result.monetaryMetrics.isEmpty
         }
         guard !recordableResults.isEmpty else {
             return
