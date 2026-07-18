@@ -6666,6 +6666,7 @@ final class CodexBarIOSTests: XCTestCase {
         let partialAfterRefresh = try await provider.fetchUsage(for: configuration)
 
         XCTAssertEqual(requestCount, 3)
+        XCTAssertFalse(full.subtitle.contains("Cached rate-limit windows"))
         XCTAssertEqual(partialAfterRefresh.bars, full.bars)
         XCTAssertEqual(partialAfterRefresh.barsFetchedAt, full.fetchedAt)
         XCTAssertEqual(partialAfterRefresh.fetchedAt, full.fetchedAt.addingTimeInterval(60))
@@ -6739,6 +6740,49 @@ final class CodexBarIOSTests: XCTestCase {
         clock.advance(by: 61)
         _ = try await provider.fetchUsage(for: configuration)
         XCTAssertEqual(requestCount, 3)
+    }
+
+    func testClaudeUsageProviderPreservesCachedBarsWhenOAuthUsageBecomesUnavailable() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+            if requestCount == 1 {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"limits":[{"kind":"weekly_all","percent":36,"is_active":true}]}"#.utf8)
+                )
+            }
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let fresh = try await provider.fetchUsage(for: configuration)
+        let unavailable = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(unavailable.bars, fresh.bars)
+        XCTAssertEqual(unavailable.barsFetchedAt, fresh.barsFetchedAt)
+        XCTAssertEqual(
+            unavailable.failureMessage,
+            "Claude subscription usage is unavailable for this account."
+        )
+        XCTAssertTrue(unavailable.subtitle.contains("Showing last known data"))
     }
 
     func testClaudeUsageProviderClearsBackoffWhenCredentialChanges() async throws {
@@ -6935,6 +6979,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(requestCount, 3)
         XCTAssertEqual(full.bars.first?.used, 25)
+        XCTAssertFalse(full.subtitle.contains("Cached rate-limit windows"))
         XCTAssertEqual(partial.bars, full.bars)
         XCTAssertEqual(partial.fetchedAt, full.fetchedAt.addingTimeInterval(60))
         XCTAssertEqual(partial.barsFetchedAt, full.fetchedAt)

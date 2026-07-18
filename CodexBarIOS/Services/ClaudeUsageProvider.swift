@@ -112,7 +112,10 @@ public final class ClaudeUsageProvider: UsageProvider {
             )
         case 404:
             return OAuthUsageOutcome(
-                result: failureResult("Claude subscription usage is unavailable for this account.", configuration: configuration)
+                result: await staleOrFailureResult(
+                    "Claude subscription usage is unavailable for this account.",
+                    configuration: configuration
+                )
             )
         case 429:
             let retryAt = retryDate(httpResponse, now: fetchedAt)
@@ -290,7 +293,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             accountID: configuration.id,
             providerID: result.providerID,
             title: configuration.displayName,
-            subtitle: "\(result.subtitle) • Cached rate-limit windows",
+            subtitle: result.subtitle,
             bars: result.bars,
             barsFetchedAt: result.barsFetchedAt,
             creditsRemaining: result.creditsRemaining,
@@ -345,7 +348,7 @@ private actor ClaudeUsageSnapshotCache {
             accountID: result.accountID,
             providerID: result.providerID,
             title: result.title,
-            subtitle: result.subtitle,
+            subtitle: "\(result.subtitle) • Cached rate-limit windows",
             bars: cached.bars,
             barsFetchedAt: cached.barsFetchedAt,
             creditsRemaining: result.creditsRemaining,
