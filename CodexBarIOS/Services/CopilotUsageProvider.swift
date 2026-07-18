@@ -498,7 +498,7 @@ public final class CopilotUsageProvider: UsageProvider {
             || response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
     }
 
-    private func applyAccountMetadata(
+    func applyAccountMetadata(
         to result: ProviderUsageResult,
         configuration: ProviderAccountConfiguration
     ) -> ProviderUsageResult {
@@ -508,6 +508,9 @@ public final class CopilotUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: result.subtitle,
             bars: result.bars,
+            creditsRemaining: result.creditsRemaining,
+            monetaryMetrics: result.monetaryMetrics,
+            usageMessages: result.usageMessages,
             failureMessage: result.failureMessage,
             fetchedAt: result.fetchedAt
         )

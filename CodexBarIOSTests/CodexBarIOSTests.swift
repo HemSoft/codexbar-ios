@@ -2638,6 +2638,45 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.showProjectionOnCurrentBar, true)
     }
 
+    func testCopilotAccountMetadataPreservesAllUsageDetails() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
+        let monetaryMetric = ProviderMonetaryMetric(
+            kind: .balance,
+            label: "Available balance",
+            minorUnits: 1_250,
+            currencyCode: "USD",
+            decimalPlaces: 2,
+            detail: "Provider-reported balance"
+        )
+        let parsedResult = ProviderUsageResult(
+            accountID: "parsed-account",
+            providerID: .copilot,
+            title: "Parsed Copilot account",
+            subtitle: "Live GitHub Copilot usage",
+            bars: [],
+            creditsRemaining: 42.5,
+            monetaryMetrics: [monetaryMetric],
+            usageMessages: ["Provider-reported message"],
+            fetchedAt: fetchedAt
+        )
+        let configuration = ProviderAccountConfiguration(
+            id: "copilot.work",
+            providerID: .copilot,
+            accountLabel: "Work Copilot",
+            authMethod: .browserSession
+        )
+        let provider = CopilotUsageProvider(secretStore: EmptySecretStore())
+
+        let result = provider.applyAccountMetadata(to: parsedResult, configuration: configuration)
+
+        XCTAssertEqual(result.accountID, "copilot.work")
+        XCTAssertEqual(result.title, "Work Copilot")
+        XCTAssertEqual(result.creditsRemaining, parsedResult.creditsRemaining)
+        XCTAssertEqual(result.monetaryMetrics, parsedResult.monetaryMetrics)
+        XCTAssertEqual(result.usageMessages, parsedResult.usageMessages)
+        XCTAssertEqual(result.fetchedAt, fetchedAt)
+    }
+
     func testCopilotUsageParserOmitsUnlimitedChatQuota() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
         let payload = """
