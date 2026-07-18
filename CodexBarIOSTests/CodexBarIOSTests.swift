@@ -2200,6 +2200,99 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(body["state"], "state value")
     }
 
+    func testTokenEndpointErrorFormatterOnlySurfacesSafeOAuthErrorCode() {
+        let body = Data(#"{"error":"invalid_grant","error_description":"authorization code=secret-code client_id=secret-client"}"#.utf8)
+
+        let message = TokenEndpointErrorFormatter.message(statusCode: 400, body: body)
+
+        XCTAssertEqual(message, "HTTP 400 (invalid_grant)")
+        XCTAssertFalse(message.contains("secret-code"))
+        XCTAssertFalse(message.contains("secret-client"))
+    }
+
+    func testTokenEndpointErrorFormatterDropsUntrustedResponseContent() {
+        let rawBody = Data("<html>authorization: Bearer secret-token</html>".utf8)
+        let unsafeJSON = Data(#"{"error":"invalid grant code=secret-code"}"#.utf8)
+        let nonASCIIJSON = Data(#"{"error":"invalid_grant_🔑"}"#.utf8)
+
+        XCTAssertEqual(
+            TokenEndpointErrorFormatter.message(statusCode: 502, body: rawBody),
+            "HTTP 502"
+        )
+        XCTAssertEqual(
+            TokenEndpointErrorFormatter.message(statusCode: 400, body: unsafeJSON),
+            "HTTP 400"
+        )
+        XCTAssertEqual(
+            TokenEndpointErrorFormatter.message(statusCode: 400, body: nonASCIIJSON),
+            "HTTP 400"
+        )
+        XCTAssertEqual(
+            TokenEndpointErrorFormatter.message(errorCode: String(repeating: "x", count: 65)),
+            "Token endpoint rejected the request."
+        )
+    }
+
+    @MainActor
+    func testClaudeBrowserSignInSanitizesTokenExchangeFailure() async throws {
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        let service = ClaudeWebAuthService(session: session, callbackTimeoutNanoseconds: 1_000_000_000)
+
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://platform.claude.com/v1/oauth/token")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 400,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"error":"invalid_grant","error_description":"code=secret-code client_id=secret-client"}"#.utf8)
+            )
+        }
+        defer {
+            MockURLProtocol.handler = nil
+        }
+
+        do {
+            _ = try await service.signIn { authorizationURL in
+                guard
+                    let authorizationComponents = URLComponents(
+                        url: authorizationURL,
+                        resolvingAgainstBaseURL: false
+                    ),
+                    let redirectURI = authorizationComponents.queryItemValue(named: "redirect_uri"),
+                    let state = authorizationComponents.queryItemValue(named: "state"),
+                    var callbackComponents = URLComponents(string: redirectURI)
+                else {
+                    XCTFail("Expected a valid Claude authorization callback URL.")
+                    return
+                }
+                callbackComponents.queryItems = [
+                    URLQueryItem(name: "code", value: "authorization-code"),
+                    URLQueryItem(name: "state", value: state)
+                ]
+                guard let callbackURL = callbackComponents.url else {
+                    XCTFail("Expected a valid Claude callback URL.")
+                    return
+                }
+                Task.detached {
+                    _ = try? await URLSession.shared.data(from: callbackURL)
+                }
+            }
+            XCTFail("Expected Claude sign-in to fail.")
+        } catch {
+            XCTAssertEqual(
+                error as? ClaudeWebAuthService.AuthError,
+                .tokenExchangeFailed("HTTP 400 (invalid_grant)")
+            )
+            XCTAssertFalse(error.localizedDescription.contains("secret-code"))
+            XCTAssertFalse(error.localizedDescription.contains("secret-client"))
+        }
+    }
+
     func testClaudeCredentialsParserReadsClaudeCodeOAuthShape() {
         let credentials = ClaudeCredentialsParser.parse("""
         {
@@ -2297,6 +2390,41 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(result.accessToken, "cursor-access")
         XCTAssertEqual(result.refreshToken, "cursor-refresh")
         XCTAssertTrue(result.storedCredential.contains(#""accessToken": "cursor-access""#))
+    }
+
+    @MainActor
+    func testCursorBrowserSignInSanitizesTokenPollFailure() async throws {
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        let service = CursorWebAuthService(
+            session: session,
+            pollIntervalNanoseconds: 1,
+            maxPollAttempts: 1
+        )
+
+        MockURLProtocol.handler = { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 400,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"error":"invalid_grant","error_description":"code=secret-code"}"#.utf8)
+            )
+        }
+        defer {
+            MockURLProtocol.handler = nil
+        }
+
+        do {
+            _ = try await service.signIn { _ in true }
+            XCTFail("Expected Cursor sign-in to fail.")
+        } catch {
+            XCTAssertEqual(error as? CursorWebAuthService.AuthError, .tokenPollFailed("HTTP 400 (invalid_grant)"))
+            XCTAssertFalse(error.localizedDescription.contains("secret-code"))
+        }
     }
 
 #if canImport(AuthenticationServices) && canImport(UIKit)

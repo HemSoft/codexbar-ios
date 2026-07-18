@@ -19,6 +19,12 @@ building, testing, or releasing the app.
   to each provider's requirements, and made stalled ChatGPT, Claude, and GitHub
   Copilot sign-ins time out cleanly. ([#52](https://github.com/HemSoft/codexbar-ios/issues/52))
 
+### Fixed
+
+- Kept sensitive authorization details out of Claude and Cursor sign-in error
+  messages while preserving the HTTP status and safe OAuth error identifier
+  needed to understand failures. ([#53](https://github.com/HemSoft/codexbar-ios/issues/53))
+
 ### Developer Experience
 
 - Clarified agent guidance for builds, tests, automated PR reviews, iPhone
