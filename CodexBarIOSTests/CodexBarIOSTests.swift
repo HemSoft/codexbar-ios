@@ -5018,6 +5018,34 @@ final class CodexBarIOSTests: XCTestCase {
         store.record(results: [result], now: result.fetchedAt)
 
         XCTAssertTrue(store.snapshots.isEmpty)
+
+        let resultWithFreshMoney = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: result.bars,
+            barsFetchedAt: barsFetchedAt,
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .remainingHeadroom,
+                    label: "Remaining spend headroom",
+                    minorUnits: 3750,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: result.fetchedAt.addingTimeInterval(60)
+        )
+        store.record(results: [resultWithFreshMoney], now: resultWithFreshMoney.fetchedAt)
+
+        let series = store.historySeries(for: resultWithFreshMoney)
+        XCTAssertTrue(series.isBalance)
+        XCTAssertEqual(series.points.map(\.value), [37.5])
+        XCTAssertEqual(
+            store.historySeriesOptions(for: resultWithFreshMoney).map(\.label),
+            ["Remaining spend headroom"]
+        )
     }
 
     @MainActor
