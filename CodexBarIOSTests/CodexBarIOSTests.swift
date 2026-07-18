@@ -3376,7 +3376,7 @@ final class CodexBarIOSTests: XCTestCase {
         }
 
         let importURL = importDirectory.appendingPathComponent(OpenCodeZenBootstrapImporter.importFileName)
-        try Data(#"{"openCodeGoWorkspaceId":"wrk_secret","apiKey":"secret-token"}"#.utf8)
+        try Data(#"{"openCodeGoWorkspaceId":"wrk_secret","providers":{"OpenCodeGo":{"apiKey":"secret-token"}}}"#.utf8)
             .write(to: importURL)
 
         let configurationStore = ProviderConfigurationStore(
