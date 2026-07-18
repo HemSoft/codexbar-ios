@@ -36,6 +36,10 @@ public final class UsageRefreshService: ObservableObject {
         Set(refreshErrorsByAccountID.keys).union(refreshingAccountIDs)
     }
 
+    var queuedBatchRefreshCount: Int {
+        batchRefreshCompletionWaiters.count
+    }
+
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
         if isBatchRefreshRunning {
             pendingBatchConfigurations = configurations
@@ -197,7 +201,13 @@ public final class UsageRefreshService: ObservableObject {
         let failureHasUsageData = failureResult.creditsRemaining != nil
             || !failureResult.bars.isEmpty
             || !failureResult.monetaryMetrics.isEmpty
-        guard let dataResult = failureHasUsageData ? failureResult : cachedResult else {
+        let dataResult: ProviderUsageResult
+        if failureHasUsageData {
+            dataResult = failureResult
+        } else if let cachedResult {
+            dataResult = cachedResult
+        } else {
+            replaceResult(failureResult)
             return
         }
 

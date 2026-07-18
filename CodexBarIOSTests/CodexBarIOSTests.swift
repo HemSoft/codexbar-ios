@@ -7423,7 +7423,7 @@ final class CodexBarIOSTests: XCTestCase {
             await service.refresh(configurations: [pendingConfiguration])
             await pendingRefreshCompleted.set()
         }
-        for _ in 0..<100 {
+        while service.queuedBatchRefreshCount < 1 {
             await Task.yield()
         }
 
@@ -7433,7 +7433,7 @@ final class CodexBarIOSTests: XCTestCase {
             await service.refresh(configurations: [latestConfiguration])
             await latestRefreshCompleted.set()
         }
-        for _ in 0..<100 {
+        while service.queuedBatchRefreshCount < 2 {
             await Task.yield()
         }
         let latestCompletedBeforeRelease = await latestRefreshCompleted.currentValue()
@@ -7509,6 +7509,31 @@ final class CodexBarIOSTests: XCTestCase {
             service.results.first { $0.accountID == failed.id }?.bars,
             cachedFailedResult.bars
         )
+    }
+
+    @MainActor
+    func testThrownRefreshFailureCreatesResultWithoutCachedUsage() async {
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.first-failure",
+            providerID: .codex,
+            accountLabel: "First Failure",
+            authMethod: .browserSession
+        )
+        let service = UsageRefreshService(providers: [
+            SelectivelyFailingUsageProvider(
+                providerID: .codex,
+                failedAccountID: configuration.id
+            ),
+        ])
+
+        await service.refresh(configurations: [configuration])
+
+        XCTAssertEqual(service.results.first?.accountID, configuration.id)
+        XCTAssertEqual(service.results.first?.title, "First Failure")
+        XCTAssertEqual(service.results.first?.subtitle, "Refresh failed")
+        XCTAssertEqual(service.results.first?.failureMessage, "Refresh failed")
+        XCTAssertTrue(service.results.first?.bars.isEmpty == true)
+        XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Refresh failed")
     }
 
     @MainActor
