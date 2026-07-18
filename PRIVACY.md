@@ -21,6 +21,13 @@ When you connect a provider, CodexBar uses the credentials you provide to reques
 
 Those requests are made to the provider's own APIs or web endpoints. The provider may process the request according to its own terms and privacy policy.
 
+For GitHub Copilot browser sign-in, CodexBar includes public OAuth application
+credentials that identify the Copilot-compatible client. They are not personal
+credentials and do not grant access to a GitHub account. You must authorize the
+sign-in with GitHub, the authorization-code exchange is protected with PKCE,
+and the account tokens returned for your session are stored in the iOS
+Keychain.
+
 ## Data HemSoft Collects
 
 HemSoft does not operate a backend service for CodexBar and does not collect your provider credentials, API keys, account balances, usage limits, widget configuration, or snapshot history.

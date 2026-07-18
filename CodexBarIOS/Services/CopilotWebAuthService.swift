@@ -25,12 +25,23 @@ public struct CopilotOAuthConfiguration: Equatable, Sendable {
     public let clientSecret: String
 
     public static var bundled: CopilotOAuthConfiguration {
+        // Copilot CLI-compatible clients use these public OAuth application
+        // credentials. They identify the OAuth app but do not grant access to a
+        // GitHub account; browser authorization and PKCE protect each sign-in.
+        #if DEBUG
         let environment = ProcessInfo.processInfo.environment
+        let environmentClientID = environment["CODEXBAR_COPILOT_OAUTH_CLIENT_ID"]
+        let environmentClientSecret = environment["CODEXBAR_COPILOT_OAUTH_CLIENT_SECRET"]
+        #else
+        let environmentClientID: String? = nil
+        let environmentClientSecret: String? = nil
+        #endif
+
         return CopilotOAuthConfiguration(
-            clientID: environment["CODEXBAR_COPILOT_OAUTH_CLIENT_ID"]
+            clientID: environmentClientID
                 ?? Bundle.main.object(forInfoDictionaryKey: "CODEXBAR_COPILOT_OAUTH_CLIENT_ID") as? String
                 ?? "178c6fc778ccc68e1d6a",
-            clientSecret: environment["CODEXBAR_COPILOT_OAUTH_CLIENT_SECRET"]
+            clientSecret: environmentClientSecret
                 ?? Bundle.main.object(forInfoDictionaryKey: "CODEXBAR_COPILOT_OAUTH_CLIENT_SECRET") as? String
                 ?? "34ddeff2b558a23d38fba8a6de74f086ede1cc0b"
         )
