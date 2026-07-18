@@ -1,6 +1,5 @@
 import CryptoKit
 import Foundation
-import Network
 import Security
 
 public struct ClaudeWebAuthResult: Equatable, Sendable {
@@ -12,7 +11,7 @@ public struct ClaudeWebAuthResult: Equatable, Sendable {
 }
 
 public final class ClaudeWebAuthService: Sendable {
-    public enum AuthError: LocalizedError, Equatable {
+    public enum AuthError: LocalizedError, Equatable, Sendable {
         case couldNotStartCallbackServer
         case missingAuthorizationCode
         case stateMismatch
@@ -88,10 +87,19 @@ public final class ClaudeWebAuthService: Sendable {
         let state = Self.randomBase64URL(byteCount: 32)
         let pkce = Self.makePKCEPair()
         reportStage("Starting local callback server...")
-        let callbackServer = try await ClaudeOAuthCallbackServer.start(
+        let callbackServer = try await LoopbackOAuthCallbackServer<AuthError>.start(
             preferredPorts: [1461, 1462, 1463],
             expectedState: state,
-            callbackPath: Self.callbackPath
+            callbackPath: Self.callbackPath,
+            bindHost: .localhost,
+            queueLabel: "com.hemsoft.CodexBarIOS.claudeOAuthCallback",
+            couldNotStartError: .couldNotStartCallbackServer,
+            missingCodeError: .missingAuthorizationCode,
+            stateMismatchError: .stateMismatch,
+            timeoutError: .callbackTimedOut,
+            successHeading: "Claude sign-in complete",
+            failureHeading: "Claude sign-in failed",
+            maximumRequestLength: 16_384
         )
         defer {
             callbackServer.cancel()
@@ -257,245 +265,6 @@ public final class ClaudeWebAuthService: Sendable {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
-    }
-}
-
-private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
-    let port: UInt16
-
-    private let expectedState: String
-    private let callbackPath: String
-    private let listener: NWListener
-    private let queue = DispatchQueue(label: "com.hemsoft.CodexBarIOS.claudeOAuthCallback")
-    private let lock = NSLock()
-    private var readyContinuation: CheckedContinuation<Void, Error>?
-    private var callbackContinuation: CheckedContinuation<URL, Error>?
-    private var pendingCallbackResult: Result<URL, Error>?
-
-    private init(port: UInt16, expectedState: String, callbackPath: String) throws {
-        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
-            throw ClaudeWebAuthService.AuthError.couldNotStartCallbackServer
-        }
-
-        self.port = port
-        self.expectedState = expectedState
-        self.callbackPath = callbackPath
-        let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(
-            host: Self.preferredLocalhostLoopbackHost(),
-            port: nwPort
-        )
-        self.listener = try NWListener(using: parameters)
-        self.listener.newConnectionHandler = { [weak self] connection in
-            self?.handle(connection)
-        }
-        self.listener.stateUpdateHandler = { [weak self] state in
-            self?.handleListenerState(state)
-        }
-    }
-
-    static func start(
-        preferredPorts: [UInt16],
-        expectedState: String,
-        callbackPath: String
-    ) async throws -> ClaudeOAuthCallbackServer {
-        var lastError: Error = ClaudeWebAuthService.AuthError.couldNotStartCallbackServer
-        for port in preferredPorts {
-            do {
-                let server = try ClaudeOAuthCallbackServer(
-                    port: port,
-                    expectedState: expectedState,
-                    callbackPath: callbackPath
-                )
-                try await server.start()
-                return server
-            } catch {
-                lastError = error
-            }
-        }
-
-        throw lastError
-    }
-
-    private func start() async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            readyContinuation = continuation
-            lock.unlock()
-            listener.start(queue: queue)
-        }
-    }
-
-    func waitForCallback(timeoutNanoseconds: UInt64) async throws -> URL {
-        let timeoutTask = Task { [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: timeoutNanoseconds)
-            } catch {
-                return
-            }
-            self?.resumeCallback(with: .failure(ClaudeWebAuthService.AuthError.callbackTimedOut))
-        }
-        defer {
-            timeoutTask.cancel()
-        }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            if let pendingCallbackResult {
-                self.pendingCallbackResult = nil
-                lock.unlock()
-                continuation.resume(with: pendingCallbackResult)
-                return
-            }
-
-            callbackContinuation = continuation
-            lock.unlock()
-        }
-    }
-
-    func cancel() {
-        listener.cancel()
-    }
-
-    private func handleListenerState(_ state: NWListener.State) {
-        switch state {
-        case .ready:
-            resumeReady(with: .success(()))
-        case .failed(let error):
-            resumeReady(with: .failure(error))
-            resumeCallback(with: .failure(error))
-        case .cancelled:
-            resumeReady(with: .failure(ClaudeWebAuthService.AuthError.couldNotStartCallbackServer))
-            resumeCallback(with: .failure(ClaudeWebAuthService.AuthError.missingAuthorizationCode))
-        default:
-            break
-        }
-    }
-
-    private static func preferredLocalhostLoopbackHost() -> NWEndpoint.Host {
-        var addresses: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo("localhost", nil, nil, &addresses) == 0, let addresses else {
-            return .ipv4(.loopback)
-        }
-        defer { freeaddrinfo(addresses) }
-
-        var address: UnsafeMutablePointer<addrinfo>? = addresses
-        while let candidate = address {
-            switch candidate.pointee.ai_family {
-            case AF_INET6:
-                return .ipv6(.loopback)
-            case AF_INET:
-                return .ipv4(.loopback)
-            default:
-                address = candidate.pointee.ai_next
-            }
-        }
-        return .ipv4(.loopback)
-    }
-
-    private func resumeReady(with result: Result<Void, Error>) {
-        lock.lock()
-        let continuation = readyContinuation
-        readyContinuation = nil
-        lock.unlock()
-        continuation?.resume(with: result)
-    }
-
-    private func resumeCallback(with result: Result<URL, Error>) {
-        lock.lock()
-        if let continuation = callbackContinuation {
-            callbackContinuation = nil
-            lock.unlock()
-            continuation.resume(with: result)
-            return
-        }
-
-        pendingCallbackResult = result
-        lock.unlock()
-    }
-
-    private func handle(_ connection: NWConnection) {
-        connection.start(queue: queue)
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) { [weak self] data, _, _, _ in
-            guard let self else {
-                connection.cancel()
-                return
-            }
-
-            let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-            let result = self.parseCallbackURL(from: request)
-            let response = self.httpResponse(for: result)
-
-            connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
-                connection.cancel()
-            })
-
-            self.resumeCallback(with: result)
-        }
-    }
-
-    private func parseCallbackURL(from request: String) -> Result<URL, Error> {
-        guard
-            let requestLine = request.components(separatedBy: "\r\n").first,
-            requestLine.hasPrefix("GET "),
-            let pathStart = requestLine.firstIndex(of: " "),
-            let pathEnd = requestLine[requestLine.index(after: pathStart)...].firstIndex(of: " ")
-        else {
-            return .failure(ClaudeWebAuthService.AuthError.missingAuthorizationCode)
-        }
-
-        let path = String(requestLine[requestLine.index(after: pathStart)..<pathEnd])
-        guard path.hasPrefix(callbackPath) else {
-            return .failure(ClaudeWebAuthService.AuthError.missingAuthorizationCode)
-        }
-
-        guard let url = URL(string: "http://localhost:\(port)\(path)") else {
-            return .failure(ClaudeWebAuthService.AuthError.missingAuthorizationCode)
-        }
-
-        guard
-            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-            components.claudeQueryItemValue(named: "state") == expectedState
-        else {
-            return .failure(ClaudeWebAuthService.AuthError.stateMismatch)
-        }
-
-        guard components.claudeQueryItemValue(named: "code")?.isEmpty == false else {
-            return .failure(ClaudeWebAuthService.AuthError.missingAuthorizationCode)
-        }
-
-        return .success(url)
-    }
-
-    private func httpResponse(for result: Result<URL, Error>) -> String {
-        let statusLine: String
-        let body: String
-
-        switch result {
-        case .success:
-            statusLine = "HTTP/1.1 200 OK"
-            body = """
-            <!doctype html>
-            <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-            <body><h1>Claude sign-in complete</h1><p>You can return to CodexBar.</p></body></html>
-            """
-        case .failure(let error):
-            statusLine = "HTTP/1.1 400 Bad Request"
-            body = """
-            <!doctype html>
-            <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-            <body><h1>Claude sign-in failed</h1><p>\(error.localizedDescription)</p></body></html>
-            """
-        }
-
-        return """
-        \(statusLine)\r
-        Content-Type: text/html; charset=utf-8\r
-        Content-Length: \(Data(body.utf8).count)\r
-        Connection: close\r
-        \r
-        \(body)
-        """
     }
 }
 

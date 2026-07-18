@@ -38,6 +38,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Consolidated shared provider credential renewal, loopback browser callbacks,
+  form encoding, and pasted-secret normalization so authentication fixes can be
+  applied consistently across providers. ([#59](https://github.com/HemSoft/codexbar-ios/issues/59))
 - Documented why the public GitHub Copilot OAuth application credentials are
   bundled, how PKCE protects sign-in, and limited process-environment credential
   overrides to debug builds. ([#55](https://github.com/HemSoft/codexbar-ios/issues/55))

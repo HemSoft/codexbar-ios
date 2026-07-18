@@ -1,6 +1,5 @@
 import CryptoKit
 import Foundation
-import Network
 import Security
 
 public struct CodexWebAuthResult: Equatable, Sendable {
@@ -27,7 +26,7 @@ public struct CodexPKCEPair: Equatable, Sendable {
 }
 
 public final class CodexWebAuthService: Sendable {
-    public enum AuthError: LocalizedError, Equatable {
+    public enum AuthError: LocalizedError, Equatable, Sendable {
         case couldNotStartCallbackServer
         case missingAuthorizationCode
         case stateMismatch
@@ -89,10 +88,18 @@ public final class CodexWebAuthService: Sendable {
     public func signIn(presentAuthorizationURL: @escaping @MainActor (URL) -> Void) async throws -> CodexWebAuthResult {
         let state = Self.randomBase64URL(byteCount: 32)
         let pkce = Self.makePKCEPair()
-        let callbackServer = try await CodexOAuthCallbackServer.start(
+        let callbackServer = try await LoopbackOAuthCallbackServer<AuthError>.start(
             preferredPorts: [1455, 1457],
             expectedState: state,
-            callbackPath: Self.callbackPath
+            callbackPath: Self.callbackPath,
+            bindHost: .localhost,
+            queueLabel: "com.hemsoft.CodexBarIOS.codexOAuthCallback",
+            couldNotStartError: .couldNotStartCallbackServer,
+            missingCodeError: .missingAuthorizationCode,
+            stateMismatchError: .stateMismatch,
+            timeoutError: .callbackTimedOut,
+            successHeading: "Sign-in complete",
+            failureHeading: "Sign-in failed"
         )
         defer {
             callbackServer.cancel()
@@ -154,7 +161,7 @@ public final class CodexWebAuthService: Sendable {
         redirectURI: String,
         codeVerifier: String
     ) -> Data {
-        formEncoded([
+        OAuthFormEncoder.encode([
             ("grant_type", "authorization_code"),
             ("code", code),
             ("redirect_uri", redirectURI),
@@ -164,7 +171,7 @@ public final class CodexWebAuthService: Sendable {
     }
 
     public static func makeRefreshTokenRequestBody(refreshToken: String) -> Data {
-        formEncoded([
+        OAuthFormEncoder.encode([
             ("grant_type", "refresh_token"),
             ("refresh_token", refreshToken),
             ("client_id", clientID),
@@ -242,274 +249,12 @@ public final class CodexWebAuthService: Sendable {
         return Data(bytes).base64URLEncodedString()
     }
 
-    private static func formEncoded(_ pairs: [(String, String)]) -> Data {
-        let encoded = pairs
-            .map { "\($0.0.urlFormEncoded)=\($0.1.urlFormEncoded)" }
-            .joined(separator: "&")
-        return Data(encoded.utf8)
-    }
-}
-
-private final class CodexOAuthCallbackServer: @unchecked Sendable {
-    let port: UInt16
-
-    private let expectedState: String
-    private let callbackPath: String
-    private let listener: NWListener
-    private let queue = DispatchQueue(label: "com.hemsoft.CodexBarIOS.codexOAuthCallback")
-    private let lock = NSLock()
-    private var readyContinuation: CheckedContinuation<Void, Error>?
-    private var callbackContinuation: CheckedContinuation<URL, Error>?
-    private var pendingCallbackResult: Result<URL, Error>?
-
-    private init(port: UInt16, expectedState: String, callbackPath: String) throws {
-        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
-            throw CodexWebAuthService.AuthError.couldNotStartCallbackServer
-        }
-
-        self.port = port
-        self.expectedState = expectedState
-        self.callbackPath = callbackPath
-        let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(
-            host: Self.preferredLocalhostLoopbackHost(),
-            port: nwPort
-        )
-        self.listener = try NWListener(using: parameters)
-        self.listener.newConnectionHandler = { [weak self] connection in
-            self?.handle(connection)
-        }
-        self.listener.stateUpdateHandler = { [weak self] state in
-            self?.handleListenerState(state)
-        }
-    }
-
-    static func start(
-        preferredPorts: [UInt16],
-        expectedState: String,
-        callbackPath: String
-    ) async throws -> CodexOAuthCallbackServer {
-        var lastError: Error = CodexWebAuthService.AuthError.couldNotStartCallbackServer
-        for port in preferredPorts {
-            do {
-                let server = try CodexOAuthCallbackServer(
-                    port: port,
-                    expectedState: expectedState,
-                    callbackPath: callbackPath
-                )
-                try await server.startListening()
-                return server
-            } catch {
-                lastError = error
-            }
-        }
-
-        throw lastError
-    }
-
-    func waitForCallback(timeoutNanoseconds: UInt64) async throws -> URL {
-        let timeoutTask = Task { [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: timeoutNanoseconds)
-            } catch {
-                return
-            }
-            self?.finishCallback(.failure(CodexWebAuthService.AuthError.callbackTimedOut))
-        }
-        defer {
-            timeoutTask.cancel()
-        }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            if let pendingCallbackResult {
-                self.pendingCallbackResult = nil
-                lock.unlock()
-                continuation.resume(with: pendingCallbackResult)
-                return
-            }
-
-            callbackContinuation = continuation
-            lock.unlock()
-        }
-    }
-
-    func cancel() {
-        listener.cancel()
-    }
-
-    private func startListening() async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            readyContinuation = continuation
-            lock.unlock()
-            listener.start(queue: queue)
-        }
-    }
-
-    private func handleListenerState(_ state: NWListener.State) {
-        switch state {
-        case .ready:
-            finishReady(.success(()))
-        case .failed(let error):
-            finishReady(.failure(error))
-            finishCallback(.failure(error))
-        case .cancelled:
-            finishReady(.failure(CodexWebAuthService.AuthError.couldNotStartCallbackServer))
-            finishCallback(.failure(CodexWebAuthService.AuthError.missingAuthorizationCode))
-        default:
-            break
-        }
-    }
-
-    private static func preferredLocalhostLoopbackHost() -> NWEndpoint.Host {
-        var addresses: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo("localhost", nil, nil, &addresses) == 0, let addresses else {
-            return .ipv4(.loopback)
-        }
-        defer { freeaddrinfo(addresses) }
-
-        var address: UnsafeMutablePointer<addrinfo>? = addresses
-        while let candidate = address {
-            switch candidate.pointee.ai_family {
-            case AF_INET6:
-                return .ipv6(.loopback)
-            case AF_INET:
-                return .ipv4(.loopback)
-            default:
-                address = candidate.pointee.ai_next
-            }
-        }
-        return .ipv4(.loopback)
-    }
-
-    private func finishReady(_ result: Result<Void, Error>) {
-        lock.lock()
-        let continuation = readyContinuation
-        readyContinuation = nil
-        lock.unlock()
-        continuation?.resume(with: result)
-    }
-
-    private func finishCallback(_ result: Result<URL, Error>) {
-        lock.lock()
-        if let continuation = callbackContinuation {
-            callbackContinuation = nil
-            lock.unlock()
-            continuation.resume(with: result)
-        } else {
-            pendingCallbackResult = result
-            lock.unlock()
-        }
-    }
-
-    private func handle(_ connection: NWConnection) {
-        connection.start(queue: queue)
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] data, _, _, _ in
-            guard let self else {
-                connection.cancel()
-                return
-            }
-
-            let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-            let result = self.parseCallbackURL(from: request)
-            let response = self.httpResponse(for: result)
-
-            connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
-                connection.cancel()
-            })
-
-            if case .success(let url) = result {
-                self.finishCallback(.success(url))
-            } else if case .failure(let error) = result {
-                self.finishCallback(.failure(error))
-            }
-        }
-    }
-
-    private func parseCallbackURL(from request: String) -> Result<URL, Error> {
-        guard
-            let requestLine = request.components(separatedBy: "\r\n").first,
-            requestLine.hasPrefix("GET "),
-            let pathStart = requestLine.firstIndex(of: " "),
-            let pathEnd = requestLine[requestLine.index(after: pathStart)...].firstIndex(of: " ")
-        else {
-            return .failure(CodexWebAuthService.AuthError.missingAuthorizationCode)
-        }
-
-        let path = String(requestLine[requestLine.index(after: pathStart)..<pathEnd])
-        guard path.hasPrefix(callbackPath) else {
-            return .failure(CodexWebAuthService.AuthError.missingAuthorizationCode)
-        }
-
-        guard let url = URL(string: "http://localhost:\(port)\(path)") else {
-            return .failure(CodexWebAuthService.AuthError.missingAuthorizationCode)
-        }
-
-        guard
-            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-            components.queryItemValue(named: "state") == expectedState
-        else {
-            return .failure(CodexWebAuthService.AuthError.stateMismatch)
-        }
-
-        guard components.queryItemValue(named: "code")?.isEmpty == false else {
-            return .failure(CodexWebAuthService.AuthError.missingAuthorizationCode)
-        }
-
-        return .success(url)
-    }
-
-    private func httpResponse(for result: Result<URL, Error>) -> String {
-        let statusLine: String
-        let body: String
-
-        switch result {
-        case .success:
-            statusLine = "HTTP/1.1 200 OK"
-            body = """
-            <!doctype html>
-            <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-            <body><h1>Sign-in complete</h1><p>You can return to CodexBar.</p></body></html>
-            """
-        case .failure(let error):
-            statusLine = "HTTP/1.1 400 Bad Request"
-            body = """
-            <!doctype html>
-            <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-            <body><h1>Sign-in failed</h1><p>\(error.localizedDescription)</p></body></html>
-            """
-        }
-
-        return """
-        \(statusLine)\r
-        Content-Type: text/html; charset=utf-8\r
-        Content-Length: \(Data(body.utf8).count)\r
-        Connection: close\r
-        \r
-        \(body)
-        """
-    }
 }
 
 private extension URLComponents {
     func queryItemValue(named name: String) -> String? {
         queryItems?.first { $0.name == name }?.value
     }
-}
-
-private extension String {
-    var urlFormEncoded: String {
-        addingPercentEncoding(withAllowedCharacters: .urlFormAllowed) ?? self
-    }
-}
-
-private extension CharacterSet {
-    static let urlFormAllowed: CharacterSet = {
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._~")
-        return allowed
-    }()
 }
 
 private extension Data {

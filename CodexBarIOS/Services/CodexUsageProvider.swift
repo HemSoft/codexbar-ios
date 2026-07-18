@@ -1,7 +1,7 @@
 import Foundation
 
 public final class CodexUsageProvider: UsageProvider {
-    private static let refreshCoordinator = CredentialRefreshCoordinator<CredentialRefreshResult>()
+    private static let refreshCoordinator = CredentialRefreshCoordinator<ProviderCredentialRefreshResult<CodexCredentials>>()
 
     private let secretStore: SecretStore
     private let session: URLSession
@@ -55,7 +55,7 @@ public final class CodexUsageProvider: UsageProvider {
             case .success(let refreshed):
                 credentials = refreshed
                 didRefresh = true
-            case .rejected:
+            case .expired, .rejected:
                 return failureResult(
                     "ChatGPT / Codex credential renewal was rejected. Sign in again.",
                     configuration: configuration
@@ -110,7 +110,7 @@ public final class CodexUsageProvider: UsageProvider {
                     keychainAccount: keychainAccount,
                     canRefresh: false
                 )
-            case .rejected:
+            case .expired, .rejected:
                 return failureResult(
                     "ChatGPT / Codex credential renewal was rejected. Sign in again.",
                     configuration: configuration
@@ -156,7 +156,7 @@ public final class CodexUsageProvider: UsageProvider {
     private func refreshCredentials(
         _ credentials: CodexCredentials,
         keychainAccount: String
-    ) async -> CredentialRefreshResult {
+    ) async -> ProviderCredentialRefreshResult<CodexCredentials> {
         await Self.refreshCoordinator.run(for: keychainAccount) { [self] in
             await performCredentialRefresh(credentials, keychainAccount: keychainAccount)
         }
@@ -165,90 +165,58 @@ public final class CodexUsageProvider: UsageProvider {
     private func performCredentialRefresh(
         _ credentials: CodexCredentials,
         keychainAccount: String
-    ) async -> CredentialRefreshResult {
-        do {
-            guard
-                let storedSecret = try secretStore.readSecret(account: keychainAccount),
-                let latestCredentials = CodexCredentialsParser.parse(storedSecret)
-            else {
-                return .rejected
-            }
-            if latestCredentials != credentials {
-                return .success(latestCredentials)
-            }
-        } catch {
-            return .temporarilyUnavailable
-        }
+    ) async -> ProviderCredentialRefreshResult<CodexCredentials> {
+        await performProviderCredentialRefresh(
+            credentials: credentials,
+            keychainAccount: keychainAccount,
+            secretStore: secretStore,
+            session: session,
+            now: now,
+            parse: { CodexCredentialsParser.parse($0) },
+            storedCredential: { CodexCredentialsParser.storedCredential(from: $0) },
+            prepare: { [tokenEndpoint] _ in
+                guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
+                    return .finished(.rejected)
+                }
 
-        guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
-            return .rejected
-        }
-
-        var request = URLRequest(url: tokenEndpoint)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 15
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = CodexWebAuthService.makeRefreshTokenRequestBody(refreshToken: refreshToken)
-
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return .temporarilyUnavailable
-            }
-            guard (200..<300).contains(httpResponse.statusCode) else {
-                return [400, 401, 403].contains(httpResponse.statusCode) ? .rejected : .temporarilyUnavailable
-            }
-            guard let tokenResponse = try? JSONDecoder().decode(CodexTokenRefreshResponse.self, from: data) else {
-                return .temporarilyUnavailable
-            }
-            if tokenResponse.error != nil {
-                return .rejected
-            }
-            guard let accessToken = tokenResponse.accessToken, !accessToken.isEmpty else {
-                return .temporarilyUnavailable
-            }
-
-            let refreshedAt = now()
-            let idToken = tokenResponse.idToken ?? credentials.idToken
-            let parsedAccessToken = CodexCredentialsParser.parse(accessToken)
-            let parsedIDToken = idToken.flatMap(CodexCredentialsParser.parse)
-            let updated = CodexCredentials(
-                accessToken: accessToken,
-                refreshToken: tokenResponse.refreshToken ?? credentials.refreshToken,
-                idToken: idToken,
-                accountID: parsedIDToken?.accountID
-                    ?? parsedAccessToken?.accountID
-                    ?? credentials.accountID,
-                expiresAt: tokenResponse.expiresAt.map(CodexCredentials.normalizedEpochSeconds)
-                    ?? tokenResponse.expiresIn.map {
-                        Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
-                    }
-                    ?? parsedAccessToken?.expiresAt
-                    ?? parsedIDToken?.expiresAt
-            )
-
-            do {
-                guard
-                    let storedSecret = try secretStore.readSecret(account: keychainAccount),
-                    let latestCredentials = CodexCredentialsParser.parse(storedSecret)
-                else {
+                var request = URLRequest(url: tokenEndpoint)
+                request.httpMethod = "POST"
+                request.timeoutInterval = 15
+                request.setValue("application/json", forHTTPHeaderField: "Accept")
+                request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+                request.httpBody = CodexWebAuthService.makeRefreshTokenRequestBody(refreshToken: refreshToken)
+                return .request(request)
+            },
+            decode: { data, refreshedAt in
+                guard let tokenResponse = try? JSONDecoder().decode(CodexTokenRefreshResponse.self, from: data) else {
+                    return .temporarilyUnavailable
+                }
+                if tokenResponse.error != nil {
                     return .rejected
                 }
-                if latestCredentials != credentials {
-                    return .success(latestCredentials)
+                guard let accessToken = tokenResponse.accessToken, !accessToken.isEmpty else {
+                    return .temporarilyUnavailable
                 }
-                try secretStore.saveSecret(
-                    CodexCredentialsParser.storedCredential(from: updated),
-                    account: keychainAccount
-                )
-            } catch {
-                return .persistenceFailed
+
+                let idToken = tokenResponse.idToken ?? credentials.idToken
+                let parsedAccessToken = CodexCredentialsParser.parse(accessToken)
+                let parsedIDToken = idToken.flatMap(CodexCredentialsParser.parse)
+                return .success(CodexCredentials(
+                    accessToken: accessToken,
+                    refreshToken: tokenResponse.refreshToken ?? credentials.refreshToken,
+                    idToken: idToken,
+                    accountID: parsedIDToken?.accountID
+                        ?? parsedAccessToken?.accountID
+                        ?? credentials.accountID,
+                    expiresAt: tokenResponse.expiresAt.map(CodexCredentials.normalizedEpochSeconds)
+                        ?? tokenResponse.expiresIn.map {
+                            Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
+                        }
+                        ?? parsedAccessToken?.expiresAt
+                        ?? parsedIDToken?.expiresAt
+                ))
             }
-            return .success(updated)
-        } catch {
-            return .temporarilyUnavailable
-        }
+        )
     }
 
     private func failureResult(_ message: String, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
@@ -292,13 +260,6 @@ public final class CodexUsageProvider: UsageProvider {
         )
     }
 
-}
-
-private enum CredentialRefreshResult: Sendable {
-    case success(CodexCredentials)
-    case rejected
-    case temporarilyUnavailable
-    case persistenceFailed
 }
 
 private struct CodexTokenRefreshResponse: Decodable {

@@ -1,7 +1,7 @@
 import Foundation
 
 public final class CopilotUsageProvider: UsageProvider {
-    private static let refreshCoordinator = CredentialRefreshCoordinator<CopilotCredentialRefreshResult>()
+    private static let refreshCoordinator = CredentialRefreshCoordinator<ProviderCredentialRefreshResult<CopilotCredentials>>()
 
     private static let editorVersion = "vscode/1.96.2"
     private static let editorPluginVersion = "copilot-chat/0.26.7"
@@ -347,7 +347,7 @@ public final class CopilotUsageProvider: UsageProvider {
     private func refreshCredentials(
         _ credentials: CopilotCredentials,
         keychainAccount: String
-    ) async -> CopilotCredentialRefreshResult {
+    ) async -> ProviderCredentialRefreshResult<CopilotCredentials> {
         await Self.refreshCoordinator.run(for: keychainAccount) { [self] in
             await performCredentialRefresh(credentials, keychainAccount: keychainAccount)
         }
@@ -356,99 +356,67 @@ public final class CopilotUsageProvider: UsageProvider {
     private func performCredentialRefresh(
         _ credentials: CopilotCredentials,
         keychainAccount: String
-    ) async -> CopilotCredentialRefreshResult {
-        do {
-            guard
-                let storedSecret = try secretStore.readSecret(account: keychainAccount),
-                let latestCredentials = CopilotCredentialsParser.parse(storedSecret)
-            else {
-                return .rejected
-            }
-            if latestCredentials != credentials {
-                return .success(latestCredentials)
-            }
-        } catch {
-            return .temporarilyUnavailable
-        }
+    ) async -> ProviderCredentialRefreshResult<CopilotCredentials> {
+        await performProviderCredentialRefresh(
+            credentials: credentials,
+            keychainAccount: keychainAccount,
+            secretStore: secretStore,
+            session: session,
+            now: now,
+            parse: { CopilotCredentialsParser.parse($0) },
+            storedCredential: { CopilotCredentialsParser.storedCredential(from: $0) },
+            prepare: { [oauthConfiguration, tokenEndpoint] refreshedAt in
+                guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
+                    return .finished(.rejected)
+                }
+                if let refreshTokenExpiresAt = credentials.refreshTokenExpiresAt,
+                   Date(timeIntervalSince1970: TimeInterval(refreshTokenExpiresAt)) <= refreshedAt {
+                    return .finished(.expired)
+                }
 
-        let refreshedAt = now()
-        guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
-            return .rejected
-        }
-        if let refreshTokenExpiresAt = credentials.refreshTokenExpiresAt,
-           Date(timeIntervalSince1970: TimeInterval(refreshTokenExpiresAt)) <= refreshedAt {
-            return .expired
-        }
+                let clientID = oauthConfiguration.clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+                let clientSecret = oauthConfiguration.clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !clientID.isEmpty, !clientSecret.isEmpty else {
+                    return .finished(.temporarilyUnavailable)
+                }
 
-        let clientID = oauthConfiguration.clientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let clientSecret = oauthConfiguration.clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clientID.isEmpty, !clientSecret.isEmpty else {
-            return .temporarilyUnavailable
-        }
-
-        var request = URLRequest(url: tokenEndpoint)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 15
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = CopilotWebAuthService.makeRefreshTokenRequestBody(
-            clientID: clientID,
-            clientSecret: clientSecret,
-            refreshToken: refreshToken
-        )
-
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return .temporarilyUnavailable
-            }
-            guard (200..<300).contains(httpResponse.statusCode) else {
-                return [400, 401, 403].contains(httpResponse.statusCode) ? .rejected : .temporarilyUnavailable
-            }
-            guard let tokenResponse = try? JSONDecoder().decode(CopilotTokenRefreshResponse.self, from: data) else {
-                return .temporarilyUnavailable
-            }
-            if tokenResponse.error != nil {
-                return .rejected
-            }
-            guard let accessToken = tokenResponse.accessToken, !accessToken.isEmpty else {
-                return .temporarilyUnavailable
-            }
-
-            let rotatedRefreshToken = tokenResponse.refreshToken ?? credentials.refreshToken
-            let updated = CopilotCredentials(
-                accessToken: accessToken,
-                username: credentials.username,
-                refreshToken: rotatedRefreshToken,
-                expiresAt: tokenResponse.expiresIn.map {
-                    Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
-                },
-                refreshTokenExpiresAt: tokenResponse.refreshTokenExpiresIn.map {
-                    Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
-                } ?? (tokenResponse.refreshToken == nil ? credentials.refreshTokenExpiresAt : nil)
-            )
-
-            do {
-                guard
-                    let storedSecret = try secretStore.readSecret(account: keychainAccount),
-                    let latestCredentials = CopilotCredentialsParser.parse(storedSecret)
-                else {
+                var request = URLRequest(url: tokenEndpoint)
+                request.httpMethod = "POST"
+                request.timeoutInterval = 15
+                request.setValue("application/json", forHTTPHeaderField: "Accept")
+                request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+                request.httpBody = CopilotWebAuthService.makeRefreshTokenRequestBody(
+                    clientID: clientID,
+                    clientSecret: clientSecret,
+                    refreshToken: refreshToken
+                )
+                return .request(request)
+            },
+            decode: { data, refreshedAt in
+                guard let tokenResponse = try? JSONDecoder().decode(CopilotTokenRefreshResponse.self, from: data) else {
+                    return .temporarilyUnavailable
+                }
+                if tokenResponse.error != nil {
                     return .rejected
                 }
-                if latestCredentials != credentials {
-                    return .success(latestCredentials)
+                guard let accessToken = tokenResponse.accessToken, !accessToken.isEmpty else {
+                    return .temporarilyUnavailable
                 }
-                try secretStore.saveSecret(
-                    CopilotCredentialsParser.storedCredential(from: updated),
-                    account: keychainAccount
-                )
-            } catch {
-                return .persistenceFailed
+
+                let rotatedRefreshToken = tokenResponse.refreshToken ?? credentials.refreshToken
+                return .success(CopilotCredentials(
+                    accessToken: accessToken,
+                    username: credentials.username,
+                    refreshToken: rotatedRefreshToken,
+                    expiresAt: tokenResponse.expiresIn.map {
+                        Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
+                    },
+                    refreshTokenExpiresAt: tokenResponse.refreshTokenExpiresIn.map {
+                        Int64(refreshedAt.addingTimeInterval(TimeInterval($0)).timeIntervalSince1970)
+                    } ?? (tokenResponse.refreshToken == nil ? credentials.refreshTokenExpiresAt : nil)
+                ))
             }
-            return .success(updated)
-        } catch {
-            return .temporarilyUnavailable
-        }
+        )
     }
 
     func resolveOrganizationAllotment(
@@ -516,14 +484,6 @@ public final class CopilotUsageProvider: UsageProvider {
             fetchedAt: result.fetchedAt
         )
     }
-}
-
-private enum CopilotCredentialRefreshResult: Sendable {
-    case success(CopilotCredentials)
-    case expired
-    case rejected
-    case temporarilyUnavailable
-    case persistenceFailed
 }
 
 private struct CopilotTokenRefreshResponse: Decodable {
