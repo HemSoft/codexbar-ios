@@ -21,6 +21,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Kept provider cards and cached usage visible consistently when refreshes fail,
+  queued one follow-up refresh when new triggers arrive during an active refresh,
+  and surfaced credential-read errors instead of treating them as a missing
+  account. ([#60](https://github.com/HemSoft/codexbar-ios/issues/60))
 - Stopped routine Claude usage refreshes from sending a billable Messages API
   request when subscription usage is unavailable or incomplete, while keeping
   previously displayed rate-limit windows visible when available.
@@ -46,7 +50,7 @@ building, testing, or releasing the app.
   overrides to debug builds. ([#55](https://github.com/HemSoft/codexbar-ios/issues/55))
 - Clarified agent guidance for builds, tests, automated PR reviews, iPhone
   deployment, signing recovery, and browser authentication.
-- Documented the SwiftPM smoke-test command and kept its provider-order check
+- Documented the SwiftPM smoke-test command and kept its provider-coverage check
   aligned with the current seven-provider demo data.
 
 ## 1.1.0 - 2026-07-15

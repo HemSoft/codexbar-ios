@@ -28,16 +28,8 @@ struct SmokeTests {
         await service.refresh()
 
         expect(
-            service.results.map(\.providerID) == [
-                .codex,
-                .claude,
-                .cursor,
-                .copilot,
-                .moonshot,
-                .openCodeZen,
-                .openRouter,
-            ],
-            "demo providers should refresh in title order"
+            Set(service.results.map(\.providerID)) == Set(ProviderID.allCases),
+            "demo refresh should include every provider"
         )
         expect(service.isRefreshing == false, "refresh flag should reset")
         expect(service.lastRefreshError == nil, "demo refresh should not fail")
