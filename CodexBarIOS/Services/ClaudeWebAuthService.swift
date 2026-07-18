@@ -265,11 +265,10 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
 
     private let expectedState: String
     private let callbackPath: String
-    private let listeners: [NWListener]
+    private let listener: NWListener
     private let queue = DispatchQueue(label: "com.hemsoft.CodexBarIOS.claudeOAuthCallback")
     private let lock = NSLock()
     private var readyContinuation: CheckedContinuation<Void, Error>?
-    private var readyListenerCount = 0
     private var callbackContinuation: CheckedContinuation<URL, Error>?
     private var pendingCallbackResult: Result<URL, Error>?
 
@@ -281,18 +280,17 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
         self.port = port
         self.expectedState = expectedState
         self.callbackPath = callbackPath
-        // `localhost` may resolve to either address family, so bind only to both loopback addresses.
-        self.listeners = try [
-            Self.makeListener(host: .ipv4(.loopback), port: nwPort),
-            Self.makeListener(host: .ipv6(.loopback), port: nwPort),
-        ]
-        for listener in listeners {
-            listener.newConnectionHandler = { [weak self] connection in
-                self?.handle(connection)
-            }
-            listener.stateUpdateHandler = { [weak self] state in
-                self?.handleListenerState(state)
-            }
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(
+            host: Self.preferredLocalhostLoopbackHost(),
+            port: nwPort
+        )
+        self.listener = try NWListener(using: parameters)
+        self.listener.newConnectionHandler = { [weak self] connection in
+            self?.handle(connection)
+        }
+        self.listener.stateUpdateHandler = { [weak self] state in
+            self?.handleListenerState(state)
         }
     }
 
@@ -309,13 +307,8 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
                     expectedState: expectedState,
                     callbackPath: callbackPath
                 )
-                do {
-                    try await server.start()
-                    return server
-                } catch {
-                    server.cancel()
-                    lastError = error
-                }
+                try await server.start()
+                return server
             } catch {
                 lastError = error
             }
@@ -329,7 +322,7 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
             lock.lock()
             readyContinuation = continuation
             lock.unlock()
-            listeners.forEach { $0.start(queue: queue) }
+            listener.start(queue: queue)
         }
     }
 
@@ -361,13 +354,13 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
     }
 
     func cancel() {
-        listeners.forEach { $0.cancel() }
+        listener.cancel()
     }
 
     private func handleListenerState(_ state: NWListener.State) {
         switch state {
         case .ready:
-            finishOneListenerReady()
+            resumeReady(with: .success(()))
         case .failed(let error):
             resumeReady(with: .failure(error))
             resumeCallback(with: .failure(error))
@@ -379,31 +372,25 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
         }
     }
 
-    private static func makeListener(host: NWEndpoint.Host, port: NWEndpoint.Port) throws -> NWListener {
-        let parameters = NWParameters.tcp
-        // Both address families must share the selected callback port.
-        parameters.allowLocalEndpointReuse = true
-        parameters.requiredLocalEndpoint = .hostPort(host: host, port: port)
-        return try NWListener(using: parameters)
-    }
-
-    private func finishOneListenerReady() {
-        lock.lock()
-        guard readyContinuation != nil else {
-            lock.unlock()
-            return
+    private static func preferredLocalhostLoopbackHost() -> NWEndpoint.Host {
+        var addresses: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo("localhost", nil, nil, &addresses) == 0, let addresses else {
+            return .ipv4(.loopback)
         }
+        defer { freeaddrinfo(addresses) }
 
-        readyListenerCount += 1
-        guard readyListenerCount == listeners.count else {
-            lock.unlock()
-            return
+        var address: UnsafeMutablePointer<addrinfo>? = addresses
+        while let candidate = address {
+            switch candidate.pointee.ai_family {
+            case AF_INET6:
+                return .ipv6(.loopback)
+            case AF_INET:
+                return .ipv4(.loopback)
+            default:
+                address = candidate.pointee.ai_next
+            }
         }
-
-        let continuation = readyContinuation
-        readyContinuation = nil
-        lock.unlock()
-        continuation?.resume()
+        return .ipv4(.loopback)
     }
 
     private func resumeReady(with result: Result<Void, Error>) {
