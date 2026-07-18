@@ -51,7 +51,6 @@ public final class ClaudeWebAuthService: Sendable {
         let subscriptionType: String?
         let rateLimitTier: String?
         let error: String?
-        let errorDescription: String?
 
         enum CodingKeys: String, CodingKey {
             case accessToken = "access_token"
@@ -61,7 +60,6 @@ public final class ClaudeWebAuthService: Sendable {
             case subscriptionType = "subscription_type"
             case rateLimitTier = "rate_limit_tier"
             case error
-            case errorDescription = "error_description"
         }
     }
 
@@ -217,7 +215,9 @@ public final class ClaudeWebAuthService: Sendable {
         }
 
         guard (200..<300).contains(httpResponse.statusCode) else {
-            throw AuthError.tokenExchangeFailed(String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)")
+            throw AuthError.tokenExchangeFailed(
+                TokenEndpointErrorFormatter.message(statusCode: httpResponse.statusCode, body: data)
+            )
         }
 
         guard let tokenResponse = try? JSONDecoder().decode(TokenResponse.self, from: data) else {
@@ -225,7 +225,7 @@ public final class ClaudeWebAuthService: Sendable {
         }
 
         if let error = tokenResponse.error {
-            throw AuthError.tokenExchangeFailed(tokenResponse.errorDescription ?? error)
+            throw AuthError.tokenExchangeFailed(TokenEndpointErrorFormatter.message(errorCode: error))
         }
 
         guard let accessToken = tokenResponse.accessToken, !accessToken.isEmpty else {
