@@ -6613,9 +6613,11 @@ final class CodexBarIOSTests: XCTestCase {
         )
         let sessionConfiguration = URLSessionConfiguration.ephemeral
         sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let clock = TestDateProvider(Date(timeIntervalSince1970: 1_800_000_000))
         let provider = ClaudeUsageProvider(
             secretStore: secretStore,
-            session: URLSession(configuration: sessionConfiguration)
+            session: URLSession(configuration: sessionConfiguration),
+            now: { clock.now() }
         )
         var requestCount = 0
         MockURLProtocol.handler = { request in
@@ -6662,13 +6664,14 @@ final class CodexBarIOSTests: XCTestCase {
         defer { MockURLProtocol.handler = nil }
 
         let full = try await provider.fetchUsage(for: configuration)
+        clock.advance(by: 60)
         let partial = try await provider.fetchUsage(for: configuration)
         let stale = try await provider.fetchUsage(for: configuration)
 
         XCTAssertEqual(requestCount, 3)
         XCTAssertEqual(full.bars.first?.used, 25)
         XCTAssertEqual(partial.bars, full.bars)
-        XCTAssertEqual(partial.fetchedAt, full.fetchedAt)
+        XCTAssertEqual(partial.fetchedAt, full.fetchedAt.addingTimeInterval(60))
         XCTAssertEqual(partial.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
         XCTAssertEqual(stale.bars, full.bars)
         XCTAssertTrue(stale.subtitle.contains("last known data"))

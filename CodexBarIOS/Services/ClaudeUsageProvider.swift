@@ -327,7 +327,7 @@ private actor ClaudeUsageSnapshotCache {
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
             failureMessage: result.failureMessage,
-            fetchedAt: cached.fetchedAt
+            fetchedAt: result.fetchedAt
         )
         results[accountID] = preserved
         retryDates[accountID] = nil
