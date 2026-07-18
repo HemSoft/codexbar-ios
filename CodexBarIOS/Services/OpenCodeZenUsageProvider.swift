@@ -123,34 +123,13 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             credential = settingsCredential
         }
 
-        if credential.hasPrefix("\""), credential.hasSuffix("\""), credential.count >= 2 {
-            credential.removeFirst()
-            credential.removeLast()
+        guard let normalizedCredential = ProviderSecretNormalizer.normalizedSecret(
+            from: credential,
+            removingPrefixes: ["authorization:", "bearer ", "cookie:", "set-cookie:"]
+        ) else {
+            return nil
         }
-
-        let authorizationPrefix = "authorization:"
-        if credential.lowercased().hasPrefix(authorizationPrefix) {
-            credential = String(credential.dropFirst(authorizationPrefix.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        let bearerPrefix = "bearer "
-        if credential.lowercased().hasPrefix(bearerPrefix) {
-            credential = String(credential.dropFirst(bearerPrefix.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        let cookiePrefix = "cookie:"
-        if credential.lowercased().hasPrefix(cookiePrefix) {
-            credential = String(credential.dropFirst(cookiePrefix.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        let setCookiePrefix = "set-cookie:"
-        if credential.lowercased().hasPrefix(setCookiePrefix) {
-            credential = String(credential.dropFirst(setCookiePrefix.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
+        credential = normalizedCredential
 
         if
             let authValue = cookieValue(named: "auth", from: credential),
