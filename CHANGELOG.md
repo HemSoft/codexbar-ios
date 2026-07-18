@@ -21,6 +21,8 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Kept a newer Claude sign-in from being overwritten when an older token
+  refresh finishes at the same time. ([#56](https://github.com/HemSoft/codexbar-ios/issues/56))
 - Kept sensitive authorization details out of Claude and Cursor sign-in error
   messages while preserving the HTTP status and safe OAuth error identifier
   needed to understand failures. ([#53](https://github.com/HemSoft/codexbar-ios/issues/53))
