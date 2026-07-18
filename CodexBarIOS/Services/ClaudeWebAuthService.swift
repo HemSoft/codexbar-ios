@@ -70,12 +70,15 @@ public final class ClaudeWebAuthService: Sendable {
     private static let callbackPath = "/callback"
     private static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
     private static let requestedScope = "org:create_api_key user:profile user:inference user:sessions:claude_code"
-    private static let callbackTimeoutNanoseconds: UInt64 = 180_000_000_000
-
     private let session: URLSession
+    private let callbackTimeoutNanoseconds: UInt64
 
-    public init(session: URLSession = .shared) {
+    public init(
+        session: URLSession = .shared,
+        callbackTimeoutNanoseconds: UInt64 = 180_000_000_000
+    ) {
         self.session = session
+        self.callbackTimeoutNanoseconds = callbackTimeoutNanoseconds
     }
 
     @MainActor
@@ -106,7 +109,9 @@ public final class ClaudeWebAuthService: Sendable {
 
         presentAuthorizationURL(authorizationURL)
         reportStage("Waiting for Claude to return to the app...")
-        let callbackURL = try await Self.waitForCallbackWithTimeout(callbackServer)
+        let callbackURL = try await callbackServer.waitForCallback(
+            timeoutNanoseconds: callbackTimeoutNanoseconds
+        )
         reportStage("Claude returned to the app. Exchanging authorization code...")
 
         let result = try await exchangeCallbackForTokens(
@@ -241,24 +246,6 @@ public final class ClaudeWebAuthService: Sendable {
         return ClaudeWebAuthResult(credentials: credentials)
     }
 
-    private static func waitForCallbackWithTimeout(_ server: ClaudeOAuthCallbackServer) async throws -> URL {
-        try await withThrowingTaskGroup(of: URL.self) { group in
-            group.addTask {
-                try await server.waitForCallback()
-            }
-            group.addTask {
-                try await Task.sleep(nanoseconds: callbackTimeoutNanoseconds)
-                throw AuthError.callbackTimedOut
-            }
-
-            guard let result = try await group.next() else {
-                throw AuthError.callbackTimedOut
-            }
-            group.cancelAll()
-            return result
-        }
-    }
-
     private static func randomBase64URL(byteCount: Int) -> String {
         var bytes = [UInt8](repeating: 0, count: byteCount)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
@@ -293,7 +280,12 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
         self.port = port
         self.expectedState = expectedState
         self.callbackPath = callbackPath
-        self.listener = try NWListener(using: .tcp, on: nwPort)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(
+            host: Self.preferredLocalhostLoopbackHost(),
+            port: nwPort
+        )
+        self.listener = try NWListener(using: parameters)
         self.listener.newConnectionHandler = { [weak self] connection in
             self?.handle(connection)
         }
@@ -334,8 +326,20 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
         }
     }
 
-    func waitForCallback() async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
+    func waitForCallback(timeoutNanoseconds: UInt64) async throws -> URL {
+        let timeoutTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+            } catch {
+                return
+            }
+            self?.resumeCallback(with: .failure(ClaudeWebAuthService.AuthError.callbackTimedOut))
+        }
+        defer {
+            timeoutTask.cancel()
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
             lock.lock()
             if let pendingCallbackResult {
                 self.pendingCallbackResult = nil
@@ -366,6 +370,27 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
         default:
             break
         }
+    }
+
+    private static func preferredLocalhostLoopbackHost() -> NWEndpoint.Host {
+        var addresses: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo("localhost", nil, nil, &addresses) == 0, let addresses else {
+            return .ipv4(.loopback)
+        }
+        defer { freeaddrinfo(addresses) }
+
+        var address: UnsafeMutablePointer<addrinfo>? = addresses
+        while let candidate = address {
+            switch candidate.pointee.ai_family {
+            case AF_INET6:
+                return .ipv6(.loopback)
+            case AF_INET:
+                return .ipv4(.loopback)
+            default:
+                address = candidate.pointee.ai_next
+            }
+        }
+        return .ipv4(.loopback)
     }
 
     private func resumeReady(with result: Result<Void, Error>) {

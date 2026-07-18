@@ -31,6 +31,7 @@ public final class CodexWebAuthService: Sendable {
         case couldNotStartCallbackServer
         case missingAuthorizationCode
         case stateMismatch
+        case callbackTimedOut
         case tokenExchangeFailed(String)
         case invalidTokenResponse
 
@@ -42,6 +43,8 @@ public final class CodexWebAuthService: Sendable {
                 "ChatGPT sign-in did not return an authorization code."
             case .stateMismatch:
                 "ChatGPT sign-in returned an unexpected state value."
+            case .callbackTimedOut:
+                "ChatGPT sign-in did not return to the app. Try again and complete sign-in in the browser."
             case .tokenExchangeFailed(let message):
                 "ChatGPT token exchange failed: \(message)"
             case .invalidTokenResponse:
@@ -71,11 +74,15 @@ public final class CodexWebAuthService: Sendable {
     static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
     public static let tokenEndpoint = issuer.appending(path: "/oauth/token")
     private static let originator = "codex_cli_rs"
-
     private let session: URLSession
+    private let callbackTimeoutNanoseconds: UInt64
 
-    public init(session: URLSession = .shared) {
+    public init(
+        session: URLSession = .shared,
+        callbackTimeoutNanoseconds: UInt64 = 180_000_000_000
+    ) {
         self.session = session
+        self.callbackTimeoutNanoseconds = callbackTimeoutNanoseconds
     }
 
     @MainActor
@@ -100,7 +107,9 @@ public final class CodexWebAuthService: Sendable {
 
         presentAuthorizationURL(authorizationURL)
 
-        let callbackURL = try await callbackServer.waitForCallback()
+        let callbackURL = try await callbackServer.waitForCallback(
+            timeoutNanoseconds: callbackTimeoutNanoseconds
+        )
         guard
             let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
             components.queryItemValue(named: "state") == state
@@ -261,7 +270,12 @@ private final class CodexOAuthCallbackServer: @unchecked Sendable {
         self.port = port
         self.expectedState = expectedState
         self.callbackPath = callbackPath
-        self.listener = try NWListener(using: .tcp, on: nwPort)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(
+            host: Self.preferredLocalhostLoopbackHost(),
+            port: nwPort
+        )
+        self.listener = try NWListener(using: parameters)
         self.listener.newConnectionHandler = { [weak self] connection in
             self?.handle(connection)
         }
@@ -293,13 +307,28 @@ private final class CodexOAuthCallbackServer: @unchecked Sendable {
         throw lastError
     }
 
-    func waitForCallback() async throws -> URL {
-        if let pendingCallbackResult = takePendingCallbackResult() {
-            return try pendingCallbackResult.get()
+    func waitForCallback(timeoutNanoseconds: UInt64) async throws -> URL {
+        let timeoutTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+            } catch {
+                return
+            }
+            self?.finishCallback(.failure(CodexWebAuthService.AuthError.callbackTimedOut))
+        }
+        defer {
+            timeoutTask.cancel()
         }
 
         return try await withCheckedThrowingContinuation { continuation in
             lock.lock()
+            if let pendingCallbackResult {
+                self.pendingCallbackResult = nil
+                lock.unlock()
+                continuation.resume(with: pendingCallbackResult)
+                return
+            }
+
             callbackContinuation = continuation
             lock.unlock()
         }
@@ -324,11 +353,34 @@ private final class CodexOAuthCallbackServer: @unchecked Sendable {
             finishReady(.success(()))
         case .failed(let error):
             finishReady(.failure(error))
+            finishCallback(.failure(error))
         case .cancelled:
             finishReady(.failure(CodexWebAuthService.AuthError.couldNotStartCallbackServer))
+            finishCallback(.failure(CodexWebAuthService.AuthError.missingAuthorizationCode))
         default:
             break
         }
+    }
+
+    private static func preferredLocalhostLoopbackHost() -> NWEndpoint.Host {
+        var addresses: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo("localhost", nil, nil, &addresses) == 0, let addresses else {
+            return .ipv4(.loopback)
+        }
+        defer { freeaddrinfo(addresses) }
+
+        var address: UnsafeMutablePointer<addrinfo>? = addresses
+        while let candidate = address {
+            switch candidate.pointee.ai_family {
+            case AF_INET6:
+                return .ipv6(.loopback)
+            case AF_INET:
+                return .ipv4(.loopback)
+            default:
+                address = candidate.pointee.ai_next
+            }
+        }
+        return .ipv4(.loopback)
     }
 
     private func finishReady(_ result: Result<Void, Error>) {
@@ -349,14 +401,6 @@ private final class CodexOAuthCallbackServer: @unchecked Sendable {
             pendingCallbackResult = result
             lock.unlock()
         }
-    }
-
-    private func takePendingCallbackResult() -> Result<URL, Error>? {
-        lock.lock()
-        let result = pendingCallbackResult
-        pendingCallbackResult = nil
-        lock.unlock()
-        return result
     }
 
     private func handle(_ connection: NWConnection) {

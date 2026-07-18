@@ -48,6 +48,7 @@ public final class CopilotWebAuthService: Sendable {
         case missingOAuthConfiguration
         case missingAuthorizationCode
         case stateMismatch
+        case callbackTimedOut
         case tokenExchangeFailed(String)
         case invalidTokenResponse
 
@@ -61,6 +62,8 @@ public final class CopilotWebAuthService: Sendable {
                 "GitHub sign-in did not return an authorization code."
             case .stateMismatch:
                 "GitHub sign-in returned an unexpected state value."
+            case .callbackTimedOut:
+                "GitHub sign-in did not return to the app. Try again and complete sign-in in the browser."
             case .tokenExchangeFailed(let message):
                 "GitHub token exchange failed: \(message)"
             case .invalidTokenResponse:
@@ -96,11 +99,15 @@ public final class CopilotWebAuthService: Sendable {
     public static let tokenEndpoint = githubBaseURL.appending(path: "/login/oauth/access_token")
     private static let callbackPath = "/callback"
     private static let requestedScope = "repo read:org gist"
-
     private let session: URLSession
+    private let callbackTimeoutNanoseconds: UInt64
 
-    public init(session: URLSession = .shared) {
+    public init(
+        session: URLSession = .shared,
+        callbackTimeoutNanoseconds: UInt64 = 180_000_000_000
+    ) {
         self.session = session
+        self.callbackTimeoutNanoseconds = callbackTimeoutNanoseconds
     }
 
     @MainActor
@@ -137,7 +144,9 @@ public final class CopilotWebAuthService: Sendable {
         )
 
         presentAuthorizationURL(authorizationURL)
-        let callbackURL = try await callbackServer.waitForCallback()
+        let callbackURL = try await callbackServer.waitForCallback(
+            timeoutNanoseconds: callbackTimeoutNanoseconds
+        )
 
         guard
             let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
@@ -331,7 +340,9 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
         self.port = port
         self.expectedState = expectedState
         self.callbackPath = callbackPath
-        self.listener = try NWListener(using: .tcp, on: nwPort)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: nwPort)
+        self.listener = try NWListener(using: parameters)
         self.listener.newConnectionHandler = { [weak self] connection in
             self?.handle(connection)
         }
@@ -363,13 +374,28 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
         throw lastError
     }
 
-    func waitForCallback() async throws -> URL {
-        if let pendingCallbackResult = takePendingCallbackResult() {
-            return try pendingCallbackResult.get()
+    func waitForCallback(timeoutNanoseconds: UInt64) async throws -> URL {
+        let timeoutTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+            } catch {
+                return
+            }
+            self?.finishCallback(.failure(CopilotWebAuthService.AuthError.callbackTimedOut))
+        }
+        defer {
+            timeoutTask.cancel()
         }
 
         return try await withCheckedThrowingContinuation { continuation in
             lock.lock()
+            if let pendingCallbackResult {
+                self.pendingCallbackResult = nil
+                lock.unlock()
+                continuation.resume(with: pendingCallbackResult)
+                return
+            }
+
             callbackContinuation = continuation
             lock.unlock()
         }
@@ -394,8 +420,10 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
             finishReady(.success(()))
         case .failed(let error):
             finishReady(.failure(error))
+            finishCallback(.failure(error))
         case .cancelled:
             finishReady(.failure(CopilotWebAuthService.AuthError.couldNotStartCallbackServer))
+            finishCallback(.failure(CopilotWebAuthService.AuthError.missingAuthorizationCode))
         default:
             break
         }
@@ -419,14 +447,6 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
             pendingCallbackResult = result
             lock.unlock()
         }
-    }
-
-    private func takePendingCallbackResult() -> Result<URL, Error>? {
-        lock.lock()
-        let result = pendingCallbackResult
-        pendingCallbackResult = nil
-        lock.unlock()
-        return result
     }
 
     private func handle(_ connection: NWConnection) {
@@ -469,7 +489,7 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
             return .failure(CopilotWebAuthService.AuthError.missingAuthorizationCode)
         }
 
-        guard let url = URL(string: "http://127.0.0.1:\(port)\(path)") else {
+        guard let url = URL(string: "http://localhost:\(port)\(path)") else {
             return .failure(CopilotWebAuthService.AuthError.missingAuthorizationCode)
         }
 
