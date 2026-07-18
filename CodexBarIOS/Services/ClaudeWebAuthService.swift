@@ -265,10 +265,11 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
 
     private let expectedState: String
     private let callbackPath: String
-    private let listener: NWListener
+    private let listeners: [NWListener]
     private let queue = DispatchQueue(label: "com.hemsoft.CodexBarIOS.claudeOAuthCallback")
     private let lock = NSLock()
     private var readyContinuation: CheckedContinuation<Void, Error>?
+    private var readyListenerCount = 0
     private var callbackContinuation: CheckedContinuation<URL, Error>?
     private var pendingCallbackResult: Result<URL, Error>?
 
@@ -280,14 +281,18 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
         self.port = port
         self.expectedState = expectedState
         self.callbackPath = callbackPath
-        let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: nwPort)
-        self.listener = try NWListener(using: parameters)
-        self.listener.newConnectionHandler = { [weak self] connection in
-            self?.handle(connection)
-        }
-        self.listener.stateUpdateHandler = { [weak self] state in
-            self?.handleListenerState(state)
+        // `localhost` may resolve to either address family, so bind only to both loopback addresses.
+        self.listeners = try [
+            Self.makeListener(host: .ipv4(.loopback), port: nwPort),
+            Self.makeListener(host: .ipv6(.loopback), port: nwPort),
+        ]
+        for listener in listeners {
+            listener.newConnectionHandler = { [weak self] connection in
+                self?.handle(connection)
+            }
+            listener.stateUpdateHandler = { [weak self] state in
+                self?.handleListenerState(state)
+            }
         }
     }
 
@@ -304,8 +309,13 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
                     expectedState: expectedState,
                     callbackPath: callbackPath
                 )
-                try await server.start()
-                return server
+                do {
+                    try await server.start()
+                    return server
+                } catch {
+                    server.cancel()
+                    lastError = error
+                }
             } catch {
                 lastError = error
             }
@@ -319,7 +329,7 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
             lock.lock()
             readyContinuation = continuation
             lock.unlock()
-            listener.start(queue: queue)
+            listeners.forEach { $0.start(queue: queue) }
         }
     }
 
@@ -351,13 +361,13 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
     }
 
     func cancel() {
-        listener.cancel()
+        listeners.forEach { $0.cancel() }
     }
 
     private func handleListenerState(_ state: NWListener.State) {
         switch state {
         case .ready:
-            resumeReady(with: .success(()))
+            finishOneListenerReady()
         case .failed(let error):
             resumeReady(with: .failure(error))
             resumeCallback(with: .failure(error))
@@ -367,6 +377,33 @@ private final class ClaudeOAuthCallbackServer: @unchecked Sendable {
         default:
             break
         }
+    }
+
+    private static func makeListener(host: NWEndpoint.Host, port: NWEndpoint.Port) throws -> NWListener {
+        let parameters = NWParameters.tcp
+        // Both address families must share the selected callback port.
+        parameters.allowLocalEndpointReuse = true
+        parameters.requiredLocalEndpoint = .hostPort(host: host, port: port)
+        return try NWListener(using: parameters)
+    }
+
+    private func finishOneListenerReady() {
+        lock.lock()
+        guard readyContinuation != nil else {
+            lock.unlock()
+            return
+        }
+
+        readyListenerCount += 1
+        guard readyListenerCount == listeners.count else {
+            lock.unlock()
+            return
+        }
+
+        let continuation = readyContinuation
+        readyContinuation = nil
+        lock.unlock()
+        continuation?.resume()
     }
 
     private func resumeReady(with result: Result<Void, Error>) {
