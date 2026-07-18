@@ -45,7 +45,7 @@ public final class ClaudeUsageProvider: UsageProvider {
         )
         if let usageResult = oauthOutcome.result {
             if oauthOutcome.isSuccessfulSnapshot {
-                await snapshotCache.storePreservingBars(usageResult, accountID: configuration.id)
+                return await snapshotCache.storePreservingBars(usageResult, accountID: configuration.id)
             }
             return usageResult
         }
@@ -312,12 +312,12 @@ private actor ClaudeUsageSnapshotCache {
         retryDates[accountID] = nil
     }
 
-    func storePreservingBars(_ result: ProviderUsageResult, accountID: String) {
+    func storePreservingBars(_ result: ProviderUsageResult, accountID: String) -> ProviderUsageResult {
         guard result.bars.isEmpty, let cached = results[accountID], !cached.bars.isEmpty else {
             store(result, accountID: accountID)
-            return
+            return result
         }
-        results[accountID] = ProviderUsageResult(
+        let preserved = ProviderUsageResult(
             accountID: result.accountID,
             providerID: result.providerID,
             title: result.title,
@@ -329,7 +329,9 @@ private actor ClaudeUsageSnapshotCache {
             failureMessage: result.failureMessage,
             fetchedAt: cached.fetchedAt
         )
+        results[accountID] = preserved
         retryDates[accountID] = nil
+        return preserved
     }
 
     func result(accountID: String) -> ProviderUsageResult? {

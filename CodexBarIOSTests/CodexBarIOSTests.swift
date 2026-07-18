@@ -6667,7 +6667,8 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(requestCount, 3)
         XCTAssertEqual(full.bars.first?.used, 25)
-        XCTAssertTrue(partial.bars.isEmpty)
+        XCTAssertEqual(partial.bars, full.bars)
+        XCTAssertEqual(partial.fetchedAt, full.fetchedAt)
         XCTAssertEqual(partial.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
         XCTAssertEqual(stale.bars, full.bars)
         XCTAssertTrue(stale.subtitle.contains("last known data"))

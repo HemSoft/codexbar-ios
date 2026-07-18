@@ -22,7 +22,8 @@ building, testing, or releasing the app.
 ### Fixed
 
 - Stopped routine Claude usage refreshes from sending a billable Messages API
-  request when subscription usage is unavailable or incomplete.
+  request when subscription usage is unavailable or incomplete, while keeping
+  previously displayed rate-limit windows visible when available.
   ([#58](https://github.com/HemSoft/codexbar-ios/issues/58))
 - Preserved Copilot balance, monetary usage, and status details when applying
   configured account labels. ([#57](https://github.com/HemSoft/codexbar-ios/issues/57))
