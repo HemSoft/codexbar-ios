@@ -92,7 +92,8 @@ public enum UsageAlertEvaluator {
         var notifications: [UsageAlertNotification] = []
 
         for result in results {
-            for bar in result.bars where bar.fractionUsed >= settings.usageThreshold {
+            let alertBars = result.hasFreshBars ? result.bars : []
+            for bar in alertBars where bar.fractionUsed >= settings.usageThreshold {
                 let alertID = alertID(for: result, bar: bar)
                 let hasAlreadyQueuedAlert = nextActiveAlertIDs.contains(alertID)
                 nextActiveAlertIDs.insert(alertID)
@@ -152,7 +153,10 @@ public enum UsageAlertEvaluator {
                 }
             }
 
-            let highestSeverity = result.highestSeverity(at: now)
+            let highestSeverity = max(
+                alertBars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal,
+                result.hasReachedSpendLimit ? .critical : .normal
+            )
             if settings.includesSeverityAlerts,
                highestSeverity >= .warning
             {
@@ -162,6 +166,7 @@ public enum UsageAlertEvaluator {
                 let detail = severityAlertDetail(
                     id: alertID,
                     result: result,
+                    bars: alertBars,
                     severity: highestSeverity,
                     now: now
                 )
@@ -228,10 +233,11 @@ public enum UsageAlertEvaluator {
     private static func severityAlertDetail(
         id: String,
         result: ProviderUsageResult,
+        bars: [UsageBar],
         severity: UsageSeverity,
         now: Date
     ) -> UsageAlertDetail {
-        let affectedBar = result.bars
+        let affectedBar = bars
             .first { $0.effectiveSeverity(at: now) == severity }
         let message: String
 

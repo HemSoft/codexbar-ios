@@ -1368,6 +1368,29 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(evaluation.notifications.first?.title, "Claude Fable weekly limit alert")
         XCTAssertFalse(evaluation.activeAlertIDs.contains("balance.claude.personal"))
 
+        let staleBarsResult = ProviderUsageResult(
+            accountID: "claude.stale-bars",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Fresh monetary usage with cached rate limits",
+            bars: [
+                UsageBar(label: "Fable weekly limit", used: 85, limit: 100),
+            ],
+            barsFetchedAt: Date(timeIntervalSince1970: 1_783_667_520),
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_580)
+        )
+        let staleBarsEvaluation = UsageAlertEvaluator.evaluate(
+            results: [staleBarsResult],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.80,
+                includesSeverityAlerts: true
+            ),
+            activeAlertIDs: []
+        )
+        XCTAssertTrue(staleBarsEvaluation.notifications.isEmpty)
+        XCTAssertTrue(staleBarsEvaluation.activeAlerts.isEmpty)
+
         let cappedResult = ProviderUsageResult(
             accountID: "claude.capped",
             providerID: .claude,
