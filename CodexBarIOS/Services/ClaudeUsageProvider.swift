@@ -211,12 +211,23 @@ public final class ClaudeUsageProvider: UsageProvider {
         }
 
         let expiresAt = Date(timeIntervalSince1970: TimeInterval(normalizeEpochToSeconds(credentials.expiresAt)))
-        guard expiresAt <= Date() else {
+        guard expiresAt <= now() else {
             return credentials
         }
 
         guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
             return credentials
+        }
+
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: configuration)
+        guard
+            let storedSecret = try secretStore.readSecret(account: keychainAccount),
+            let latestCredentials = ClaudeCredentialsParser.parse(storedSecret)
+        else {
+            return credentials
+        }
+        if latestCredentials != credentials {
+            return latestCredentials
         }
 
         var request = URLRequest(url: Self.tokenRefreshEndpoint)
@@ -241,16 +252,30 @@ public final class ClaudeUsageProvider: UsageProvider {
             return credentials
         }
 
+        let refreshedAt = now()
         let updated = ClaudeCredentials(
             subscriptionType: credentials.subscriptionType,
             rateLimitTier: credentials.rateLimitTier,
-            expiresAt: refreshed.expiresAt ?? refreshed.expiresIn.map { Date().addingTimeInterval(TimeInterval($0)).claudeUsageUnixTimeMilliseconds } ?? 0,
+            expiresAt: refreshed.expiresAt ?? refreshed.expiresIn.map {
+                refreshedAt.addingTimeInterval(TimeInterval($0)).claudeUsageUnixTimeMilliseconds
+            } ?? 0,
             accessToken: accessToken,
             refreshToken: refreshed.refreshToken ?? credentials.refreshToken
         )
+
+        guard
+            let storedSecret = try secretStore.readSecret(account: keychainAccount),
+            let latestCredentials = ClaudeCredentialsParser.parse(storedSecret)
+        else {
+            return credentials
+        }
+        if latestCredentials != credentials {
+            return latestCredentials
+        }
+
         try secretStore.saveSecret(
             ClaudeCredentialsParser.storedCredential(from: updated),
-            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+            account: keychainAccount
         )
         return updated
     }
