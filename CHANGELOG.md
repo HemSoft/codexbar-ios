@@ -30,6 +30,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Documented why the public GitHub Copilot OAuth application credentials are
+  bundled, how PKCE protects sign-in, and limited process-environment credential
+  overrides to debug builds. ([#55](https://github.com/HemSoft/codexbar-ios/issues/55))
 - Clarified agent guidance for builds, tests, automated PR reviews, iPhone
   deployment, signing recovery, and browser authentication.
 - Documented the SwiftPM smoke-test command and kept its provider-order check
