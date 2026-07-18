@@ -3297,6 +3297,102 @@ final class CodexBarIOSTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testOpenCodeZenBootstrapImporterAppliesCompleteFileProtection() throws {
+        let fileManager = RecordingFileProtectionManager()
+        let importURL = URL(fileURLWithPath: "/tmp/\(OpenCodeZenBootstrapImporter.importFileName)")
+
+        XCTAssertTrue(
+            OpenCodeZenBootstrapImporter.protectImportFile(at: importURL, fileManager: fileManager)
+        )
+        XCTAssertEqual(fileManager.recordedPath, importURL.path)
+        XCTAssertEqual(
+            fileManager.recordedAttributes?[.protectionKey] as? FileProtectionType,
+            .complete
+        )
+    }
+
+    @MainActor
+    func testOpenCodeZenBootstrapImporterProtectsImportsAndRemovesStagingFile() throws {
+        let suiteName = "OpenCodeZenBootstrapProtectedImport-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let fileManager = FileManager.default
+        let importDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("OpenCodeZenBootstrapImport-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: importDirectory, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: importDirectory)
+        }
+
+        let importURL = importDirectory.appendingPathComponent(OpenCodeZenBootstrapImporter.importFileName)
+        let payload = """
+        {
+          "openCodeGoWorkspaceId": "wrk_protected",
+          "providers": {
+            "OpenCodeGo": {
+              "apiKey": "protected-dashboard-token"
+            }
+          }
+        }
+        """
+        try Data(payload.utf8).write(to: importURL)
+
+        let secretStore = MemorySecretStore()
+        let configurationStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        OpenCodeZenBootstrapImporter.importIfNeeded(
+            configurationStore: configurationStore,
+            fileManager: fileManager,
+            importDirectory: importDirectory
+        )
+
+        XCTAssertFalse(fileManager.fileExists(atPath: importURL.path))
+        let configuration = try XCTUnwrap(configurationStore.configurations(for: .openCodeZen).first)
+        XCTAssertEqual(configuration.openCodeWorkspaceId, "wrk_protected")
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
+            "protected-dashboard-token"
+        )
+    }
+
+    @MainActor
+    func testOpenCodeZenBootstrapImporterDeletesFileWithoutReadingWhenProtectionFails() throws {
+        let suiteName = "OpenCodeZenBootstrapProtectionFailure-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let fileManager = RecordingFileProtectionManager()
+        fileManager.shouldFail = true
+        let importDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("OpenCodeZenBootstrapFailure-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: importDirectory, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: importDirectory)
+        }
+
+        let importURL = importDirectory.appendingPathComponent(OpenCodeZenBootstrapImporter.importFileName)
+        try Data(#"{"openCodeGoWorkspaceId":"wrk_secret","providers":{"OpenCodeGo":{"apiKey":"secret-token"}}}"#.utf8)
+            .write(to: importURL)
+
+        let configurationStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        OpenCodeZenBootstrapImporter.importIfNeeded(
+            configurationStore: configurationStore,
+            fileManager: fileManager,
+            importDirectory: importDirectory
+        )
+
+        XCTAssertFalse(fileManager.fileExists(atPath: importURL.path))
+        XCTAssertTrue(configurationStore.configurations(for: .openCodeZen).isEmpty)
+    }
+
     func testOpenCodeZenProviderNormalizesAuthHeaderBeforeDashboardRequest() async throws {
         let secretStore = MemorySecretStore()
         var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
@@ -7072,6 +7168,20 @@ private struct EmptySecretStore: SecretStore {
     }
 
     func deleteSecret(account: String) throws {
+    }
+}
+
+private final class RecordingFileProtectionManager: FileManager, @unchecked Sendable {
+    var shouldFail = false
+    private(set) var recordedAttributes: [FileAttributeKey: Any]?
+    private(set) var recordedPath: String?
+
+    override func setAttributes(_ attributes: [FileAttributeKey: Any], ofItemAtPath path: String) throws {
+        recordedAttributes = attributes
+        recordedPath = path
+        if shouldFail {
+            throw CocoaError(.fileWriteNoPermission)
+        }
     }
 }
 
