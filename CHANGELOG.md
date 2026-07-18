@@ -13,6 +13,12 @@ building, testing, or releasing the app.
   history, and in widgets, alongside the existing OpenRouter and OpenCode ZEN
   balances. ([#66](https://github.com/HemSoft/codexbar-ios/issues/66))
 
+### Changed
+
+- Restricted browser sign-in callbacks to this device, aligned callback hosts
+  across providers, and made stalled ChatGPT, Claude, and GitHub Copilot
+  sign-ins time out cleanly. ([#52](https://github.com/HemSoft/codexbar-ios/issues/52))
+
 ### Developer Experience
 
 - Clarified agent guidance for builds, tests, automated PR reviews, iPhone
