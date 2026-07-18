@@ -106,9 +106,9 @@ struct ProviderUsageCard: View {
                             .lineLimit(1)
                     }
 
-                    UsageProgressBar(bar: bar)
+                    UsageProgressBar(bar: bar, showsSeverity: result.hasFreshBars)
 
-                    if let projectionDescription = bar.projectionDescription() {
+                    if result.hasFreshBars, let projectionDescription = bar.projectionDescription() {
                         Text(projectionDescription)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -804,11 +804,12 @@ private struct ProviderLogoTile: View {
 
 private struct UsageProgressBar: View {
     let bar: UsageBar
+    let showsSeverity: Bool
 
     var body: some View {
         GeometryReader { proxy in
             let actualWidth = proxy.size.width * bar.fractionUsed
-            let projectedFraction = bar.projectedFraction() ?? 0
+            let projectedFraction = showsSeverity ? (bar.projectedFraction() ?? 0) : 0
             let projectedWidth = proxy.size.width * projectedFraction
 
             ZStack(alignment: .leading) {
@@ -822,7 +823,7 @@ private struct UsageProgressBar: View {
                 }
 
                 Capsule()
-                    .fill(bar.severity.tint)
+                    .fill(showsSeverity ? bar.severity.tint : Color.secondary.opacity(0.55))
                     .frame(width: actualWidth)
             }
         }

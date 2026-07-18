@@ -99,13 +99,17 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         bars.isEmpty || barsFetchedAt == fetchedAt
     }
 
+    public var freshBars: [UsageBar] {
+        hasFreshBars ? bars : []
+    }
+
     public var highestSeverity: UsageSeverity {
         highestSeverity()
     }
 
     public func highestSeverity(at now: Date = Date()) -> UsageSeverity {
         max(
-            bars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal,
+            freshBars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal,
             hasReachedSpendLimit ? .critical : .normal
         )
     }

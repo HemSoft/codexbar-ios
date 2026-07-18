@@ -717,6 +717,53 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(snapshot.results.map(\.accountID), [lowBalanceConfiguration.id, highBalanceConfiguration.id])
     }
 
+    @MainActor
+    func testWidgetSnapshotPublisherNeutralizesStaleBarSeverityAndProjection() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let configuration = store.addAccount(for: .claude)
+        store.saveSecret("claude-token", for: configuration)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .claude,
+            title: configuration.displayName,
+            subtitle: "Fresh monetary usage with cached rate limits",
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 95,
+                    limit: 100,
+                    projectionCurrent: 100,
+                    projectionLimit: 100,
+                    projectionPeriodStart: fetchedAt.addingTimeInterval(-60 * 60),
+                    projectionPeriodEnd: fetchedAt.addingTimeInterval(60 * 60)
+                ),
+            ],
+            barsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults,
+            now: fetchedAt
+        )
+
+        let provider = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first)
+        let bar = try XCTUnwrap(provider.bars.first)
+        XCTAssertEqual(provider.severity, .normal)
+        XCTAssertEqual(bar.severity, .normal)
+        XCTAssertNil(bar.projectedFraction)
+        XCTAssertNil(bar.projectedSeverity)
+    }
+
     func testProviderAccountConfigurationDecodesLegacyAccountWithoutGroup() throws {
         let json = """
         {
@@ -921,6 +968,34 @@ final class CodexBarIOSTests: XCTestCase {
             ordered.map(\.accountID),
             ["critical.projection", "warning.usage", "balance.low", "balance.high", "manual.first", "manual.second"]
         )
+    }
+
+    func testDashboardUsageSorterIgnoresStaleBarUrgency() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let staleCritical = ProviderUsageResult(
+            accountID: "stale.critical",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Cached rate limits",
+            bars: [UsageBar(label: "Weekly", used: 95, limit: 100)],
+            barsFetchedAt: now.addingTimeInterval(-60),
+            fetchedAt: now
+        )
+        let freshWarning = makeHistoryResult(
+            accountID: "fresh.warning",
+            providerID: .codex,
+            fetchedAt: now,
+            used: 80
+        )
+
+        XCTAssertEqual(staleCritical.highestSeverity(at: now), .normal)
+        let ordered = DashboardUsageSorter.orderedResults(
+            [staleCritical, freshWarning],
+            mode: .smart,
+            manualOrder: [],
+            now: now
+        )
+        XCTAssertEqual(ordered.map(\.accountID), ["fresh.warning", "stale.critical"])
     }
 
     func testDashboardUsageSorterKeepsManualOrderingWhenManualModeIsSelected() {

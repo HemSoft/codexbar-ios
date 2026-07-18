@@ -92,7 +92,7 @@ public enum UsageAlertEvaluator {
         var notifications: [UsageAlertNotification] = []
 
         for result in results {
-            let alertBars = result.hasFreshBars ? result.bars : []
+            let alertBars = result.freshBars
             for bar in alertBars where bar.fractionUsed >= settings.usageThreshold {
                 let alertID = alertID(for: result, bar: bar)
                 let hasAlreadyQueuedAlert = nextActiveAlertIDs.contains(alertID)
