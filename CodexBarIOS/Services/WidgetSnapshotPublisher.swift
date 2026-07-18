@@ -20,6 +20,7 @@ enum WidgetSnapshotPublisher {
             generatedAt: now,
             results: displayable.map { result in
                 let configuration = configurationStore.configuration(accountID: result.accountID)
+                let barsAreFresh = result.hasFreshBars
                 return CodexBarWidgetProviderSnapshot(
                     accountID: result.accountID,
                     providerID: result.providerID.rawValue,
@@ -28,9 +29,9 @@ enum WidgetSnapshotPublisher {
                     groupID: configuration?.groupID,
                     groupName: configurationStore.group(for: configuration?.groupID)?.name,
                     bars: result.bars.enumerated().map { index, bar in
-                        let projectedFraction = bar.projectedFraction(at: now)
-                        let projectedSeverity = bar.projectedSeverity(at: now)
-                        let projectionParts = bar.projectionDescriptionParts(at: now)
+                        let projectedFraction = barsAreFresh ? bar.projectedFraction(at: now) : nil
+                        let projectedSeverity = barsAreFresh ? bar.projectedSeverity(at: now) : nil
+                        let projectionParts = barsAreFresh ? bar.projectionDescriptionParts(at: now) : nil
                         return CodexBarWidgetUsageBarSnapshot(
                             id: stableBarID(accountID: result.accountID, bar: bar, index: index),
                             label: bar.label,
@@ -42,7 +43,7 @@ enum WidgetSnapshotPublisher {
                             ),
                             resetsAt: bar.resetsAt,
                             resetDisplayStyle: bar.resetDisplayStyle,
-                            severity: CodexBarWidgetSeverity(bar.severity),
+                            severity: barsAreFresh ? CodexBarWidgetSeverity(bar.severity) : .normal,
                             projectedFraction: projectedFraction,
                             projectionDescription: projectionParts?.formatted(using: dateTimeFormatter),
                             projectionLeadingText: projectionParts?.leadingText,

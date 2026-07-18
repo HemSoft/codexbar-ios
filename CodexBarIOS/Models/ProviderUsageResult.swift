@@ -58,6 +58,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let title: String
     public let subtitle: String
     public let bars: [UsageBar]
+    public let barsFetchedAt: Date?
     public let creditsRemaining: Double?
     public let monetaryMetrics: [ProviderMonetaryMetric]
     public let usageMessages: [String]
@@ -70,6 +71,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         title: String,
         subtitle: String,
         bars: [UsageBar],
+        barsFetchedAt: Date? = nil,
         creditsRemaining: Double? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
         usageMessages: [String] = [],
@@ -81,6 +83,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.title = title
         self.subtitle = subtitle
         self.bars = bars
+        self.barsFetchedAt = bars.isEmpty ? nil : (barsFetchedAt ?? fetchedAt)
         self.creditsRemaining = creditsRemaining
         self.monetaryMetrics = monetaryMetrics
         self.usageMessages = usageMessages
@@ -92,13 +95,21 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         accountID
     }
 
+    public var hasFreshBars: Bool {
+        bars.isEmpty || barsFetchedAt == fetchedAt
+    }
+
+    public var freshBars: [UsageBar] {
+        hasFreshBars ? bars : []
+    }
+
     public var highestSeverity: UsageSeverity {
         highestSeverity()
     }
 
     public func highestSeverity(at now: Date = Date()) -> UsageSeverity {
         max(
-            bars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal,
+            freshBars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal,
             hasReachedSpendLimit ? .critical : .normal
         )
     }

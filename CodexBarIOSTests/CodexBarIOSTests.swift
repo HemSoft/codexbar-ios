@@ -717,6 +717,53 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(snapshot.results.map(\.accountID), [lowBalanceConfiguration.id, highBalanceConfiguration.id])
     }
 
+    @MainActor
+    func testWidgetSnapshotPublisherNeutralizesStaleBarSeverityAndProjection() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let configuration = store.addAccount(for: .claude)
+        store.saveSecret("claude-token", for: configuration)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .claude,
+            title: configuration.displayName,
+            subtitle: "Fresh monetary usage with cached rate limits",
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 95,
+                    limit: 100,
+                    projectionCurrent: 100,
+                    projectionLimit: 100,
+                    projectionPeriodStart: fetchedAt.addingTimeInterval(-60 * 60),
+                    projectionPeriodEnd: fetchedAt.addingTimeInterval(60 * 60)
+                ),
+            ],
+            barsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults,
+            now: fetchedAt
+        )
+
+        let provider = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first)
+        let bar = try XCTUnwrap(provider.bars.first)
+        XCTAssertEqual(provider.severity, .normal)
+        XCTAssertEqual(bar.severity, .normal)
+        XCTAssertNil(bar.projectedFraction)
+        XCTAssertNil(bar.projectedSeverity)
+    }
+
     func testProviderAccountConfigurationDecodesLegacyAccountWithoutGroup() throws {
         let json = """
         {
@@ -921,6 +968,34 @@ final class CodexBarIOSTests: XCTestCase {
             ordered.map(\.accountID),
             ["critical.projection", "warning.usage", "balance.low", "balance.high", "manual.first", "manual.second"]
         )
+    }
+
+    func testDashboardUsageSorterIgnoresStaleBarUrgency() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let staleCritical = ProviderUsageResult(
+            accountID: "stale.critical",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Cached rate limits",
+            bars: [UsageBar(label: "Weekly", used: 95, limit: 100)],
+            barsFetchedAt: now.addingTimeInterval(-60),
+            fetchedAt: now
+        )
+        let freshWarning = makeHistoryResult(
+            accountID: "fresh.warning",
+            providerID: .codex,
+            fetchedAt: now,
+            used: 80
+        )
+
+        XCTAssertEqual(staleCritical.highestSeverity(at: now), .normal)
+        let ordered = DashboardUsageSorter.orderedResults(
+            [staleCritical, freshWarning],
+            mode: .smart,
+            manualOrder: [],
+            now: now
+        )
+        XCTAssertEqual(ordered.map(\.accountID), ["fresh.warning", "stale.critical"])
     }
 
     func testDashboardUsageSorterKeepsManualOrderingWhenManualModeIsSelected() {
@@ -1368,6 +1443,29 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(evaluation.notifications.first?.title, "Claude Fable weekly limit alert")
         XCTAssertFalse(evaluation.activeAlertIDs.contains("balance.claude.personal"))
 
+        let staleBarsResult = ProviderUsageResult(
+            accountID: "claude.stale-bars",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Fresh monetary usage with cached rate limits",
+            bars: [
+                UsageBar(label: "Fable weekly limit", used: 85, limit: 100),
+            ],
+            barsFetchedAt: Date(timeIntervalSince1970: 1_783_667_520),
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_580)
+        )
+        let staleBarsEvaluation = UsageAlertEvaluator.evaluate(
+            results: [staleBarsResult],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.80,
+                includesSeverityAlerts: true
+            ),
+            activeAlertIDs: []
+        )
+        XCTAssertTrue(staleBarsEvaluation.notifications.isEmpty)
+        XCTAssertTrue(staleBarsEvaluation.activeAlerts.isEmpty)
+
         let cappedResult = ProviderUsageResult(
             accountID: "claude.capped",
             providerID: .claude,
@@ -1428,6 +1526,53 @@ final class CodexBarIOSTests: XCTestCase {
             fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
         )
         XCTAssertEqual(zeroCapResult.highestSeverity, .normal)
+    }
+
+    func testUsageAlertEvaluatorKeepsExistingAlertIDsWhileBarsAreStale() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
+        let settings = UsageAlertSettings(
+            isEnabled: true,
+            usageThreshold: 0.80,
+            includesSeverityAlerts: true
+        )
+        let freshResult = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live usage",
+            bars: [UsageBar(label: "Fable weekly limit", used: 85, limit: 100)],
+            fetchedAt: fetchedAt
+        )
+        let firstEvaluation = UsageAlertEvaluator.evaluate(
+            results: [freshResult],
+            settings: settings,
+            activeAlertIDs: []
+        )
+        let staleResult = ProviderUsageResult(
+            accountID: freshResult.accountID,
+            providerID: freshResult.providerID,
+            title: freshResult.title,
+            subtitle: "Fresh monetary usage with cached rate limits",
+            bars: freshResult.bars,
+            barsFetchedAt: fetchedAt,
+            fetchedAt: fetchedAt.addingTimeInterval(60)
+        )
+
+        let repeatedEvaluation = UsageAlertEvaluator.evaluate(
+            results: [staleResult],
+            settings: settings,
+            activeAlertIDs: firstEvaluation.activeAlertIDs
+        )
+        XCTAssertTrue(repeatedEvaluation.notifications.isEmpty)
+        XCTAssertTrue(repeatedEvaluation.activeAlerts.isEmpty)
+        XCTAssertEqual(repeatedEvaluation.activeAlertIDs, firstEvaluation.activeAlertIDs)
+
+        let coldEvaluation = UsageAlertEvaluator.evaluate(
+            results: [staleResult],
+            settings: settings,
+            activeAlertIDs: []
+        )
+        XCTAssertTrue(coldEvaluation.activeAlertIDs.isEmpty)
     }
 
     func testUsageAlertEvaluatorReturnsCardScopedActiveAlerts() {
@@ -4997,6 +5142,58 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testUsageHistoryStoreSkipsStaleBarsWithoutFreshValues() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let barsFetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Cached Claude usage",
+            bars: [UsageBar(label: "Weekly usage limit", used: 40, limit: 100)],
+            barsFetchedAt: barsFetchedAt,
+            fetchedAt: barsFetchedAt.addingTimeInterval(60)
+        )
+
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [result], now: result.fetchedAt)
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+
+        let resultWithFreshMoney = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: result.bars,
+            barsFetchedAt: barsFetchedAt,
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .remainingHeadroom,
+                    label: "Remaining spend headroom",
+                    minorUnits: 3750,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: result.fetchedAt.addingTimeInterval(60)
+        )
+        store.record(results: [resultWithFreshMoney], now: resultWithFreshMoney.fetchedAt)
+
+        let series = store.historySeries(for: resultWithFreshMoney)
+        XCTAssertTrue(series.isBalance)
+        XCTAssertEqual(series.points.map(\.value), [37.5])
+        XCTAssertEqual(
+            store.historySeriesOptions(for: resultWithFreshMoney).map(\.label),
+            ["Remaining spend headroom"]
+        )
+    }
+
+    @MainActor
     func testUsageHistoryTrendSummaryReportsUsageMovement() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -6412,6 +6609,75 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(persisted.expiresAt, 2_000_003_600_000)
     }
 
+    func testClaudeUsageProviderPreservesCachedBarsAcrossTokenRefresh() async throws {
+        let clock = TestDateProvider(Date(timeIntervalSince1970: 2_000_000_000))
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: configuration)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(
+                subscriptionType: "pro",
+                expiresAt: 2_000_000_030_000,
+                accessToken: "old-access",
+                refreshToken: "old-refresh"
+            )),
+            account: keychainAccount
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            now: { clock.now() }
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            switch requestCount {
+            case 1:
+                XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer old-access")
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"limits":[{"kind":"weekly_all","percent":25,"is_active":true}]}"#.utf8)
+                )
+            case 2:
+                XCTAssertEqual(request.url?.path, "/v1/oauth/token")
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}"#.utf8)
+                )
+            case 3:
+                XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer new-access")
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"extra_usage":{"is_enabled":true,"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8)
+                )
+            default:
+                XCTFail("Unexpected request \(request.url?.absoluteString ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let full = try await provider.fetchUsage(for: configuration)
+        clock.advance(by: 60)
+        let partialAfterRefresh = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 3)
+        XCTAssertFalse(full.subtitle.contains("Cached rate-limit windows"))
+        XCTAssertEqual(partialAfterRefresh.bars, full.bars)
+        XCTAssertEqual(partialAfterRefresh.barsFetchedAt, full.fetchedAt)
+        XCTAssertEqual(partialAfterRefresh.fetchedAt, full.fetchedAt.addingTimeInterval(60))
+        XCTAssertFalse(partialAfterRefresh.hasFreshBars)
+        XCTAssertTrue(partialAfterRefresh.subtitle.contains("Cached rate-limit windows"))
+        XCTAssertEqual(
+            partialAfterRefresh.monetaryMetrics.map(\.kind),
+            [.spent, .spendLimit, .remainingHeadroom]
+        )
+    }
+
     func testClaudeUsageProviderPreservesStaleSnapshotOnRateLimitWithoutProbe() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
@@ -6476,6 +6742,49 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(requestCount, 3)
     }
 
+    func testClaudeUsageProviderPreservesCachedBarsWhenOAuthUsageBecomesUnavailable() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+            if requestCount == 1 {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"limits":[{"kind":"weekly_all","percent":36,"is_active":true}]}"#.utf8)
+                )
+            }
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                Data()
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let fresh = try await provider.fetchUsage(for: configuration)
+        let unavailable = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(unavailable.bars, fresh.bars)
+        XCTAssertEqual(unavailable.barsFetchedAt, fresh.barsFetchedAt)
+        XCTAssertEqual(
+            unavailable.failureMessage,
+            "Claude subscription usage is unavailable for this account."
+        )
+        XCTAssertTrue(unavailable.subtitle.contains("Showing last known data"))
+    }
+
     func testClaudeUsageProviderClearsBackoffWhenCredentialChanges() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
@@ -6531,7 +6840,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertFalse(refreshed.subtitle.contains("rate-limited"))
     }
 
-    func testClaudeUsageProviderCachesSuccessfulHeaderFallbackForLaterRateLimit() async throws {
+    func testClaudeUsageProviderDoesNotProbeMessagesWhenOAuthUsageIsUnavailable() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
         try secretStore.saveSecret(
@@ -6547,128 +6856,27 @@ final class CodexBarIOSTests: XCTestCase {
         var requestCount = 0
         MockURLProtocol.handler = { request in
             requestCount += 1
-            if requestCount == 1 {
-                XCTAssertEqual(request.url?.path, "/api/oauth/usage")
-                return (
-                    HTTPURLResponse(
-                        url: try XCTUnwrap(request.url),
-                        statusCode: 503,
-                        httpVersion: nil,
-                        headerFields: nil
-                    )!,
-                    Data(#"{}"#.utf8)
-                )
-            }
-            if requestCount == 2 {
-                XCTAssertEqual(request.url?.path, "/v1/messages")
-                return (
-                    HTTPURLResponse(
-                        url: try XCTUnwrap(request.url),
-                        statusCode: 200,
-                        httpVersion: nil,
-                        headerFields: [
-                            "anthropic-ratelimit-unified-5h-utilization": "0.25",
-                            "anthropic-ratelimit-unified-5h-reset": "1893456000",
-                        ]
-                    )!,
-                    Data()
-                )
-            }
             XCTAssertEqual(request.url?.path, "/api/oauth/usage")
             return (
                 HTTPURLResponse(
                     url: try XCTUnwrap(request.url),
-                    statusCode: 429,
+                    statusCode: 503,
                     httpVersion: nil,
-                    headerFields: ["Retry-After": "120"]
+                    headerFields: nil
                 )!,
-                Data()
-            )
-        }
-        defer { MockURLProtocol.handler = nil }
-
-        let fallback = try await provider.fetchUsage(for: configuration)
-        let stale = try await provider.fetchUsage(for: configuration)
-
-        XCTAssertEqual(requestCount, 3)
-        XCTAssertEqual(fallback.bars, stale.bars)
-        XCTAssertEqual(fallback.fetchedAt, stale.fetchedAt)
-        XCTAssertTrue(stale.subtitle.contains("last known data"))
-    }
-
-    func testClaudeUsageProviderMergesOAuthOnlyStateWithHeaderFallback() async throws {
-        let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
-        try secretStore.saveSecret(
-            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
-            account: ProviderConfigurationStore.keychainAccount(for: configuration)
-        )
-        let sessionConfiguration = URLSessionConfiguration.ephemeral
-        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
-        let provider = ClaudeUsageProvider(
-            secretStore: secretStore,
-            session: URLSession(configuration: sessionConfiguration)
-        )
-        var requestCount = 0
-        MockURLProtocol.handler = { request in
-            requestCount += 1
-            if request.url?.path == "/api/oauth/usage" {
-                return (
-                    HTTPURLResponse(
-                        url: try XCTUnwrap(request.url),
-                        statusCode: 200,
-                        httpVersion: nil,
-                        headerFields: nil
-                    )!,
-                    Data(#"{"extra_usage":{"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8)
-                )
-            }
-            XCTAssertEqual(request.url?.path, "/v1/messages")
-            return (
-                HTTPURLResponse(
-                    url: try XCTUnwrap(request.url),
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: [
-                        "anthropic-ratelimit-unified-5h-utilization": "0.25",
-                        "anthropic-ratelimit-unified-5h-reset": "1893456000",
-                    ]
-                )!,
-                Data()
+                Data(#"{}"#.utf8)
             )
         }
         defer { MockURLProtocol.handler = nil }
 
         let result = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(requestCount, 2)
-        XCTAssertEqual(result.bars.first?.used, 25)
-        XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
-        XCTAssertEqual(result.usageMessages, ["Usage-credit enabled status was not reported."])
-
-        MockURLProtocol.handler = { request in
-            if request.url?.path == "/api/oauth/usage" {
-                return (
-                    HTTPURLResponse(
-                        url: try XCTUnwrap(request.url),
-                        statusCode: 200,
-                        httpVersion: nil,
-                        headerFields: nil
-                    )!,
-                    Data(#"{"extra_usage":{"is_enabled":true,"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8)
-                )
-            }
-            throw URLError(.timedOut)
-        }
-        let preserved = try await ClaudeUsageProvider(
-            secretStore: secretStore,
-            session: URLSession(configuration: sessionConfiguration)
-        ).fetchUsage(for: configuration)
-        XCTAssertEqual(preserved.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
-        XCTAssertTrue(preserved.bars.isEmpty)
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertTrue(result.bars.isEmpty)
+        XCTAssertEqual(result.subtitle, "Claude usage is temporarily unavailable (server error 503).")
     }
 
-    func testClaudeUsageProviderPreservesCachedBarsWhenPartialProbeFails() async throws {
+    func testClaudeUsageProviderReturnsOAuthOnlyStateWithoutMessagesProbe() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
         try secretStore.saveSecret(
@@ -6684,8 +6892,58 @@ final class CodexBarIOSTests: XCTestCase {
         var requestCount = 0
         MockURLProtocol.handler = { request in
             requestCount += 1
+            XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"extra_usage":{"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8)
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertTrue(result.bars.isEmpty)
+        XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
+        XCTAssertEqual(result.usageMessages, ["Usage-credit enabled status was not reported."])
+    }
+
+    func testClaudeUsageProviderPreservesCachedBarsAfterOAuthOnlyState() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let clock = TestDateProvider(Date(timeIntervalSince1970: 1_800_000_000))
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            now: { clock.now() }
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
             switch requestCount {
-            case 1, 3:
+            case 1:
+                XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(#"{"limits":[{"kind":"weekly_all","percent":25,"is_active":true}]}"#.utf8)
+                )
+            case 2:
                 XCTAssertEqual(request.url?.path, "/api/oauth/usage")
                 return (
                     HTTPURLResponse(
@@ -6696,24 +6954,7 @@ final class CodexBarIOSTests: XCTestCase {
                     )!,
                     Data(#"{"extra_usage":{"is_enabled":true,"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8)
                 )
-            case 2:
-                XCTAssertEqual(request.url?.path, "/v1/messages")
-                return (
-                    HTTPURLResponse(
-                        url: try XCTUnwrap(request.url),
-                        statusCode: 200,
-                        httpVersion: nil,
-                        headerFields: [
-                            "anthropic-ratelimit-unified-5h-utilization": "0.25",
-                            "anthropic-ratelimit-unified-5h-reset": "1893456000",
-                        ]
-                    )!,
-                    Data()
-                )
-            case 4:
-                XCTAssertEqual(request.url?.path, "/v1/messages")
-                throw URLError(.timedOut)
-            default:
+            case 3:
                 XCTAssertEqual(request.url?.path, "/api/oauth/usage")
                 return (
                     HTTPURLResponse(
@@ -6724,24 +6965,37 @@ final class CodexBarIOSTests: XCTestCase {
                     )!,
                     Data()
                 )
+            default:
+                XCTFail("Unexpected request \(request.url?.absoluteString ?? "nil")")
+                throw URLError(.badURL)
             }
         }
         defer { MockURLProtocol.handler = nil }
 
-        let merged = try await provider.fetchUsage(for: configuration)
+        let full = try await provider.fetchUsage(for: configuration)
+        clock.advance(by: 60)
         let partial = try await provider.fetchUsage(for: configuration)
         let stale = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(requestCount, 5)
-        XCTAssertEqual(merged.bars.first?.used, 25)
-        XCTAssertTrue(partial.bars.isEmpty)
-        XCTAssertEqual(stale.bars, merged.bars)
-        XCTAssertEqual(stale.monetaryMetrics, partial.monetaryMetrics)
-        XCTAssertEqual(stale.fetchedAt, merged.fetchedAt)
+        XCTAssertEqual(requestCount, 3)
+        XCTAssertEqual(full.bars.first?.used, 25)
+        XCTAssertFalse(full.subtitle.contains("Cached rate-limit windows"))
+        XCTAssertEqual(partial.bars, full.bars)
+        XCTAssertEqual(partial.fetchedAt, full.fetchedAt.addingTimeInterval(60))
+        XCTAssertEqual(partial.barsFetchedAt, full.fetchedAt)
+        XCTAssertFalse(partial.hasFreshBars)
+        XCTAssertTrue(partial.subtitle.contains("Cached rate-limit windows"))
+        XCTAssertEqual(partial.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
+        XCTAssertEqual(stale.bars, full.bars)
         XCTAssertTrue(stale.subtitle.contains("last known data"))
+
+        let historySnapshot = UsageHistorySnapshot(result: partial)
+        XCTAssertTrue(historySnapshot.bars.isEmpty)
+        XCTAssertEqual(historySnapshot.capturedAt, partial.fetchedAt)
+        XCTAssertEqual(historySnapshot.monetaryMetrics?.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
     }
 
-    func testClaudeUsageProviderDoesNotProbeMessagesOnlySnapshotDuringBackoff() async throws {
+    func testClaudeUsageProviderDoesNotSendMessagesRequestDuringOAuthBackoff() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
         try secretStore.saveSecret(
@@ -6758,6 +7012,7 @@ final class CodexBarIOSTests: XCTestCase {
         MockURLProtocol.handler = { request in
             requestCount += 1
             if requestCount == 1 {
+                XCTAssertEqual(request.url?.path, "/api/oauth/usage")
                 return (
                     HTTPURLResponse(
                         url: try XCTUnwrap(request.url),
@@ -6766,18 +7021,6 @@ final class CodexBarIOSTests: XCTestCase {
                         headerFields: nil
                     )!,
                     Data(#"{"extra_usage":{"is_enabled":false}}"#.utf8)
-                )
-            }
-            if requestCount == 2 {
-                XCTAssertEqual(request.url?.path, "/v1/messages")
-                return (
-                    HTTPURLResponse(
-                        url: try XCTUnwrap(request.url),
-                        statusCode: 200,
-                        httpVersion: nil,
-                        headerFields: nil
-                    )!,
-                    Data()
                 )
             }
             XCTAssertEqual(request.url?.path, "/api/oauth/usage")
@@ -6793,11 +7036,11 @@ final class CodexBarIOSTests: XCTestCase {
         }
         defer { MockURLProtocol.handler = nil }
 
-        let messagesOnly = try await provider.fetchUsage(for: configuration)
+        let oauthOnly = try await provider.fetchUsage(for: configuration)
         let stale = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(requestCount, 3)
-        XCTAssertEqual(messagesOnly.usageMessages, stale.usageMessages)
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(oauthOnly.usageMessages, stale.usageMessages)
         XCTAssertTrue(stale.subtitle.contains("rate-limited"))
     }
 
@@ -6817,18 +7060,9 @@ final class CodexBarIOSTests: XCTestCase {
             session: URLSession(configuration: urlSessionConfiguration)
         )
         var statusCode = 401
+        var requestCount = 0
         MockURLProtocol.handler = { request in
-            if request.url?.path == "/v1/messages" {
-                return (
-                    HTTPURLResponse(
-                        url: try XCTUnwrap(request.url),
-                        statusCode: 200,
-                        httpVersion: nil,
-                        headerFields: nil
-                    )!,
-                    Data()
-                )
-            }
+            requestCount += 1
             XCTAssertEqual(request.url?.path, "/api/oauth/usage")
             return (
                 HTTPURLResponse(
@@ -6850,13 +7084,14 @@ final class CodexBarIOSTests: XCTestCase {
         statusCode = 503
         let unavailable = try await provider.fetchUsage(for: configuration)
 
+        XCTAssertEqual(requestCount, 4)
         XCTAssertEqual(unauthorized.subtitle, "Claude credential was rejected. Sign in again.")
         XCTAssertEqual(forbidden.subtitle, "Claude credential lacks permission to read subscription usage.")
         XCTAssertEqual(missing.subtitle, "Claude subscription usage is unavailable for this account.")
         XCTAssertEqual(unavailable.subtitle, "Claude usage is temporarily unavailable (server error 503).")
     }
 
-    func testClaudeUsageProviderFallsBackToHeadersWhenOAuthUsageIsUnavailable() async throws {
+    func testClaudeUsageProviderDoesNotProbeMessagesWhenOAuthPayloadIsUnrecognized() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
         try secretStore.saveSecret(
@@ -6872,38 +7107,65 @@ final class CodexBarIOSTests: XCTestCase {
         var requestCount = 0
         MockURLProtocol.handler = { request in
             requestCount += 1
-            if request.url?.path == "/api/oauth/usage" {
-                return (
-                    HTTPURLResponse(
-                        url: try XCTUnwrap(request.url),
-                        statusCode: 404,
-                        httpVersion: nil,
-                        headerFields: nil
-                    )!,
-                    Data()
-                )
-            }
-            XCTAssertEqual(request.url?.path, "/v1/messages")
+            XCTAssertEqual(request.url?.path, "/api/oauth/usage")
             return (
                 HTTPURLResponse(
                     url: try XCTUnwrap(request.url),
                     statusCode: 200,
                     httpVersion: nil,
-                    headerFields: [
-                        "anthropic-ratelimit-unified-5h-utilization": "0.25",
-                        "anthropic-ratelimit-unified-5h-reset": "1893456000",
-                    ]
+                    headerFields: nil
                 )!,
-                Data()
+                Data(#"{}"#.utf8)
             )
         }
         defer { MockURLProtocol.handler = nil }
 
         let result = try await provider.fetchUsage(for: configuration)
 
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertTrue(result.bars.isEmpty)
+        XCTAssertEqual(result.subtitle, "Claude usage did not include rate-limit windows.")
+    }
+
+    func testClaudeUsageProviderPreservesCachedBarsWhenOAuthPayloadIsUnrecognized() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(accessToken: "claude-token")),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration)
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+            let data = requestCount == 1
+                ? Data(#"{"limits":[{"kind":"weekly_all","percent":25,"is_active":true}]}"#.utf8)
+                : Data(#"{}"#.utf8)
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                data
+            )
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let fresh = try await provider.fetchUsage(for: configuration)
+        let preserved = try await provider.fetchUsage(for: configuration)
+
         XCTAssertEqual(requestCount, 2)
-        XCTAssertEqual(result.bars.first?.used, 25)
-        XCTAssertFalse(result.subtitle.contains("unavailable"))
+        XCTAssertEqual(preserved.bars, fresh.bars)
+        XCTAssertEqual(preserved.failureMessage, "Claude usage did not include rate-limit windows.")
+        XCTAssertTrue(preserved.subtitle.contains("last known data"))
     }
 
     @MainActor

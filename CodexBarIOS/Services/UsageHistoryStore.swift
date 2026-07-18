@@ -82,16 +82,20 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
 
     public init(result: ProviderUsageResult, capturedAt: Date? = nil) {
         let capturedAt = capturedAt ?? result.fetchedAt
+        let recordableBars = result.hasFreshBars ? result.bars : []
         self.id = "\(result.accountID).\(capturedAt.timeIntervalSince1970)"
         self.accountID = result.accountID
         self.providerID = result.providerID
         self.title = result.title
         self.subtitle = result.subtitle
         self.capturedAt = capturedAt
-        self.bars = result.bars.map(UsageHistoryBarSnapshot.init)
+        self.bars = recordableBars.map(UsageHistoryBarSnapshot.init)
         self.creditsRemaining = result.creditsRemaining
         self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
-        self.highestSeverity = result.highestSeverity(at: capturedAt)
+        self.highestSeverity = max(
+            recordableBars.map { $0.effectiveSeverity(at: capturedAt) }.max() ?? .normal,
+            result.hasReachedSpendLimit ? .critical : .normal
+        )
     }
 
     public var primaryValue: Double? {
@@ -330,7 +334,8 @@ public final class UsageHistoryStore: ObservableObject {
 
     public func record(results: [ProviderUsageResult], now: Date = Date()) {
         let recordableResults = results.filter { result in
-            result.creditsRemaining != nil || !result.bars.isEmpty || !result.monetaryMetrics.isEmpty
+            let hasFreshBars = result.hasFreshBars && !result.bars.isEmpty
+            return result.creditsRemaining != nil || hasFreshBars || !result.monetaryMetrics.isEmpty
         }
         guard !recordableResults.isEmpty else {
             return
@@ -366,7 +371,7 @@ public final class UsageHistoryStore: ObservableObject {
         let isBalance: Bool
         if result.creditsRemaining != nil {
             isBalance = true
-        } else if !result.bars.isEmpty {
+        } else if result.hasFreshBars, !result.bars.isEmpty {
             isBalance = false
         } else if !result.monetaryMetrics.isEmpty {
             isBalance = true
@@ -420,7 +425,7 @@ public final class UsageHistoryStore: ObservableObject {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
         var options: [UsageHistorySeriesOption] = []
 
-        if !result.bars.isEmpty || result.creditsRemaining != nil {
+        if (result.hasFreshBars && !result.bars.isEmpty) || result.creditsRemaining != nil {
             options.append(UsageHistorySeriesOption(
                 id: "primary",
                 label: result.creditsRemaining == nil ? "Usage" : "Balance",
