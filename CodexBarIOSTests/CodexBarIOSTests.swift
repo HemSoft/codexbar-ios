@@ -6672,9 +6672,16 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(full.bars.first?.used, 25)
         XCTAssertEqual(partial.bars, full.bars)
         XCTAssertEqual(partial.fetchedAt, full.fetchedAt.addingTimeInterval(60))
+        XCTAssertEqual(partial.barsFetchedAt, full.fetchedAt)
+        XCTAssertFalse(partial.hasFreshBars)
         XCTAssertEqual(partial.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
         XCTAssertEqual(stale.bars, full.bars)
         XCTAssertTrue(stale.subtitle.contains("last known data"))
+
+        let historySnapshot = UsageHistorySnapshot(result: partial)
+        XCTAssertTrue(historySnapshot.bars.isEmpty)
+        XCTAssertEqual(historySnapshot.capturedAt, partial.fetchedAt)
+        XCTAssertEqual(historySnapshot.monetaryMetrics?.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
     }
 
     func testClaudeUsageProviderDoesNotSendMessagesRequestDuringOAuthBackoff() async throws {

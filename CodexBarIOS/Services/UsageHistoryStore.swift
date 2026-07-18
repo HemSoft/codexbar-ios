@@ -82,16 +82,20 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
 
     public init(result: ProviderUsageResult, capturedAt: Date? = nil) {
         let capturedAt = capturedAt ?? result.fetchedAt
+        let recordableBars = result.hasFreshBars ? result.bars : []
         self.id = "\(result.accountID).\(capturedAt.timeIntervalSince1970)"
         self.accountID = result.accountID
         self.providerID = result.providerID
         self.title = result.title
         self.subtitle = result.subtitle
         self.capturedAt = capturedAt
-        self.bars = result.bars.map(UsageHistoryBarSnapshot.init)
+        self.bars = recordableBars.map(UsageHistoryBarSnapshot.init)
         self.creditsRemaining = result.creditsRemaining
         self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
-        self.highestSeverity = result.highestSeverity(at: capturedAt)
+        self.highestSeverity = max(
+            recordableBars.map { $0.effectiveSeverity(at: capturedAt) }.max() ?? .normal,
+            result.hasReachedSpendLimit ? .critical : .normal
+        )
     }
 
     public var primaryValue: Double? {

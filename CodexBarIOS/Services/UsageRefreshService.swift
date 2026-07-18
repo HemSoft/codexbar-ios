@@ -178,6 +178,7 @@ public final class UsageRefreshService: ObservableObject {
             title: failureResult.title,
             subtitle: subtitle,
             bars: dataResult.bars,
+            barsFetchedAt: dataResult.barsFetchedAt,
             creditsRemaining: dataResult.creditsRemaining,
             monetaryMetrics: dataResult.monetaryMetrics,
             usageMessages: dataResult.usageMessages,
