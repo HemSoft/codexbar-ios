@@ -7391,6 +7391,66 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testBatchRefreshRechecksAccountsAfterWaitingForInFlightRefresh() async {
+        let firstGate = UsageProviderGate()
+        let secondGate = UsageProviderGate()
+        let recorder = UsageProviderRecorder()
+        let first = ProviderAccountConfiguration(
+            id: "codex.first-explicit",
+            providerID: .codex,
+            accountLabel: "First Codex",
+            authMethod: .browserSession
+        )
+        let second = ProviderAccountConfiguration(
+            id: "codex.second-explicit",
+            providerID: .codex,
+            accountLabel: "Second Codex",
+            authMethod: .browserSession
+        )
+        let service = UsageRefreshService(providers: [
+            AccountGatedUsageProvider(
+                providerID: .codex,
+                gates: [first.id: firstGate, second.id: secondGate],
+                recorder: recorder
+            ),
+        ])
+
+        let secondRefresh = Task {
+            await service.refresh(configuration: second)
+        }
+        await secondGate.waitUntilBlocked()
+        let batchRefresh = Task {
+            await service.refresh(configurations: [first, second])
+        }
+        while service.refreshWaiterCount(for: second.id) < 1 {
+            await Task.yield()
+        }
+        let firstRefresh = Task {
+            await service.refresh(configuration: first)
+        }
+        await firstGate.waitUntilBlocked()
+
+        await secondGate.release()
+        _ = await secondRefresh.value
+        while service.refreshWaiterCount(for: first.id) < 1 {
+            await Task.yield()
+        }
+
+        let labelsBeforeFirstRelease = await recorder.recordedLabels()
+        XCTAssertEqual(labelsBeforeFirstRelease.filter { $0 == first.accountLabel }.count, 1)
+        XCTAssertEqual(service.refreshingAccountIDs, [first.id])
+
+        await firstGate.release()
+        _ = await firstRefresh.value
+        await batchRefresh.value
+
+        let completedLabels = await recorder.recordedLabels()
+        XCTAssertEqual(completedLabels.filter { $0 == first.accountLabel }.count, 2)
+        XCTAssertEqual(completedLabels.filter { $0 == second.accountLabel }.count, 2)
+        XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
+    }
+
+    @MainActor
     func testConcurrentBatchRefreshQueuesOneFollowUpRun() async {
         let gate = UsageProviderGate()
         let recorder = UsageProviderRecorder()
@@ -8029,6 +8089,28 @@ private struct GatedUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: "Fresh usage",
             bars: [UsageBar(label: "Usage", used: 20, limit: 100)],
+            fetchedAt: Date()
+        )
+    }
+}
+
+private struct AccountGatedUsageProvider: UsageProvider {
+    let providerID: ProviderID
+    let gates: [String: UsageProviderGate]
+    let recorder: UsageProviderRecorder
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        await recorder.record(configuration.accountLabel)
+        if let gate = gates[configuration.id] {
+            await gate.wait()
+        }
+
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: providerID,
+            title: configuration.displayName,
+            subtitle: "Fresh usage",
+            bars: [],
             fetchedAt: Date()
         )
     }

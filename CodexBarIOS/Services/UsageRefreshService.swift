@@ -40,6 +40,10 @@ public final class UsageRefreshService: ObservableObject {
         batchRefreshCompletionWaiters.count
     }
 
+    func refreshWaiterCount(for accountID: String) -> Int {
+        refreshCompletionWaiters[accountID]?.count ?? 0
+    }
+
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
         if isBatchRefreshRunning {
             pendingBatchConfigurations = configurations
@@ -70,8 +74,11 @@ public final class UsageRefreshService: ObservableObject {
 
     private func performRefresh(configurations: [ProviderAccountConfiguration]) async {
         let enabledConfigurations = configurations.filter(\.isEnabled)
-        for configuration in enabledConfigurations {
-            await waitForRefreshToFinish(accountID: configuration.id)
+        while let refreshingAccountID = enabledConfigurations.lazy
+            .map(\.id)
+            .first(where: refreshingAccountIDs.contains)
+        {
+            await waitForRefreshToFinish(accountID: refreshingAccountID)
         }
 
         let enabledAccountIDs = Set(enabledConfigurations.map(\.id))
