@@ -6487,6 +6487,73 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(persisted.expiresAt, 2_000_003_600_000)
     }
 
+    func testClaudeUsageProviderPreservesCachedBarsAcrossTokenRefresh() async throws {
+        let clock = TestDateProvider(Date(timeIntervalSince1970: 2_000_000_000))
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: configuration)
+        try secretStore.saveSecret(
+            ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(
+                subscriptionType: "pro",
+                expiresAt: 2_000_000_030_000,
+                accessToken: "old-access",
+                refreshToken: "old-refresh"
+            )),
+            account: keychainAccount
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [MockURLProtocol.self]
+        let provider = ClaudeUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            now: { clock.now() }
+        )
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            switch requestCount {
+            case 1:
+                XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer old-access")
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"limits":[{"kind":"weekly_all","percent":25,"is_active":true}]}"#.utf8)
+                )
+            case 2:
+                XCTAssertEqual(request.url?.path, "/v1/oauth/token")
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}"#.utf8)
+                )
+            case 3:
+                XCTAssertEqual(request.url?.path, "/api/oauth/usage")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer new-access")
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"extra_usage":{"is_enabled":true,"used_credits":1250,"monthly_limit":5000,"currency":"USD","decimal_places":2}}"#.utf8)
+                )
+            default:
+                XCTFail("Unexpected request \(request.url?.absoluteString ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let full = try await provider.fetchUsage(for: configuration)
+        clock.advance(by: 60)
+        let partialAfterRefresh = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestCount, 3)
+        XCTAssertEqual(partialAfterRefresh.bars, full.bars)
+        XCTAssertEqual(partialAfterRefresh.barsFetchedAt, full.fetchedAt)
+        XCTAssertEqual(partialAfterRefresh.fetchedAt, full.fetchedAt.addingTimeInterval(60))
+        XCTAssertFalse(partialAfterRefresh.hasFreshBars)
+        XCTAssertEqual(
+            partialAfterRefresh.monetaryMetrics.map(\.kind),
+            [.spent, .spendLimit, .remainingHeadroom]
+        )
+    }
+
     func testClaudeUsageProviderPreservesStaleSnapshotOnRateLimitWithoutProbe() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)

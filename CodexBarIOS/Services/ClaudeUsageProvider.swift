@@ -32,11 +32,21 @@ public final class ClaudeUsageProvider: UsageProvider {
             return failureResult("Not configured - sign in with Claude.", configuration: configuration)
         }
 
-        let credentials = try await refreshedCredentialsIfNeeded(parsedCredentials, configuration: configuration)
+        await snapshotCache.prepare(accountID: configuration.id, credential: accessToken)
+        let refreshOutcome = try await refreshedCredentialsIfNeeded(parsedCredentials, configuration: configuration)
+        let credentials = refreshOutcome.credentials
         guard let token = credentials.accessToken, !token.isEmpty else {
             return failureResult("Claude credential is missing an access token.", configuration: configuration)
         }
-        await snapshotCache.prepare(accountID: configuration.id, credential: token)
+        if let rotatedCredential = refreshOutcome.rotatedCredentialFrom {
+            await snapshotCache.rotateCredential(
+                accountID: configuration.id,
+                from: rotatedCredential,
+                to: token
+            )
+        } else {
+            await snapshotCache.prepare(accountID: configuration.id, credential: token)
+        }
 
         let oauthOutcome = try await fetchOAuthUsage(
             configuration: configuration,
@@ -129,18 +139,18 @@ public final class ClaudeUsageProvider: UsageProvider {
     private func refreshedCredentialsIfNeeded(
         _ credentials: ClaudeCredentials,
         configuration: ProviderAccountConfiguration
-    ) async throws -> ClaudeCredentials {
+    ) async throws -> (credentials: ClaudeCredentials, rotatedCredentialFrom: String?) {
         guard credentials.expiresAt > 0 else {
-            return credentials
+            return (credentials, nil)
         }
 
         let expiresAt = Date(timeIntervalSince1970: TimeInterval(normalizeEpochToSeconds(credentials.expiresAt)))
         guard expiresAt <= now() else {
-            return credentials
+            return (credentials, nil)
         }
 
         guard let refreshToken = credentials.refreshToken, !refreshToken.isEmpty else {
-            return credentials
+            return (credentials, nil)
         }
 
         let keychainAccount = ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -148,10 +158,10 @@ public final class ClaudeUsageProvider: UsageProvider {
             let storedSecret = try secretStore.readSecret(account: keychainAccount),
             let latestCredentials = ClaudeCredentialsParser.parse(storedSecret)
         else {
-            return credentials
+            return (credentials, nil)
         }
         if latestCredentials != credentials {
-            return latestCredentials
+            return (latestCredentials, nil)
         }
 
         var request = URLRequest(url: Self.tokenRefreshEndpoint)
@@ -173,7 +183,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             let accessToken = refreshed.accessToken,
             !accessToken.isEmpty
         else {
-            return credentials
+            return (credentials, nil)
         }
 
         let refreshedAt = now()
@@ -191,17 +201,17 @@ public final class ClaudeUsageProvider: UsageProvider {
             let storedSecret = try secretStore.readSecret(account: keychainAccount),
             let latestCredentials = ClaudeCredentialsParser.parse(storedSecret)
         else {
-            return credentials
+            return (credentials, nil)
         }
         if latestCredentials != credentials {
-            return latestCredentials
+            return (latestCredentials, nil)
         }
 
         try secretStore.saveSecret(
             ClaudeCredentialsParser.storedCredential(from: updated),
             account: keychainAccount
         )
-        return updated
+        return (updated, credentials.accessToken)
     }
 
     private func makeOAuthUsageRequest(accessToken: String) -> URLRequest {
@@ -310,6 +320,15 @@ private actor ClaudeUsageSnapshotCache {
             retryDates[accountID] = nil
         }
         credentials[accountID] = credential
+    }
+
+    func rotateCredential(accountID: String, from oldCredential: String, to newCredential: String) {
+        guard credentials[accountID] == oldCredential else {
+            prepare(accountID: accountID, credential: newCredential)
+            return
+        }
+        credentials[accountID] = newCredential
+        retryDates[accountID] = nil
     }
 
     func store(_ result: ProviderUsageResult, accountID: String) {
