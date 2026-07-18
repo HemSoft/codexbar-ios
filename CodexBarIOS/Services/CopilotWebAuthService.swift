@@ -135,7 +135,7 @@ public final class CopilotWebAuthService: Sendable {
             callbackServer.cancel()
         }
 
-        let redirectURI = "http://localhost:\(callbackServer.port)\(Self.callbackPath)"
+        let redirectURI = "http://127.0.0.1:\(callbackServer.port)\(Self.callbackPath)"
         let authorizationURL = Self.authorizationURL(
             clientID: clientID,
             redirectURI: redirectURI,
@@ -325,11 +325,10 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
 
     private let expectedState: String
     private let callbackPath: String
-    private let listeners: [NWListener]
+    private let listener: NWListener
     private let queue = DispatchQueue(label: "com.hemsoft.CodexBarIOS.copilotOAuthCallback")
     private let lock = NSLock()
     private var readyContinuation: CheckedContinuation<Void, Error>?
-    private var readyListenerCount = 0
     private var callbackContinuation: CheckedContinuation<URL, Error>?
     private var pendingCallbackResult: Result<URL, Error>?
 
@@ -341,18 +340,14 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
         self.port = port
         self.expectedState = expectedState
         self.callbackPath = callbackPath
-        // `localhost` may resolve to either address family, so bind only to both loopback addresses.
-        self.listeners = try [
-            Self.makeListener(host: .ipv4(.loopback), port: nwPort),
-            Self.makeListener(host: .ipv6(.loopback), port: nwPort),
-        ]
-        for listener in listeners {
-            listener.newConnectionHandler = { [weak self] connection in
-                self?.handle(connection)
-            }
-            listener.stateUpdateHandler = { [weak self] state in
-                self?.handleListenerState(state)
-            }
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: nwPort)
+        self.listener = try NWListener(using: parameters)
+        self.listener.newConnectionHandler = { [weak self] connection in
+            self?.handle(connection)
+        }
+        self.listener.stateUpdateHandler = { [weak self] state in
+            self?.handleListenerState(state)
         }
     }
 
@@ -369,13 +364,8 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
                     expectedState: expectedState,
                     callbackPath: callbackPath
                 )
-                do {
-                    try await server.startListening()
-                    return server
-                } catch {
-                    server.cancel()
-                    lastError = error
-                }
+                try await server.startListening()
+                return server
             } catch {
                 lastError = error
             }
@@ -412,7 +402,7 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
     }
 
     func cancel() {
-        listeners.forEach { $0.cancel() }
+        listener.cancel()
     }
 
     private func startListening() async throws {
@@ -420,14 +410,14 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
             lock.lock()
             readyContinuation = continuation
             lock.unlock()
-            listeners.forEach { $0.start(queue: queue) }
+            listener.start(queue: queue)
         }
     }
 
     private func handleListenerState(_ state: NWListener.State) {
         switch state {
         case .ready:
-            finishOneListenerReady()
+            finishReady(.success(()))
         case .failed(let error):
             finishReady(.failure(error))
             finishCallback(.failure(error))
@@ -437,33 +427,6 @@ private final class CopilotOAuthCallbackServer: @unchecked Sendable {
         default:
             break
         }
-    }
-
-    private static func makeListener(host: NWEndpoint.Host, port: NWEndpoint.Port) throws -> NWListener {
-        let parameters = NWParameters.tcp
-        // Both address families must share the selected callback port.
-        parameters.allowLocalEndpointReuse = true
-        parameters.requiredLocalEndpoint = .hostPort(host: host, port: port)
-        return try NWListener(using: parameters)
-    }
-
-    private func finishOneListenerReady() {
-        lock.lock()
-        guard readyContinuation != nil else {
-            lock.unlock()
-            return
-        }
-
-        readyListenerCount += 1
-        guard readyListenerCount == listeners.count else {
-            lock.unlock()
-            return
-        }
-
-        let continuation = readyContinuation
-        readyContinuation = nil
-        lock.unlock()
-        continuation?.resume()
     }
 
     private func finishReady(_ result: Result<Void, Error>) {

@@ -2070,7 +2070,7 @@ final class CodexBarIOSTests: XCTestCase {
     func testCopilotAuthURLUsesGitHubBrowserCallbackFlow() throws {
         let url = CopilotWebAuthService.authorizationURL(
             clientID: "client id",
-            redirectURI: "http://localhost:1456/callback",
+            redirectURI: "http://127.0.0.1:1456/callback",
             state: "state",
             codeChallenge: "challenge"
         )
@@ -2081,7 +2081,7 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(components.path, "/login/oauth/authorize")
         XCTAssertEqual(components.queryItemValue(named: "response_type"), "code")
         XCTAssertEqual(components.queryItemValue(named: "client_id"), "client id")
-        XCTAssertEqual(components.queryItemValue(named: "redirect_uri"), "http://localhost:1456/callback")
+        XCTAssertEqual(components.queryItemValue(named: "redirect_uri"), "http://127.0.0.1:1456/callback")
         XCTAssertEqual(components.queryItemValue(named: "scope"), "repo read:org gist")
         XCTAssertEqual(components.queryItemValue(named: "state"), "state")
         XCTAssertEqual(components.queryItemValue(named: "code_challenge"), "challenge")
@@ -2090,7 +2090,7 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
-    func testCopilotBrowserSignInUsesLocalhostRedirectAndTimesOut() async throws {
+    func testCopilotBrowserSignInUsesRegisteredLoopbackRedirectAndTimesOut() async throws {
         let service = CopilotWebAuthService(callbackTimeoutNanoseconds: 10_000_000)
         let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
         var presentedURL: URL?
@@ -2106,7 +2106,7 @@ final class CodexBarIOSTests: XCTestCase {
             URLComponents(url: try XCTUnwrap(presentedURL), resolvingAgainstBaseURL: false)
         )
         let redirectURI = try XCTUnwrap(authorizationComponents.queryItemValue(named: "redirect_uri"))
-        XCTAssertEqual(URL(string: redirectURI)?.host, "localhost")
+        XCTAssertEqual(URL(string: redirectURI)?.host, "127.0.0.1")
     }
 
     func testCopilotTokenRequestBodyUsesAuthorizationCodeExchange() {
@@ -2115,7 +2115,7 @@ final class CodexBarIOSTests: XCTestCase {
                 clientID: "client",
                 clientSecret: "secret",
                 code: "code value",
-                redirectURI: "http://localhost:1456/callback",
+                redirectURI: "http://127.0.0.1:1456/callback",
                 codeVerifier: "verifier value"
             ),
             encoding: .utf8
@@ -2123,7 +2123,7 @@ final class CodexBarIOSTests: XCTestCase {
 
         XCTAssertEqual(
             body,
-            "client_id=client&client_secret=secret&code=code%20value&redirect_uri=http%3A%2F%2Flocalhost%3A1456%2Fcallback&code_verifier=verifier%20value"
+            "client_id=client&client_secret=secret&code=code%20value&redirect_uri=http%3A%2F%2F127.0.0.1%3A1456%2Fcallback&code_verifier=verifier%20value"
         )
     }
 

@@ -15,9 +15,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
-- Restricted browser sign-in callbacks to this device, aligned callback hosts
-  across providers, and made stalled ChatGPT, Claude, and GitHub Copilot
-  sign-ins time out cleanly. ([#52](https://github.com/HemSoft/codexbar-ios/issues/52))
+- Restricted browser sign-in callbacks to this device, matched callback hosts
+  to each provider's requirements, and made stalled ChatGPT, Claude, and GitHub
+  Copilot sign-ins time out cleanly. ([#52](https://github.com/HemSoft/codexbar-ios/issues/52))
 
 ### Developer Experience
 
