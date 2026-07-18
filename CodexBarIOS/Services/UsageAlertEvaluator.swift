@@ -92,6 +92,25 @@ public enum UsageAlertEvaluator {
         var notifications: [UsageAlertNotification] = []
 
         for result in results {
+            if !result.hasFreshBars {
+                let staleUsageAlertIDs = result.bars
+                    .filter { $0.fractionUsed >= settings.usageThreshold }
+                    .map { alertID(for: result, bar: $0) }
+                    .filter(activeAlertIDs.contains)
+                nextActiveAlertIDs.formUnion(staleUsageAlertIDs)
+
+                let staleSeverity = result.bars
+                    .map { $0.effectiveSeverity(at: now) }
+                    .max() ?? .normal
+                let severityAlertID = "severity.\(result.accountID)"
+                if settings.includesSeverityAlerts,
+                   staleSeverity >= .warning,
+                   activeAlertIDs.contains(severityAlertID)
+                {
+                    nextActiveAlertIDs.insert(severityAlertID)
+                }
+            }
+
             let alertBars = result.freshBars
             for bar in alertBars where bar.fractionUsed >= settings.usageThreshold {
                 let alertID = alertID(for: result, bar: bar)

@@ -1528,6 +1528,53 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(zeroCapResult.highestSeverity, .normal)
     }
 
+    func testUsageAlertEvaluatorKeepsExistingAlertIDsWhileBarsAreStale() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
+        let settings = UsageAlertSettings(
+            isEnabled: true,
+            usageThreshold: 0.80,
+            includesSeverityAlerts: true
+        )
+        let freshResult = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live usage",
+            bars: [UsageBar(label: "Fable weekly limit", used: 85, limit: 100)],
+            fetchedAt: fetchedAt
+        )
+        let firstEvaluation = UsageAlertEvaluator.evaluate(
+            results: [freshResult],
+            settings: settings,
+            activeAlertIDs: []
+        )
+        let staleResult = ProviderUsageResult(
+            accountID: freshResult.accountID,
+            providerID: freshResult.providerID,
+            title: freshResult.title,
+            subtitle: "Fresh monetary usage with cached rate limits",
+            bars: freshResult.bars,
+            barsFetchedAt: fetchedAt,
+            fetchedAt: fetchedAt.addingTimeInterval(60)
+        )
+
+        let repeatedEvaluation = UsageAlertEvaluator.evaluate(
+            results: [staleResult],
+            settings: settings,
+            activeAlertIDs: firstEvaluation.activeAlertIDs
+        )
+        XCTAssertTrue(repeatedEvaluation.notifications.isEmpty)
+        XCTAssertTrue(repeatedEvaluation.activeAlerts.isEmpty)
+        XCTAssertEqual(repeatedEvaluation.activeAlertIDs, firstEvaluation.activeAlertIDs)
+
+        let coldEvaluation = UsageAlertEvaluator.evaluate(
+            results: [staleResult],
+            settings: settings,
+            activeAlertIDs: []
+        )
+        XCTAssertTrue(coldEvaluation.activeAlertIDs.isEmpty)
+    }
+
     func testUsageAlertEvaluatorReturnsCardScopedActiveAlerts() {
         let codex = ProviderUsageResult(
             accountID: "codex.personal",
