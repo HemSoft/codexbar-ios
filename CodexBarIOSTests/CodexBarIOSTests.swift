@@ -718,6 +718,47 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testWidgetSnapshotPublisherUsesConfigurationOrderWhenManualOrderIsEmpty() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let claude = store.addAccount(for: .claude)
+        let openRouter = store.addAccount(for: .openRouter)
+        store.saveSecret("claude-token", for: claude)
+        store.saveSecret("openrouter-key", for: openRouter)
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let claudeResult = ProviderUsageResult(
+            accountID: claude.id,
+            providerID: .claude,
+            title: claude.displayName,
+            subtitle: "Fresh usage",
+            bars: [],
+            fetchedAt: fetchedAt
+        )
+        let openRouterResult = ProviderUsageResult(
+            accountID: openRouter.id,
+            providerID: .openRouter,
+            title: openRouter.displayName,
+            subtitle: "Fresh usage",
+            bars: [],
+            fetchedAt: fetchedAt
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [openRouterResult, claudeResult],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+
+        let snapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        XCTAssertEqual(snapshot.results.map(\.accountID), [claude.id, openRouter.id])
+    }
+
+    @MainActor
     func testWidgetSnapshotPublisherNeutralizesStaleBarSeverityAndProjection() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

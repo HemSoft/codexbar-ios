@@ -85,9 +85,14 @@ enum WidgetSnapshotPublisher {
         configurationStore: ProviderConfigurationStore,
         now: Date
     ) -> [ProviderUsageResult] {
-        let displayable = results.filter { result in
-            configurationStore.configuration(accountID: result.accountID)
-                .map(configurationStore.shouldDisplayOnDashboard) ?? false
+        let resultsByAccountID = Dictionary(
+            uniqueKeysWithValues: results.map { ($0.accountID, $0) }
+        )
+        let displayable: [ProviderUsageResult] = configurationStore.configurations.compactMap { configuration in
+            guard configurationStore.shouldDisplayOnDashboard(configuration) else {
+                return nil
+            }
+            return resultsByAccountID[configuration.id]
         }
 
         return DashboardUsageSorter.orderedResults(
