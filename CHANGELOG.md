@@ -52,6 +52,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Split the monolithic test suite into domain-focused classes with isolated
+  network and preference fixtures so independent test groups can run in
+  parallel without sharing mutable state.
+  ([#64](https://github.com/HemSoft/codexbar-ios/issues/64))
 - Split widget configuration, views, accessory layouts, and tile models into
   focused files, and shared provider logos, progress bars, severity colors, and
   currency formatting between the app and widget.
