@@ -656,13 +656,15 @@ final class ProviderNetworkTests: XCTestCase {
         )
         let sessionConfiguration = URLSessionConfiguration.ephemeral
         sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let refreshJoined = TestSignal()
         let provider = CopilotUsageProvider(
             secretStore: secretStore,
             session: URLSession(configuration: sessionConfiguration),
             usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
             tokenEndpoint: URL(string: "https://example.test/github-token")!,
             oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
-            now: { now }
+            now: { now },
+            onJoinInFlightRefresh: { refreshJoined.signal() }
         )
         let counterLock = NSLock()
         let refreshGate = TestRequestGate()
@@ -694,7 +696,7 @@ final class ProviderNetworkTests: XCTestCase {
         let first = Task { try await provider.fetchUsage(for: configuration) }
         XCTAssertTrue(refreshGate.waitUntilBlocked(), "Expected the first credential refresh request to start.")
         let second = Task { try await provider.fetchUsage(for: configuration) }
-        await Task.yield()
+        XCTAssertTrue(refreshJoined.wait(), "Expected the second fetch to join the in-flight credential refresh.")
         refreshGate.release()
         let results = try await [first.value, second.value]
 

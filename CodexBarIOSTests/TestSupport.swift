@@ -372,6 +372,30 @@ final class TestRequestGate: @unchecked Sendable {
     }
 }
 
+final class TestSignal: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var signaled = false
+
+    func signal() {
+        condition.lock()
+        signaled = true
+        condition.broadcast()
+        condition.unlock()
+    }
+
+    func wait(timeout: TimeInterval = 2) -> Bool {
+        condition.lock()
+        defer { condition.unlock() }
+        let deadline = Date().addingTimeInterval(timeout)
+        while !signaled {
+            guard condition.wait(until: deadline) else {
+                return false
+            }
+        }
+        return true
+    }
+}
+
 final class TestDateProvider: @unchecked Sendable {
     private let lock = NSLock()
     private var date: Date
