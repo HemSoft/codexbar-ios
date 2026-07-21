@@ -45,6 +45,8 @@
 		10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003F /* MoonshotUsageProvider.swift */; };
 		100000000000000000000040 /* TokenEndpointErrorFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000040 /* TokenEndpointErrorFormatter.swift */; };
 		100000000000000000000041 /* ProviderAuthSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000041 /* ProviderAuthSupport.swift */; };
+		100000000000000000000042 /* DashboardOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000042 /* DashboardOrchestrator.swift */; };
+		100000000000000000000043 /* ProviderSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000043 /* ProviderSettingsViewModel.swift */; };
 		100000000000000000000024 /* CursorUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* CursorUsageProvider.swift */; };
 		100000000000000000000025 /* CursorWebAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000027 /* CursorWebAuthService.swift */; };
 		100000000000000000000026 /* OpenCodeZenUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* OpenCodeZenUsageProvider.swift */; };
@@ -146,6 +148,8 @@
 		20000000000000000000003F /* MoonshotUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonshotUsageProvider.swift; sourceTree = "<group>"; };
 		200000000000000000000040 /* TokenEndpointErrorFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEndpointErrorFormatter.swift; sourceTree = "<group>"; };
 		200000000000000000000041 /* ProviderAuthSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAuthSupport.swift; sourceTree = "<group>"; };
+		200000000000000000000042 /* DashboardOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardOrchestrator.swift; sourceTree = "<group>"; };
+		200000000000000000000043 /* ProviderSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSettingsViewModel.swift; sourceTree = "<group>"; };
 		200000000000000000000026 /* CursorUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorUsageProvider.swift; sourceTree = "<group>"; };
 		200000000000000000000027 /* CursorWebAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorWebAuthService.swift; sourceTree = "<group>"; };
 		200000000000000000000028 /* OpenCodeZenUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeZenUsageProvider.swift; sourceTree = "<group>"; };
@@ -254,6 +258,7 @@
 				200000000000000000000011 /* ProviderConfigurationStore.swift */,
 				20000000000000000000003A /* DashboardUsageSorter.swift */,
 				20000000000000000000003B /* AppReviewPromptPolicy.swift */,
+				200000000000000000000042 /* DashboardOrchestrator.swift */,
 				20000000000000000000003C /* AppUpdateService.swift */,
 				20000000000000000000003D /* AppStoreScreenshotFixtures.swift */,
 				200000000000000000000034 /* UsageAlertEvaluator.swift */,
@@ -290,6 +295,7 @@
 				200000000000000000000012 /* SettingsView.swift */,
 				200000000000000000000038 /* WidgetBuilderView.swift */,
 				200000000000000000000013 /* ProviderSettingsView.swift */,
+				200000000000000000000043 /* ProviderSettingsViewModel.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -490,6 +496,7 @@
 				100000000000000000000033 /* LocalUsageAlertNotifier.swift in Sources */,
 				100000000000000000000010 /* SettingsView.swift in Sources */,
 				100000000000000000000011 /* ProviderSettingsView.swift in Sources */,
+				100000000000000000000043 /* ProviderSettingsViewModel.swift in Sources */,
 				100000000000000000000012 /* CodexCredentials.swift in Sources */,
 				100000000000000000000013 /* CodexCredentialsParser.swift in Sources */,
 				100000000000000000000014 /* CodexUsageParser.swift in Sources */,
@@ -516,6 +523,7 @@
 				100000000000000000000027 /* OpenCodeZenBootstrapImporter.swift in Sources */,
 				100000000000000000000039 /* DashboardUsageSorter.swift in Sources */,
 				10000000000000000000003A /* AppReviewPromptPolicy.swift in Sources */,
+				100000000000000000000042 /* DashboardOrchestrator.swift in Sources */,
 				10000000000000000000003B /* AppUpdateService.swift in Sources */,
 				10000000000000000000003C /* AppStoreScreenshotFixtures.swift in Sources */,
 				10000000000000000000003D /* UserFacingDateTimeFormatter.swift in Sources */,
@@ -707,7 +715,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -741,7 +749,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -764,7 +772,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOSTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -787,7 +795,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOSTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -812,7 +820,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOS.CodexBarIOSWidget;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -841,7 +849,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOS.CodexBarIOSWidget;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
 				PRODUCT_NAME = "$(TARGET_NAME)";

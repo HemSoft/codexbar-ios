@@ -7761,6 +7761,234 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(service.results.map(\.accountID), [openCode.id])
     }
 
+    @MainActor
+    func testWidgetSnapshotCoordinatorPublishesStoreAndRefreshChangesReactively() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .codex)
+        let service = UsageRefreshService(providers: [
+            GatedUsageProvider(
+                providerID: .codex,
+                blockedAccountID: "never",
+                gate: UsageProviderGate()
+            ),
+        ])
+        var publishedAccountIDs: [[String]] = []
+        var settingsPublishCount = 0
+        let coordinator = WidgetSnapshotCoordinator(
+            refreshService: service,
+            configurationStore: store,
+            publishSnapshot: { results, _ in
+                publishedAccountIDs.append(results.map(\.accountID))
+            },
+            publishSettings: { _ in
+                settingsPublishCount += 1
+            }
+        )
+
+        await service.refresh(configurations: [configuration])
+        await Task.yield()
+        XCTAssertEqual(publishedAccountIDs.last, [configuration.id])
+
+        let snapshotCount = publishedAccountIDs.count
+        store.updateDashboardCardOrder([configuration.id])
+        await Task.yield()
+        XCTAssertEqual(publishedAccountIDs.count, snapshotCount + 1)
+
+        store.updateWidgetRefreshInterval(.oneHour)
+        await Task.yield()
+        XCTAssertEqual(settingsPublishCount, 1)
+        withExtendedLifetime(coordinator) {}
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelDebouncesTextChangesAndFlushesOnDismissal() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .openRouter)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id
+        )
+
+        viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "Team Router"
+        viewModel.binding(for: \.showsHistory).wrappedValue = false
+
+        XCTAssertEqual(viewModel.configuration.accountLabel, "Team Router")
+        XCTAssertFalse(viewModel.configuration.showsHistory)
+        XCTAssertEqual(store.configuration(accountID: configuration.id)?.accountLabel, "Team Router")
+        XCTAssertEqual(store.configuration(accountID: configuration.id)?.showsHistory, false)
+
+        viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "Final Router"
+        XCTAssertEqual(store.configuration(accountID: configuration.id)?.accountLabel, "Team Router")
+        viewModel.flushPendingChanges()
+
+        XCTAssertEqual(viewModel.configuration.accountLabel, "Final Router")
+        XCTAssertEqual(store.configuration(accountID: configuration.id)?.accountLabel, "Final Router")
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelRegistersDefaultAccountBeforeSavingCredential() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: ProviderID.openRouter.rawValue
+        )
+        viewModel.secret = "sk-or-test"
+
+        viewModel.saveGenericCredential()
+
+        let savedConfiguration = store.configuration(accountID: ProviderID.openRouter.rawValue)
+        XCTAssertNotNil(savedConfiguration)
+        XCTAssertEqual(viewModel.secret, "")
+        XCTAssertTrue(savedConfiguration.map { store.hasSecret(for: $0) } ?? false)
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelCancelsPendingEditsBeforeCursorSignOut() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let cursor = store.addAccount(for: .cursor)
+        let connected = try XCTUnwrap(
+            store.connectCursorAccount(cursor, credential: "cursor-token")
+        )
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: connected.id
+        )
+
+        viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "stale@example.com"
+        viewModel.signOutOfCursor()
+        viewModel.flushPendingChanges()
+
+        XCTAssertEqual(store.configuration(accountID: connected.id)?.accountLabel, "")
+        XCTAssertFalse(store.hasSecret(for: connected))
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelCancelsPendingEditsWhenSavingOpenCodeCredential() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id
+        )
+        viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "Team ZEN"
+        viewModel.secret = "opencode-token"
+
+        viewModel.saveOpenCodeCredential()
+        var externallyUpdated = store.configuration(accountID: openCode.id)!
+        externallyUpdated.showsHistory = false
+        XCTAssertTrue(store.update(externallyUpdated))
+        viewModel.flushPendingChanges()
+
+        XCTAssertEqual(store.configuration(accountID: openCode.id)?.accountLabel, "Team ZEN")
+        XCTAssertEqual(store.configuration(accountID: openCode.id)?.showsHistory, false)
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelReportsCredentialSaveFailureWithoutCompleting() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingSaveSecretStore(secret: "existing-token")
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 }
+        )
+        viewModel.secret = "replacement-token"
+
+        viewModel.saveGenericCredential()
+
+        XCTAssertNotNil(viewModel.credentialError)
+        XCTAssertEqual(viewModel.secret, "replacement-token")
+        XCTAssertEqual(credentialsChangedCount, 0)
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelReportsCredentialRemovalFailureWithoutCompleting() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingDeleteSecretStore()
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 }
+        )
+
+        viewModel.removeSavedCredential()
+
+        XCTAssertNotNil(viewModel.credentialError)
+        XCTAssertEqual(credentialsChangedCount, 0)
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelClearsCredentialErrorWhenRetryingCodexSignIn() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingDeleteSecretStore()
+        )
+        let configuration = store.addAccount(for: .codex)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            codexAuthService: CodexWebAuthService(callbackTimeoutNanoseconds: 10_000_000)
+        )
+        viewModel.removeSavedCredential()
+        XCTAssertNotNil(viewModel.credentialError)
+
+        await viewModel.signInWithCodex()
+
+        XCTAssertNil(viewModel.credentialError)
+        XCTAssertNotNil(viewModel.codexAuthError)
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelCompletesSuccessfulSaveDespiteUnrelatedReadFailure() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = SelectiveReadFailureSecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let unreadable = store.addAccount(for: .openRouter)
+        let target = store.addAccount(for: .moonshot)
+        secretStore.failingAccount = ProviderConfigurationStore.keychainAccount(for: unreadable)
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: target.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 }
+        )
+        viewModel.secret = "moonshot-token"
+
+        viewModel.saveGenericCredential()
+
+        XCTAssertNil(viewModel.credentialError)
+        XCTAssertEqual(viewModel.secret, "")
+        XCTAssertEqual(credentialsChangedCount, 1)
+        XCTAssertNotNil(store.lastError)
+    }
+
     private func makeHistoryResult(
         accountID: String,
         providerID: ProviderID = .codex,
@@ -7888,6 +8116,45 @@ private final class FailingSaveSecretStore: SecretStore, @unchecked Sendable {
     }
 
     func deleteSecret(account: String) throws {}
+}
+
+private struct FailingDeleteSecretStore: SecretStore {
+    func readSecret(account: String) throws -> String? {
+        "existing-token"
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {}
+
+    func deleteSecret(account: String) throws {
+        throw KeychainError.unhandledStatus(-25308)
+    }
+}
+
+private final class SelectiveReadFailureSecretStore: SecretStore, @unchecked Sendable {
+    var failingAccount: String?
+    private let lock = NSLock()
+    private var secrets: [String: String] = [:]
+
+    func readSecret(account: String) throws -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        if account == failingAccount {
+            throw KeychainError.unhandledStatus(-25308)
+        }
+        return secrets[account]
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        secrets[account] = secret
+    }
+
+    func deleteSecret(account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        secrets.removeValue(forKey: account)
+    }
 }
 
 private final class StaleThirdReadSecretStore: SecretStore, @unchecked Sendable {

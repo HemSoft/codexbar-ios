@@ -21,6 +21,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Kept pending provider-setting edits from overwriting newer Cursor sign-in,
+  sign-out, or OpenCode credential changes. ([#61](https://github.com/HemSoft/codexbar-ios/issues/61))
+- Reported credential-storage failures instead of presenting unsuccessful
+  provider sign-ins or credential changes as complete. ([#61](https://github.com/HemSoft/codexbar-ios/issues/61))
 - Kept provider cards, widgets, and cached usage visible and ordered consistently
   when refreshes fail, queued one follow-up refresh when new triggers arrive
   during an active refresh, and surfaced credential-read errors instead of
@@ -43,6 +47,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Moved dashboard refresh, alert, widget-sync, ordering, and provider sign-in
+  orchestration out of SwiftUI views so those flows can evolve and be tested
+  independently. ([#61](https://github.com/HemSoft/codexbar-ios/issues/61))
 - Consolidated shared provider credential renewal, loopback browser callbacks,
   form encoding, and pasted-secret normalization so authentication fixes can be
   applied consistently across providers. ([#59](https://github.com/HemSoft/codexbar-ios/issues/59))
