@@ -9,10 +9,13 @@ struct CodexBarWidgetView: View {
         switch family {
         case .accessoryInline:
             AccessoryInlineWidget(tiles: selectedTiles.map(\.tile))
+                .widgetURL(selectedTiles.first?.tile.deepLinkURL)
         case .accessoryCircular:
             AccessoryCircularWidget(tile: selectedTiles.first?.tile)
+                .widgetURL(selectedTiles.first?.tile.deepLinkURL)
         case .accessoryRectangular:
             AccessoryRectangularWidget(tile: selectedTiles.first?.tile)
+                .widgetURL(selectedTiles.first?.tile.deepLinkURL)
         default:
             TileWidget(
                 tiles: selectedTiles,
@@ -274,7 +277,11 @@ struct TileWidget: View {
                 VStack(alignment: .leading, spacing: 8) {
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(Array(tiles.enumerated()), id: \.offset) { _, tile in
-                            ProviderWidgetTile(renderedTile: tile, style: family == .systemSmall ? .small : .standard)
+                            if family == .systemSmall {
+                                ProviderWidgetTile(renderedTile: tile, style: .small)
+                            } else {
+                                LinkedProviderWidgetTile(renderedTile: tile, style: .standard)
+                            }
                         }
                     }
 
@@ -287,6 +294,7 @@ struct TileWidget: View {
                 }
             }
         }
+        .widgetURL(family == .systemSmall ? tiles.first?.tile.deepLinkURL : nil)
         .containerBackground(.background, for: .widget)
     }
 
@@ -329,7 +337,7 @@ struct DenseTileWidget: View {
 
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(Array(displayedTiles.enumerated()), id: \.offset) { _, tile in
-                    ProviderWidgetTile(renderedTile: tile, style: .dense)
+                    LinkedProviderWidgetTile(renderedTile: tile, style: .dense)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
@@ -350,6 +358,23 @@ struct DenseTileWidget: View {
     private var columns: [GridItem] {
         let columnCount = family == .systemExtraLarge && displayedTiles.count > 4 ? 3 : 2
         return Array(repeating: GridItem(.flexible(), spacing: 8), count: columnCount)
+    }
+}
+
+private struct LinkedProviderWidgetTile: View {
+    let renderedTile: CodexBarWidgetRenderedTile
+    let style: ProviderWidgetTile.Style
+
+    var body: some View {
+        if let destination = renderedTile.tile.deepLinkURL {
+            Link(destination: destination) {
+                ProviderWidgetTile(renderedTile: renderedTile, style: style)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens this account in CodexBar")
+        } else {
+            ProviderWidgetTile(renderedTile: renderedTile, style: style)
+        }
     }
 }
 

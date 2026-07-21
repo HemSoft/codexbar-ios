@@ -26,6 +26,7 @@ let package = Package(
                 "CodexBarIOSApp.swift",
                 "CodexBarIOS.entitlements",
                 "ContentView.swift",
+                "Info.plist",
                 "Resources",
                 "Views"
             ]

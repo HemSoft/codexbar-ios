@@ -2,6 +2,7 @@ import Foundation
 
 struct CodexBarWidgetTile: Identifiable {
     let id: String
+    let accountID: String?
     let providerID: String
     let providerTitle: String
     let title: String
@@ -38,6 +39,7 @@ struct CodexBarWidgetTile: Identifiable {
     static func unavailable(choice: CodexBarWidgetTileChoice) -> CodexBarWidgetTile {
         CodexBarWidgetTile(
             id: "unavailable.\(choice.id)",
+            accountID: nil,
             providerID: "unavailable",
             providerTitle: choice.title,
             title: choice.title,
@@ -47,6 +49,10 @@ struct CodexBarWidgetTile: Identifiable {
             monetaryMetric: nil,
             severity: .warning
         )
+    }
+
+    var deepLinkURL: URL? {
+        accountID.flatMap(CodexBarDeepLink.providerURL(accountID:))
     }
 
     var monetaryValueText: String? {
@@ -163,6 +169,7 @@ extension CodexBarWidgetProviderSnapshot {
         let summaryMetric = summaryMonetaryMetric
         return CodexBarWidgetTile(
             id: "provider.\(accountID)",
+            accountID: accountID,
             providerID: providerID,
             providerTitle: title,
             title: summaryMetric?.label ?? (creditsRemaining == nil ? title : "\(title) Balance"),
@@ -187,6 +194,7 @@ extension CodexBarWidgetProviderSnapshot {
     func barTile(_ bar: CodexBarWidgetUsageBarSnapshot) -> CodexBarWidgetTile {
         CodexBarWidgetTile(
             id: "bar.\(bar.id)",
+            accountID: accountID,
             providerID: providerID,
             providerTitle: title,
             title: bar.label,
@@ -201,6 +209,7 @@ extension CodexBarWidgetProviderSnapshot {
     func monetaryTile(_ metric: CodexBarWidgetMonetaryMetricSnapshot) -> CodexBarWidgetTile {
         CodexBarWidgetTile(
             id: "money.\(accountID).\(metric.id)",
+            accountID: accountID,
             providerID: providerID,
             providerTitle: title,
             title: metric.label,

@@ -17,6 +17,9 @@ struct ContentView: View {
     @State private var isShowingSettings = false
     @State private var selectedHistoryResult: ProviderUsageResult?
     @State private var draggedCardID: String?
+    @State private var deepLinkNavigation = DashboardDeepLinkNavigationState()
+    @State private var hasCompletedInitialRefresh = false
+    @State private var settingsRefreshCompletionID = UUID()
 
     init(
         refreshService: UsageRefreshService,
@@ -50,60 +53,112 @@ struct ContentView: View {
         let usageAlertsByAccountID = orchestrator.currentUsageAlertsByAccountID
 
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    if !cardItems.isEmpty,
-                       let release = appUpdateController.dashboardRelease {
-                        AppUpdateNotice(
-                            release: release,
-                            onDismiss: appUpdateController.dismissDashboardNotice
-                        )
-                    }
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        if !cardItems.isEmpty,
+                           let release = appUpdateController.dashboardRelease {
+                            AppUpdateNotice(
+                                release: release,
+                                onDismiss: appUpdateController.dismissDashboardNotice
+                            )
+                        }
 
-                    ForEach(sections) { section in
-                        VStack(alignment: .leading, spacing: 8) {
-                            if showGroupHeaders {
-                                Text(section.title)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .textCase(.uppercase)
-                                    .padding(.horizontal, 4)
-                            }
+                        ForEach(sections) { section in
+                            VStack(alignment: .leading, spacing: 8) {
+                                if showGroupHeaders {
+                                    Text(section.title)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .textCase(.uppercase)
+                                        .padding(.horizontal, 4)
+                                }
 
-                            ForEach(section.items) { item in
-                                let card = dashboardCard(
-                                    for: item,
-                                    alerts: usageAlertsByAccountID[item.id] ?? []
-                                )
+                                ForEach(section.items) { item in
+                                    let card = dashboardCard(
+                                        for: item,
+                                        alerts: usageAlertsByAccountID[item.id] ?? []
+                                    )
 
-                                if orchestrator.isManualDashboardOrdering {
-                                    card
-                                        .onDrag {
-                                            draggedCardID = item.id
-                                            return NSItemProvider(object: item.id as NSString)
-                                        }
-                                        .onDrop(
-                                            of: [UTType.text],
-                                            delegate: ProviderUsageCardDropDelegate(
-                                                targetID: item.id,
-                                                draggedCardID: $draggedCardID,
-                                                moveCard: moveCard,
-                                                finishDrag: finishCardDrag
+                                    if orchestrator.isManualDashboardOrdering {
+                                        card
+                                            .id(item.id)
+                                            .onDrag {
+                                                draggedCardID = item.id
+                                                return NSItemProvider(object: item.id as NSString)
+                                            }
+                                            .onDrop(
+                                                of: [UTType.text],
+                                                delegate: ProviderUsageCardDropDelegate(
+                                                    targetID: item.id,
+                                                    draggedCardID: $draggedCardID,
+                                                    moveCard: moveCard,
+                                                    finishDrag: finishCardDrag
+                                                )
                                             )
-                                        )
-                                } else {
-                                    card
-                                        .accessibilityHint(
-                                            Text("Smart ordering is active.")
-                                        )
+                                    } else {
+                                        card
+                                            .id(item.id)
+                                            .accessibilityHint(
+                                                Text("Smart ordering is active.")
+                                            )
+                                    }
                                 }
                             }
                         }
                     }
+                    .padding()
                 }
-                .padding()
+                .background(Color(.systemGroupedBackground))
+                .onOpenURL { url in
+                    handleDeepLink(
+                        url,
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: cardItems.map(\.id)
+                    )
+                }
+                .onChange(of: cardItems.map(\.id)) { _, accountIDs in
+                    scrollToPendingDeepLink(
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: accountIDs,
+                        completesNavigation: false
+                    )
+                }
+                .onChange(of: refreshService.isRefreshing) { _, isRefreshing in
+                    guard !isRefreshing, deepLinkNavigation.waitsForRefresh else {
+                        return
+                    }
+                    scrollToPendingDeepLink(
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: cardItems.map(\.id),
+                        completesNavigation: true
+                    )
+                }
+                .onChange(of: hasCompletedInitialRefresh) { _, hasCompletedInitialRefresh in
+                    guard
+                        hasCompletedInitialRefresh,
+                        !refreshService.isRefreshing,
+                        deepLinkNavigation.waitsForRefresh
+                    else {
+                        return
+                    }
+                    scrollToPendingDeepLink(
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: cardItems.map(\.id),
+                        completesNavigation: true
+                    )
+                }
+                .onChange(of: settingsRefreshCompletionID) { _, _ in
+                    guard deepLinkNavigation.waitsForRefresh else {
+                        return
+                    }
+                    scrollToPendingDeepLink(
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: cardItems.map(\.id),
+                        completesNavigation: true
+                    )
+                }
             }
-            .background(Color(.systemGroupedBackground))
             .navigationTitle("CodexBar")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -153,7 +208,10 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $isShowingSettings, onDismiss: {
-            Task { await orchestrator.refreshAfterSettingsDismissed() }
+            Task {
+                await orchestrator.refreshAfterSettingsDismissed()
+                settingsRefreshCompletionID = UUID()
+            }
         }) {
             SettingsView(
                 configurationStore: configurationStore,
@@ -188,6 +246,7 @@ struct ContentView: View {
                 return
             }
             await orchestrator.initialRefresh()
+            hasCompletedInitialRefresh = true
         }
         .task(id: AutoRefreshTaskID(
             interval: configurationStore.autoRefreshInterval,
@@ -255,11 +314,88 @@ struct ContentView: View {
         draggedCardID = nil
     }
 
+    private func handleDeepLink(
+        _ url: URL,
+        scrollProxy: ScrollViewProxy,
+        availableAccountIDs: [String]
+    ) {
+        guard let accountID = CodexBarDeepLink.providerAccountID(from: url) else {
+            return
+        }
+
+        let expectsSettingsRefresh = isShowingSettings
+        isShowingSettings = false
+        selectedHistoryResult = nil
+        deepLinkNavigation.begin(
+            accountID: accountID,
+            waitsForRefresh: refreshService.isRefreshing
+                || expectsSettingsRefresh
+                || (performsLifecycleWork && !hasCompletedInitialRefresh)
+        )
+        scrollToPendingDeepLink(
+            scrollProxy: scrollProxy,
+            availableAccountIDs: availableAccountIDs,
+            completesNavigation: deepLinkNavigation.shouldFinishAfterInitialScroll
+        )
+    }
+
+    private func scrollToPendingDeepLink(
+        scrollProxy: ScrollViewProxy,
+        availableAccountIDs: [String],
+        completesNavigation: Bool
+    ) {
+        guard let accountID = deepLinkNavigation.accountID else {
+            return
+        }
+        guard availableAccountIDs.contains(accountID) else {
+            if completesNavigation {
+                deepLinkNavigation.finish(accountID: accountID)
+            }
+            return
+        }
+
+        Task { @MainActor in
+            await Task.yield()
+            guard deepLinkNavigation.accountID == accountID else {
+                return
+            }
+
+            withAnimation(.snappy(duration: 0.25)) {
+                scrollProxy.scrollTo(accountID, anchor: .center)
+            }
+            if completesNavigation {
+                deepLinkNavigation.finish(accountID: accountID)
+            }
+        }
+    }
+
     private var refreshAccessibilityLabel: String {
         guard let schedule = orchestrator.autoRefreshSchedule else {
             return "Refresh usage"
         }
         return "Refresh usage. \(schedule.accessibilityDescription(at: Date()))"
+    }
+}
+
+struct DashboardDeepLinkNavigationState: Equatable {
+    private(set) var accountID: String?
+    private(set) var waitsForRefresh = false
+
+    var shouldFinishAfterInitialScroll: Bool {
+        !waitsForRefresh
+    }
+
+    mutating func begin(accountID: String, waitsForRefresh: Bool) {
+        self.accountID = accountID
+        self.waitsForRefresh = waitsForRefresh
+    }
+
+    mutating func finish(accountID: String) {
+        guard self.accountID == accountID else {
+            return
+        }
+        self.accountID = nil
+        waitsForRefresh = false
     }
 }
 
