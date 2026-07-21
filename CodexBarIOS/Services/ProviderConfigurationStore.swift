@@ -286,11 +286,13 @@ public final class ProviderConfigurationStore: ObservableObject {
         defaults.set(Array(activeIDs).sorted(), forKey: usageAlertActiveIDsKey)
     }
 
-    public func saveSecret(_ secret: String, for providerID: ProviderID) {
+    @discardableResult
+    public func saveSecret(_ secret: String, for providerID: ProviderID) -> Bool {
         saveSecret(secret, for: configuration(for: providerID))
     }
 
-    public func saveSecret(_ secret: String, for configuration: ProviderAccountConfiguration) {
+    @discardableResult
+    public func saveSecret(_ secret: String, for configuration: ProviderAccountConfiguration) -> Bool {
         do {
             if secret.isEmpty {
                 try secretStore.deleteSecret(account: keychainAccount(for: configuration))
@@ -300,8 +302,10 @@ public final class ProviderConfigurationStore: ObservableObject {
 
             lastError = nil
             refreshSecretAvailability()
+            return true
         } catch {
             lastError = error.localizedDescription
+            return false
         }
     }
 

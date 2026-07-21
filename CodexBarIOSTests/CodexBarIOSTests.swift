@@ -7941,6 +7941,31 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(credentialsChangedCount, 0)
     }
 
+    @MainActor
+    func testProviderSettingsViewModelCompletesSuccessfulSaveDespiteUnrelatedReadFailure() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = SelectiveReadFailureSecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let unreadable = store.addAccount(for: .openRouter)
+        let target = store.addAccount(for: .moonshot)
+        secretStore.failingAccount = ProviderConfigurationStore.keychainAccount(for: unreadable)
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: target.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 }
+        )
+        viewModel.secret = "moonshot-token"
+
+        viewModel.saveGenericCredential()
+
+        XCTAssertNil(viewModel.credentialError)
+        XCTAssertEqual(viewModel.secret, "")
+        XCTAssertEqual(credentialsChangedCount, 1)
+        XCTAssertNotNil(store.lastError)
+    }
+
     private func makeHistoryResult(
         accountID: String,
         providerID: ProviderID = .codex,
@@ -8079,6 +8104,33 @@ private struct FailingDeleteSecretStore: SecretStore {
 
     func deleteSecret(account: String) throws {
         throw KeychainError.unhandledStatus(-25308)
+    }
+}
+
+private final class SelectiveReadFailureSecretStore: SecretStore, @unchecked Sendable {
+    var failingAccount: String?
+    private let lock = NSLock()
+    private var secrets: [String: String] = [:]
+
+    func readSecret(account: String) throws -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        if account == failingAccount {
+            throw KeychainError.unhandledStatus(-25308)
+        }
+        return secrets[account]
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        secrets[account] = secret
+    }
+
+    func deleteSecret(account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        secrets.removeValue(forKey: account)
     }
 }
 

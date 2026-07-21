@@ -439,7 +439,6 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func persistSecret(_ secret: String) -> Bool {
         configurationStore.saveSecret(secret, for: configuration)
-        return configurationStore.lastError == nil
     }
 
     private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
