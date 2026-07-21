@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var draggedCardID: String?
     @State private var deepLinkNavigation = DashboardDeepLinkNavigationState()
     @State private var hasCompletedInitialRefresh = false
+    @State private var settingsRefreshCompletionID = UUID()
 
     init(
         refreshService: UsageRefreshService,
@@ -147,6 +148,16 @@ struct ContentView: View {
                         completesNavigation: true
                     )
                 }
+                .onChange(of: settingsRefreshCompletionID) { _, _ in
+                    guard deepLinkNavigation.waitsForRefresh else {
+                        return
+                    }
+                    scrollToPendingDeepLink(
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: cardItems.map(\.id),
+                        completesNavigation: true
+                    )
+                }
             }
             .navigationTitle("CodexBar")
             .toolbar {
@@ -197,7 +208,10 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $isShowingSettings, onDismiss: {
-            Task { await orchestrator.refreshAfterSettingsDismissed() }
+            Task {
+                await orchestrator.refreshAfterSettingsDismissed()
+                settingsRefreshCompletionID = UUID()
+            }
         }) {
             SettingsView(
                 configurationStore: configurationStore,
