@@ -146,10 +146,8 @@ final class DashboardOrchestrator: ObservableObject {
             return
         }
 
-        orderedIDs.move(
-            fromOffsets: IndexSet(integer: sourceIndex),
-            toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
-        )
+        let movedID = orderedIDs.remove(at: sourceIndex)
+        orderedIDs.insert(movedID, at: targetIndex)
         persistVisibleCardOrder(orderedIDs)
     }
 
