@@ -7942,6 +7942,29 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderSettingsViewModelClearsCredentialErrorWhenRetryingCodexSignIn() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingDeleteSecretStore()
+        )
+        let configuration = store.addAccount(for: .codex)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            codexAuthService: CodexWebAuthService(callbackTimeoutNanoseconds: 10_000_000)
+        )
+        viewModel.removeSavedCredential()
+        XCTAssertNotNil(viewModel.credentialError)
+
+        await viewModel.signInWithCodex()
+
+        XCTAssertNil(viewModel.credentialError)
+        XCTAssertNotNil(viewModel.codexAuthError)
+    }
+
+    @MainActor
     func testProviderSettingsViewModelCompletesSuccessfulSaveDespiteUnrelatedReadFailure() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

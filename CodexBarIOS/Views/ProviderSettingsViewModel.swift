@@ -157,6 +157,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func signInWithCodex() async {
         isSigningInWithCodex = true
+        credentialError = nil
         codexAuthError = nil
         defer { isSigningInWithCodex = false }
 
@@ -186,6 +187,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func signInWithCopilot() async {
         isSigningInWithCopilot = true
+        credentialError = nil
         copilotAuthError = nil
         defer { isSigningInWithCopilot = false }
 
@@ -224,6 +226,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func signInWithClaude() async {
         isSigningInWithClaude = true
+        credentialError = nil
         claudeAuthError = nil
         claudeAuthDiagnostic = nil
         defer { isSigningInWithClaude = false }
@@ -271,6 +274,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func signOutOfCursor() {
+        credentialError = nil
         cursorAuthError = nil
         flushPendingChanges()
         guard let disconnected = configurationStore.disconnectCursorAccount(configuration) else {
@@ -282,6 +286,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func saveOpenCodeCredential() {
+        credentialError = nil
         guard persist(configuration) else {
             openCodeCredentialMessage = configurationStore.lastError
             return
@@ -319,6 +324,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func saveCopilotCredential() async {
         isSigningInWithCopilot = true
+        credentialError = nil
         copilotAuthError = nil
         defer { isSigningInWithCopilot = false }
 
@@ -359,6 +365,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func signInWithCursor() async {
         isSigningInWithCursor = true
+        credentialError = nil
         cursorAuthError = nil
         defer {
             cursorAuthPresenter.finish()
