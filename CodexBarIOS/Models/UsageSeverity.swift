@@ -6,12 +6,13 @@ public enum UsageSeverity: Int, Codable, Comparable, Sendable {
     case critical
 
     public init(fractionUsed: Double) {
-        if fractionUsed >= 0.9 {
-            self = .critical
-        } else if fractionUsed >= 0.75 {
-            self = .warning
-        } else {
+        switch CodexBarWidgetSeverity(fractionUsed: fractionUsed) {
+        case .normal:
             self = .normal
+        case .warning:
+            self = .warning
+        case .critical:
+            self = .critical
         }
     }
 

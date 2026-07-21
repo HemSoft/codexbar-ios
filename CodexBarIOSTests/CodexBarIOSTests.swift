@@ -509,7 +509,10 @@ final class CodexBarIOSTests: XCTestCase {
             WidgetSnapshotStore.loadBuilderConfiguration(forPreview: true, defaults: defaults),
             .default
         )
-        XCTAssertEqual(CodexBarWidgetSnapshot.preview.results.map(\.providerID), ["codex", "openCodeZen"])
+        XCTAssertEqual(
+            CodexBarWidgetSnapshot.preview.results.map(\.providerID),
+            ["codex", "copilot", "claude", "cursor", "moonshot", "openCodeZen", "openRouter"]
+        )
     }
 
     func testSharedWidgetRenderingMapsEveryProviderLogo() {

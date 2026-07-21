@@ -26,18 +26,14 @@ struct CodexBarWidgetView: View {
         let allTiles = scopedSelectableTiles
         let builderConfiguration = WidgetSnapshotStore.loadBuilderConfiguration(forPreview: entry.isPreview)
         let usesBuilderDefaults = usesBuilderDefaults(builderConfiguration)
-        let configuredChoices: [CodexBarWidgetTileChoice?] = if entry.isPreview {
-            Array(repeating: nil, count: 6)
-        } else {
-            [
-                entry.configuration.tile1,
-                entry.configuration.tile2,
-                entry.configuration.tile3,
-                entry.configuration.tile4,
-                entry.configuration.tile5,
-                entry.configuration.tile6,
-            ]
-        }
+        let configuredChoices = [
+            entry.configuration.tile1,
+            entry.configuration.tile2,
+            entry.configuration.tile3,
+            entry.configuration.tile4,
+            entry.configuration.tile5,
+            entry.configuration.tile6,
+        ]
         let configuredDisplayModes = [
             entry.configuration.tile1DisplayMode,
             entry.configuration.tile2DisplayMode,
@@ -120,7 +116,7 @@ struct CodexBarWidgetView: View {
     }
 
     private var selectedFocus: CodexBarWidgetFocus {
-        entry.isPreview ? .dashboardOrder : entry.configuration.focus
+        entry.configuration.focus
     }
 
     private func resolvedTile(
@@ -140,6 +136,10 @@ struct CodexBarWidgetView: View {
         }
         if titleMatches.count == 1, let titleMatch = titleMatches.first {
             return titleMatch
+        }
+
+        if entry.isPreview, let previewFallback = allTiles.first {
+            return previewFallback
         }
 
         return .unavailable(choice: choice)
