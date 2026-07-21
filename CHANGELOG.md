@@ -43,6 +43,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Moved dashboard refresh, alert, widget-sync, ordering, and provider sign-in
+  orchestration out of SwiftUI views so those flows can evolve and be tested
+  independently. ([#61](https://github.com/HemSoft/codexbar-ios/issues/61))
 - Consolidated shared provider credential renewal, loopback browser callbacks,
   form encoding, and pasted-secret normalization so authentication fixes can be
   applied consistently across providers. ([#59](https://github.com/HemSoft/codexbar-ios/issues/59))

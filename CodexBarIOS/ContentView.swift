@@ -4,29 +4,26 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+@MainActor
 struct ContentView: View {
     @ObservedObject var refreshService: UsageRefreshService
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var historyStore: UsageHistoryStore
     @ObservedObject var appUpdateController: AppUpdateController
-    private let usageAlertNotifier: any UsageAlertNotifying
-    private let appReviewPromptPolicy: AppReviewPromptPolicy
+    @StateObject private var orchestrator: DashboardOrchestrator
     private let performsLifecycleWork: Bool
 
     @Environment(\.requestReview) private var requestReview
     @State private var isShowingSettings = false
     @State private var selectedHistoryResult: ProviderUsageResult?
-    @State private var autoRefreshSchedule: AutoRefreshSchedule?
-    @State private var autoRefreshResetID = UUID()
     @State private var draggedCardID: String?
-    @State private var lastSystemDateTimeRefresh: ContinuousClock.Instant?
 
     init(
         refreshService: UsageRefreshService,
         configurationStore: ProviderConfigurationStore,
         historyStore: UsageHistoryStore,
         appUpdateController: AppUpdateController,
-        usageAlertNotifier: any UsageAlertNotifying = LocalUsageAlertNotifier.shared,
+        usageAlertNotifier: (any UsageAlertNotifying)? = nil,
         appReviewPromptPolicy: AppReviewPromptPolicy = AppReviewPromptPolicy(),
         performsLifecycleWork: Bool = true
     ) {
@@ -34,16 +31,23 @@ struct ContentView: View {
         self.configurationStore = configurationStore
         self.historyStore = historyStore
         self.appUpdateController = appUpdateController
-        self.usageAlertNotifier = usageAlertNotifier
-        self.appReviewPromptPolicy = appReviewPromptPolicy
         self.performsLifecycleWork = performsLifecycleWork
+        self._orchestrator = StateObject(
+            wrappedValue: DashboardOrchestrator(
+                refreshService: refreshService,
+                configurationStore: configurationStore,
+                historyStore: historyStore,
+                usageAlertNotifier: usageAlertNotifier ?? LocalUsageAlertNotifier.shared,
+                appReviewPromptPolicy: appReviewPromptPolicy
+            )
+        )
     }
 
     var body: some View {
-        let cardItems = dashboardCardItems
-        let sections = dashboardSections
-        let showGroupHeaders = shouldShowGroupHeaders(for: sections)
-        let usageAlertsByAccountID = currentUsageAlertsByAccountID
+        let cardItems = orchestrator.dashboardCardItems
+        let sections = orchestrator.dashboardSections
+        let showGroupHeaders = orchestrator.shouldShowGroupHeaders(for: sections)
+        let usageAlertsByAccountID = orchestrator.currentUsageAlertsByAccountID
 
         NavigationStack {
             ScrollView {
@@ -72,7 +76,7 @@ struct ContentView: View {
                                     alerts: usageAlertsByAccountID[item.id] ?? []
                                 )
 
-                                if isManualDashboardOrdering {
+                                if orchestrator.isManualDashboardOrdering {
                                     card
                                         .onDrag {
                                             draggedCardID = item.id
@@ -114,12 +118,14 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task {
-                            await refreshNow(considerReviewPrompt: true)
+                            if await orchestrator.refreshNow(considerReviewPrompt: true) {
+                                requestReview()
+                            }
                         }
                     } label: {
                         RefreshButtonLabel(
                             isRefreshing: refreshService.isRefreshing,
-                            schedule: autoRefreshSchedule
+                            schedule: orchestrator.autoRefreshSchedule
                         )
                     }
                     .disabled(refreshService.isRefreshing)
@@ -146,30 +152,22 @@ struct ContentView: View {
                 }
             }
         }
-        .sheet(isPresented: $isShowingSettings, onDismiss: refreshAfterSettingsDismissed) {
+        .sheet(isPresented: $isShowingSettings, onDismiss: {
+            Task { await orchestrator.refreshAfterSettingsDismissed() }
+        }) {
             SettingsView(
                 configurationStore: configurationStore,
                 appUpdateController: appUpdateController,
                 onAccountsChanged: {
                     Task {
-                        await refreshNow()
+                        _ = await orchestrator.refreshNow()
                     }
                 },
                 onAccountRefresh: { configuration in
-                    let result = await refreshService.refresh(configuration: configuration)
-                    let successfulResults = result.map { $0.failureMessage == nil ? [$0] : [] } ?? []
-                    let preservedAccountIDs = Set(configurationStore.configurations.map(\.id))
-                        .subtracting(successfulResults.map(\.accountID))
-                    recordUsageHistoryIfAvailable(results: successfulResults)
-                    publishWidgetSnapshot()
-                    await processUsageAlerts(
-                        results: successfulResults,
-                        preserving: preservedAccountIDs
-                    )
-                    return result
+                    await orchestrator.refreshAccount(configuration)
                 },
                 onAlertAuthorizationRequest: {
-                    await usageAlertNotifier.requestAuthorization()
+                    await orchestrator.requestAlertAuthorization()
                 }
             )
         }
@@ -189,156 +187,25 @@ struct ContentView: View {
             guard performsLifecycleWork else {
                 return
             }
-            await refreshService.refresh(configurations: configurationStore.configurations)
-            let successfulResults = refreshService.successfulRefreshResults
-            recordUsageHistoryIfAvailable(results: successfulResults)
-            publishWidgetSnapshot()
-            await processUsageAlerts(
-                results: successfulResults,
-                preserving: refreshService.incompleteRefreshAccountIDs
-            )
+            await orchestrator.initialRefresh()
         }
-        .task(id: AutoRefreshTaskID(interval: configurationStore.autoRefreshInterval, resetID: autoRefreshResetID)) {
+        .task(id: AutoRefreshTaskID(
+            interval: configurationStore.autoRefreshInterval,
+            resetID: orchestrator.autoRefreshResetID
+        )) {
             guard performsLifecycleWork else {
                 return
             }
-            await runAutoRefreshLoop()
-        }
-        .onChange(of: refreshService.results) { _, _ in
-            publishWidgetSnapshot()
-        }
-        .onChange(of: configurationStore.configurations) { _, configurations in
-            historyStore.removeSnapshotsForMissingAccounts(validAccountIDs: Set(configurations.map(\.id)))
-        }
-        .onChange(of: configurationStore.dashboardCardOrder) { _, _ in
-            publishWidgetSnapshot()
-        }
-        .onChange(of: configurationStore.dashboardOrderingMode) { _, _ in
-            publishWidgetSnapshot()
-        }
-        .onChange(of: configurationStore.groups) { _, _ in
-            publishWidgetSnapshot()
-        }
-        .onChange(of: configurationStore.widgetRefreshInterval) { _, _ in
-            WidgetSnapshotPublisher.publishSettings(configurationStore: configurationStore)
+            await orchestrator.runAutoRefreshLoop()
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
-            handleSystemDateTimeChange()
+            guard performsLifecycleWork else { return }
+            Task { await orchestrator.handleSystemDateTimeChange() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
-            handleSystemDateTimeChange()
+            guard performsLifecycleWork else { return }
+            Task { await orchestrator.handleSystemDateTimeChange() }
         }
-    }
-
-    private var displayedResults: [ProviderUsageResult] {
-        refreshService.results.filter { result in
-            configurationStore.configuration(accountID: result.accountID)
-                .map(configurationStore.shouldDisplayOnDashboard) ?? false
-        }
-    }
-
-    private var dashboardCardItems: [DashboardProviderCardItem] {
-        DashboardProviderCardItem.items(
-            configurations: configurationStore.configurations.filter(
-                configurationStore.shouldDisplayOnDashboard
-            ),
-            results: displayedResults,
-            refreshingAccountIDs: refreshService.refreshingAccountIDs,
-            errorsByAccountID: refreshService.refreshErrorsByAccountID,
-            orderingMode: configurationStore.dashboardOrderingMode,
-            manualOrder: configurationStore.dashboardCardOrder
-        )
-    }
-
-    private var dashboardSections: [DashboardSection] {
-        var sections: [DashboardSection] = []
-        var sectionIndexes: [String: Int] = [:]
-        let configurationsByAccountID = Dictionary(
-            uniqueKeysWithValues: configurationStore.configurations.map { configuration in
-                (configuration.id, configuration)
-            }
-        )
-        let groupsByID = Dictionary(
-            uniqueKeysWithValues: configurationStore.groups.map { group in
-                (group.id, group)
-            }
-        )
-
-        for (offset, item) in dashboardCardItems.enumerated() {
-            let configuration = configurationsByAccountID[item.id]
-            let groupID = configuration?.groupID ?? DashboardSection.ungroupedID
-            let title = configuration?.groupID.flatMap { groupsByID[$0]?.name }
-                ?? ProviderAccountGroup.ungroupedDisplayName
-
-            if configurationStore.dashboardOrderingMode == .smart {
-                if sections.indices.last.map({ sections[$0].groupID }) == groupID {
-                    sections[sections.count - 1].items.append(item)
-                } else {
-                    sections.append(
-                        DashboardSection(
-                            id: "\(groupID).\(offset)",
-                            groupID: groupID,
-                            title: title,
-                            items: [item]
-                        )
-                    )
-                }
-                continue
-            }
-
-            if let sectionIndex = sectionIndexes[groupID] {
-                sections[sectionIndex].items.append(item)
-            } else {
-                sectionIndexes[groupID] = sections.count
-                sections.append(DashboardSection(id: groupID, groupID: groupID, title: title, items: [item]))
-            }
-        }
-
-        return sections
-    }
-
-    private func shouldShowGroupHeaders(for sections: [DashboardSection]) -> Bool {
-        !configurationStore.groups.isEmpty && sections.contains { section in
-            section.groupID != DashboardSection.ungroupedID || sections.count > 1
-        }
-    }
-
-    private var visibleDashboardOrder: [String] {
-        dashboardSections.flatMap(\.items).map(\.id)
-    }
-
-    private var isManualDashboardOrdering: Bool {
-        configurationStore.dashboardOrderingMode == .manual
-    }
-
-    private var currentUsageAlertsByAccountID: [String: [UsageAlertDetail]] {
-        let evaluation = UsageAlertEvaluator.evaluate(
-            results: refreshService.results,
-            settings: configurationStore.usageAlertSettings,
-            activeAlertIDs: configurationStore.usageAlertActiveIDs
-        )
-
-        return Dictionary(grouping: evaluation.activeAlerts, by: \.accountID)
-    }
-
-    private func dashboardStatusText(for result: ProviderUsageResult) -> String {
-        if let error = refreshService.refreshErrorsByAccountID[result.accountID] {
-            return "Refresh failed - \(error)"
-        }
-
-        guard let configuration = configurationStore.configuration(accountID: result.accountID) else {
-            return result.subtitle
-        }
-
-        if configurationStore.isConfigured(configuration) {
-            if result.subtitle.localizedCaseInsensitiveContains("not configured") {
-                return configurationStore.statusText(for: configuration)
-            }
-
-            return result.subtitle
-        }
-
-        return configurationStore.statusText(for: configuration)
     }
 
     @ViewBuilder
@@ -349,7 +216,7 @@ struct ContentView: View {
         if let result = item.result {
             ProviderUsageCard(
                 result: result,
-                statusText: dashboardStatusText(for: result),
+                statusText: orchestrator.dashboardStatusText(for: result),
                 history: historyStore.historySeries(for: result),
                 alerts: alerts,
                 isHistoryEnabled: item.configuration.showsHistory,
@@ -360,7 +227,7 @@ struct ContentView: View {
                 },
                 onRetry: {
                     Task {
-                        await refreshAccount(item.configuration)
+                        await orchestrator.refreshAccount(item.configuration)
                     }
                 }
             )
@@ -370,209 +237,29 @@ struct ContentView: View {
                 errorMessage: item.errorMessage,
                 onRetry: {
                     Task {
-                        await refreshAccount(item.configuration)
+                        await orchestrator.refreshAccount(item.configuration)
                     }
                 }
             )
         }
     }
 
-    private func refreshAfterSettingsDismissed() {
-        configurationStore.refreshSecretAvailability()
-        Task {
-            await refreshNow()
-        }
-    }
-
-    private func handleSystemDateTimeChange() {
-        guard performsLifecycleWork else {
-            return
-        }
-
-        let now = ContinuousClock.now
-        if let lastSystemDateTimeRefresh,
-           lastSystemDateTimeRefresh.duration(to: now) < .seconds(1) {
-            return
-        }
-        lastSystemDateTimeRefresh = now
-
-        Task {
-            await refreshNow()
-        }
-    }
-
     private func moveCard(_ draggedID: String, to targetID: String) {
-        guard isManualDashboardOrdering else {
-            return
-        }
-
-        var orderedIDs = visibleDashboardOrder
-        guard
-            dashboardGroupID(for: draggedID) == dashboardGroupID(for: targetID),
-            let sourceIndex = orderedIDs.firstIndex(of: draggedID),
-            let targetIndex = orderedIDs.firstIndex(of: targetID),
-            sourceIndex != targetIndex
-        else {
-            return
-        }
-
         withAnimation(.snappy(duration: 0.18)) {
-            orderedIDs.move(
-                fromOffsets: IndexSet(integer: sourceIndex),
-                toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
-            )
-            persistVisibleCardOrder(orderedIDs)
+            orchestrator.moveCard(draggedID, to: targetID)
         }
-    }
-
-    private func dashboardGroupID(for accountID: String) -> String {
-        configurationStore.configuration(accountID: accountID)?.groupID
-            ?? DashboardSection.ungroupedID
     }
 
     private func finishCardDrag() {
-        guard isManualDashboardOrdering else {
-            draggedCardID = nil
-            return
-        }
-
-        persistVisibleCardOrder(visibleDashboardOrder)
+        orchestrator.finishCardDrag()
         draggedCardID = nil
     }
 
-    private func persistVisibleCardOrder(_ orderedVisibleIDs: [String]) {
-        guard isManualDashboardOrdering else {
-            return
-        }
-
-        let visibleIDs = Set(dashboardCardItems.map(\.id))
-        let hiddenOrderedIDs = configurationStore.dashboardCardOrder.filter { !visibleIDs.contains($0) }
-        configurationStore.updateDashboardCardOrder(orderedVisibleIDs + hiddenOrderedIDs)
-    }
-
-    private func publishWidgetSnapshot() {
-        WidgetSnapshotPublisher.publish(
-            results: refreshService.results,
-            configurationStore: configurationStore
-        )
-    }
-
-    private func recordUsageHistoryIfAvailable(results: [ProviderUsageResult]) {
-        historyStore.record(results: results)
-    }
-
-    private func refreshAccount(_ configuration: ProviderAccountConfiguration) async {
-        let result = await refreshService.refresh(configuration: configuration)
-        let successfulResults = result.map { $0.failureMessage == nil ? [$0] : [] } ?? []
-        let preservedAccountIDs = Set(configurationStore.configurations.map(\.id))
-            .subtracting(successfulResults.map(\.accountID))
-        recordUsageHistoryIfAvailable(results: successfulResults)
-        publishWidgetSnapshot()
-        await processUsageAlerts(
-            results: successfulResults,
-            preserving: preservedAccountIDs
-        )
-    }
-
     private var refreshAccessibilityLabel: String {
-        guard let autoRefreshSchedule else {
+        guard let schedule = orchestrator.autoRefreshSchedule else {
             return "Refresh usage"
         }
-
-        return "Refresh usage. \(autoRefreshSchedule.accessibilityDescription(at: Date()))"
-    }
-
-    private func refreshNow(considerReviewPrompt: Bool = false) async {
-        await refreshService.refresh(configurations: configurationStore.configurations)
-        let successfulResults = refreshService.successfulRefreshResults
-        recordUsageHistoryIfAvailable(results: successfulResults)
-        publishWidgetSnapshot()
-        await processUsageAlerts(
-            results: successfulResults,
-            preserving: refreshService.incompleteRefreshAccountIDs
-        )
-        if considerReviewPrompt {
-            requestReviewAfterSuccessfulRefreshIfEligible()
-        }
-        if configurationStore.autoRefreshInterval.seconds != nil {
-            autoRefreshResetID = UUID()
-        }
-    }
-
-    private func requestReviewAfterSuccessfulRefreshIfEligible() {
-        guard AppReviewPromptEligibility.hasSuccessfulUsage(
-            lastRefreshError: refreshService.lastRefreshError,
-            results: refreshService.results
-        ) else {
-            return
-        }
-        guard appReviewPromptPolicy.registerSuccessfulRefresh() else {
-            return
-        }
-
-        requestReview()
-    }
-
-    private func processUsageAlerts(
-        results: [ProviderUsageResult],
-        preserving preservedAccountIDs: Set<String>
-    ) async {
-        let existingActiveAlertIDs = configurationStore.usageAlertActiveIDs
-        let preservedActiveAlertIDs = configurationStore.usageAlertSettings.isEnabled
-            ? UsageAlertEvaluator.activeAlertIDs(
-                existingActiveAlertIDs,
-                belongingTo: preservedAccountIDs,
-                knownAccountIDs: Set(configurationStore.configurations.map(\.id))
-            )
-            : []
-        let evaluation = UsageAlertEvaluator.evaluate(
-            results: results,
-            settings: configurationStore.usageAlertSettings,
-            activeAlertIDs: existingActiveAlertIDs
-        )
-
-        var deliveredActiveAlertIDs = preservedActiveAlertIDs.union(evaluation.activeAlertIDs)
-
-        for notification in evaluation.notifications {
-            do {
-                try await usageAlertNotifier.deliver(notification)
-            } catch {
-                deliveredActiveAlertIDs.remove(notification.id)
-            }
-        }
-
-        configurationStore.updateUsageAlertActiveIDs(deliveredActiveAlertIDs)
-    }
-
-    @MainActor
-    private func runAutoRefreshLoop() async {
-        guard let interval = configurationStore.autoRefreshInterval.seconds else {
-            autoRefreshSchedule = nil
-            return
-        }
-
-        while !Task.isCancelled {
-            let start = Date()
-            autoRefreshSchedule = AutoRefreshSchedule(
-                start: start,
-                end: start.addingTimeInterval(interval)
-            )
-
-            do {
-                try await Task.sleep(for: .seconds(interval))
-            } catch {
-                return
-            }
-
-            await refreshService.refresh(configurations: configurationStore.configurations)
-            let successfulResults = refreshService.successfulRefreshResults
-            recordUsageHistoryIfAvailable(results: successfulResults)
-            publishWidgetSnapshot()
-            await processUsageAlerts(
-                results: successfulResults,
-                preserving: refreshService.incompleteRefreshAccountIDs
-            )
-        }
+        return "Refresh usage. \(schedule.accessibilityDescription(at: Date()))"
     }
 }
 
@@ -603,102 +290,6 @@ private struct ProviderUsageCardDropDelegate: DropDelegate {
 private struct AutoRefreshTaskID: Equatable {
     let interval: AutoRefreshInterval
     let resetID: UUID
-}
-
-private struct AutoRefreshSchedule: Equatable {
-    let start: Date
-    let end: Date
-
-    func progress(at date: Date) -> Double {
-        let duration = end.timeIntervalSince(start)
-        guard duration > 0 else {
-            return 1
-        }
-
-        return min(max(date.timeIntervalSince(start) / duration, 0), 1)
-    }
-
-    func remainingSeconds(at date: Date) -> Int {
-        max(0, Int(ceil(end.timeIntervalSince(date))))
-    }
-
-    func accessibilityDescription(at date: Date) -> String {
-        "Next auto refresh in \(formatDuration(remainingSeconds(at: date)))."
-    }
-
-    private func formatDuration(_ seconds: Int) -> String {
-        if seconds >= 3_600 {
-            let hours = seconds / 3_600
-            let minutes = (seconds % 3_600) / 60
-            return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h"
-        }
-
-        if seconds >= 60 {
-            let minutes = seconds / 60
-            let remainingSeconds = seconds % 60
-            return remainingSeconds > 0 ? "\(minutes)m \(remainingSeconds)s" : "\(minutes)m"
-        }
-
-        return "\(seconds)s"
-    }
-}
-
-private struct DashboardSection: Identifiable {
-    static let ungroupedID = "__ungrouped"
-
-    let id: String
-    let groupID: String
-    let title: String
-    var items: [DashboardProviderCardItem]
-}
-
-struct DashboardProviderCardItem: Identifiable, Equatable {
-    let configuration: ProviderAccountConfiguration
-    let result: ProviderUsageResult?
-    let isRefreshing: Bool
-    let errorMessage: String?
-
-    var id: String {
-        configuration.id
-    }
-
-    static func items(
-        configurations: [ProviderAccountConfiguration],
-        results: [ProviderUsageResult],
-        refreshingAccountIDs: Set<String>,
-        errorsByAccountID: [String: String],
-        orderingMode: DashboardOrderingMode,
-        manualOrder: [String]
-    ) -> [DashboardProviderCardItem] {
-        let resultsByAccountID = Dictionary(
-            uniqueKeysWithValues: results.map { ($0.accountID, $0) }
-        )
-        let items = configurations.map { configuration in
-            DashboardProviderCardItem(
-                configuration: configuration,
-                result: resultsByAccountID[configuration.id],
-                isRefreshing: refreshingAccountIDs.contains(configuration.id),
-                errorMessage: errorsByAccountID[configuration.id]
-            )
-        }
-        let itemsByAccountID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
-        let orderingResults = items.map { item in
-            item.result ?? ProviderUsageResult(
-                accountID: item.id,
-                providerID: item.configuration.providerID,
-                title: item.configuration.displayName,
-                subtitle: "Loading current usage",
-                bars: [],
-                fetchedAt: .distantPast
-            )
-        }
-
-        return DashboardUsageSorter.orderedResults(
-            orderingResults,
-            mode: orderingMode,
-            manualOrder: manualOrder
-        ).compactMap { itemsByAccountID[$0.accountID] }
-    }
 }
 
 private struct AppUpdateNotice: View {

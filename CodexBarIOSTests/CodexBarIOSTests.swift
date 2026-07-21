@@ -7761,6 +7761,67 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(service.results.map(\.accountID), [openCode.id])
     }
 
+    @MainActor
+    func testWidgetSnapshotCoordinatorPublishesStoreAndRefreshChangesReactively() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .codex)
+        let service = UsageRefreshService(providers: [
+            GatedUsageProvider(
+                providerID: .codex,
+                blockedAccountID: "never",
+                gate: UsageProviderGate()
+            ),
+        ])
+        var publishedAccountIDs: [[String]] = []
+        var settingsPublishCount = 0
+        let coordinator = WidgetSnapshotCoordinator(
+            refreshService: service,
+            configurationStore: store,
+            publishSnapshot: { results, _ in
+                publishedAccountIDs.append(results.map(\.accountID))
+            },
+            publishSettings: { _ in
+                settingsPublishCount += 1
+            }
+        )
+
+        await service.refresh(configurations: [configuration])
+        await Task.yield()
+        XCTAssertEqual(publishedAccountIDs.last, [configuration.id])
+
+        let snapshotCount = publishedAccountIDs.count
+        store.updateDashboardCardOrder([configuration.id])
+        await Task.yield()
+        XCTAssertEqual(publishedAccountIDs.count, snapshotCount + 1)
+
+        store.updateWidgetRefreshInterval(.oneHour)
+        await Task.yield()
+        XCTAssertEqual(settingsPublishCount, 1)
+        withExtendedLifetime(coordinator) {}
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelPersistsBindingChangesWithoutViewWriteBack() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .openRouter)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id
+        )
+
+        viewModel.binding(for: \.accountLabel).wrappedValue = "Team Router"
+        viewModel.binding(for: \.showsHistory).wrappedValue = false
+
+        XCTAssertEqual(viewModel.configuration.accountLabel, "Team Router")
+        XCTAssertFalse(viewModel.configuration.showsHistory)
+        XCTAssertEqual(store.configuration(accountID: configuration.id)?.accountLabel, "Team Router")
+        XCTAssertEqual(store.configuration(accountID: configuration.id)?.showsHistory, false)
+    }
+
     private func makeHistoryResult(
         accountID: String,
         providerID: ProviderID = .codex,

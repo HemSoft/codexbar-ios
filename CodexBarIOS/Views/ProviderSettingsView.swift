@@ -3,34 +3,7 @@ import SafariServices
 
 struct ProviderSettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
-    let accountID: String
-    var onCredentialsChanged: @MainActor () -> Void = {}
-    var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
-
-    @State private var configuration: ProviderAccountConfiguration
-    @State private var secret = ""
-    @State private var isSigningInWithCodex = false
-    @State private var isSigningInWithCopilot = false
-    @State private var isSigningInWithClaude = false
-    @State private var isSigningInWithCursor = false
-    @State private var cursorSignInTask: Task<Void, Never>?
-    @State private var cursorAuthPresenter = CursorWebAuthenticationPresenter()
-    @State private var debugAutostartedCopilotAuth = false
-    @State private var codexAuthError: String?
-    @State private var copilotAuthError: String?
-    @State private var claudeAuthError: String?
-    @State private var claudeAuthDiagnostic: String?
-    @State private var cursorAuthError: String?
-    @State private var authURL: PresentedAuthURL?
-    @State private var copilotTotalAllotmentText = ""
-    @State private var openCodeCredentialMessage: String?
-    @State private var isRefreshingOpenCode = false
-
-    private let codexAuthService = CodexWebAuthService()
-    private let copilotAuthService = CopilotWebAuthService()
-    private let claudeAuthService = ClaudeWebAuthService()
-    private let cursorAuthService = CursorWebAuthService()
-    private let copilotUsageProvider = CopilotUsageProvider()
+    @StateObject private var viewModel: ProviderSettingsViewModel
 
     init(
         configurationStore: ProviderConfigurationStore,
@@ -39,42 +12,44 @@ struct ProviderSettingsView: View {
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     ) {
         self.configurationStore = configurationStore
-        self.accountID = accountID
-        self.onCredentialsChanged = onCredentialsChanged
-        self.onAccountRefresh = onAccountRefresh
-        self._configuration = State(
-            initialValue: configurationStore.configuration(accountID: accountID)
-                ?? ProviderID(rawValue: accountID).map(ProviderAccountConfiguration.defaultConfiguration)
-                ?? .defaultConfiguration(for: .codex)
+        self._viewModel = StateObject(
+            wrappedValue: ProviderSettingsViewModel(
+                configurationStore: configurationStore,
+                accountID: accountID,
+                onCredentialsChanged: onCredentialsChanged,
+                onAccountRefresh: onAccountRefresh
+            )
         )
     }
 
     var body: some View {
+        let configuration = viewModel.configuration
+
         Form {
             Section {
-                Toggle("Enabled", isOn: $configuration.isEnabled)
-                Toggle("Show History", isOn: $configuration.showsHistory)
+                Toggle("Enabled", isOn: viewModel.binding(for: \.isEnabled))
+                Toggle("Show History", isOn: viewModel.binding(for: \.showsHistory))
 
-                TextField("Account label", text: $configuration.accountLabel)
+                TextField("Account label", text: viewModel.binding(for: \.accountLabel))
                     .textContentType(.username)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
-                Picker("Group", selection: $configuration.groupID) {
+                Picker("Group", selection: viewModel.binding(for: \.groupID)) {
                     Text(ProviderAccountGroup.ungroupedDisplayName).tag(Optional<String>.none)
                     ForEach(configurationStore.groups) { group in
                         Text(group.name).tag(Optional(group.id))
                     }
                 }
 
-                Picker("Auth method", selection: $configuration.authMethod) {
+                Picker("Auth method", selection: viewModel.binding(for: \.authMethod)) {
                     ForEach(availableAuthMethods) { method in
                         Text(authMethodDisplayName(method)).tag(method)
                     }
                 }
 
                 if providerID == .copilot {
-                    Picker("Account type", selection: $configuration.copilotAccountScope) {
+                    Picker("Account type", selection: viewModel.binding(for: \.copilotAccountScope)) {
                         ForEach(CopilotAccountScope.allCases) { scope in
                             Text(scope.displayName).tag(scope)
                         }
@@ -82,26 +57,23 @@ struct ProviderSettingsView: View {
                     .pickerStyle(.segmented)
 
                     if configuration.copilotAccountScope == .organization {
-                        TextField("Organization", text: $configuration.githubOrganization)
+                        TextField("Organization", text: viewModel.binding(for: \.githubOrganization))
                             .textContentType(.organizationName)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
 
-                        TextField("Enterprise (optional)", text: $configuration.githubEnterprise)
+                        TextField("Enterprise (optional)", text: viewModel.binding(for: \.githubEnterprise))
                             .textContentType(.organizationName)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
 
-                        TextField("Total allotment (optional)", text: $copilotTotalAllotmentText)
+                        TextField("Total allotment (optional)", text: viewModel.copilotAllotmentBinding)
                             .keyboardType(.decimalPad)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .onChange(of: copilotTotalAllotmentText) { _, newValue in
-                                configuration.copilotTotalAllotment = parsedAllotment(newValue)
-                            }
                     }
                 } else if providerID == .openCodeZen {
-                    TextField("Workspace ID", text: $configuration.openCodeWorkspaceId)
+                    TextField("Workspace ID", text: viewModel.binding(for: \.openCodeWorkspaceId))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
@@ -111,88 +83,86 @@ struct ProviderSettingsView: View {
                 if providerID == .codex {
                     Button {
                         Task {
-                            await signInWithCodex()
+                            await viewModel.signInWithCodex()
                         }
                     } label: {
-                        if isSigningInWithCodex {
+                        if viewModel.isSigningInWithCodex {
                             ProgressView()
                         } else {
                             Text(configurationStore.hasSecret(for: configuration) ? "Sign in Again" : "Sign in with ChatGPT")
                         }
                     }
-                    .disabled(isSigningInWithCodex)
+                    .disabled(viewModel.isSigningInWithCodex)
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Sign Out", role: .destructive) {
-                            configurationStore.saveSecret("", for: configuration)
-                            onCredentialsChanged()
+                            viewModel.removeSavedCredential()
                         }
                     }
 
-                    if let codexAuthError {
+                    if let codexAuthError = viewModel.codexAuthError {
                         Text(codexAuthError)
                             .foregroundStyle(.red)
                     }
                 } else if providerID == .copilot {
                     Button {
                         Task {
-                            await signInWithCopilot()
+                            await viewModel.signInWithCopilot()
                         }
                     } label: {
-                        if isSigningInWithCopilot {
+                        if viewModel.isSigningInWithCopilot {
                             ProgressView()
                         } else {
                             Text(configurationStore.hasSecret(for: configuration) ? "Sign in Again" : "Sign in with GitHub")
                         }
                     }
-                    .disabled(isSigningInWithCopilot)
+                    .disabled(viewModel.isSigningInWithCopilot)
 
                     if configuration.authMethod == .cliToken {
-                        SecureField(copilotSecretPlaceholder, text: $secret)
+                        SecureField(copilotSecretPlaceholder, text: $viewModel.secret)
                             .textContentType(.password)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
 
                         Button {
                             Task {
-                                await saveCopilotCredential()
+                                await viewModel.saveCopilotCredential()
                             }
                         } label: {
-                            if isSigningInWithCopilot {
+                            if viewModel.isSigningInWithCopilot {
                                 ProgressView()
                             } else {
                                 Text(configurationStore.hasSecret(for: configuration) ? "Update Token" : "Save Token")
                             }
                         }
-                        .disabled(isSigningInWithCopilot || secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(viewModel.isSigningInWithCopilot || viewModel.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Sign Out", role: .destructive) {
-                            configurationStore.saveSecret("", for: configuration)
-                            onCredentialsChanged()
+                            viewModel.removeSavedCredential()
                         }
                     }
 
-                    if let copilotAuthError {
+                    if let copilotAuthError = viewModel.copilotAuthError {
                         Text(copilotAuthError)
                             .foregroundStyle(.red)
                     }
                 } else if providerID == .claude {
                     Button {
                         Task {
-                            await signInWithClaude()
+                            await viewModel.signInWithClaude()
                         }
                     } label: {
-                        if isSigningInWithClaude {
+                        if viewModel.isSigningInWithClaude {
                             ProgressView()
                         } else {
                             Text(configurationStore.hasSecret(for: configuration) ? "Sign in Again" : "Sign in with Claude")
                         }
                     }
-                    .disabled(isSigningInWithClaude)
+                    .disabled(viewModel.isSigningInWithClaude)
 
-                    if let claudeAuthDiagnostic {
+                    if let claudeAuthDiagnostic = viewModel.claudeAuthDiagnostic {
                         Text(claudeAuthDiagnostic)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -200,68 +170,65 @@ struct ProviderSettingsView: View {
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Sign Out", role: .destructive) {
-                            configurationStore.saveSecret("", for: configuration)
-                            onCredentialsChanged()
+                            viewModel.removeSavedCredential()
                         }
                     }
 
-                    if let claudeAuthError {
+                    if let claudeAuthError = viewModel.claudeAuthError {
                         Text(claudeAuthError)
                             .foregroundStyle(.red)
                     }
                 } else if providerID == .cursor {
                     Button {
-                        startCursorSignIn()
+                        viewModel.startCursorSignIn()
                     } label: {
-                        if isSigningInWithCursor {
+                        if viewModel.isSigningInWithCursor {
                             ProgressView()
                         } else {
                             Text(configurationStore.hasSecret(for: configuration) ? "Switch Cursor Account" : "Sign in with Cursor")
                         }
                     }
-                    .disabled(isSigningInWithCursor)
+                    .disabled(viewModel.isSigningInWithCursor)
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Sign Out", role: .destructive) {
-                            signOutOfCursor()
+                            viewModel.signOutOfCursor()
                         }
                     }
 
-                    if let cursorAuthError {
+                    if let cursorAuthError = viewModel.cursorAuthError {
                         Text(cursorAuthError)
                             .foregroundStyle(.red)
                     }
                 } else if providerID == .openCodeZen {
-                    SecureField(secretPlaceholder, text: $secret)
+                    SecureField(secretPlaceholder, text: $viewModel.secret)
                         .textContentType(.password)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
                     Button(configurationStore.hasSecret(for: configuration) ? "Update and Refresh" : "Save and Refresh") {
-                        saveOpenCodeCredential()
+                        viewModel.saveOpenCodeCredential()
                     }
-                    .disabled(secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(viewModel.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button {
                             Task {
-                                await refreshOpenCode()
+                                await viewModel.refreshOpenCode()
                             }
                         } label: {
-                            if isRefreshingOpenCode {
+                            if viewModel.isRefreshingOpenCode {
                                 ProgressView()
                             } else {
                                 Label("Refresh Now", systemImage: "arrow.clockwise")
                             }
                         }
-                        .disabled(isRefreshingOpenCode)
+                        .disabled(viewModel.isRefreshingOpenCode)
                     }
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Remove Saved Credential", role: .destructive) {
-                            configurationStore.saveSecret("", for: configuration)
-                            openCodeCredentialMessage = "OpenCode credential removed."
-                            onCredentialsChanged()
+                            viewModel.removeSavedCredential(message: "OpenCode credential removed.")
                         }
                     }
 
@@ -272,28 +239,25 @@ struct ProviderSettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
-                    if let openCodeCredentialMessage {
+                    if let openCodeCredentialMessage = viewModel.openCodeCredentialMessage {
                         Text(openCodeCredentialMessage)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 } else if configuration.requiresSecret {
-                    SecureField(secretPlaceholder, text: $secret)
+                    SecureField(secretPlaceholder, text: $viewModel.secret)
                         .textContentType(.password)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
                     Button("Save Credential") {
-                        configurationStore.saveSecret(secret, for: configuration)
-                        secret = ""
-                        onCredentialsChanged()
+                        viewModel.saveGenericCredential()
                     }
-                    .disabled(secret.isEmpty)
+                    .disabled(viewModel.secret.isEmpty)
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Remove Saved Credential", role: .destructive) {
-                            configurationStore.saveSecret("", for: configuration)
-                            onCredentialsChanged()
+                            viewModel.removeSavedCredential()
                         }
                     }
                 } else {
@@ -313,64 +277,41 @@ struct ProviderSettingsView: View {
         }
         .navigationTitle(configuration.displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: configuration) { _, newValue in
-            configurationStore.update(newValue)
-        }
-        .onAppear {
-            configuration = normalizedConfiguration(
-                configurationStore.configuration(accountID: accountID) ?? configuration
-            )
-            copilotTotalAllotmentText = allotmentText(configuration.copilotTotalAllotment)
-            configurationStore.update(configuration)
-            configurationStore.refreshSecretAvailability()
-        }
         .task {
-            await debugAutostartCopilotAuthIfNeeded()
+            await viewModel.prepare()
         }
         .onDisappear {
-            cursorSignInTask?.cancel()
-            cursorAuthPresenter.finish()
+            viewModel.cancelAuthentication()
         }
-        .sheet(item: $authURL) { authURL in
+        .sheet(item: $viewModel.authURL) { authURL in
             SafariAuthSheet(authURL: authURL)
         }
     }
 
     private var secretPlaceholder: String {
         if providerID == .openCodeZen {
-            return configurationStore.hasSecret(for: configuration)
+            return configurationStore.hasSecret(for: viewModel.configuration)
                 ? "OpenCode dashboard auth value saved"
                 : "Paste OpenCode dashboard auth value"
         }
 
-        return configurationStore.hasSecret(for: configuration)
+        return configurationStore.hasSecret(for: viewModel.configuration)
             ? "Credential saved"
             : "Paste credential"
     }
 
     private var copilotSecretPlaceholder: String {
-        configurationStore.hasSecret(for: configuration)
+        configurationStore.hasSecret(for: viewModel.configuration)
             ? "GitHub token saved"
             : "Paste GitHub token"
     }
 
     private var providerID: ProviderID {
-        configuration.providerID
+        viewModel.providerID
     }
 
     private var availableAuthMethods: [ProviderAuthMethod] {
-        switch providerID {
-        case .codex:
-            [.browserSession]
-        case .copilot:
-            [.browserSession, .cliToken]
-        case .openRouter, .openCodeZen, .moonshot:
-            [.apiKey]
-        case .claude:
-            [.browserSession]
-        case .cursor:
-            [.browserSession]
-        }
+        viewModel.availableAuthMethods
     }
 
     private func authMethodDisplayName(_ method: ProviderAuthMethod) -> String {
@@ -378,7 +319,7 @@ struct ProviderSettingsView: View {
     }
 
     private var nonSecretAuthText: String {
-        switch configuration.authMethod {
+        switch viewModel.configuration.authMethod {
         case .browserSession:
             "Sign in through the browser to connect this account."
         case .codexAuthJSON:
@@ -390,308 +331,9 @@ struct ProviderSettingsView: View {
         }
     }
 
-    private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
-        var normalized = configuration
-        if providerID == .codex {
-            normalized.authMethod = .browserSession
-        } else if providerID == .claude {
-            normalized.authMethod = .browserSession
-        } else if providerID == .cursor {
-            normalized.authMethod = .browserSession
-        }
-        return normalized
-    }
-
-    private func allotmentText(_ value: Double?) -> String {
-        guard let value else {
-            return ""
-        }
-
-        return value.formatted(.number.grouping(.never).precision(.fractionLength(0...2)))
-    }
-
-    private func parsedAllotment(_ value: String) -> Double? {
-        let normalized = value
-            .replacingOccurrences(of: ",", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else {
-            return nil
-        }
-
-        return Double(normalized)
-    }
-
-    @MainActor
-    private func signInWithCodex() async {
-        isSigningInWithCodex = true
-        codexAuthError = nil
-
-        do {
-            let result = try await codexAuthService.signIn { url in
-                authURL = PresentedAuthURL(url: url)
-            }
-            configuration.authMethod = .browserSession
-            guard configurationStore.update(configuration) else {
-                codexAuthError = configurationStore.lastError
-                authURL = nil
-                isSigningInWithCodex = false
-                return
-            }
-            configurationStore.saveSecret(result.storedCredential, for: configuration)
-            onCredentialsChanged()
-            authURL = nil
-        } catch {
-            codexAuthError = error.localizedDescription
-            authURL = nil
-        }
-
-        isSigningInWithCodex = false
-    }
-
-    @MainActor
-    private func signInWithCopilot() async {
-        isSigningInWithCopilot = true
-        copilotAuthError = nil
-
-        do {
-            let result = try await copilotAuthService.signIn(
-                configuration: .bundled
-            ) { url in
-                authURL = PresentedAuthURL(url: url)
-            }
-            let username = try await copilotUsageProvider.fetchUsername(accessToken: result.accessToken)
-            guard let username, !username.isEmpty else {
-                copilotAuthError = "GitHub sign-in completed, but the token could not be verified for Copilot access."
-                authURL = nil
-                isSigningInWithCopilot = false
-                return
-            }
-
-            if configuration.copilotAccountScope == .personal {
-                configuration.accountLabel = username
-            } else if configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                configuration.accountLabel = configuration.githubOrganization.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            configuration.authMethod = .browserSession
-            guard configurationStore.update(configuration) else {
-                copilotAuthError = configurationStore.lastError
-                authURL = nil
-                isSigningInWithCopilot = false
-                return
-            }
-            configurationStore.saveSecret(result.storedCredential(username: username), for: configuration)
-            secret = ""
-            onCredentialsChanged()
-            authURL = nil
-        } catch {
-            copilotAuthError = error.localizedDescription
-            authURL = nil
-        }
-
-        isSigningInWithCopilot = false
-    }
-
-    @MainActor
-    private func signInWithClaude() async {
-        isSigningInWithClaude = true
-        claudeAuthError = nil
-        claudeAuthDiagnostic = nil
-
-        do {
-            let result = try await claudeAuthService.signIn(
-                presentAuthorizationURL: { url in
-                    authURL = PresentedAuthURL(url: url)
-                },
-                reportStage: { message in
-                    claudeAuthDiagnostic = message
-                }
-            )
-            configuration.authMethod = .browserSession
-            guard configurationStore.update(configuration) else {
-                claudeAuthError = configurationStore.lastError
-                authURL = nil
-                isSigningInWithClaude = false
-                return
-            }
-            configurationStore.saveSecret(result.storedCredential, for: configuration)
-            secret = ""
-            onCredentialsChanged()
-            authURL = nil
-            claudeAuthDiagnostic = "Claude sign-in complete."
-        } catch {
-            claudeAuthError = error.localizedDescription
-            authURL = nil
-            if claudeAuthDiagnostic == nil {
-                claudeAuthDiagnostic = "Claude sign-in failed."
-            }
-        }
-
-        isSigningInWithClaude = false
-    }
-
-    @MainActor
-    private func startCursorSignIn() {
-        guard cursorSignInTask == nil else {
-            return
-        }
-        cursorSignInTask = Task { @MainActor in
-            await signInWithCursor()
-        }
-    }
-
-    @MainActor
-    private func signInWithCursor() async {
-        isSigningInWithCursor = true
-        cursorAuthError = nil
-        defer {
-            cursorAuthPresenter.finish()
-            cursorSignInTask = nil
-            isSigningInWithCursor = false
-        }
-
-        do {
-            let result = try await cursorAuthService.signIn { url in
-                cursorAuthPresenter.present(url: url) {
-                    cursorSignInTask?.cancel()
-                }
-            }
-            guard let connectedConfiguration = configurationStore.connectCursorAccount(
-                configuration,
-                credential: result.storedCredential
-            ) else {
-                cursorAuthError = configurationStore.lastError
-                return
-            }
-            configuration = connectedConfiguration
-            secret = ""
-            onCredentialsChanged()
-        } catch {
-            cursorAuthError = Task.isCancelled
-                ? "Cursor sign-in canceled. The existing account was not changed."
-                : error.localizedDescription
-        }
-    }
-
-    @MainActor
-    private func signOutOfCursor() {
-        cursorAuthError = nil
-        guard let disconnectedConfiguration = configurationStore.disconnectCursorAccount(configuration) else {
-            cursorAuthError = configurationStore.lastError
-            return
-        }
-        configuration = disconnectedConfiguration
-        onCredentialsChanged()
-    }
-
-    @MainActor
-    private func debugAutostartCopilotAuthIfNeeded() async {
-        #if DEBUG
-        guard
-            providerID == .copilot,
-            !debugAutostartedCopilotAuth,
-            ProcessInfo.processInfo.environment["CODEXBAR_DEBUG_AUTOSTART_COPILOT_AUTH"] == "1"
-        else {
-            return
-        }
-
-        debugAutostartedCopilotAuth = true
-        try? await Task.sleep(nanoseconds: 750_000_000)
-        await signInWithCopilot()
-        #endif
-    }
-
-    @MainActor
-    private func saveOpenCodeCredential() {
-        guard configurationStore.update(configuration) else {
-            openCodeCredentialMessage = configurationStore.lastError
-            return
-        }
-
-        configurationStore.saveSecret(secret, for: configuration)
-        guard configurationStore.lastError == nil else {
-            openCodeCredentialMessage = configurationStore.lastError
-            return
-        }
-
-        secret = ""
-        openCodeCredentialMessage = configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "OpenCode dashboard auth value saved. Enter the workspace ID, then refresh."
-            : "OpenCode dashboard auth value saved. Refreshing..."
-        Task {
-            await refreshOpenCode()
-        }
-    }
-
-    @MainActor
-    private func refreshOpenCode() async {
-        guard !isRefreshingOpenCode else {
-            return
-        }
-
-        isRefreshingOpenCode = true
-        openCodeCredentialMessage = "Refreshing OpenCode ZEN..."
-        defer {
-            isRefreshingOpenCode = false
-        }
-
-        guard let result = await onAccountRefresh(configuration) else {
-            openCodeCredentialMessage = "Refresh finished. Check the dashboard."
-            return
-        }
-
-        if let balance = result.creditsRemaining {
-            let formatted = Self.openCodeBalanceFormatter.string(from: NSNumber(value: balance)) ?? "$\(balance)"
-            openCodeCredentialMessage = "OpenCode ZEN balance refreshed: \(formatted)"
-        } else {
-            openCodeCredentialMessage = result.subtitle
-        }
-    }
-
-    @MainActor
-    private func saveCopilotCredential() async {
-        isSigningInWithCopilot = true
-        copilotAuthError = nil
-        defer {
-            isSigningInWithCopilot = false
-        }
-
-        do {
-            let token = secret.trimmingCharacters(in: .whitespacesAndNewlines)
-            let username = try await copilotUsageProvider.fetchUsername(accessToken: token)
-            guard let username, !username.isEmpty else {
-                copilotAuthError = "GitHub token could not be verified for Copilot access."
-                return
-            }
-
-            if configuration.copilotAccountScope == .personal {
-                configuration.accountLabel = username
-            } else if configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                configuration.accountLabel = configuration.githubOrganization.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            configuration.authMethod = .cliToken
-            guard configurationStore.update(configuration) else {
-                copilotAuthError = configurationStore.lastError
-                return
-            }
-            let credentials = CopilotCredentials(accessToken: token, username: username)
-            if
-                let data = try? JSONEncoder().encode(credentials),
-                let storedCredential = String(data: data, encoding: .utf8)
-            {
-                configurationStore.saveSecret(storedCredential, for: configuration)
-            } else {
-                configurationStore.saveSecret(token, for: configuration)
-            }
-            secret = ""
-            onCredentialsChanged()
-        } catch {
-            copilotAuthError = error.localizedDescription
-        }
-    }
-
 }
 
-private struct PresentedAuthURL: Identifiable {
+struct PresentedAuthURL: Identifiable {
     let id = UUID()
     let url: URL
 
@@ -717,17 +359,6 @@ private struct SafariAuthView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {
     }
-}
-
-private extension ProviderSettingsView {
-    static let openCodeBalanceFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
 }
 
 #Preview {
