@@ -6,12 +6,13 @@ public enum UsageSeverity: Int, Codable, Comparable, Sendable {
     case critical
 
     public init(fractionUsed: Double) {
-        if fractionUsed >= 0.9 {
-            self = .critical
-        } else if fractionUsed >= 0.75 {
-            self = .warning
-        } else {
+        switch CodexBarWidgetSeverity(fractionUsed: fractionUsed) {
+        case .normal:
             self = .normal
+        case .warning:
+            self = .warning
+        case .critical:
+            self = .critical
         }
     }
 
@@ -22,22 +23,22 @@ public enum UsageSeverity: Int, Codable, Comparable, Sendable {
     public var tint: Color {
         switch self {
         case .normal:
-            .green
+            CodexBarSeverityPalette.normal
         case .warning:
-            .orange
+            CodexBarSeverityPalette.warning
         case .critical:
-            .red
+            CodexBarSeverityPalette.critical
         }
     }
 
     public var projectedTint: Color {
         switch self {
         case .normal:
-            Color(red: 0x86 / 255.0, green: 0xEF / 255.0, blue: 0xAC / 255.0)
+            CodexBarSeverityPalette.projectedNormal
         case .warning:
-            Color(red: 0xFA / 255.0, green: 0xCC / 255.0, blue: 0x15 / 255.0)
+            CodexBarSeverityPalette.projectedWarning
         case .critical:
-            Color(red: 0xF8 / 255.0, green: 0x71 / 255.0, blue: 0x71 / 255.0)
+            CodexBarSeverityPalette.projectedCritical
         }
     }
 }

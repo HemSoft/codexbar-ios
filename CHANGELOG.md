@@ -21,6 +21,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Show representative sample data in the widget gallery instead of loading the
+  current account snapshot while users preview widget configurations.
+  ([#62](https://github.com/HemSoft/codexbar-ios/issues/62))
 - Kept pending provider-setting edits from overwriting newer Cursor sign-in,
   sign-out, or OpenCode credential changes. ([#61](https://github.com/HemSoft/codexbar-ios/issues/61))
 - Reported credential-storage failures instead of presenting unsuccessful
@@ -47,6 +50,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Split widget configuration, views, accessory layouts, and tile models into
+  focused files, and shared provider logos, progress bars, severity colors, and
+  currency formatting between the app and widget.
+  ([#62](https://github.com/HemSoft/codexbar-ios/issues/62))
 - Moved dashboard refresh, alert, widget-sync, ordering, and provider sign-in
   orchestration out of SwiftUI views so those flows can evolve and be tested
   independently. ([#61](https://github.com/HemSoft/codexbar-ios/issues/61))

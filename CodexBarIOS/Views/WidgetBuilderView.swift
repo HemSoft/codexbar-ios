@@ -187,7 +187,12 @@ private struct WidgetBuilderPreviewTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                WidgetBuilderProviderLogo(providerID: tile.providerID)
+                CodexBarProviderLogo(
+                    providerID: tile.providerID,
+                    size: 20,
+                    background: Color(.systemBackground),
+                    border: Color(.separator).opacity(0.35)
+                )
 
                 Text(tile.providerTitle)
                     .font(.caption.weight(.semibold))
@@ -210,7 +215,10 @@ private struct WidgetBuilderPreviewTile: View {
                 .minimumScaleFactor(0.7)
 
             if let fractionUsed = tile.fractionUsed {
-                WidgetBuilderProgressBar(fractionUsed: fractionUsed, severity: tile.severity)
+                CodexBarUsageProgressBar(
+                    fractionUsed: fractionUsed,
+                    severity: tile.severity
+                )
             }
         }
         .padding(10)
@@ -219,92 +227,9 @@ private struct WidgetBuilderPreviewTile: View {
     }
 }
 
-private struct WidgetBuilderProgressBar: View {
-    let fractionUsed: Double
-    let severity: CodexBarWidgetSeverity
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.primary.opacity(0.12))
-
-                Capsule()
-                    .fill(severity.tint)
-                    .frame(width: proxy.size.width * min(max(fractionUsed, 0), 1))
-            }
-        }
-        .frame(height: 6)
-        .accessibilityHidden(true)
-    }
-}
-
-private struct WidgetBuilderProviderLogo: View {
-    let providerID: String
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Color(.systemBackground))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(Color(.separator).opacity(0.35), lineWidth: 0.5)
-                }
-
-            if let assetName {
-                Image(assetName)
-                    .resizable()
-                    .renderingMode(.original)
-                    .scaledToFit()
-                    .padding(3)
-            } else {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(width: 20, height: 20)
-        .accessibilityHidden(true)
-    }
-
-    private var assetName: String? {
-        switch providerID {
-        case "codex":
-            "CodexLogo"
-        case "copilot":
-            "CopilotLogo"
-        case "claude":
-            "ClaudeLogo"
-        case "openRouter":
-            "OpenRouterLogo"
-        case "openCodeZen":
-            "OpenCodeZenLogo"
-        case "moonshot":
-            "MoonshotLogo"
-        case "cursor":
-            "CursorLogo"
-        default:
-            nil
-        }
-    }
-}
-
 private extension CodexBarWidgetBuilderTile {
     var choiceTitle: String {
         providerTitle == title ? title : "\(providerTitle) - \(title)"
-    }
-}
-
-private extension CodexBarWidgetSeverity {
-    var tint: Color {
-        switch self {
-        case .normal:
-            .green
-        case .warning:
-            .orange
-        case .critical:
-            .red
-        }
     }
 }
 

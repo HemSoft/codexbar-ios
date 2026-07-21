@@ -15,6 +15,99 @@ public struct CodexBarWidgetSnapshot: Codable, Equatable, Sendable {
     }
 
     public static let empty = CodexBarWidgetSnapshot(generatedAt: .distantPast, results: [])
+    public static let preview = CodexBarWidgetSnapshot(
+        generatedAt: Date(),
+        results: [
+            previewUsageProvider(
+                id: "codex",
+                title: "ChatGPT / Codex",
+                subtitle: "Pro",
+                barLabel: "5-hour usage limit",
+                fractionUsed: 0.42
+            ),
+            previewUsageProvider(
+                id: "copilot",
+                title: "GitHub Copilot",
+                subtitle: "Individual",
+                barLabel: "Premium requests",
+                fractionUsed: 0.73
+            ),
+            previewUsageProvider(
+                id: "claude",
+                title: "Claude",
+                subtitle: "Pro",
+                barLabel: "All models weekly usage limit",
+                fractionUsed: 0.58
+            ),
+            previewUsageProvider(
+                id: "cursor",
+                title: "Cursor",
+                subtitle: "Pro",
+                barLabel: "Monthly included usage",
+                fractionUsed: 0.51
+            ),
+            previewBalanceProvider(
+                id: "moonshot",
+                title: "Moonshot (Kimi)",
+                balance: 24.15
+            ),
+            previewBalanceProvider(
+                id: "openCodeZen",
+                title: "OpenCode ZEN",
+                balance: 12.48
+            ),
+            previewBalanceProvider(
+                id: "openRouter",
+                title: "OpenRouter",
+                balance: 18.72
+            ),
+        ]
+    )
+
+    private static func previewUsageProvider(
+        id: String,
+        title: String,
+        subtitle: String,
+        barLabel: String,
+        fractionUsed: Double
+    ) -> CodexBarWidgetProviderSnapshot {
+        CodexBarWidgetProviderSnapshot(
+            accountID: id,
+            providerID: id,
+            title: title,
+            subtitle: subtitle,
+            bars: [
+                CodexBarWidgetUsageBarSnapshot(
+                    id: "\(id).preview",
+                    label: barLabel,
+                    fractionUsed: fractionUsed,
+                    usageText: "\(Int((fractionUsed * 100).rounded()))%",
+                    resetDescription: "Resets soon",
+                    severity: CodexBarWidgetSeverity(fractionUsed: fractionUsed)
+                )
+            ],
+            creditsRemaining: nil,
+            fetchedAt: Date(),
+            severity: CodexBarWidgetSeverity(fractionUsed: fractionUsed)
+        )
+    }
+
+    private static func previewBalanceProvider(
+        id: String,
+        title: String,
+        balance: Double
+    ) -> CodexBarWidgetProviderSnapshot {
+        CodexBarWidgetProviderSnapshot(
+            accountID: id,
+            providerID: id,
+            title: title,
+            subtitle: "API balance",
+            bars: [],
+            creditsRemaining: balance,
+            fetchedAt: Date(),
+            severity: .normal
+        )
+    }
 }
 
 public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, Sendable {
@@ -206,6 +299,16 @@ public enum CodexBarWidgetSeverity: String, Codable, Comparable, Sendable {
     case warning
     case critical
 
+    public init(fractionUsed: Double) {
+        if fractionUsed >= 0.9 {
+            self = .critical
+        } else if fractionUsed >= 0.75 {
+            self = .warning
+        } else {
+            self = .normal
+        }
+    }
+
     public static func < (lhs: CodexBarWidgetSeverity, rhs: CodexBarWidgetSeverity) -> Bool {
         lhs.rank < rhs.rank
     }
@@ -240,6 +343,13 @@ public enum WidgetSnapshotStore {
         }
 
         return snapshot
+    }
+
+    public static func loadSnapshot(
+        forPreview isPreview: Bool,
+        defaults: UserDefaults? = userDefaults()
+    ) -> CodexBarWidgetSnapshot {
+        isPreview ? .preview : loadSnapshot(defaults: defaults)
     }
 
     public static func saveSnapshot(
@@ -286,6 +396,13 @@ public enum WidgetSnapshotStore {
             selectedTileIDs: configuration.selectedTileIDs,
             displayModes: configuration.displayModes
         )
+    }
+
+    public static func loadBuilderConfiguration(
+        forPreview isPreview: Bool,
+        defaults: UserDefaults? = userDefaults()
+    ) -> CodexBarWidgetBuilderConfiguration {
+        isPreview ? .default : loadBuilderConfiguration(defaults: defaults)
     }
 
     public static func saveBuilderConfiguration(
