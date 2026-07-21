@@ -15,6 +15,40 @@ public struct CodexBarWidgetSnapshot: Codable, Equatable, Sendable {
     }
 
     public static let empty = CodexBarWidgetSnapshot(generatedAt: .distantPast, results: [])
+    public static let preview = CodexBarWidgetSnapshot(
+        generatedAt: Date(),
+        results: [
+            CodexBarWidgetProviderSnapshot(
+                accountID: "codex",
+                providerID: "codex",
+                title: "ChatGPT / Codex",
+                subtitle: "Pro",
+                bars: [
+                    CodexBarWidgetUsageBarSnapshot(
+                        id: "primary",
+                        label: "5 hour",
+                        fractionUsed: 0.42,
+                        usageText: "42%",
+                        resetDescription: "Resets 2h",
+                        severity: .normal
+                    )
+                ],
+                creditsRemaining: nil,
+                fetchedAt: Date(),
+                severity: .normal
+            ),
+            CodexBarWidgetProviderSnapshot(
+                accountID: "openCodeZen",
+                providerID: "openCodeZen",
+                title: "OpenCode ZEN",
+                subtitle: "Balance",
+                bars: [],
+                creditsRemaining: 184.25,
+                fetchedAt: Date(),
+                severity: .normal
+            ),
+        ]
+    )
 }
 
 public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, Sendable {
@@ -240,6 +274,13 @@ public enum WidgetSnapshotStore {
         }
 
         return snapshot
+    }
+
+    public static func loadSnapshot(
+        forPreview isPreview: Bool,
+        defaults: UserDefaults? = userDefaults()
+    ) -> CodexBarWidgetSnapshot {
+        isPreview ? .preview : loadSnapshot(defaults: defaults)
     }
 
     public static func saveSnapshot(

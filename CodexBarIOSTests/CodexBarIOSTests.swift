@@ -476,6 +476,40 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(WidgetSnapshotStore.loadRefreshInterval(defaults: defaults), .threeHours)
     }
 
+    func testWidgetSnapshotStoreUsesPreviewFixtureForWidgetGallery() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let storedSnapshot = CodexBarWidgetSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_788_475_200),
+            results: []
+        )
+        WidgetSnapshotStore.saveSnapshot(storedSnapshot, defaults: defaults)
+
+        XCTAssertEqual(
+            WidgetSnapshotStore.loadSnapshot(forPreview: false, defaults: defaults),
+            storedSnapshot
+        )
+        XCTAssertEqual(
+            WidgetSnapshotStore.loadSnapshot(forPreview: true, defaults: defaults),
+            .preview
+        )
+        XCTAssertEqual(CodexBarWidgetSnapshot.preview.results.map(\.providerID), ["codex", "openCodeZen"])
+    }
+
+    func testSharedWidgetRenderingMapsEveryProviderLogo() {
+        XCTAssertEqual(CodexBarProviderLogo.assetName(for: "codex"), "CodexLogo")
+        XCTAssertEqual(CodexBarProviderLogo.assetName(for: "copilot"), "CopilotLogo")
+        XCTAssertEqual(CodexBarProviderLogo.assetName(for: "claude"), "ClaudeLogo")
+        XCTAssertEqual(CodexBarProviderLogo.assetName(for: "cursor"), "CursorLogo")
+        XCTAssertEqual(CodexBarProviderLogo.assetName(for: "moonshot"), "MoonshotLogo")
+        XCTAssertEqual(CodexBarProviderLogo.assetName(for: "openCodeZen"), "OpenCodeZenLogo")
+        XCTAssertEqual(CodexBarProviderLogo.assetName(for: "openRouter"), "OpenRouterLogo")
+        XCTAssertNil(CodexBarProviderLogo.assetName(for: "unknown"))
+    }
+
     func testWidgetSnapshotStoreRoundTripsBuilderConfiguration() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

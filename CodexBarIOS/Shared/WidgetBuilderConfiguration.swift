@@ -309,15 +309,6 @@ private extension CodexBarWidgetProviderSnapshot {
     }
 
     private static func formattedCurrency(_ amount: Double) -> String {
-        currencyFormatter.string(from: NSNumber(value: amount)) ?? "$0.00"
+        CodexBarCurrencyText.format(amount)
     }
-
-    private static let currencyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
 }

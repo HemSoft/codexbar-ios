@@ -81,7 +81,7 @@ struct ProviderUsageCard: View {
             }
 
             if let creditsRemaining = result.creditsRemaining, result.bars.isEmpty {
-                Text(Self.currencyFormatter.string(from: NSNumber(value: creditsRemaining)) ?? "$0.00")
+                Text(CodexBarCurrencyText.format(creditsRemaining))
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.primary)
                     .monospacedDigit()
@@ -176,15 +176,6 @@ struct ProviderUsageCard: View {
     var showsRetryAction: Bool {
         refreshErrorMessage != nil && !isRefreshing
     }
-
-    private static let currencyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
 
     private func monetaryAccessibilityLabel(_ metric: ProviderMonetaryMetric) -> String {
         [metric.label, metric.formattedAmount(), metric.detail]
@@ -758,47 +749,17 @@ private extension UsageAlertKind {
     }
 }
 
-private extension ProviderID {
-    var cardLogoAssetName: String {
-        switch self {
-        case .codex:
-            "CodexLogo"
-        case .copilot:
-            "CopilotLogo"
-        case .claude:
-            "ClaudeLogo"
-        case .openRouter:
-            "OpenRouterLogo"
-        case .openCodeZen:
-            "OpenCodeZenLogo"
-        case .moonshot:
-            "MoonshotLogo"
-        case .cursor:
-            "CursorLogo"
-        }
-    }
-}
-
 private struct ProviderLogoTile: View {
     let providerID: ProviderID
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Color(.secondarySystemGroupedBackground))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(Color(.separator).opacity(0.3), lineWidth: 0.5)
-                }
-
-            Image(providerID.cardLogoAssetName)
-                .resizable()
-                .renderingMode(.original)
-                .scaledToFit()
-                .padding(4)
-        }
-        .frame(width: 24, height: 24)
-        .accessibilityHidden(true)
+        CodexBarProviderLogo(
+            providerID: providerID.rawValue,
+            size: 24,
+            background: Color(.secondarySystemGroupedBackground),
+            border: Color(.separator).opacity(0.3),
+            imagePadding: 4
+        )
     }
 }
 
@@ -807,28 +768,31 @@ private struct UsageProgressBar: View {
     let showsSeverity: Bool
 
     var body: some View {
-        GeometryReader { proxy in
-            let actualWidth = proxy.size.width * bar.fractionUsed
-            let projectedFraction = showsSeverity ? (bar.projectedFraction() ?? 0) : 0
-            let projectedWidth = proxy.size.width * projectedFraction
+        CodexBarUsageProgressBar(
+            fractionUsed: bar.fractionUsed,
+            projectedFraction: showsSeverity ? bar.projectedFraction() : nil,
+            severity: showsSeverity ? bar.severity.widgetSeverity : .normal,
+            projectedSeverity: showsSeverity
+                ? bar.projectedFraction().map { UsageSeverity(fractionUsed: $0).widgetSeverity }
+                : nil,
+            fillColor: showsSeverity ? nil : Color.secondary.opacity(0.55),
+            height: 7,
+            trackColor: Color(.tertiarySystemFill),
+            accessibilityText: "\(bar.label) \(bar.usageText)"
+        )
+    }
+}
 
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color(.tertiarySystemFill))
-
-                if projectedWidth > actualWidth {
-                    Capsule()
-                        .fill(UsageSeverity(fractionUsed: projectedFraction).projectedTint.opacity(0.55))
-                        .frame(width: projectedWidth)
-                }
-
-                Capsule()
-                    .fill(showsSeverity ? bar.severity.tint : Color.secondary.opacity(0.55))
-                    .frame(width: actualWidth)
-            }
+private extension UsageSeverity {
+    var widgetSeverity: CodexBarWidgetSeverity {
+        switch self {
+        case .normal:
+            .normal
+        case .warning:
+            .warning
+        case .critical:
+            .critical
         }
-        .frame(height: 7)
-        .accessibilityLabel("\(bar.label) \(bar.usageText)")
     }
 }
 
