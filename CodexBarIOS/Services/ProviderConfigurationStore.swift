@@ -16,6 +16,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     private let defaults: UserDefaults
     private let secretStore: SecretStore
+    private let widgetSnapshotDefaults: UserDefaults?
     private let configurationsKey = DefaultsKey.configurations
     private let groupsKey = DefaultsKey.groups
     private let appAppearanceKey = DefaultsKey.appAppearance
@@ -29,11 +30,13 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     public init(
         defaults: UserDefaults = .standard,
-        secretStore: SecretStore = KeychainService()
+        secretStore: SecretStore = KeychainService(),
+        widgetSnapshotDefaults: UserDefaults? = WidgetSnapshotStore.userDefaults()
     ) {
         let loadedGroups = Self.loadGroups(from: defaults)
         self.defaults = defaults
         self.secretStore = secretStore
+        self.widgetSnapshotDefaults = widgetSnapshotDefaults
         self.groups = loadedGroups
         self.configurations = Self.loadConfigurations(
             from: defaults,
@@ -42,7 +45,10 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.secretAvailability = [:]
         self.appAppearance = Self.loadAppAppearance(from: defaults)
         self.autoRefreshInterval = Self.loadAutoRefreshInterval(from: defaults)
-        self.widgetRefreshInterval = Self.loadWidgetRefreshInterval(from: defaults)
+        self.widgetRefreshInterval = Self.loadWidgetRefreshInterval(
+            from: defaults,
+            widgetSnapshotDefaults: widgetSnapshotDefaults
+        )
         self.dashboardOrderingMode = Self.loadDashboardOrderingMode(from: defaults)
         self.dashboardCardOrder = Self.loadDashboardCardOrder(from: defaults)
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
@@ -233,7 +239,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     public func updateWidgetRefreshInterval(_ interval: WidgetRefreshInterval) {
         widgetRefreshInterval = interval
         defaults.set(interval.rawValue, forKey: widgetRefreshIntervalKey)
-        WidgetSnapshotStore.saveRefreshInterval(interval)
+        WidgetSnapshotStore.saveRefreshInterval(interval, defaults: widgetSnapshotDefaults)
     }
 
     public func updateDashboardOrderingMode(_ mode: DashboardOrderingMode) {
@@ -668,15 +674,18 @@ public final class ProviderConfigurationStore: ObservableObject {
         return interval
     }
 
-    private static func loadWidgetRefreshInterval(from defaults: UserDefaults) -> WidgetRefreshInterval {
+    private static func loadWidgetRefreshInterval(
+        from defaults: UserDefaults,
+        widgetSnapshotDefaults: UserDefaults?
+    ) -> WidgetRefreshInterval {
         guard
             defaults.object(forKey: DefaultsKey.widgetRefreshInterval) != nil,
             let interval = WidgetRefreshInterval(rawValue: defaults.integer(forKey: DefaultsKey.widgetRefreshInterval))
         else {
-            return WidgetSnapshotStore.loadRefreshInterval()
+            return WidgetSnapshotStore.loadRefreshInterval(defaults: widgetSnapshotDefaults)
         }
 
-        WidgetSnapshotStore.saveRefreshInterval(interval)
+        WidgetSnapshotStore.saveRefreshInterval(interval, defaults: widgetSnapshotDefaults)
         return interval
     }
 

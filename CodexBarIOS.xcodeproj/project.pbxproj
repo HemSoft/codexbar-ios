@@ -18,7 +18,14 @@
 		100000000000000000000009 /* UsageRefreshService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000009 /* UsageRefreshService.swift */; };
 		10000000000000000000000A /* ProviderUsageCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000A /* ProviderUsageCard.swift */; };
 		10000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000B /* Assets.xcassets */; };
-		10000000000000000000000C /* CodexBarIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000E /* CodexBarIOSTests.swift */; };
+		10000000000000000000000C /* AppAndWidgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000E /* AppAndWidgetTests.swift */; };
+		100000000000000000000051 /* UsageAlertTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004A /* UsageAlertTests.swift */; };
+		10000000000000000000004B /* ConfigurationAndAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004B /* ConfigurationAndAuthTests.swift */; };
+		10000000000000000000004C /* ProviderParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004C /* ProviderParsingTests.swift */; };
+		10000000000000000000004D /* UsageHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004D /* UsageHistoryTests.swift */; };
+		10000000000000000000004E /* ProviderNetworkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004E /* ProviderNetworkTests.swift */; };
+		10000000000000000000004F /* DashboardAndSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004F /* DashboardAndSettingsTests.swift */; };
+		100000000000000000000050 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000050 /* TestSupport.swift */; };
 		10000000000000000000000D /* ProviderAccountConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000F /* ProviderAccountConfiguration.swift */; };
 		10000000000000000000000E /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000010 /* KeychainService.swift */; };
 		10000000000000000000000F /* ProviderConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ProviderConfigurationStore.swift */; };
@@ -128,7 +135,14 @@
 		20000000000000000000000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		20000000000000000000000C /* CodexBarIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodexBarIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		20000000000000000000000D /* CodexBarIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexBarIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		20000000000000000000000E /* CodexBarIOSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarIOSTests.swift; sourceTree = "<group>"; };
+		20000000000000000000000E /* AppAndWidgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAndWidgetTests.swift; sourceTree = "<group>"; };
+		20000000000000000000004A /* UsageAlertTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageAlertTests.swift; sourceTree = "<group>"; };
+		20000000000000000000004B /* ConfigurationAndAuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationAndAuthTests.swift; sourceTree = "<group>"; };
+		20000000000000000000004C /* ProviderParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderParsingTests.swift; sourceTree = "<group>"; };
+		20000000000000000000004D /* UsageHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageHistoryTests.swift; sourceTree = "<group>"; };
+		20000000000000000000004E /* ProviderNetworkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderNetworkTests.swift; sourceTree = "<group>"; };
+		20000000000000000000004F /* DashboardAndSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardAndSettingsTests.swift; sourceTree = "<group>"; };
+		200000000000000000000050 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		20000000000000000000000F /* ProviderAccountConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAccountConfiguration.swift; sourceTree = "<group>"; };
 		200000000000000000000010 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		200000000000000000000011 /* ProviderConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderConfigurationStore.swift; sourceTree = "<group>"; };
@@ -325,7 +339,14 @@
 		700000000000000000000007 /* CodexBarIOSTests */ = {
 			isa = PBXGroup;
 			children = (
-				20000000000000000000000E /* CodexBarIOSTests.swift */,
+				20000000000000000000000E /* AppAndWidgetTests.swift */,
+				20000000000000000000004B /* ConfigurationAndAuthTests.swift */,
+				20000000000000000000004F /* DashboardAndSettingsTests.swift */,
+				20000000000000000000004E /* ProviderNetworkTests.swift */,
+				20000000000000000000004C /* ProviderParsingTests.swift */,
+				200000000000000000000050 /* TestSupport.swift */,
+				20000000000000000000004A /* UsageAlertTests.swift */,
+				20000000000000000000004D /* UsageHistoryTests.swift */,
 			);
 			path = CodexBarIOSTests;
 			sourceTree = "<group>";
@@ -562,7 +583,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				10000000000000000000000C /* CodexBarIOSTests.swift in Sources */,
+				10000000000000000000000C /* AppAndWidgetTests.swift in Sources */,
+				10000000000000000000004B /* ConfigurationAndAuthTests.swift in Sources */,
+				10000000000000000000004F /* DashboardAndSettingsTests.swift in Sources */,
+				10000000000000000000004E /* ProviderNetworkTests.swift in Sources */,
+				10000000000000000000004C /* ProviderParsingTests.swift in Sources */,
+				100000000000000000000050 /* TestSupport.swift in Sources */,
+				100000000000000000000051 /* UsageAlertTests.swift in Sources */,
+				10000000000000000000004D /* UsageHistoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
