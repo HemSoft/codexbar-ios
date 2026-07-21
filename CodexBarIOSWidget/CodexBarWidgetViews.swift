@@ -277,10 +277,11 @@ struct TileWidget: View {
                 VStack(alignment: .leading, spacing: 8) {
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(Array(tiles.enumerated()), id: \.offset) { _, tile in
-                            LinkedProviderWidgetTile(
-                                renderedTile: tile,
-                                style: family == .systemSmall ? .small : .standard
-                            )
+                            if family == .systemSmall {
+                                ProviderWidgetTile(renderedTile: tile, style: .small)
+                            } else {
+                                LinkedProviderWidgetTile(renderedTile: tile, style: .standard)
+                            }
                         }
                     }
 
@@ -293,6 +294,7 @@ struct TileWidget: View {
                 }
             }
         }
+        .widgetURL(family == .systemSmall ? tiles.first?.tile.deepLinkURL : nil)
         .containerBackground(.background, for: .widget)
     }
 
