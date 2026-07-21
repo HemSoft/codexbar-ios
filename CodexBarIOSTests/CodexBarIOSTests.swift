@@ -5,6 +5,28 @@ import AuthenticationServices
 #endif
 
 final class CodexBarIOSTests: XCTestCase {
+    func testProviderDeepLinkRoundTripsAccountID() throws {
+        let accountID = "claude.work + personal/primary?"
+        let url = try XCTUnwrap(CodexBarDeepLink.providerURL(accountID: accountID))
+
+        XCTAssertEqual(url.scheme, "codexbar")
+        XCTAssertEqual(url.host, "provider")
+        XCTAssertEqual(CodexBarDeepLink.providerAccountID(from: url), accountID)
+    }
+
+    func testProviderDeepLinkRejectsUnsupportedOrAmbiguousRoutes() throws {
+        XCTAssertNil(CodexBarDeepLink.providerURL(accountID: ""))
+        XCTAssertNil(CodexBarDeepLink.providerAccountID(from: URL(string: "https://provider?account=codex")!))
+        XCTAssertNil(CodexBarDeepLink.providerAccountID(from: URL(string: "codexbar://settings?account=codex")!))
+        XCTAssertNil(CodexBarDeepLink.providerAccountID(from: URL(string: "codexbar://provider/details?account=codex")!))
+        XCTAssertNil(CodexBarDeepLink.providerAccountID(from: URL(string: "codexbar://provider")!))
+        XCTAssertNil(
+            CodexBarDeepLink.providerAccountID(
+                from: URL(string: "codexbar://provider?account=codex&account=claude")!
+            )
+        )
+    }
+
     func testUsageSeverityThresholds() {
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.74), .normal)
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.75), .warning)

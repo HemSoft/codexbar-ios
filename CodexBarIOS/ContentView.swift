@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var isShowingSettings = false
     @State private var selectedHistoryResult: ProviderUsageResult?
     @State private var draggedCardID: String?
+    @State private var pendingDeepLinkAccountID: String?
 
     init(
         refreshService: UsageRefreshService,
@@ -50,60 +51,77 @@ struct ContentView: View {
         let usageAlertsByAccountID = orchestrator.currentUsageAlertsByAccountID
 
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    if !cardItems.isEmpty,
-                       let release = appUpdateController.dashboardRelease {
-                        AppUpdateNotice(
-                            release: release,
-                            onDismiss: appUpdateController.dismissDashboardNotice
-                        )
-                    }
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        if !cardItems.isEmpty,
+                           let release = appUpdateController.dashboardRelease {
+                            AppUpdateNotice(
+                                release: release,
+                                onDismiss: appUpdateController.dismissDashboardNotice
+                            )
+                        }
 
-                    ForEach(sections) { section in
-                        VStack(alignment: .leading, spacing: 8) {
-                            if showGroupHeaders {
-                                Text(section.title)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .textCase(.uppercase)
-                                    .padding(.horizontal, 4)
-                            }
+                        ForEach(sections) { section in
+                            VStack(alignment: .leading, spacing: 8) {
+                                if showGroupHeaders {
+                                    Text(section.title)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .textCase(.uppercase)
+                                        .padding(.horizontal, 4)
+                                }
 
-                            ForEach(section.items) { item in
-                                let card = dashboardCard(
-                                    for: item,
-                                    alerts: usageAlertsByAccountID[item.id] ?? []
-                                )
+                                ForEach(section.items) { item in
+                                    let card = dashboardCard(
+                                        for: item,
+                                        alerts: usageAlertsByAccountID[item.id] ?? []
+                                    )
 
-                                if orchestrator.isManualDashboardOrdering {
-                                    card
-                                        .onDrag {
-                                            draggedCardID = item.id
-                                            return NSItemProvider(object: item.id as NSString)
-                                        }
-                                        .onDrop(
-                                            of: [UTType.text],
-                                            delegate: ProviderUsageCardDropDelegate(
-                                                targetID: item.id,
-                                                draggedCardID: $draggedCardID,
-                                                moveCard: moveCard,
-                                                finishDrag: finishCardDrag
+                                    if orchestrator.isManualDashboardOrdering {
+                                        card
+                                            .id(item.id)
+                                            .onDrag {
+                                                draggedCardID = item.id
+                                                return NSItemProvider(object: item.id as NSString)
+                                            }
+                                            .onDrop(
+                                                of: [UTType.text],
+                                                delegate: ProviderUsageCardDropDelegate(
+                                                    targetID: item.id,
+                                                    draggedCardID: $draggedCardID,
+                                                    moveCard: moveCard,
+                                                    finishDrag: finishCardDrag
+                                                )
                                             )
-                                        )
-                                } else {
-                                    card
-                                        .accessibilityHint(
-                                            Text("Smart ordering is active.")
-                                        )
+                                    } else {
+                                        card
+                                            .id(item.id)
+                                            .accessibilityHint(
+                                                Text("Smart ordering is active.")
+                                            )
+                                    }
                                 }
                             }
                         }
                     }
+                    .padding()
                 }
-                .padding()
+                .background(Color(.systemGroupedBackground))
+                .onOpenURL { url in
+                    handleDeepLink(
+                        url,
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: cardItems.map(\.id)
+                    )
+                }
+                .onChange(of: cardItems.map(\.id)) { _, accountIDs in
+                    scrollToPendingDeepLink(
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: accountIDs
+                    )
+                }
             }
-            .background(Color(.systemGroupedBackground))
             .navigationTitle("CodexBar")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -253,6 +271,48 @@ struct ContentView: View {
     private func finishCardDrag() {
         orchestrator.finishCardDrag()
         draggedCardID = nil
+    }
+
+    private func handleDeepLink(
+        _ url: URL,
+        scrollProxy: ScrollViewProxy,
+        availableAccountIDs: [String]
+    ) {
+        guard let accountID = CodexBarDeepLink.providerAccountID(from: url) else {
+            return
+        }
+
+        isShowingSettings = false
+        selectedHistoryResult = nil
+        pendingDeepLinkAccountID = accountID
+        scrollToPendingDeepLink(
+            scrollProxy: scrollProxy,
+            availableAccountIDs: availableAccountIDs
+        )
+    }
+
+    private func scrollToPendingDeepLink(
+        scrollProxy: ScrollViewProxy,
+        availableAccountIDs: [String]
+    ) {
+        guard
+            let accountID = pendingDeepLinkAccountID,
+            availableAccountIDs.contains(accountID)
+        else {
+            return
+        }
+
+        Task { @MainActor in
+            await Task.yield()
+            guard pendingDeepLinkAccountID == accountID else {
+                return
+            }
+
+            withAnimation(.snappy(duration: 0.25)) {
+                scrollProxy.scrollTo(accountID, anchor: .center)
+            }
+            pendingDeepLinkAccountID = nil
+        }
     }
 
     private var refreshAccessibilityLabel: String {
