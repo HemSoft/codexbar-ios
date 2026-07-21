@@ -55,6 +55,25 @@ struct CodexBarWidgetTile: Identifiable {
         }
         return creditsRemaining.map { CodexBarCurrencyText.format($0) }
     }
+
+    var summaryText: String {
+        if let monetaryValueText {
+            return monetaryValueText
+        }
+
+        return bar.map(metricText(for:)) ?? "No data"
+    }
+
+    func metricText(for bar: CodexBarWidgetUsageBarSnapshot) -> String {
+        guard
+            let projectedFraction = bar.projectedFraction,
+            bar.effectiveSeverity > bar.severity
+        else {
+            return bar.usageText
+        }
+
+        return "Proj \(Int((projectedFraction * 100).rounded()))%"
+    }
 }
 
 struct CodexBarWidgetRenderedTile: Identifiable {
@@ -192,23 +211,4 @@ extension CodexBarWidgetProviderSnapshot {
             severity: severity
         )
     }
-}
-
-func summary(for tile: CodexBarWidgetTile) -> String {
-    if let monetaryValueText = tile.monetaryValueText {
-        return monetaryValueText
-    }
-
-    return tile.bar.map(metricText(for:)) ?? "No data"
-}
-
-func metricText(for bar: CodexBarWidgetUsageBarSnapshot) -> String {
-    guard
-        let projectedFraction = bar.projectedFraction,
-        bar.effectiveSeverity > bar.severity
-    else {
-        return bar.usageText
-    }
-
-    return "Proj \(Int((projectedFraction * 100).rounded()))%"
 }

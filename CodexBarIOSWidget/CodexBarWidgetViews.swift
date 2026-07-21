@@ -427,7 +427,7 @@ struct ProviderWidgetTile: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             } else if let bar = tile.bar {
-                Text(metricText(for: bar))
+                Text(tile.metricText(for: bar))
                     .font(.system(size: 25, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
@@ -654,7 +654,7 @@ struct ProviderWidgetTile: View {
 
     private var primaryMetric: String {
         if let bar = tile.bar {
-            return metricText(for: bar)
+            return tile.metricText(for: bar)
         }
 
         if let monetaryValueText = tile.monetaryValueText {

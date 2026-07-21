@@ -768,13 +768,12 @@ private struct UsageProgressBar: View {
     let showsSeverity: Bool
 
     var body: some View {
+        let projectedFraction = showsSeverity ? bar.projectedFraction() : nil
         CodexBarUsageProgressBar(
             fractionUsed: bar.fractionUsed,
-            projectedFraction: showsSeverity ? bar.projectedFraction() : nil,
+            projectedFraction: projectedFraction,
             severity: showsSeverity ? bar.severity.widgetSeverity : .normal,
-            projectedSeverity: showsSeverity
-                ? bar.projectedFraction().map { UsageSeverity(fractionUsed: $0).widgetSeverity }
-                : nil,
+            projectedSeverity: projectedFraction.map { UsageSeverity(fractionUsed: $0).widgetSeverity },
             fillColor: showsSeverity ? nil : Color.secondary.opacity(0.55),
             height: 7,
             trackColor: Color(.tertiarySystemFill),

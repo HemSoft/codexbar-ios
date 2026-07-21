@@ -6,7 +6,7 @@ struct AccessoryInlineWidget: View {
 
     var body: some View {
         if let tile = tiles.first {
-            Text("\(tile.providerTitle) \(summary(for: tile))")
+            Text("\(tile.providerTitle) \(tile.summaryText)")
         } else {
             Text("CodexBar")
         }
@@ -20,7 +20,7 @@ struct AccessoryCircularWidget: View {
         Gauge(value: tile?.bar?.effectiveFractionUsed ?? 0) {
             Image(systemName: "gauge.with.dots.needle.50percent")
         } currentValueLabel: {
-            Text(tile.map(summary) ?? "--")
+            Text(tile.map(\.summaryText) ?? "--")
                 .font(.system(size: 10, weight: .semibold))
                 .minimumScaleFactor(0.6)
         }
@@ -38,7 +38,7 @@ struct AccessoryRectangularWidget: View {
                 Text(tile.providerTitle)
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
-                Text(summary(for: tile))
+                Text(tile.summaryText)
                     .font(.caption2)
                     .lineLimit(1)
             }
