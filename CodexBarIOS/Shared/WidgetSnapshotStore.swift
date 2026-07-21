@@ -329,6 +329,13 @@ public enum WidgetSnapshotStore {
         )
     }
 
+    public static func loadBuilderConfiguration(
+        forPreview isPreview: Bool,
+        defaults: UserDefaults? = userDefaults()
+    ) -> CodexBarWidgetBuilderConfiguration {
+        isPreview ? .default : loadBuilderConfiguration(defaults: defaults)
+    }
+
     public static func saveBuilderConfiguration(
         _ configuration: CodexBarWidgetBuilderConfiguration,
         defaults: UserDefaults? = userDefaults()

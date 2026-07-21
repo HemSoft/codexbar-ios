@@ -7,6 +7,7 @@ struct CodexBarWidgetEntry: TimelineEntry {
     let date: Date
     let snapshot: CodexBarWidgetSnapshot
     let configuration: CodexBarWidgetConfigurationIntent
+    let isPreview: Bool
 }
 
 struct CodexBarWidgetProvider: AppIntentTimelineProvider {
@@ -14,7 +15,8 @@ struct CodexBarWidgetProvider: AppIntentTimelineProvider {
         CodexBarWidgetEntry(
             date: Date(),
             snapshot: .preview,
-            configuration: CodexBarWidgetConfigurationIntent()
+            configuration: CodexBarWidgetConfigurationIntent(),
+            isPreview: true
         )
     }
 
@@ -25,7 +27,8 @@ struct CodexBarWidgetProvider: AppIntentTimelineProvider {
         CodexBarWidgetEntry(
             date: Date(),
             snapshot: WidgetSnapshotStore.loadSnapshot(forPreview: context.isPreview),
-            configuration: configuration
+            configuration: configuration,
+            isPreview: context.isPreview
         )
     }
 
@@ -41,7 +44,8 @@ struct CodexBarWidgetProvider: AppIntentTimelineProvider {
                 CodexBarWidgetEntry(
                     date: now,
                     snapshot: snapshot,
-                    configuration: configuration
+                    configuration: configuration,
+                    isPreview: false
                 )
             ],
             policy: .after(now.addingTimeInterval(interval.seconds))

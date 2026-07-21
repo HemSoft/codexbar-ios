@@ -24,7 +24,7 @@ struct CodexBarWidgetView: View {
 
     private var selectedTiles: [CodexBarWidgetRenderedTile] {
         let allTiles = scopedSelectableTiles
-        let builderConfiguration = WidgetSnapshotStore.loadBuilderConfiguration()
+        let builderConfiguration = WidgetSnapshotStore.loadBuilderConfiguration(forPreview: entry.isPreview)
         let usesBuilderDefaults = usesBuilderDefaults(builderConfiguration)
         let configuredChoices = [
             entry.configuration.tile1,
@@ -731,6 +731,7 @@ private struct WidgetUsageProgressBar: View {
     CodexBarWidgetEntry(
         date: Date(),
         snapshot: .preview,
-        configuration: CodexBarWidgetConfigurationIntent()
+        configuration: CodexBarWidgetConfigurationIntent(),
+        isPreview: true
     )
 }

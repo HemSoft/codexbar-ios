@@ -486,7 +486,12 @@ final class CodexBarIOSTests: XCTestCase {
             generatedAt: Date(timeIntervalSince1970: 1_788_475_200),
             results: []
         )
+        let storedBuilderConfiguration = CodexBarWidgetBuilderConfiguration(
+            layout: .oneTile,
+            selectedTileIDs: ["provider.real-account"]
+        )
         WidgetSnapshotStore.saveSnapshot(storedSnapshot, defaults: defaults)
+        WidgetSnapshotStore.saveBuilderConfiguration(storedBuilderConfiguration, defaults: defaults)
 
         XCTAssertEqual(
             WidgetSnapshotStore.loadSnapshot(forPreview: false, defaults: defaults),
@@ -495,6 +500,14 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(
             WidgetSnapshotStore.loadSnapshot(forPreview: true, defaults: defaults),
             .preview
+        )
+        XCTAssertEqual(
+            WidgetSnapshotStore.loadBuilderConfiguration(forPreview: false, defaults: defaults),
+            storedBuilderConfiguration
+        )
+        XCTAssertEqual(
+            WidgetSnapshotStore.loadBuilderConfiguration(forPreview: true, defaults: defaults),
+            .default
         )
         XCTAssertEqual(CodexBarWidgetSnapshot.preview.results.map(\.providerID), ["codex", "openCodeZen"])
     }
