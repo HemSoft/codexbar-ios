@@ -7849,6 +7849,52 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertTrue(savedConfiguration.map { store.hasSecret(for: $0) } ?? false)
     }
 
+    @MainActor
+    func testProviderSettingsViewModelCancelsPendingEditsBeforeCursorSignOut() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let cursor = store.addAccount(for: .cursor)
+        let connected = try XCTUnwrap(
+            store.connectCursorAccount(cursor, credential: "cursor-token")
+        )
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: connected.id
+        )
+
+        viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "stale@example.com"
+        viewModel.signOutOfCursor()
+        viewModel.flushPendingChanges()
+
+        XCTAssertEqual(store.configuration(accountID: connected.id)?.accountLabel, "")
+        XCTAssertFalse(store.hasSecret(for: connected))
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelCancelsPendingEditsWhenSavingOpenCodeCredential() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id
+        )
+        viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "Team ZEN"
+        viewModel.secret = "opencode-token"
+
+        viewModel.saveOpenCodeCredential()
+        var externallyUpdated = store.configuration(accountID: openCode.id)!
+        externallyUpdated.showsHistory = false
+        XCTAssertTrue(store.update(externallyUpdated))
+        viewModel.flushPendingChanges()
+
+        XCTAssertEqual(store.configuration(accountID: openCode.id)?.accountLabel, "Team ZEN")
+        XCTAssertEqual(store.configuration(accountID: openCode.id)?.showsHistory, false)
+    }
+
     private func makeHistoryResult(
         accountID: String,
         providerID: ProviderID = .codex,

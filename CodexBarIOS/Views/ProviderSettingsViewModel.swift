@@ -247,6 +247,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func signOutOfCursor() {
         cursorAuthError = nil
+        flushPendingChanges()
         guard let disconnected = configurationStore.disconnectCursorAccount(configuration) else {
             cursorAuthError = configurationStore.lastError
             return
@@ -256,7 +257,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func saveOpenCodeCredential() {
-        guard configurationStore.update(configuration) else {
+        guard persist(configuration) else {
             openCodeCredentialMessage = configurationStore.lastError
             return
         }
@@ -341,6 +342,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                     self.cursorSignInTask?.cancel()
                 }
             }
+            flushPendingChanges()
             guard let connected = configurationStore.connectCursorAccount(
                 configuration,
                 credential: result.storedCredential
