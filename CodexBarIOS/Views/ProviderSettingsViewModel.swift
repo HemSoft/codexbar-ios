@@ -19,6 +19,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published private(set) var claudeAuthError: String?
     @Published private(set) var claudeAuthDiagnostic: String?
     @Published private(set) var cursorAuthError: String?
+    @Published private(set) var credentialError: String?
     @Published var authURL: PresentedAuthURL?
     @Published private(set) var copilotTotalAllotmentText = ""
     @Published private(set) var openCodeCredentialMessage: String?
@@ -131,14 +132,25 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func saveGenericCredential() {
-        guard persist(configuration) else { return }
-        configurationStore.saveSecret(secret, for: configuration)
+        credentialError = nil
+        guard persist(configuration) else {
+            credentialError = configurationStore.lastError
+            return
+        }
+        guard persistSecret(secret) else {
+            credentialError = configurationStore.lastError
+            return
+        }
         secret = ""
         onCredentialsChanged()
     }
 
     func removeSavedCredential(message: String? = nil) {
-        configurationStore.saveSecret("", for: configuration)
+        credentialError = nil
+        guard persistSecret("") else {
+            credentialError = configurationStore.lastError
+            return
+        }
         openCodeCredentialMessage = message
         onCredentialsChanged()
     }
@@ -159,7 +171,11 @@ final class ProviderSettingsViewModel: ObservableObject {
                 authURL = nil
                 return
             }
-            configurationStore.saveSecret(result.storedCredential, for: configuration)
+            guard persistSecret(result.storedCredential) else {
+                codexAuthError = configurationStore.lastError
+                authURL = nil
+                return
+            }
             onCredentialsChanged()
             authURL = nil
         } catch {
@@ -192,7 +208,11 @@ final class ProviderSettingsViewModel: ObservableObject {
                 authURL = nil
                 return
             }
-            configurationStore.saveSecret(result.storedCredential(username: username), for: configuration)
+            guard persistSecret(result.storedCredential(username: username)) else {
+                copilotAuthError = configurationStore.lastError
+                authURL = nil
+                return
+            }
             secret = ""
             onCredentialsChanged()
             authURL = nil
@@ -224,7 +244,12 @@ final class ProviderSettingsViewModel: ObservableObject {
                 authURL = nil
                 return
             }
-            configurationStore.saveSecret(result.storedCredential, for: configuration)
+            guard persistSecret(result.storedCredential) else {
+                claudeAuthError = configurationStore.lastError
+                claudeAuthDiagnostic = "Claude sign-in failed."
+                authURL = nil
+                return
+            }
             secret = ""
             onCredentialsChanged()
             authURL = nil
@@ -261,8 +286,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             openCodeCredentialMessage = configurationStore.lastError
             return
         }
-        configurationStore.saveSecret(secret, for: configuration)
-        guard configurationStore.lastError == nil else {
+        guard persistSecret(secret) else {
             openCodeCredentialMessage = configurationStore.lastError
             return
         }
@@ -316,9 +340,15 @@ final class ProviderSettingsViewModel: ObservableObject {
             let credentials = CopilotCredentials(accessToken: token, username: username)
             if let data = try? JSONEncoder().encode(credentials),
                let storedCredential = String(data: data, encoding: .utf8) {
-                configurationStore.saveSecret(storedCredential, for: configuration)
+                guard persistSecret(storedCredential) else {
+                    copilotAuthError = configurationStore.lastError
+                    return
+                }
             } else {
-                configurationStore.saveSecret(token, for: configuration)
+                guard persistSecret(token) else {
+                    copilotAuthError = configurationStore.lastError
+                    return
+                }
             }
             secret = ""
             onCredentialsChanged()
@@ -405,6 +435,11 @@ final class ProviderSettingsViewModel: ObservableObject {
         pendingConfiguration = nil
         configuration = updated
         return configurationStore.update(updated)
+    }
+
+    private func persistSecret(_ secret: String) -> Bool {
+        configurationStore.saveSecret(secret, for: configuration)
+        return configurationStore.lastError == nil
     }
 
     private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {

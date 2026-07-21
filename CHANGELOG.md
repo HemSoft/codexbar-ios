@@ -23,6 +23,8 @@ building, testing, or releasing the app.
 
 - Kept pending provider-setting edits from overwriting newer Cursor sign-in,
   sign-out, or OpenCode credential changes. ([#61](https://github.com/HemSoft/codexbar-ios/issues/61))
+- Reported credential-storage failures instead of presenting unsuccessful
+  provider sign-ins or credential changes as complete. ([#61](https://github.com/HemSoft/codexbar-ios/issues/61))
 - Kept provider cards, widgets, and cached usage visible and ordered consistently
   when refreshes fail, queued one follow-up refresh when new triggers arrive
   during an active refresh, and surfaced credential-read errors instead of

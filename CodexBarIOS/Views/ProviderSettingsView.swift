@@ -276,6 +276,11 @@ struct ProviderSettingsView: View {
                     Text(nonSecretAuthText)
                         .foregroundStyle(.secondary)
                 }
+
+                if let credentialError = viewModel.credentialError {
+                    Text(credentialError)
+                        .foregroundStyle(.red)
+                }
             } header: {
                 Text("Credential")
             }

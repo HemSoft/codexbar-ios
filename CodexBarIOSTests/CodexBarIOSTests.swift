@@ -7895,6 +7895,52 @@ final class CodexBarIOSTests: XCTestCase {
         XCTAssertEqual(store.configuration(accountID: openCode.id)?.showsHistory, false)
     }
 
+    @MainActor
+    func testProviderSettingsViewModelReportsCredentialSaveFailureWithoutCompleting() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingSaveSecretStore(secret: "existing-token")
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 }
+        )
+        viewModel.secret = "replacement-token"
+
+        viewModel.saveGenericCredential()
+
+        XCTAssertNotNil(viewModel.credentialError)
+        XCTAssertEqual(viewModel.secret, "replacement-token")
+        XCTAssertEqual(credentialsChangedCount, 0)
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelReportsCredentialRemovalFailureWithoutCompleting() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingDeleteSecretStore()
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 }
+        )
+
+        viewModel.removeSavedCredential()
+
+        XCTAssertNotNil(viewModel.credentialError)
+        XCTAssertEqual(credentialsChangedCount, 0)
+    }
+
     private func makeHistoryResult(
         accountID: String,
         providerID: ProviderID = .codex,
@@ -8022,6 +8068,18 @@ private final class FailingSaveSecretStore: SecretStore, @unchecked Sendable {
     }
 
     func deleteSecret(account: String) throws {}
+}
+
+private struct FailingDeleteSecretStore: SecretStore {
+    func readSecret(account: String) throws -> String? {
+        "existing-token"
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {}
+
+    func deleteSecret(account: String) throws {
+        throw KeychainError.unhandledStatus(-25308)
+    }
 }
 
 private final class StaleThirdReadSecretStore: SecretStore, @unchecked Sendable {
