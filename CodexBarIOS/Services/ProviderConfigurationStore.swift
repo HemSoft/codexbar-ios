@@ -25,6 +25,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let dashboardCardOrderKey = DefaultsKey.dashboardCardOrder
     private let usageAlertSettingsKey = DefaultsKey.usageAlertSettings
     private let usageAlertActiveIDsKey = DefaultsKey.usageAlertActiveIDs
+    private var secretAvailabilityError: String?
 
     public init(
         defaults: UserDefaults = .standard,
@@ -515,12 +516,27 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     public func refreshSecretAvailability() {
         var availability: [String: Bool] = [:]
+        var firstReadError: String?
         for configuration in configurations {
             let account = keychainAccount(for: configuration)
-            availability[configuration.id] = ((try? secretStore.readSecret(account: account)) ?? nil) != nil
+            do {
+                availability[configuration.id] = try secretStore.readSecret(account: account) != nil
+            } catch {
+                availability[configuration.id] = false
+                if firstReadError == nil {
+                    firstReadError = "Could not read the saved credential for \(configuration.displayName): \(error.localizedDescription)"
+                }
+            }
         }
 
         secretAvailability = availability
+        let previousSecretAvailabilityError = secretAvailabilityError
+        secretAvailabilityError = firstReadError
+        if let firstReadError {
+            lastError = firstReadError
+        } else if lastError == previousSecretAvailabilityError {
+            lastError = nil
+        }
     }
 
     private func saveConfigurations() {

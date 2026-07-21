@@ -9,6 +9,9 @@ public final class UsageRefreshService: ObservableObject {
 
     private let providers: [any UsageProvider]
     private var refreshCompletionWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+    private var isBatchRefreshRunning = false
+    private var pendingBatchConfigurations: [ProviderAccountConfiguration]?
+    private var batchRefreshCompletionWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init(
         providers: [any UsageProvider],
@@ -33,12 +36,51 @@ public final class UsageRefreshService: ObservableObject {
         Set(refreshErrorsByAccountID.keys).union(refreshingAccountIDs)
     }
 
+    var queuedBatchRefreshCount: Int {
+        batchRefreshCompletionWaiters.count
+    }
+
+    func refreshWaiterCount(for accountID: String) -> Int {
+        refreshCompletionWaiters[accountID]?.count ?? 0
+    }
+
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
-        guard !isRefreshing else {
+        if isBatchRefreshRunning {
+            pendingBatchConfigurations = configurations
+            await withCheckedContinuation { continuation in
+                batchRefreshCompletionWaiters.append(continuation)
+            }
             return
         }
 
+        isBatchRefreshRunning = true
+        var nextConfigurations = configurations
+        while true {
+            await performRefresh(configurations: nextConfigurations)
+            guard let pendingConfigurations = pendingBatchConfigurations else {
+                break
+            }
+            pendingBatchConfigurations = nil
+            nextConfigurations = pendingConfigurations
+        }
+
+        isBatchRefreshRunning = false
+        let waiters = batchRefreshCompletionWaiters
+        batchRefreshCompletionWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    private func performRefresh(configurations: [ProviderAccountConfiguration]) async {
         let enabledConfigurations = configurations.filter(\.isEnabled)
+        while let refreshingAccountID = enabledConfigurations.lazy
+            .map(\.id)
+            .first(where: refreshingAccountIDs.contains)
+        {
+            await waitForRefreshToFinish(accountID: refreshingAccountID)
+        }
+
         let enabledAccountIDs = Set(enabledConfigurations.map(\.id))
         results.removeAll { !enabledAccountIDs.contains($0.accountID) }
         refreshErrorsByAccountID = refreshErrorsByAccountID.filter { enabledAccountIDs.contains($0.key) }
@@ -79,10 +121,14 @@ public final class UsageRefreshService: ObservableObject {
                             result: result
                         )
                     } catch {
+                        let result = Self.failureResult(
+                            for: configuration,
+                            message: error.localizedDescription
+                        )
                         return .failure(
                             accountID: configuration.id,
                             message: error.localizedDescription,
-                            result: nil
+                            result: result
                         )
                     }
                 }
@@ -139,9 +185,11 @@ public final class UsageRefreshService: ObservableObject {
             return result
         } catch {
             let message = error.localizedDescription
+            let result = Self.failureResult(for: configuration, message: message)
+            preserveFailureResult(result, accountID: configuration.id)
             refreshErrorsByAccountID[configuration.id] = message
             lastRefreshError = message
-            return nil
+            return result
         }
     }
 
@@ -152,19 +200,21 @@ public final class UsageRefreshService: ObservableObject {
     private func replaceResult(_ result: ProviderUsageResult) {
         var nextResults = results.filter { $0.accountID != result.accountID }
         nextResults.append(result)
-        results = nextResults.sorted { $0.title < $1.title }
+        results = nextResults
     }
 
-    private func preserveFailureResult(_ failureResult: ProviderUsageResult?, accountID: String) {
-        guard let failureResult else {
-            return
-        }
-
+    private func preserveFailureResult(_ failureResult: ProviderUsageResult, accountID: String) {
         let cachedResult = results.first { $0.accountID == accountID }
         let failureHasUsageData = failureResult.creditsRemaining != nil
             || !failureResult.bars.isEmpty
             || !failureResult.monetaryMetrics.isEmpty
-        guard let dataResult = failureHasUsageData ? failureResult : cachedResult else {
+        let dataResult: ProviderUsageResult
+        if failureHasUsageData {
+            dataResult = failureResult
+        } else if let cachedResult {
+            dataResult = cachedResult
+        } else {
+            replaceResult(failureResult)
             return
         }
 
@@ -187,6 +237,21 @@ public final class UsageRefreshService: ObservableObject {
         ))
     }
 
+    private nonisolated static func failureResult(
+        for configuration: ProviderAccountConfiguration,
+        message: String
+    ) -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: configuration.providerID,
+            title: configuration.displayName,
+            subtitle: message,
+            bars: [],
+            failureMessage: message,
+            fetchedAt: Date()
+        )
+    }
+
     private func waitForRefreshToFinish(accountID: String) async {
         while refreshingAccountIDs.contains(accountID) {
             await withCheckedContinuation { continuation in
@@ -206,7 +271,7 @@ public final class UsageRefreshService: ObservableObject {
 
 private enum AccountRefreshOutcome: Sendable {
     case success(accountID: String, result: ProviderUsageResult)
-    case failure(accountID: String, message: String, result: ProviderUsageResult?)
+    case failure(accountID: String, message: String, result: ProviderUsageResult)
 }
 
 public extension UsageRefreshService {
