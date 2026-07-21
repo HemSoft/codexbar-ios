@@ -26,14 +26,18 @@ struct CodexBarWidgetView: View {
         let allTiles = scopedSelectableTiles
         let builderConfiguration = WidgetSnapshotStore.loadBuilderConfiguration(forPreview: entry.isPreview)
         let usesBuilderDefaults = usesBuilderDefaults(builderConfiguration)
-        let configuredChoices = [
-            entry.configuration.tile1,
-            entry.configuration.tile2,
-            entry.configuration.tile3,
-            entry.configuration.tile4,
-            entry.configuration.tile5,
-            entry.configuration.tile6,
-        ]
+        let configuredChoices: [CodexBarWidgetTileChoice?] = if entry.isPreview {
+            Array(repeating: nil, count: 6)
+        } else {
+            [
+                entry.configuration.tile1,
+                entry.configuration.tile2,
+                entry.configuration.tile3,
+                entry.configuration.tile4,
+                entry.configuration.tile5,
+                entry.configuration.tile6,
+            ]
+        }
         let configuredDisplayModes = [
             entry.configuration.tile1DisplayMode,
             entry.configuration.tile2DisplayMode,
@@ -93,7 +97,8 @@ struct CodexBarWidgetView: View {
     }
 
     private func usesBuilderDefaults(_ configuration: CodexBarWidgetBuilderConfiguration) -> Bool {
-        configuration.hasCustomizations
+        !entry.isPreview
+            && configuration.hasCustomizations
             && entry.configuration.focus == .dashboardOrder
             && entry.configuration.group == nil
     }
@@ -103,11 +108,19 @@ struct CodexBarWidgetView: View {
     }
 
     private var scopedSelectableTiles: [CodexBarWidgetTile] {
-        entry.snapshot.selectableTiles(group: entry.configuration.group, focus: entry.configuration.focus)
+        entry.snapshot.selectableTiles(group: selectedGroup, focus: selectedFocus)
     }
 
     private var scopedProviders: [CodexBarWidgetProviderSnapshot] {
-        entry.snapshot.scopedProviders(group: entry.configuration.group, focus: entry.configuration.focus)
+        entry.snapshot.scopedProviders(group: selectedGroup, focus: selectedFocus)
+    }
+
+    private var selectedGroup: CodexBarWidgetGroupChoice? {
+        entry.isPreview ? nil : entry.configuration.group
+    }
+
+    private var selectedFocus: CodexBarWidgetFocus {
+        entry.isPreview ? .dashboardOrder : entry.configuration.focus
     }
 
     private func resolvedTile(
