@@ -27,6 +27,31 @@ final class CodexBarIOSTests: XCTestCase {
         )
     }
 
+    func testDashboardDeepLinkNavigationKeepsTargetUntilRefreshReorderSettles() {
+        var navigation = DashboardDeepLinkNavigationState()
+        navigation.begin(accountID: "claude.work", waitsForRefresh: true)
+
+        XCTAssertEqual(navigation.accountID, "claude.work")
+        XCTAssertFalse(navigation.shouldFinishAfterInitialScroll)
+
+        navigation.finish(accountID: "another-account")
+        XCTAssertEqual(navigation.accountID, "claude.work")
+
+        navigation.finish(accountID: "claude.work")
+        XCTAssertNil(navigation.accountID)
+        XCTAssertFalse(navigation.waitsForRefresh)
+    }
+
+    func testDashboardDeepLinkNavigationFinishesWarmLaunchAfterInitialScroll() {
+        var navigation = DashboardDeepLinkNavigationState()
+        navigation.begin(accountID: "codex", waitsForRefresh: false)
+
+        XCTAssertTrue(navigation.shouldFinishAfterInitialScroll)
+
+        navigation.finish(accountID: "codex")
+        XCTAssertNil(navigation.accountID)
+    }
+
     func testUsageSeverityThresholds() {
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.74), .normal)
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.75), .warning)

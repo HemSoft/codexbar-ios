@@ -17,7 +17,8 @@ struct ContentView: View {
     @State private var isShowingSettings = false
     @State private var selectedHistoryResult: ProviderUsageResult?
     @State private var draggedCardID: String?
-    @State private var pendingDeepLinkAccountID: String?
+    @State private var deepLinkNavigation = DashboardDeepLinkNavigationState()
+    @State private var hasCompletedInitialRefresh = false
 
     init(
         refreshService: UsageRefreshService,
@@ -118,7 +119,32 @@ struct ContentView: View {
                 .onChange(of: cardItems.map(\.id)) { _, accountIDs in
                     scrollToPendingDeepLink(
                         scrollProxy: scrollProxy,
-                        availableAccountIDs: accountIDs
+                        availableAccountIDs: accountIDs,
+                        completesNavigation: false
+                    )
+                }
+                .onChange(of: refreshService.isRefreshing) { _, isRefreshing in
+                    guard !isRefreshing, deepLinkNavigation.waitsForRefresh else {
+                        return
+                    }
+                    scrollToPendingDeepLink(
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: cardItems.map(\.id),
+                        completesNavigation: true
+                    )
+                }
+                .onChange(of: hasCompletedInitialRefresh) { _, hasCompletedInitialRefresh in
+                    guard
+                        hasCompletedInitialRefresh,
+                        !refreshService.isRefreshing,
+                        deepLinkNavigation.waitsForRefresh
+                    else {
+                        return
+                    }
+                    scrollToPendingDeepLink(
+                        scrollProxy: scrollProxy,
+                        availableAccountIDs: cardItems.map(\.id),
+                        completesNavigation: true
                     )
                 }
             }
@@ -206,6 +232,7 @@ struct ContentView: View {
                 return
             }
             await orchestrator.initialRefresh()
+            hasCompletedInitialRefresh = true
         }
         .task(id: AutoRefreshTaskID(
             interval: configurationStore.autoRefreshInterval,
@@ -282,36 +309,49 @@ struct ContentView: View {
             return
         }
 
+        let expectsSettingsRefresh = isShowingSettings
         isShowingSettings = false
         selectedHistoryResult = nil
-        pendingDeepLinkAccountID = accountID
+        deepLinkNavigation.begin(
+            accountID: accountID,
+            waitsForRefresh: refreshService.isRefreshing
+                || expectsSettingsRefresh
+                || (performsLifecycleWork && !hasCompletedInitialRefresh)
+        )
         scrollToPendingDeepLink(
             scrollProxy: scrollProxy,
-            availableAccountIDs: availableAccountIDs
+            availableAccountIDs: availableAccountIDs,
+            completesNavigation: deepLinkNavigation.shouldFinishAfterInitialScroll
         )
     }
 
     private func scrollToPendingDeepLink(
         scrollProxy: ScrollViewProxy,
-        availableAccountIDs: [String]
+        availableAccountIDs: [String],
+        completesNavigation: Bool
     ) {
-        guard
-            let accountID = pendingDeepLinkAccountID,
-            availableAccountIDs.contains(accountID)
-        else {
+        guard let accountID = deepLinkNavigation.accountID else {
+            return
+        }
+        guard availableAccountIDs.contains(accountID) else {
+            if completesNavigation {
+                deepLinkNavigation.finish(accountID: accountID)
+            }
             return
         }
 
         Task { @MainActor in
             await Task.yield()
-            guard pendingDeepLinkAccountID == accountID else {
+            guard deepLinkNavigation.accountID == accountID else {
                 return
             }
 
             withAnimation(.snappy(duration: 0.25)) {
                 scrollProxy.scrollTo(accountID, anchor: .center)
             }
-            pendingDeepLinkAccountID = nil
+            if completesNavigation {
+                deepLinkNavigation.finish(accountID: accountID)
+            }
         }
     }
 
@@ -320,6 +360,28 @@ struct ContentView: View {
             return "Refresh usage"
         }
         return "Refresh usage. \(schedule.accessibilityDescription(at: Date()))"
+    }
+}
+
+struct DashboardDeepLinkNavigationState: Equatable {
+    private(set) var accountID: String?
+    private(set) var waitsForRefresh = false
+
+    var shouldFinishAfterInitialScroll: Bool {
+        !waitsForRefresh
+    }
+
+    mutating func begin(accountID: String, waitsForRefresh: Bool) {
+        self.accountID = accountID
+        self.waitsForRefresh = waitsForRefresh
+    }
+
+    mutating func finish(accountID: String) {
+        guard self.accountID == accountID else {
+            return
+        }
+        self.accountID = nil
+        waitsForRefresh = false
     }
 }
 
