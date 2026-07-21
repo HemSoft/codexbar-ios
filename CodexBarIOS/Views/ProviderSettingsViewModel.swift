@@ -3,6 +3,11 @@ import SwiftUI
 
 @MainActor
 final class ProviderSettingsViewModel: ObservableObject {
+    enum PersistenceBehavior {
+        case immediate
+        case debounced
+    }
+
     @Published private(set) var configuration: ProviderAccountConfiguration
     @Published var secret = ""
     @Published private(set) var isSigningInWithCodex = false
@@ -31,6 +36,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var cursorSignInTask: Task<Void, Never>?
     private var cursorAuthPresenter = CursorWebAuthenticationPresenter()
     private var debugAutostartedCopilotAuth = false
+    private var pendingPersistenceTask: Task<Void, Never>?
+    private var pendingConfiguration: ProviderAccountConfiguration?
 
     init(
         configurationStore: ProviderConfigurationStore,
@@ -72,13 +79,16 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
     }
 
-    func binding<Value>(for keyPath: WritableKeyPath<ProviderAccountConfiguration, Value>) -> Binding<Value> {
+    func binding<Value>(
+        for keyPath: WritableKeyPath<ProviderAccountConfiguration, Value>,
+        persistence: PersistenceBehavior = .immediate
+    ) -> Binding<Value> {
         Binding(
             get: { self.configuration[keyPath: keyPath] },
             set: { value in
                 var updated = self.configuration
                 updated[keyPath: keyPath] = value
-                self.persist(updated)
+                self.updateConfiguration(updated, persistence: persistence)
             }
         )
     }
@@ -90,7 +100,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 self.copilotTotalAllotmentText = value
                 var updated = self.configuration
                 updated.copilotTotalAllotment = self.parsedAllotment(value)
-                self.persist(updated)
+                self.updateConfiguration(updated, persistence: .debounced)
             }
         )
     }
@@ -112,7 +122,16 @@ final class ProviderSettingsViewModel: ObservableObject {
         cursorAuthPresenter.finish()
     }
 
+    func flushPendingChanges() {
+        pendingPersistenceTask?.cancel()
+        pendingPersistenceTask = nil
+        guard let pendingConfiguration else { return }
+        self.pendingConfiguration = nil
+        _ = persist(pendingConfiguration)
+    }
+
     func saveGenericCredential() {
+        guard persist(configuration) else { return }
         configurationStore.saveSecret(secret, for: configuration)
         secret = ""
         onCredentialsChanged()
@@ -352,8 +371,36 @@ final class ProviderSettingsViewModel: ObservableObject {
         #endif
     }
 
+    private func updateConfiguration(
+        _ updated: ProviderAccountConfiguration,
+        persistence: PersistenceBehavior
+    ) {
+        configuration = updated
+        switch persistence {
+        case .immediate:
+            pendingPersistenceTask?.cancel()
+            pendingPersistenceTask = nil
+            pendingConfiguration = nil
+            _ = configurationStore.update(updated)
+        case .debounced:
+            pendingConfiguration = updated
+            pendingPersistenceTask?.cancel()
+            pendingPersistenceTask = Task { @MainActor [weak self] in
+                do {
+                    try await Task.sleep(for: .milliseconds(350))
+                } catch {
+                    return
+                }
+                self?.flushPendingChanges()
+            }
+        }
+    }
+
     @discardableResult
     private func persist(_ updated: ProviderAccountConfiguration) -> Bool {
+        pendingPersistenceTask?.cancel()
+        pendingPersistenceTask = nil
+        pendingConfiguration = nil
         configuration = updated
         return configurationStore.update(updated)
     }

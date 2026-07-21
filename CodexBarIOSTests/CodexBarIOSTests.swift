@@ -7803,7 +7803,7 @@ final class CodexBarIOSTests: XCTestCase {
     }
 
     @MainActor
-    func testProviderSettingsViewModelPersistsBindingChangesWithoutViewWriteBack() {
+    func testProviderSettingsViewModelDebouncesTextChangesAndFlushesOnDismissal() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
@@ -7813,13 +7813,40 @@ final class CodexBarIOSTests: XCTestCase {
             accountID: configuration.id
         )
 
-        viewModel.binding(for: \.accountLabel).wrappedValue = "Team Router"
+        viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "Team Router"
         viewModel.binding(for: \.showsHistory).wrappedValue = false
 
         XCTAssertEqual(viewModel.configuration.accountLabel, "Team Router")
         XCTAssertFalse(viewModel.configuration.showsHistory)
         XCTAssertEqual(store.configuration(accountID: configuration.id)?.accountLabel, "Team Router")
         XCTAssertEqual(store.configuration(accountID: configuration.id)?.showsHistory, false)
+
+        viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "Final Router"
+        XCTAssertEqual(store.configuration(accountID: configuration.id)?.accountLabel, "Team Router")
+        viewModel.flushPendingChanges()
+
+        XCTAssertEqual(viewModel.configuration.accountLabel, "Final Router")
+        XCTAssertEqual(store.configuration(accountID: configuration.id)?.accountLabel, "Final Router")
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelRegistersDefaultAccountBeforeSavingCredential() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: ProviderID.openRouter.rawValue
+        )
+        viewModel.secret = "sk-or-test"
+
+        viewModel.saveGenericCredential()
+
+        let savedConfiguration = store.configuration(accountID: ProviderID.openRouter.rawValue)
+        XCTAssertNotNil(savedConfiguration)
+        XCTAssertEqual(viewModel.secret, "")
+        XCTAssertTrue(savedConfiguration.map { store.hasSecret(for: $0) } ?? false)
     }
 
     private func makeHistoryResult(

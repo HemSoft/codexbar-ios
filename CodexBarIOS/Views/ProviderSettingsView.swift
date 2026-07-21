@@ -30,7 +30,10 @@ struct ProviderSettingsView: View {
                 Toggle("Enabled", isOn: viewModel.binding(for: \.isEnabled))
                 Toggle("Show History", isOn: viewModel.binding(for: \.showsHistory))
 
-                TextField("Account label", text: viewModel.binding(for: \.accountLabel))
+                TextField(
+                    "Account label",
+                    text: viewModel.binding(for: \.accountLabel, persistence: .debounced)
+                )
                     .textContentType(.username)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -57,12 +60,18 @@ struct ProviderSettingsView: View {
                     .pickerStyle(.segmented)
 
                     if configuration.copilotAccountScope == .organization {
-                        TextField("Organization", text: viewModel.binding(for: \.githubOrganization))
+                        TextField(
+                            "Organization",
+                            text: viewModel.binding(for: \.githubOrganization, persistence: .debounced)
+                        )
                             .textContentType(.organizationName)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
 
-                        TextField("Enterprise (optional)", text: viewModel.binding(for: \.githubEnterprise))
+                        TextField(
+                            "Enterprise (optional)",
+                            text: viewModel.binding(for: \.githubEnterprise, persistence: .debounced)
+                        )
                             .textContentType(.organizationName)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
@@ -73,7 +82,10 @@ struct ProviderSettingsView: View {
                             .autocorrectionDisabled()
                     }
                 } else if providerID == .openCodeZen {
-                    TextField("Workspace ID", text: viewModel.binding(for: \.openCodeWorkspaceId))
+                    TextField(
+                        "Workspace ID",
+                        text: viewModel.binding(for: \.openCodeWorkspaceId, persistence: .debounced)
+                    )
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
@@ -281,6 +293,7 @@ struct ProviderSettingsView: View {
             await viewModel.prepare()
         }
         .onDisappear {
+            viewModel.flushPendingChanges()
             viewModel.cancelAuthentication()
         }
         .sheet(item: $viewModel.authURL) { authURL in
