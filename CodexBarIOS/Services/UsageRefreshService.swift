@@ -256,7 +256,7 @@ public final class UsageRefreshService: ObservableObject {
 
         if let urlError = error as? URLError {
             switch urlError.code {
-            case .cancelled, .badURL, .unsupportedURL:
+            case .badURL, .unsupportedURL:
                 return false
             default:
                 return true

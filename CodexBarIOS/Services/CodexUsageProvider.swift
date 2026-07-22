@@ -341,13 +341,17 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
             }
             return credentials
         }
-        guard case .success(let refreshed) = await refreshCredentials(
+        switch await refreshCredentials(
             credentials,
             keychainAccount: keychainAccount
-        ) else {
+        ) {
+        case .success(let refreshed):
+            return refreshed
+        case .temporarilyUnavailable where !credentials.isExpired(at: now()):
+            return credentials
+        case .expired, .rejected, .temporarilyUnavailable, .persistenceFailed:
             throw CodexBankedResetConsumptionError.credentialUnavailable
         }
-        return refreshed
     }
 
     private func refreshCredentials(

@@ -111,7 +111,7 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertEqual(result.codexBankedRateLimitResets?.preferredCredit?.id, "credit-1")
     }
 
-    func testCodexUsageProviderConsumesWithStillValidTokenThatCannotRefresh() async throws {
+    func testCodexUsageProviderConsumesWithStillValidTokenWithoutRefreshToken() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
         try secretStore.saveSecret(
@@ -145,6 +145,56 @@ final class ProviderNetworkTests: XCTestCase {
         )
 
         XCTAssertEqual(outcome, .reset)
+    }
+
+    func testCodexUsageProviderConsumesWithStillValidTokenWhenRefreshIsTemporarilyUnavailable() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "still-valid-access",
+                refreshToken: "refresh-token",
+                expiresAt: 2_000_000_060
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            consumeResetEndpoint: URL(string: "https://example.test/consume")!,
+            tokenEndpoint: URL(string: "https://example.test/token")!,
+            now: { Date(timeIntervalSince1970: 2_000_000_000) }
+        )
+        var refreshRequests = 0
+        var consumeRequests = 0
+        ProviderNetworkMockURLProtocol.handler = { request in
+            if request.url?.path == "/token" {
+                refreshRequests += 1
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
+            }
+            consumeRequests += 1
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer still-valid-access")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"code":"reset"}"#.utf8)
+            )
+        }
+        defer { ProviderNetworkMockURLProtocol.handler = nil }
+
+        let outcome = try await provider.consumeBankedReset(
+            for: configuration,
+            creditID: nil,
+            idempotencyKey: "attempt-temporary-refresh-failure"
+        )
+
+        XCTAssertEqual(outcome, .reset)
+        XCTAssertEqual(refreshRequests, 1)
+        XCTAssertEqual(consumeRequests, 1)
     }
 
     func testCodexUsageProviderConsumesEachOfficialResetOutcomeWithOpaqueCreditID() async throws {
@@ -277,6 +327,57 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertEqual(idempotencyKeys.count, 2)
         XCTAssertEqual(idempotencyKeys[0], idempotencyKeys[1])
         XCTAssertFalse(idempotencyKeys[0].isEmpty)
+        XCTAssertEqual(creditIDs.compactMap { $0 }, ["credit-original", "credit-original"])
+    }
+
+    @MainActor
+    func testUsageRefreshServiceReusesIdempotencyKeyAfterCancellation() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "codex-access",
+                expiresAt: 2_100_000_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            consumeResetEndpoint: URL(string: "https://example.test/consume")!,
+            now: { Date(timeIntervalSince1970: 2_000_000_000) }
+        )
+        let service = UsageRefreshService(providers: [provider])
+        var idempotencyKeys: [String] = []
+        var creditIDs: [String?] = []
+        ProviderNetworkMockURLProtocol.handler = { request in
+            let body = try XCTUnwrap(requestBodyData(from: request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
+            idempotencyKeys.append(try XCTUnwrap(json["redeem_request_id"]))
+            creditIDs.append(json["credit_id"])
+            if idempotencyKeys.count == 1 {
+                throw URLError(.cancelled)
+            }
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"code":"reset"}"#.utf8)
+            )
+        }
+        defer { ProviderNetworkMockURLProtocol.handler = nil }
+
+        do {
+            _ = try await service.consumeCodexBankedReset(for: configuration, creditID: "credit-original")
+            XCTFail("Expected the first request to be cancelled")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .cancelled)
+        }
+        let outcome = try await service.consumeCodexBankedReset(for: configuration, creditID: "credit-changed")
+
+        XCTAssertEqual(outcome, .reset)
+        XCTAssertEqual(idempotencyKeys.count, 2)
+        XCTAssertEqual(idempotencyKeys[0], idempotencyKeys[1])
         XCTAssertEqual(creditIDs.compactMap { $0 }, ["credit-original", "credit-original"])
     }
 
