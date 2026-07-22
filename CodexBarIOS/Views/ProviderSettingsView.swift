@@ -340,10 +340,6 @@ struct ProviderSettingsView: View {
         switch viewModel.configuration.authMethod {
         case .browserSession:
             "Sign in through the browser to connect this account."
-        case .codexAuthJSON:
-            "Codex auth.json import is no longer used."
-        case .oauth:
-            "This provider will use OAuth once its sign-in flow is implemented."
         case .apiKey, .cliToken:
             "Paste a credential to save it in Keychain."
         }

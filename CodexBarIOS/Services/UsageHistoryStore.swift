@@ -313,8 +313,7 @@ public struct UsageHistorySeriesOption: Identifiable, Equatable, Sendable {
 @MainActor
 public final class UsageHistoryStore: ObservableObject {
     @Published public private(set) var snapshots: [UsageHistorySnapshot]
-
-    deinit {}
+    @Published public private(set) var lastError: String?
 
     private let defaults: UserDefaults
     private let retention: TimeInterval
@@ -330,6 +329,7 @@ public final class UsageHistoryStore: ObservableObject {
         self.retention = TimeInterval(max(retentionDays, 1) * 24 * 60 * 60)
         self.maxSnapshotsPerAccount = max(maxSnapshotsPerAccount, 1)
         self.snapshots = Self.loadSnapshots(defaults: defaults, storageKey: storageKey)
+        self.lastError = nil
     }
 
     public func record(results: [ProviderUsageResult], now: Date = Date()) {
@@ -341,18 +341,20 @@ public final class UsageHistoryStore: ObservableObject {
             return
         }
 
+        let previousSnapshots = snapshots
         var snapshotsByID = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0) })
         for snapshot in recordableResults.map({ UsageHistorySnapshot(result: $0) }) {
             snapshotsByID[snapshot.id] = snapshot
         }
         snapshots = Array(snapshotsByID.values)
         prune(now: now, validAccountIDs: Set(recordableResults.map(\.accountID)), removeMissingAccounts: false)
-        save()
+        save(restoringOnFailure: previousSnapshots)
     }
 
     public func removeSnapshotsForMissingAccounts(validAccountIDs: Set<String>, now: Date = Date()) {
+        let previousSnapshots = snapshots
         prune(now: now, validAccountIDs: validAccountIDs, removeMissingAccounts: true)
-        save()
+        save(restoringOnFailure: previousSnapshots)
     }
 
     public func snapshots(for accountID: String, since start: Date? = nil) -> [UsageHistorySnapshot] {
@@ -533,9 +535,14 @@ public final class UsageHistoryStore: ObservableObject {
             .sorted { $0.capturedAt < $1.capturedAt }
     }
 
-    private func save() {
-        if let data = try? JSONEncoder().encode(snapshots) {
+    private func save(restoringOnFailure previousSnapshots: [UsageHistorySnapshot]) {
+        do {
+            let data = try JSONEncoder().encode(snapshots)
             defaults.set(data, forKey: storageKey)
+            lastError = nil
+        } catch {
+            snapshots = previousSnapshots
+            lastError = "Could not save usage history: \(error.localizedDescription)"
         }
     }
 
