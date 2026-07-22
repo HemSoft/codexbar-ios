@@ -114,6 +114,58 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(crossedAgain.notifications.count, 1)
     }
 
+    func testCodexCardHidesOnlyUsageThresholdAlerts() {
+        let usageAlert = UsageAlertDetail(
+            id: "usage.codex.personal.weekly",
+            accountID: "codex.personal",
+            kind: .usage,
+            title: "Weekly at 92%",
+            message: "92 of 100 used. Alert threshold: 80%.",
+            severity: .warning
+        )
+        let severityAlert = UsageAlertDetail(
+            id: "severity.codex.personal",
+            accountID: "codex.personal",
+            kind: .severity,
+            title: "Critical status",
+            message: "Weekly is projected to reach 100%.",
+            severity: .critical
+        )
+        let codexResult = ProviderUsageResult(
+            accountID: "codex.personal",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Live usage",
+            bars: [UsageBar(label: "Weekly", used: 92, limit: 100)],
+            fetchedAt: Date()
+        )
+        let codexCard = ProviderUsageCard(
+            result: codexResult,
+            statusText: codexResult.subtitle,
+            history: UsageHistorySeries(accountID: codexResult.accountID, points: [], isBalance: false),
+            alerts: [usageAlert, severityAlert]
+        )
+
+        XCTAssertEqual(codexCard.displayedAlerts, [severityAlert])
+
+        let cursorResult = ProviderUsageResult(
+            accountID: "cursor.personal",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Live usage",
+            bars: [UsageBar(label: "Total", used: 92, limit: 100)],
+            fetchedAt: Date()
+        )
+        let cursorCard = ProviderUsageCard(
+            result: cursorResult,
+            statusText: cursorResult.subtitle,
+            history: UsageHistorySeries(accountID: cursorResult.accountID, points: [], isBalance: false),
+            alerts: [usageAlert, severityAlert]
+        )
+
+        XCTAssertEqual(cursorCard.displayedAlerts, [usageAlert, severityAlert])
+    }
+
     func testUsageAlertEvaluatorUsesInjectedNowForResetDescription() throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let resetAt = now.addingTimeInterval(2 * 60 * 60)

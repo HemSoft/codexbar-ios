@@ -76,8 +76,8 @@ struct ProviderUsageCard: View {
                     .accessibilityHidden(true)
             }
 
-            if !alerts.isEmpty {
-                UsageAlertSummaryView(alerts: alerts)
+            if !displayedAlerts.isEmpty {
+                UsageAlertSummaryView(alerts: displayedAlerts)
             }
 
             if showsRetryAction {
@@ -228,6 +228,13 @@ struct ProviderUsageCard: View {
 
     private var cardSeverity: UsageSeverity {
         max(result.highestSeverity, alerts.map(\.severity).max() ?? .normal)
+    }
+
+    var displayedAlerts: [UsageAlertDetail] {
+        guard result.providerID == .codex else {
+            return alerts
+        }
+        return alerts.filter { $0.kind != .usage }
     }
 
     var showsHistory: Bool {
