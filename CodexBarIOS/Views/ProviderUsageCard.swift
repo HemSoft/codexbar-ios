@@ -155,16 +155,17 @@ struct ProviderUsageCard: View {
                     }
                 }
 
-                if let resetFeedback {
-                    Label(
-                        resetFeedback.message,
-                        systemImage: resetFeedback.isSuccess ? "checkmark.circle" : "info.circle"
-                    )
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel(resetFeedback.message)
-                }
+            }
+
+            if let resetFeedback = resetPresentationFeedback {
+                Label(
+                    resetFeedback.message,
+                    systemImage: resetFeedback.isSuccess ? "checkmark.circle" : "info.circle"
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(resetFeedback.message)
             }
 
             if !result.monetaryMetrics.isEmpty {
@@ -261,6 +262,17 @@ struct ProviderUsageCard: View {
         bankedResets?.canConsume == true
             && onUseCodexReset != nil
             && !isResetActionUnavailable
+    }
+
+    var resetPresentationFeedback: CodexBankedResetRedemptionFeedback? {
+        Self.resetPresentationFeedback(resetFeedback, availableResets: bankedResets)
+    }
+
+    static func resetPresentationFeedback(
+        _ feedback: CodexBankedResetRedemptionFeedback?,
+        availableResets _: CodexBankedRateLimitResets?
+    ) -> CodexBankedResetRedemptionFeedback? {
+        feedback
     }
 
     var resetConfirmationMessage: String {

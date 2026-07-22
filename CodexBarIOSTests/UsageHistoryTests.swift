@@ -611,4 +611,17 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertNil(zeroCard.bankedResets)
     }
 
+    @MainActor
+    func testProviderUsageCardKeepsResetFeedbackAfterFinalCreditDisappears() {
+        let feedback = CodexBankedResetRedemptionFeedback(
+            message: "Reset used. Current usage limits are refreshed.",
+            isSuccess: true
+        )
+
+        XCTAssertEqual(
+            ProviderUsageCard.resetPresentationFeedback(feedback, availableResets: nil),
+            feedback
+        )
+    }
+
 }
