@@ -2,6 +2,45 @@ import XCTest
 @testable import CodexBarIOS
 
 final class AppAndWidgetTests: XCTestCase {
+    func testBuiltAppAndWidgetContainRequiredPrivacyManifests() throws {
+        XCTAssertEqual(
+            try privacyReasons(in: Bundle.main),
+            ["CA92.1", "1C8F.1"]
+        )
+
+        let plugInsURL = try XCTUnwrap(Bundle.main.builtInPlugInsURL)
+        let widgetBundle = try XCTUnwrap(
+            Bundle(url: plugInsURL.appendingPathComponent("CodexBarIOSWidget.appex"))
+        )
+        XCTAssertEqual(try privacyReasons(in: widgetBundle), ["1C8F.1"])
+    }
+
+    private func privacyReasons(in bundle: Bundle) throws -> Set<String> {
+        let manifestURL = try XCTUnwrap(
+            bundle.url(forResource: "PrivacyInfo", withExtension: "xcprivacy"),
+            "Missing PrivacyInfo.xcprivacy in \(bundle.bundleURL.lastPathComponent)"
+        )
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        )
+
+        XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false)
+        XCTAssertEqual(manifest["NSPrivacyTrackingDomains"] as? [String], [])
+        XCTAssertTrue((manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]])?.isEmpty == true)
+
+        let accessedAPITypes = try XCTUnwrap(
+            manifest["NSPrivacyAccessedAPITypes"] as? [[String: Any]]
+        )
+        let userDefaultsEntry = try XCTUnwrap(
+            accessedAPITypes.first {
+                $0["NSPrivacyAccessedAPIType"] as? String
+                    == "NSPrivacyAccessedAPICategoryUserDefaults"
+            }
+        )
+        return Set(try XCTUnwrap(userDefaultsEntry["NSPrivacyAccessedAPITypeReasons"] as? [String]))
+    }
+
     func testProviderDeepLinkRoundTripsAccountID() throws {
         let accountID = "claude.work + personal/primary?"
         let url = try XCTUnwrap(CodexBarDeepLink.providerURL(accountID: accountID))

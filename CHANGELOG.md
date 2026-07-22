@@ -61,6 +61,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added required privacy manifests to the app and widget bundles, including a
+  build-time regression check, so App Store submissions declare local and
+  app-group preference access correctly. ([#85](https://github.com/HemSoft/codexbar-ios/issues/85))
 - Made the simulator runner follow Xcode's latest selected runtime and device,
   hoisted repeated settings formatting work, and removed obsolete
   authentication and parsing code.

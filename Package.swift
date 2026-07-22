@@ -27,6 +27,7 @@ let package = Package(
                 "CodexBarIOS.entitlements",
                 "ContentView.swift",
                 "Info.plist",
+                "PrivacyInfo.xcprivacy",
                 "Resources",
                 "Views"
             ]
