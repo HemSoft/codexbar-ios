@@ -10,12 +10,16 @@ The Windows reference implementation is checked out beside this repo at:
 
 ## Current Scope
 
-- SwiftUI dashboard for provider usage cards
-- Provider abstraction with Codex, Copilot, Claude, Cursor, OpenRouter, OpenCode ZEN, and Moonshot (Kimi) adapters
-- Settings screen for enabling providers, labeling accounts, choosing auth method, and saving API keys/tokens in Keychain
-- ChatGPT / Codex browser sign-in with Keychain-backed usage fetching
-- Refresh service with demo data for providers whose fetchers have not been ported yet
-- Unit tests for model severity and refresh behavior
+- SwiftUI dashboard with account-scoped usage cards for Codex, GitHub Copilot,
+  Claude, Cursor, OpenRouter, OpenCode ZEN, and Moonshot (Kimi)
+- Live provider adapters and settings for enabling accounts, choosing supported
+  authentication methods, labeling accounts, and storing credentials in Keychain
+- Usage history and charts, configurable usage alerts, and home-screen and
+  lock-screen widgets
+- Demo data limited to previews, smoke tests, widget galleries, and screenshots
+- Simulator unit tests spanning configuration and authentication, provider
+  parsing and networking, dashboard and settings, widgets, history, and alerts,
+  plus a SwiftPM smoke harness; see [Build and Test](AGENTS.md#build-and-test)
 
 ## Requirements
 
