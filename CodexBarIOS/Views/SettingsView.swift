@@ -279,8 +279,9 @@ struct SettingsView: View {
                 titleVisibility: .visible
             ) {
                 Button("Reset Accounts", role: .destructive) {
-                    configurationStore.resetAccounts()
-                    onAccountsChanged()
+                    if configurationStore.resetAccounts() {
+                        onAccountsChanged()
+                    }
                 }
             } message: {
                 Text("This removes account entries and saved provider credentials from this device.")

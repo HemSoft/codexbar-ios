@@ -365,6 +365,8 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
         let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
         XCTAssertEqual(reloadedStore.configuration(accountID: account.id), account)
+        XCTAssertEqual(reloadedStore.dashboardCardOrder, [account.id])
+        XCTAssertEqual(reloadedStore.usageAlertActiveIDs, [alertID])
 
         secretStore.shouldFailDelete = false
         XCTAssertTrue(store.removeAccount(account))
@@ -374,6 +376,13 @@ final class ConfigurationAndAuthTests: XCTestCase {
             try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account))
         )
         XCTAssertNil(store.lastError)
+        XCTAssertTrue(store.dashboardCardOrder.isEmpty)
+        XCTAssertTrue(store.usageAlertActiveIDs.isEmpty)
+
+        let storeAfterRemoval = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        XCTAssertNil(storeAfterRemoval.configuration(accountID: account.id))
+        XCTAssertTrue(storeAfterRemoval.dashboardCardOrder.isEmpty)
+        XCTAssertTrue(storeAfterRemoval.usageAlertActiveIDs.isEmpty)
     }
 
     @MainActor
@@ -404,6 +413,31 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertNil(
             try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: removedAccount))
         )
+        XCTAssertNotNil(store.lastError)
+    }
+
+    @MainActor
+    func testResetAccountsFailurePreservesAccountsAndDependentState() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingDeleteSecretStore()
+        )
+        let account = store.addAccount(for: .openRouter)
+        let alertID = "balance.\(account.id)"
+        store.updateDashboardCardOrder([account.id])
+        store.updateUsageAlertActiveIDs([alertID])
+
+        XCTAssertFalse(store.resetAccounts())
+
+        XCTAssertEqual(store.configuration(accountID: account.id), account)
+        XCTAssertEqual(store.dashboardCardOrder, [account.id])
+        XCTAssertEqual(store.usageAlertActiveIDs, [alertID])
         XCTAssertNotNil(store.lastError)
     }
 
