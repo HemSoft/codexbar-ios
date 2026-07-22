@@ -396,10 +396,12 @@ struct SettingsView: View {
 
     private func deleteAccounts(at offsets: IndexSet) {
         let accounts = configurationStore.configurations
-        for index in offsets {
-            configurationStore.removeAccount(accounts[index])
+        let removedAnyAccount = offsets.reduce(into: false) { removedAnyAccount, index in
+            removedAnyAccount = configurationStore.removeAccount(accounts[index]) || removedAnyAccount
         }
-        onAccountsChanged()
+        if removedAnyAccount {
+            onAccountsChanged()
+        }
     }
 
     private func addGroup() {

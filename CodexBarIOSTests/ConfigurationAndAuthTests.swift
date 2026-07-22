@@ -336,6 +336,46 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertNil(try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)))
     }
 
+    @MainActor
+    func testAccountRemovalKeepsAccountAndStateWhenCredentialDeletionFailsThenAllowsRetry() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = RetriableDeleteSecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let account = store.addAccount(for: .openRouter)
+        let alertID = "balance.\(account.id)"
+        store.updateDashboardCardOrder([account.id])
+        store.updateUsageAlertActiveIDs([alertID])
+        XCTAssertTrue(store.saveSecret("existing-token", for: account))
+
+        XCTAssertFalse(store.removeAccount(account))
+
+        XCTAssertEqual(store.configuration(accountID: account.id), account)
+        XCTAssertEqual(store.dashboardCardOrder, [account.id])
+        XCTAssertEqual(store.usageAlertActiveIDs, [alertID])
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)),
+            "existing-token"
+        )
+        XCTAssertNotNil(store.lastError)
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        XCTAssertEqual(reloadedStore.configuration(accountID: account.id), account)
+
+        secretStore.shouldFailDelete = false
+        XCTAssertTrue(store.removeAccount(account))
+
+        XCTAssertNil(store.configuration(accountID: account.id))
+        XCTAssertNil(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account))
+        )
+        XCTAssertNil(store.lastError)
+    }
+
     func testCodexAuthURLUsesBrowserLoginFlow() throws {
         let url = CodexWebAuthService.authorizationURL(
             redirectURI: "http://localhost:1455/auth/callback",
