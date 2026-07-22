@@ -26,6 +26,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Made ChatGPT, Claude, and GitHub Copilot browser sign-in callbacks reliable
+  when the browser delivers the local HTTP request in multiple pieces.
+  ([#87](https://github.com/HemSoft/codexbar-ios/issues/87))
 - Kept accounts and their dashboard, history, and widget state available when
   Keychain credential deletion fails so removal can be retried safely.
   ([#86](https://github.com/HemSoft/codexbar-ios/issues/86))

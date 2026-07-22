@@ -1,5 +1,6 @@
 import XCTest
 @testable import CodexBarIOS
+import Darwin
 #if canImport(AuthenticationServices) && canImport(UIKit)
 import AuthenticationServices
 #endif
@@ -439,6 +440,67 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertEqual(store.dashboardCardOrder, [account.id])
         XCTAssertEqual(store.usageAlertActiveIDs, [alertID])
         XCTAssertNotNil(store.lastError)
+    }
+
+    func testLoopbackOAuthCallbackServerAcceptsRequestsSplitAcrossWrites() async throws {
+        let request = Data((
+            "GET /callback?code=authorization-code&state=expected-state HTTP/1.1\r\n" +
+                "Host: 127.0.0.1\r\nUser-Agent: CodexBarIOSTests\r\n\r\n"
+        ).utf8)
+        let splitOffsets = [1, 37, request.count - 1]
+
+        for (index, splitOffset) in splitOffsets.enumerated() {
+            let port = UInt16(35_187 + index)
+            let server = try await makeLoopbackCallbackServer(preferredPorts: [port])
+            defer { server.cancel() }
+            let callbackTask = Task {
+                try await server.waitForCallback(timeoutNanoseconds: 2_000_000_000)
+            }
+
+            let response = try await sendRawHTTPRequest(
+                port: port,
+                chunks: [Data(request[..<splitOffset]), Data(request[splitOffset...])]
+            )
+            let callbackURL = try await callbackTask.value
+
+            XCTAssertTrue(response.hasPrefix("HTTP/1.1 200 OK"))
+            XCTAssertEqual(callbackURL.path, "/callback")
+            XCTAssertEqual(
+                URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?
+                    .queryItemValue(named: "code"),
+                "authorization-code"
+            )
+        }
+    }
+
+    func testLoopbackOAuthCallbackServerRejectsOversizedRequest() async throws {
+        let port: UInt16 = 35_190
+        let server = try await makeLoopbackCallbackServer(
+            preferredPorts: [port],
+            maximumRequestLength: 64
+        )
+        defer { server.cancel() }
+
+        let response = try await sendRawHTTPRequest(
+            port: port,
+            chunks: [Data(("GET /callback?" + String(repeating: "x", count: 128)).utf8)]
+        )
+
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 413 Payload Too Large"))
+    }
+
+    func testLoopbackOAuthCallbackServerRejectsPrematurelyClosedRequest() async throws {
+        let port: UInt16 = 35_191
+        let server = try await makeLoopbackCallbackServer(preferredPorts: [port])
+        defer { server.cancel() }
+
+        let response = try await sendRawHTTPRequest(
+            port: port,
+            chunks: [Data("GET /callback?code=authorization-code".utf8)],
+            finishWriting: true
+        )
+
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 400 Bad Request"))
     }
 
     func testCodexAuthURLUsesBrowserLoginFlow() throws {
@@ -1447,6 +1509,114 @@ final class ConfigurationAndAuthTests: XCTestCase {
         )
 
         XCTAssertEqual(total, 350000)
+    }
+
+    private func makeLoopbackCallbackServer(
+        preferredPorts: [UInt16],
+        maximumRequestLength: Int = 8_192
+    ) async throws -> LoopbackOAuthCallbackServer<ClaudeWebAuthService.AuthError> {
+        try await LoopbackOAuthCallbackServer<ClaudeWebAuthService.AuthError>.start(
+            preferredPorts: preferredPorts,
+            expectedState: "expected-state",
+            callbackPath: "/callback",
+            bindHost: .ipv4,
+            queueLabel: "com.hemsoft.CodexBarIOSTests.loopbackOAuth.\(UUID().uuidString)",
+            couldNotStartError: .couldNotStartCallbackServer,
+            missingCodeError: .missingAuthorizationCode,
+            stateMismatchError: .stateMismatch,
+            timeoutError: .callbackTimedOut,
+            successHeading: "Sign-in complete",
+            failureHeading: "Sign-in failed",
+            maximumRequestLength: maximumRequestLength
+        )
+    }
+
+    private func sendRawHTTPRequest(
+        port: UInt16,
+        chunks: [Data],
+        finishWriting: Bool = false
+    ) async throws -> String {
+        try await Task.detached {
+            let socketDescriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+            guard socketDescriptor >= 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            defer { Darwin.close(socketDescriptor) }
+
+            var receiveTimeout = timeval(tv_sec: 2, tv_usec: 0)
+            guard setsockopt(
+                socketDescriptor,
+                SOL_SOCKET,
+                SO_RCVTIMEO,
+                &receiveTimeout,
+                socklen_t(MemoryLayout<timeval>.size)
+            ) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+
+            var address = sockaddr_in()
+            address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+            address.sin_family = sa_family_t(AF_INET)
+            address.sin_port = port.bigEndian
+            address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+            let connectionResult = withUnsafePointer(to: &address) { addressPointer in
+                addressPointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                    Darwin.connect(
+                        socketDescriptor,
+                        socketAddress,
+                        socklen_t(MemoryLayout<sockaddr_in>.size)
+                    )
+                }
+            }
+            guard connectionResult == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+
+            for (index, chunk) in chunks.enumerated() {
+                try chunk.withUnsafeBytes { bytes in
+                    var sentByteCount = 0
+                    while sentByteCount < bytes.count {
+                        let result = Darwin.send(
+                            socketDescriptor,
+                            bytes.baseAddress?.advanced(by: sentByteCount),
+                            bytes.count - sentByteCount,
+                            0
+                        )
+                        guard result > 0 else {
+                            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                        }
+                        sentByteCount += result
+                    }
+                }
+                if index < chunks.count - 1 {
+                    usleep(50_000)
+                }
+            }
+
+            if finishWriting {
+                guard Darwin.shutdown(socketDescriptor, SHUT_WR) == 0 else {
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+            }
+
+            var response = Data()
+            var buffer = [UInt8](repeating: 0, count: 4_096)
+            while true {
+                let receivedByteCount = buffer.withUnsafeMutableBytes { bytes in
+                    Darwin.recv(socketDescriptor, bytes.baseAddress, bytes.count, 0)
+                }
+                if receivedByteCount > 0 {
+                    response.append(contentsOf: buffer.prefix(receivedByteCount))
+                } else if receivedByteCount == 0 {
+                    break
+                } else if errno == ECONNRESET, !response.isEmpty {
+                    break
+                } else {
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+            }
+            return String(decoding: response, as: UTF8.self)
+        }.value
     }
 
 }
