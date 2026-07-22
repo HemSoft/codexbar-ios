@@ -26,6 +26,8 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Hid redundant usage-threshold alert text on Codex dashboard cards while
+  preserving threshold notifications and other alert types. ([#94](https://github.com/HemSoft/codexbar-ios/issues/94))
 - Made ChatGPT, Claude, and GitHub Copilot browser sign-in callbacks reliable
   when the browser delivers the local HTTP request in multiple pieces.
   ([#87](https://github.com/HemSoft/codexbar-ios/issues/87))
