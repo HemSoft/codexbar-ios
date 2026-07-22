@@ -12,6 +12,8 @@ public final class UsageRefreshService: ObservableObject {
     private var isBatchRefreshRunning = false
     private var pendingBatchConfigurations: [ProviderAccountConfiguration]?
     private var batchRefreshCompletionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var codexResetAttempts: [String: CodexResetAttempt] = [:]
+    private var codexResetTasks: [String: Task<CodexBankedResetConsumptionOutcome, Error>] = [:]
 
     public init(
         providers: [any UsageProvider],
@@ -197,6 +199,73 @@ public final class UsageRefreshService: ObservableObject {
         await refresh(configurations: ProviderID.allCases.map(ProviderAccountConfiguration.defaultConfiguration))
     }
 
+    public func consumeCodexBankedReset(
+        for configuration: ProviderAccountConfiguration,
+        creditID: String?
+    ) async throws -> CodexBankedResetConsumptionOutcome {
+        guard
+            configuration.providerID == .codex,
+            let provider = providers.first(where: { $0.providerID == .codex }) as? any CodexBankedResetConsuming
+        else {
+            throw CodexBankedResetConsumptionError.unsupported
+        }
+
+        if let activeTask = codexResetTasks[configuration.id] {
+            return try await activeTask.value
+        }
+
+        let attempt = codexResetAttempts[configuration.id] ?? CodexResetAttempt(
+            idempotencyKey: UUID().uuidString,
+            creditID: creditID
+        )
+        codexResetAttempts[configuration.id] = attempt
+        let task = Task {
+            try await provider.consumeBankedReset(
+                for: configuration,
+                creditID: attempt.creditID,
+                idempotencyKey: attempt.idempotencyKey
+            )
+        }
+        codexResetTasks[configuration.id] = task
+
+        do {
+            let outcome = try await task.value
+            codexResetTasks[configuration.id] = nil
+            codexResetAttempts[configuration.id] = nil
+            return outcome
+        } catch {
+            codexResetTasks[configuration.id] = nil
+            if !shouldRetainCodexResetAttempt(after: error) {
+                codexResetAttempts[configuration.id] = nil
+            }
+            throw error
+        }
+    }
+
+    private func shouldRetainCodexResetAttempt(after error: Error) -> Bool {
+        if let resetError = error as? CodexBankedResetConsumptionError {
+            switch resetError {
+            case .invalidResponse:
+                return true
+            case .httpStatus(let status):
+                return status == 408 || status == 425 || status == 429 || (500..<600).contains(status)
+            case .notConfigured, .credentialUnavailable, .unsupported, .invalidRequest:
+                return false
+            }
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .badURL, .unsupportedURL:
+                return false
+            default:
+                return true
+            }
+        }
+
+        return false
+    }
+
     private func replaceResult(_ result: ProviderUsageResult) {
         var nextResults = results.filter { $0.accountID != result.accountID }
         nextResults.append(result)
@@ -208,6 +277,7 @@ public final class UsageRefreshService: ObservableObject {
         let failureHasUsageData = failureResult.creditsRemaining != nil
             || !failureResult.bars.isEmpty
             || !failureResult.monetaryMetrics.isEmpty
+            || failureResult.codexBankedRateLimitResets != nil
         let dataResult: ProviderUsageResult
         if failureHasUsageData {
             dataResult = failureResult
@@ -232,6 +302,7 @@ public final class UsageRefreshService: ObservableObject {
             creditsRemaining: dataResult.creditsRemaining,
             monetaryMetrics: dataResult.monetaryMetrics,
             usageMessages: dataResult.usageMessages,
+            codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,
             failureMessage: failureResult.failureMessage,
             fetchedAt: dataResult.fetchedAt
         ))
@@ -267,6 +338,11 @@ public final class UsageRefreshService: ObservableObject {
             waiter.resume()
         }
     }
+}
+
+private struct CodexResetAttempt {
+    let idempotencyKey: String
+    let creditID: String?
 }
 
 private enum AccountRefreshOutcome: Sendable {

@@ -536,4 +536,92 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertFalse(refreshingCard.showsRetryAction)
     }
 
+    @MainActor
+    func testProviderUsageCardPresentsBankedResetsWithoutChangingSeverity() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = ProviderUsageResult(
+            accountID: "codex.personal",
+            providerID: .codex,
+            title: "ChatGPT / Codex",
+            subtitle: "Live ChatGPT usage",
+            bars: [UsageBar(label: "5 hour usage limit", used: 25, limit: 100)],
+            codexBankedRateLimitResets: CodexBankedRateLimitResets(
+                availableCount: 1,
+                credits: [CodexBankedRateLimitReset(
+                    id: "credit-1",
+                    title: "Full reset (Weekly + 5 hr)",
+                    expiresAt: Date(timeIntervalSince1970: 1_893_456_000)
+                )],
+                canConsume: true
+            ),
+            fetchedAt: fetchedAt
+        )
+        var redemptionCount = 0
+        let card = ProviderUsageCard(
+            result: result,
+            statusText: result.subtitle,
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false),
+            onUseCodexReset: { _ in
+                redemptionCount += 1
+                return CodexBankedResetRedemptionFeedback(message: "Reset used.", isSuccess: true)
+            }
+        )
+
+        XCTAssertEqual(card.bankedResetAvailabilityText, "1 reset available")
+        XCTAssertTrue(card.showsCodexResetAction)
+        XCTAssertTrue(card.resetConfirmationMessage.contains("Full reset (Weekly + 5 hr)"))
+        XCTAssertEqual(result.highestSeverity, .normal)
+        card.cancelCodexReset()
+        XCTAssertEqual(redemptionCount, 0)
+
+        let readOnlyResult = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: .codex,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: result.bars,
+            codexBankedRateLimitResets: CodexBankedRateLimitResets(
+                availableCount: 3,
+                canConsume: false
+            ),
+            fetchedAt: fetchedAt
+        )
+        let readOnlyCard = ProviderUsageCard(
+            result: readOnlyResult,
+            statusText: readOnlyResult.subtitle,
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false)
+        )
+        XCTAssertEqual(readOnlyCard.bankedResetAvailabilityText, "3 resets available")
+        XCTAssertFalse(readOnlyCard.showsCodexResetAction)
+
+        let zeroResult = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: .codex,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: result.bars,
+            codexBankedRateLimitResets: CodexBankedRateLimitResets(availableCount: 0),
+            fetchedAt: fetchedAt
+        )
+        let zeroCard = ProviderUsageCard(
+            result: zeroResult,
+            statusText: zeroResult.subtitle,
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false)
+        )
+        XCTAssertNil(zeroCard.bankedResets)
+    }
+
+    @MainActor
+    func testProviderUsageCardKeepsResetFeedbackAfterFinalCreditDisappears() {
+        let feedback = CodexBankedResetRedemptionFeedback(
+            message: "Reset used. Current usage limits are refreshed.",
+            isSuccess: true
+        )
+
+        XCTAssertEqual(
+            ProviderUsageCard.resetPresentationFeedback(feedback, availableResets: nil),
+            feedback
+        )
+    }
+
 }

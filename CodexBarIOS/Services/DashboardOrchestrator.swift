@@ -1,6 +1,18 @@
 import Combine
 import Foundation
 
+struct CodexBankedResetRedemptionFeedback: Equatable, Sendable {
+    let message: String
+    let isSuccess: Bool
+    let hidesAction: Bool
+
+    init(message: String, isSuccess: Bool, hidesAction: Bool = false) {
+        self.message = message
+        self.isSuccess = isSuccess
+        self.hidesAction = hidesAction
+    }
+}
+
 @MainActor
 final class DashboardOrchestrator: ObservableObject {
     @Published private(set) var autoRefreshSchedule: AutoRefreshSchedule?
@@ -200,6 +212,49 @@ final class DashboardOrchestrator: ObservableObject {
             .subtracting(successfulResults.map(\.accountID))
         await finishRefresh(results: successfulResults, preserving: preservedAccountIDs)
         return result
+    }
+
+    func consumeCodexBankedReset(
+        for configuration: ProviderAccountConfiguration,
+        creditID: String?
+    ) async -> CodexBankedResetRedemptionFeedback {
+        do {
+            let outcome = try await refreshService.consumeCodexBankedReset(
+                for: configuration,
+                creditID: creditID
+            )
+            let refreshed = await refreshAccount(configuration)
+            let refreshSucceeded = refreshed?.failureMessage == nil
+
+            switch outcome {
+            case .reset, .alreadyRedeemed:
+                return CodexBankedResetRedemptionFeedback(
+                    message: refreshSucceeded
+                        ? "Reset used. Current usage limits are refreshed."
+                        : "Reset used, but current usage could not be refreshed. Try refreshing again.",
+                    isSuccess: true
+                )
+            case .nothingToReset:
+                return CodexBankedResetRedemptionFeedback(
+                    message: "There is no applicable usage window to reset right now.",
+                    isSuccess: false
+                )
+            case .noCredit:
+                return CodexBankedResetRedemptionFeedback(
+                    message: "No banked reset remains for this account.",
+                    isSuccess: false,
+                    hidesAction: true
+                )
+            }
+        } catch {
+            let hidesAction = (error as? CodexBankedResetConsumptionError) == .unsupported
+            return CodexBankedResetRedemptionFeedback(
+                message: (error as? LocalizedError)?.errorDescription
+                    ?? "Could not use the reset. Try again.",
+                isSuccess: false,
+                hidesAction: hidesAction
+            )
+        }
     }
 
     func requestAlertAuthorization() async -> Bool {

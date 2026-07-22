@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added a discreet banked Codex reset count beside usage limits and a confirmed,
+  account-scoped action to use one reset when ChatGPT verifies redemption is
+  supported. ([#84](https://github.com/HemSoft/codexbar-ios/issues/84))
 - Added per-tile widget links that open CodexBar at the matching provider
   account on the dashboard. ([#63](https://github.com/HemSoft/codexbar-ios/issues/63))
 - Added Moonshot (Kimi) as a new provider: paste an API key from
