@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 public enum CodexUsageParser {
@@ -9,18 +10,22 @@ public enum CodexUsageParser {
         fetchedAt: Date = Date(),
         dateTimeFormatter: UserFacingDateTimeFormatter = .current
     ) -> ProviderUsageResult? {
-        guard
-            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let rateLimit = root["rate_limit"] as? [String: Any]
-        else {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
 
         var windows: [CodexUsageWindow] = []
-        addWindow(named: "primary_window", from: rateLimit, to: &windows)
-        addWindow(named: "secondary_window", from: rateLimit, to: &windows)
+        if let rateLimit = root["rate_limit"] as? [String: Any] {
+            addWindow(named: "primary_window", from: rateLimit, to: &windows)
+            addWindow(named: "secondary_window", from: rateLimit, to: &windows)
+        }
+        let resetCredits = parseResetCredits(
+            root["rate_limit_reset_credits"],
+            canConsume: false,
+            includesEmpty: false
+        )
 
-        guard !windows.isEmpty else {
+        guard !windows.isEmpty || resetCredits != nil else {
             return nil
         }
 
@@ -51,7 +56,54 @@ public enum CodexUsageParser {
             subtitle: "Live ChatGPT usage",
             bars: bars,
             usageMessages: [],
+            codexBankedRateLimitResets: resetCredits,
             fetchedAt: fetchedAt
+        )
+    }
+
+    public static func parseResetCredits(
+        _ data: Data,
+        canConsume: Bool
+    ) -> CodexBankedRateLimitResets? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) else {
+            return nil
+        }
+        return parseResetCredits(root, canConsume: canConsume, includesEmpty: true)
+    }
+
+    private static func parseResetCredits(
+        _ value: Any?,
+        canConsume: Bool,
+        includesEmpty: Bool
+    ) -> CodexBankedRateLimitResets? {
+        guard
+            let dictionary = value as? [String: Any],
+            let availableCount = nonnegativeInteger(dictionary["available_count"]),
+            includesEmpty || availableCount > 0
+        else {
+            return nil
+        }
+
+        let credits = (dictionary["credits"] as? [[String: Any]])?.compactMap { credit -> CodexBankedRateLimitReset? in
+            guard
+                let id = nonemptyString(credit["id"]),
+                nonemptyString(credit["status"])?.lowercased() == "available"
+            else {
+                return nil
+            }
+
+            return CodexBankedRateLimitReset(
+                id: id,
+                title: nonemptyString(credit["title"]),
+                description: nonemptyString(credit["description"]),
+                expiresAt: nonemptyString(credit["expires_at"]).flatMap(parseISO8601Date)
+            )
+        }
+
+        return CodexBankedRateLimitResets(
+            availableCount: availableCount,
+            credits: credits,
+            canConsume: canConsume
         )
     }
 
@@ -163,6 +215,39 @@ public enum CodexUsageParser {
         }
 
         return nil
+    }
+
+    private static func nonnegativeInteger(_ value: Any?) -> Int? {
+        guard
+            let number = value as? NSNumber,
+            CFGetTypeID(number) != CFBooleanGetTypeID()
+        else {
+            return nil
+        }
+        let doubleValue = number.doubleValue
+        guard
+            doubleValue.isFinite,
+            doubleValue >= 0,
+            doubleValue.rounded(.towardZero) == doubleValue,
+            doubleValue <= Double(Int.max)
+        else {
+            return nil
+        }
+        return Int(doubleValue)
+    }
+
+    private static func nonemptyString(_ value: Any?) -> String? {
+        guard let value = value as? String else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func parseISO8601Date(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 }
 

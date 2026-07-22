@@ -342,11 +342,17 @@ final class DashboardAndSettingsTests: XCTestCase {
             accountLabel: "Successful Codex",
             authMethod: .browserSession
         )
-        let cachedFailedResult = makeHistoryResult(
+        let cachedFailedResult = ProviderUsageResult(
             accountID: failed.id,
             providerID: .codex,
+            title: failed.displayName,
+            subtitle: "Cached usage",
+            bars: [UsageBar(label: "Usage", used: 75, limit: 100)],
+            codexBankedRateLimitResets: CodexBankedRateLimitResets(
+                availableCount: 2,
+                canConsume: true
+            ),
             fetchedAt: Date().addingTimeInterval(-300),
-            used: 75
         )
         let service = UsageRefreshService(
             providers: [
@@ -360,6 +366,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(Set(service.results.map(\.accountID)), [failed.id, successful.id])
         let preservedFailure = service.results.first { $0.accountID == failed.id }
         XCTAssertEqual(preservedFailure?.bars, cachedFailedResult.bars)
+        XCTAssertEqual(preservedFailure?.codexBankedRateLimitResets, cachedFailedResult.codexBankedRateLimitResets)
         XCTAssertEqual(preservedFailure?.fetchedAt, cachedFailedResult.fetchedAt)
         XCTAssertEqual(preservedFailure?.failureMessage, "Refresh failed")
         XCTAssertEqual(
@@ -763,6 +770,57 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(viewModel.secret, "")
         XCTAssertEqual(credentialsChangedCount, 1)
         XCTAssertNotNil(store.lastError)
+    }
+
+    @MainActor
+    func testResetConsumptionRefetchesAndPreservesVerifiedAvailabilityWhenRefreshFails() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .codex)
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: configuration.displayName,
+            subtitle: "Live ChatGPT usage",
+            bars: [UsageBar(label: "Usage", used: 100, limit: 100)],
+            codexBankedRateLimitResets: CodexBankedRateLimitResets(
+                availableCount: 1,
+                canConsume: true
+            ),
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let provider = ResetConsumptionTestProvider(outcome: .reset, fetchFails: true)
+        let service = UsageRefreshService(providers: [provider], initialResults: [cachedResult])
+        let historyStore = UsageHistoryStore(defaults: defaults)
+        let widgetCoordinator = WidgetSnapshotCoordinator(
+            refreshService: service,
+            configurationStore: store,
+            publishSnapshot: { _, _ in },
+            publishSettings: { _ in }
+        )
+        let orchestrator = DashboardOrchestrator(
+            refreshService: service,
+            configurationStore: store,
+            historyStore: historyStore,
+            usageAlertNotifier: StubUsageAlertNotifier(),
+            appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: widgetCoordinator
+        )
+
+        let feedback = await orchestrator.consumeCodexBankedReset(
+            for: configuration,
+            creditID: nil
+        )
+
+        XCTAssertTrue(feedback.isSuccess)
+        XCTAssertTrue(feedback.message.contains("could not be refreshed"))
+        let fetchCount = await provider.recordedFetchCount()
+        let consumedKeys = await provider.recordedConsumedKeys()
+        XCTAssertEqual(fetchCount, 1)
+        XCTAssertEqual(consumedKeys.count, 1)
+        XCTAssertEqual(service.results.first?.codexBankedRateLimitResets, cachedResult.codexBankedRateLimitResets)
+        XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Refresh failed")
     }
 
 }

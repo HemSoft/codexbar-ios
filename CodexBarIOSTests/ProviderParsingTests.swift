@@ -957,6 +957,73 @@ final class ProviderParsingTests: XCTestCase {
 
     }
 
+    func testCodexUsageParserReadsBankedResetCountsDefensively() throws {
+        func parse(_ resetCreditsJSON: String?) -> CodexBankedRateLimitResets? {
+            let resetCredits = resetCreditsJSON.map { ",\"rate_limit_reset_credits\":\($0)" } ?? ""
+            let payload = """
+            {
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 25,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 18000
+                }
+              }
+              \(resetCredits)
+            }
+            """
+            return CodexUsageParser.parse(Data(payload.utf8))?.codexBankedRateLimitResets
+        }
+
+        XCTAssertNil(parse(nil))
+        XCTAssertNil(parse("null"))
+        XCTAssertNil(parse(#"{"available_count":0}"#))
+        XCTAssertNil(parse(#"{"available_count":-1}"#))
+        XCTAssertNil(parse(#"{"available_count":1.5}"#))
+        XCTAssertNil(parse(#"{"available_count":"2"}"#))
+        XCTAssertEqual(parse(#"{"available_count":1}"#)?.availableCount, 1)
+        XCTAssertEqual(parse(#"{"available_count":3}"#)?.availableCount, 3)
+        XCTAssertFalse(try XCTUnwrap(parse(#"{"available_count":1}"#)).canConsume)
+    }
+
+    func testCodexUsageParserReadsDetailedAndCountOnlyResetCredits() throws {
+        let detailed = try XCTUnwrap(CodexUsageParser.parseResetCredits(
+            Data("""
+            {
+              "available_count":2,
+              "credits":[
+                {
+                  "id":"credit-1",
+                  "status":"available",
+                  "title":"Full reset (Weekly + 5 hr)",
+                  "description":"Ready to redeem",
+                  "expires_at":"2030-01-02T03:04:05Z"
+                },
+                {"id":"credit-used","status":"redeemed","title":"Do not show"}
+              ]
+            }
+            """.utf8),
+            canConsume: true
+        ))
+
+        XCTAssertEqual(detailed.availableCount, 2)
+        XCTAssertTrue(detailed.canConsume)
+        XCTAssertEqual(detailed.credits?.map(\.id), ["credit-1"])
+        XCTAssertEqual(detailed.preferredCredit?.title, "Full reset (Weekly + 5 hr)")
+        XCTAssertEqual(
+            detailed.preferredCredit?.expiresAt,
+            ISO8601DateFormatter().date(from: "2030-01-02T03:04:05Z")
+        )
+
+        let countOnly = try XCTUnwrap(CodexUsageParser.parseResetCredits(
+            Data(#"{"available_count":4}"#.utf8),
+            canConsume: true
+        ))
+        XCTAssertEqual(countOnly.availableCount, 4)
+        XCTAssertNil(countOnly.credits)
+        XCTAssertTrue(countOnly.canConsume)
+    }
+
     func testCodexUsageParserSilentlyAcceptsMissingFiveHourWindowAndDurationDrift() throws {
         let weeklyOnlyPayload = #"{"plan_type":"prolite","rate_limit":{"primary_window":{"used_percent":30,"reset_at":1894060800,"limit_window_seconds":604800},"secondary_window":null}}"#
         let weeklyOnly = try XCTUnwrap(CodexUsageParser.parse(Data(weeklyOnlyPayload.utf8)))

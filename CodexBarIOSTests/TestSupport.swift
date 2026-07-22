@@ -586,6 +586,69 @@ struct ReturningFailureUsageProvider: UsageProvider {
     }
 }
 
+actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
+    nonisolated let providerID = ProviderID.codex
+    private let outcome: CodexBankedResetConsumptionOutcome
+    private let fetchFails: Bool
+    private let consumeGate: UsageProviderGate?
+    private var fetchCount = 0
+    private var consumedKeys: [String] = []
+
+    init(
+        outcome: CodexBankedResetConsumptionOutcome,
+        fetchFails: Bool,
+        consumeGate: UsageProviderGate? = nil
+    ) {
+        self.outcome = outcome
+        self.fetchFails = fetchFails
+        self.consumeGate = consumeGate
+    }
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        fetchCount += 1
+        if fetchFails {
+            throw TestUsageProviderError.failed
+        }
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: configuration.displayName,
+            subtitle: "Fresh usage",
+            bars: [UsageBar(label: "Usage", used: 0, limit: 100)],
+            fetchedAt: Date()
+        )
+    }
+
+    func consumeBankedReset(
+        for configuration: ProviderAccountConfiguration,
+        creditID: String?,
+        idempotencyKey: String
+    ) async throws -> CodexBankedResetConsumptionOutcome {
+        consumedKeys.append(idempotencyKey)
+        if let consumeGate {
+            await consumeGate.wait()
+        }
+        return outcome
+    }
+
+    func recordedFetchCount() -> Int {
+        fetchCount
+    }
+
+    func recordedConsumedKeys() -> [String] {
+        consumedKeys
+    }
+}
+
+@MainActor
+final class StubUsageAlertNotifier: UsageAlertNotifying {
+    func requestAuthorization() async -> Bool {
+        true
+    }
+
+    func deliver(_ notification: UsageAlertNotification) async throws {}
+}
+
 extension URLComponents {
     func queryItemValue(named name: String) -> String? {
         queryItems?.first { $0.name == name }?.value

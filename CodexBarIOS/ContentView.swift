@@ -295,6 +295,12 @@ struct ContentView: View {
                     Task {
                         await orchestrator.refreshAccount(item.configuration)
                     }
+                },
+                onUseCodexReset: { creditID in
+                    await orchestrator.consumeCodexBankedReset(
+                        for: item.configuration,
+                        creditID: creditID
+                    )
                 }
             )
         } else {

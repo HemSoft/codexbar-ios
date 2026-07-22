@@ -52,6 +52,45 @@ public struct ProviderMonetaryMetric: Identifiable, Codable, Equatable, Sendable
     }
 }
 
+public struct CodexBankedRateLimitReset: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let title: String?
+    public let description: String?
+    public let expiresAt: Date?
+
+    public init(
+        id: String,
+        title: String? = nil,
+        description: String? = nil,
+        expiresAt: Date? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct CodexBankedRateLimitResets: Equatable, Sendable {
+    public let availableCount: Int
+    public let credits: [CodexBankedRateLimitReset]?
+    public let canConsume: Bool
+
+    public init(
+        availableCount: Int,
+        credits: [CodexBankedRateLimitReset]? = nil,
+        canConsume: Bool = false
+    ) {
+        self.availableCount = max(availableCount, 0)
+        self.credits = credits
+        self.canConsume = canConsume
+    }
+
+    public var preferredCredit: CodexBankedRateLimitReset? {
+        credits?.first
+    }
+}
+
 public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let accountID: String
     public let providerID: ProviderID
@@ -62,6 +101,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let creditsRemaining: Double?
     public let monetaryMetrics: [ProviderMonetaryMetric]
     public let usageMessages: [String]
+    public let codexBankedRateLimitResets: CodexBankedRateLimitResets?
     public let failureMessage: String?
     public let fetchedAt: Date
 
@@ -75,6 +115,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         creditsRemaining: Double? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
         usageMessages: [String] = [],
+        codexBankedRateLimitResets: CodexBankedRateLimitResets? = nil,
         failureMessage: String? = nil,
         fetchedAt: Date
     ) {
@@ -87,6 +128,9 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.creditsRemaining = creditsRemaining
         self.monetaryMetrics = monetaryMetrics
         self.usageMessages = usageMessages
+        self.codexBankedRateLimitResets = codexBankedRateLimitResets.flatMap {
+            $0.availableCount > 0 ? $0 : nil
+        }
         self.failureMessage = failureMessage
         self.fetchedAt = fetchedAt
     }

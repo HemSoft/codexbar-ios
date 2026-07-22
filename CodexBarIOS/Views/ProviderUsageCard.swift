@@ -1,5 +1,6 @@
 import Charts
 import SwiftUI
+import UIKit
 
 struct ProviderUsageCard: View {
     let result: ProviderUsageResult
@@ -11,6 +12,12 @@ struct ProviderUsageCard: View {
     let refreshErrorMessage: String?
     let onShowHistory: () -> Void
     let onRetry: () -> Void
+    let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
+
+    @State private var isShowingResetConfirmation = false
+    @State private var isUsingReset = false
+    @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
+    @State private var isResetActionUnavailable = false
 
     init(
         result: ProviderUsageResult,
@@ -21,7 +28,8 @@ struct ProviderUsageCard: View {
         isRefreshing: Bool = false,
         refreshErrorMessage: String? = nil,
         onShowHistory: @escaping () -> Void = {},
-        onRetry: @escaping () -> Void = {}
+        onRetry: @escaping () -> Void = {},
+        onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)? = nil
     ) {
         self.result = result
         self.statusText = statusText
@@ -32,6 +40,7 @@ struct ProviderUsageCard: View {
         self.refreshErrorMessage = refreshErrorMessage
         self.onShowHistory = onShowHistory
         self.onRetry = onRetry
+        self.onUseCodexReset = onUseCodexReset
     }
 
     var body: some View {
@@ -118,6 +127,46 @@ struct ProviderUsageCard: View {
                 }
             }
 
+            if bankedResets != nil {
+                HStack(spacing: 8) {
+                    Label(bankedResetAvailabilityText, systemImage: "arrow.counterclockwise.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(bankedResetAvailabilityText)
+
+                    Spacer(minLength: 8)
+
+                    if showsCodexResetAction {
+                        Button {
+                            isShowingResetConfirmation = true
+                        } label: {
+                            if isUsingReset {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .accessibilityLabel("Using banked reset")
+                            } else {
+                                Text("Use reset")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isUsingReset)
+                        .accessibilityHint("Asks for confirmation before using one banked reset")
+                    }
+                }
+
+                if let resetFeedback {
+                    Label(
+                        resetFeedback.message,
+                        systemImage: resetFeedback.isSuccess ? "checkmark.circle" : "info.circle"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(resetFeedback.message)
+                }
+            }
+
             if !result.monetaryMetrics.isEmpty {
                 Divider()
 
@@ -160,6 +209,19 @@ struct ProviderUsageCard: View {
         }
         .padding(16)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+        .alert("Use one banked reset?", isPresented: $isShowingResetConfirmation) {
+            Button("Cancel", role: .cancel) {
+                cancelCodexReset()
+            }
+            Button("Use Reset", role: .destructive) {
+                useCodexReset()
+            }
+        } message: {
+            Text(resetConfirmationMessage)
+        }
+        .onChange(of: result.fetchedAt) {
+            isResetActionUnavailable = false
+        }
     }
 
     private var cardSeverity: UsageSeverity {
@@ -175,6 +237,65 @@ struct ProviderUsageCard: View {
 
     var showsRetryAction: Bool {
         refreshErrorMessage != nil && !isRefreshing
+    }
+
+    var bankedResets: CodexBankedRateLimitResets? {
+        guard
+            result.providerID == .codex,
+            let resets = result.codexBankedRateLimitResets,
+            resets.availableCount > 0
+        else {
+            return nil
+        }
+        return resets
+    }
+
+    var bankedResetAvailabilityText: String {
+        guard let count = bankedResets?.availableCount else {
+            return ""
+        }
+        return count == 1 ? "1 reset available" : "\(count) resets available"
+    }
+
+    var showsCodexResetAction: Bool {
+        bankedResets?.canConsume == true
+            && onUseCodexReset != nil
+            && !isResetActionUnavailable
+    }
+
+    var resetConfirmationMessage: String {
+        guard let credit = bankedResets?.preferredCredit else {
+            return "This will use one banked reset for the current ChatGPT account."
+        }
+
+        var details = [credit.title, credit.description].compactMap { $0 }
+        if let expiresAt = credit.expiresAt {
+            details.append("Expires \(UserFacingDateTimeFormatter.current.dateAndTime(expiresAt)).")
+        }
+        let detailText = details.joined(separator: " ")
+        return detailText.isEmpty
+            ? "This will use one banked reset for the current ChatGPT account."
+            : "This will use one banked reset. \(detailText)"
+    }
+
+    private func useCodexReset() {
+        guard !isUsingReset, let onUseCodexReset else {
+            return
+        }
+        isUsingReset = true
+        resetFeedback = nil
+        let creditID = bankedResets?.preferredCredit?.id
+        Task {
+            let feedback = await onUseCodexReset(creditID)
+            resetFeedback = feedback
+            isResetActionUnavailable = feedback.hidesAction
+            isUsingReset = false
+            UIAccessibility.post(notification: .announcement, argument: feedback.message)
+        }
+    }
+
+    func cancelCodexReset() {
+        isShowingResetConfirmation = false
     }
 
     private func monetaryAccessibilityLabel(_ metric: ProviderMonetaryMetric) -> String {
