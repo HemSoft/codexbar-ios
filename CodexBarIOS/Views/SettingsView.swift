@@ -279,8 +279,9 @@ struct SettingsView: View {
                 titleVisibility: .visible
             ) {
                 Button("Reset Accounts", role: .destructive) {
-                    configurationStore.resetAccounts()
-                    onAccountsChanged()
+                    if configurationStore.resetAccounts() {
+                        onAccountsChanged()
+                    }
                 }
             } message: {
                 Text("This removes account entries and saved provider credentials from this device.")
@@ -396,10 +397,10 @@ struct SettingsView: View {
 
     private func deleteAccounts(at offsets: IndexSet) {
         let accounts = configurationStore.configurations
-        for index in offsets {
-            configurationStore.removeAccount(accounts[index])
+        let accountsToRemove = offsets.map { accounts[$0] }
+        if configurationStore.removeAccounts(accountsToRemove) {
+            onAccountsChanged()
         }
-        onAccountsChanged()
     }
 
     private func addGroup() {

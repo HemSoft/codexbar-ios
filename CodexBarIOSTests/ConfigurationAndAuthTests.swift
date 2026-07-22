@@ -336,6 +336,111 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertNil(try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)))
     }
 
+    @MainActor
+    func testAccountRemovalKeepsAccountAndStateWhenCredentialDeletionFailsThenAllowsRetry() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = RetriableDeleteSecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let account = store.addAccount(for: .openRouter)
+        let alertID = "balance.\(account.id)"
+        store.updateDashboardCardOrder([account.id])
+        store.updateUsageAlertActiveIDs([alertID])
+        XCTAssertTrue(store.saveSecret("existing-token", for: account))
+
+        XCTAssertFalse(store.removeAccount(account))
+
+        XCTAssertEqual(store.configuration(accountID: account.id), account)
+        XCTAssertEqual(store.dashboardCardOrder, [account.id])
+        XCTAssertEqual(store.usageAlertActiveIDs, [alertID])
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)),
+            "existing-token"
+        )
+        XCTAssertNotNil(store.lastError)
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        XCTAssertEqual(reloadedStore.configuration(accountID: account.id), account)
+        XCTAssertEqual(reloadedStore.dashboardCardOrder, [account.id])
+        XCTAssertEqual(reloadedStore.usageAlertActiveIDs, [alertID])
+
+        secretStore.shouldFailDelete = false
+        XCTAssertTrue(store.removeAccount(account))
+
+        XCTAssertNil(store.configuration(accountID: account.id))
+        XCTAssertNil(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account))
+        )
+        XCTAssertNil(store.lastError)
+        XCTAssertTrue(store.dashboardCardOrder.isEmpty)
+        XCTAssertTrue(store.usageAlertActiveIDs.isEmpty)
+
+        let storeAfterRemoval = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        XCTAssertNil(storeAfterRemoval.configuration(accountID: account.id))
+        XCTAssertTrue(storeAfterRemoval.dashboardCardOrder.isEmpty)
+        XCTAssertTrue(storeAfterRemoval.usageAlertActiveIDs.isEmpty)
+    }
+
+    @MainActor
+    func testBulkAccountRemovalPreservesFailureWhenLaterAccountSucceeds() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = RetriableDeleteSecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let failedAccount = store.addAccount(for: .openRouter)
+        let removedAccount = store.addAccount(for: .moonshot)
+        XCTAssertTrue(store.saveSecret("failed-token", for: failedAccount))
+        XCTAssertTrue(store.saveSecret("removed-token", for: removedAccount))
+        secretStore.shouldFailDelete = false
+        secretStore.failingAccount = ProviderConfigurationStore.keychainAccount(for: failedAccount)
+
+        XCTAssertTrue(store.removeAccounts([failedAccount, removedAccount]))
+
+        XCTAssertEqual(store.configuration(accountID: failedAccount.id), failedAccount)
+        XCTAssertNil(store.configuration(accountID: removedAccount.id))
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: failedAccount)),
+            "failed-token"
+        )
+        XCTAssertNil(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: removedAccount))
+        )
+        XCTAssertNotNil(store.lastError)
+    }
+
+    @MainActor
+    func testResetAccountsFailurePreservesAccountsAndDependentState() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingDeleteSecretStore()
+        )
+        let account = store.addAccount(for: .openRouter)
+        let alertID = "balance.\(account.id)"
+        store.updateDashboardCardOrder([account.id])
+        store.updateUsageAlertActiveIDs([alertID])
+
+        XCTAssertFalse(store.resetAccounts())
+
+        XCTAssertEqual(store.configuration(accountID: account.id), account)
+        XCTAssertEqual(store.dashboardCardOrder, [account.id])
+        XCTAssertEqual(store.usageAlertActiveIDs, [alertID])
+        XCTAssertNotNil(store.lastError)
+    }
+
     func testCodexAuthURLUsesBrowserLoginFlow() throws {
         let url = CodexWebAuthService.authorizationURL(
             redirectURI: "http://localhost:1455/auth/callback",

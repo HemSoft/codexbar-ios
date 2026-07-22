@@ -186,20 +186,55 @@ public final class ProviderConfigurationStore: ObservableObject {
         return true
     }
 
-    public func removeAccount(_ configuration: ProviderAccountConfiguration) {
-        configurations.removeAll { $0.id == configuration.id }
-        do {
-            try secretStore.deleteSecret(account: keychainAccount(for: configuration))
-            lastError = nil
-        } catch {
-            lastError = error.localizedDescription
-        }
-        sortConfigurations()
-        saveConfigurations()
-        refreshSecretAvailability()
+    @discardableResult
+    public func removeAccount(_ configuration: ProviderAccountConfiguration) -> Bool {
+        removeAccounts([configuration])
     }
 
-    public func resetAccounts() {
+    @discardableResult
+    public func removeAccounts(_ accounts: [ProviderAccountConfiguration]) -> Bool {
+        var removedAnyAccount = false
+        var firstDeletionError: String?
+        var removedAccountIDs = Set<String>()
+        let knownAccountIDs = Set(configurations.map(\.id))
+
+        for configuration in accounts {
+            do {
+                try secretStore.deleteSecret(account: keychainAccount(for: configuration))
+                configurations.removeAll { $0.id == configuration.id }
+                removedAccountIDs.insert(configuration.id)
+                removedAnyAccount = true
+            } catch {
+                if firstDeletionError == nil {
+                    firstDeletionError = error.localizedDescription
+                }
+            }
+        }
+
+        lastError = nil
+        if removedAnyAccount {
+            sortConfigurations()
+            saveConfigurations()
+            updateDashboardCardOrder(
+                dashboardCardOrder.filter { !removedAccountIDs.contains($0) }
+            )
+            updateUsageAlertActiveIDs(
+                UsageAlertEvaluator.activeAlertIDs(
+                    usageAlertActiveIDs,
+                    belongingTo: Set(configurations.map(\.id)),
+                    knownAccountIDs: knownAccountIDs
+                )
+            )
+            refreshSecretAvailability()
+        }
+        if let firstDeletionError {
+            lastError = firstDeletionError
+        }
+        return removedAnyAccount
+    }
+
+    @discardableResult
+    public func resetAccounts() -> Bool {
         let accountsToDelete = Set(
             configurations.map { keychainAccount(for: $0) }
                 + ProviderID.allCases.map { keychainAccount(for: $0) }
@@ -220,9 +255,11 @@ public final class ProviderConfigurationStore: ObservableObject {
             defaults.removeObject(forKey: dashboardCardOrderKey)
             defaults.removeObject(forKey: usageAlertActiveIDsKey)
             lastError = nil
+            return true
         } catch {
             lastError = error.localizedDescription
             refreshSecretAvailability()
+            return false
         }
     }
 

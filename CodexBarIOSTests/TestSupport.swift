@@ -141,6 +141,34 @@ struct FailingDeleteSecretStore: SecretStore {
     }
 }
 
+final class RetriableDeleteSecretStore: SecretStore, @unchecked Sendable {
+    var shouldFailDelete = true
+    var failingAccount: String?
+    private let lock = NSLock()
+    private var secrets: [String: String] = [:]
+
+    func readSecret(account: String) throws -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return secrets[account]
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        secrets[account] = secret
+    }
+
+    func deleteSecret(account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        if shouldFailDelete || failingAccount == account {
+            throw KeychainError.unhandledStatus(-25308)
+        }
+        secrets.removeValue(forKey: account)
+    }
+}
+
 final class SelectiveReadFailureSecretStore: SecretStore, @unchecked Sendable {
     var failingAccount: String?
     private let lock = NSLock()

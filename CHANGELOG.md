@@ -26,6 +26,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Kept accounts and their dashboard, history, and widget state available when
+  Keychain credential deletion fails so removal can be retried safely.
+  ([#86](https://github.com/HemSoft/codexbar-ios/issues/86))
 - Kept server-provided details out of GitHub Copilot sign-in errors while
   preserving a safe OAuth error identifier for troubleshooting.
   ([#70](https://github.com/HemSoft/codexbar-ios/issues/70))
