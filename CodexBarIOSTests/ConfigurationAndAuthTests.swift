@@ -376,6 +376,37 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertNil(store.lastError)
     }
 
+    @MainActor
+    func testBulkAccountRemovalPreservesFailureWhenLaterAccountSucceeds() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = RetriableDeleteSecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let failedAccount = store.addAccount(for: .openRouter)
+        let removedAccount = store.addAccount(for: .moonshot)
+        XCTAssertTrue(store.saveSecret("failed-token", for: failedAccount))
+        XCTAssertTrue(store.saveSecret("removed-token", for: removedAccount))
+        secretStore.shouldFailDelete = false
+        secretStore.failingAccount = ProviderConfigurationStore.keychainAccount(for: failedAccount)
+
+        XCTAssertTrue(store.removeAccounts([failedAccount, removedAccount]))
+
+        XCTAssertEqual(store.configuration(accountID: failedAccount.id), failedAccount)
+        XCTAssertNil(store.configuration(accountID: removedAccount.id))
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: failedAccount)),
+            "failed-token"
+        )
+        XCTAssertNil(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: removedAccount))
+        )
+        XCTAssertNotNil(store.lastError)
+    }
+
     func testCodexAuthURLUsesBrowserLoginFlow() throws {
         let url = CodexWebAuthService.authorizationURL(
             redirectURI: "http://localhost:1455/auth/callback",

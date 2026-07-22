@@ -396,10 +396,8 @@ struct SettingsView: View {
 
     private func deleteAccounts(at offsets: IndexSet) {
         let accounts = configurationStore.configurations
-        let removedAnyAccount = offsets.reduce(into: false) { removedAnyAccount, index in
-            removedAnyAccount = configurationStore.removeAccount(accounts[index]) || removedAnyAccount
-        }
-        if removedAnyAccount {
+        let accountsToRemove = offsets.map { accounts[$0] }
+        if configurationStore.removeAccounts(accountsToRemove) {
             onAccountsChanged()
         }
     }
