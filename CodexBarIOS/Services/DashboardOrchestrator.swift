@@ -242,7 +242,8 @@ final class DashboardOrchestrator: ObservableObject {
             case .noCredit:
                 return CodexBankedResetRedemptionFeedback(
                     message: "No banked reset remains for this account.",
-                    isSuccess: false
+                    isSuccess: false,
+                    hidesAction: true
                 )
             }
         } catch {

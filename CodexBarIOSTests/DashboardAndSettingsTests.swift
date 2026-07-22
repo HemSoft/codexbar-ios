@@ -823,4 +823,50 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Refresh failed")
     }
 
+    @MainActor
+    func testNoCreditHidesPreservedResetActionWhenAuthoritativeRefreshFails() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .codex)
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: configuration.displayName,
+            subtitle: "Live ChatGPT usage",
+            bars: [UsageBar(label: "Usage", used: 100, limit: 100)],
+            codexBankedRateLimitResets: CodexBankedRateLimitResets(
+                availableCount: 1,
+                canConsume: true
+            ),
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let provider = ResetConsumptionTestProvider(outcome: .noCredit, fetchFails: true)
+        let service = UsageRefreshService(providers: [provider], initialResults: [cachedResult])
+        let orchestrator = DashboardOrchestrator(
+            refreshService: service,
+            configurationStore: store,
+            historyStore: UsageHistoryStore(defaults: defaults),
+            usageAlertNotifier: StubUsageAlertNotifier(),
+            appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                refreshService: service,
+                configurationStore: store,
+                publishSnapshot: { _, _ in },
+                publishSettings: { _ in }
+            )
+        )
+
+        let feedback = await orchestrator.consumeCodexBankedReset(
+            for: configuration,
+            creditID: "stale-credit"
+        )
+
+        XCTAssertFalse(feedback.isSuccess)
+        XCTAssertTrue(feedback.hidesAction)
+        XCTAssertEqual(feedback.message, "No banked reset remains for this account.")
+        XCTAssertEqual(service.results.first?.codexBankedRateLimitResets, cachedResult.codexBankedRateLimitResets)
+        XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Refresh failed")
+    }
+
 }
