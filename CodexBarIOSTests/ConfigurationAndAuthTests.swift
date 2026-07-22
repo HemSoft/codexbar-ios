@@ -548,6 +548,69 @@ final class ConfigurationAndAuthTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testCopilotBrowserSignInSanitizesSuccessfulTokenErrorResponse() async throws {
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [ConfigurationAndAuthMockURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        let service = CopilotWebAuthService(session: session, callbackTimeoutNanoseconds: 1_000_000_000)
+        let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
+
+        ConfigurationAndAuthMockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://github.com/login/oauth/access_token")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"error":"invalid_grant","error_description":"code=secret-code client_id=secret-client"}"#.utf8
+                )
+            )
+        }
+        defer {
+            ConfigurationAndAuthMockURLProtocol.handler = nil
+        }
+
+        do {
+            _ = try await service.signIn(configuration: configuration) { authorizationURL in
+                guard
+                    let authorizationComponents = URLComponents(
+                        url: authorizationURL,
+                        resolvingAgainstBaseURL: false
+                    ),
+                    let redirectURI = authorizationComponents.queryItemValue(named: "redirect_uri"),
+                    let state = authorizationComponents.queryItemValue(named: "state"),
+                    var callbackComponents = URLComponents(string: redirectURI)
+                else {
+                    XCTFail("Expected a valid GitHub authorization callback URL.")
+                    return
+                }
+                callbackComponents.queryItems = [
+                    URLQueryItem(name: "code", value: "authorization-code"),
+                    URLQueryItem(name: "state", value: state)
+                ]
+                guard let callbackURL = callbackComponents.url else {
+                    XCTFail("Expected a valid GitHub callback URL.")
+                    return
+                }
+                Task.detached {
+                    _ = try? await URLSession.shared.data(from: callbackURL)
+                }
+            }
+            XCTFail("Expected GitHub sign-in to fail.")
+        } catch {
+            XCTAssertEqual(
+                error as? CopilotWebAuthService.AuthError,
+                .tokenExchangeFailed("invalid_grant")
+            )
+            XCTAssertFalse(error.localizedDescription.contains("secret-code"))
+            XCTAssertFalse(error.localizedDescription.contains("secret-client"))
+        }
+    }
+
     func testClaudeAuthURLUsesBrowserCallbackFlow() throws {
         let url = ClaudeWebAuthService.authorizationURL(
             redirectURI: "http://localhost:1461/callback",

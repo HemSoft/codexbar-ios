@@ -93,7 +93,6 @@ public final class CopilotWebAuthService: Sendable {
         let expiresIn: Int64?
         let refreshTokenExpiresIn: Int64?
         let error: String?
-        let errorDescription: String?
 
         enum CodingKeys: String, CodingKey {
             case accessToken = "access_token"
@@ -101,7 +100,6 @@ public final class CopilotWebAuthService: Sendable {
             case expiresIn = "expires_in"
             case refreshTokenExpiresIn = "refresh_token_expires_in"
             case error
-            case errorDescription = "error_description"
         }
     }
 
@@ -275,7 +273,7 @@ public final class CopilotWebAuthService: Sendable {
         }
 
         if let error = tokenResponse.error {
-            throw AuthError.tokenExchangeFailed(tokenResponse.errorDescription ?? error)
+            throw AuthError.tokenExchangeFailed(TokenEndpointErrorFormatter.message(errorCode: error))
         }
 
         guard let accessToken = tokenResponse.accessToken, !accessToken.isEmpty else {

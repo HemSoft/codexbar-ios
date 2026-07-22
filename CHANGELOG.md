@@ -23,6 +23,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Kept server-provided details out of GitHub Copilot sign-in errors while
+  preserving a safe OAuth error identifier for troubleshooting.
+  ([#70](https://github.com/HemSoft/codexbar-ios/issues/70))
 - Reported corrupt Keychain credentials and usage-history persistence failures
   instead of treating them as missing or silently discarding history changes.
   ([#65](https://github.com/HemSoft/codexbar-ios/issues/65))
