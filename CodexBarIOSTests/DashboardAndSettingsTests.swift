@@ -352,7 +352,7 @@ final class DashboardAndSettingsTests: XCTestCase {
                 availableCount: 2,
                 canConsume: true
             ),
-            fetchedAt: Date().addingTimeInterval(-300),
+            fetchedAt: Date().addingTimeInterval(-300)
         )
         let service = UsageRefreshService(
             providers: [

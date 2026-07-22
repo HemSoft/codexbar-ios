@@ -222,6 +222,7 @@ struct ProviderUsageCard: View {
         }
         .onChange(of: result.fetchedAt) {
             isResetActionUnavailable = false
+            resetFeedback = nil
         }
     }
 

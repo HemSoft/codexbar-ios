@@ -111,6 +111,42 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertEqual(result.codexBankedRateLimitResets?.preferredCredit?.id, "credit-1")
     }
 
+    func testCodexUsageProviderConsumesWithStillValidTokenThatCannotRefresh() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "still-valid-access",
+                expiresAt: 2_000_000_060
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            consumeResetEndpoint: URL(string: "https://example.test/consume")!,
+            now: { Date(timeIntervalSince1970: 2_000_000_000) }
+        )
+        ProviderNetworkMockURLProtocol.handler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer still-valid-access")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"code":"reset"}"#.utf8)
+            )
+        }
+        defer { ProviderNetworkMockURLProtocol.handler = nil }
+
+        let outcome = try await provider.consumeBankedReset(
+            for: configuration,
+            creditID: nil,
+            idempotencyKey: "attempt-still-valid"
+        )
+
+        XCTAssertEqual(outcome, .reset)
+    }
+
     func testCodexUsageProviderConsumesEachOfficialResetOutcomeWithOpaqueCreditID() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)

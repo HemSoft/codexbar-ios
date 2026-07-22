@@ -336,7 +336,10 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
             return credentials
         }
         guard credentials.refreshToken?.isEmpty == false else {
-            throw CodexBankedResetConsumptionError.credentialUnavailable
+            if credentials.isExpired(at: now()) {
+                throw CodexBankedResetConsumptionError.credentialUnavailable
+            }
+            return credentials
         }
         guard case .success(let refreshed) = await refreshCredentials(
             credentials,
