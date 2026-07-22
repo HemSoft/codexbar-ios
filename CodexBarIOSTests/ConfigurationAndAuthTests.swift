@@ -5,6 +5,52 @@ import AuthenticationServices
 #endif
 
 final class ConfigurationAndAuthTests: XCTestCase {
+    func testProviderAuthMethodMigratesLegacyValuesToBrowserSession() throws {
+        let decoder = JSONDecoder()
+
+        for legacyValue in ["codexAuthJSON", "oauth"] {
+            let data = Data("\"\(legacyValue)\"".utf8)
+            XCTAssertEqual(try decoder.decode(ProviderAuthMethod.self, from: data), .browserSession)
+        }
+    }
+
+    @MainActor
+    func testProviderConfigurationStoreLoadsAccountsWithLegacyAuthMethods() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(
+            Data(
+                #"""
+                [
+                  {"id":"codex.legacy","providerID":"codex","authMethod":"codexAuthJSON"},
+                  {"id":"claude.legacy","providerID":"claude","authMethod":"oauth"}
+                ]
+                """#.utf8
+            ),
+            forKey: "providerConfigurations"
+        )
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+
+        XCTAssertEqual(
+            Dictionary(uniqueKeysWithValues: store.configurations.map { ($0.id, $0.authMethod) }),
+            [
+                "codex.legacy": .browserSession,
+                "claude.legacy": .browserSession,
+            ]
+        )
+    }
+
+    func testKeychainSecretDecoderRejectsNonUTF8Data() {
+        XCTAssertThrowsError(try KeychainService.decodeSecret(Data([0xFF]))) { error in
+            XCTAssertEqual(error as? KeychainError, .invalidSecretData)
+            XCTAssertEqual(error.localizedDescription, "The saved credential contains invalid data.")
+        }
+    }
+
     @MainActor
     func testProviderConfigurationStoreStartsWithoutAccounts() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"

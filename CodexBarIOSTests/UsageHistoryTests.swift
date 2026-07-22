@@ -23,6 +23,39 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testUsageHistoryStoreSurfacesEncodingFailures() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let invalidResult = makeHistoryResult(
+            accountID: "codex.invalid-history",
+            fetchedAt: fetchedAt,
+            used: .nan
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(results: [invalidResult], now: fetchedAt)
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+        XCTAssertTrue(store.lastError?.hasPrefix("Could not save usage history:") == true)
+        XCTAssertNil(defaults.data(forKey: "usageHistorySnapshots"))
+
+        let validResult = makeHistoryResult(
+            accountID: "codex.valid-history",
+            fetchedAt: fetchedAt,
+            used: 42
+        )
+        store.record(results: [validResult], now: fetchedAt)
+
+        XCTAssertNil(store.lastError)
+        XCTAssertEqual(store.snapshots.map(\.accountID), ["codex.valid-history"])
+        XCTAssertNotNil(defaults.data(forKey: "usageHistorySnapshots"))
+    }
+
+    @MainActor
     func testUsageHistoryStorePersistsAllMonetaryMetricsAlongsideBars() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

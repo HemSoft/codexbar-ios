@@ -15,7 +15,7 @@ fi
 
 export DEVELOPER_DIR
 
-DESTINATION="${1:-platform=iOS Simulator,name=iPhone 17,OS=26.5}"
+DESTINATION="${1:-platform=iOS Simulator,name=iPhone 17,OS=latest}"
 
 echo "Building $SCHEME for $DESTINATION"
 xcodebuild \
@@ -26,13 +26,16 @@ xcodebuild \
   -quiet \
   build
 
-BUILD_DIR="$(xcodebuild \
+BUILD_SETTINGS="$(xcodebuild \
   -project "$PROJECT" \
   -scheme "$SCHEME" \
   -destination "$DESTINATION" \
   -configuration Debug \
   -showBuildSettings \
-  2>/dev/null | awk -F'= ' '/BUILT_PRODUCTS_DIR/ {print $2; exit}')"
+  2>/dev/null)"
+
+BUILD_DIR="$(awk -F'= ' '/BUILT_PRODUCTS_DIR/ {print $2; exit}' <<<"$BUILD_SETTINGS")"
+DEVICE_ID="$(awk -F'= ' '/TARGET_DEVICE_IDENTIFIER/ {print $2; exit}' <<<"$BUILD_SETTINGS")"
 
 APP_PATH="$BUILD_DIR/$SCHEME.app"
 
@@ -41,14 +44,8 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-DEVICE_ID="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone 17 / && /Shutdown|Booted/ {print $2; exit}')"
-
 if [[ -z "$DEVICE_ID" ]]; then
-  DEVICE_ID="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ && /Shutdown|Booted/ {print $2; exit}')"
-fi
-
-if [[ -z "$DEVICE_ID" ]]; then
-  echo "No available iPhone simulator found." >&2
+  echo "Could not resolve the simulator selected by: $DESTINATION" >&2
   exit 1
 fi
 
@@ -63,4 +60,3 @@ echo "Launching $BUNDLE_ID"
 xcrun simctl launch "$DEVICE_ID" "$BUNDLE_ID"
 
 open -a Simulator
-

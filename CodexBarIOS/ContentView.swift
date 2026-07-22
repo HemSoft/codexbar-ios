@@ -56,6 +56,13 @@ struct ContentView: View {
             ScrollViewReader { scrollProxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
+                        if let historyError = historyStore.lastError {
+                            Label(historyError, systemImage: "exclamationmark.triangle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                                .accessibilityIdentifier("usage-history-persistence-error")
+                        }
+
                         if !cardItems.isEmpty,
                            let release = appUpdateController.dashboardRelease {
                             AppUpdateNotice(

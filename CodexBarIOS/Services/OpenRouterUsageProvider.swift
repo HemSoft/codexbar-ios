@@ -105,15 +105,6 @@ public final class OpenRouterUsageProvider: UsageProvider {
         }
     }
 
-    private static func string(from value: Any?) -> String? {
-        guard let string = value as? String else {
-            return nil
-        }
-
-        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
     private func failureResult(_ message: String, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id,

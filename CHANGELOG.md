@@ -23,6 +23,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Reported corrupt Keychain credentials and usage-history persistence failures
+  instead of treating them as missing or silently discarding history changes.
+  ([#65](https://github.com/HemSoft/codexbar-ios/issues/65))
 - Show representative sample data in the widget gallery instead of loading the
   current account snapshot while users preview widget configurations.
   ([#62](https://github.com/HemSoft/codexbar-ios/issues/62))
@@ -52,6 +55,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Made the simulator runner follow Xcode's latest selected runtime and device,
+  hoisted repeated settings formatting work, and removed obsolete
+  authentication and parsing code.
+  ([#65](https://github.com/HemSoft/codexbar-ios/issues/65))
 - Split the monolithic test suite into domain-focused classes with isolated
   network and preference fixtures so independent test groups can run in
   parallel without sharing mutable state.

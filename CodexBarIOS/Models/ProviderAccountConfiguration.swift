@@ -140,9 +140,7 @@ public enum CopilotAccountScope: String, Codable, CaseIterable, Identifiable, Se
 public enum ProviderAuthMethod: String, Codable, CaseIterable, Identifiable, Sendable {
     case apiKey
     case browserSession
-    case codexAuthJSON
     case cliToken
-    case oauth
 
     public var id: String {
         rawValue
@@ -154,22 +152,41 @@ public enum ProviderAuthMethod: String, Codable, CaseIterable, Identifiable, Sen
             "API Key"
         case .browserSession:
             "Browser Session"
-        case .codexAuthJSON:
-            "Codex auth.json"
         case .cliToken:
             "CLI Token"
-        case .oauth:
-            "OAuth"
         }
     }
 
     public var requiresSecret: Bool {
         switch self {
-        case .apiKey, .codexAuthJSON, .cliToken:
+        case .apiKey, .cliToken:
             true
-        case .browserSession, .oauth:
+        case .browserSession:
             false
         }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+
+        switch rawValue {
+        case "codexAuthJSON", "oauth":
+            self = .browserSession
+        default:
+            guard let value = Self(rawValue: rawValue) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Unknown provider authentication method: \(rawValue)"
+                )
+            }
+            self = value
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 }
 
