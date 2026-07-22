@@ -235,8 +235,35 @@ public final class UsageRefreshService: ObservableObject {
             return outcome
         } catch {
             codexResetTasks[configuration.id] = nil
+            if !shouldRetainCodexResetAttempt(after: error) {
+                codexResetAttempts[configuration.id] = nil
+            }
             throw error
         }
+    }
+
+    private func shouldRetainCodexResetAttempt(after error: Error) -> Bool {
+        if let resetError = error as? CodexBankedResetConsumptionError {
+            switch resetError {
+            case .invalidResponse:
+                return true
+            case .httpStatus(let status):
+                return status == 408 || status == 425 || status == 429 || (500..<600).contains(status)
+            case .notConfigured, .credentialUnavailable, .unsupported, .invalidRequest:
+                return false
+            }
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cancelled, .badURL, .unsupportedURL:
+                return false
+            default:
+                return true
+            }
+        }
+
+        return false
     }
 
     private func replaceResult(_ result: ProviderUsageResult) {

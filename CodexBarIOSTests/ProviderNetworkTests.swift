@@ -244,6 +244,56 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertEqual(creditIDs.compactMap { $0 }, ["credit-original", "credit-original"])
     }
 
+    @MainActor
+    func testUsageRefreshServiceClearsAttemptAfterDefinitiveClientFailure() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "codex-access",
+                expiresAt: 2_100_000_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            consumeResetEndpoint: URL(string: "https://example.test/consume")!,
+            now: { Date(timeIntervalSince1970: 2_000_000_000) }
+        )
+        let service = UsageRefreshService(providers: [provider])
+        var idempotencyKeys: [String] = []
+        var creditIDs: [String?] = []
+        ProviderNetworkMockURLProtocol.handler = { request in
+            let body = try XCTUnwrap(requestBodyData(from: request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
+            idempotencyKeys.append(try XCTUnwrap(json["redeem_request_id"]))
+            creditIDs.append(json["credit_id"])
+            let status = idempotencyKeys.count == 1 ? 400 : 200
+            let responseBody = status == 200 ? Data(#"{"code":"reset"}"#.utf8) : Data()
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: status, httpVersion: nil, headerFields: nil)!,
+                responseBody
+            )
+        }
+        defer { ProviderNetworkMockURLProtocol.handler = nil }
+
+        do {
+            _ = try await service.consumeCodexBankedReset(for: configuration, creditID: "credit-original")
+            XCTFail("Expected the first client-error attempt to fail")
+        } catch {
+            XCTAssertEqual(error as? CodexBankedResetConsumptionError, .httpStatus(400))
+        }
+        let outcome = try await service.consumeCodexBankedReset(for: configuration, creditID: "credit-changed")
+
+        XCTAssertEqual(outcome, .reset)
+        XCTAssertEqual(idempotencyKeys.count, 2)
+        XCTAssertNotEqual(idempotencyKeys[0], idempotencyKeys[1])
+        XCTAssertEqual(creditIDs.compactMap { $0 }, ["credit-original", "credit-changed"])
+    }
+
     func testCodexUsageProviderSilentlyPreservesWeeklyOnlyUsage() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let secretStore = MemorySecretStore()
