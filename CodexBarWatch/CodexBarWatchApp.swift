@@ -4,7 +4,7 @@ import SwiftUI
 struct CodexBarWatchApp: App {
     var body: some Scene {
         WindowGroup {
-            WatchDashboardView(state: .sample)
+            WatchDashboardView(state: .empty)
         }
     }
 }

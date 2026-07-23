@@ -2,6 +2,11 @@ import XCTest
 @testable import CodexBarWatch
 
 final class WatchDashboardStateTests: XCTestCase {
+    func testProductionFoundationStartsWithoutDemoUsage() {
+        XCTAssertTrue(WatchDashboardState.empty.samples.isEmpty)
+        XCTAssertEqual(WatchDashboardState.empty.statusText, "Set up providers on iPhone")
+    }
+
     func testSamplesAreOrderedByHighestClampedUsage() {
         let state = WatchDashboardState(
             title: "CodexBar",

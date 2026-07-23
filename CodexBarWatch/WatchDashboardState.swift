@@ -33,6 +33,12 @@ struct WatchDashboardState: Equatable, Sendable {
         }
     }
 
+    static let empty = WatchDashboardState(
+        title: "CodexBar",
+        statusText: "Set up providers on iPhone",
+        samples: []
+    )
+
     static let sample = WatchDashboardState(
         title: "CodexBar",
         statusText: "Sample data",
