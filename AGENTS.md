@@ -3,8 +3,11 @@
 CodexBar for iOS is a native SwiftUI companion app (bundle ID
 `com.hemsoft.CodexBarIOS`, scheme `CodexBarIOS`, Xcode project
 `CodexBarIOS.xcodeproj`). Xcode targets: `CodexBarIOS` (app),
-`CodexBarIOSWidget` (widget), and `CodexBarIOSTests` (unit tests). `Package.swift`
-also exposes the `CodexBarIOSSmokeTests` executable smoke harness. See
+`CodexBarIOSWidget` (widget), `CodexBarIOSTests` (unit tests),
+`CodexBarWatch` (embedded watchOS 10 companion), and `CodexBarWatchTests`
+(watchOS unit tests). Shared schemes are `CodexBarIOS`, `CodexBarWatch`, and
+`CodexBarWatchTests`. `Package.swift` also exposes the
+`CodexBarIOSSmokeTests` executable smoke harness. See
 `README.md` for scope and the Windows reference repo, `APP-STORE.md` for store
 metadata, `PRIVACY.md` for the privacy policy, `SUPPORT.md` for support flow,
 and `CHANGELOG.md` for release history.
@@ -85,6 +88,31 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift run \
     CodexBarIOSSmokeTests
   ```
+
+- Build the watchOS 10 companion shell on the latest installed simulator:
+
+  ```sh
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
+    -project CodexBarIOS.xcodeproj -scheme CodexBarWatch \
+    -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=latest' \
+    build
+  ```
+
+- Run the watch foundation tests:
+
+  ```sh
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
+    -project CodexBarIOS.xcodeproj -scheme CodexBarWatchTests \
+    -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=latest' \
+    test
+  ```
+
+If that watch name is not installed, use
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl list devices available`
+to select another available watchOS simulator. The watch app is a dependent
+companion embedded in `CodexBarIOS`; this foundation does not enable independent
+installation or add Watch Connectivity, credentials, provider networking,
+widgets, or complications.
 
 There is no separate lint/typecheck tool configured for this repo beyond
 Xcode/Swift compiler warnings and the test targets above.

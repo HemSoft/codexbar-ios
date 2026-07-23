@@ -69,6 +69,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added an embedded watchOS 10 companion target, shared watch app and test
+  schemes, a deterministic accessible SwiftUI shell, and simulator-tested watch
+  foundation coverage. ([#96](https://github.com/HemSoft/codexbar-ios/issues/96))
 - Added deterministic unit coverage for the production widget configuration,
   timeline, entity-query, filtering, and tile-selection logic. ([#97](https://github.com/HemSoft/codexbar-ios/issues/97))
 - Added required privacy manifests to the app and widget bundles, including a

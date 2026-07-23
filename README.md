@@ -16,15 +16,19 @@ The Windows reference implementation is checked out beside this repo at:
   authentication methods, labeling accounts, and storing credentials in Keychain
 - Usage history and charts, configurable usage alerts, and home-screen and
   lock-screen widgets
+- An embedded watchOS companion foundation with a deterministic, watch-native
+  SwiftUI shell; provider data and account setup remain iPhone-only for now
 - Demo data limited to previews, smoke tests, widget galleries, and screenshots
 - Simulator unit tests spanning configuration and authentication, provider
   parsing and networking, dashboard and settings, widgets, history, and alerts,
-  plus a SwiftPM smoke harness; see [Build and Test](AGENTS.md#build-and-test)
+  plus watchOS foundation tests and a SwiftPM smoke harness; see
+  [Build and Test](AGENTS.md#build-and-test)
 
 ## Requirements
 
 - Xcode 16 or later
 - iOS 17 or later
+- watchOS 10 or later for the companion app
 
 ## GitHub Copilot Sign-In
 
@@ -46,6 +50,12 @@ documented defaults in `CopilotWebAuthService.swift`.
 ```bash
 open CodexBarIOS.xcodeproj
 ```
+
+The project includes shared `CodexBarWatch` and `CodexBarWatchTests` schemes.
+The watch source is isolated under `CodexBarWatch/`; it intentionally does not
+compile the iOS authentication, notification, widget, or UIKit-dependent code.
+Use the documented simulator commands in
+[Build and Test](AGENTS.md#build-and-test) to build and test the watch targets.
 
 ## Reference Repo
 
