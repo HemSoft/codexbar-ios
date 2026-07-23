@@ -23,7 +23,7 @@ struct ProviderUsageCard: View {
     @State private var resetInventoryPresentation: CodexBankedResetInventoryPresentation?
     @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
     @State private var isResetActionUnavailable = false
-    @StateObject private var resetRedemptionController = CodexBankedResetRedemptionController()
+    @StateObject private var resetRedemptionController: CodexBankedResetRedemptionController
 
     init(
         result: ProviderUsageResult,
@@ -35,6 +35,7 @@ struct ProviderUsageCard: View {
         refreshErrorMessage: String? = nil,
         onShowHistory: @escaping () -> Void = {},
         onRetry: @escaping () -> Void = {},
+        retainedCodexResetAttempt: CodexRetainedResetAttempt? = nil,
         onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)? = nil
     ) {
         self.result = result
@@ -47,6 +48,12 @@ struct ProviderUsageCard: View {
         self.onShowHistory = onShowHistory
         self.onRetry = onRetry
         self.onUseCodexReset = onUseCodexReset
+        _resetRedemptionController = StateObject(
+            wrappedValue: CodexBankedResetRedemptionController(
+                retainedAttempt: retainedCodexResetAttempt,
+                resets: result.codexBankedRateLimitResets
+            )
+        )
     }
 
     var body: some View {
@@ -381,6 +388,27 @@ final class CodexBankedResetRedemptionController: ObservableObject {
 
     var isConfirmationPresented: Bool {
         selectedItem != nil
+    }
+
+    init(
+        retainedAttempt: CodexRetainedResetAttempt? = nil,
+        resets: CodexBankedRateLimitResets? = nil
+    ) {
+        guard let retainedAttempt else {
+            return
+        }
+        if
+            let creditID = retainedAttempt.creditID,
+            let credit = resets?.credits?.first(where: { $0.id == creditID })
+        {
+            retryItem = CodexBankedResetInventoryItem(credit: credit)
+        } else if let creditID = retainedAttempt.creditID {
+            retryItem = CodexBankedResetInventoryItem(
+                credit: CodexBankedRateLimitReset(id: creditID)
+            )
+        } else {
+            retryItem = .generic()
+        }
     }
 
     func requestConfirmation(for item: CodexBankedResetInventoryItem) {

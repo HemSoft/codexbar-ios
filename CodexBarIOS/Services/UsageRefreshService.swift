@@ -1,5 +1,9 @@
 import Foundation
 
+struct CodexRetainedResetAttempt: Equatable, Sendable {
+    let creditID: String?
+}
+
 @MainActor
 public final class UsageRefreshService: ObservableObject {
     @Published public private(set) var results: [ProviderUsageResult] = []
@@ -267,7 +271,14 @@ public final class UsageRefreshService: ObservableObject {
     }
 
     func hasRetainedCodexResetAttempt(for accountID: String) -> Bool {
-        codexResetAttempts[accountID] != nil
+        retainedCodexResetAttempt(for: accountID) != nil
+    }
+
+    func retainedCodexResetAttempt(for accountID: String) -> CodexRetainedResetAttempt? {
+        guard let attempt = codexResetAttempts[accountID] else {
+            return nil
+        }
+        return CodexRetainedResetAttempt(creditID: attempt.creditID)
     }
 
     private func replaceResult(_ result: ProviderUsageResult) {

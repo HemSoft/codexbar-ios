@@ -267,6 +267,15 @@ final class DashboardOrchestrator: ObservableObject {
         }
     }
 
+    func retainedCodexResetAttempt(
+        for configuration: ProviderAccountConfiguration
+    ) -> CodexRetainedResetAttempt? {
+        guard configuration.providerID == .codex else {
+            return nil
+        }
+        return refreshService.retainedCodexResetAttempt(for: configuration.id)
+    }
+
     func requestAlertAuthorization() async -> Bool {
         await usageAlertNotifier.requestAuthorization()
     }

@@ -806,6 +806,10 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertFalse(feedback.isSuccess)
         XCTAssertTrue(feedback.requiresSameResetForRetry)
         XCTAssertTrue(service.hasRetainedCodexResetAttempt(for: configuration.id))
+        XCTAssertEqual(
+            service.retainedCodexResetAttempt(for: configuration.id),
+            CodexRetainedResetAttempt(creditID: "credit-original")
+        )
     }
 
     @MainActor
