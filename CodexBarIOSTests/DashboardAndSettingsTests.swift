@@ -773,6 +773,107 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testRetryableResetFailurePinsRetryToOriginalCredit() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .codex)
+        let provider = ResetConsumptionTestProvider(
+            outcome: .reset,
+            fetchFails: false,
+            consumeErrorCode: .timedOut
+        )
+        let service = UsageRefreshService(providers: [provider])
+        let orchestrator = DashboardOrchestrator(
+            refreshService: service,
+            configurationStore: store,
+            historyStore: UsageHistoryStore(defaults: defaults),
+            usageAlertNotifier: StubUsageAlertNotifier(),
+            appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                refreshService: service,
+                configurationStore: store,
+                publishSnapshot: { _, _ in },
+                publishSettings: { _ in }
+            )
+        )
+
+        let feedback = await orchestrator.consumeCodexBankedReset(
+            for: configuration,
+            creditID: "credit-original"
+        )
+
+        XCTAssertFalse(feedback.isSuccess)
+        XCTAssertTrue(feedback.requiresSameResetForRetry)
+        XCTAssertTrue(service.hasRetainedCodexResetAttempt(for: configuration.id))
+        XCTAssertEqual(
+            service.retainedCodexResetAttempt(for: configuration.id),
+            CodexRetainedResetAttempt(creditID: "credit-original")
+        )
+
+        let retryFeedback = await orchestrator.consumeCodexBankedReset(
+            for: configuration,
+            creditID: "credit-different"
+        )
+        let consumedKeys = await provider.recordedConsumedKeys()
+        let consumedCreditIDs = await provider.recordedConsumedCreditIDs()
+
+        XCTAssertFalse(retryFeedback.isSuccess)
+        XCTAssertEqual(consumedCreditIDs, ["credit-original", "credit-original"])
+        XCTAssertEqual(consumedKeys.count, 2)
+        XCTAssertEqual(consumedKeys[0], consumedKeys[1])
+    }
+
+    @MainActor
+    func testResetConsumptionRefreshesAuthoritativeInventoryAfterSuccess() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .codex)
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: configuration.displayName,
+            subtitle: "Live ChatGPT usage",
+            bars: [UsageBar(label: "Usage", used: 100, limit: 100)],
+            codexBankedRateLimitResets: CodexBankedRateLimitResets(
+                availableCount: 2,
+                credits: [
+                    CodexBankedRateLimitReset(id: "credit-first"),
+                    CodexBankedRateLimitReset(id: "credit-second"),
+                ],
+                canConsume: true
+            ),
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let provider = ResetConsumptionTestProvider(outcome: .reset, fetchFails: false)
+        let service = UsageRefreshService(providers: [provider], initialResults: [cachedResult])
+        let orchestrator = DashboardOrchestrator(
+            refreshService: service,
+            configurationStore: store,
+            historyStore: UsageHistoryStore(defaults: defaults),
+            usageAlertNotifier: StubUsageAlertNotifier(),
+            appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                refreshService: service,
+                configurationStore: store,
+                publishSnapshot: { _, _ in },
+                publishSettings: { _ in }
+            )
+        )
+
+        let feedback = await orchestrator.consumeCodexBankedReset(
+            for: configuration,
+            creditID: "credit-second"
+        )
+
+        XCTAssertTrue(feedback.isSuccess)
+        XCTAssertNil(service.results.first?.codexBankedRateLimitResets)
+        let fetchCount = await provider.recordedFetchCount()
+        XCTAssertEqual(fetchCount, 1)
+    }
+
+    @MainActor
     func testResetConsumptionRefetchesAndPreservesVerifiedAvailabilityWhenRefreshFails() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

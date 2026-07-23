@@ -89,6 +89,25 @@ public struct CodexBankedRateLimitResets: Equatable, Sendable {
     public var preferredCredit: CodexBankedRateLimitReset? {
         credits?.first
     }
+
+    public var orderedCredits: [CodexBankedRateLimitReset] {
+        guard let credits else {
+            return []
+        }
+
+        return credits.enumerated().sorted { lhs, rhs in
+            switch (lhs.element.expiresAt, rhs.element.expiresAt) {
+            case let (lhsDate?, rhsDate?) where lhsDate != rhsDate:
+                return lhsDate < rhsDate
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                return lhs.offset < rhs.offset
+            }
+        }.map(\.element)
+    }
 }
 
 public struct ProviderUsageResult: Identifiable, Equatable, Sendable {

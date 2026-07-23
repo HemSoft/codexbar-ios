@@ -296,6 +296,9 @@ struct ContentView: View {
                         await orchestrator.refreshAccount(item.configuration)
                     }
                 },
+                retainedCodexResetAttempt: orchestrator.retainedCodexResetAttempt(
+                    for: item.configuration
+                ),
                 onUseCodexReset: { creditID in
                     await orchestrator.consumeCodexBankedReset(
                         for: item.configuration,

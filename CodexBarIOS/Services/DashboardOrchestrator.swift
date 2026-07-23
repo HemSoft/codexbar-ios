@@ -5,11 +5,18 @@ struct CodexBankedResetRedemptionFeedback: Equatable, Sendable {
     let message: String
     let isSuccess: Bool
     let hidesAction: Bool
+    let requiresSameResetForRetry: Bool
 
-    init(message: String, isSuccess: Bool, hidesAction: Bool = false) {
+    init(
+        message: String,
+        isSuccess: Bool,
+        hidesAction: Bool = false,
+        requiresSameResetForRetry: Bool = false
+    ) {
         self.message = message
         self.isSuccess = isSuccess
         self.hidesAction = hidesAction
+        self.requiresSameResetForRetry = requiresSameResetForRetry
     }
 }
 
@@ -252,9 +259,21 @@ final class DashboardOrchestrator: ObservableObject {
                 message: (error as? LocalizedError)?.errorDescription
                     ?? "Could not use the reset. Try again.",
                 isSuccess: false,
-                hidesAction: hidesAction
+                hidesAction: hidesAction,
+                requiresSameResetForRetry: refreshService.hasRetainedCodexResetAttempt(
+                    for: configuration.id
+                )
             )
         }
+    }
+
+    func retainedCodexResetAttempt(
+        for configuration: ProviderAccountConfiguration
+    ) -> CodexRetainedResetAttempt? {
+        guard configuration.providerID == .codex else {
+            return nil
+        }
+        return refreshService.retainedCodexResetAttempt(for: configuration.id)
     }
 
     func requestAlertAuthorization() async -> Bool {
