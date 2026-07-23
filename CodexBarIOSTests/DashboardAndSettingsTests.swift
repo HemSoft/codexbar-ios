@@ -773,6 +773,42 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testRetryableResetFailurePinsRetryToOriginalCredit() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .codex)
+        let provider = ResetConsumptionTestProvider(
+            outcome: .reset,
+            fetchFails: false,
+            consumeErrorCode: .timedOut
+        )
+        let service = UsageRefreshService(providers: [provider])
+        let orchestrator = DashboardOrchestrator(
+            refreshService: service,
+            configurationStore: store,
+            historyStore: UsageHistoryStore(defaults: defaults),
+            usageAlertNotifier: StubUsageAlertNotifier(),
+            appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                refreshService: service,
+                configurationStore: store,
+                publishSnapshot: { _, _ in },
+                publishSettings: { _ in }
+            )
+        )
+
+        let feedback = await orchestrator.consumeCodexBankedReset(
+            for: configuration,
+            creditID: "credit-original"
+        )
+
+        XCTAssertFalse(feedback.isSuccess)
+        XCTAssertTrue(feedback.requiresSameResetForRetry)
+        XCTAssertTrue(service.hasRetainedCodexResetAttempt(for: configuration.id))
+    }
+
+    @MainActor
     func testResetConsumptionRefreshesAuthoritativeInventoryAfterSuccess() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

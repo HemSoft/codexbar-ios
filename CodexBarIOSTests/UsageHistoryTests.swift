@@ -718,8 +718,16 @@ final class UsageHistoryTests: XCTestCase {
 
         controller.requestConfirmation(for: first)
         XCTAssertNil(controller.selectedItem)
-        controller.finishRedemption(for: second)
+        controller.finishRedemption(for: second, requiresSameResetForRetry: true)
         XCTAssertNil(controller.pendingItemID)
+        XCTAssertEqual(controller.retryItemID, second.id)
+        XCTAssertFalse(controller.canRequestConfirmation(for: first))
+        XCTAssertTrue(controller.canRequestConfirmation(for: second))
+
+        controller.requestConfirmation(for: second)
+        XCTAssertEqual(controller.beginRedemption()?.creditID, "credit-second")
+        controller.finishRedemption(for: second)
+        XCTAssertNil(controller.retryItemID)
     }
 
     @MainActor

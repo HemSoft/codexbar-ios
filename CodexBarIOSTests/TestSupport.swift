@@ -619,17 +619,20 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
     private let outcome: CodexBankedResetConsumptionOutcome
     private let fetchFails: Bool
     private let consumeGate: UsageProviderGate?
+    private let consumeErrorCode: URLError.Code?
     private var fetchCount = 0
     private var consumedKeys: [String] = []
 
     init(
         outcome: CodexBankedResetConsumptionOutcome,
         fetchFails: Bool,
-        consumeGate: UsageProviderGate? = nil
+        consumeGate: UsageProviderGate? = nil,
+        consumeErrorCode: URLError.Code? = nil
     ) {
         self.outcome = outcome
         self.fetchFails = fetchFails
         self.consumeGate = consumeGate
+        self.consumeErrorCode = consumeErrorCode
     }
 
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
@@ -655,6 +658,9 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
         consumedKeys.append(idempotencyKey)
         if let consumeGate {
             await consumeGate.wait()
+        }
+        if let consumeErrorCode {
+            throw URLError(consumeErrorCode)
         }
         return outcome
     }

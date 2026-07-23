@@ -266,6 +266,10 @@ public final class UsageRefreshService: ObservableObject {
         return false
     }
 
+    func hasRetainedCodexResetAttempt(for accountID: String) -> Bool {
+        codexResetAttempts[accountID] != nil
+    }
+
     private func replaceResult(_ result: ProviderUsageResult) {
         var nextResults = results.filter { $0.accountID != result.accountID }
         nextResults.append(result)

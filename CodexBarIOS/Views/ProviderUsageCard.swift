@@ -358,13 +358,14 @@ struct CodexBankedResetInventoryItem: Identifiable, Equatable, Sendable {
 final class CodexBankedResetRedemptionController: ObservableObject {
     @Published private(set) var selectedItem: CodexBankedResetInventoryItem?
     @Published private(set) var pendingItemID: String?
+    @Published private(set) var retryItemID: String?
 
     var isConfirmationPresented: Bool {
         selectedItem != nil
     }
 
     func requestConfirmation(for item: CodexBankedResetInventoryItem) {
-        guard pendingItemID == nil else {
+        guard canRequestConfirmation(for: item) else {
             return
         }
         selectedItem = item
@@ -383,11 +384,19 @@ final class CodexBankedResetRedemptionController: ObservableObject {
         return selectedItem
     }
 
-    func finishRedemption(for item: CodexBankedResetInventoryItem) {
+    func finishRedemption(
+        for item: CodexBankedResetInventoryItem,
+        requiresSameResetForRetry: Bool = false
+    ) {
         guard pendingItemID == item.id else {
             return
         }
         pendingItemID = nil
+        retryItemID = requiresSameResetForRetry ? item.id : nil
+    }
+
+    func canRequestConfirmation(for item: CodexBankedResetInventoryItem) -> Bool {
+        pendingItemID == nil && (retryItemID == nil || retryItemID == item.id)
     }
 }
 
@@ -431,10 +440,14 @@ struct CodexBankedResetInventoryView: View {
                                     resetRow(item)
                                 }
                                 .buttonStyle(.plain)
-                                .disabled(redemptionController.pendingItemID != nil)
+                                .disabled(!redemptionController.canRequestConfirmation(for: item))
                                 .accessibilityElement(children: .ignore)
                                 .accessibilityLabel(item.accessibilityLabel)
-                                .accessibilityHint("Asks for confirmation before using this reset")
+                                .accessibilityHint(
+                                    redemptionController.retryItemID == item.id
+                                        ? "Retries the original redemption attempt for this reset"
+                                        : "Asks for confirmation before using this reset"
+                                )
                             } else {
                                 resetRow(item)
                                     .accessibilityElement(children: .ignore)
@@ -512,6 +525,11 @@ struct CodexBankedResetInventoryView: View {
                 Label(item.expiration, systemImage: "calendar")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if redemptionController.retryItemID == item.id {
+                    Label("Retry this reset", systemImage: "arrow.clockwise")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer(minLength: 8)
@@ -541,7 +559,10 @@ struct CodexBankedResetInventoryView: View {
         feedback = nil
         Task {
             let result = await onUseReset(item.creditID)
-            redemptionController.finishRedemption(for: item)
+            redemptionController.finishRedemption(
+                for: item,
+                requiresSameResetForRetry: result.requiresSameResetForRetry
+            )
             feedback = result
             onFeedback(result)
             UIAccessibility.post(notification: .announcement, argument: result.message)
