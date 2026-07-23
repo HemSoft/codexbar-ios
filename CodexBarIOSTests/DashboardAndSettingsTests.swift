@@ -810,6 +810,18 @@ final class DashboardAndSettingsTests: XCTestCase {
             service.retainedCodexResetAttempt(for: configuration.id),
             CodexRetainedResetAttempt(creditID: "credit-original")
         )
+
+        let retryFeedback = await orchestrator.consumeCodexBankedReset(
+            for: configuration,
+            creditID: "credit-different"
+        )
+        let consumedKeys = await provider.recordedConsumedKeys()
+        let consumedCreditIDs = await provider.recordedConsumedCreditIDs()
+
+        XCTAssertFalse(retryFeedback.isSuccess)
+        XCTAssertEqual(consumedCreditIDs, ["credit-original", "credit-original"])
+        XCTAssertEqual(consumedKeys.count, 2)
+        XCTAssertEqual(consumedKeys[0], consumedKeys[1])
     }
 
     @MainActor

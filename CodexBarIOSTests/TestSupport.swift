@@ -622,6 +622,7 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
     private let consumeErrorCode: URLError.Code?
     private var fetchCount = 0
     private var consumedKeys: [String] = []
+    private var consumedCreditIDs: [String?] = []
 
     init(
         outcome: CodexBankedResetConsumptionOutcome,
@@ -656,6 +657,7 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
         idempotencyKey: String
     ) async throws -> CodexBankedResetConsumptionOutcome {
         consumedKeys.append(idempotencyKey)
+        consumedCreditIDs.append(creditID)
         if let consumeGate {
             await consumeGate.wait()
         }
@@ -671,6 +673,10 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
 
     func recordedConsumedKeys() -> [String] {
         consumedKeys
+    }
+
+    func recordedConsumedCreditIDs() -> [String?] {
+        consumedCreditIDs
     }
 }
 

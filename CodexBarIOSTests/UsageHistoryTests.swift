@@ -857,24 +857,37 @@ final class UsageHistoryTests: XCTestCase {
         )
     }
 
-    func testResetInventoryPresentationRetainsPayloadAndCapabilityWhenCardChanges() {
-        let resets = CodexBankedRateLimitResets(
+    @MainActor
+    func testResetInventoryPresentationRetainsPayloadAndCapabilityWhenCardChanges() throws {
+        let initialResets = CodexBankedRateLimitResets(
             availableCount: 1,
             credits: [CodexBankedRateLimitReset(id: "credit-first", title: "First")],
             canConsume: true
         )
-        let presentation = CodexBankedResetInventoryPresentation(
-            resets: resets,
-            canRedeem: false
+        let presentation = ProviderUsageCard.reconciledResetInventoryPresentation(
+            current: nil,
+            requestedResets: initialResets,
+            canRedeem: false,
+            requestsPresentation: true
+        )
+        let refreshedResets = CodexBankedRateLimitResets(
+            availableCount: 2,
+            credits: [
+                CodexBankedRateLimitReset(id: "credit-second", title: "Second"),
+                CodexBankedRateLimitReset(id: "credit-third", title: "Third"),
+            ],
+            canConsume: true
+        )
+        let reconciled = ProviderUsageCard.reconciledResetInventoryPresentation(
+            current: presentation,
+            requestedResets: refreshedResets,
+            canRedeem: true,
+            requestsPresentation: false
         )
 
-        let refreshedResets: CodexBankedRateLimitResets? = nil
-        let refreshedCanRedeem = true
-
-        XCTAssertNil(refreshedResets)
-        XCTAssertTrue(refreshedCanRedeem)
-        XCTAssertEqual(presentation.resets, resets)
-        XCTAssertFalse(presentation.canRedeem)
+        XCTAssertEqual(reconciled, presentation)
+        XCTAssertEqual(reconciled?.resets, initialResets)
+        XCTAssertFalse(try XCTUnwrap(reconciled).canRedeem)
     }
 
 }

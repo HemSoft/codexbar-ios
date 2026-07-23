@@ -151,12 +151,12 @@ struct ProviderUsageCard: View {
 
                     if showsCodexResetInventoryAction {
                         Button {
-                            if let bankedResets {
-                                resetInventoryPresentation = CodexBankedResetInventoryPresentation(
-                                    resets: bankedResets,
-                                    canRedeem: showsCodexResetRedemptionActions
-                                )
-                            }
+                            resetInventoryPresentation = Self.reconciledResetInventoryPresentation(
+                                current: resetInventoryPresentation,
+                                requestedResets: bankedResets,
+                                canRedeem: showsCodexResetRedemptionActions,
+                                requestsPresentation: true
+                            )
                         } label: {
                             Text(resetInventoryActionTitle)
                         }
@@ -234,6 +234,12 @@ struct ProviderUsageCard: View {
             )
         }
         .onChange(of: result.fetchedAt) {
+            resetInventoryPresentation = Self.reconciledResetInventoryPresentation(
+                current: resetInventoryPresentation,
+                requestedResets: bankedResets,
+                canRedeem: showsCodexResetRedemptionActions,
+                requestsPresentation: false
+            )
             isResetActionUnavailable = false
             resetFeedback = nil
         }
@@ -302,6 +308,24 @@ struct ProviderUsageCard: View {
         availableResets _: CodexBankedRateLimitResets?
     ) -> CodexBankedResetRedemptionFeedback? {
         feedback
+    }
+
+    static func reconciledResetInventoryPresentation(
+        current: CodexBankedResetInventoryPresentation?,
+        requestedResets: CodexBankedRateLimitResets?,
+        canRedeem: Bool,
+        requestsPresentation: Bool
+    ) -> CodexBankedResetInventoryPresentation? {
+        if let current {
+            return current
+        }
+        guard requestsPresentation, let requestedResets else {
+            return nil
+        }
+        return CodexBankedResetInventoryPresentation(
+            resets: requestedResets,
+            canRedeem: canRedeem
+        )
     }
 
     private func monetaryAccessibilityLabel(_ metric: ProviderMonetaryMetric) -> String {
