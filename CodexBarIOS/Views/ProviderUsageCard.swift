@@ -5,6 +5,7 @@ import UIKit
 struct CodexBankedResetInventoryPresentation: Identifiable, Equatable {
     let id = UUID()
     let resets: CodexBankedRateLimitResets
+    let canRedeem: Bool
 }
 
 struct ProviderUsageCard: View {
@@ -145,7 +146,8 @@ struct ProviderUsageCard: View {
                         Button {
                             if let bankedResets {
                                 resetInventoryPresentation = CodexBankedResetInventoryPresentation(
-                                    resets: bankedResets
+                                    resets: bankedResets,
+                                    canRedeem: showsCodexResetRedemptionActions
                                 )
                             }
                         } label: {
@@ -215,7 +217,7 @@ struct ProviderUsageCard: View {
         .sheet(item: $resetInventoryPresentation) { presentation in
             CodexBankedResetInventoryView(
                 resets: presentation.resets,
-                canRedeem: showsCodexResetRedemptionActions,
+                canRedeem: presentation.canRedeem,
                 onUseReset: onUseCodexReset,
                 onFeedback: { feedback in
                     resetFeedback = feedback

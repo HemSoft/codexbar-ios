@@ -826,18 +826,24 @@ final class UsageHistoryTests: XCTestCase {
         )
     }
 
-    func testResetInventoryPresentationRetainsPayloadWhenCardAvailabilityChanges() {
+    func testResetInventoryPresentationRetainsPayloadAndCapabilityWhenCardChanges() {
         let resets = CodexBankedRateLimitResets(
             availableCount: 1,
             credits: [CodexBankedRateLimitReset(id: "credit-first", title: "First")],
             canConsume: true
         )
-        let presentation = CodexBankedResetInventoryPresentation(resets: resets)
+        let presentation = CodexBankedResetInventoryPresentation(
+            resets: resets,
+            canRedeem: false
+        )
 
         let refreshedResets: CodexBankedRateLimitResets? = nil
+        let refreshedCanRedeem = true
 
         XCTAssertNil(refreshedResets)
+        XCTAssertTrue(refreshedCanRedeem)
         XCTAssertEqual(presentation.resets, resets)
+        XCTAssertFalse(presentation.canRedeem)
     }
 
 }
