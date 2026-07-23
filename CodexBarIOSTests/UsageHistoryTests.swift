@@ -687,6 +687,27 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertNil(genericItem?.creditID)
         XCTAssertEqual(genericItem?.expiration, "Expiration unavailable")
 
+        let mixedInventory = CodexBankedResetInventoryView(
+            resets: CodexBankedRateLimitResets(
+                availableCount: 3,
+                credits: [
+                    CodexBankedRateLimitReset(id: "credit-first", title: "First"),
+                    CodexBankedRateLimitReset(id: "credit-second", title: "Second"),
+                ],
+                canConsume: true
+            ),
+            canRedeem: true,
+            onUseReset: { _ in
+                CodexBankedResetRedemptionFeedback(message: "Reset used.", isSuccess: true)
+            },
+            onFeedback: { _ in },
+            redemptionController: CodexBankedResetRedemptionController()
+        )
+        XCTAssertEqual(
+            mixedInventory.inventoryItems.map(\.id),
+            ["credit-first", "credit-second", "generic-banked-reset"]
+        )
+
         let readOnlyInventory = CodexBankedResetInventoryView(
             resets: countOnly,
             canRedeem: false,

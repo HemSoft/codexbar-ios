@@ -424,8 +424,13 @@ struct CodexBankedResetInventoryView: View {
     var inventoryItems: [CodexBankedResetInventoryItem] {
         let currentItems: [CodexBankedResetInventoryItem]
         if !resets.orderedCredits.isEmpty {
-            currentItems = resets.orderedCredits.map {
+            let detailedItems = resets.orderedCredits.map {
                 CodexBankedResetInventoryItem(credit: $0)
+            }
+            currentItems = if canRedeem, resets.availableCount > detailedItems.count {
+                detailedItems + [.generic()]
+            } else {
+                detailedItems
             }
         } else {
             currentItems = canRedeem ? [.generic()] : []
