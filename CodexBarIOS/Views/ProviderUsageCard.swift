@@ -359,8 +359,16 @@ struct CodexBankedResetInventoryItem: Identifiable, Equatable, Sendable {
 @MainActor
 final class CodexBankedResetRedemptionController: ObservableObject {
     @Published private(set) var selectedItem: CodexBankedResetInventoryItem?
-    @Published private(set) var pendingItemID: String?
-    @Published private(set) var retryItemID: String?
+    @Published private(set) var pendingItem: CodexBankedResetInventoryItem?
+    @Published private(set) var retryItem: CodexBankedResetInventoryItem?
+
+    var pendingItemID: String? {
+        pendingItem?.id
+    }
+
+    var retryItemID: String? {
+        retryItem?.id
+    }
 
     var isConfirmationPresented: Bool {
         selectedItem != nil
@@ -378,10 +386,11 @@ final class CodexBankedResetRedemptionController: ObservableObject {
     }
 
     func beginRedemption() -> CodexBankedResetInventoryItem? {
-        guard pendingItemID == nil, let selectedItem else {
+        guard pendingItem == nil, let selectedItem else {
             return nil
         }
-        pendingItemID = selectedItem.id
+        pendingItem = selectedItem
+        retryItem = nil
         self.selectedItem = nil
         return selectedItem
     }
@@ -393,8 +402,8 @@ final class CodexBankedResetRedemptionController: ObservableObject {
         guard pendingItemID == item.id else {
             return
         }
-        pendingItemID = nil
-        retryItemID = requiresSameResetForRetry ? item.id : nil
+        pendingItem = nil
+        retryItem = requiresSameResetForRetry ? item : nil
     }
 
     func canRequestConfirmation(for item: CodexBankedResetInventoryItem) -> Bool {
@@ -413,12 +422,22 @@ struct CodexBankedResetInventoryView: View {
     @State private var feedback: CodexBankedResetRedemptionFeedback?
 
     var inventoryItems: [CodexBankedResetInventoryItem] {
+        let currentItems: [CodexBankedResetInventoryItem]
         if !resets.orderedCredits.isEmpty {
-            return resets.orderedCredits.map {
+            currentItems = resets.orderedCredits.map {
                 CodexBankedResetInventoryItem(credit: $0)
             }
+        } else {
+            currentItems = canRedeem ? [.generic()] : []
         }
-        return canRedeem ? [.generic()] : []
+
+        guard
+            let retainedItem = redemptionController.pendingItem ?? redemptionController.retryItem,
+            !currentItems.contains(where: { $0.id == retainedItem.id })
+        else {
+            return currentItems
+        }
+        return [retainedItem] + currentItems
     }
 
     var unavailableDetailCount: Int {

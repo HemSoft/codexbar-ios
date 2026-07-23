@@ -757,6 +757,42 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testResetInventoryPreservesCountOnlyRetryWhenDetailedMetadataArrives() {
+        let genericItem = CodexBankedResetInventoryItem.generic()
+        let controller = CodexBankedResetRedemptionController()
+
+        controller.requestConfirmation(for: genericItem)
+        XCTAssertNil(controller.beginRedemption()?.creditID)
+        controller.finishRedemption(for: genericItem, requiresSameResetForRetry: true)
+
+        let detailedInventory = CodexBankedResetInventoryView(
+            resets: CodexBankedRateLimitResets(
+                availableCount: 2,
+                credits: [
+                    CodexBankedRateLimitReset(id: "credit-first", title: "First"),
+                    CodexBankedRateLimitReset(id: "credit-second", title: "Second"),
+                ],
+                canConsume: true
+            ),
+            canRedeem: true,
+            onUseReset: { _ in
+                CodexBankedResetRedemptionFeedback(message: "Reset used.", isSuccess: true)
+            },
+            onFeedback: { _ in },
+            redemptionController: controller
+        )
+
+        XCTAssertEqual(
+            detailedInventory.inventoryItems.map(\.id),
+            ["generic-banked-reset", "credit-first", "credit-second"]
+        )
+        XCTAssertTrue(controller.canRequestConfirmation(for: genericItem))
+        XCTAssertFalse(
+            controller.canRequestConfirmation(for: detailedInventory.inventoryItems[1])
+        )
+    }
+
+    @MainActor
     func testProviderUsageCardKeepsResetFeedbackAfterFinalCreditDisappears() {
         let feedback = CodexBankedResetRedemptionFeedback(
             message: "Reset used. Current usage limits are refreshed.",
