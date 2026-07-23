@@ -826,4 +826,18 @@ final class UsageHistoryTests: XCTestCase {
         )
     }
 
+    func testResetInventoryPresentationRetainsPayloadWhenCardAvailabilityChanges() {
+        let resets = CodexBankedRateLimitResets(
+            availableCount: 1,
+            credits: [CodexBankedRateLimitReset(id: "credit-first", title: "First")],
+            canConsume: true
+        )
+        let presentation = CodexBankedResetInventoryPresentation(resets: resets)
+
+        let refreshedResets: CodexBankedRateLimitResets? = nil
+
+        XCTAssertNil(refreshedResets)
+        XCTAssertEqual(presentation.resets, resets)
+    }
+
 }

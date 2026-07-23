@@ -2,6 +2,11 @@ import Charts
 import SwiftUI
 import UIKit
 
+struct CodexBankedResetInventoryPresentation: Identifiable, Equatable {
+    let id = UUID()
+    let resets: CodexBankedRateLimitResets
+}
+
 struct ProviderUsageCard: View {
     let result: ProviderUsageResult
     let statusText: String
@@ -14,7 +19,7 @@ struct ProviderUsageCard: View {
     let onRetry: () -> Void
     let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
 
-    @State private var isShowingResetInventory = false
+    @State private var resetInventoryPresentation: CodexBankedResetInventoryPresentation?
     @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
     @State private var isResetActionUnavailable = false
     @StateObject private var resetRedemptionController = CodexBankedResetRedemptionController()
@@ -138,7 +143,11 @@ struct ProviderUsageCard: View {
 
                     if showsCodexResetInventoryAction {
                         Button {
-                            isShowingResetInventory = true
+                            if let bankedResets {
+                                resetInventoryPresentation = CodexBankedResetInventoryPresentation(
+                                    resets: bankedResets
+                                )
+                            }
                         } label: {
                             Text(resetInventoryActionTitle)
                         }
@@ -203,19 +212,17 @@ struct ProviderUsageCard: View {
         }
         .padding(16)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
-        .sheet(isPresented: $isShowingResetInventory) {
-            if let bankedResets {
-                CodexBankedResetInventoryView(
-                    resets: bankedResets,
-                    canRedeem: showsCodexResetRedemptionActions,
-                    onUseReset: onUseCodexReset,
-                    onFeedback: { feedback in
-                        resetFeedback = feedback
-                        isResetActionUnavailable = feedback.hidesAction
-                    },
-                    redemptionController: resetRedemptionController
-                )
-            }
+        .sheet(item: $resetInventoryPresentation) { presentation in
+            CodexBankedResetInventoryView(
+                resets: presentation.resets,
+                canRedeem: showsCodexResetRedemptionActions,
+                onUseReset: onUseCodexReset,
+                onFeedback: { feedback in
+                    resetFeedback = feedback
+                    isResetActionUnavailable = feedback.hidesAction
+                },
+                redemptionController: resetRedemptionController
+            )
         }
         .onChange(of: result.fetchedAt) {
             isResetActionUnavailable = false
