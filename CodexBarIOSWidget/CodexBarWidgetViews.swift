@@ -60,7 +60,10 @@ struct CodexBarWidgetView: View {
 
                 return CodexBarWidgetRenderedTile(
                     tile: resolvedTile(for: choice, in: allTiles),
-                    displayMode: displayMode(at: index, in: configuredDisplayModes)
+                    displayMode: CodexBarWidgetTileDisplayMode.mode(
+                        at: index,
+                        in: configuredDisplayModes
+                    )
                 )
             }
         }
@@ -82,7 +85,9 @@ struct CodexBarWidgetView: View {
 
                 return CodexBarWidgetRenderedTile(
                     tile: tile,
-                    displayMode: displayMode(from: builderConfiguration.displayMode(at: index))
+                    displayMode: CodexBarWidgetTileDisplayMode(
+                        builderDisplayMode: builderConfiguration.displayMode(at: index)
+                    )
                 )
             }
         }
@@ -90,7 +95,10 @@ struct CodexBarWidgetView: View {
         return fallbackTiles.enumerated().map { index, tile in
             CodexBarWidgetRenderedTile(
                 tile: tile,
-                displayMode: displayMode(at: index, in: configuredDisplayModes)
+                displayMode: CodexBarWidgetTileDisplayMode.mode(
+                    at: index,
+                    in: configuredDisplayModes
+                )
             )
         }
     }
@@ -195,17 +203,6 @@ struct CodexBarWidgetView: View {
         }
 
         return nil
-    }
-
-    private func displayMode(
-        at index: Int,
-        in displayModes: [CodexBarWidgetTileDisplayMode]
-    ) -> CodexBarWidgetTileDisplayMode {
-        displayModes.indices.contains(index) ? displayModes[index] : .automatic
-    }
-
-    private func displayMode(from displayMode: CodexBarWidgetBuilderDisplayMode) -> CodexBarWidgetTileDisplayMode {
-        CodexBarWidgetTileDisplayMode(rawValue: displayMode.rawValue) ?? .automatic
     }
 
     private func tileCount(

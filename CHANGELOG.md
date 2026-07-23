@@ -69,6 +69,8 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added deterministic unit coverage for the production widget configuration,
+  timeline, entity-query, filtering, and tile-selection logic. ([#97](https://github.com/HemSoft/codexbar-ios/issues/97))
 - Added required privacy manifests to the app and widget bundles, including a
   build-time regression check, so App Store submissions declare local and
   app-group preference access correctly. ([#85](https://github.com/HemSoft/codexbar-ios/issues/85))

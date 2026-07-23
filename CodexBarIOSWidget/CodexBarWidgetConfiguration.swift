@@ -10,46 +10,102 @@ struct CodexBarWidgetEntry: TimelineEntry {
     let isPreview: Bool
 }
 
-struct CodexBarWidgetProvider: AppIntentTimelineProvider {
-    func placeholder(in context: Context) -> CodexBarWidgetEntry {
+struct CodexBarWidgetTimelinePlan {
+    let entry: CodexBarWidgetEntry
+    let nextRefreshDate: Date
+
+    var timeline: Timeline<CodexBarWidgetEntry> {
+        Timeline(entries: [entry], policy: .after(nextRefreshDate))
+    }
+}
+
+struct CodexBarWidgetTimelineLoader: Sendable {
+    private let now: @Sendable () -> Date
+    private let loadSnapshot: @Sendable (Bool) -> CodexBarWidgetSnapshot
+    private let loadRefreshInterval: @Sendable () -> WidgetRefreshInterval
+
+    init(
+        now: @escaping @Sendable () -> Date = { Date() },
+        loadSnapshot: @escaping @Sendable (Bool) -> CodexBarWidgetSnapshot = {
+            WidgetSnapshotStore.loadSnapshot(forPreview: $0)
+        },
+        loadRefreshInterval: @escaping @Sendable () -> WidgetRefreshInterval = {
+            WidgetSnapshotStore.loadRefreshInterval()
+        }
+    ) {
+        self.now = now
+        self.loadSnapshot = loadSnapshot
+        self.loadRefreshInterval = loadRefreshInterval
+    }
+
+    func placeholder(configuration: CodexBarWidgetConfigurationIntent) -> CodexBarWidgetEntry {
         CodexBarWidgetEntry(
-            date: Date(),
+            date: now(),
             snapshot: .preview,
-            configuration: CodexBarWidgetConfigurationIntent(),
+            configuration: configuration,
             isPreview: true
         )
+    }
+
+    func snapshot(
+        configuration: CodexBarWidgetConfigurationIntent,
+        isPreview: Bool
+    ) -> CodexBarWidgetEntry {
+        CodexBarWidgetEntry(
+            date: now(),
+            snapshot: loadSnapshot(isPreview),
+            configuration: configuration,
+            isPreview: isPreview
+        )
+    }
+
+    func timeline(
+        configuration: CodexBarWidgetConfigurationIntent
+    ) -> Timeline<CodexBarWidgetEntry> {
+        timelinePlan(configuration: configuration).timeline
+    }
+
+    func timelinePlan(
+        configuration: CodexBarWidgetConfigurationIntent
+    ) -> CodexBarWidgetTimelinePlan {
+        let date = now()
+        let snapshot = loadSnapshot(false)
+        let interval = configuration.refreshPolicy.interval(fallback: loadRefreshInterval())
+        return CodexBarWidgetTimelinePlan(
+            entry: CodexBarWidgetEntry(
+                date: date,
+                snapshot: snapshot,
+                configuration: configuration,
+                isPreview: false
+            ),
+            nextRefreshDate: date.addingTimeInterval(interval.seconds)
+        )
+    }
+}
+
+struct CodexBarWidgetProvider: AppIntentTimelineProvider {
+    private let loader: CodexBarWidgetTimelineLoader
+
+    init(loader: CodexBarWidgetTimelineLoader = CodexBarWidgetTimelineLoader()) {
+        self.loader = loader
+    }
+
+    func placeholder(in context: Context) -> CodexBarWidgetEntry {
+        loader.placeholder(configuration: CodexBarWidgetConfigurationIntent())
     }
 
     func snapshot(
         for configuration: CodexBarWidgetConfigurationIntent,
         in context: Context
     ) async -> CodexBarWidgetEntry {
-        CodexBarWidgetEntry(
-            date: Date(),
-            snapshot: WidgetSnapshotStore.loadSnapshot(forPreview: context.isPreview),
-            configuration: configuration,
-            isPreview: context.isPreview
-        )
+        loader.snapshot(configuration: configuration, isPreview: context.isPreview)
     }
 
     func timeline(
         for configuration: CodexBarWidgetConfigurationIntent,
         in context: Context
     ) async -> Timeline<CodexBarWidgetEntry> {
-        let now = Date()
-        let snapshot = WidgetSnapshotStore.loadSnapshot()
-        let interval = configuration.refreshPolicy.interval(fallback: WidgetSnapshotStore.loadRefreshInterval())
-        return Timeline(
-            entries: [
-                CodexBarWidgetEntry(
-                    date: now,
-                    snapshot: snapshot,
-                    configuration: configuration,
-                    isPreview: false
-                )
-            ],
-            policy: .after(now.addingTimeInterval(interval.seconds))
-        )
+        loader.timeline(configuration: configuration)
     }
 }
 
@@ -212,6 +268,17 @@ enum CodexBarWidgetTileDisplayMode: String, AppEnum {
         .balanceOnly: "Balance Only",
         .urgentStatus: "Urgent Status",
     ]
+
+    static func mode(
+        at index: Int,
+        in displayModes: [CodexBarWidgetTileDisplayMode]
+    ) -> CodexBarWidgetTileDisplayMode {
+        displayModes.indices.contains(index) ? displayModes[index] : .automatic
+    }
+
+    init(builderDisplayMode: CodexBarWidgetBuilderDisplayMode) {
+        self = Self(rawValue: builderDisplayMode.rawValue) ?? .automatic
+    }
 }
 
 struct CodexBarWidgetTileChoice: AppEntity {
@@ -241,8 +308,20 @@ struct CodexBarWidgetGroupChoice: AppEntity {
 }
 
 struct CodexBarWidgetGroupChoiceQuery: EntityStringQuery {
+    private let loadSnapshot: @Sendable () -> CodexBarWidgetSnapshot
+
+    init() {
+        loadSnapshot = { WidgetSnapshotStore.loadSnapshot() }
+    }
+
+    init(
+        loadSnapshot: @escaping @Sendable () -> CodexBarWidgetSnapshot
+    ) {
+        self.loadSnapshot = loadSnapshot
+    }
+
     func entities(for identifiers: [CodexBarWidgetGroupChoice.ID]) async throws -> [CodexBarWidgetGroupChoice] {
-        let choices = Self.choices()
+        let choices = choices()
         return identifiers.map { identifier in
             choices.first { $0.id == identifier }
                 ?? CodexBarWidgetGroupChoice(id: identifier, title: "Saved Group")
@@ -251,26 +330,45 @@ struct CodexBarWidgetGroupChoiceQuery: EntityStringQuery {
 
     func entities(matching string: String) async throws -> [CodexBarWidgetGroupChoice] {
         guard !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return Self.choices()
+            return choices()
         }
 
-        return Self.choices().filter { choice in
+        return choices().filter { choice in
             choice.title.localizedCaseInsensitiveContains(string)
         }
     }
 
     func suggestedEntities() async throws -> [CodexBarWidgetGroupChoice] {
-        Self.choices()
+        choices()
     }
 
-    private static func choices() -> [CodexBarWidgetGroupChoice] {
-        WidgetSnapshotStore.loadSnapshot().groupChoices
+    private func choices() -> [CodexBarWidgetGroupChoice] {
+        loadSnapshot().groupChoices
     }
 }
 
 struct CodexBarWidgetTileChoiceQuery: EntityStringQuery {
     @IntentParameterDependency<CodexBarWidgetConfigurationIntent>(\.$group, \.$focus)
     var intent
+    private let loadSnapshot: @Sendable () -> CodexBarWidgetSnapshot
+    private let groupOverride: CodexBarWidgetGroupChoice?
+    private let focusOverride: CodexBarWidgetFocus?
+
+    init() {
+        loadSnapshot = { WidgetSnapshotStore.loadSnapshot() }
+        groupOverride = nil
+        focusOverride = nil
+    }
+
+    init(
+        loadSnapshot: @escaping @Sendable () -> CodexBarWidgetSnapshot,
+        group: CodexBarWidgetGroupChoice? = nil,
+        focus: CodexBarWidgetFocus? = nil
+    ) {
+        self.loadSnapshot = loadSnapshot
+        self.groupOverride = group
+        self.focusOverride = focus
+    }
 
     func entities(for identifiers: [CodexBarWidgetTileChoice.ID]) async throws -> [CodexBarWidgetTileChoice] {
         let choices = choices()
@@ -297,46 +395,23 @@ struct CodexBarWidgetTileChoiceQuery: EntityStringQuery {
 
     private func choices() -> [CodexBarWidgetTileChoice] {
         Self.choices(
-            group: intent?.group,
-            focus: intent?.focus ?? .dashboardOrder
+            snapshot: loadSnapshot(),
+            group: groupOverride ?? intent?.group,
+            focus: focusOverride ?? intent?.focus ?? .dashboardOrder
         )
     }
 
     private static func choices(
+        snapshot: CodexBarWidgetSnapshot,
         group: CodexBarWidgetGroupChoice? = nil,
         focus: CodexBarWidgetFocus = .dashboardOrder
     ) -> [CodexBarWidgetTileChoice] {
-        WidgetSnapshotStore.loadSnapshot().selectableTiles(group: group, focus: focus).map { tile in
+        snapshot.selectableTiles(group: group, focus: focus).map { tile in
             CodexBarWidgetTileChoice(
                 id: tile.id,
                 title: tile.choiceTitle,
                 subtitle: tile.choiceSubtitle
             )
         }
-    }
-}
-
-struct CodexBarIOSWidget: Widget {
-    let kind = CodexBarWidgetConstants.widgetKind
-
-    var body: some WidgetConfiguration {
-        AppIntentConfiguration(
-            kind: kind,
-            intent: CodexBarWidgetConfigurationIntent.self,
-            provider: CodexBarWidgetProvider()
-        ) { entry in
-            CodexBarWidgetView(entry: entry)
-        }
-        .configurationDisplayName("CodexBar")
-        .description("Track AI provider usage from the Home Screen and Lock Screen.")
-        .supportedFamilies([
-            .systemSmall,
-            .systemMedium,
-            .systemLarge,
-            .systemExtraLarge,
-            .accessoryInline,
-            .accessoryCircular,
-            .accessoryRectangular,
-        ])
     }
 }
