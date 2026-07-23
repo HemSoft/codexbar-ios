@@ -678,7 +678,8 @@ final class UsageHistoryTests: XCTestCase {
             onUseReset: { _ in
                 CodexBankedResetRedemptionFeedback(message: "Reset used.", isSuccess: true)
             },
-            onFeedback: { _ in }
+            onFeedback: { _ in },
+            redemptionController: CodexBankedResetRedemptionController()
         )
         let genericItem = actionableInventory.inventoryItems.first
         XCTAssertEqual(actionableInventory.inventoryItems.count, 1)
@@ -690,7 +691,8 @@ final class UsageHistoryTests: XCTestCase {
             resets: countOnly,
             canRedeem: false,
             onUseReset: nil,
-            onFeedback: { _ in }
+            onFeedback: { _ in },
+            redemptionController: CodexBankedResetRedemptionController()
         )
         XCTAssertTrue(readOnlyInventory.inventoryItems.isEmpty)
         XCTAssertEqual(readOnlyInventory.unavailableDetailCount, 3)
@@ -723,6 +725,30 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(controller.retryItemID, second.id)
         XCTAssertFalse(controller.canRequestConfirmation(for: first))
         XCTAssertTrue(controller.canRequestConfirmation(for: second))
+
+        controller.requestConfirmation(for: second)
+        XCTAssertEqual(controller.beginRedemption()?.creditID, "credit-second")
+        controller.finishRedemption(for: second, requiresSameResetForRetry: true)
+
+        let reopenedInventory = CodexBankedResetInventoryView(
+            resets: CodexBankedRateLimitResets(
+                availableCount: 2,
+                credits: [
+                    CodexBankedRateLimitReset(id: "credit-first", title: "First"),
+                    CodexBankedRateLimitReset(id: "credit-second", title: "Second"),
+                ],
+                canConsume: true
+            ),
+            canRedeem: true,
+            onUseReset: { _ in
+                CodexBankedResetRedemptionFeedback(message: "Reset used.", isSuccess: true)
+            },
+            onFeedback: { _ in },
+            redemptionController: controller
+        )
+        XCTAssertEqual(reopenedInventory.redemptionController.retryItemID, second.id)
+        XCTAssertFalse(reopenedInventory.redemptionController.canRequestConfirmation(for: first))
+        XCTAssertTrue(reopenedInventory.redemptionController.canRequestConfirmation(for: second))
 
         controller.requestConfirmation(for: second)
         XCTAssertEqual(controller.beginRedemption()?.creditID, "credit-second")

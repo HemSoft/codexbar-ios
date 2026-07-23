@@ -17,6 +17,7 @@ struct ProviderUsageCard: View {
     @State private var isShowingResetInventory = false
     @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
     @State private var isResetActionUnavailable = false
+    @StateObject private var resetRedemptionController = CodexBankedResetRedemptionController()
 
     init(
         result: ProviderUsageResult,
@@ -211,7 +212,8 @@ struct ProviderUsageCard: View {
                     onFeedback: { feedback in
                         resetFeedback = feedback
                         isResetActionUnavailable = feedback.hidesAction
-                    }
+                    },
+                    redemptionController: resetRedemptionController
                 )
             }
         }
@@ -405,9 +407,9 @@ struct CodexBankedResetInventoryView: View {
     let canRedeem: Bool
     let onUseReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
     let onFeedback: (CodexBankedResetRedemptionFeedback) -> Void
+    @ObservedObject var redemptionController: CodexBankedResetRedemptionController
 
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var redemptionController = CodexBankedResetRedemptionController()
     @State private var feedback: CodexBankedResetRedemptionFeedback?
 
     var inventoryItems: [CodexBankedResetInventoryItem] {
