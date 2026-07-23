@@ -537,7 +537,7 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
-    func testProviderUsageCardPresentsBankedResetsWithoutChangingSeverity() {
+    func testProviderUsageCardOpensBankedResetInventoryWithoutChangingSeverity() {
         let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
         let result = ProviderUsageResult(
             accountID: "codex.personal",
@@ -568,10 +568,10 @@ final class UsageHistoryTests: XCTestCase {
         )
 
         XCTAssertEqual(card.bankedResetAvailabilityText, "1 reset available")
-        XCTAssertTrue(card.showsCodexResetAction)
-        XCTAssertTrue(card.resetConfirmationMessage.contains("Full reset (Weekly + 5 hr)"))
+        XCTAssertTrue(card.showsCodexResetInventoryAction)
+        XCTAssertEqual(card.resetInventoryActionTitle, "View Resets")
+        XCTAssertTrue(card.showsCodexResetRedemptionActions)
         XCTAssertEqual(result.highestSeverity, .normal)
-        card.cancelCodexReset()
         XCTAssertEqual(redemptionCount, 0)
 
         let readOnlyResult = ProviderUsageResult(
@@ -592,7 +592,8 @@ final class UsageHistoryTests: XCTestCase {
             history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false)
         )
         XCTAssertEqual(readOnlyCard.bankedResetAvailabilityText, "3 resets available")
-        XCTAssertFalse(readOnlyCard.showsCodexResetAction)
+        XCTAssertTrue(readOnlyCard.showsCodexResetInventoryAction)
+        XCTAssertFalse(readOnlyCard.showsCodexResetRedemptionActions)
 
         let zeroResult = ProviderUsageResult(
             accountID: result.accountID,
@@ -609,6 +610,116 @@ final class UsageHistoryTests: XCTestCase {
             history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false)
         )
         XCTAssertNil(zeroCard.bankedResets)
+    }
+
+    @MainActor
+    func testResetInventoryOrdersDetailedCreditsAndFormatsMissingMetadata() throws {
+        let formatter = UserFacingDateTimeFormatter(
+            timeZone: try XCTUnwrap(TimeZone(secondsFromGMT: 0)),
+            locale: Locale(identifier: "en_US")
+        )
+        let later = Date(timeIntervalSince1970: 1_893_456_000)
+        let sooner = later.addingTimeInterval(-3_600)
+        let resets = CodexBankedRateLimitResets(
+            availableCount: 4,
+            credits: [
+                CodexBankedRateLimitReset(id: "missing"),
+                CodexBankedRateLimitReset(
+                    id: "later",
+                    title: "Weekly reset",
+                    description: "Restores weekly usage",
+                    expiresAt: later
+                ),
+                CodexBankedRateLimitReset(
+                    id: "sooner",
+                    title: "5-hour reset",
+                    expiresAt: sooner
+                ),
+                CodexBankedRateLimitReset(id: "missing-second", title: " "),
+            ],
+            canConsume: true
+        )
+
+        XCTAssertEqual(resets.orderedCredits.map(\.id), [
+            "sooner",
+            "later",
+            "missing",
+            "missing-second",
+        ])
+
+        let soonerItem = CodexBankedResetInventoryItem(
+            credit: try XCTUnwrap(resets.orderedCredits.first),
+            dateTimeFormatter: formatter
+        )
+        XCTAssertEqual(soonerItem.creditID, "sooner")
+        XCTAssertEqual(soonerItem.title, "5-hour reset")
+        XCTAssertEqual(soonerItem.detail, "No description provided.")
+        XCTAssertEqual(soonerItem.expiration, "Expires \(formatter.dateAndTime(sooner))")
+        XCTAssertTrue(soonerItem.accessibilityLabel.contains("available"))
+
+        let missingItem = CodexBankedResetInventoryItem(
+            credit: try XCTUnwrap(resets.orderedCredits.last),
+            dateTimeFormatter: formatter
+        )
+        XCTAssertEqual(missingItem.title, "Banked reset")
+        XCTAssertEqual(missingItem.detail, "No description provided.")
+        XCTAssertEqual(missingItem.expiration, "Expiration unavailable")
+    }
+
+    @MainActor
+    func testResetInventoryUsesConservativeCountOnlyFallback() {
+        let countOnly = CodexBankedRateLimitResets(
+            availableCount: 3,
+            canConsume: true
+        )
+        let actionableInventory = CodexBankedResetInventoryView(
+            resets: countOnly,
+            canRedeem: true,
+            onUseReset: { _ in
+                CodexBankedResetRedemptionFeedback(message: "Reset used.", isSuccess: true)
+            },
+            onFeedback: { _ in }
+        )
+        let genericItem = actionableInventory.inventoryItems.first
+        XCTAssertEqual(actionableInventory.inventoryItems.count, 1)
+        XCTAssertEqual(genericItem?.title, "Use one banked reset")
+        XCTAssertNil(genericItem?.creditID)
+        XCTAssertEqual(genericItem?.expiration, "Expiration unavailable")
+
+        let readOnlyInventory = CodexBankedResetInventoryView(
+            resets: countOnly,
+            canRedeem: false,
+            onUseReset: nil,
+            onFeedback: { _ in }
+        )
+        XCTAssertTrue(readOnlyInventory.inventoryItems.isEmpty)
+        XCTAssertEqual(readOnlyInventory.unavailableDetailCount, 3)
+    }
+
+    @MainActor
+    func testResetInventorySelectionSupportsNonFirstCreditCancellationAndDuplicateTapGuard() {
+        let first = CodexBankedResetInventoryItem(
+            credit: CodexBankedRateLimitReset(id: "credit-first", title: "First")
+        )
+        let second = CodexBankedResetInventoryItem(
+            credit: CodexBankedRateLimitReset(id: "credit-second", title: "Second")
+        )
+        let controller = CodexBankedResetRedemptionController()
+
+        controller.requestConfirmation(for: first)
+        controller.cancelConfirmation()
+        XCTAssertNil(controller.beginRedemption())
+
+        controller.requestConfirmation(for: second)
+        let selected = controller.beginRedemption()
+        XCTAssertEqual(selected?.creditID, "credit-second")
+        XCTAssertEqual(controller.pendingItemID, second.id)
+        XCTAssertNil(controller.beginRedemption())
+
+        controller.requestConfirmation(for: first)
+        XCTAssertNil(controller.selectedItem)
+        controller.finishRedemption(for: second)
+        XCTAssertNil(controller.pendingItemID)
     }
 
     @MainActor

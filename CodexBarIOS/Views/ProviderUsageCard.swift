@@ -14,8 +14,7 @@ struct ProviderUsageCard: View {
     let onRetry: () -> Void
     let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
 
-    @State private var isShowingResetConfirmation = false
-    @State private var isUsingReset = false
+    @State private var isShowingResetInventory = false
     @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
     @State private var isResetActionUnavailable = false
 
@@ -136,22 +135,15 @@ struct ProviderUsageCard: View {
 
                     Spacer(minLength: 8)
 
-                    if showsCodexResetAction {
+                    if showsCodexResetInventoryAction {
                         Button {
-                            isShowingResetConfirmation = true
+                            isShowingResetInventory = true
                         } label: {
-                            if isUsingReset {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .accessibilityLabel("Using banked reset")
-                            } else {
-                                Text("Use reset")
-                            }
+                            Text(resetInventoryActionTitle)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .disabled(isUsingReset)
-                        .accessibilityHint("Asks for confirmation before using one banked reset")
+                        .accessibilityHint("Shows each available banked reset and its expiration")
                     }
                 }
 
@@ -210,15 +202,18 @@ struct ProviderUsageCard: View {
         }
         .padding(16)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
-        .alert("Use one banked reset?", isPresented: $isShowingResetConfirmation) {
-            Button("Cancel", role: .cancel) {
-                cancelCodexReset()
+        .sheet(isPresented: $isShowingResetInventory) {
+            if let bankedResets {
+                CodexBankedResetInventoryView(
+                    resets: bankedResets,
+                    canRedeem: showsCodexResetRedemptionActions,
+                    onUseReset: onUseCodexReset,
+                    onFeedback: { feedback in
+                        resetFeedback = feedback
+                        isResetActionUnavailable = feedback.hidesAction
+                    }
+                )
             }
-            Button("Use Reset", role: .destructive) {
-                useCodexReset()
-            }
-        } message: {
-            Text(resetConfirmationMessage)
         }
         .onChange(of: result.fetchedAt) {
             isResetActionUnavailable = false
@@ -266,7 +261,15 @@ struct ProviderUsageCard: View {
         return count == 1 ? "1 reset available" : "\(count) resets available"
     }
 
-    var showsCodexResetAction: Bool {
+    var showsCodexResetInventoryAction: Bool {
+        bankedResets != nil
+    }
+
+    var resetInventoryActionTitle: String {
+        "View Resets"
+    }
+
+    var showsCodexResetRedemptionActions: Bool {
         bankedResets?.canConsume == true
             && onUseCodexReset != nil
             && !isResetActionUnavailable
@@ -283,45 +286,269 @@ struct ProviderUsageCard: View {
         feedback
     }
 
-    var resetConfirmationMessage: String {
-        guard let credit = bankedResets?.preferredCredit else {
-            return "This will use one banked reset for the current ChatGPT account."
-        }
-
-        var details = [credit.title, credit.description].compactMap { $0 }
-        if let expiresAt = credit.expiresAt {
-            details.append("Expires \(UserFacingDateTimeFormatter.current.dateAndTime(expiresAt)).")
-        }
-        let detailText = details.joined(separator: " ")
-        return detailText.isEmpty
-            ? "This will use one banked reset for the current ChatGPT account."
-            : "This will use one banked reset. \(detailText)"
-    }
-
-    private func useCodexReset() {
-        guard !isUsingReset, let onUseCodexReset else {
-            return
-        }
-        isUsingReset = true
-        resetFeedback = nil
-        let creditID = bankedResets?.preferredCredit?.id
-        Task {
-            let feedback = await onUseCodexReset(creditID)
-            resetFeedback = feedback
-            isResetActionUnavailable = feedback.hidesAction
-            isUsingReset = false
-            UIAccessibility.post(notification: .announcement, argument: feedback.message)
-        }
-    }
-
-    func cancelCodexReset() {
-        isShowingResetConfirmation = false
-    }
-
     private func monetaryAccessibilityLabel(_ metric: ProviderMonetaryMetric) -> String {
         [metric.label, metric.formattedAmount(), metric.detail]
             .compactMap { $0 }
             .joined(separator: ", ")
+    }
+}
+
+struct CodexBankedResetInventoryItem: Identifiable, Equatable, Sendable {
+    let id: String
+    let creditID: String?
+    let title: String
+    let detail: String
+    let expiration: String
+
+    init(
+        credit: CodexBankedRateLimitReset,
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
+    ) {
+        id = credit.id
+        creditID = credit.id
+        title = Self.nonempty(credit.title) ?? "Banked reset"
+        detail = Self.nonempty(credit.description) ?? "No description provided."
+        expiration = credit.expiresAt.map {
+            "Expires \(dateTimeFormatter.dateAndTime($0))"
+        } ?? "Expiration unavailable"
+    }
+
+    static func generic() -> CodexBankedResetInventoryItem {
+        CodexBankedResetInventoryItem(
+            id: "generic-banked-reset",
+            creditID: nil,
+            title: "Use one banked reset",
+            detail: "Individual reset details are unavailable for this account.",
+            expiration: "Expiration unavailable"
+        )
+    }
+
+    private init(
+        id: String,
+        creditID: String?,
+        title: String,
+        detail: String,
+        expiration: String
+    ) {
+        self.id = id
+        self.creditID = creditID
+        self.title = title
+        self.detail = detail
+        self.expiration = expiration
+    }
+
+    var confirmationMessage: String {
+        if creditID == nil {
+            return "This will use one banked reset for the current ChatGPT account. Individual reset details and expiration are unavailable."
+        }
+        return "This will use the selected banked reset for the current ChatGPT account. \(detail) \(expiration)."
+    }
+
+    var accessibilityLabel: String {
+        "\(title), \(detail), \(expiration), available"
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+}
+
+@MainActor
+final class CodexBankedResetRedemptionController: ObservableObject {
+    @Published private(set) var selectedItem: CodexBankedResetInventoryItem?
+    @Published private(set) var pendingItemID: String?
+
+    var isConfirmationPresented: Bool {
+        selectedItem != nil
+    }
+
+    func requestConfirmation(for item: CodexBankedResetInventoryItem) {
+        guard pendingItemID == nil else {
+            return
+        }
+        selectedItem = item
+    }
+
+    func cancelConfirmation() {
+        selectedItem = nil
+    }
+
+    func beginRedemption() -> CodexBankedResetInventoryItem? {
+        guard pendingItemID == nil, let selectedItem else {
+            return nil
+        }
+        pendingItemID = selectedItem.id
+        self.selectedItem = nil
+        return selectedItem
+    }
+
+    func finishRedemption(for item: CodexBankedResetInventoryItem) {
+        guard pendingItemID == item.id else {
+            return
+        }
+        pendingItemID = nil
+    }
+}
+
+struct CodexBankedResetInventoryView: View {
+    let resets: CodexBankedRateLimitResets
+    let canRedeem: Bool
+    let onUseReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
+    let onFeedback: (CodexBankedResetRedemptionFeedback) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var redemptionController = CodexBankedResetRedemptionController()
+    @State private var feedback: CodexBankedResetRedemptionFeedback?
+
+    var inventoryItems: [CodexBankedResetInventoryItem] {
+        if !resets.orderedCredits.isEmpty {
+            return resets.orderedCredits.map {
+                CodexBankedResetInventoryItem(credit: $0)
+            }
+        }
+        return canRedeem ? [.generic()] : []
+    }
+
+    var unavailableDetailCount: Int {
+        max(resets.availableCount - resets.orderedCredits.count, 0)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if inventoryItems.isEmpty {
+                        Text("Individual reset details are unavailable. Redemption is not available from CodexBar right now.")
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(inventoryItems) { item in
+                            if canRedeem {
+                                Button {
+                                    redemptionController.requestConfirmation(for: item)
+                                } label: {
+                                    resetRow(item)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(redemptionController.pendingItemID != nil)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(item.accessibilityLabel)
+                                .accessibilityHint("Asks for confirmation before using this reset")
+                            } else {
+                                resetRow(item)
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel(item.accessibilityLabel)
+                            }
+                        }
+                    }
+                } header: {
+                    Text(resets.availableCount == 1 ? "1 reset available" : "\(resets.availableCount) resets available")
+                } footer: {
+                    if unavailableDetailCount > 0, !resets.orderedCredits.isEmpty {
+                        Text(unavailableDetailCount == 1
+                            ? "Details are unavailable for 1 additional reset."
+                            : "Details are unavailable for \(unavailableDetailCount) additional resets.")
+                    } else if !canRedeem, !inventoryItems.isEmpty {
+                        Text("This inventory is read-only because redemption is not available from CodexBar right now.")
+                    }
+                }
+
+                if let feedback {
+                    Section {
+                        Label(
+                            feedback.message,
+                            systemImage: feedback.isSuccess ? "checkmark.circle" : "info.circle"
+                        )
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(feedback.message)
+                    }
+                }
+            }
+            .navigationTitle("Saved Codex Resets")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .alert(
+                redemptionController.selectedItem.map { "Use \($0.title)?" } ?? "Use Reset?",
+                isPresented: Binding(
+                    get: { redemptionController.isConfirmationPresented },
+                    set: { isPresented in
+                        if !isPresented {
+                            redemptionController.cancelConfirmation()
+                        }
+                    }
+                ),
+                presenting: redemptionController.selectedItem
+            ) { _ in
+                Button("Cancel", role: .cancel) {
+                    redemptionController.cancelConfirmation()
+                }
+                Button("Use Reset", role: .destructive) {
+                    redeemSelectedReset()
+                }
+            } message: { item in
+                Text(item.confirmationMessage)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func resetRow(_ item: CodexBankedResetInventoryItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(item.title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(item.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Label(item.expiration, systemImage: "calendar")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            if redemptionController.pendingItemID == item.id {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Using \(item.title)")
+            } else if canRedeem {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func redeemSelectedReset() {
+        guard
+            let onUseReset,
+            let item = redemptionController.beginRedemption()
+        else {
+            return
+        }
+
+        feedback = nil
+        Task {
+            let result = await onUseReset(item.creditID)
+            redemptionController.finishRedemption(for: item)
+            feedback = result
+            onFeedback(result)
+            UIAccessibility.post(notification: .announcement, argument: result.message)
+            if result.isSuccess || result.hidesAction {
+                dismiss()
+            }
+        }
     }
 }
 

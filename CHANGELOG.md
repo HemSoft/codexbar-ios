@@ -20,6 +20,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Let users open a native inventory from the Codex card, inspect each saved
+  reset and its localized expiration, and explicitly choose which reset to use.
+  ([#101](https://github.com/HemSoft/codexbar-ios/issues/101))
 - Restricted browser sign-in callbacks to this device, matched callback hosts
   to each provider's requirements, and made stalled ChatGPT, Claude, and GitHub
   Copilot sign-ins time out cleanly. ([#52](https://github.com/HemSoft/codexbar-ios/issues/52))
