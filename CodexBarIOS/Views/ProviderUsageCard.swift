@@ -395,13 +395,22 @@ final class CodexBankedResetRedemptionController: ObservableObject {
     }
 
     func beginRedemption() -> CodexBankedResetInventoryItem? {
-        guard pendingItem == nil, let selectedItem else {
+        guard let selectedItem else {
             return nil
         }
-        pendingItem = selectedItem
+        return beginRedemption(for: selectedItem)
+    }
+
+    func beginRedemption(
+        for item: CodexBankedResetInventoryItem
+    ) -> CodexBankedResetInventoryItem? {
+        guard canRequestConfirmation(for: item) else {
+            return nil
+        }
+        pendingItem = item
         retryItem = nil
         self.selectedItem = nil
-        return selectedItem
+        return item
     }
 
     func finishRedemption(
@@ -533,12 +542,12 @@ struct CodexBankedResetInventoryView: View {
                     }
                 ),
                 presenting: redemptionController.selectedItem
-            ) { _ in
+            ) { item in
                 Button("Cancel", role: .cancel) {
                     redemptionController.cancelConfirmation()
                 }
                 Button("Use Reset", role: .destructive) {
-                    redeemSelectedReset()
+                    redeemSelectedReset(item)
                 }
             } message: { item in
                 Text(item.confirmationMessage)
@@ -583,10 +592,10 @@ struct CodexBankedResetInventoryView: View {
         .contentShape(Rectangle())
     }
 
-    private func redeemSelectedReset() {
+    private func redeemSelectedReset(_ presentedItem: CodexBankedResetInventoryItem) {
         guard
             let onUseReset,
-            let item = redemptionController.beginRedemption()
+            let item = redemptionController.beginRedemption(for: presentedItem)
         else {
             return
         }

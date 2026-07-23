@@ -720,7 +720,7 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
-    func testResetInventorySelectionSupportsNonFirstCreditCancellationAndDuplicateTapGuard() {
+    func testResetInventorySelectionSupportsNonFirstCreditCancellationAndDuplicateTapGuard() throws {
         let first = CodexBankedResetInventoryItem(
             credit: CodexBankedRateLimitReset(id: "credit-first", title: "First")
         )
@@ -734,7 +734,9 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertNil(controller.beginRedemption())
 
         controller.requestConfirmation(for: second)
-        let selected = controller.beginRedemption()
+        let alertPresentedItem = try XCTUnwrap(controller.selectedItem)
+        controller.cancelConfirmation()
+        let selected = controller.beginRedemption(for: alertPresentedItem)
         XCTAssertEqual(selected?.creditID, "credit-second")
         XCTAssertEqual(controller.pendingItemID, second.id)
         XCTAssertNil(controller.beginRedemption())
