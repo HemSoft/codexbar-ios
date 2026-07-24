@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Select an available iPhone simulator
         id: ios-destination
@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Select an available Apple Watch simulator
         id: watch-destination
@@ -104,7 +104,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Run smoke harness
         run: xcrun swift run CodexBarIOSSmokeTests
