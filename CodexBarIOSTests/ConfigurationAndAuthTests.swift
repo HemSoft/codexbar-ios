@@ -92,8 +92,13 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), malformedData)
         XCTAssertEqual(try secretStore.readSecret(account: keychainAccount), "preserved-secret")
 
-        _ = store.addAccount(for: .codex)
+        let attemptedAccount = store.addAccount(for: .codex)
+        var attemptedUpdate = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        attemptedUpdate.accountLabel = "Imported OpenCode"
 
+        XCTAssertFalse(store.update(attemptedUpdate))
+        XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertNil(store.configuration(accountID: attemptedAccount.id))
         XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), malformedData)
         XCTAssertTrue(store.isConfigurationRecoveryRequired)
         XCTAssertNotNil(store.lastError)

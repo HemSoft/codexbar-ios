@@ -18,12 +18,17 @@ enum OpenCodeZenBootstrapImporter {
             return
         }
 
-        defer {
+        guard protectImportFile(at: importURL, fileManager: fileManager) else {
             try? fileManager.removeItem(at: importURL)
+            return
         }
 
-        guard protectImportFile(at: importURL, fileManager: fileManager) else {
+        guard !configurationStore.isConfigurationRecoveryRequired else {
             return
+        }
+
+        defer {
+            try? fileManager.removeItem(at: importURL)
         }
 
         guard

@@ -111,6 +111,10 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     @discardableResult
     public func updateGroup(_ group: ProviderAccountGroup) -> Bool {
+        guard allowConfigurationMutation() else {
+            return false
+        }
+
         let normalizedName = Self.normalizedGroupName(group.name)
         guard !normalizedName.isEmpty else {
             lastError = "Group names cannot be empty."
@@ -136,6 +140,10 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     public func removeGroup(_ group: ProviderAccountGroup) {
+        guard allowConfigurationMutation() else {
+            return
+        }
+
         groups.removeAll { $0.id == group.id }
         configurations = configurations.map { configuration in
             var updated = configuration
@@ -164,15 +172,26 @@ public final class ProviderConfigurationStore: ObservableObject {
             configuration.copilotAccountScope = copilotScope
         }
         configuration.accountLabel = suggestedAccountLabel(for: providerID)
+        guard allowConfigurationMutation() else {
+            return configuration
+        }
+
+        let previousConfigurations = configurations
         configurations.append(configuration)
         sortConfigurations()
-        saveConfigurations()
+        if !saveConfigurations() {
+            configurations = previousConfigurations
+        }
         refreshSecretAvailability()
         return configuration
     }
 
     @discardableResult
     public func update(_ configuration: ProviderAccountConfiguration) -> Bool {
+        guard allowConfigurationMutation() else {
+            return false
+        }
+
         let normalized = Self.normalizedConfiguration(
             configuration,
             validGroupIDs: Set(groups.map(\.id))
@@ -182,6 +201,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             return false
         }
 
+        let previousConfigurations = configurations
         if let index = configurations.firstIndex(where: { $0.id == normalized.id }) {
             configurations[index] = normalized
         } else {
@@ -189,7 +209,10 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         sortConfigurations()
-        saveConfigurations()
+        guard saveConfigurations() else {
+            configurations = previousConfigurations
+            return false
+        }
         return true
     }
 
@@ -200,6 +223,10 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     @discardableResult
     public func removeAccounts(_ accounts: [ProviderAccountConfiguration]) -> Bool {
+        guard allowConfigurationMutation() else {
+            return false
+        }
+
         var removedAnyAccount = false
         var firstDeletionError: String?
         var removedAccountIDs = Set<String>()
@@ -423,6 +450,10 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     @discardableResult
     public func saveSecret(_ secret: String, for configuration: ProviderAccountConfiguration) -> Bool {
+        guard allowConfigurationMutation() else {
+            return false
+        }
+
         do {
             if secret.isEmpty {
                 try secretStore.deleteSecret(account: keychainAccount(for: configuration))
@@ -540,6 +571,10 @@ public final class ProviderConfigurationStore: ObservableObject {
         _ configuration: ProviderAccountConfiguration,
         credential: String
     ) -> ProviderAccountConfiguration? {
+        guard allowConfigurationMutation() else {
+            return nil
+        }
+
         guard configuration.providerID == .cursor else {
             lastError = "Only Cursor accounts can be connected here."
             return nil
@@ -573,6 +608,10 @@ public final class ProviderConfigurationStore: ObservableObject {
     public func disconnectCursorAccount(
         _ configuration: ProviderAccountConfiguration
     ) -> ProviderAccountConfiguration? {
+        guard allowConfigurationMutation() else {
+            return nil
+        }
+
         guard configuration.providerID == .cursor else {
             lastError = "Only Cursor accounts can be disconnected here."
             return nil
@@ -673,19 +712,30 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 
-    private func saveConfigurations() {
-        guard !isConfigurationRecoveryRequired else {
-            lastError = Self.configurationLoadErrorMessage
-            return
+    @discardableResult
+    private func saveConfigurations() -> Bool {
+        guard allowConfigurationMutation() else {
+            return false
         }
 
         do {
             let data = try JSONEncoder().encode(configurations)
             defaults.set(data, forKey: configurationsKey)
             lastError = nil
+            return true
         } catch {
             lastError = error.localizedDescription
+            return false
         }
+    }
+
+    private func allowConfigurationMutation() -> Bool {
+        guard !isConfigurationRecoveryRequired else {
+            lastError = Self.configurationLoadErrorMessage
+            return false
+        }
+
+        return true
     }
 
     private func saveGroups() {
