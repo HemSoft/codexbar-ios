@@ -61,7 +61,8 @@ enum WatchSnapshotPublisher {
         return WatchDashboardSnapshot(
             generatedAt: now,
             refreshIntervalSeconds: configurationStore.autoRefreshInterval.seconds,
-            accounts: orderedResults.compactMap { result -> WatchAccountSnapshot? in
+            accounts: orderedResults.enumerated().compactMap {
+                displayIndex, result -> WatchAccountSnapshot? in
                 guard let configuration = configurationStore.configuration(accountID: result.accountID) else {
                     return nil
                 }
@@ -119,7 +120,7 @@ enum WatchSnapshotPublisher {
                     : result.barsFetchedAt ?? result.fetchedAt
 
                 return WatchAccountSnapshot(
-                    id: result.accountID,
+                    id: "\(result.providerID.rawValue).\(displayIndex)",
                     providerName: result.title,
                     accountLabel: watchAccountLabel(
                         configuration: configuration,

@@ -629,7 +629,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.refreshIntervalSeconds, 300)
-        XCTAssertEqual(snapshot.accounts.map(\.id), [configuration.id])
+        XCTAssertEqual(snapshot.accounts.map(\.id), ["codex.0"])
         XCTAssertEqual(
             snapshot.accounts[0].metrics.map(\.visualizationStyle),
             WatchMetricVisualizationStyle.allCases
@@ -637,6 +637,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts[0].metrics.map(\.usedFraction), [0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
         let encodedText = try XCTUnwrap(String(data: snapshot.encoded(), encoding: .utf8))
         XCTAssertFalse(encodedText.contains("watch-must-never-see-this-secret"))
+        XCTAssertFalse(encodedText.contains(configuration.id))
         XCTAssertFalse(encodedText.localizedCaseInsensitiveContains("token"))
         XCTAssertFalse(encodedText.localizedCaseInsensitiveContains("cookie"))
 
