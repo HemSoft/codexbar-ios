@@ -33,6 +33,7 @@ public enum CodexUsageParser {
         let bars = windows.map { window in
             let usedFraction = window.usedPercent / 100
             return UsageBar(
+                stableKey: "window-\(window.durationSeconds)",
                 label: label(forDuration: window.durationSeconds),
                 used: window.usedPercent,
                 limit: 100,

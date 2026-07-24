@@ -10,6 +10,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var widgetRefreshInterval: WidgetRefreshInterval
     @Published public private(set) var dashboardOrderingMode: DashboardOrderingMode
     @Published public private(set) var dashboardCardOrder: [String]
+    @Published public private(set) var metricVisualizationPreferences: [String: [String: MetricVisualizationStyle]]
     @Published public private(set) var usageAlertSettings: UsageAlertSettings
     @Published public private(set) var usageAlertActiveIDs: Set<String>
     @Published public private(set) var lastError: String?
@@ -24,6 +25,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let widgetRefreshIntervalKey = DefaultsKey.widgetRefreshInterval
     private let dashboardOrderingModeKey = DefaultsKey.dashboardOrderingMode
     private let dashboardCardOrderKey = DefaultsKey.dashboardCardOrder
+    private let metricVisualizationPreferencesKey = DefaultsKey.metricVisualizationPreferences
     private let usageAlertSettingsKey = DefaultsKey.usageAlertSettings
     private let usageAlertActiveIDsKey = DefaultsKey.usageAlertActiveIDs
     private var secretAvailabilityError: String?
@@ -51,6 +53,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         )
         self.dashboardOrderingMode = Self.loadDashboardOrderingMode(from: defaults)
         self.dashboardCardOrder = Self.loadDashboardCardOrder(from: defaults)
+        self.metricVisualizationPreferences = Self.loadMetricVisualizationPreferences(from: defaults)
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
         self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
         sortConfigurations()
@@ -225,6 +228,10 @@ public final class ProviderConfigurationStore: ObservableObject {
                     knownAccountIDs: knownAccountIDs
                 )
             )
+            for accountID in removedAccountIDs {
+                metricVisualizationPreferences.removeValue(forKey: accountID)
+            }
+            saveMetricVisualizationPreferences()
             refreshSecretAvailability()
         }
         if let firstDeletionError {
@@ -249,10 +256,12 @@ public final class ProviderConfigurationStore: ObservableObject {
             groups = []
             secretAvailability = [:]
             dashboardCardOrder = []
+            metricVisualizationPreferences = [:]
             usageAlertActiveIDs = []
             defaults.removeObject(forKey: configurationsKey)
             defaults.removeObject(forKey: groupsKey)
             defaults.removeObject(forKey: dashboardCardOrderKey)
+            defaults.removeObject(forKey: metricVisualizationPreferencesKey)
             defaults.removeObject(forKey: usageAlertActiveIDsKey)
             lastError = nil
             return true
@@ -288,6 +297,59 @@ public final class ProviderConfigurationStore: ObservableObject {
         var seenAccountIDs = Set<String>()
         dashboardCardOrder = accountIDs.filter { seenAccountIDs.insert($0).inserted }
         defaults.set(dashboardCardOrder, forKey: dashboardCardOrderKey)
+    }
+
+    public func visualizationStyle(accountID: String, metricID: String) -> MetricVisualizationStyle {
+        metricVisualizationPreferences[accountID]?[metricID] ?? .linearBar
+    }
+
+    public func updateVisualizationStyle(
+        _ style: MetricVisualizationStyle,
+        accountID: String,
+        metricID: String
+    ) {
+        guard !accountID.isEmpty, !metricID.isEmpty else {
+            return
+        }
+
+        metricVisualizationPreferences[accountID, default: [:]][metricID] = style
+        saveMetricVisualizationPreferences()
+    }
+
+    public func applyVisualizationStyle(
+        _ style: MetricVisualizationStyle,
+        accountID: String,
+        metricIDs: [String]
+    ) {
+        guard !accountID.isEmpty else {
+            return
+        }
+
+        let uniqueMetricIDs = Set(metricIDs.filter { !$0.isEmpty })
+        guard !uniqueMetricIDs.isEmpty else {
+            return
+        }
+
+        for metricID in uniqueMetricIDs {
+            metricVisualizationPreferences[accountID, default: [:]][metricID] = style
+        }
+        saveMetricVisualizationPreferences()
+    }
+
+    public func resetVisualizationStyles(accountID: String, metricIDs: [String]) {
+        guard var accountPreferences = metricVisualizationPreferences[accountID] else {
+            return
+        }
+
+        for metricID in metricIDs {
+            accountPreferences.removeValue(forKey: metricID)
+        }
+        if accountPreferences.isEmpty {
+            metricVisualizationPreferences.removeValue(forKey: accountID)
+        } else {
+            metricVisualizationPreferences[accountID] = accountPreferences
+        }
+        saveMetricVisualizationPreferences()
     }
 
     public func updateUsageAlertSettings(_ settings: UsageAlertSettings) {
@@ -644,6 +706,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         static let widgetRefreshInterval = "widgetRefreshInterval"
         static let dashboardOrderingMode = "dashboardOrderingMode"
         static let dashboardCardOrder = "dashboardCardOrder"
+        static let metricVisualizationPreferences = "metricVisualizationPreferences"
         static let usageAlertSettings = "usageAlertSettings"
         static let usageAlertActiveIDs = "usageAlertActiveIDs"
     }
@@ -741,6 +804,27 @@ public final class ProviderConfigurationStore: ObservableObject {
         var seenAccountIDs = Set<String>()
         return (defaults.stringArray(forKey: DefaultsKey.dashboardCardOrder) ?? [])
             .filter { seenAccountIDs.insert($0).inserted }
+    }
+
+    private static func loadMetricVisualizationPreferences(
+        from defaults: UserDefaults
+    ) -> [String: [String: MetricVisualizationStyle]] {
+        guard
+            let data = defaults.data(forKey: DefaultsKey.metricVisualizationPreferences),
+            let decoded = try? JSONDecoder().decode(
+                [String: [String: MetricVisualizationStyle]].self,
+                from: data
+            )
+        else {
+            return [:]
+        }
+
+        return decoded
+    }
+
+    private func saveMetricVisualizationPreferences() {
+        let data = try? JSONEncoder().encode(metricVisualizationPreferences)
+        defaults.set(data, forKey: metricVisualizationPreferencesKey)
     }
 
     private static func loadUsageAlertSettings(from defaults: UserDefaults) -> UsageAlertSettings {

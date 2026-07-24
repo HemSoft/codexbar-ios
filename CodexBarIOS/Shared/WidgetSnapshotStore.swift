@@ -1,5 +1,56 @@
 import Foundation
 
+public enum MetricVisualizationStyle: String, CaseIterable, Equatable, Sendable, Identifiable {
+    case automatic
+    case linearBar
+    case segmentedBar
+    case circularRing
+    case semicircularDial
+    case largeNumeric
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .automatic:
+            String(localized: "Automatic")
+        case .linearBar:
+            String(localized: "Linear bar")
+        case .segmentedBar:
+            String(localized: "Segmented bar")
+        case .circularRing:
+            String(localized: "Circular ring")
+        case .semicircularDial:
+            String(localized: "Semicircular dial")
+        case .largeNumeric:
+            String(localized: "Large numeric")
+        }
+    }
+
+    public func resolvedForWidget(allowsGauge: Bool) -> MetricVisualizationStyle {
+        if self == .automatic {
+            return .linearBar
+        }
+        if !allowsGauge && (self == .circularRing || self == .semicircularDial) {
+            return .linearBar
+        }
+        return self
+    }
+}
+
+extension MetricVisualizationStyle: Codable {
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = MetricVisualizationStyle(rawValue: rawValue) ?? .automatic
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
 public enum CodexBarWidgetConstants {
     public static let appGroupIdentifier = "group.com.hemsoft.CodexBarIOS"
     public static let widgetKind = "CodexBarUsageWidget"
@@ -213,6 +264,7 @@ public struct CodexBarWidgetMonetaryMetricSnapshot: Codable, Equatable, Identifi
 
 public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, Sendable {
     public let id: String
+    public let metricID: String?
     public let label: String
     public let fractionUsed: Double
     public let usageText: String
@@ -226,9 +278,11 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
     public let projectionTimestamp: Date?
     public let projectionTrailingText: String?
     public let projectedSeverity: CodexBarWidgetSeverity?
+    public let visualizationStyle: MetricVisualizationStyle?
 
     public init(
         id: String,
+        metricID: String? = nil,
         label: String,
         fractionUsed: Double,
         usageText: String,
@@ -241,9 +295,11 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
         projectionLeadingText: String? = nil,
         projectionTimestamp: Date? = nil,
         projectionTrailingText: String? = nil,
-        projectedSeverity: CodexBarWidgetSeverity? = nil
+        projectedSeverity: CodexBarWidgetSeverity? = nil,
+        visualizationStyle: MetricVisualizationStyle? = nil
     ) {
         self.id = id
+        self.metricID = metricID
         self.label = label
         self.fractionUsed = fractionUsed
         self.usageText = usageText
@@ -257,6 +313,7 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
         self.projectionTimestamp = projectionTimestamp
         self.projectionTrailingText = projectionTrailingText
         self.projectedSeverity = projectedSeverity
+        self.visualizationStyle = visualizationStyle
     }
 
     public var effectiveSeverity: CodexBarWidgetSeverity {

@@ -1353,4 +1353,156 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    func testMetricVisualizationStyleDecodesUnknownFutureValuesAsAutomatic() throws {
+        let decoded = try JSONDecoder().decode(
+            MetricVisualizationStyle.self,
+            from: Data("\"future-hologram\"".utf8)
+        )
+
+        XCTAssertEqual(decoded, .automatic)
+        XCTAssertEqual(
+            MetricVisualizationStyle.allCases.map(\.displayName),
+            [
+                "Automatic",
+                "Linear bar",
+                "Segmented bar",
+                "Circular ring",
+                "Semicircular dial",
+                "Large numeric",
+            ]
+        )
+        XCTAssertEqual(MetricVisualizationStyle.automatic.resolvedForWidget(allowsGauge: true), .linearBar)
+        XCTAssertEqual(MetricVisualizationStyle.circularRing.resolvedForWidget(allowsGauge: false), .linearBar)
+        XCTAssertEqual(MetricVisualizationStyle.semicircularDial.resolvedForWidget(allowsGauge: false), .linearBar)
+        XCTAssertEqual(MetricVisualizationStyle.segmentedBar.resolvedForWidget(allowsGauge: false), .segmentedBar)
+        XCTAssertEqual(MetricVisualizationStyle.largeNumeric.resolvedForWidget(allowsGauge: true), .largeNumeric)
+    }
+
+    @MainActor
+    func testMetricVisualizationPreferencesPersistPerAccountAndStableMetric() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let firstAccount = store.addAccount(for: .codex)
+        let secondAccount = store.addAccount(for: .codex)
+        let firstMetric = UsageBar(
+            stableKey: "window-18000",
+            label: "Localized label A",
+            used: 30,
+            limit: 100
+        )
+        let renamedMetric = UsageBar(
+            stableKey: "window-18000",
+            label: "Localized label B",
+            used: 40,
+            limit: 100
+        )
+        let metricID = firstMetric.metricIdentifier(providerID: .codex, index: 0)
+
+        XCTAssertEqual(store.visualizationStyle(accountID: firstAccount.id, metricID: metricID), .linearBar)
+        XCTAssertEqual(
+            metricID,
+            renamedMetric.metricIdentifier(providerID: .codex, index: 4)
+        )
+
+        store.updateVisualizationStyle(.circularRing, accountID: firstAccount.id, metricID: metricID)
+        store.applyVisualizationStyle(
+            .segmentedBar,
+            accountID: firstAccount.id,
+            metricIDs: [metricID, "codex.window-604800"]
+        )
+
+        let reloaded = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        XCTAssertEqual(reloaded.visualizationStyle(accountID: firstAccount.id, metricID: metricID), .segmentedBar)
+        XCTAssertEqual(
+            reloaded.visualizationStyle(accountID: firstAccount.id, metricID: "codex.window-604800"),
+            .segmentedBar
+        )
+        XCTAssertEqual(reloaded.visualizationStyle(accountID: secondAccount.id, metricID: metricID), .linearBar)
+
+        reloaded.resetVisualizationStyles(
+            accountID: firstAccount.id,
+            metricIDs: [metricID, "codex.window-604800"]
+        )
+        XCTAssertEqual(reloaded.visualizationStyle(accountID: firstAccount.id, metricID: metricID), .linearBar)
+    }
+
+    @MainActor
+    func testRemovingAccountCleansUpMetricVisualizationPreferences() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let account = store.addAccount(for: .codex)
+        store.updateVisualizationStyle(
+            .largeNumeric,
+            accountID: account.id,
+            metricID: "codex.window-18000"
+        )
+
+        XCTAssertTrue(store.removeAccount(account))
+        XCTAssertNil(store.metricVisualizationPreferences[account.id])
+    }
+
+    @MainActor
+    func testWidgetSnapshotPublishesEveryMetricVisualizationStyle() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        var configuration = store.addAccount(for: .openCodeZen)
+        configuration.openCodeWorkspaceId = "workspace"
+        XCTAssertTrue(store.update(configuration))
+
+        let bars = MetricVisualizationStyle.allCases.enumerated().map { index, style in
+            let stableKey = "metric-\(index)"
+            store.updateVisualizationStyle(
+                style,
+                accountID: configuration.id,
+                metricID: "openCodeZen.\(stableKey)"
+            )
+            return UsageBar(
+                stableKey: stableKey,
+                label: "Metric \(index)",
+                used: Double(index + 1),
+                limit: 10
+            )
+        }
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openCodeZen,
+            title: "OpenCode ZEN",
+            subtitle: "Live usage",
+            bars: bars,
+            fetchedAt: Date(timeIntervalSince1970: 1_788_475_200)
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+
+        let publishedBars = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        ).bars
+        XCTAssertEqual(publishedBars.compactMap(\.visualizationStyle), MetricVisualizationStyle.allCases)
+        XCTAssertEqual(
+            publishedBars.compactMap(\.metricID),
+            bars.enumerated().map {
+                $0.element.metricIdentifier(providerID: .openCodeZen, index: $0.offset)
+            }
+        )
+    }
+
 }

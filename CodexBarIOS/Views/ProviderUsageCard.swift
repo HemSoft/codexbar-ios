@@ -19,10 +19,15 @@ struct ProviderUsageCard: View {
     let onShowHistory: () -> Void
     let onRetry: () -> Void
     let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
+    let visualizationStyleForMetric: (String) -> MetricVisualizationStyle
+    let onUpdateVisualizationStyle: (String, MetricVisualizationStyle) -> Void
+    let onApplyVisualizationStyleToAll: (MetricVisualizationStyle, [String]) -> Void
+    let onResetVisualizationStyles: ([String]) -> Void
 
     @State private var resetInventoryPresentation: CodexBankedResetInventoryPresentation?
     @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
     @State private var isResetActionUnavailable = false
+    @State private var isCustomizingMetrics = false
     @StateObject private var resetRedemptionController: CodexBankedResetRedemptionController
 
     init(
@@ -36,7 +41,11 @@ struct ProviderUsageCard: View {
         onShowHistory: @escaping () -> Void = {},
         onRetry: @escaping () -> Void = {},
         retainedCodexResetAttempt: CodexRetainedResetAttempt? = nil,
-        onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)? = nil
+        onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)? = nil,
+        visualizationStyleForMetric: @escaping (String) -> MetricVisualizationStyle = { _ in .linearBar },
+        onUpdateVisualizationStyle: @escaping (String, MetricVisualizationStyle) -> Void = { _, _ in },
+        onApplyVisualizationStyleToAll: @escaping (MetricVisualizationStyle, [String]) -> Void = { _, _ in },
+        onResetVisualizationStyles: @escaping ([String]) -> Void = { _ in }
     ) {
         self.result = result
         self.statusText = statusText
@@ -48,6 +57,10 @@ struct ProviderUsageCard: View {
         self.onShowHistory = onShowHistory
         self.onRetry = onRetry
         self.onUseCodexReset = onUseCodexReset
+        self.visualizationStyleForMetric = visualizationStyleForMetric
+        self.onUpdateVisualizationStyle = onUpdateVisualizationStyle
+        self.onApplyVisualizationStyleToAll = onApplyVisualizationStyleToAll
+        self.onResetVisualizationStyles = onResetVisualizationStyles
         _resetRedemptionController = StateObject(
             wrappedValue: CodexBankedResetRedemptionController(
                 retainedAttempt: retainedCodexResetAttempt,
@@ -83,6 +96,20 @@ struct ProviderUsageCard: View {
                 }
                 .frame(width: 16, height: 16)
 
+                if !result.bars.isEmpty {
+                    Menu {
+                        Button {
+                            isCustomizingMetrics = true
+                        } label: {
+                            Label("Customize Metrics…", systemImage: "gauge.with.dots.needle.50percent")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.body)
+                    }
+                    .accessibilityLabel("More options for \(result.title)")
+                }
+
                 Circle()
                     .fill(cardSeverity.tint)
                     .frame(width: 10, height: 10)
@@ -111,7 +138,7 @@ struct ProviderUsageCard: View {
                     .lineLimit(1)
             }
 
-            ForEach(result.bars) { bar in
+            ForEach(Array(result.bars.enumerated()), id: \.element.id) { index, bar in
                 VStack(alignment: .leading, spacing: 7) {
                     HStack {
                         Text(bar.label)
@@ -128,16 +155,22 @@ struct ProviderUsageCard: View {
                             .lineLimit(1)
                     }
 
-                    UsageProgressBar(bar: bar, showsSeverity: result.hasFreshBars)
+                    MetricVisualizationView(
+                        bar: bar,
+                        style: visualizationStyleForMetric(metricID(for: bar, index: index)),
+                        showsSeverity: result.hasFreshBars
+                    )
 
                     if result.hasFreshBars, let projectionDescription = bar.projectionDescription() {
                         Text(projectionDescription)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(metricAccessibilityLabel(bar))
             }
 
             if bankedResets != nil {
@@ -231,6 +264,18 @@ struct ProviderUsageCard: View {
                     isResetActionUnavailable = feedback.hidesAction
                 },
                 redemptionController: resetRedemptionController
+            )
+        }
+        .sheet(isPresented: $isCustomizingMetrics) {
+            MetricVisualizationCustomizationView(
+                accountTitle: result.title,
+                providerID: result.providerID,
+                bars: result.bars,
+                showsSeverity: result.hasFreshBars,
+                visualizationStyleForMetric: visualizationStyleForMetric,
+                onUpdateVisualizationStyle: onUpdateVisualizationStyle,
+                onApplyVisualizationStyleToAll: onApplyVisualizationStyleToAll,
+                onResetVisualizationStyles: onResetVisualizationStyles
             )
         }
         .onChange(of: result.fetchedAt) {
@@ -332,6 +377,23 @@ struct ProviderUsageCard: View {
         [metric.label, metric.formattedAmount(), metric.detail]
             .compactMap { $0 }
             .joined(separator: ", ")
+    }
+
+    private func metricID(for bar: UsageBar, index: Int) -> String {
+        bar.metricIdentifier(providerID: result.providerID, index: index)
+    }
+
+    private func metricAccessibilityLabel(_ bar: UsageBar) -> String {
+        let severity = result.hasFreshBars ? bar.effectiveSeverity().accessibilityName : "status unavailable"
+        return [
+            bar.label,
+            bar.usageText,
+            severity,
+            bar.localizedResetDescription(),
+            result.hasFreshBars ? bar.projectionDescription() : nil,
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
     }
 }
 
@@ -1248,6 +1310,233 @@ private struct ProviderLogoTile: View {
     }
 }
 
+private struct MetricVisualizationCustomizationView: View {
+    let accountTitle: String
+    let providerID: ProviderID
+    let bars: [UsageBar]
+    let showsSeverity: Bool
+    let visualizationStyleForMetric: (String) -> MetricVisualizationStyle
+    let onUpdateVisualizationStyle: (String, MetricVisualizationStyle) -> Void
+    let onApplyVisualizationStyleToAll: (MetricVisualizationStyle, [String]) -> Void
+    let onResetVisualizationStyles: ([String]) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(Array(bars.enumerated()), id: \.element.id) { index, bar in
+                        let metricID = bar.metricIdentifier(providerID: providerID, index: index)
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text(bar.label)
+                                    .font(.subheadline.weight(.semibold))
+
+                                Spacer(minLength: 12)
+
+                                Picker(
+                                    "Style for \(bar.label)",
+                                    selection: Binding(
+                                        get: { visualizationStyleForMetric(metricID) },
+                                        set: { onUpdateVisualizationStyle(metricID, $0) }
+                                    )
+                                ) {
+                                    ForEach(MetricVisualizationStyle.allCases) { style in
+                                        Text(style.displayName).tag(style)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                            }
+
+                            MetricVisualizationView(
+                                bar: bar,
+                                style: visualizationStyleForMetric(metricID),
+                                showsSeverity: showsSeverity
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityHidden(true)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } header: {
+                    Text("Metrics")
+                } footer: {
+                    Text("Changes apply immediately and are saved automatically.")
+                }
+
+                Section {
+                    Menu {
+                        ForEach(MetricVisualizationStyle.allCases) { style in
+                            Button(style.displayName) {
+                                onApplyVisualizationStyleToAll(style, metricIDs)
+                            }
+                        }
+                    } label: {
+                        Label("Apply to all metrics in this card", systemImage: "square.stack.3d.up")
+                    }
+
+                    Button {
+                        onResetVisualizationStyles(metricIDs)
+                    } label: {
+                        Label("Reset this card to linear bars", systemImage: "arrow.counterclockwise")
+                    }
+                }
+            }
+            .navigationTitle("Customize Metrics")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var metricIDs: [String] {
+        bars.enumerated().map { index, bar in
+            bar.metricIdentifier(providerID: providerID, index: index)
+        }
+    }
+}
+
+private struct MetricVisualizationView: View {
+    let bar: UsageBar
+    let style: MetricVisualizationStyle
+    let showsSeverity: Bool
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    var body: some View {
+        Group {
+            switch resolvedStyle {
+            case .automatic:
+                EmptyView()
+            case .linearBar:
+                UsageProgressBar(bar: bar, showsSeverity: showsSeverity)
+            case .segmentedBar:
+                SegmentedUsageBar(
+                    fraction: bar.fractionUsed,
+                    tint: tint
+                )
+            case .circularRing:
+                CircularUsageRing(
+                    fraction: bar.fractionUsed,
+                    valueText: bar.usageText,
+                    tint: tint
+                )
+            case .semicircularDial:
+                SemicircularUsageDial(
+                    fraction: bar.fractionUsed,
+                    valueText: bar.usageText,
+                    tint: tint
+                )
+            case .largeNumeric:
+                Text(bar.usageText)
+                    .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var resolvedStyle: MetricVisualizationStyle {
+        guard style == .automatic else {
+            return style
+        }
+        return horizontalSizeClass == .regular ? .circularRing : .linearBar
+    }
+
+    private var tint: Color {
+        showsSeverity ? bar.effectiveSeverity().tint : Color.secondary.opacity(0.7)
+    }
+}
+
+private struct SegmentedUsageBar: View {
+    let fraction: Double
+    let tint: Color
+    private let segmentCount = 12
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<segmentCount, id: \.self) { index in
+                Capsule()
+                    .fill(index < filledSegmentCount ? tint : Color(.tertiarySystemFill))
+            }
+        }
+        .frame(height: 9)
+    }
+
+    private var filledSegmentCount: Int {
+        Int((min(max(fraction, 0), 1) * Double(segmentCount)).rounded(.up))
+    }
+}
+
+private struct CircularUsageRing: View {
+    let fraction: Double
+    let valueText: String
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color(.tertiarySystemFill), lineWidth: 8)
+            Circle()
+                .trim(from: 0, to: min(max(fraction, 0), 1))
+                .stroke(tint, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text(valueText)
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.65)
+        }
+        .frame(width: 72, height: 72)
+    }
+}
+
+private struct SemicircularUsageDial: View {
+    let fraction: Double
+    let valueText: String
+    let tint: Color
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            SemicircleShape()
+                .stroke(Color(.tertiarySystemFill), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+            SemicircleShape()
+                .trim(from: 0, to: min(max(fraction, 0), 1))
+                .stroke(tint, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+            Text(valueText)
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+        }
+        .frame(width: 112, height: 58)
+    }
+}
+
+private struct SemicircleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let radius = min(rect.width / 2, rect.height)
+        path.addArc(
+            center: CGPoint(x: rect.midX, y: rect.maxY),
+            radius: radius,
+            startAngle: .degrees(180),
+            endAngle: .degrees(0),
+            clockwise: false
+        )
+        return path
+    }
+}
+
 private struct UsageProgressBar: View {
     let bar: UsageBar
     let showsSeverity: Bool
@@ -1268,6 +1557,17 @@ private struct UsageProgressBar: View {
 }
 
 private extension UsageSeverity {
+    var accessibilityName: String {
+        switch self {
+        case .normal:
+            "normal status"
+        case .warning:
+            "warning status"
+        case .critical:
+            "critical status"
+        }
+    }
+
     var widgetSeverity: CodexBarWidgetSeverity {
         switch self {
         case .normal:

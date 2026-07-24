@@ -11,11 +11,23 @@ public enum CopilotUsageParser {
         var bars: [UsageBar] = []
 
         if let premium = response.quotaSnapshots?.premiumInteractions {
-            bars.append(makeUsageBar(snapshot: premium, label: "Premium interactions", reset: reset, fetchedAt: fetchedAt))
+            bars.append(makeUsageBar(
+                snapshot: premium,
+                stableKey: "premium-interactions",
+                label: "Premium interactions",
+                reset: reset,
+                fetchedAt: fetchedAt
+            ))
         }
 
         if let chat = response.quotaSnapshots?.chat, !chat.unlimited, chat.entitlement > 0 {
-            bars.append(makeUsageBar(snapshot: chat, label: "Chat", reset: reset, fetchedAt: fetchedAt))
+            bars.append(makeUsageBar(
+                snapshot: chat,
+                stableKey: "chat",
+                label: "Chat",
+                reset: reset,
+                fetchedAt: fetchedAt
+            ))
         }
 
         return ProviderUsageResult(
@@ -33,12 +45,14 @@ public enum CopilotUsageParser {
 
     private static func makeUsageBar(
         snapshot: CopilotQuotaSnapshot,
+        stableKey: String,
         label: String,
         reset: CopilotReset,
         fetchedAt: Date
     ) -> UsageBar {
         guard snapshot.entitlement > 0 else {
             return UsageBar(
+                stableKey: stableKey,
                 label: snapshot.unlimited ? "\(label) - unlimited" : "\(label) - no quota",
                 used: 0,
                 limit: 0,
@@ -51,6 +65,7 @@ public enum CopilotUsageParser {
         let formattedLabel = "\(label) (\(formatNumber(used)) / \(formatNumber(snapshot.entitlement)))"
         let projectionPeriod = monthlyProjectionPeriod(resetDate: reset.date, fetchedAt: fetchedAt)
         return UsageBar(
+            stableKey: stableKey,
             label: formattedLabel,
             used: Double(used),
             limit: Double(snapshot.entitlement),
@@ -242,6 +257,7 @@ public enum CopilotBillingUsageParser {
                 : nil
             return [
                 UsageBar(
+                    stableKey: "ai-credits",
                     label: "AI credits used (\(formatNumber(consumed)))",
                     used: consumed,
                     limit: 0,
@@ -257,6 +273,7 @@ public enum CopilotBillingUsageParser {
 
         return [
             UsageBar(
+                stableKey: "ai-credits",
                 label: "Current AI credits (\(formatNumber(consumed)) / \(formatNumber(total)))",
                 used: consumed,
                 limit: total,

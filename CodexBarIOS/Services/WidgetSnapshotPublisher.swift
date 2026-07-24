@@ -33,7 +33,15 @@ enum WidgetSnapshotPublisher {
                         let projectedSeverity = barsAreFresh ? bar.projectedSeverity(at: now) : nil
                         let projectionParts = barsAreFresh ? bar.projectionDescriptionParts(at: now) : nil
                         return CodexBarWidgetUsageBarSnapshot(
-                            id: stableBarID(accountID: result.accountID, bar: bar, index: index),
+                            id: stableBarID(
+                                accountID: result.accountID,
+                                bar: bar,
+                                index: index
+                            ),
+                            metricID: bar.metricIdentifier(
+                                providerID: result.providerID,
+                                index: index
+                            ),
                             label: bar.label,
                             fractionUsed: bar.fractionUsed,
                             usageText: bar.usageText,
@@ -49,7 +57,14 @@ enum WidgetSnapshotPublisher {
                             projectionLeadingText: projectionParts?.leadingText,
                             projectionTimestamp: projectionParts?.timestamp,
                             projectionTrailingText: projectionParts?.trailingText,
-                            projectedSeverity: projectedSeverity.map(CodexBarWidgetSeverity.init)
+                            projectedSeverity: projectedSeverity.map(CodexBarWidgetSeverity.init),
+                            visualizationStyle: configurationStore.visualizationStyle(
+                                accountID: result.accountID,
+                                metricID: bar.metricIdentifier(
+                                    providerID: result.providerID,
+                                    index: index
+                                )
+                            )
                         )
                     },
                     creditsRemaining: result.creditsRemaining,
@@ -122,7 +137,11 @@ enum WidgetSnapshotPublisher {
         return configurationStore.statusText(for: configuration)
     }
 
-    private static func stableBarID(accountID: String, bar: UsageBar, index: Int) -> String {
+    private static func stableBarID(
+        accountID: String,
+        bar: UsageBar,
+        index: Int
+    ) -> String {
         // Keep existing saved Claude weekly tiles resolvable when the visible label becomes more specific.
         if bar.stableKey == ClaudeUsageIdentity.allModelsWeeklyStableKey {
             return "\(accountID).\(ClaudeUsageIdentity.allModelsWeeklyLegacyKey)"

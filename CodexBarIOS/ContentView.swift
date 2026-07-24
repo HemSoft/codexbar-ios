@@ -304,6 +304,32 @@ struct ContentView: View {
                         for: item.configuration,
                         creditID: creditID
                     )
+                },
+                visualizationStyleForMetric: { metricID in
+                    configurationStore.visualizationStyle(
+                        accountID: result.accountID,
+                        metricID: metricID
+                    )
+                },
+                onUpdateVisualizationStyle: { metricID, style in
+                    configurationStore.updateVisualizationStyle(
+                        style,
+                        accountID: result.accountID,
+                        metricID: metricID
+                    )
+                },
+                onApplyVisualizationStyleToAll: { style, metricIDs in
+                    configurationStore.applyVisualizationStyle(
+                        style,
+                        accountID: result.accountID,
+                        metricIDs: metricIDs
+                    )
+                },
+                onResetVisualizationStyles: { metricIDs in
+                    configurationStore.resetVisualizationStyles(
+                        accountID: result.accountID,
+                        metricIDs: metricIDs
+                    )
                 }
             )
         } else {

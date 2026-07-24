@@ -418,6 +418,9 @@ final class WidgetSnapshotCoordinator {
         configurationStore.$groups.dropFirst().sink { [weak self] _ in
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
+        configurationStore.$metricVisualizationPreferences.dropFirst().sink { [weak self] _ in
+            self?.scheduleSnapshotPublish()
+        }.store(in: &cancellables)
         configurationStore.$widgetRefreshInterval.dropFirst().sink { [weak self] _ in
             self?.scheduleSettingsPublish()
         }.store(in: &cancellables)

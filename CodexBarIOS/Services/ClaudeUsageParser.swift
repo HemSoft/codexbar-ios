@@ -275,6 +275,7 @@ public enum ClaudeUsageParser {
         }
 
         if let bar = usageBarFromHeaders(
+            stableKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
             label: "Weekly usage limit",
             utilizationKey: "anthropic-ratelimit-unified-7d-utilization",
             resetKey: "anthropic-ratelimit-unified-7d-reset",
