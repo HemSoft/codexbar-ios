@@ -16,8 +16,10 @@ The Windows reference implementation is checked out beside this repo at:
   authentication methods, labeling accounts, and storing credentials in Keychain
 - Usage history and charts, configurable usage alerts, and home-screen and
   lock-screen widgets
-- An embedded watchOS companion foundation with a deterministic, watch-native
-  SwiftUI shell; provider data and account setup remain iPhone-only for now
+- An embedded watchOS companion with a live, read-only dashboard that mirrors
+  presentation-ready account metrics, visualization choices, ordering, and
+  freshness from iPhone; provider setup, credentials, and provider networking
+  remain iPhone-only
 - Demo data limited to previews, smoke tests, widget galleries, and screenshots
 - Simulator unit tests spanning configuration and authentication, provider
   parsing and networking, dashboard and settings, widgets, history, and alerts,
