@@ -46,6 +46,7 @@ public extension DemoUsageProvider {
                 providerID: .codex,
                 bars: [
                     UsageBar(
+                        stableKey: "window-18000",
                         label: "5-hour usage limit",
                         used: 42,
                         limit: 100,
@@ -53,6 +54,7 @@ public extension DemoUsageProvider {
                         projectionDescriptionOverride: "Projected to stay under limit"
                     ),
                     UsageBar(
+                        stableKey: "window-604800",
                         label: "Weekly usage limit",
                         used: 68,
                         limit: 100,
@@ -65,6 +67,7 @@ public extension DemoUsageProvider {
                 providerID: .copilot,
                 bars: [
                     UsageBar(
+                        stableKey: "premium-interactions",
                         label: "Premium requests",
                         used: 73,
                         limit: 100,
@@ -77,18 +80,21 @@ public extension DemoUsageProvider {
                 providerID: .claude,
                 bars: [
                     UsageBar(
+                        stableKey: "session",
                         label: "5-hour usage limit",
                         used: 36,
                         limit: 100,
                         resetDescription: "Resets in 1h 40m"
                     ),
                     UsageBar(
+                        stableKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
                         label: "All models weekly usage limit",
                         used: 58,
                         limit: 100,
                         resetDescription: "Resets Monday"
                     ),
                     UsageBar(
+                        stableKey: "weekly-scoped-fable",
                         label: "Fable weekly usage limit",
                         used: 71,
                         limit: 100,
@@ -138,6 +144,7 @@ public extension DemoUsageProvider {
                 providerID: .cursor,
                 bars: [
                     UsageBar(
+                        stableKey: "total",
                         label: "Monthly included usage",
                         used: 51,
                         limit: 100,

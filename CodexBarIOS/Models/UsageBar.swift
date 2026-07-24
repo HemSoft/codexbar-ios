@@ -100,6 +100,16 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         return "\(Int((used / limit * 100).rounded()))%"
     }
 
+    public func metricIdentifier(providerID: ProviderID, index: Int) -> String {
+        if let stableKey, !stableKey.isEmpty {
+            return "\(providerID.rawValue).\(stableKey)"
+        }
+
+        // Production providers supply stable keys. This position fallback keeps older
+        // cached/test metrics deterministic without using a localized display label.
+        return "\(providerID.rawValue).position-\(index)"
+    }
+
     public func localizedResetDescription(
         at now: Date = Date(),
         dateTimeFormatter: UserFacingDateTimeFormatter = .current

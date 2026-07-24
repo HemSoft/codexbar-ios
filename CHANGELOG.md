@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added per-metric dashboard and widget visualization choices with Automatic,
+  linear, segmented, ring, dial, and large-number styles that persist separately
+  for each configured account. ([#103](https://github.com/HemSoft/codexbar-ios/issues/103))
 - Added a discreet banked Codex reset count beside usage limits and a confirmed,
   account-scoped action to use one reset when ChatGPT verifies redemption is
   supported. ([#84](https://github.com/HemSoft/codexbar-ios/issues/84))

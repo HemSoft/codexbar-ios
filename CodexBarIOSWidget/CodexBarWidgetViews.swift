@@ -434,7 +434,7 @@ struct ProviderWidgetTile: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                    WidgetUsageProgressBar(bar: bar)
+                    WidgetMetricVisualization(bar: bar, layoutStyle: style)
                 }
             } else {
                 Text(tile.subtitle)
@@ -474,7 +474,7 @@ struct ProviderWidgetTile: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
 
-                WidgetUsageProgressBar(bar: bar)
+                WidgetMetricVisualization(bar: bar, layoutStyle: style)
 
                 if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
                     Text(detail)
@@ -757,6 +757,94 @@ private struct WidgetUsageProgressBar: View {
             projectedSeverity: bar.effectiveSeverity,
             accessibilityText: "\(bar.label) \(bar.usageText)"
         )
+    }
+}
+
+private struct WidgetMetricVisualization: View {
+    let bar: CodexBarWidgetUsageBarSnapshot
+    let layoutStyle: ProviderWidgetTile.Style
+
+    var body: some View {
+        Group {
+            switch resolvedStyle {
+            case .automatic, .linearBar:
+                WidgetUsageProgressBar(bar: bar)
+            case .segmentedBar:
+                HStack(spacing: 2) {
+                    ForEach(0..<10, id: \.self) { index in
+                        Capsule()
+                            .fill(index < filledSegments ? bar.effectiveSeverity.tint : Color.primary.opacity(0.12))
+                    }
+                }
+                .frame(height: 6)
+            case .circularRing:
+                ZStack {
+                    Circle()
+                        .stroke(Color.primary.opacity(0.12), lineWidth: 5)
+                    Circle()
+                        .trim(from: 0, to: clampedFraction)
+                        .stroke(
+                            bar.effectiveSeverity.tint,
+                            style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                    Text(bar.usageText)
+                        .font(.system(size: 9, weight: .semibold))
+                        .minimumScaleFactor(0.6)
+                }
+                .frame(width: 42, height: 42)
+            case .semicircularDial:
+                ZStack(alignment: .bottom) {
+                    WidgetSemicircleShape()
+                        .stroke(Color.primary.opacity(0.12), lineWidth: 5)
+                    WidgetSemicircleShape()
+                        .trim(from: 0, to: clampedFraction)
+                        .stroke(
+                            bar.effectiveSeverity.tint,
+                            style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                        )
+                    Text(bar.usageText)
+                        .font(.system(size: 8, weight: .semibold))
+                }
+                .frame(width: 52, height: 28)
+            case .largeNumeric:
+                Text(bar.usageText)
+                    .font(.system(size: layoutStyle == .dense ? 20 : 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(bar.effectiveSeverity.tint)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+        }
+        .accessibilityLabel("\(bar.label), \(bar.usageText)")
+    }
+
+    private var resolvedStyle: MetricVisualizationStyle {
+        (bar.visualizationStyle ?? .automatic).resolvedForWidget(
+            allowsGauge: layoutStyle != .dense
+        )
+    }
+
+    private var clampedFraction: Double {
+        min(max(bar.fractionUsed, 0), 1)
+    }
+
+    private var filledSegments: Int {
+        Int((clampedFraction * 10).rounded(.up))
+    }
+}
+
+private struct WidgetSemicircleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addArc(
+            center: CGPoint(x: rect.midX, y: rect.maxY),
+            radius: min(rect.width / 2, rect.height),
+            startAngle: .degrees(180),
+            endAngle: .degrees(0),
+            clockwise: false
+        )
+        return path
     }
 }
 
