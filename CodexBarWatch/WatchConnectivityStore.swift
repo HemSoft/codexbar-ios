@@ -56,6 +56,19 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     func updateReachability(_ isReachable: Bool) {
         isPhoneReachable = isReachable
     }
+
+    func activationCompleted(
+        applicationContext: [String: Any],
+        isPhoneReachable: Bool,
+        error: Error?
+    ) {
+        updateReachability(isPhoneReachable)
+        if !applicationContext.isEmpty {
+            receive(applicationContext)
+        } else if error != nil, snapshot == nil {
+            decodingError = "Couldn’t connect to iPhone"
+        }
+    }
 }
 
 extension WatchDashboardStore: WCSessionDelegate {
@@ -65,10 +78,11 @@ extension WatchDashboardStore: WCSessionDelegate {
         error: Error?
     ) {
         Task { @MainActor [weak self] in
-            self?.updateReachability(session.isReachable)
-            if error != nil, self?.snapshot == nil {
-                self?.decodingError = "Couldn’t connect to iPhone"
-            }
+            self?.activationCompleted(
+                applicationContext: session.receivedApplicationContext,
+                isPhoneReachable: session.isReachable,
+                error: error
+            )
         }
     }
 

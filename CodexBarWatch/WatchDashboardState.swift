@@ -71,12 +71,14 @@ struct WatchDashboardState: Equatable, Sendable {
             return
         }
 
-        let freshnessText = Self.lastUpdatedText(snapshot.generatedAt, now: now)
+        let displayedAccounts = snapshot.accounts.filter { !$0.metrics.isEmpty }
+        let oldestDisplayedFetch = displayedAccounts.map(\.fetchedAt).min() ?? snapshot.generatedAt
+        let freshnessText = Self.lastUpdatedText(oldestDisplayedFetch, now: now)
         if let decodingError {
             statusText = "\(decodingError). Showing \(freshnessText.lowercased())"
-        } else if snapshot.accounts.allSatisfy({ $0.metrics.isEmpty }) {
+        } else if displayedAccounts.isEmpty {
             statusText = "No dashboard metrics on iPhone"
-        } else if snapshot.isStale(at: now) {
+        } else if snapshot.isStale(dataDate: oldestDisplayedFetch, at: now) {
             statusText = "\(freshnessText) • Stale"
         } else if !isPhoneReachable {
             statusText = "\(freshnessText) • iPhone unavailable"
@@ -85,7 +87,8 @@ struct WatchDashboardState: Equatable, Sendable {
         }
 
         samples = snapshot.accounts.flatMap { account in
-            account.metrics.map { metric in
+            let accountFreshnessText = Self.lastUpdatedText(account.fetchedAt, now: now)
+            return account.metrics.map { metric in
                 WatchUsageSample(
                     id: "\(account.id).\(metric.id)",
                     providerName: account.providerName,
@@ -96,7 +99,7 @@ struct WatchDashboardState: Equatable, Sendable {
                     severity: metric.severity,
                     resetText: metric.resetText,
                     visualizationStyle: metric.visualizationStyle,
-                    freshnessText: freshnessText
+                    freshnessText: accountFreshnessText
                 )
             }
         }

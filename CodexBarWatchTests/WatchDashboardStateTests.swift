@@ -182,6 +182,34 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertTrue(stale.statusText.contains("Stale"))
     }
 
+    func testFreshnessUsesOldestDisplayedProviderFetchInsteadOfDeliveryTime() {
+        let generatedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let oldFetch = generatedAt.addingTimeInterval(-1_800)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: generatedAt,
+            refreshIntervalSeconds: 60,
+            accounts: [
+                account(
+                    id: "codex",
+                    provider: "Codex",
+                    metricID: "window",
+                    fraction: 0.5,
+                    generatedAt: oldFetch
+                ),
+            ]
+        )
+
+        let state = WatchDashboardState(
+            snapshot: snapshot,
+            now: generatedAt,
+            isPhoneReachable: true,
+            decodingError: nil
+        )
+
+        XCTAssertEqual(state.statusText, "Updated 30m ago • Stale")
+        XCTAssertTrue(state.samples[0].accessibilitySummary.contains("Updated 30m ago"))
+    }
+
     @MainActor
     func testMalformedUpdatePreservesPersistedLastGoodSnapshot() throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
@@ -210,6 +238,38 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertNotNil(store.decodingError)
         let reloaded = WatchDashboardStore(defaults: defaults, session: nil)
         XCTAssertEqual(reloaded.snapshot, snapshot)
+    }
+
+    @MainActor
+    func testActivationConsumesContextDeliveredBeforeFirstWatchLaunch() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let store = WatchDashboardStore(defaults: defaults, session: nil)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                account(
+                    id: "codex",
+                    provider: "Codex",
+                    metricID: "window",
+                    fraction: 0.5,
+                    generatedAt: now
+                ),
+            ]
+        )
+
+        store.activationCompleted(
+            applicationContext: try snapshot.applicationContext(),
+            isPhoneReachable: false,
+            error: nil
+        )
+
+        XCTAssertEqual(store.snapshot, snapshot)
+        XCTAssertFalse(store.isPhoneReachable)
+        XCTAssertNil(store.decodingError)
     }
 
     private func account(

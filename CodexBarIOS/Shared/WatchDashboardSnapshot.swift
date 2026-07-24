@@ -273,8 +273,12 @@ public struct WatchDashboardSnapshot: Codable, Equatable, Sendable {
     }
 
     public func isStale(at date: Date) -> Bool {
+        isStale(dataDate: generatedAt, at: date)
+    }
+
+    public func isStale(dataDate: Date, at date: Date) -> Bool {
         let refreshWindow = refreshIntervalSeconds.map { max($0 * 2, 15 * 60) } ?? 60 * 60
-        return date.timeIntervalSince(generatedAt) > refreshWindow
+        return date.timeIntervalSince(dataDate) > refreshWindow
     }
 
     private static let encoder: JSONEncoder = {
