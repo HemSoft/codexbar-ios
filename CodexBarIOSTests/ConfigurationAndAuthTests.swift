@@ -63,6 +63,78 @@ final class ConfigurationAndAuthTests: XCTestCase {
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
 
         XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertFalse(store.isConfigurationRecoveryRequired)
+        XCTAssertNil(store.lastError)
+    }
+
+    @MainActor
+    func testProviderConfigurationStorePreservesMalformedDataAndSurfacesRecoveryState() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        let malformedData = Data(#"{"accounts":"not-an-array"}"#.utf8)
+        let savedAccount = ProviderAccountConfiguration(providerID: .openRouter, authMethod: .apiKey)
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: savedAccount)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(malformedData, forKey: "providerConfigurations")
+        try secretStore.saveSecret("preserved-secret", account: keychainAccount)
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+
+        XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertTrue(store.isConfigurationRecoveryRequired)
+        XCTAssertEqual(
+            store.lastError,
+            "Saved account data couldn't be read. Replace the damaged account list in Settings to resume saving configurations."
+        )
+        XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), malformedData)
+        XCTAssertEqual(try secretStore.readSecret(account: keychainAccount), "preserved-secret")
+
+        _ = store.addAccount(for: .codex)
+
+        XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), malformedData)
+        XCTAssertTrue(store.isConfigurationRecoveryRequired)
+        XCTAssertNotNil(store.lastError)
+        XCTAssertEqual(try secretStore.readSecret(account: keychainAccount), "preserved-secret")
+    }
+
+    @MainActor
+    func testProviderConfigurationStoreReplacesMalformedDataThenSavesNormally() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        let malformedData = Data("not-json".utf8)
+        let savedAccount = ProviderAccountConfiguration(providerID: .openRouter, authMethod: .apiKey)
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: savedAccount)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(malformedData, forKey: "providerConfigurations")
+        try secretStore.saveSecret("preserved-secret", account: keychainAccount)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+
+        XCTAssertTrue(store.replaceCorruptedConfigurations())
+
+        XCTAssertFalse(store.isConfigurationRecoveryRequired)
+        XCTAssertNil(store.lastError)
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                [ProviderAccountConfiguration].self,
+                from: try XCTUnwrap(defaults.data(forKey: "providerConfigurations"))
+            ),
+            []
+        )
+        XCTAssertEqual(try secretStore.readSecret(account: keychainAccount), "preserved-secret")
+
+        let replacement = store.addAccount(for: .claude)
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+
+        XCTAssertEqual(reloadedStore.configurations, [replacement])
+        XCTAssertFalse(reloadedStore.isConfigurationRecoveryRequired)
+        XCTAssertNil(reloadedStore.lastError)
+        XCTAssertEqual(try secretStore.readSecret(account: keychainAccount), "preserved-secret")
     }
 
     @MainActor

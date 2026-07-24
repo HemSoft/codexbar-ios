@@ -16,6 +16,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.requestReview) private var requestReview
     @State private var isConfirmingReset = false
+    @State private var isConfirmingConfigurationReplacement = false
     @State private var alertPermissionMessage: String?
     @State private var newGroupName = ""
     @State private var groupNameDrafts: [String: String] = [:]
@@ -231,6 +232,7 @@ struct SettingsView: View {
                     } label: {
                         Label("Add Account", systemImage: "plus.circle")
                     }
+                    .disabled(configurationStore.isConfigurationRecoveryRequired)
                 } header: {
                     Text("Accounts")
                 }
@@ -269,6 +271,12 @@ struct SettingsView: View {
                     Section {
                         Text(lastError)
                             .foregroundStyle(.red)
+
+                        if configurationStore.isConfigurationRecoveryRequired {
+                            Button("Replace Damaged Account List", role: .destructive) {
+                                isConfirmingConfigurationReplacement = true
+                            }
+                        }
                     }
                 }
             }
@@ -285,6 +293,19 @@ struct SettingsView: View {
                 }
             } message: {
                 Text("This removes account entries and saved provider credentials from this device.")
+            }
+            .confirmationDialog(
+                "Replace unreadable account data?",
+                isPresented: $isConfirmingConfigurationReplacement,
+                titleVisibility: .visible
+            ) {
+                Button("Replace Account Data", role: .destructive) {
+                    _ = configurationStore.replaceCorruptedConfigurations()
+                }
+            } message: {
+                Text(
+                    "This replaces the damaged account list with an empty list so you can add accounts again. Saved Keychain credentials are not deleted."
+                )
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
