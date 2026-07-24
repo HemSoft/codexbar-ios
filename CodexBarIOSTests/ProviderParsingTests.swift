@@ -524,7 +524,7 @@ final class ProviderParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testOpenCodeZenBootstrapImporterWaitsForConfigurationRecovery() throws {
+    func testOpenCodeZenBootstrapImporterWaitsForAndResumesAfterConfigurationRecovery() throws {
         let suiteName = "OpenCodeZenBootstrapRecovery-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         let malformedData = Data("not-json".utf8)
@@ -566,12 +566,11 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertTrue(configurationStore.configurations.isEmpty)
         XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), malformedData)
 
-        XCTAssertTrue(configurationStore.replaceCorruptedConfigurations())
-        OpenCodeZenBootstrapImporter.importIfNeeded(
+        XCTAssertTrue(OpenCodeZenBootstrapImporter.replaceCorruptedConfigurationsAndImportIfNeeded(
             configurationStore: configurationStore,
             fileManager: fileManager,
             importDirectory: importDirectory
-        )
+        ))
 
         XCTAssertFalse(fileManager.fileExists(atPath: importURL.path))
         let configuration = try XCTUnwrap(configurationStore.configurations(for: .openCodeZen).first)

@@ -300,7 +300,11 @@ struct SettingsView: View {
                 titleVisibility: .visible
             ) {
                 Button("Replace Account Data", role: .destructive) {
-                    _ = configurationStore.replaceCorruptedConfigurations()
+                    if OpenCodeZenBootstrapImporter.replaceCorruptedConfigurationsAndImportIfNeeded(
+                        configurationStore: configurationStore
+                    ) {
+                        onAccountsChanged()
+                    }
                 }
             } message: {
                 Text(
