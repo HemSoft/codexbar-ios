@@ -36,6 +36,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Reported damaged saved usage history on the dashboard, preserved its raw data
+  until an explicit reset, and resumed recording after recovery.
+  ([#109](https://github.com/HemSoft/codexbar-ios/issues/109))
 - Surfaced damaged saved account lists in Settings, preserved their raw data and
   Keychain credentials until explicit replacement, and restored normal account
   saving after recovery. ([#108](https://github.com/HemSoft/codexbar-ios/issues/108))
