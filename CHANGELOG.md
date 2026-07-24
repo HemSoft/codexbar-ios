@@ -79,6 +79,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added pull-request and `main` branch CI coverage for iOS unit tests, watchOS
+  unit tests, and the SwiftPM smoke harness using simulator destinations
+  discovered from each runner. ([#107](https://github.com/HemSoft/codexbar-ios/issues/107))
 - Added an embedded watchOS 10 companion target, shared watch app and test
   schemes, a deterministic accessible SwiftUI shell, and simulator-tested watch
   foundation coverage. ([#96](https://github.com/HemSoft/codexbar-ios/issues/96))

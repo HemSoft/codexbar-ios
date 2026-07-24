@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-tests:
+    name: iOS tests
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Select an available iPhone simulator
+        id: ios-destination
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          device_id="$(
+            xcrun simctl list devices available --json |
+              jq -r '
+                [.devices[] | .[] |
+                  select(.isAvailable == true and (.name | startswith("iPhone")))]
+                | first
+                | .udid // empty
+              '
+          )"
+
+          if [[ -z "$device_id" ]]; then
+            xcrun simctl list devices available
+            echo "No available iPhone simulator was found." >&2
+            exit 1
+          fi
+
+          echo "id=$device_id" >> "$GITHUB_OUTPUT"
+
+      - name: Run iOS unit tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CodexBarIOS.xcodeproj \
+            -scheme CodexBarIOS \
+            -destination "platform=iOS Simulator,id=${{ steps.ios-destination.outputs.id }}" \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+  watch-tests:
+    name: watchOS tests
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Select an available Apple Watch simulator
+        id: watch-destination
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          device_id="$(
+            xcrun simctl list devices available --json |
+              jq -r '
+                [.devices[] | .[] |
+                  select(.isAvailable == true and (.name | startswith("Apple Watch")))]
+                | first
+                | .udid // empty
+              '
+          )"
+
+          if [[ -z "$device_id" ]]; then
+            xcrun simctl list devices available
+            echo "No available Apple Watch simulator was found." >&2
+            exit 1
+          fi
+
+          echo "id=$device_id" >> "$GITHUB_OUTPUT"
+
+      - name: Run watchOS unit tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CodexBarIOS.xcodeproj \
+            -scheme CodexBarWatchTests \
+            -destination "platform=watchOS Simulator,id=${{ steps.watch-destination.outputs.id }}" \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+  smoke-tests:
+    name: SwiftPM smoke tests
+    runs-on: macos-26
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Run smoke harness
+        run: xcrun swift run CodexBarIOSSmokeTests
