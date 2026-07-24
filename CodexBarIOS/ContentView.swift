@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var deepLinkNavigation = DashboardDeepLinkNavigationState()
     @State private var hasCompletedInitialRefresh = false
     @State private var settingsRefreshCompletionID = UUID()
+    @State private var isConfirmingHistoryReset = false
 
     init(
         refreshService: UsageRefreshService,
@@ -57,10 +58,20 @@ struct ContentView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         if let historyError = historyStore.lastError {
-                            Label(historyError, systemImage: "exclamationmark.triangle.fill")
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                                .accessibilityIdentifier("usage-history-persistence-error")
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label(historyError, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.footnote)
+                                    .foregroundStyle(.red)
+                                    .accessibilityIdentifier("usage-history-persistence-error")
+
+                                if historyStore.requiresRecovery {
+                                    Button("Reset History", role: .destructive) {
+                                        isConfirmingHistoryReset = true
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .accessibilityIdentifier("reset-corrupted-usage-history")
+                                }
+                            }
                         }
 
                         if !cardItems.isEmpty,
@@ -241,6 +252,17 @@ struct ContentView: View {
                 result: result,
                 seriesOptions: historyStore.historySeriesOptions(for: result)
             )
+        }
+        .confirmationDialog(
+            "Reset unreadable usage history?",
+            isPresented: $isConfirmingHistoryReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset History", role: .destructive) {
+                historyStore.discardCorruptedHistory()
+            }
+        } message: {
+            Text("This permanently discards the unreadable history so new usage can be recorded.")
         }
         .task {
             guard performsLifecycleWork else {

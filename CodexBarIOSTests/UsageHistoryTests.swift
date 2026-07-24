@@ -3,6 +3,69 @@ import XCTest
 
 final class UsageHistoryTests: XCTestCase {
     @MainActor
+    func testMissingUsageHistoryInitializesWithoutAnError() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = UsageHistoryStore(defaults: defaults)
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+        XCTAssertNil(store.lastError)
+        XCTAssertFalse(store.requiresRecovery)
+    }
+
+    @MainActor
+    func testCorruptedUsageHistoryIsPreservedUntilExplicitlyReset() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let corruptedData = Data("not valid usage history".utf8)
+        defaults.set(corruptedData, forKey: "usageHistorySnapshots")
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = makeHistoryResult(
+            accountID: "codex.recovered-history",
+            fetchedAt: fetchedAt,
+            used: 42
+        )
+
+        let store = UsageHistoryStore(defaults: defaults)
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+        XCTAssertEqual(
+            store.lastError,
+            "Saved usage history could not be read. Reset history to resume recording."
+        )
+        XCTAssertTrue(store.requiresRecovery)
+
+        store.record(results: [result], now: fetchedAt)
+        store.removeSnapshotsForMissingAccounts(
+            validAccountIDs: [result.accountID],
+            now: fetchedAt
+        )
+
+        XCTAssertEqual(defaults.data(forKey: "usageHistorySnapshots"), corruptedData)
+        XCTAssertTrue(store.snapshots.isEmpty)
+        XCTAssertNotNil(store.lastError)
+
+        store.discardCorruptedHistory()
+
+        XCTAssertNil(defaults.data(forKey: "usageHistorySnapshots"))
+        XCTAssertNil(store.lastError)
+        XCTAssertFalse(store.requiresRecovery)
+
+        store.record(results: [result], now: fetchedAt)
+
+        XCTAssertEqual(store.snapshots.map(\.accountID), [result.accountID])
+        XCTAssertNotNil(defaults.data(forKey: "usageHistorySnapshots"))
+        XCTAssertNil(store.lastError)
+    }
+
+    @MainActor
     func testUsageHistoryStoreRecordsAndPersistsSnapshots() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
