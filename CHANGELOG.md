@@ -8,6 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added a live, read-only Apple Watch dashboard that mirrors iPhone account
+  metrics, visualization choices, ordering, and freshness while keeping the
+  last valid snapshot available when the devices disconnect.
+  ([#104](https://github.com/HemSoft/codexbar-ios/issues/104))
 - Added per-metric dashboard and widget visualization choices with Automatic,
   linear, segmented, ring, dial, and large-number styles that persist separately
   for each configured account. ([#103](https://github.com/HemSoft/codexbar-ios/issues/103))

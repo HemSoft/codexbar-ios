@@ -31,6 +31,7 @@ final class DashboardOrchestrator: ObservableObject {
     private let usageAlertNotifier: any UsageAlertNotifying
     private let appReviewPromptPolicy: AppReviewPromptPolicy
     private let widgetSnapshotCoordinator: WidgetSnapshotCoordinator
+    private let watchSnapshotCoordinator: WatchSnapshotCoordinator
     private var lastSystemDateTimeRefresh: ContinuousClock.Instant?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -40,7 +41,8 @@ final class DashboardOrchestrator: ObservableObject {
         historyStore: UsageHistoryStore,
         usageAlertNotifier: any UsageAlertNotifying,
         appReviewPromptPolicy: AppReviewPromptPolicy,
-        widgetSnapshotCoordinator: WidgetSnapshotCoordinator? = nil
+        widgetSnapshotCoordinator: WidgetSnapshotCoordinator? = nil,
+        watchSnapshotCoordinator: WatchSnapshotCoordinator? = nil
     ) {
         self.refreshService = refreshService
         self.configurationStore = configurationStore
@@ -48,6 +50,10 @@ final class DashboardOrchestrator: ObservableObject {
         self.usageAlertNotifier = usageAlertNotifier
         self.appReviewPromptPolicy = appReviewPromptPolicy
         self.widgetSnapshotCoordinator = widgetSnapshotCoordinator ?? WidgetSnapshotCoordinator(
+            refreshService: refreshService,
+            configurationStore: configurationStore
+        )
+        self.watchSnapshotCoordinator = watchSnapshotCoordinator ?? WatchSnapshotCoordinator(
             refreshService: refreshService,
             configurationStore: configurationStore
         )

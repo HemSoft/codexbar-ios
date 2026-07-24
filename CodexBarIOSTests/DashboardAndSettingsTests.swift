@@ -586,6 +586,218 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testWatchSnapshotContainsPresentationOnlyMetricsAndEveryStyle() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("watch-must-never-see-this-secret", for: configuration))
+        store.updateAutoRefreshInterval(.fiveMinutes)
+
+        let bars = MetricVisualizationStyle.allCases.enumerated().map { index, style in
+            let bar = UsageBar(
+                stableKey: "metric-\(index)",
+                label: style.displayName,
+                used: Double(index + 1),
+                limit: 10,
+                resetDescription: "Resets later"
+            )
+            store.updateVisualizationStyle(
+                style,
+                accountID: configuration.id,
+                metricID: bar.metricIdentifier(providerID: .codex, index: index)
+            )
+            return bar
+        }
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Pro",
+            bars: bars,
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+
+        let snapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: result.fetchedAt
+        )
+
+        XCTAssertEqual(snapshot.refreshIntervalSeconds, 300)
+        XCTAssertEqual(snapshot.accounts.map(\.id), ["codex.0"])
+        XCTAssertEqual(snapshot.accounts[0].providerName, ProviderID.codex.displayName)
+        XCTAssertEqual(snapshot.accounts[0].accountLabel, configuration.accountLabel)
+        XCTAssertNotEqual(snapshot.accounts[0].providerName, snapshot.accounts[0].accountLabel)
+        XCTAssertEqual(
+            snapshot.accounts[0].metrics.map(\.visualizationStyle),
+            WatchMetricVisualizationStyle.allCases
+        )
+        XCTAssertEqual(snapshot.accounts[0].metrics.map(\.usedFraction), [0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+        let encodedText = try XCTUnwrap(String(data: snapshot.encoded(), encoding: .utf8))
+        XCTAssertFalse(encodedText.contains("watch-must-never-see-this-secret"))
+        XCTAssertFalse(encodedText.contains(configuration.id))
+        XCTAssertFalse(encodedText.localizedCaseInsensitiveContains("token"))
+        XCTAssertFalse(encodedText.localizedCaseInsensitiveContains("cookie"))
+
+        XCTAssertTrue(store.removeAccount(configuration))
+        let afterRemoval = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: result.fetchedAt
+        )
+        XCTAssertTrue(afterRemoval.accounts.isEmpty)
+    }
+
+    func testWatchSnapshotDeduplicatorIgnoresGenerationTimeAndSupportsForcedReassertion() throws {
+        let first = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        let sameSemanticState = WatchDashboardSnapshot(
+            generatedAt: first.generatedAt.addingTimeInterval(60),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var deduplicator = WatchSnapshotDeduplicator()
+
+        XCTAssertTrue(try deduplicator.shouldSend(first, force: false))
+        try deduplicator.recordSent(first)
+        XCTAssertFalse(try deduplicator.shouldSend(sameSemanticState, force: false))
+        XCTAssertTrue(try deduplicator.shouldSend(sameSemanticState, force: true))
+
+        let changed = WatchDashboardSnapshot(
+            generatedAt: sameSemanticState.generatedAt,
+            refreshIntervalSeconds: 60,
+            accounts: []
+        )
+        XCTAssertTrue(try deduplicator.shouldSend(changed, force: false))
+    }
+
+    @MainActor
+    func testWatchSnapshotUsesPreservedBarsFetchTimeForFreshness() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .claude)
+        XCTAssertTrue(store.saveSecret("secret", for: configuration))
+        let barsFetchedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let refreshedAt = barsFetchedAt.addingTimeInterval(30 * 60)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Fresh balance with preserved usage",
+            bars: [UsageBar(stableKey: "window", label: "Usage", used: 4, limit: 10)],
+            barsFetchedAt: barsFetchedAt,
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .balance,
+                    label: "Balance",
+                    minorUnits: 2_000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: refreshedAt
+        )
+
+        let snapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: refreshedAt
+        )
+
+        XCTAssertEqual(try XCTUnwrap(snapshot.accounts.first).fetchedAt, barsFetchedAt)
+    }
+
+    @MainActor
+    func testWatchSnapshotCoordinatorActivatesAndCoalescesRapidChanges() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("secret", for: configuration))
+        let bar = UsageBar(stableKey: "window", label: "Usage", used: 4, limit: 10)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Pro",
+            bars: [bar],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let service = UsageRefreshService(providers: [], initialResults: [result])
+        let sender = RecordingWatchSnapshotSender()
+        let coordinator = WatchSnapshotCoordinator(
+            refreshService: service,
+            configurationStore: store,
+            sender: sender,
+            coalescingDelay: .milliseconds(5)
+        )
+
+        XCTAssertEqual(sender.activationCount, 1)
+        sender.completeActivation()
+        XCTAssertEqual(sender.publishedForces, [true])
+
+        let metricID = bar.metricIdentifier(providerID: .codex, index: 0)
+        store.updateVisualizationStyle(.segmentedBar, accountID: configuration.id, metricID: metricID)
+        store.updateVisualizationStyle(.circularRing, accountID: configuration.id, metricID: metricID)
+        store.updateVisualizationStyle(.largeNumeric, accountID: configuration.id, metricID: metricID)
+        try? await Task.sleep(for: .milliseconds(30))
+
+        XCTAssertEqual(sender.publishedForces, [true, false])
+        XCTAssertEqual(
+            sender.snapshots.last?.accounts[0].metrics[0].visualizationStyle,
+            .largeNumeric
+        )
+        withExtendedLifetime(coordinator) {}
+    }
+
+    @MainActor
+    func testWatchSnapshotCoordinatorPreservesLastWatchDataWhileInitialRefreshIsPending() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("secret", for: configuration))
+        let service = UsageRefreshService(providers: [], initialResults: [])
+        let sender = RecordingWatchSnapshotSender()
+        let coordinator = WatchSnapshotCoordinator(
+            refreshService: service,
+            configurationStore: store,
+            sender: sender,
+            coalescingDelay: .milliseconds(5)
+        )
+
+        sender.completeActivation()
+        XCTAssertTrue(sender.snapshots.isEmpty)
+
+        XCTAssertTrue(store.removeAccount(configuration))
+        try? await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(sender.snapshots.count, 1)
+        XCTAssertTrue(sender.snapshots[0].accounts.isEmpty)
+        withExtendedLifetime(coordinator) {}
+    }
+
+    @MainActor
     func testProviderSettingsViewModelDebouncesTextChangesAndFlushesOnDismissal() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
@@ -970,4 +1182,27 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Refresh failed")
     }
 
+}
+
+@MainActor
+private final class RecordingWatchSnapshotSender: WatchSnapshotSending {
+    private var activationHandler: (@MainActor () -> Void)?
+    private(set) var activationCount = 0
+    private(set) var snapshots: [WatchDashboardSnapshot] = []
+    private(set) var publishedForces: [Bool] = []
+
+    func activate(onActivated: @escaping @MainActor () -> Void) {
+        activationCount += 1
+        activationHandler = onActivated
+    }
+
+    func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool {
+        snapshots.append(snapshot)
+        publishedForces.append(force)
+        return true
+    }
+
+    func completeActivation() {
+        activationHandler?()
+    }
 }

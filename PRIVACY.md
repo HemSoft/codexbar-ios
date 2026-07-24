@@ -6,14 +6,23 @@ CodexBar Usage Monitor is a local dashboard for monitoring AI provider usage, li
 
 ## Data CodexBar Stores On Your Device
 
-CodexBar may store the following information locally on your iPhone or iPad:
+CodexBar may store the following information locally on your iPhone, iPad, or
+paired Apple Watch:
 
 - Provider account labels and configuration choices you enter in the app.
 - API keys, access tokens, refresh tokens, and similar credentials for providers you choose to connect.
 - Usage, balance, refresh status, and snapshot history used to show cards, trends, alerts, and widgets.
 - Widget configuration, including which tiles you choose to show.
+- A presentation-only Apple Watch snapshot containing account labels, metric
+  names and values, visualization choices, reset context, status, and freshness.
 
 Provider credentials are stored using the iOS Keychain where appropriate. Widget snapshots and app settings are stored locally in the app container or app group container so the app and widgets can display your configured tiles.
+
+The iPhone app sends only the latest presentation-ready dashboard snapshot to
+the paired Apple Watch through Apple's Watch Connectivity framework. Provider
+credentials, credential identifiers, cookies, raw provider responses, and
+provider networking never move to the watch. The watch stores its last valid
+snapshot locally so it can remain useful during a temporary disconnection.
 
 ## Third-Party Provider Requests
 

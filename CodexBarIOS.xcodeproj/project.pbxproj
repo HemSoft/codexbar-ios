@@ -100,6 +100,10 @@
 		D10000000000000000000005 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000006 /* PrivacyInfo.xcprivacy */; };
 		D10000000000000000000006 /* WatchDashboardStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000009 /* WatchDashboardStateTests.swift */; };
 		D10000000000000000000007 /* CodexBarWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = D20000000000000000000008 /* CodexBarWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E10000000000000000000001 /* WatchDashboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* WatchDashboardSnapshot.swift */; };
+		E10000000000000000000002 /* WatchDashboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* WatchDashboardSnapshot.swift */; };
+		E10000000000000000000003 /* WatchSnapshotCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000002 /* WatchSnapshotCoordinator.swift */; };
+		E10000000000000000000004 /* WatchConnectivityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000003 /* WatchConnectivityStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -252,6 +256,9 @@
 		D20000000000000000000008 /* CodexBarWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodexBarWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D20000000000000000000009 /* WatchDashboardStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardStateTests.swift; sourceTree = "<group>"; };
 		D2000000000000000000000A /* CodexBarWatchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexBarWatchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E20000000000000000000001 /* WatchDashboardSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardSnapshot.swift; sourceTree = "<group>"; };
+		E20000000000000000000002 /* WatchSnapshotCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSnapshotCoordinator.swift; sourceTree = "<group>"; };
+		E20000000000000000000003 /* WatchConnectivityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -356,6 +363,7 @@
 				200000000000000000000042 /* DashboardOrchestrator.swift */,
 				20000000000000000000003C /* AppUpdateService.swift */,
 				20000000000000000000003D /* AppStoreScreenshotFixtures.swift */,
+				E20000000000000000000002 /* WatchSnapshotCoordinator.swift */,
 				200000000000000000000034 /* UsageAlertEvaluator.swift */,
 				200000000000000000000035 /* LocalUsageAlertNotifier.swift */,
 				200000000000000000000015 /* CodexCredentialsParser.swift */,
@@ -454,6 +462,7 @@
 				20000000000000000000002B /* WidgetSnapshotStore.swift */,
 				200000000000000000000037 /* WidgetBuilderConfiguration.swift */,
 				200000000000000000000044 /* WidgetRenderingSupport.swift */,
+				E20000000000000000000001 /* WatchDashboardSnapshot.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -464,6 +473,7 @@
 				D20000000000000000000001 /* CodexBarWatchApp.swift */,
 				D20000000000000000000002 /* WatchDashboardState.swift */,
 				D20000000000000000000003 /* WatchDashboardView.swift */,
+				E20000000000000000000003 /* WatchConnectivityStore.swift */,
 				D20000000000000000000005 /* Info.plist */,
 				D20000000000000000000006 /* PrivacyInfo.xcprivacy */,
 				D20000000000000000000007 /* CodexBarWatch.entitlements */,
@@ -743,6 +753,8 @@
 				100000000000000000000036 /* WidgetBuilderView.swift in Sources */,
 				100000000000000000000025 /* CursorWebAuthService.swift in Sources */,
 				100000000000000000000024 /* CursorUsageProvider.swift in Sources */,
+				E10000000000000000000001 /* WatchDashboardSnapshot.swift in Sources */,
+				E10000000000000000000003 /* WatchSnapshotCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -787,6 +799,8 @@
 				D10000000000000000000001 /* CodexBarWatchApp.swift in Sources */,
 				D10000000000000000000002 /* WatchDashboardState.swift in Sources */,
 				D10000000000000000000003 /* WatchDashboardView.swift in Sources */,
+				E10000000000000000000002 /* WatchDashboardSnapshot.swift in Sources */,
+				E10000000000000000000004 /* WatchConnectivityStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
