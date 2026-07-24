@@ -121,7 +121,7 @@ enum WatchSnapshotPublisher {
 
                 return WatchAccountSnapshot(
                     id: "\(result.providerID.rawValue).\(displayIndex)",
-                    providerName: result.title,
+                    providerName: configuration.providerID.displayName,
                     accountLabel: watchAccountLabel(
                         configuration: configuration,
                         result: result

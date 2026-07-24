@@ -630,6 +630,9 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertEqual(snapshot.refreshIntervalSeconds, 300)
         XCTAssertEqual(snapshot.accounts.map(\.id), ["codex.0"])
+        XCTAssertEqual(snapshot.accounts[0].providerName, ProviderID.codex.displayName)
+        XCTAssertEqual(snapshot.accounts[0].accountLabel, configuration.accountLabel)
+        XCTAssertNotEqual(snapshot.accounts[0].providerName, snapshot.accounts[0].accountLabel)
         XCTAssertEqual(
             snapshot.accounts[0].metrics.map(\.visualizationStyle),
             WatchMetricVisualizationStyle.allCases
