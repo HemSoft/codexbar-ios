@@ -66,6 +66,32 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testNonDataUsageHistoryIsPreservedUntilExplicitlyReset() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let corruptedValue = "not stored as data"
+        defaults.set(corruptedValue, forKey: "usageHistorySnapshots")
+
+        let store = UsageHistoryStore(defaults: defaults)
+
+        XCTAssertTrue(store.requiresRecovery)
+        XCTAssertNotNil(store.lastError)
+        XCTAssertEqual(
+            defaults.string(forKey: "usageHistorySnapshots"),
+            corruptedValue
+        )
+
+        store.discardCorruptedHistory()
+
+        XCTAssertFalse(store.requiresRecovery)
+        XCTAssertNil(store.lastError)
+        XCTAssertNil(defaults.object(forKey: "usageHistorySnapshots"))
+    }
+
+    @MainActor
     func testUsageHistoryStoreRecordsAndPersistsSnapshots() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
