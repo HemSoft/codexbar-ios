@@ -74,16 +74,19 @@ final class ConfigurationAndAuthTests: XCTestCase {
         let secretStore = MemorySecretStore()
         let malformedData = Data(#"{"accounts":"not-an-array"}"#.utf8)
         let savedAccount = ProviderAccountConfiguration(providerID: .openRouter, authMethod: .apiKey)
+        let savedGroup = ProviderAccountGroup(id: "saved-group", name: "Saved Group")
         let keychainAccount = ProviderConfigurationStore.keychainAccount(for: savedAccount)
         defer {
             defaults.removePersistentDomain(forName: suiteName)
         }
         defaults.set(malformedData, forKey: "providerConfigurations")
+        defaults.set(try JSONEncoder().encode([savedGroup]), forKey: "providerAccountGroups")
         try secretStore.saveSecret("preserved-secret", account: keychainAccount)
 
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
 
         XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertEqual(store.groups, [savedGroup])
         XCTAssertTrue(store.isConfigurationRecoveryRequired)
         XCTAssertEqual(
             store.lastError,
@@ -95,9 +98,13 @@ final class ConfigurationAndAuthTests: XCTestCase {
         let attemptedAccount = store.addAccount(for: .codex)
         var attemptedUpdate = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
         attemptedUpdate.accountLabel = "Imported OpenCode"
+        var attemptedGroupUpdate = savedGroup
+        attemptedGroupUpdate.name = "Blocked Rename"
 
         XCTAssertFalse(store.update(attemptedUpdate))
+        XCTAssertFalse(store.updateGroup(attemptedGroupUpdate))
         XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertEqual(store.groups, [savedGroup])
         XCTAssertNil(store.configuration(accountID: attemptedAccount.id))
         XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), malformedData)
         XCTAssertTrue(store.isConfigurationRecoveryRequired)

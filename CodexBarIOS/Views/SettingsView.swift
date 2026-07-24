@@ -172,6 +172,8 @@ struct SettingsView: View {
                         )
                         .textInputAutocapitalization(.words)
                         .focused($focusedGroupID, equals: group.id)
+                        .disabled(configurationStore.isConfigurationRecoveryRequired)
+                        .deleteDisabled(configurationStore.isConfigurationRecoveryRequired)
                         .onSubmit {
                             commitGroupName(for: group.id)
                         }
@@ -193,6 +195,7 @@ struct SettingsView: View {
                         .disabled(newGroupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityLabel("Add group")
                     }
+                    .disabled(configurationStore.isConfigurationRecoveryRequired)
                 } header: {
                     Text("Groups")
                 }
