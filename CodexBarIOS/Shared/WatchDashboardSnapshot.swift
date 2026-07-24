@@ -21,6 +21,15 @@ public enum WatchMetricVisualizationStyle: String, CaseIterable, Equatable, Send
         }
         return self
     }
+
+    public func showsHeaderExactValueOnWatch(allowsGauge: Bool) -> Bool {
+        switch resolvedForWatch(allowsGauge: allowsGauge) {
+        case .automatic, .linearBar, .segmentedBar:
+            true
+        case .circularRing, .semicircularDial, .largeNumeric:
+            false
+        }
+    }
 }
 
 extension WatchMetricVisualizationStyle: Codable {

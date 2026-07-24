@@ -3,6 +3,8 @@ import SwiftUI
 struct WatchDashboardView: View {
     let state: WatchDashboardState
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         List {
             Section {
@@ -25,8 +27,12 @@ struct WatchDashboardView: View {
                                 Text(sample.providerName)
                                     .font(.headline)
                                 Spacer(minLength: 4)
-                                Text(sample.exactValue)
-                                    .font(.caption.monospacedDigit())
+                                if sample.visualizationStyle.showsHeaderExactValueOnWatch(
+                                    allowsGauge: !dynamicTypeSize.isAccessibilitySize
+                                ) {
+                                    Text(sample.exactValue)
+                                        .font(.caption.monospacedDigit())
+                                }
                             }
 
                             Text(sample.metricLabel)

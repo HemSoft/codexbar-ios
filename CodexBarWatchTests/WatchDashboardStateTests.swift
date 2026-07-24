@@ -89,6 +89,16 @@ final class WatchDashboardStateTests: XCTestCase {
         )
     }
 
+    func testSelfRenderingVisualizationsHideDuplicateHeaderValue() {
+        XCTAssertTrue(WatchMetricVisualizationStyle.linearBar.showsHeaderExactValueOnWatch(allowsGauge: true))
+        XCTAssertTrue(WatchMetricVisualizationStyle.segmentedBar.showsHeaderExactValueOnWatch(allowsGauge: true))
+        XCTAssertTrue(WatchMetricVisualizationStyle.automatic.showsHeaderExactValueOnWatch(allowsGauge: true))
+        XCTAssertFalse(WatchMetricVisualizationStyle.circularRing.showsHeaderExactValueOnWatch(allowsGauge: true))
+        XCTAssertFalse(WatchMetricVisualizationStyle.semicircularDial.showsHeaderExactValueOnWatch(allowsGauge: true))
+        XCTAssertFalse(WatchMetricVisualizationStyle.largeNumeric.showsHeaderExactValueOnWatch(allowsGauge: true))
+        XCTAssertTrue(WatchMetricVisualizationStyle.circularRing.showsHeaderExactValueOnWatch(allowsGauge: false))
+    }
+
     func testPayloadRoundTripAndUnknownStyleFallback() throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let snapshot = WatchDashboardSnapshot(

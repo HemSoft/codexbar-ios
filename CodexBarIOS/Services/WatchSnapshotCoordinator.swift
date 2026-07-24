@@ -288,6 +288,10 @@ final class WatchSnapshotCoordinator {
             publishCurrentSnapshot()
         }
     }
+
+    deinit {
+        snapshotPublishTask?.cancel()
+    }
 }
 
 #if os(iOS)
