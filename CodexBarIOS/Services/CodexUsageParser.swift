@@ -33,7 +33,7 @@ public enum CodexUsageParser {
         let bars = windows.map { window in
             let usedFraction = window.usedPercent / 100
             return UsageBar(
-                stableKey: "window-\(window.durationSeconds)",
+                stableKey: "window-\(canonicalDuration(window.durationSeconds))",
                 label: label(forDuration: window.durationSeconds),
                 used: window.usedPercent,
                 limit: 100,
@@ -136,6 +136,16 @@ public enum CodexUsageParser {
             "\(max(1, durationSeconds / 3_600)) hour usage limit"
         } else {
             "\(max(1, Int((Double(durationSeconds) / 60).rounded()))) minute usage limit"
+        }
+    }
+
+    private static func canonicalDuration(_ durationSeconds: Int) -> Int {
+        if isApproximateDuration(durationSeconds, expected: fiveHourDurationSeconds) {
+            fiveHourDurationSeconds
+        } else if isApproximateDuration(durationSeconds, expected: weeklyDurationSeconds) {
+            weeklyDurationSeconds
+        } else {
+            durationSeconds
         }
     }
 

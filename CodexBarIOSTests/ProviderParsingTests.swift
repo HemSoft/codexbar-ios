@@ -1035,12 +1035,22 @@ final class ProviderParsingTests: XCTestCase {
         let drifted = try XCTUnwrap(CodexUsageParser.parse(Data(driftedPayload.utf8)))
 
         XCTAssertEqual(drifted.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
+        XCTAssertEqual(
+            drifted.bars.enumerated().map {
+                $0.element.metricIdentifier(providerID: .codex, index: $0.offset)
+            },
+            ["codex.window-18000", "codex.window-604800"]
+        )
         XCTAssertTrue(drifted.usageMessages.isEmpty)
 
         let outsideTolerancePayload = #"{"rate_limit":{"primary_window":{"used_percent":10,"reset_at":1893456000,"limit_window_seconds":18901}}}"#
         let outsideTolerance = try XCTUnwrap(CodexUsageParser.parse(Data(outsideTolerancePayload.utf8)))
 
         XCTAssertEqual(outsideTolerance.bars.map(\.label), ["315 minute usage limit"])
+        XCTAssertEqual(
+            outsideTolerance.bars.first?.metricIdentifier(providerID: .codex, index: 0),
+            "codex.window-18901"
+        )
         XCTAssertTrue(outsideTolerance.usageMessages.isEmpty)
     }
 
