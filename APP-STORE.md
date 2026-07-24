@@ -2,12 +2,14 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-07-16
+Status last reviewed: 2026-07-24
 
 ## Current Status
 
 - App builds, installs, and launches on the connected development iPhone.
 - Main dashboard, provider settings, widget support, and snapshot trend improvements are on `main`.
+- The embedded Apple Watch companion provides a live, read-only dashboard
+  synchronized from iPhone.
 - Development signing is stable through the dedicated CodexBar keychain documented in `AGENTS.md`.
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
@@ -74,7 +76,10 @@ Reference links:
 - [x] Prepare screenshots for required iPhone sizes. Six deterministic iPhone 17 Pro Max images at `1320x2868` were generated and reviewed at full size on 2026-07-11.
 - [x] Prepare screenshots for required iPad sizes. Six deterministic iPad Pro 13-inch (M5) images at `2064x2752` were generated and reviewed at full size on 2026-07-11.
 - [x] Upload the Issue #22 iPhone and iPad screenshot sets to App Store Connect and verify their order and cropping. Both device sets contain six ordered screenshots in the 1.1 draft as of 2026-07-11.
-- [x] Confirm Apple Watch screenshots are not needed. Current repo has no watchOS app target, so Apple Watch screenshots are not required unless a watchOS app is added.
+- [ ] Verify Apple Watch screenshot handling for the next watch-enabled App
+  Store submission. The embedded watchOS app target is present, but neither an
+  Apple Watch screenshot requirement nor a completed watch screenshot set has
+  been verified in App Store Connect as of 2026-07-24.
 - [ ] Consider an app preview video after the first TestFlight build is stable.
 - [ ] Verify the App Store icon renders correctly and has no transparency.
 
