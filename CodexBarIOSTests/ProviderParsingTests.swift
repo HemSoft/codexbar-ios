@@ -524,6 +524,64 @@ final class ProviderParsingTests: XCTestCase {
     }
 
     @MainActor
+    func testOpenCodeZenBootstrapImporterWaitsForAndResumesAfterConfigurationRecovery() throws {
+        let suiteName = "OpenCodeZenBootstrapRecovery-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let malformedData = Data("not-json".utf8)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(malformedData, forKey: "providerConfigurations")
+
+        let fileManager = FileManager.default
+        let importDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("OpenCodeZenBootstrapRecovery-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: importDirectory, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: importDirectory)
+        }
+
+        let importURL = importDirectory.appendingPathComponent(OpenCodeZenBootstrapImporter.importFileName)
+        let payload = """
+        {
+          "openCodeGoWorkspaceId": "wrk_after_recovery",
+          "providers": {
+            "OpenCodeGo": {
+              "apiKey": "recovered-dashboard-token"
+            }
+          }
+        }
+        """
+        try Data(payload.utf8).write(to: importURL)
+
+        let secretStore = MemorySecretStore()
+        let configurationStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        OpenCodeZenBootstrapImporter.importIfNeeded(
+            configurationStore: configurationStore,
+            fileManager: fileManager,
+            importDirectory: importDirectory
+        )
+
+        XCTAssertTrue(fileManager.fileExists(atPath: importURL.path))
+        XCTAssertTrue(configurationStore.configurations.isEmpty)
+        XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), malformedData)
+
+        XCTAssertTrue(OpenCodeZenBootstrapImporter.replaceCorruptedConfigurationsAndImportIfNeeded(
+            configurationStore: configurationStore,
+            fileManager: fileManager,
+            importDirectory: importDirectory
+        ))
+
+        XCTAssertFalse(fileManager.fileExists(atPath: importURL.path))
+        let configuration = try XCTUnwrap(configurationStore.configurations(for: .openCodeZen).first)
+        XCTAssertEqual(configuration.openCodeWorkspaceId, "wrk_after_recovery")
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
+            "recovered-dashboard-token"
+        )
+    }
+
+    @MainActor
     func testOpenCodeZenBootstrapImporterDeletesFileWithoutReadingWhenProtectionFails() throws {
         let suiteName = "OpenCodeZenBootstrapProtectionFailure-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
