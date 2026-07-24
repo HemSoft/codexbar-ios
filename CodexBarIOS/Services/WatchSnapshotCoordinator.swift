@@ -114,6 +114,9 @@ enum WatchSnapshotPublisher {
                         )
                     )
                 }
+                let displayedDataFetchedAt = barMetrics.isEmpty
+                    ? result.fetchedAt
+                    : result.barsFetchedAt ?? result.fetchedAt
 
                 return WatchAccountSnapshot(
                     id: result.accountID,
@@ -126,7 +129,7 @@ enum WatchSnapshotPublisher {
                         for: result,
                         configurationStore: configurationStore
                     ),
-                    fetchedAt: result.fetchedAt,
+                    fetchedAt: displayedDataFetchedAt,
                     metrics: metrics
                 )
             }

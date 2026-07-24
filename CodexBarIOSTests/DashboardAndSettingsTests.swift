@@ -676,6 +676,47 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testWatchSnapshotUsesPreservedBarsFetchTimeForFreshness() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .claude)
+        XCTAssertTrue(store.saveSecret("secret", for: configuration))
+        let barsFetchedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let refreshedAt = barsFetchedAt.addingTimeInterval(30 * 60)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Fresh balance with preserved usage",
+            bars: [UsageBar(stableKey: "window", label: "Usage", used: 4, limit: 10)],
+            barsFetchedAt: barsFetchedAt,
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .balance,
+                    label: "Balance",
+                    minorUnits: 2_000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: refreshedAt
+        )
+
+        let snapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: refreshedAt
+        )
+
+        XCTAssertEqual(try XCTUnwrap(snapshot.accounts.first).fetchedAt, barsFetchedAt)
+    }
+
+    @MainActor
     func testWatchSnapshotCoordinatorActivatesAndCoalescesRapidChanges() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
