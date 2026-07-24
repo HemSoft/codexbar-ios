@@ -77,7 +77,7 @@ struct WatchDashboardState: Equatable, Sendable {
         if let decodingError {
             statusText = "\(decodingError). Showing \(freshnessText.lowercased())"
         } else if displayedAccounts.isEmpty {
-            statusText = "No dashboard metrics on iPhone"
+            statusText = Self.emptyStatusText(for: snapshot.accounts)
         } else if snapshot.isStale(dataDate: oldestDisplayedFetch, at: now) {
             statusText = "\(freshnessText) • Stale"
         } else if !isPhoneReachable {
@@ -123,6 +123,19 @@ struct WatchDashboardState: Equatable, Sendable {
             return "Updated \(seconds / 3_600)h ago"
         }
         return "Updated \(seconds / 86_400)d ago"
+    }
+
+    private static func emptyStatusText(for accounts: [WatchAccountSnapshot]) -> String {
+        let accountStatuses = accounts.compactMap { account -> String? in
+            guard let status = account.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !status.isEmpty else {
+                return nil
+            }
+            return "\(account.providerName): \(status)"
+        }
+        return accountStatuses.isEmpty
+            ? "No dashboard metrics on iPhone"
+            : accountStatuses.joined(separator: " • ")
     }
 
     static let sample = WatchDashboardState(

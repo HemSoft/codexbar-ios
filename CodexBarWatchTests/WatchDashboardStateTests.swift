@@ -210,6 +210,34 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertTrue(state.samples[0].accessibilitySummary.contains("Updated 30m ago"))
     }
 
+    func testEmptyDashboardPreservesProviderStatusText() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "claude",
+                    providerName: "Claude",
+                    accountLabel: "Primary",
+                    statusText: "Refresh failed; showing no cached usage",
+                    fetchedAt: now,
+                    metrics: []
+                ),
+            ]
+        )
+
+        let state = WatchDashboardState(
+            snapshot: snapshot,
+            now: now,
+            isPhoneReachable: true,
+            decodingError: nil
+        )
+
+        XCTAssertTrue(state.samples.isEmpty)
+        XCTAssertEqual(state.statusText, "Claude: Refresh failed; showing no cached usage")
+    }
+
     @MainActor
     func testMalformedUpdatePreservesPersistedLastGoodSnapshot() throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
