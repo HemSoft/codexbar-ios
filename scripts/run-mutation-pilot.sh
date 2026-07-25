@@ -13,7 +13,7 @@ tool_binary="$tool_cache_dir/swift-mutation-testing"
 mkdir -p "$tool_cache_dir" "$repository_dir/build/mutation-testing"
 
 if [[ ! -f "$tool_archive" ]]; then
-    curl -fsSL \
+    curl -fsSL --remove-on-error \
         "https://github.com/ericodx/swift-mutation-testing/releases/download/v$tool_version/swift-mutation-testing-v$tool_version-macos.tar.gz" \
         -o "$tool_archive"
 fi
