@@ -312,13 +312,16 @@ final class ProviderSettingsViewModel: ObservableObject {
             openCodeCredentialMessage = "Refresh finished. Check the dashboard."
             return
         }
+        let usageContext = result.usageMessages.isEmpty
+            ? ""
+            : " \(result.usageMessages.joined(separator: " "))"
         if !result.bars.isEmpty, result.creditsRemaining != nil {
-            openCodeCredentialMessage = "OpenCode Go usage and ZEN balance refreshed."
+            openCodeCredentialMessage = "OpenCode Go usage and ZEN balance refreshed.\(usageContext)"
         } else if !result.bars.isEmpty {
             openCodeCredentialMessage = "OpenCode Go usage refreshed."
         } else if let balance = result.creditsRemaining {
             let formatted = Self.openCodeBalanceFormatter.string(from: NSNumber(value: balance)) ?? "$\(balance)"
-            openCodeCredentialMessage = "OpenCode ZEN balance refreshed: \(formatted)"
+            openCodeCredentialMessage = "OpenCode ZEN balance refreshed: \(formatted)\(usageContext)"
         } else {
             openCodeCredentialMessage = result.subtitle
         }

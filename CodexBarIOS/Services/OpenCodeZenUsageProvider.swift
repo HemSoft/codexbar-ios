@@ -87,8 +87,9 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         configuration: ProviderAccountConfiguration
     ) async -> ProviderUsageResult {
         let fetchedAt = Date()
-        let balance = await fetchBalance(workspaceId: workspaceId, apiKey: apiKey)
-        let goUsage = await fetchGoUsage(workspaceId: workspaceId, apiKey: apiKey)
+        async let balanceTask = fetchBalance(workspaceId: workspaceId, apiKey: apiKey)
+        async let goUsageTask = fetchGoUsage(workspaceId: workspaceId, apiKey: apiKey)
+        let (balance, goUsage) = await (balanceTask, goUsageTask)
         return Self.buildCombinedResult(
             balance: balance,
             goUsage: goUsage,
@@ -524,7 +525,10 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         let hours = durationComponent(named: #"hours?|hrs?|h"#, in: value)
         let minutes = durationComponent(named: #"minutes?|mins?|m"#, in: value)
         let duration = days * 86_400 + hours * 3_600 + minutes * 60
-        return duration > 0 ? duration : nil
+        let recognizedUnitPattern = #"\b(?:days?|hours?|hrs?|minutes?|mins?)\b|\d+(?:\.\d+)?\s*[dhm]\b"#
+        return value.range(of: recognizedUnitPattern, options: .regularExpression) == nil
+            ? nil
+            : duration
     }
 
     private static func durationComponent(named unitPattern: String, in text: String) -> Double {

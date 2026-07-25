@@ -893,6 +893,37 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderSettingsViewModelPreservesGoStatusWhenBalanceRefreshes() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id,
+            onAccountRefresh: { configuration in
+                ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openCodeZen,
+                    title: configuration.displayName,
+                    subtitle: "ZEN credit balance - Go not subscribed",
+                    bars: [],
+                    creditsRemaining: 12.25,
+                    usageMessages: ["This workspace is not subscribed to OpenCode Go."],
+                    fetchedAt: Date()
+                )
+            }
+        )
+
+        await viewModel.refreshOpenCode()
+
+        XCTAssertEqual(
+            viewModel.openCodeCredentialMessage,
+            "OpenCode ZEN balance refreshed: $12.25 This workspace is not subscribed to OpenCode Go."
+        )
+    }
+
+    @MainActor
     func testProviderSettingsViewModelReportsCredentialSaveFailureWithoutCompleting() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
