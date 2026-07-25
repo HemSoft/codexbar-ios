@@ -915,6 +915,212 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testPastedCopilotReplacementFailurePreservesPersistedIdentityAndCredential() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = FailingSaveSecretStore(secret: "existing-token")
+        defer {
+            DashboardAndSettingsMockURLProtocol.handler = nil
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let session = makeCopilotTestSession()
+        DashboardAndSettingsMockURLProtocol.handler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "token replacement-token")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"login":"replacement-user"}"#.utf8)
+            )
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var configuration = store.addAccount(for: .copilot)
+        configuration.accountLabel = "existing-user"
+        configuration.authMethod = .browserSession
+        XCTAssertTrue(store.update(configuration))
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 },
+            copilotUsageProvider: makeCopilotUsageProvider(session: session)
+        )
+        viewModel.secret = "replacement-token"
+
+        await viewModel.saveCopilotCredential()
+
+        XCTAssertNotNil(viewModel.copilotAuthError)
+        XCTAssertEqual(viewModel.secret, "replacement-token")
+        XCTAssertEqual(credentialsChangedCount, 0)
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let reloaded = try XCTUnwrap(reloadedStore.configuration(accountID: configuration.id))
+        XCTAssertEqual(reloaded.accountLabel, "existing-user")
+        XCTAssertEqual(reloaded.authMethod, .browserSession)
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: reloaded)),
+            "existing-token"
+        )
+    }
+
+    @MainActor
+    func testSuccessfulPastedCopilotReplacementUpdatesPersistedIdentityAndCredential() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        defer {
+            DashboardAndSettingsMockURLProtocol.handler = nil
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let session = makeCopilotTestSession()
+        DashboardAndSettingsMockURLProtocol.handler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "token replacement-token")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"login":"replacement-user"}"#.utf8)
+            )
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var configuration = store.addAccount(for: .copilot)
+        configuration.accountLabel = "existing-user"
+        configuration.authMethod = .browserSession
+        XCTAssertTrue(store.update(configuration))
+        XCTAssertTrue(store.saveSecret("existing-token", for: configuration))
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 },
+            copilotUsageProvider: makeCopilotUsageProvider(session: session)
+        )
+        viewModel.secret = "replacement-token"
+
+        await viewModel.saveCopilotCredential()
+
+        XCTAssertNil(viewModel.copilotAuthError)
+        XCTAssertEqual(viewModel.secret, "")
+        XCTAssertEqual(credentialsChangedCount, 1)
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let reloaded = try XCTUnwrap(reloadedStore.configuration(accountID: configuration.id))
+        XCTAssertEqual(reloaded.accountLabel, "replacement-user")
+        XCTAssertEqual(reloaded.authMethod, .cliToken)
+        let savedCredential = try XCTUnwrap(
+            secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: reloaded))
+        )
+        XCTAssertEqual(
+            CopilotCredentialsParser.parse(savedCredential),
+            CopilotCredentials(accessToken: "replacement-token", username: "replacement-user")
+        )
+    }
+
+    @MainActor
+    func testBrowserCopilotReplacementFailurePreservesPersistedIdentityAndCredential() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = FailingSaveSecretStore(secret: "existing-token")
+        defer {
+            DashboardAndSettingsMockURLProtocol.handler = nil
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let session = makeCopilotTestSession()
+        installCopilotBrowserReplacementHandler()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var configuration = store.addAccount(for: .copilot)
+        configuration.accountLabel = "existing-user"
+        configuration.authMethod = .cliToken
+        XCTAssertTrue(store.update(configuration))
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 },
+            copilotAuthService: CopilotWebAuthService(
+                session: session,
+                callbackTimeoutNanoseconds: 1_000_000_000
+            ),
+            copilotUsageProvider: makeCopilotUsageProvider(session: session)
+        )
+
+        try await completeCopilotBrowserSignIn(viewModel)
+
+        XCTAssertNotNil(viewModel.copilotAuthError)
+        XCTAssertEqual(credentialsChangedCount, 0)
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let reloaded = try XCTUnwrap(reloadedStore.configuration(accountID: configuration.id))
+        XCTAssertEqual(reloaded.accountLabel, "existing-user")
+        XCTAssertEqual(reloaded.authMethod, .cliToken)
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: reloaded)),
+            "existing-token"
+        )
+    }
+
+    @MainActor
+    func testSuccessfulBrowserCopilotReplacementUpdatesPersistedIdentityAndCredential() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        defer {
+            DashboardAndSettingsMockURLProtocol.handler = nil
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let session = makeCopilotTestSession()
+        installCopilotBrowserReplacementHandler()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var configuration = store.addAccount(for: .copilot)
+        configuration.accountLabel = "existing-user"
+        configuration.authMethod = .cliToken
+        XCTAssertTrue(store.update(configuration))
+        XCTAssertTrue(store.saveSecret("existing-token", for: configuration))
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 },
+            copilotAuthService: CopilotWebAuthService(
+                session: session,
+                callbackTimeoutNanoseconds: 1_000_000_000
+            ),
+            copilotUsageProvider: makeCopilotUsageProvider(session: session)
+        )
+
+        try await completeCopilotBrowserSignIn(viewModel)
+
+        XCTAssertNil(viewModel.copilotAuthError)
+        XCTAssertEqual(credentialsChangedCount, 1)
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let reloaded = try XCTUnwrap(reloadedStore.configuration(accountID: configuration.id))
+        XCTAssertEqual(reloaded.accountLabel, "replacement-user")
+        XCTAssertEqual(reloaded.authMethod, .browserSession)
+        let savedCredential = try XCTUnwrap(
+            secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: reloaded))
+        )
+        XCTAssertEqual(
+            CopilotCredentialsParser.parse(savedCredential),
+            CopilotCredentials(
+                accessToken: "replacement-token",
+                username: "replacement-user",
+                refreshToken: "replacement-refresh-token",
+                expiresAt: nil,
+                refreshTokenExpiresAt: nil
+            )
+        )
+    }
+
+    @MainActor
     func testProviderSettingsViewModelReportsCredentialRemovalFailureWithoutCompleting() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
@@ -934,6 +1140,82 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertNotNil(viewModel.credentialError)
         XCTAssertEqual(credentialsChangedCount, 0)
+    }
+
+    private func makeCopilotTestSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DashboardAndSettingsMockURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    private func makeCopilotUsageProvider(session: URLSession) -> CopilotUsageProvider {
+        CopilotUsageProvider(
+            secretStore: EmptySecretStore(),
+            session: session,
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!
+        )
+    }
+
+    private func installCopilotBrowserReplacementHandler() {
+        DashboardAndSettingsMockURLProtocol.handler = { request in
+            switch request.url?.path {
+            case "/login/oauth/access_token":
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(
+                        #"{"access_token":"replacement-token","refresh_token":"replacement-refresh-token"}"#.utf8
+                    )
+                )
+            case "/copilot-usage":
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "token replacement-token")
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(#"{"login":"replacement-user"}"#.utf8)
+                )
+            default:
+                throw URLError(.badURL)
+            }
+        }
+    }
+
+    @MainActor
+    private func completeCopilotBrowserSignIn(
+        _ viewModel: ProviderSettingsViewModel
+    ) async throws {
+        let signInTask = Task {
+            await viewModel.signInWithCopilot()
+        }
+        var authorizationURL: URL?
+        for _ in 0..<100 {
+            authorizationURL = viewModel.authURL?.url
+            if authorizationURL != nil {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let components = try XCTUnwrap(
+            URLComponents(url: try XCTUnwrap(authorizationURL), resolvingAgainstBaseURL: false)
+        )
+        let redirectURI = try XCTUnwrap(components.queryItemValue(named: "redirect_uri"))
+        let state = try XCTUnwrap(components.queryItemValue(named: "state"))
+        var callbackComponents = try XCTUnwrap(URLComponents(string: redirectURI))
+        callbackComponents.queryItems = [
+            URLQueryItem(name: "code", value: "authorization-code"),
+            URLQueryItem(name: "state", value: state),
+        ]
+        _ = try await URLSession.shared.data(from: try XCTUnwrap(callbackComponents.url))
+        await signInTask.value
     }
 
     @MainActor

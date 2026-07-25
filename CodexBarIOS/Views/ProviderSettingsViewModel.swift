@@ -205,12 +205,10 @@ final class ProviderSettingsViewModel: ObservableObject {
             var updated = configuration
             updateCopilotAccountLabel(&updated, username: username)
             updated.authMethod = .browserSession
-            guard persist(updated) else {
-                copilotAuthError = configurationStore.lastError
-                authURL = nil
-                return
-            }
-            guard persistSecret(result.storedCredential(username: username)) else {
+            guard persistCredential(
+                result.storedCredential(username: username),
+                with: updated
+            ) else {
                 copilotAuthError = configurationStore.lastError
                 authURL = nil
                 return
@@ -339,22 +337,11 @@ final class ProviderSettingsViewModel: ObservableObject {
             var updated = configuration
             updateCopilotAccountLabel(&updated, username: username)
             updated.authMethod = .cliToken
-            guard persist(updated) else {
+            let credentials = CopilotCredentials(accessToken: token, username: username)
+            let storedCredential = CopilotCredentialsParser.storedCredential(from: credentials)
+            guard persistCredential(storedCredential, with: updated) else {
                 copilotAuthError = configurationStore.lastError
                 return
-            }
-            let credentials = CopilotCredentials(accessToken: token, username: username)
-            if let data = try? JSONEncoder().encode(credentials),
-               let storedCredential = String(data: data, encoding: .utf8) {
-                guard persistSecret(storedCredential) else {
-                    copilotAuthError = configurationStore.lastError
-                    return
-                }
-            } else {
-                guard persistSecret(token) else {
-                    copilotAuthError = configurationStore.lastError
-                    return
-                }
             }
             secret = ""
             onCredentialsChanged()
@@ -446,6 +433,20 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func persistSecret(_ secret: String) -> Bool {
         configurationStore.saveSecret(secret, for: configuration)
+    }
+
+    private func persistCredential(
+        _ credential: String,
+        with updated: ProviderAccountConfiguration
+    ) -> Bool {
+        pendingPersistenceTask?.cancel()
+        pendingPersistenceTask = nil
+        pendingConfiguration = nil
+        guard configurationStore.replaceCredential(credential, for: updated) else {
+            return false
+        }
+        configuration = configurationStore.configuration(accountID: updated.id) ?? updated
+        return true
     }
 
     private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {

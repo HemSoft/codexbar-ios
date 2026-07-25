@@ -232,6 +232,53 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     @discardableResult
+    public func replaceCredential(
+        _ credential: String,
+        for configuration: ProviderAccountConfiguration
+    ) -> Bool {
+        guard allowConfigurationMutation() else {
+            return false
+        }
+
+        let normalized = Self.normalizedConfiguration(
+            configuration,
+            validGroupIDs: Set(groups.map(\.id))
+        )
+        guard isAccountNameUnique(normalized) else {
+            lastError = "Account names must be unique."
+            return false
+        }
+
+        var updatedConfigurations = configurations
+        if let index = updatedConfigurations.firstIndex(where: { $0.id == normalized.id }) {
+            updatedConfigurations[index] = normalized
+        } else {
+            updatedConfigurations.append(normalized)
+        }
+        let groupNames = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.name) })
+        updatedConfigurations.sort {
+            Self.configurationSort($0, $1, groupNames: groupNames)
+        }
+
+        do {
+            let data = try JSONEncoder().encode(updatedConfigurations)
+            if credential.isEmpty {
+                try secretStore.deleteSecret(account: keychainAccount(for: normalized))
+            } else {
+                try secretStore.saveSecret(credential, account: keychainAccount(for: normalized))
+            }
+            defaults.set(data, forKey: configurationsKey)
+            configurations = updatedConfigurations
+            lastError = nil
+            refreshSecretAvailability()
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
     public func removeAccount(_ configuration: ProviderAccountConfiguration) -> Bool {
         removeAccounts([configuration])
     }
