@@ -41,7 +41,7 @@ enum OpenCodeZenBootstrapImporter {
             return
         }
 
-        guard !configurationStore.isConfigurationRecoveryRequired else {
+        guard !configurationStore.isPersistenceRecoveryRequired else {
             return
         }
 

@@ -17,6 +17,7 @@ struct SettingsView: View {
     @Environment(\.requestReview) private var requestReview
     @State private var isConfirmingReset = false
     @State private var isConfirmingConfigurationReplacement = false
+    @State private var isConfirmingGroupReplacement = false
     @State private var alertPermissionMessage: String?
     @State private var newGroupName = ""
     @State private var groupNameDrafts: [String: String] = [:]
@@ -172,8 +173,8 @@ struct SettingsView: View {
                         )
                         .textInputAutocapitalization(.words)
                         .focused($focusedGroupID, equals: group.id)
-                        .disabled(configurationStore.isConfigurationRecoveryRequired)
-                        .deleteDisabled(configurationStore.isConfigurationRecoveryRequired)
+                        .disabled(configurationStore.isPersistenceRecoveryRequired)
+                        .deleteDisabled(configurationStore.isPersistenceRecoveryRequired)
                         .onSubmit {
                             commitGroupName(for: group.id)
                         }
@@ -195,7 +196,7 @@ struct SettingsView: View {
                         .disabled(newGroupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityLabel("Add group")
                     }
-                    .disabled(configurationStore.isConfigurationRecoveryRequired)
+                    .disabled(configurationStore.isPersistenceRecoveryRequired)
                 } header: {
                     Text("Groups")
                 }
@@ -235,7 +236,7 @@ struct SettingsView: View {
                     } label: {
                         Label("Add Account", systemImage: "plus.circle")
                     }
-                    .disabled(configurationStore.isConfigurationRecoveryRequired)
+                    .disabled(configurationStore.isPersistenceRecoveryRequired)
                 } header: {
                     Text("Accounts")
                 }
@@ -268,8 +269,11 @@ struct SettingsView: View {
                         isConfirmingReset = true
                     }
                     .disabled(
-                        configurationStore.configurations.isEmpty
-                            && !configurationStore.hasIncompleteAccountReset
+                        configurationStore.isPersistenceRecoveryRequired
+                            || (
+                                configurationStore.configurations.isEmpty
+                                    && !configurationStore.hasIncompleteAccountReset
+                            )
                     )
                 }
 
@@ -281,6 +285,12 @@ struct SettingsView: View {
                         if configurationStore.isConfigurationRecoveryRequired {
                             Button("Replace Damaged Account List", role: .destructive) {
                                 isConfirmingConfigurationReplacement = true
+                            }
+                        }
+
+                        if configurationStore.isGroupRecoveryRequired {
+                            Button("Replace Damaged Group List", role: .destructive) {
+                                isConfirmingGroupReplacement = true
                             }
                         }
                     }
@@ -318,6 +328,21 @@ struct SettingsView: View {
             } message: {
                 Text(
                     "This replaces the damaged account list with an empty list so you can add accounts again. Saved Keychain credentials are not deleted."
+                )
+            }
+            .confirmationDialog(
+                "Replace unreadable group data?",
+                isPresented: $isConfirmingGroupReplacement,
+                titleVisibility: .visible
+            ) {
+                Button("Replace Group Data", role: .destructive) {
+                    if configurationStore.replaceCorruptedGroups() {
+                        onAccountsChanged()
+                    }
+                }
+            } message: {
+                Text(
+                    "This replaces the damaged group list with an empty list and deliberately ungroups every saved account. Saved accounts and Keychain credentials are not deleted."
                 )
             }
             .toolbar {

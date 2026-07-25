@@ -36,6 +36,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Preserved saved account grouping when group data is unreadable, surfaced the
+  problem in Settings, and required explicit recovery before replacing damaged
+  groups or ungrouping accounts. ([#116](https://github.com/HemSoft/codexbar-ios/issues/116))
 - Kept saved accounts and their dashboard settings consistent with Keychain
   credentials when an all-account reset only partially succeeds, while leaving
   failed accounts available to retry. ([#115](https://github.com/HemSoft/codexbar-ios/issues/115))
