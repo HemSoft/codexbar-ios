@@ -338,6 +338,7 @@ public final class UsageRefreshService: ObservableObject {
             preserveCachedBarsOnFailure: failureResult.preserveCachedBarsOnFailure,
             preserveCachedCreditsOnFailure: failureResult.preserveCachedCreditsOnFailure,
             cacheIdentity: failureResult.cacheIdentity,
+            cacheScope: failureResult.cacheScope,
             allowsUnscopedCacheReuse: failureResult.allowsUnscopedCacheReuse,
             fetchedAt: dataResult.fetchedAt
         ))
@@ -351,7 +352,13 @@ public final class UsageRefreshService: ObservableObject {
             return true
         }
         guard let failureIdentity = failureResult.cacheIdentity else {
-            return failureResult.allowsUnscopedCacheReuse
+            guard
+                failureResult.allowsUnscopedCacheReuse,
+                let failureScope = failureResult.cacheScope
+            else {
+                return false
+            }
+            return cachedResult.cacheScope == failureScope
         }
         return cachedResult.cacheIdentity == failureIdentity
     }
@@ -367,6 +374,11 @@ public final class UsageRefreshService: ObservableObject {
             subtitle: message,
             bars: [],
             failureMessage: message,
+            cacheScope: configuration.providerID == .openCodeZen
+                ? OpenCodeZenUsageProvider.normalizedWorkspaceId(
+                    from: configuration.openCodeWorkspaceId
+                )
+                : nil,
             allowsUnscopedCacheReuse: true,
             fetchedAt: Date()
         )

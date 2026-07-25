@@ -126,6 +126,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let preserveCachedBarsOnFailure: Bool
     public let preserveCachedCreditsOnFailure: Bool
     public let cacheIdentity: String?
+    public let cacheScope: String?
     public let allowsUnscopedCacheReuse: Bool
     public let fetchedAt: Date
 
@@ -145,6 +146,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         preserveCachedBarsOnFailure: Bool = false,
         preserveCachedCreditsOnFailure: Bool = false,
         cacheIdentity: String? = nil,
+        cacheScope: String? = nil,
         allowsUnscopedCacheReuse: Bool = false,
         fetchedAt: Date
     ) {
@@ -165,6 +167,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.preserveCachedBarsOnFailure = preserveCachedBarsOnFailure
         self.preserveCachedCreditsOnFailure = preserveCachedCreditsOnFailure
         self.cacheIdentity = cacheIdentity
+        self.cacheScope = cacheScope
         self.allowsUnscopedCacheReuse = allowsUnscopedCacheReuse
         self.fetchedAt = fetchedAt
     }

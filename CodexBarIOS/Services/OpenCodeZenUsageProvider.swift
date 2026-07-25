@@ -112,6 +112,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             goUsage: goUsage,
             configuration: configuration,
             cacheIdentity: cacheIdentity,
+            cacheScope: workspaceId,
             fetchedAt: fetchedAt
         )
     }
@@ -806,6 +807,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         goUsage: OpenCodeGoPageOutcome,
         configuration: ProviderAccountConfiguration,
         cacheIdentity: String,
+        cacheScope: String,
         fetchedAt: Date
     ) -> ProviderUsageResult {
         let creditsRemaining: Double?
@@ -886,6 +888,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                 bars: [],
                 failureMessage: message,
                 cacheIdentity: cacheIdentity,
+                cacheScope: cacheScope,
                 fetchedAt: fetchedAt
             )
         }
@@ -922,6 +925,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             preserveCachedBarsOnFailure: preserveCachedBars,
             preserveCachedCreditsOnFailure: preserveCachedCredits,
             cacheIdentity: cacheIdentity,
+            cacheScope: cacheScope,
             fetchedAt: fetchedAt
         )
     }

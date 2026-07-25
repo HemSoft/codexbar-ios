@@ -690,6 +690,7 @@ final class ProviderParsingTests: XCTestCase {
             bars: [UsageBar(label: "Rolling", used: 25, limit: 100)],
             creditsRemaining: 12.5,
             cacheIdentity: "known-account-identity",
+            cacheScope: "wrk_test",
             fetchedAt: fetchedAt
         )
         let service = UsageRefreshService(
@@ -711,6 +712,37 @@ final class ProviderParsingTests: XCTestCase {
             service.refreshErrorsByAccountID[configuration.id],
             "Keychain unavailable"
         )
+    }
+
+    @MainActor
+    func testOpenCodeCredentialReadFailureDoesNotReuseAnotherWorkspaceCache() async throws {
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        configuration.openCodeWorkspaceId = "wrk_new"
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openCodeZen,
+            title: configuration.displayName,
+            subtitle: "Old workspace data",
+            bars: [UsageBar(label: "Rolling", used: 25, limit: 100)],
+            creditsRemaining: 12.5,
+            cacheIdentity: "old-account-identity",
+            cacheScope: "wrk_old",
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let service = UsageRefreshService(
+            providers: [
+                OpenCodeZenUsageProvider(secretStore: FailingReadSecretStore()),
+            ],
+            initialResults: [cachedResult]
+        )
+
+        _ = await service.refresh(configuration: configuration)
+
+        let failure = try XCTUnwrap(service.results.first)
+        XCTAssertTrue(failure.bars.isEmpty)
+        XCTAssertNil(failure.creditsRemaining)
+        XCTAssertEqual(failure.subtitle, "Keychain unavailable")
+        XCTAssertEqual(failure.cacheScope, "wrk_new")
     }
 
     func testOpenCodeProviderDoesNotTreatDashboard404AsNotSubscribed() async throws {
