@@ -68,6 +68,139 @@ final class ConfigurationAndAuthTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderConfigurationStoreTreatsMissingGroupDataAsEmpty() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        var savedAccount = ProviderAccountConfiguration(providerID: .openRouter, authMethod: .apiKey)
+        savedAccount.groupID = "missing-group"
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(try JSONEncoder().encode([savedAccount]), forKey: "providerConfigurations")
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+
+        XCTAssertTrue(store.groups.isEmpty)
+        XCTAssertNil(store.configuration(accountID: savedAccount.id)?.groupID)
+        XCTAssertFalse(store.isGroupRecoveryRequired)
+        XCTAssertFalse(store.isPersistenceRecoveryRequired)
+        XCTAssertNil(store.lastError)
+    }
+
+    @MainActor
+    func testProviderConfigurationStorePreservesMalformedGroupDataAndAccountGrouping() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let malformedGroupData = Data(#"{"groups":"not-an-array"}"#.utf8)
+        var savedAccount = ProviderAccountConfiguration(providerID: .openRouter, authMethod: .apiKey)
+        savedAccount.groupID = "preserved-group"
+        let configurationData = try JSONEncoder().encode([savedAccount])
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(malformedGroupData, forKey: "providerAccountGroups")
+        defaults.set(configurationData, forKey: "providerConfigurations")
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+
+        XCTAssertTrue(store.groups.isEmpty)
+        XCTAssertEqual(store.configuration(accountID: savedAccount.id)?.groupID, "preserved-group")
+        XCTAssertTrue(store.isGroupRecoveryRequired)
+        XCTAssertTrue(store.isPersistenceRecoveryRequired)
+        XCTAssertEqual(
+            store.lastError,
+            "Saved group data couldn't be read. Replace the damaged group list in Settings to resume saving accounts and groups."
+        )
+        XCTAssertEqual(defaults.data(forKey: "providerAccountGroups"), malformedGroupData)
+        XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), configurationData)
+
+        XCTAssertNil(store.addGroup(named: "Blocked Group"))
+        var attemptedUpdate = savedAccount
+        attemptedUpdate.accountLabel = "Blocked Rename"
+        XCTAssertFalse(store.update(attemptedUpdate))
+        XCTAssertEqual(store.configuration(accountID: savedAccount.id), savedAccount)
+        XCTAssertEqual(defaults.data(forKey: "providerAccountGroups"), malformedGroupData)
+        XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), configurationData)
+    }
+
+    @MainActor
+    func testProviderConfigurationStoreRestoresGroupRecoveryErrorAfterCredentialReadRecovers() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        var savedAccount = ProviderAccountConfiguration(providerID: .openRouter, authMethod: .apiKey)
+        savedAccount.groupID = "preserved-group"
+        let secretStore = SelectiveReadFailureSecretStore()
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: savedAccount)
+        secretStore.failingAccount = keychainAccount
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(Data("not-json".utf8), forKey: "providerAccountGroups")
+        defaults.set(try JSONEncoder().encode([savedAccount]), forKey: "providerConfigurations")
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+
+        XCTAssertTrue(store.isGroupRecoveryRequired)
+        XCTAssertEqual(
+            store.lastError,
+            "Could not read the saved credential for \(savedAccount.displayName): Keychain operation failed with status -25308."
+        )
+
+        secretStore.failingAccount = nil
+        store.refreshSecretAvailability()
+
+        XCTAssertTrue(store.isGroupRecoveryRequired)
+        XCTAssertEqual(
+            store.lastError,
+            "Saved group data couldn't be read. Replace the damaged group list in Settings to resume saving accounts and groups."
+        )
+    }
+
+    @MainActor
+    func testProviderConfigurationStoreReplacesMalformedGroupsThenSavesNormally() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        var savedAccount = ProviderAccountConfiguration(providerID: .openRouter, authMethod: .apiKey)
+        savedAccount.groupID = "damaged-group"
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(Data("not-json".utf8), forKey: "providerAccountGroups")
+        defaults.set(try JSONEncoder().encode([savedAccount]), forKey: "providerConfigurations")
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+
+        XCTAssertTrue(store.replaceCorruptedGroups())
+
+        XCTAssertTrue(store.groups.isEmpty)
+        XCTAssertNil(store.configuration(accountID: savedAccount.id)?.groupID)
+        XCTAssertFalse(store.isGroupRecoveryRequired)
+        XCTAssertFalse(store.isPersistenceRecoveryRequired)
+        XCTAssertNil(store.lastError)
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                [ProviderAccountGroup].self,
+                from: try XCTUnwrap(defaults.data(forKey: "providerAccountGroups"))
+            ),
+            []
+        )
+
+        let replacementGroup = try XCTUnwrap(store.addGroup(named: "Recovered Group"))
+        var regroupedAccount = try XCTUnwrap(store.configuration(accountID: savedAccount.id))
+        regroupedAccount.groupID = replacementGroup.id
+        XCTAssertTrue(store.update(regroupedAccount))
+
+        let reloadedStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertEqual(reloadedStore.groups, [replacementGroup])
+        XCTAssertEqual(reloadedStore.configuration(accountID: savedAccount.id)?.groupID, replacementGroup.id)
+        XCTAssertFalse(reloadedStore.isPersistenceRecoveryRequired)
+        XCTAssertNil(reloadedStore.lastError)
+    }
+
+    @MainActor
     func testProviderConfigurationStorePreservesMalformedDataAndSurfacesRecoveryState() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

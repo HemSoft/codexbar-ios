@@ -582,6 +582,78 @@ final class ProviderParsingTests: XCTestCase {
     }
 
     @MainActor
+    func testOpenCodeZenBootstrapImporterResumesAfterGroupRecovery() throws {
+        let suiteName = "OpenCodeZenBootstrapGroupRecovery-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let malformedConfigurationData = Data("bad-configurations".utf8)
+        let malformedGroupData = Data("bad-groups".utf8)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(malformedConfigurationData, forKey: "providerConfigurations")
+        defaults.set(malformedGroupData, forKey: "providerAccountGroups")
+
+        let fileManager = FileManager.default
+        let importDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("OpenCodeZenBootstrapGroupRecovery-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: importDirectory, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: importDirectory)
+        }
+
+        let importURL = importDirectory.appendingPathComponent(OpenCodeZenBootstrapImporter.importFileName)
+        let payload = """
+        {
+          "openCodeGoWorkspaceId": "wrk_after_group_recovery",
+          "providers": {
+            "OpenCodeGo": {
+              "apiKey": "group-recovered-dashboard-token"
+            }
+          }
+        }
+        """
+        try Data(payload.utf8).write(to: importURL)
+
+        let secretStore = MemorySecretStore()
+        let configurationStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        OpenCodeZenBootstrapImporter.importIfNeeded(
+            configurationStore: configurationStore,
+            fileManager: fileManager,
+            importDirectory: importDirectory
+        )
+
+        XCTAssertTrue(fileManager.fileExists(atPath: importURL.path))
+        XCTAssertTrue(configurationStore.isConfigurationRecoveryRequired)
+        XCTAssertTrue(configurationStore.isGroupRecoveryRequired)
+        XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), malformedConfigurationData)
+        XCTAssertEqual(defaults.data(forKey: "providerAccountGroups"), malformedGroupData)
+
+        XCTAssertTrue(OpenCodeZenBootstrapImporter.replaceCorruptedConfigurationsAndImportIfNeeded(
+            configurationStore: configurationStore,
+            fileManager: fileManager,
+            importDirectory: importDirectory
+        ))
+        XCTAssertTrue(fileManager.fileExists(atPath: importURL.path))
+        XCTAssertFalse(configurationStore.isConfigurationRecoveryRequired)
+        XCTAssertTrue(configurationStore.isGroupRecoveryRequired)
+
+        XCTAssertTrue(OpenCodeZenBootstrapImporter.replaceCorruptedGroupsAndImportIfNeeded(
+            configurationStore: configurationStore,
+            fileManager: fileManager,
+            importDirectory: importDirectory
+        ))
+
+        XCTAssertFalse(fileManager.fileExists(atPath: importURL.path))
+        XCTAssertFalse(configurationStore.isPersistenceRecoveryRequired)
+        let configuration = try XCTUnwrap(configurationStore.configurations(for: .openCodeZen).first)
+        XCTAssertEqual(configuration.openCodeWorkspaceId, "wrk_after_group_recovery")
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
+            "group-recovered-dashboard-token"
+        )
+    }
+
+    @MainActor
     func testOpenCodeZenBootstrapImporterDeletesFileWithoutReadingWhenProtectionFails() throws {
         let suiteName = "OpenCodeZenBootstrapProtectionFailure-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
