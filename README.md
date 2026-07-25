@@ -59,6 +59,12 @@ compile the iOS authentication, notification, widget, or UIKit-dependent code.
 Use the documented simulator commands in
 [Build and Test](AGENTS.md#build-and-test) to build and test the watch targets.
 
+## Mutation Testing
+
+A focused, non-blocking mutation-testing pilot is available for deterministic
+dashboard sorting logic. See [MUTATION-TESTING.md](MUTATION-TESTING.md) for the
+pinned tool, baseline findings, survivor triage, and reproducible local command.
+
 ## Reference Repo
 
 The current Windows app is a C# / WPF / .NET 9 system tray app with shared provider logic in `src/CodexBar.Core`. The iOS implementation should port behavior from there deliberately instead of sharing project structure directly.

@@ -1,0 +1,29 @@
+# Targeted CodexBar mutation-testing pilot.
+scheme: CodexBarIOS
+destination: platform=iOS Simulator,name=iPhone 17,OS=latest
+testing-framework: xctest
+test-target: CodexBarIOSTests/AppAndWidgetTests
+
+# XCTest execution is intentionally serial for simulator reliability.
+timeout: 120
+concurrency: 1
+
+sources-path: CodexBarIOS/Services
+output: build/mutation-testing/report.json
+html-output: build/mutation-testing/report.html
+
+mutators:
+  - name: RelationalOperatorReplacement
+    active: true
+  - name: BooleanLiteralReplacement
+    active: true
+  - name: LogicalOperatorReplacement
+    active: true
+  - name: ArithmeticOperatorReplacement
+    active: true
+  - name: NegateConditional
+    active: true
+  - name: SwapTernary
+    active: true
+  - name: RemoveSideEffects
+    active: false

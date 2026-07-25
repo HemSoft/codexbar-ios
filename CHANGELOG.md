@@ -97,6 +97,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added a pinned, sandboxed mutation-testing pilot for dashboard sorting,
+  documented its measured baseline and survivor triage, and strengthened
+  projection-ordering boundary coverage without adding a blocking CI gate.
+  ([#124](https://github.com/HemSoft/codexbar-ios/issues/124))
 - Added pull-request and `main` branch CI coverage for iOS unit tests, watchOS
   unit tests, and the SwiftPM smoke harness using simulator destinations
   discovered from each runner. ([#107](https://github.com/HemSoft/codexbar-ios/issues/107))
