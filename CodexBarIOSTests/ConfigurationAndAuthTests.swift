@@ -571,6 +571,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
             store.visualizationStyle(accountID: failedAccount.id, metricID: "balance"),
             .semicircularDial
         )
+        XCTAssertTrue(store.hasIncompleteAccountReset)
         XCTAssertNotNil(store.lastError)
 
         let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
@@ -583,6 +584,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
             reloadedStore.visualizationStyle(accountID: failedAccount.id, metricID: "balance"),
             .semicircularDial
         )
+        XCTAssertTrue(reloadedStore.hasIncompleteAccountReset)
 
         secretStore.failingAccount = nil
         XCTAssertTrue(store.resetAccounts())
@@ -591,12 +593,47 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertTrue(store.dashboardCardOrder.isEmpty)
         XCTAssertTrue(store.usageAlertActiveIDs.isEmpty)
         XCTAssertTrue(store.metricVisualizationPreferences.isEmpty)
+        XCTAssertFalse(store.hasIncompleteAccountReset)
         XCTAssertNil(
             try secretStore.readSecret(
                 account: ProviderConfigurationStore.keychainAccount(for: failedAccount)
             )
         )
         XCTAssertNil(store.lastError)
+    }
+
+    @MainActor
+    func testResetAccountsKeepsLegacyCredentialFailureRetryableWithoutConfigurations() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = RetriableDeleteSecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let legacyAccount = ProviderConfigurationStore.keychainAccount(for: ProviderID.claude)
+        try secretStore.saveSecret("legacy-token", account: legacyAccount)
+        secretStore.shouldFailDelete = false
+        secretStore.failingAccount = legacyAccount
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+
+        XCTAssertFalse(store.resetAccounts())
+
+        XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertTrue(store.hasIncompleteAccountReset)
+        XCTAssertEqual(try secretStore.readSecret(account: legacyAccount), "legacy-token")
+        XCTAssertNotNil(store.lastError)
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        XCTAssertTrue(reloadedStore.configurations.isEmpty)
+        XCTAssertTrue(reloadedStore.hasIncompleteAccountReset)
+
+        secretStore.failingAccount = nil
+        XCTAssertTrue(reloadedStore.resetAccounts())
+
+        XCTAssertFalse(reloadedStore.hasIncompleteAccountReset)
+        XCTAssertNil(try secretStore.readSecret(account: legacyAccount))
+        XCTAssertNil(reloadedStore.lastError)
     }
 
     func testLoopbackOAuthCallbackServerAcceptsRequestsSplitAcrossWrites() async throws {

@@ -14,6 +14,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var usageAlertSettings: UsageAlertSettings
     @Published public private(set) var usageAlertActiveIDs: Set<String>
     @Published public private(set) var isConfigurationRecoveryRequired: Bool
+    @Published public private(set) var hasIncompleteAccountReset: Bool
     @Published public private(set) var lastError: String?
 
     private let defaults: UserDefaults
@@ -29,6 +30,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let metricVisualizationPreferencesKey = DefaultsKey.metricVisualizationPreferences
     private let usageAlertSettingsKey = DefaultsKey.usageAlertSettings
     private let usageAlertActiveIDsKey = DefaultsKey.usageAlertActiveIDs
+    private let incompleteAccountResetKey = DefaultsKey.incompleteAccountReset
     private var secretAvailabilityError: String?
 
     public init(
@@ -59,6 +61,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
         self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
         self.isConfigurationRecoveryRequired = configurationLoadResult.error != nil
+        self.hasIncompleteAccountReset = defaults.bool(forKey: DefaultsKey.incompleteAccountReset)
         self.lastError = configurationLoadResult.error
         sortConfigurations()
         refreshSecretAvailability()
@@ -312,6 +315,8 @@ public final class ProviderConfigurationStore: ObservableObject {
             defaults.removeObject(forKey: dashboardCardOrderKey)
             defaults.removeObject(forKey: metricVisualizationPreferencesKey)
             defaults.removeObject(forKey: usageAlertActiveIDsKey)
+            defaults.removeObject(forKey: incompleteAccountResetKey)
+            hasIncompleteAccountReset = false
             lastError = nil
             return true
         }
@@ -336,6 +341,8 @@ public final class ProviderConfigurationStore: ObservableObject {
             saveMetricVisualizationPreferences()
         }
         refreshSecretAvailability()
+        hasIncompleteAccountReset = true
+        defaults.set(true, forKey: incompleteAccountResetKey)
         lastError = firstDeletionError
         return false
     }
@@ -830,6 +837,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         static let metricVisualizationPreferences = "metricVisualizationPreferences"
         static let usageAlertSettings = "usageAlertSettings"
         static let usageAlertActiveIDs = "usageAlertActiveIDs"
+        static let incompleteAccountReset = "incompleteAccountReset"
     }
 
     private struct ConfigurationLoadResult {
