@@ -156,7 +156,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             case 401, 403:
                 return .failure("OpenCode rejected the saved dashboard auth value.")
             case 404:
-                return .notSubscribed
+                return .failure("OpenCode Go dashboard returned HTTP 404.")
             case 429:
                 return .failure("OpenCode Go rate limit reached. Try again later.")
             default:
@@ -782,6 +782,14 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             usageMessages.append("Go usage unavailable: \(goFailure)")
         }
 
+        let preserveCachedCredits = balanceFailure != nil
+            && (!usageBars.isEmpty || goStateIsAuthoritativeWithoutBars)
+        let preserveCachedBars = goFailure != nil && creditsRemaining != nil
+        let partialFailureMessage = [
+            preserveCachedCredits ? balanceFailure.map { "ZEN balance unavailable: \($0)" } : nil,
+            preserveCachedBars ? goFailure.map { "Go usage unavailable: \($0)" } : nil,
+        ].compactMap { $0 }.joined(separator: " ")
+
         let hasUsableResult = creditsRemaining != nil || !usageBars.isEmpty || goStateIsAuthoritativeWithoutBars
         guard hasUsableResult else {
             var failures = [balanceFailure, goFailure]
@@ -840,6 +848,9 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             bars: usageBars,
             creditsRemaining: creditsRemaining,
             usageMessages: usageMessages,
+            failureMessage: partialFailureMessage.isEmpty ? nil : partialFailureMessage,
+            preserveCachedBarsOnFailure: preserveCachedBars,
+            preserveCachedCreditsOnFailure: preserveCachedCredits,
             fetchedAt: fetchedAt
         )
     }

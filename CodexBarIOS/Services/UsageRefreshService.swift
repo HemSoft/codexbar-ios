@@ -293,6 +293,8 @@ public final class UsageRefreshService: ObservableObject {
             || !failureResult.bars.isEmpty
             || !failureResult.monetaryMetrics.isEmpty
             || failureResult.codexBankedRateLimitResets != nil
+            || failureResult.preserveCachedBarsOnFailure
+            || failureResult.preserveCachedCreditsOnFailure
         let dataResult: ProviderUsageResult
         if failureHasUsageData {
             dataResult = failureResult
@@ -303,6 +305,12 @@ public final class UsageRefreshService: ObservableObject {
             return
         }
 
+        let barsResult = failureResult.preserveCachedBarsOnFailure
+            ? cachedResult ?? failureResult
+            : dataResult
+        let creditsResult = failureResult.preserveCachedCreditsOnFailure
+            ? cachedResult ?? failureResult
+            : dataResult
         let subtitle = failureHasUsageData
             || failureResult.subtitle.localizedCaseInsensitiveContains("last known data")
             ? failureResult.subtitle
@@ -312,9 +320,9 @@ public final class UsageRefreshService: ObservableObject {
             providerID: failureResult.providerID,
             title: failureResult.title,
             subtitle: subtitle,
-            bars: dataResult.bars,
-            barsFetchedAt: dataResult.barsFetchedAt,
-            creditsRemaining: dataResult.creditsRemaining,
+            bars: barsResult.bars,
+            barsFetchedAt: barsResult.barsFetchedAt,
+            creditsRemaining: creditsResult.creditsRemaining,
             monetaryMetrics: dataResult.monetaryMetrics,
             usageMessages: dataResult.usageMessages,
             codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,
