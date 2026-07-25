@@ -124,6 +124,39 @@ final class ConfigurationAndAuthTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderConfigurationStoreRestoresGroupRecoveryErrorAfterCredentialReadRecovers() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        var savedAccount = ProviderAccountConfiguration(providerID: .openRouter, authMethod: .apiKey)
+        savedAccount.groupID = "preserved-group"
+        let secretStore = SelectiveReadFailureSecretStore()
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: savedAccount)
+        secretStore.failingAccount = keychainAccount
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(Data("not-json".utf8), forKey: "providerAccountGroups")
+        defaults.set(try JSONEncoder().encode([savedAccount]), forKey: "providerConfigurations")
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+
+        XCTAssertTrue(store.isGroupRecoveryRequired)
+        XCTAssertEqual(
+            store.lastError,
+            "Could not read the saved credential for \(savedAccount.displayName): Keychain operation failed with status -25308."
+        )
+
+        secretStore.failingAccount = nil
+        store.refreshSecretAvailability()
+
+        XCTAssertTrue(store.isGroupRecoveryRequired)
+        XCTAssertEqual(
+            store.lastError,
+            "Saved group data couldn't be read. Replace the damaged group list in Settings to resume saving accounts and groups."
+        )
+    }
+
+    @MainActor
     func testProviderConfigurationStoreReplacesMalformedGroupsThenSavesNormally() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

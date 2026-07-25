@@ -281,7 +281,11 @@ struct SettingsView: View {
                     Section {
                         Text(lastError)
                             .foregroundStyle(.red)
+                    }
+                }
 
+                if configurationStore.isPersistenceRecoveryRequired {
+                    Section {
                         if configurationStore.isConfigurationRecoveryRequired {
                             Button("Replace Damaged Account List", role: .destructive) {
                                 isConfirmingConfigurationReplacement = true
@@ -293,6 +297,8 @@ struct SettingsView: View {
                                 isConfirmingGroupReplacement = true
                             }
                         }
+                    } header: {
+                        Text("Data Recovery")
                     }
                 }
             }
@@ -336,7 +342,9 @@ struct SettingsView: View {
                 titleVisibility: .visible
             ) {
                 Button("Replace Group Data", role: .destructive) {
-                    if configurationStore.replaceCorruptedGroups() {
+                    if OpenCodeZenBootstrapImporter.replaceCorruptedGroupsAndImportIfNeeded(
+                        configurationStore: configurationStore
+                    ) {
                         onAccountsChanged()
                     }
                 }

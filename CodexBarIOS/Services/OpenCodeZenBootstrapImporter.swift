@@ -22,6 +22,24 @@ enum OpenCodeZenBootstrapImporter {
         return true
     }
 
+    @discardableResult
+    static func replaceCorruptedGroupsAndImportIfNeeded(
+        configurationStore: ProviderConfigurationStore,
+        fileManager: FileManager = .default,
+        importDirectory: URL? = nil
+    ) -> Bool {
+        guard configurationStore.replaceCorruptedGroups() else {
+            return false
+        }
+
+        importIfNeeded(
+            configurationStore: configurationStore,
+            fileManager: fileManager,
+            importDirectory: importDirectory
+        )
+        return true
+    }
+
     static func importIfNeeded(
         configurationStore: ProviderConfigurationStore,
         fileManager: FileManager = .default,
