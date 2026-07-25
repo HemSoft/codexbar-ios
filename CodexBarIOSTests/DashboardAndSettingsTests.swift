@@ -951,6 +951,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             copilotUsageProvider: makeCopilotUsageProvider(session: session)
         )
         viewModel.secret = "replacement-token"
+        viewModel.binding(for: \.showsHistory, persistence: .debounced).wrappedValue = false
 
         await viewModel.saveCopilotCredential()
 
@@ -961,6 +962,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         let reloaded = try XCTUnwrap(reloadedStore.configuration(accountID: configuration.id))
         XCTAssertEqual(reloaded.accountLabel, "existing-user")
         XCTAssertEqual(reloaded.authMethod, .browserSession)
+        XCTAssertFalse(reloaded.showsHistory)
         XCTAssertEqual(
             try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: reloaded)),
             "existing-token"
@@ -1195,27 +1197,39 @@ final class DashboardAndSettingsTests: XCTestCase {
         let signInTask = Task {
             await viewModel.signInWithCopilot()
         }
-        var authorizationURL: URL?
-        for _ in 0..<100 {
-            authorizationURL = viewModel.authURL?.url
-            if authorizationURL != nil {
-                break
+        do {
+            var authorizationURL: URL?
+            for _ in 0..<100 {
+                authorizationURL = viewModel.authURL?.url
+                if authorizationURL != nil {
+                    break
+                }
+                try await Task.sleep(for: .milliseconds(10))
             }
-            try await Task.sleep(for: .milliseconds(10))
-        }
 
-        let components = try XCTUnwrap(
-            URLComponents(url: try XCTUnwrap(authorizationURL), resolvingAgainstBaseURL: false)
-        )
-        let redirectURI = try XCTUnwrap(components.queryItemValue(named: "redirect_uri"))
-        let state = try XCTUnwrap(components.queryItemValue(named: "state"))
-        var callbackComponents = try XCTUnwrap(URLComponents(string: redirectURI))
-        callbackComponents.queryItems = [
-            URLQueryItem(name: "code", value: "authorization-code"),
-            URLQueryItem(name: "state", value: state),
-        ]
-        _ = try await URLSession.shared.data(from: try XCTUnwrap(callbackComponents.url))
-        await signInTask.value
+            guard let authorizationURL else {
+                signInTask.cancel()
+                await signInTask.value
+                XCTFail("Copilot authorization URL was never presented.")
+                return
+            }
+            let components = try XCTUnwrap(
+                URLComponents(url: authorizationURL, resolvingAgainstBaseURL: false)
+            )
+            let redirectURI = try XCTUnwrap(components.queryItemValue(named: "redirect_uri"))
+            let state = try XCTUnwrap(components.queryItemValue(named: "state"))
+            var callbackComponents = try XCTUnwrap(URLComponents(string: redirectURI))
+            callbackComponents.queryItems = [
+                URLQueryItem(name: "code", value: "authorization-code"),
+                URLQueryItem(name: "state", value: state),
+            ]
+            _ = try await URLSession.shared.data(from: try XCTUnwrap(callbackComponents.url))
+            await signInTask.value
+        } catch {
+            signInTask.cancel()
+            await signInTask.value
+            throw error
+        }
     }
 
     @MainActor

@@ -439,9 +439,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         _ credential: String,
         with updated: ProviderAccountConfiguration
     ) -> Bool {
-        pendingPersistenceTask?.cancel()
-        pendingPersistenceTask = nil
-        pendingConfiguration = nil
+        flushPendingChanges()
         guard configurationStore.replaceCredential(credential, for: updated) else {
             return false
         }

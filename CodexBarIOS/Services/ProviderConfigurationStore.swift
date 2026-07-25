@@ -255,10 +255,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         } else {
             updatedConfigurations.append(normalized)
         }
-        let groupNames = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.name) })
-        updatedConfigurations.sort {
-            Self.configurationSort($0, $1, groupNames: groupNames)
-        }
+        updatedConfigurations = sortedConfigurations(updatedConfigurations)
 
         do {
             let data = try JSONEncoder().encode(updatedConfigurations)
@@ -1155,8 +1152,14 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     private func sortConfigurations() {
+        configurations = sortedConfigurations(configurations)
+    }
+
+    private func sortedConfigurations(
+        _ configurations: [ProviderAccountConfiguration]
+    ) -> [ProviderAccountConfiguration] {
         let groupNames = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.name) })
-        configurations.sort {
+        return configurations.sorted {
             Self.configurationSort($0, $1, groupNames: groupNames)
         }
     }
