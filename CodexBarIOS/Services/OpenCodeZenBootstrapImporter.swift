@@ -98,9 +98,15 @@ enum OpenCodeZenBootstrapImporter {
         _ payload: String,
         configurationStore: ProviderConfigurationStore
     ) -> Bool {
-        guard let credential = OpenCodeZenUsageProvider.normalizedBalanceCredential(from: payload) else {
+        guard
+            let balanceCredential = OpenCodeZenUsageProvider.normalizedBalanceCredential(from: payload),
+            let goCredential = OpenCodeZenUsageProvider.normalizedGoCredential(from: payload)
+        else {
             return false
         }
+        let storedCredential = balanceCredential == goCredential
+            ? balanceCredential
+            : payload
 
         let existingConfiguration = configurationStore.configurations(for: .openCodeZen).first
         let existingWorkspaceId = OpenCodeZenUsageProvider.normalizedWorkspaceId(
@@ -122,7 +128,7 @@ enum OpenCodeZenBootstrapImporter {
             return false
         }
 
-        configurationStore.saveSecret(credential, for: configuration)
+        configurationStore.saveSecret(storedCredential, for: configuration)
         return configurationStore.hasSecret(for: configuration)
     }
 }

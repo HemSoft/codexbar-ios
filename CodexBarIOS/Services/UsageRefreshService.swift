@@ -338,6 +338,7 @@ public final class UsageRefreshService: ObservableObject {
             preserveCachedBarsOnFailure: failureResult.preserveCachedBarsOnFailure,
             preserveCachedCreditsOnFailure: failureResult.preserveCachedCreditsOnFailure,
             cacheIdentity: failureResult.cacheIdentity,
+            allowsUnscopedCacheReuse: failureResult.allowsUnscopedCacheReuse,
             fetchedAt: dataResult.fetchedAt
         ))
     }
@@ -350,7 +351,7 @@ public final class UsageRefreshService: ObservableObject {
             return true
         }
         guard let failureIdentity = failureResult.cacheIdentity else {
-            return false
+            return failureResult.allowsUnscopedCacheReuse
         }
         return cachedResult.cacheIdentity == failureIdentity
     }
@@ -366,6 +367,7 @@ public final class UsageRefreshService: ObservableObject {
             subtitle: message,
             bars: [],
             failureMessage: message,
+            allowsUnscopedCacheReuse: true,
             fetchedAt: Date()
         )
     }

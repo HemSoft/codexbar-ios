@@ -677,6 +677,42 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertNil(changedCredential.creditsFetchedAt)
     }
 
+    @MainActor
+    func testOpenCodeRefreshPreservesCacheWhenCredentialReadFails() async throws {
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        configuration.openCodeWorkspaceId = "wrk_test"
+        let fetchedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openCodeZen,
+            title: configuration.displayName,
+            subtitle: "Go usage and ZEN credit balance",
+            bars: [UsageBar(label: "Rolling", used: 25, limit: 100)],
+            creditsRemaining: 12.5,
+            cacheIdentity: "known-account-identity",
+            fetchedAt: fetchedAt
+        )
+        let service = UsageRefreshService(
+            providers: [
+                OpenCodeZenUsageProvider(secretStore: FailingReadSecretStore()),
+            ],
+            initialResults: [cachedResult]
+        )
+
+        _ = await service.refresh(configuration: configuration)
+
+        let preserved = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(preserved.bars, cachedResult.bars)
+        XCTAssertEqual(preserved.barsFetchedAt, cachedResult.barsFetchedAt)
+        XCTAssertEqual(preserved.creditsRemaining, cachedResult.creditsRemaining)
+        XCTAssertEqual(preserved.creditsFetchedAt, cachedResult.creditsFetchedAt)
+        XCTAssertTrue(preserved.subtitle.contains("Showing last known data."))
+        XCTAssertEqual(
+            service.refreshErrorsByAccountID[configuration.id],
+            "Keychain unavailable"
+        )
+    }
+
     func testOpenCodeProviderDoesNotTreatDashboard404AsNotSubscribed() async throws {
         let secretStore = MemorySecretStore()
         var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
@@ -947,6 +983,9 @@ final class ProviderParsingTests: XCTestCase {
           "providers": {
             "OpenCodeGo": {
               "apiKey": "go-dashboard-token"
+            },
+            "OpenCodeZen": {
+              "apiKey": "sk-zen-model-token"
             }
           }
         }
@@ -957,8 +996,17 @@ final class ProviderParsingTests: XCTestCase {
         let configuration = try XCTUnwrap(configurationStore.configurations(for: .openCodeZen).first)
         XCTAssertEqual(configuration.openCodeWorkspaceId, "wrk_from_windows")
         XCTAssertEqual(configuration.accountLabel, "OpenCode ZEN")
+        let savedCredential = try XCTUnwrap(
+            secretStore.readSecret(
+                account: ProviderConfigurationStore.keychainAccount(for: configuration)
+            )
+        )
         XCTAssertEqual(
-            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
+            OpenCodeZenUsageProvider.normalizedBalanceCredential(from: savedCredential),
+            "sk-zen-model-token"
+        )
+        XCTAssertEqual(
+            OpenCodeZenUsageProvider.normalizedGoCredential(from: savedCredential),
             "go-dashboard-token"
         )
     }
