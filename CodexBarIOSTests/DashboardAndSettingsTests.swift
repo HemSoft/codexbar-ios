@@ -516,7 +516,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         ])
 
         DashboardAndSettingsMockURLProtocol.handler = { request in
-            XCTAssertEqual(request.url?.path, "/workspace/wrk_test/billing")
+            XCTAssertTrue(["/workspace/wrk_test/billing", "/workspace/wrk_test/go"].contains(request.url?.path))
             XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "auth=opencode-dashboard-token")
             return (
                 HTTPURLResponse(
@@ -525,7 +525,9 @@ final class DashboardAndSettingsTests: XCTestCase {
                     httpVersion: nil,
                     headerFields: ["Content-Type": "text/html"]
                 )!,
-                Data(#"<html>balance:1225000000</html>"#.utf8)
+                request.url?.path.hasSuffix("/go") == true
+                    ? Data(#"<html><div data-slot="promo-description">Subscribe to Go</div></html>"#.utf8)
+                    : Data(#"<html>balance:1225000000</html>"#.utf8)
             )
         }
         defer {

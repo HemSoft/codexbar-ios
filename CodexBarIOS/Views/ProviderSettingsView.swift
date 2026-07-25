@@ -245,7 +245,10 @@ struct ProviderSettingsView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("Enter the OpenCode workspace ID and dashboard auth value.", systemImage: "key")
+                        Label(
+                            "Enter the OpenCode workspace ID and dashboard auth value to track ZEN balance and Go usage.",
+                            systemImage: "key"
+                        )
                         Label("You can paste the Windows settings JSON or OPENCODE_GO_AUTH_COOKIE value.", systemImage: "checkmark.circle")
                     }
                     .font(.footnote)

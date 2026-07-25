@@ -306,6 +306,216 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertTrue(result.bars.isEmpty)
     }
 
+    func testOpenCodeGoParserReadsHydrationWindowsInStableOrder() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        let payload = """
+        <script>
+        window.data = {
+          "monthlyUsage": {"resetInSec": 2592000, "usagePercent": 7.25},
+          "rollingUsage": {"resetInSec": 5400, "usagePercent": 12.5},
+          "weeklyUsage": {"usagePercent": 43.75, "resetInSec": 172800}
+        };
+        </script>
+        """
+
+        let result = try XCTUnwrap(OpenCodeZenUsageProvider.parseGoUsage(
+            Data(payload.utf8),
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ))
+
+        XCTAssertEqual(result.bars.map(\.stableKey), [
+            "go.rolling-5-hour",
+            "go.weekly",
+            "go.monthly",
+        ])
+        XCTAssertEqual(result.bars.map(\.label), [
+            "5-hour usage limit",
+            "Weekly usage limit",
+            "Monthly usage limit",
+        ])
+        XCTAssertEqual(result.bars.map(\.used), [12.5, 43.75, 7.25])
+        XCTAssertEqual(result.bars[0].resetsAt, fetchedAt.addingTimeInterval(5_400))
+        XCTAssertEqual(result.bars[1].resetsAt, fetchedAt.addingTimeInterval(172_800))
+        XCTAssertEqual(result.bars[2].resetsAt, fetchedAt.addingTimeInterval(2_592_000))
+        XCTAssertEqual(result.bars.map(\.resetDisplayStyle), [
+            .relativeWithLocalTime,
+            .relativeWithLocalTime,
+            .relativeWithLocalTime,
+        ])
+    }
+
+    func testOpenCodeGoParserFallsBackToRenderedUsageItems() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        let payload = """
+        <div data-slot="usage-item">
+          <span data-slot="usage-label">Monthly Usage</span>
+          <span data-slot="usage-value">6.5%</span>
+          <span data-slot="reset-time">Resets in 29 days 4 hours</span>
+        </div>
+        <div data-slot="usage-item">
+          <span data-slot="usage-label">Rolling Usage</span>
+          <span data-slot="usage-value">10.25%</span>
+          <span data-slot="reset-time">Resets in 1 hour 30 minutes</span>
+        </div>
+        <div data-slot="usage-item">
+          <span data-slot="usage-label">Weekly Usage</span>
+          <span data-slot="usage-value">20%</span>
+          <span data-slot="reset-time">Resets in 2 days 3 hours</span>
+        </div>
+        """
+
+        let result = try XCTUnwrap(OpenCodeZenUsageProvider.parseGoUsage(
+            Data(payload.utf8),
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ))
+
+        XCTAssertEqual(result.bars.map(\.used), [10.25, 20, 6.5])
+        XCTAssertEqual(result.bars[0].resetsAt, fetchedAt.addingTimeInterval(5_400))
+        XCTAssertEqual(result.bars[1].resetsAt, fetchedAt.addingTimeInterval(183_600))
+        XCTAssertEqual(result.bars[2].resetsAt, fetchedAt.addingTimeInterval(2_520_000))
+    }
+
+    func testOpenCodeGoParserRejectsPartialAndMalformedPages() {
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        let partial = """
+        {"rollingUsage":{"usagePercent":12,"resetInSec":300},
+         "weeklyUsage":{"usagePercent":20,"resetInSec":600}}
+        """
+
+        XCTAssertNil(OpenCodeZenUsageProvider.parseGoUsage(
+            Data(partial.utf8),
+            configuration: configuration
+        ))
+        XCTAssertNil(OpenCodeZenUsageProvider.parseGoUsage(
+            Data("<html>unexpected dashboard</html>".utf8),
+            configuration: configuration
+        ))
+    }
+
+    func testOpenCodeProviderPreservesBalanceWhenGoPageIsMalformed() async throws {
+        let secretStore = MemorySecretStore()
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        configuration.openCodeWorkspaceId = "wrk_test"
+        try secretStore.saveSecret(
+            "opencode-dashboard-token",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [ProviderParsingMockURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        let provider = OpenCodeZenUsageProvider(secretStore: secretStore, session: session)
+
+        ProviderParsingMockURLProtocol.handler = { request in
+            let data = request.url?.path.hasSuffix("/go") == true
+                ? Data("<html>malformed Go page</html>".utf8)
+                : Data("<html>balance:1225000000</html>".utf8)
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                data
+            )
+        }
+        defer {
+            ProviderParsingMockURLProtocol.handler = nil
+        }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 12.25, accuracy: 0.0001)
+        XCTAssertTrue(result.bars.isEmpty)
+        XCTAssertNil(result.failureMessage)
+        XCTAssertEqual(result.usageMessages, [
+            "Go usage unavailable: Could not parse all OpenCode Go usage windows.",
+        ])
+    }
+
+    func testOpenCodeProviderPreservesGoUsageWhenBalanceIsMalformed() async throws {
+        let secretStore = MemorySecretStore()
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        configuration.openCodeWorkspaceId = "wrk_test"
+        try secretStore.saveSecret(
+            "opencode-dashboard-token",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [ProviderParsingMockURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        let provider = OpenCodeZenUsageProvider(secretStore: secretStore, session: session)
+        let goPayload = """
+        {"rollingUsage":{"usagePercent":12.5,"resetInSec":300},
+         "weeklyUsage":{"resetInSec":600,"usagePercent":20},
+         "monthlyUsage":{"usagePercent":30.75,"resetInSec":900}}
+        """
+
+        ProviderParsingMockURLProtocol.handler = { request in
+            let data = request.url?.path.hasSuffix("/go") == true
+                ? Data(goPayload.utf8)
+                : Data("<html>malformed balance page</html>".utf8)
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                data
+            )
+        }
+        defer {
+            ProviderParsingMockURLProtocol.handler = nil
+        }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertNil(result.creditsRemaining)
+        XCTAssertEqual(result.bars.map(\.used), [12.5, 20, 30.75])
+        XCTAssertNil(result.failureMessage)
+        XCTAssertEqual(result.usageMessages, [
+            "ZEN balance unavailable: Could not parse OpenCode ZEN balance.",
+        ])
+    }
+
+    func testOpenCodeProviderReturnsGoUsageAndZenBalanceTogether() async throws {
+        let secretStore = MemorySecretStore()
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        configuration.openCodeWorkspaceId = "wrk_test"
+        try secretStore.saveSecret(
+            "opencode-dashboard-token",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [ProviderParsingMockURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        let provider = OpenCodeZenUsageProvider(secretStore: secretStore, session: session)
+        let goPayload = #"""
+        <script>data="{\"weeklyUsage\":{\"resetInSec\":600,\"usagePercent\":22.5},
+        \"rollingUsage\":{\"usagePercent\":11.25,\"resetInSec\":300},
+        \"monthlyUsage\":{\"resetInSec\":900,\"usagePercent\":33.75}}"</script>
+        """#
+
+        ProviderParsingMockURLProtocol.handler = { request in
+            let data = request.url?.path.hasSuffix("/go") == true
+                ? Data(goPayload.utf8)
+                : Data("<html>balance:1875000000</html>".utf8)
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                data
+            )
+        }
+        defer {
+            ProviderParsingMockURLProtocol.handler = nil
+        }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 18.75, accuracy: 0.0001)
+        XCTAssertEqual(result.bars.map(\.used), [11.25, 22.5, 33.75])
+        XCTAssertEqual(result.subtitle, "Go usage and ZEN credit balance")
+        XCTAssertTrue(result.usageMessages.isEmpty)
+        XCTAssertNil(result.failureMessage)
+    }
+
     func testOpenCodeZenProviderFetchesDashboardBillingBalance() async throws {
         let secretStore = MemorySecretStore()
         var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
@@ -325,7 +535,7 @@ final class ProviderParsingTests: XCTestCase {
             requestCount += 1
             XCTAssertEqual(request.url?.scheme, "https")
             XCTAssertEqual(request.url?.host, "opencode.ai")
-            XCTAssertEqual(request.url?.path, "/workspace/wrk_test/billing")
+            XCTAssertTrue(["/workspace/wrk_test/billing", "/workspace/wrk_test/go"].contains(request.url?.path))
             XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "auth=opencode-dashboard-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "text/html")
             return (
@@ -335,7 +545,9 @@ final class ProviderParsingTests: XCTestCase {
                     httpVersion: nil,
                     headerFields: ["Content-Type": "text/html"]
                 )!,
-                Data(#"<html>data balance:2575000000 more</html>"#.utf8)
+                request.url?.path.hasSuffix("/go") == true
+                    ? Data(#"<html><div data-slot="promo-description">Subscribe to Go</div></html>"#.utf8)
+                    : Data(#"<html>data balance:2575000000 more</html>"#.utf8)
             )
         }
         defer {
@@ -347,7 +559,11 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.providerID, .openCodeZen)
         XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 25.75, accuracy: 0.0001)
         XCTAssertTrue(result.bars.isEmpty)
-        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(result.subtitle, "ZEN credit balance - Go not subscribed")
+        XCTAssertEqual(result.usageMessages, [
+            "This workspace is not subscribed to OpenCode Go.",
+        ])
+        XCTAssertEqual(requestCount, 2)
     }
 
     func testOpenCodeZenProviderExplainsModelAPIKeyCannotFetchBalanceAfterDashboardRejectsIt() async throws {
@@ -412,11 +628,16 @@ final class ProviderParsingTests: XCTestCase {
         let provider = OpenCodeZenUsageProvider(secretStore: secretStore, session: session)
 
         ProviderParsingMockURLProtocol.handler = { request in
-            XCTAssertEqual(request.url?.path, "/workspace/wrk_from_windows/billing")
+            XCTAssertTrue([
+                "/workspace/wrk_from_windows/billing",
+                "/workspace/wrk_from_windows/go",
+            ].contains(request.url?.path))
             XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "auth=go-dashboard-token")
             return (
                 HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
-                Data(#"<html>balance:625000000</html>"#.utf8)
+                request.url?.path.hasSuffix("/go") == true
+                    ? Data(#"<html><div data-slot="promo-description">Subscribe to Go</div></html>"#.utf8)
+                    : Data(#"<html>balance:625000000</html>"#.utf8)
             )
         }
         defer {
@@ -705,7 +926,10 @@ final class ProviderParsingTests: XCTestCase {
 
         ProviderParsingMockURLProtocol.handler = { request in
             requestCount += 1
-            XCTAssertEqual(request.url?.absoluteString, "https://opencode.ai/workspace/wrk_test/billing")
+            XCTAssertTrue([
+                "https://opencode.ai/workspace/wrk_test/billing",
+                "https://opencode.ai/workspace/wrk_test/go",
+            ].contains(request.url?.absoluteString))
             XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "auth=opencode-dashboard-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "text/html")
             XCTAssertEqual(
@@ -719,7 +943,9 @@ final class ProviderParsingTests: XCTestCase {
                     httpVersion: nil,
                     headerFields: nil
                 )!,
-                Data(#"<html>data balance:2575000000 more</html>"#.utf8)
+                request.url?.path.hasSuffix("/go") == true
+                    ? Data(#"<html><div data-slot="promo-description">Subscribe to Go</div></html>"#.utf8)
+                    : Data(#"<html>data balance:2575000000 more</html>"#.utf8)
             )
         }
         defer {
@@ -731,7 +957,7 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.providerID, .openCodeZen)
         XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 25.75, accuracy: 0.0001)
         XCTAssertTrue(result.bars.isEmpty)
-        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(requestCount, 2)
     }
 
     func testOpenCodeZenProviderReportsRejectedCredential() async throws {
@@ -763,7 +989,7 @@ final class ProviderParsingTests: XCTestCase {
         let result = try await provider.fetchUsage(for: configuration)
 
         XCTAssertEqual(result.providerID, .openCodeZen)
-        XCTAssertEqual(result.subtitle, "OpenCode ZEN rejected this API key.")
+        XCTAssertEqual(result.subtitle, "OpenCode rejected the saved dashboard auth value.")
         XCTAssertNil(result.creditsRemaining)
         XCTAssertTrue(result.bars.isEmpty)
     }
@@ -826,6 +1052,10 @@ final class ProviderParsingTests: XCTestCase {
         )
         XCTAssertEqual(
             OpenCodeZenUsageProvider.normalizedWorkspaceId(from: "https://opencode.ai/workspace/wrk_test/billing"),
+            "wrk_test"
+        )
+        XCTAssertEqual(
+            OpenCodeZenUsageProvider.normalizedWorkspaceId(from: "https://opencode.ai/workspace/wrk_test/go"),
             "wrk_test"
         )
         XCTAssertEqual(
