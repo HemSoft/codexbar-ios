@@ -886,7 +886,8 @@ final class ProviderParsingTests: XCTestCase {
               "apiKey": "go-dashboard-token"
             },
             "OpenCodeZen": {
-              "enabled": true
+              "enabled": true,
+              "apiKey": "sk-zen-model-token"
             }
           }
         }
@@ -906,7 +907,12 @@ final class ProviderParsingTests: XCTestCase {
                 "/workspace/wrk_from_windows/billing",
                 "/workspace/wrk_from_windows/go",
             ].contains(request.url?.path))
-            XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "auth=go-dashboard-token")
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "Cookie"),
+                request.url?.path.hasSuffix("/go") == true
+                    ? "auth=go-dashboard-token"
+                    : "auth=sk-zen-model-token"
+            )
             return (
                 HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
                 request.url?.path.hasSuffix("/go") == true

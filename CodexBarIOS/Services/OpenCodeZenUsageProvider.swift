@@ -48,13 +48,17 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         guard let balanceCredential = Self.normalizedAPIKey(from: storedSecret) else {
             return failureResult("Not configured - enter OpenCode dashboard auth value.", configuration: configuration)
         }
+        let goCredential = Self.normalizedGoCredential(from: storedSecret)
+            ?? balanceCredential
 
         return await fetchDashboards(
             workspaceId: workspaceId,
-            apiKey: balanceCredential,
+            balanceAPIKey: balanceCredential,
+            goAPIKey: goCredential,
             cacheIdentity: Self.cacheIdentity(
                 workspaceId: workspaceId,
-                credential: balanceCredential
+                balanceCredential: balanceCredential,
+                goCredential: goCredential
             ),
             configuration: configuration
         )
@@ -88,13 +92,20 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
 
     private func fetchDashboards(
         workspaceId: String,
-        apiKey: String,
+        balanceAPIKey: String,
+        goAPIKey: String,
         cacheIdentity: String,
         configuration: ProviderAccountConfiguration
     ) async -> ProviderUsageResult {
         let fetchedAt = Date()
-        async let balanceTask = fetchBalance(workspaceId: workspaceId, apiKey: apiKey)
-        async let goUsageTask = fetchGoUsage(workspaceId: workspaceId, apiKey: apiKey)
+        async let balanceTask = fetchBalance(
+            workspaceId: workspaceId,
+            apiKey: balanceAPIKey
+        )
+        async let goUsageTask = fetchGoUsage(
+            workspaceId: workspaceId,
+            apiKey: goAPIKey
+        )
         let (balance, goUsage) = await (balanceTask, goUsageTask)
         return Self.buildCombinedResult(
             balance: balance,
@@ -105,8 +116,14 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         )
     }
 
-    private static func cacheIdentity(workspaceId: String, credential: String) -> String {
-        let source = Data("\(workspaceId)\u{0}\(credential)".utf8)
+    private static func cacheIdentity(
+        workspaceId: String,
+        balanceCredential: String,
+        goCredential: String
+    ) -> String {
+        let source = Data(
+            "\(workspaceId)\u{0}\(balanceCredential)\u{0}\(goCredential)".utf8
+        )
         return Data(SHA256.hash(data: source)).base64EncodedString()
     }
 
@@ -217,15 +234,48 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
     }
 
     static func normalizedAPIKey(from storedSecret: String?) -> String? {
+        normalizedCredential(
+            from: storedSecret,
+            settingsProviderNames: ["OpenCodeZen", "OpenCodeGo"],
+            environmentNames: [
+                "OPENCODE_ZEN_AUTH_COOKIE",
+                "OPENCODE_GO_AUTH_COOKIE",
+            ]
+        )
+    }
+
+    static func normalizedGoCredential(from storedSecret: String?) -> String? {
+        normalizedCredential(
+            from: storedSecret,
+            settingsProviderNames: ["OpenCodeGo", "OpenCodeZen"],
+            environmentNames: [
+                "OPENCODE_GO_AUTH_COOKIE",
+                "OPENCODE_ZEN_AUTH_COOKIE",
+            ]
+        )
+    }
+
+    private static func normalizedCredential(
+        from storedSecret: String?,
+        settingsProviderNames: [String],
+        environmentNames: [String]
+    ) -> String? {
         guard var credential = storedSecret?.trimmingCharacters(in: .whitespacesAndNewlines), !credential.isEmpty else {
             return nil
         }
 
-        if let settingsCredential = openCodeDashboardCredential(fromSettingsJSON: credential)
-            ?? environmentValue(named: "OPENCODE_ZEN_AUTH_COOKIE", in: credential)
-            ?? environmentValue(named: "OPENCODE_GO_AUTH_COOKIE", in: credential)
+        let settingsCredential = settingsProviderNames.lazy.compactMap {
+            openCodeDashboardCredential(
+                fromSettingsJSON: credential,
+                providerName: $0
+            )
+        }.first
+        let environmentCredential = environmentNames.lazy.compactMap {
+            environmentValue(named: $0, in: credential)
+        }.first
+        if let extractedCredential = settingsCredential ?? environmentCredential
         {
-            credential = settingsCredential
+            credential = extractedCredential
         }
 
         guard let normalizedCredential = ProviderSecretNormalizer.normalizedSecret(
@@ -625,14 +675,16 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         credential.hasPrefix("sk-")
     }
 
-    private static func openCodeDashboardCredential(fromSettingsJSON value: String) -> String? {
+    private static func openCodeDashboardCredential(
+        fromSettingsJSON value: String,
+        providerName: String
+    ) -> String? {
         guard let root = jsonObject(from: value) else {
             return nil
         }
 
         let providers = root["providers"] as? [String: Any]
-        return providerAPIKey(named: "OpenCodeZen", in: providers)
-            ?? providerAPIKey(named: "OpenCodeGo", in: providers)
+        return providerAPIKey(named: providerName, in: providers)
     }
 
     private static func openCodeWorkspaceId(fromSettingsJSON value: String) -> String? {
