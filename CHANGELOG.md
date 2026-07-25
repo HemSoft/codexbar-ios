@@ -36,6 +36,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Kept saved accounts and their dashboard settings consistent with Keychain
+  credentials when an all-account reset only partially succeeds, while leaving
+  failed accounts available to retry. ([#115](https://github.com/HemSoft/codexbar-ios/issues/115))
 - Reported damaged saved usage history on the dashboard, preserved its raw data
   until an explicit reset, and resumed recording after recovery.
   ([#109](https://github.com/HemSoft/codexbar-ios/issues/109))

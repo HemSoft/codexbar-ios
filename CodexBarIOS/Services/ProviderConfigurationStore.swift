@@ -273,16 +273,34 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     @discardableResult
     public func resetAccounts() -> Bool {
-        let accountsToDelete = Set(
-            configurations.map { keychainAccount(for: $0) }
-                + ProviderID.allCases.map { keychainAccount(for: $0) }
-        )
+        let knownAccountIDs = Set(configurations.map(\.id))
+        var accountsToDelete: [String] = []
+        var seenKeychainAccounts = Set<String>()
+        for account in configurations.map({ keychainAccount(for: $0) })
+            + ProviderID.allCases.map({ keychainAccount(for: $0) })
+        where seenKeychainAccounts.insert(account).inserted
+        {
+            accountsToDelete.append(account)
+        }
 
-        do {
-            for account in accountsToDelete {
+        var removedAccountIDs = Set<String>()
+        var firstDeletionError: String?
+        for account in accountsToDelete {
+            do {
                 try secretStore.deleteSecret(account: account)
+                removedAccountIDs.formUnion(
+                    configurations
+                        .filter { keychainAccount(for: $0) == account }
+                        .map(\.id)
+                )
+            } catch {
+                if firstDeletionError == nil {
+                    firstDeletionError = error.localizedDescription
+                }
             }
+        }
 
+        if firstDeletionError == nil {
             configurations = []
             groups = []
             secretAvailability = [:]
@@ -296,11 +314,30 @@ public final class ProviderConfigurationStore: ObservableObject {
             defaults.removeObject(forKey: usageAlertActiveIDsKey)
             lastError = nil
             return true
-        } catch {
-            lastError = error.localizedDescription
-            refreshSecretAvailability()
-            return false
         }
+
+        if !removedAccountIDs.isEmpty {
+            configurations.removeAll { removedAccountIDs.contains($0.id) }
+            sortConfigurations()
+            saveConfigurations()
+            updateDashboardCardOrder(
+                dashboardCardOrder.filter { !removedAccountIDs.contains($0) }
+            )
+            updateUsageAlertActiveIDs(
+                UsageAlertEvaluator.activeAlertIDs(
+                    usageAlertActiveIDs,
+                    belongingTo: Set(configurations.map(\.id)),
+                    knownAccountIDs: knownAccountIDs
+                )
+            )
+            for accountID in removedAccountIDs {
+                metricVisualizationPreferences.removeValue(forKey: accountID)
+            }
+            saveMetricVisualizationPreferences()
+        }
+        refreshSecretAvailability()
+        lastError = firstDeletionError
+        return false
     }
 
     @discardableResult

@@ -526,6 +526,79 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertNotNil(store.lastError)
     }
 
+    @MainActor
+    func testResetAccountsCommitsSuccessfulCredentialDeletionsAndRetriesFailures() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = RetriableDeleteSecretStore()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let removedAccount = store.addAccount(for: .claude)
+        let failedAccount = store.addAccount(for: .openRouter)
+        let removedAlertID = "usage.\(removedAccount.id).window"
+        let failedAlertID = "balance.\(failedAccount.id)"
+        store.updateDashboardCardOrder([removedAccount.id, failedAccount.id])
+        store.updateUsageAlertActiveIDs([removedAlertID, failedAlertID])
+        store.updateVisualizationStyle(.circularRing, accountID: removedAccount.id, metricID: "usage")
+        store.updateVisualizationStyle(.semicircularDial, accountID: failedAccount.id, metricID: "balance")
+        XCTAssertTrue(store.saveSecret("removed-token", for: removedAccount))
+        XCTAssertTrue(store.saveSecret("failed-token", for: failedAccount))
+        secretStore.shouldFailDelete = false
+        secretStore.failingAccount = ProviderConfigurationStore.keychainAccount(for: failedAccount)
+
+        XCTAssertFalse(store.resetAccounts())
+
+        XCTAssertNil(store.configuration(accountID: removedAccount.id))
+        XCTAssertEqual(store.configuration(accountID: failedAccount.id), failedAccount)
+        XCTAssertNil(
+            try secretStore.readSecret(
+                account: ProviderConfigurationStore.keychainAccount(for: removedAccount)
+            )
+        )
+        XCTAssertEqual(
+            try secretStore.readSecret(
+                account: ProviderConfigurationStore.keychainAccount(for: failedAccount)
+            ),
+            "failed-token"
+        )
+        XCTAssertEqual(store.dashboardCardOrder, [failedAccount.id])
+        XCTAssertEqual(store.usageAlertActiveIDs, [failedAlertID])
+        XCTAssertNil(store.metricVisualizationPreferences[removedAccount.id])
+        XCTAssertEqual(
+            store.visualizationStyle(accountID: failedAccount.id, metricID: "balance"),
+            .semicircularDial
+        )
+        XCTAssertNotNil(store.lastError)
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        XCTAssertNil(reloadedStore.configuration(accountID: removedAccount.id))
+        XCTAssertEqual(reloadedStore.configuration(accountID: failedAccount.id), failedAccount)
+        XCTAssertEqual(reloadedStore.dashboardCardOrder, [failedAccount.id])
+        XCTAssertEqual(reloadedStore.usageAlertActiveIDs, [failedAlertID])
+        XCTAssertNil(reloadedStore.metricVisualizationPreferences[removedAccount.id])
+        XCTAssertEqual(
+            reloadedStore.visualizationStyle(accountID: failedAccount.id, metricID: "balance"),
+            .semicircularDial
+        )
+
+        secretStore.failingAccount = nil
+        XCTAssertTrue(store.resetAccounts())
+
+        XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertTrue(store.dashboardCardOrder.isEmpty)
+        XCTAssertTrue(store.usageAlertActiveIDs.isEmpty)
+        XCTAssertTrue(store.metricVisualizationPreferences.isEmpty)
+        XCTAssertNil(
+            try secretStore.readSecret(
+                account: ProviderConfigurationStore.keychainAccount(for: failedAccount)
+            )
+        )
+        XCTAssertNil(store.lastError)
+    }
+
     func testLoopbackOAuthCallbackServerAcceptsRequestsSplitAcrossWrites() async throws {
         let request = Data((
             "GET /callback?code=authorization-code&state=expected-state HTTP/1.1\r\n" +
