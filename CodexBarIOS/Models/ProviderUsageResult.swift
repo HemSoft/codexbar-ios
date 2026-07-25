@@ -125,6 +125,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let failureMessage: String?
     public let preserveCachedBarsOnFailure: Bool
     public let preserveCachedCreditsOnFailure: Bool
+    public let cacheIdentity: String?
     public let fetchedAt: Date
 
     public init(
@@ -142,6 +143,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         failureMessage: String? = nil,
         preserveCachedBarsOnFailure: Bool = false,
         preserveCachedCreditsOnFailure: Bool = false,
+        cacheIdentity: String? = nil,
         fetchedAt: Date
     ) {
         self.accountID = accountID ?? providerID.rawValue
@@ -160,6 +162,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.failureMessage = failureMessage
         self.preserveCachedBarsOnFailure = preserveCachedBarsOnFailure
         self.preserveCachedCreditsOnFailure = preserveCachedCreditsOnFailure
+        self.cacheIdentity = cacheIdentity
         self.fetchedAt = fetchedAt
     }
 

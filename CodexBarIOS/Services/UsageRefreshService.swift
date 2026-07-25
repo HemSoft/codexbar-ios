@@ -292,7 +292,10 @@ public final class UsageRefreshService: ObservableObject {
     }
 
     private func preserveFailureResult(_ failureResult: ProviderUsageResult, accountID: String) {
-        let cachedResult = results.first { $0.accountID == accountID }
+        let cachedResult = results.first {
+            $0.accountID == accountID
+                && Self.canReuseCachedResult($0, for: failureResult)
+        }
         let failureHasUsageData = failureResult.creditsRemaining != nil
             || !failureResult.bars.isEmpty
             || !failureResult.monetaryMetrics.isEmpty
@@ -334,8 +337,22 @@ public final class UsageRefreshService: ObservableObject {
             failureMessage: failureResult.failureMessage,
             preserveCachedBarsOnFailure: failureResult.preserveCachedBarsOnFailure,
             preserveCachedCreditsOnFailure: failureResult.preserveCachedCreditsOnFailure,
+            cacheIdentity: failureResult.cacheIdentity,
             fetchedAt: dataResult.fetchedAt
         ))
+    }
+
+    private nonisolated static func canReuseCachedResult(
+        _ cachedResult: ProviderUsageResult,
+        for failureResult: ProviderUsageResult
+    ) -> Bool {
+        guard failureResult.providerID == .openCodeZen else {
+            return true
+        }
+        guard let failureIdentity = failureResult.cacheIdentity else {
+            return false
+        }
+        return cachedResult.cacheIdentity == failureIdentity
     }
 
     private nonisolated static func failureResult(

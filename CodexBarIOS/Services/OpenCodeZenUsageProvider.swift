@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 private struct OpenCodeGoWindow {
@@ -51,6 +52,10 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         return await fetchDashboards(
             workspaceId: workspaceId,
             apiKey: balanceCredential,
+            cacheIdentity: Self.cacheIdentity(
+                workspaceId: workspaceId,
+                credential: balanceCredential
+            ),
             configuration: configuration
         )
     }
@@ -84,6 +89,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
     private func fetchDashboards(
         workspaceId: String,
         apiKey: String,
+        cacheIdentity: String,
         configuration: ProviderAccountConfiguration
     ) async -> ProviderUsageResult {
         let fetchedAt = Date()
@@ -94,8 +100,14 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             balance: balance,
             goUsage: goUsage,
             configuration: configuration,
+            cacheIdentity: cacheIdentity,
             fetchedAt: fetchedAt
         )
+    }
+
+    private static func cacheIdentity(workspaceId: String, credential: String) -> String {
+        let source = Data("\(workspaceId)\u{0}\(credential)".utf8)
+        return Data(SHA256.hash(data: source)).base64EncodedString()
     }
 
     private func fetchBalance(
@@ -741,6 +753,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         balance: OpenCodeBalanceFetchOutcome,
         goUsage: OpenCodeGoPageOutcome,
         configuration: ProviderAccountConfiguration,
+        cacheIdentity: String,
         fetchedAt: Date
     ) -> ProviderUsageResult {
         let creditsRemaining: Double?
@@ -820,6 +833,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                 subtitle: message,
                 bars: [],
                 failureMessage: message,
+                cacheIdentity: cacheIdentity,
                 fetchedAt: fetchedAt
             )
         }
@@ -855,6 +869,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             failureMessage: partialFailureMessage.isEmpty ? nil : partialFailureMessage,
             preserveCachedBarsOnFailure: preserveCachedBars,
             preserveCachedCreditsOnFailure: preserveCachedCredits,
+            cacheIdentity: cacheIdentity,
             fetchedAt: fetchedAt
         )
     }

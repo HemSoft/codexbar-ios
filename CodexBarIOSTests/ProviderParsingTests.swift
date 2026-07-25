@@ -597,6 +597,86 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(service.successfulRefreshResults, [balanceFailure])
     }
 
+    @MainActor
+    func testOpenCodePartialRefreshDoesNotReuseCacheAfterWorkspaceOrCredentialChanges() async throws {
+        let secretStore = MemorySecretStore()
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        configuration.openCodeWorkspaceId = "wrk_old"
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: configuration)
+        try secretStore.saveSecret("old-token", account: keychainAccount)
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [ProviderParsingMockURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        let service = UsageRefreshService(providers: [
+            OpenCodeZenUsageProvider(secretStore: secretStore, session: session),
+        ])
+        var phase = 0
+
+        ProviderParsingMockURLProtocol.handler = { request in
+            let isGo = request.url?.path.hasSuffix("/go") == true
+            let data: Data
+            switch (phase, isGo) {
+            case (0, false):
+                data = Data("<html>balance:1000000000</html>".utf8)
+            case (0, true):
+                data = Data("""
+                {"rollingUsage":{"usagePercent":10,"resetInSec":300},
+                 "weeklyUsage":{"usagePercent":20,"resetInSec":600},
+                 "monthlyUsage":{"usagePercent":30,"resetInSec":900}}
+                """.utf8)
+            case (1, false):
+                data = Data("<html>balance:2000000000</html>".utf8)
+            case (1, true):
+                data = Data("<html>malformed Go page</html>".utf8)
+            case (2, false):
+                data = Data("<html>malformed balance page</html>".utf8)
+            case (2, true):
+                data = Data("""
+                {"rollingUsage":{"usagePercent":40,"resetInSec":300},
+                 "weeklyUsage":{"usagePercent":50,"resetInSec":600},
+                 "monthlyUsage":{"usagePercent":60,"resetInSec":900}}
+                """.utf8)
+            default:
+                XCTFail("Unexpected OpenCode request phase")
+                data = Data()
+            }
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                data
+            )
+        }
+        defer {
+            ProviderParsingMockURLProtocol.handler = nil
+        }
+
+        _ = await service.refresh(configuration: configuration)
+        let original = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(original.bars.map(\.used), [10, 20, 30])
+        XCTAssertEqual(try XCTUnwrap(original.creditsRemaining), 10, accuracy: 0.0001)
+
+        phase = 1
+        configuration.openCodeWorkspaceId = "wrk_new"
+        _ = await service.refresh(configuration: configuration)
+        let changedWorkspace = try XCTUnwrap(service.results.first)
+        XCTAssertTrue(changedWorkspace.bars.isEmpty)
+        XCTAssertNil(changedWorkspace.barsFetchedAt)
+        XCTAssertEqual(try XCTUnwrap(changedWorkspace.creditsRemaining), 20, accuracy: 0.0001)
+
+        phase = 2
+        try secretStore.saveSecret("new-token", account: keychainAccount)
+        _ = await service.refresh(configuration: configuration)
+        let changedCredential = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(changedCredential.bars.map(\.used), [40, 50, 60])
+        XCTAssertNil(changedCredential.creditsRemaining)
+        XCTAssertNil(changedCredential.creditsFetchedAt)
+    }
+
     func testOpenCodeProviderDoesNotTreatDashboard404AsNotSubscribed() async throws {
         let secretStore = MemorySecretStore()
         var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
