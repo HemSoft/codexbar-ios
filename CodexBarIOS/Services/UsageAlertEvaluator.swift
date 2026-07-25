@@ -92,6 +92,23 @@ public enum UsageAlertEvaluator {
         var notifications: [UsageAlertNotification] = []
 
         for result in results {
+            if result.preserveCachedBarsOnFailure {
+                let usagePrefix = "usage.\(result.accountID)."
+                let severityAlertID = "severity.\(result.accountID)"
+                nextActiveAlertIDs.formUnion(
+                    activeAlertIDs.filter {
+                        $0 == severityAlertID || $0.hasPrefix(usagePrefix)
+                    }
+                )
+            }
+
+            let balanceAlertID = "balance.\(result.accountID)"
+            if result.preserveCachedCreditsOnFailure,
+               activeAlertIDs.contains(balanceAlertID)
+            {
+                nextActiveAlertIDs.insert(balanceAlertID)
+            }
+
             if !result.hasFreshBars {
                 let staleUsageAlertIDs = result.bars
                     .filter { $0.fractionUsed >= settings.usageThreshold }
@@ -111,7 +128,6 @@ public enum UsageAlertEvaluator {
                 }
             }
 
-            let balanceAlertID = "balance.\(result.accountID)"
             if !result.hasFreshCredits,
                activeAlertIDs.contains(balanceAlertID)
             {

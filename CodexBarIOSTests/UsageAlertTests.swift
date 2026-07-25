@@ -498,6 +498,60 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(evaluation.activeAlerts.map(\.kind), [.usage])
     }
 
+    func testUsageAlertEvaluatorPreservesFailedPartialComponentsWithoutCache() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_580)
+        let accountID = "opencode.cold-partial"
+        let usageAlertID = "usage.\(accountID).go.weekly"
+        let severityAlertID = "severity.\(accountID)"
+        let balanceAlertID = "balance.\(accountID)"
+        let settings = UsageAlertSettings(
+            isEnabled: true,
+            usageThreshold: 0.80,
+            balanceThreshold: 5,
+            includesSeverityAlerts: true
+        )
+        let balanceOnly = ProviderUsageResult(
+            accountID: accountID,
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "ZEN credit balance",
+            bars: [],
+            creditsRemaining: 10,
+            preserveCachedBarsOnFailure: true,
+            fetchedAt: fetchedAt
+        )
+
+        let balanceOnlyEvaluation = UsageAlertEvaluator.evaluate(
+            results: [balanceOnly],
+            settings: settings,
+            activeAlertIDs: [usageAlertID, severityAlertID],
+            now: fetchedAt
+        )
+
+        XCTAssertEqual(
+            balanceOnlyEvaluation.activeAlertIDs,
+            [usageAlertID, severityAlertID]
+        )
+
+        let usageOnly = ProviderUsageResult(
+            accountID: accountID,
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "OpenCode Go usage",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 20, limit: 100)],
+            preserveCachedCreditsOnFailure: true,
+            fetchedAt: fetchedAt.addingTimeInterval(60)
+        )
+        let usageOnlyEvaluation = UsageAlertEvaluator.evaluate(
+            results: [usageOnly],
+            settings: settings,
+            activeAlertIDs: [balanceAlertID],
+            now: usageOnly.fetchedAt
+        )
+
+        XCTAssertEqual(usageOnlyEvaluation.activeAlertIDs, [balanceAlertID])
+    }
+
     func testUsageAlertEvaluatorReturnsCardScopedActiveAlerts() {
         let codex = ProviderUsageResult(
             accountID: "codex.personal",
