@@ -305,16 +305,23 @@ final class ProviderSettingsViewModel: ObservableObject {
     func refreshOpenCode() async {
         guard !isRefreshingOpenCode else { return }
         isRefreshingOpenCode = true
-        openCodeCredentialMessage = "Refreshing OpenCode ZEN..."
+        openCodeCredentialMessage = "Refreshing OpenCode ZEN and Go..."
         defer { isRefreshingOpenCode = false }
 
         guard let result = await onAccountRefresh(configuration) else {
             openCodeCredentialMessage = "Refresh finished. Check the dashboard."
             return
         }
-        if let balance = result.creditsRemaining {
+        let usageContext = result.usageMessages.isEmpty
+            ? ""
+            : " \(result.usageMessages.joined(separator: " "))"
+        if !result.bars.isEmpty, result.creditsRemaining != nil {
+            openCodeCredentialMessage = "OpenCode Go usage and ZEN balance refreshed.\(usageContext)"
+        } else if !result.bars.isEmpty {
+            openCodeCredentialMessage = "OpenCode Go usage refreshed.\(usageContext)"
+        } else if let balance = result.creditsRemaining {
             let formatted = Self.openCodeBalanceFormatter.string(from: NSNumber(value: balance)) ?? "$\(balance)"
-            openCodeCredentialMessage = "OpenCode ZEN balance refreshed: \(formatted)"
+            openCodeCredentialMessage = "OpenCode ZEN balance refreshed: \(formatted)\(usageContext)"
         } else {
             openCodeCredentialMessage = result.subtitle
         }

@@ -90,7 +90,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         self.subtitle = result.subtitle
         self.capturedAt = capturedAt
         self.bars = recordableBars.map(UsageHistoryBarSnapshot.init)
-        self.creditsRemaining = result.creditsRemaining
+        self.creditsRemaining = result.freshCreditsRemaining
         self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
         self.highestSeverity = max(
             recordableBars.map { $0.effectiveSeverity(at: capturedAt) }.max() ?? .normal,
@@ -350,7 +350,7 @@ public final class UsageHistoryStore: ObservableObject {
 
         let recordableResults = results.filter { result in
             let hasFreshBars = result.hasFreshBars && !result.bars.isEmpty
-            return result.creditsRemaining != nil || hasFreshBars || !result.monetaryMetrics.isEmpty
+            return result.freshCreditsRemaining != nil || hasFreshBars || !result.monetaryMetrics.isEmpty
         }
         guard !recordableResults.isEmpty else {
             return
@@ -400,33 +400,19 @@ public final class UsageHistoryStore: ObservableObject {
         since start: Date? = nil
     ) -> UsageHistorySeries {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
-        let isBalance: Bool
-        if result.creditsRemaining != nil {
-            isBalance = true
-        } else if result.hasFreshBars, !result.bars.isEmpty {
-            isBalance = false
-        } else if !result.monetaryMetrics.isEmpty {
-            isBalance = true
-        } else {
-            isBalance = accountSnapshots.last.map {
-                $0.creditsRemaining != nil || !($0.monetaryMetrics ?? []).isEmpty
-            } ?? false
+        let hasUsageHistory = accountSnapshots.contains { !$0.bars.isEmpty }
+        if (result.hasFreshBars && !result.bars.isEmpty)
+            || (!result.bars.isEmpty && hasUsageHistory)
+        {
+            return usageSeries(accountID: result.accountID, snapshots: accountSnapshots)
         }
-        let points = accountSnapshots.compactMap { snapshot -> UsageHistoryPoint? in
-            if isBalance {
-                guard snapshot.creditsRemaining != nil || !(snapshot.monetaryMetrics ?? []).isEmpty else {
-                    return nil
-                }
-            } else {
-                guard !snapshot.bars.isEmpty else {
-                    return nil
-                }
-            }
-            let value = isBalance
-                ? snapshot.monetaryPrimaryValue
-                : snapshot.bars.map(\.fractionUsed).max()
-            return value.map { UsageHistoryPoint(snapshot: snapshot, value: $0) }
+
+        if result.freshCreditsRemaining != nil
+            || accountSnapshots.contains(where: { $0.creditsRemaining != nil })
+        {
+            return balanceSeries(accountID: result.accountID, snapshots: accountSnapshots)
         }
+
         let monetaryFormat = primaryMonetaryMetric(in: result.monetaryMetrics).map {
             ($0.currencyCode, $0.decimalPlaces)
         } ?? accountSnapshots.last.flatMap { snapshot in
@@ -437,10 +423,44 @@ public final class UsageHistoryStore: ObservableObject {
 
         return UsageHistorySeries(
             accountID: result.accountID,
-            points: points,
-            isBalance: isBalance,
+            points: accountSnapshots.compactMap { snapshot in
+                snapshot.monetaryPrimaryValue.map {
+                    UsageHistoryPoint(snapshot: snapshot, value: $0)
+                }
+            },
+            isBalance: true,
             currencyCode: monetaryFormat?.0,
             decimalPlaces: min(max(monetaryFormat?.1 ?? 2, 0), 6)
+        )
+    }
+
+    private func usageSeries(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot]
+    ) -> UsageHistorySeries {
+        UsageHistorySeries(
+            accountID: accountID,
+            points: snapshots.compactMap { snapshot in
+                snapshot.bars.map(\.fractionUsed).max().map {
+                    UsageHistoryPoint(snapshot: snapshot, value: $0)
+                }
+            },
+            isBalance: false
+        )
+    }
+
+    private func balanceSeries(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot]
+    ) -> UsageHistorySeries {
+        UsageHistorySeries(
+            accountID: accountID,
+            points: snapshots.compactMap { snapshot in
+                snapshot.creditsRemaining.map {
+                    UsageHistoryPoint(snapshot: snapshot, value: $0)
+                }
+            },
+            isBalance: true
         )
     }
 
@@ -457,11 +477,23 @@ public final class UsageHistoryStore: ObservableObject {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
         var options: [UsageHistorySeriesOption] = []
 
-        if (result.hasFreshBars && !result.bars.isEmpty) || result.creditsRemaining != nil {
+        if (result.hasFreshBars && !result.bars.isEmpty)
+            || accountSnapshots.contains(where: { !$0.bars.isEmpty })
+        {
             options.append(UsageHistorySeriesOption(
-                id: "primary",
-                label: result.creditsRemaining == nil ? "Usage" : "Balance",
-                series: historySeries(for: result, since: start)
+                id: "usage",
+                label: "Usage",
+                series: usageSeries(accountID: result.accountID, snapshots: accountSnapshots)
+            ))
+        }
+
+        if result.freshCreditsRemaining != nil
+            || accountSnapshots.contains(where: { $0.creditsRemaining != nil })
+        {
+            options.append(UsageHistorySeriesOption(
+                id: "balance",
+                label: "Balance",
+                series: balanceSeries(accountID: result.accountID, snapshots: accountSnapshots)
             ))
         }
 

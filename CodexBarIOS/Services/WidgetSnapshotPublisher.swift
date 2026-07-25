@@ -67,7 +67,7 @@ enum WidgetSnapshotPublisher {
                             )
                         )
                     },
-                    creditsRemaining: result.creditsRemaining,
+                    creditsRemaining: result.freshCreditsRemaining,
                     monetaryMetrics: result.monetaryMetrics.map { metric in
                         CodexBarWidgetMonetaryMetricSnapshot(
                             kind: metric.kind.rawValue,

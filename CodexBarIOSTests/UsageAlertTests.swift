@@ -466,6 +466,92 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertTrue(coldEvaluation.activeAlertIDs.isEmpty)
     }
 
+    func testUsageAlertEvaluatorProcessesFreshBarsWhilePreservingStaleBalance() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_580)
+        let accountID = "opencode.partial"
+        let result = ProviderUsageResult(
+            accountID: accountID,
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Fresh Go usage with cached ZEN balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 90, limit: 100)],
+            creditsRemaining: 3,
+            creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+        let balanceAlertID = "balance.\(accountID)"
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.80,
+                balanceThreshold: 5,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: [balanceAlertID],
+            now: fetchedAt
+        )
+
+        XCTAssertTrue(evaluation.activeAlertIDs.contains(balanceAlertID))
+        XCTAssertEqual(evaluation.notifications.map(\.kind), [.usage])
+        XCTAssertEqual(evaluation.activeAlerts.map(\.kind), [.usage])
+    }
+
+    func testUsageAlertEvaluatorPreservesFailedPartialComponentsWithoutCache() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_580)
+        let accountID = "opencode.cold-partial"
+        let usageAlertID = "usage.\(accountID).go.weekly"
+        let severityAlertID = "severity.\(accountID)"
+        let balanceAlertID = "balance.\(accountID)"
+        let settings = UsageAlertSettings(
+            isEnabled: true,
+            usageThreshold: 0.80,
+            balanceThreshold: 5,
+            includesSeverityAlerts: true
+        )
+        let balanceOnly = ProviderUsageResult(
+            accountID: accountID,
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "ZEN credit balance",
+            bars: [],
+            creditsRemaining: 10,
+            preserveCachedBarsOnFailure: true,
+            fetchedAt: fetchedAt
+        )
+
+        let balanceOnlyEvaluation = UsageAlertEvaluator.evaluate(
+            results: [balanceOnly],
+            settings: settings,
+            activeAlertIDs: [usageAlertID, severityAlertID],
+            now: fetchedAt
+        )
+
+        XCTAssertEqual(
+            balanceOnlyEvaluation.activeAlertIDs,
+            [usageAlertID, severityAlertID]
+        )
+
+        let usageOnly = ProviderUsageResult(
+            accountID: accountID,
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "OpenCode Go usage",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 20, limit: 100)],
+            preserveCachedCreditsOnFailure: true,
+            fetchedAt: fetchedAt.addingTimeInterval(60)
+        )
+        let usageOnlyEvaluation = UsageAlertEvaluator.evaluate(
+            results: [usageOnly],
+            settings: settings,
+            activeAlertIDs: [balanceAlertID],
+            now: usageOnly.fetchedAt
+        )
+
+        XCTAssertEqual(usageOnlyEvaluation.activeAlertIDs, [balanceAlertID])
+    }
+
     func testUsageAlertEvaluatorReturnsCardScopedActiveAlerts() {
         let codex = ProviderUsageResult(
             accountID: "codex.personal",

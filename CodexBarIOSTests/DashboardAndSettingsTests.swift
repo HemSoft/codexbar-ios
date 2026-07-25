@@ -516,7 +516,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         ])
 
         DashboardAndSettingsMockURLProtocol.handler = { request in
-            XCTAssertEqual(request.url?.path, "/workspace/wrk_test/billing")
+            XCTAssertTrue(["/workspace/wrk_test/billing", "/workspace/wrk_test/go"].contains(request.url?.path))
             XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "auth=opencode-dashboard-token")
             return (
                 HTTPURLResponse(
@@ -525,7 +525,9 @@ final class DashboardAndSettingsTests: XCTestCase {
                     httpVersion: nil,
                     headerFields: ["Content-Type": "text/html"]
                 )!,
-                Data(#"<html>balance:1225000000</html>"#.utf8)
+                request.url?.path.hasSuffix("/go") == true
+                    ? Data(#"<html><div data-slot="promo-description">Subscribe to Go</div></html>"#.utf8)
+                    : Data(#"<html>balance:1225000000</html>"#.utf8)
             )
         }
         defer {
@@ -721,6 +723,40 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testWatchSnapshotOmitsCachedCreditsFromPartialRefresh() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .openCodeZen)
+        XCTAssertTrue(store.saveSecret("secret", for: configuration))
+        let fetchedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Fresh Go usage with cached ZEN balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 40, limit: 100)],
+            creditsRemaining: 3,
+            creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+
+        let snapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: fetchedAt
+        )
+
+        let metrics = try XCTUnwrap(snapshot.accounts.first).metrics
+        XCTAssertEqual(metrics.map(\.id), ["openCodeZen.go.weekly"])
+        XCTAssertEqual(metrics.map(\.exactValue), ["40%"])
+    }
+
+    @MainActor
     func testWatchSnapshotCoordinatorActivatesAndCoalescesRapidChanges() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
@@ -888,6 +924,67 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertEqual(store.configuration(accountID: openCode.id)?.accountLabel, "Team ZEN")
         XCTAssertEqual(store.configuration(accountID: openCode.id)?.showsHistory, false)
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelPreservesGoStatusWhenBalanceRefreshes() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id,
+            onAccountRefresh: { configuration in
+                ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openCodeZen,
+                    title: configuration.displayName,
+                    subtitle: "ZEN credit balance - Go not subscribed",
+                    bars: [],
+                    creditsRemaining: 12.25,
+                    usageMessages: ["This workspace is not subscribed to OpenCode Go."],
+                    fetchedAt: Date()
+                )
+            }
+        )
+
+        await viewModel.refreshOpenCode()
+
+        XCTAssertEqual(
+            viewModel.openCodeCredentialMessage,
+            "OpenCode ZEN balance refreshed: $12.25 This workspace is not subscribed to OpenCode Go."
+        )
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelReportsBalanceFailureAfterGoRefresh() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id,
+            onAccountRefresh: { configuration in
+                ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openCodeZen,
+                    title: configuration.displayName,
+                    subtitle: "OpenCode Go usage",
+                    bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 20, limit: 100)],
+                    usageMessages: ["ZEN balance unavailable: Could not parse OpenCode ZEN balance."],
+                    fetchedAt: Date()
+                )
+            }
+        )
+
+        await viewModel.refreshOpenCode()
+
+        XCTAssertEqual(
+            viewModel.openCodeCredentialMessage,
+            "OpenCode Go usage refreshed. ZEN balance unavailable: Could not parse OpenCode ZEN balance."
+        )
     }
 
     @MainActor

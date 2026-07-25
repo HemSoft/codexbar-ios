@@ -33,8 +33,12 @@ public final class UsageRefreshService: ObservableObject {
 
     public var successfulRefreshResults: [ProviderUsageResult] {
         results.filter { result in
-            refreshErrorsByAccountID[result.accountID] == nil
-                && !refreshingAccountIDs.contains(result.accountID)
+            guard !refreshingAccountIDs.contains(result.accountID) else {
+                return false
+            }
+            return refreshErrorsByAccountID[result.accountID] == nil
+                || result.preserveCachedBarsOnFailure
+                || result.preserveCachedCreditsOnFailure
         }
     }
 
@@ -288,11 +292,16 @@ public final class UsageRefreshService: ObservableObject {
     }
 
     private func preserveFailureResult(_ failureResult: ProviderUsageResult, accountID: String) {
-        let cachedResult = results.first { $0.accountID == accountID }
+        let cachedResult = results.first {
+            $0.accountID == accountID
+                && Self.canReuseCachedResult($0, for: failureResult)
+        }
         let failureHasUsageData = failureResult.creditsRemaining != nil
             || !failureResult.bars.isEmpty
             || !failureResult.monetaryMetrics.isEmpty
             || failureResult.codexBankedRateLimitResets != nil
+            || failureResult.preserveCachedBarsOnFailure
+            || failureResult.preserveCachedCreditsOnFailure
         let dataResult: ProviderUsageResult
         if failureHasUsageData {
             dataResult = failureResult
@@ -303,6 +312,12 @@ public final class UsageRefreshService: ObservableObject {
             return
         }
 
+        let barsResult = failureResult.preserveCachedBarsOnFailure
+            ? cachedResult ?? failureResult
+            : dataResult
+        let creditsResult = failureResult.preserveCachedCreditsOnFailure
+            ? cachedResult ?? failureResult
+            : dataResult
         let subtitle = failureHasUsageData
             || failureResult.subtitle.localizedCaseInsensitiveContains("last known data")
             ? failureResult.subtitle
@@ -312,15 +327,40 @@ public final class UsageRefreshService: ObservableObject {
             providerID: failureResult.providerID,
             title: failureResult.title,
             subtitle: subtitle,
-            bars: dataResult.bars,
-            barsFetchedAt: dataResult.barsFetchedAt,
-            creditsRemaining: dataResult.creditsRemaining,
+            bars: barsResult.bars,
+            barsFetchedAt: barsResult.barsFetchedAt,
+            creditsRemaining: creditsResult.creditsRemaining,
+            creditsFetchedAt: creditsResult.creditsFetchedAt,
             monetaryMetrics: dataResult.monetaryMetrics,
             usageMessages: dataResult.usageMessages,
             codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,
             failureMessage: failureResult.failureMessage,
+            preserveCachedBarsOnFailure: failureResult.preserveCachedBarsOnFailure,
+            preserveCachedCreditsOnFailure: failureResult.preserveCachedCreditsOnFailure,
+            cacheIdentity: failureResult.cacheIdentity,
+            cacheScope: failureResult.cacheScope,
+            allowsUnscopedCacheReuse: failureResult.allowsUnscopedCacheReuse,
             fetchedAt: dataResult.fetchedAt
         ))
+    }
+
+    private nonisolated static func canReuseCachedResult(
+        _ cachedResult: ProviderUsageResult,
+        for failureResult: ProviderUsageResult
+    ) -> Bool {
+        guard failureResult.providerID == .openCodeZen else {
+            return true
+        }
+        guard let failureIdentity = failureResult.cacheIdentity else {
+            guard
+                failureResult.allowsUnscopedCacheReuse,
+                let failureScope = failureResult.cacheScope
+            else {
+                return false
+            }
+            return cachedResult.cacheScope == failureScope
+        }
+        return cachedResult.cacheIdentity == failureIdentity
     }
 
     private nonisolated static func failureResult(
@@ -334,6 +374,12 @@ public final class UsageRefreshService: ObservableObject {
             subtitle: message,
             bars: [],
             failureMessage: message,
+            cacheScope: configuration.providerID == .openCodeZen
+                ? OpenCodeZenUsageProvider.normalizedWorkspaceId(
+                    from: configuration.openCodeWorkspaceId
+                )
+                : nil,
+            allowsUnscopedCacheReuse: true,
             fetchedAt: Date()
         )
     }

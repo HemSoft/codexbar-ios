@@ -118,10 +118,16 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let bars: [UsageBar]
     public let barsFetchedAt: Date?
     public let creditsRemaining: Double?
+    public let creditsFetchedAt: Date?
     public let monetaryMetrics: [ProviderMonetaryMetric]
     public let usageMessages: [String]
     public let codexBankedRateLimitResets: CodexBankedRateLimitResets?
     public let failureMessage: String?
+    public let preserveCachedBarsOnFailure: Bool
+    public let preserveCachedCreditsOnFailure: Bool
+    public let cacheIdentity: String?
+    public let cacheScope: String?
+    public let allowsUnscopedCacheReuse: Bool
     public let fetchedAt: Date
 
     public init(
@@ -132,10 +138,16 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         bars: [UsageBar],
         barsFetchedAt: Date? = nil,
         creditsRemaining: Double? = nil,
+        creditsFetchedAt: Date? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
         usageMessages: [String] = [],
         codexBankedRateLimitResets: CodexBankedRateLimitResets? = nil,
         failureMessage: String? = nil,
+        preserveCachedBarsOnFailure: Bool = false,
+        preserveCachedCreditsOnFailure: Bool = false,
+        cacheIdentity: String? = nil,
+        cacheScope: String? = nil,
+        allowsUnscopedCacheReuse: Bool = false,
         fetchedAt: Date
     ) {
         self.accountID = accountID ?? providerID.rawValue
@@ -145,12 +157,18 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.bars = bars
         self.barsFetchedAt = bars.isEmpty ? nil : (barsFetchedAt ?? fetchedAt)
         self.creditsRemaining = creditsRemaining
+        self.creditsFetchedAt = creditsRemaining == nil ? nil : (creditsFetchedAt ?? fetchedAt)
         self.monetaryMetrics = monetaryMetrics
         self.usageMessages = usageMessages
         self.codexBankedRateLimitResets = codexBankedRateLimitResets.flatMap {
             $0.availableCount > 0 ? $0 : nil
         }
         self.failureMessage = failureMessage
+        self.preserveCachedBarsOnFailure = preserveCachedBarsOnFailure
+        self.preserveCachedCreditsOnFailure = preserveCachedCreditsOnFailure
+        self.cacheIdentity = cacheIdentity
+        self.cacheScope = cacheScope
+        self.allowsUnscopedCacheReuse = allowsUnscopedCacheReuse
         self.fetchedAt = fetchedAt
     }
 
@@ -164,6 +182,14 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
 
     public var freshBars: [UsageBar] {
         hasFreshBars ? bars : []
+    }
+
+    public var hasFreshCredits: Bool {
+        creditsRemaining == nil || creditsFetchedAt == fetchedAt
+    }
+
+    public var freshCreditsRemaining: Double? {
+        hasFreshCredits ? creditsRemaining : nil
     }
 
     public var highestSeverity: UsageSeverity {

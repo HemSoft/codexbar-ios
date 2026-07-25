@@ -954,6 +954,40 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertNil(bar.projectedSeverity)
     }
 
+    @MainActor
+    func testWidgetSnapshotPublisherOmitsCachedCreditsFromPartialRefresh() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .openCodeZen)
+        store.saveSecret("secret", for: configuration)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openCodeZen,
+            title: configuration.displayName,
+            subtitle: "Fresh Go usage with cached ZEN balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 40, limit: 100)],
+            creditsRemaining: 3,
+            creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults,
+            now: fetchedAt
+        )
+
+        let provider = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first)
+        XCTAssertNil(provider.creditsRemaining)
+        XCTAssertEqual(provider.bars.map(\.usageText), ["40%"])
+    }
+
     func testProviderAccountConfigurationDecodesLegacyAccountWithoutGroup() throws {
         let json = """
         {

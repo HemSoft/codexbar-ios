@@ -92,6 +92,23 @@ public enum UsageAlertEvaluator {
         var notifications: [UsageAlertNotification] = []
 
         for result in results {
+            if result.preserveCachedBarsOnFailure {
+                let usagePrefix = "usage.\(result.accountID)."
+                let severityAlertID = "severity.\(result.accountID)"
+                nextActiveAlertIDs.formUnion(
+                    activeAlertIDs.filter {
+                        $0 == severityAlertID || $0.hasPrefix(usagePrefix)
+                    }
+                )
+            }
+
+            let balanceAlertID = "balance.\(result.accountID)"
+            if result.preserveCachedCreditsOnFailure,
+               activeAlertIDs.contains(balanceAlertID)
+            {
+                nextActiveAlertIDs.insert(balanceAlertID)
+            }
+
             if !result.hasFreshBars {
                 let staleUsageAlertIDs = result.bars
                     .filter { $0.fractionUsed >= settings.usageThreshold }
@@ -109,6 +126,12 @@ public enum UsageAlertEvaluator {
                 {
                     nextActiveAlertIDs.insert(severityAlertID)
                 }
+            }
+
+            if !result.hasFreshCredits,
+               activeAlertIDs.contains(balanceAlertID)
+            {
+                nextActiveAlertIDs.insert(balanceAlertID)
             }
 
             let alertBars = result.freshBars
@@ -145,10 +168,10 @@ public enum UsageAlertEvaluator {
                 )
             }
 
-            if let creditsRemaining = result.creditsRemaining,
+            if let creditsRemaining = result.freshCreditsRemaining,
                creditsRemaining <= settings.balanceThreshold
             {
-                let alertID = "balance.\(result.accountID)"
+                let alertID = balanceAlertID
                 nextActiveAlertIDs.insert(alertID)
 
                 let detail = balanceAlertDetail(

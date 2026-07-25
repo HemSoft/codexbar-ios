@@ -129,13 +129,24 @@ struct ProviderUsageCard: View {
                 .accessibilityHint("Refreshes usage for \(result.title)")
             }
 
-            if let creditsRemaining = result.creditsRemaining, result.bars.isEmpty {
-                Text(CodexBarCurrencyText.format(creditsRemaining))
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.primary)
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
+            if let creditsRemaining = result.creditsRemaining {
+                if result.bars.isEmpty {
+                    Text(CodexBarCurrencyText.format(creditsRemaining))
+                        .font(.system(size: 34, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.primary)
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                } else {
+                    HStack {
+                        Text(result.providerID == .openCodeZen ? "ZEN credit balance" : "Credit balance")
+                        Spacer()
+                        Text(CodexBarCurrencyText.format(creditsRemaining))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    .font(.footnote)
+                }
             }
 
             ForEach(Array(result.bars.enumerated()), id: \.element.id) { index, bar in

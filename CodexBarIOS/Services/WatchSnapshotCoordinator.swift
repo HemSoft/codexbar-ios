@@ -103,7 +103,7 @@ enum WatchSnapshotPublisher {
                 }
 
                 var metrics = barMetrics + monetaryMetrics
-                if let creditsRemaining = result.creditsRemaining, monetaryMetrics.isEmpty {
+                if let creditsRemaining = result.freshCreditsRemaining, monetaryMetrics.isEmpty {
                     metrics.append(
                         WatchMetricSnapshot(
                             id: "\(result.providerID.rawValue).credits-remaining",

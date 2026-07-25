@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added OpenCode Go subscription tracking for the rolling 5-hour, weekly, and
+  monthly usage limits, including provider-reported reset times alongside the
+  existing ZEN credit balance. ([#122](https://github.com/HemSoft/codexbar-ios/issues/122))
 - Added a live, read-only Apple Watch dashboard that mirrors iPhone account
   metrics, visualization choices, ordering, and freshness while keeping the
   last valid snapshot available when the devices disconnect.

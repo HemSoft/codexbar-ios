@@ -205,9 +205,11 @@ final class DashboardOrchestrator: ObservableObject {
     @discardableResult
     func refreshNow(considerReviewPrompt: Bool = false) async -> Bool {
         await refreshService.refresh(configurations: configurationStore.configurations)
+        let processableResults = refreshService.successfulRefreshResults
         await finishRefresh(
-            results: refreshService.successfulRefreshResults,
+            results: processableResults,
             preserving: refreshService.incompleteRefreshAccountIDs
+                .subtracting(processableResults.map(\.accountID))
         )
 
         if configurationStore.autoRefreshInterval.seconds != nil {
@@ -220,7 +222,9 @@ final class DashboardOrchestrator: ObservableObject {
     @discardableResult
     func refreshAccount(_ configuration: ProviderAccountConfiguration) async -> ProviderUsageResult? {
         let result = await refreshService.refresh(configuration: configuration)
-        let successfulResults = result.map { $0.failureMessage == nil ? [$0] : [] } ?? []
+        let successfulResults = refreshService.successfulRefreshResults.filter {
+            $0.accountID == configuration.id
+        }
         let preservedAccountIDs = Set(configurationStore.configurations.map(\.id))
             .subtracting(successfulResults.map(\.accountID))
         await finishRefresh(results: successfulResults, preserving: preservedAccountIDs)
@@ -306,9 +310,11 @@ final class DashboardOrchestrator: ObservableObject {
             }
 
             await refreshService.refresh(configurations: configurationStore.configurations)
+            let processableResults = refreshService.successfulRefreshResults
             await finishRefresh(
-                results: refreshService.successfulRefreshResults,
+                results: processableResults,
                 preserving: refreshService.incompleteRefreshAccountIDs
+                    .subtracting(processableResults.map(\.accountID))
             )
         }
     }
