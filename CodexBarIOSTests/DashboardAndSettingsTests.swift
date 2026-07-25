@@ -723,6 +723,40 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testWatchSnapshotOmitsCachedCreditsFromPartialRefresh() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .openCodeZen)
+        XCTAssertTrue(store.saveSecret("secret", for: configuration))
+        let fetchedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Fresh Go usage with cached ZEN balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 40, limit: 100)],
+            creditsRemaining: 3,
+            creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+
+        let snapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: fetchedAt
+        )
+
+        let metrics = try XCTUnwrap(snapshot.accounts.first).metrics
+        XCTAssertEqual(metrics.map(\.id), ["openCodeZen.go.weekly"])
+        XCTAssertEqual(metrics.map(\.exactValue), ["40%"])
+    }
+
+    @MainActor
     func testWatchSnapshotCoordinatorActivatesAndCoalescesRapidChanges() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

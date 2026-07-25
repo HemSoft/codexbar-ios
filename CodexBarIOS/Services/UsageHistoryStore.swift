@@ -401,7 +401,7 @@ public final class UsageHistoryStore: ObservableObject {
     ) -> UsageHistorySeries {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
         let isBalance: Bool
-        if result.creditsRemaining != nil {
+        if result.freshCreditsRemaining != nil {
             isBalance = true
         } else if result.hasFreshBars, !result.bars.isEmpty {
             isBalance = false
@@ -457,10 +457,10 @@ public final class UsageHistoryStore: ObservableObject {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
         var options: [UsageHistorySeriesOption] = []
 
-        if (result.hasFreshBars && !result.bars.isEmpty) || result.creditsRemaining != nil {
+        if (result.hasFreshBars && !result.bars.isEmpty) || result.freshCreditsRemaining != nil {
             options.append(UsageHistorySeriesOption(
                 id: "primary",
-                label: result.creditsRemaining == nil ? "Usage" : "Balance",
+                label: result.freshCreditsRemaining == nil ? "Usage" : "Balance",
                 series: historySeries(for: result, since: start)
             ))
         }

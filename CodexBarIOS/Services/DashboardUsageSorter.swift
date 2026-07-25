@@ -67,7 +67,7 @@ private struct SmartOrderingScore: Comparable {
     ) {
         let freshBars = result.freshBars
         severityRank = -result.highestSeverity(at: now).rawValue
-        balanceRank = BalanceRank(creditsRemaining: result.creditsRemaining)
+        balanceRank = BalanceRank(creditsRemaining: result.freshCreditsRemaining)
         projectedLimitHitAt = freshBars.compactMap { $0.projectedLimitHitAt(now: now) }.min()
         projectedFractionRank = -(freshBars.map { max($0.fractionUsed, $0.projectedFraction(at: now) ?? 0) }.max() ?? 0)
         manualIndex = manualIndexes[result.id] ?? Int.max
