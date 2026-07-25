@@ -14,6 +14,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var usageAlertSettings: UsageAlertSettings
     @Published public private(set) var usageAlertActiveIDs: Set<String>
     @Published public private(set) var isConfigurationRecoveryRequired: Bool
+    @Published public private(set) var hasIncompleteAccountReset: Bool
     @Published public private(set) var lastError: String?
 
     private let defaults: UserDefaults
@@ -29,6 +30,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let metricVisualizationPreferencesKey = DefaultsKey.metricVisualizationPreferences
     private let usageAlertSettingsKey = DefaultsKey.usageAlertSettings
     private let usageAlertActiveIDsKey = DefaultsKey.usageAlertActiveIDs
+    private let incompleteAccountResetKey = DefaultsKey.incompleteAccountReset
     private var secretAvailabilityError: String?
 
     public init(
@@ -59,6 +61,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
         self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
         self.isConfigurationRecoveryRequired = configurationLoadResult.error != nil
+        self.hasIncompleteAccountReset = defaults.bool(forKey: DefaultsKey.incompleteAccountReset)
         self.lastError = configurationLoadResult.error
         sortConfigurations()
         refreshSecretAvailability()
@@ -273,16 +276,34 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     @discardableResult
     public func resetAccounts() -> Bool {
-        let accountsToDelete = Set(
-            configurations.map { keychainAccount(for: $0) }
-                + ProviderID.allCases.map { keychainAccount(for: $0) }
-        )
+        let knownAccountIDs = Set(configurations.map(\.id))
+        var accountsToDelete: [String] = []
+        var seenKeychainAccounts = Set<String>()
+        for account in configurations.map({ keychainAccount(for: $0) })
+            + ProviderID.allCases.map({ keychainAccount(for: $0) })
+        where seenKeychainAccounts.insert(account).inserted
+        {
+            accountsToDelete.append(account)
+        }
 
-        do {
-            for account in accountsToDelete {
+        var removedAccountIDs = Set<String>()
+        var firstDeletionError: String?
+        for account in accountsToDelete {
+            do {
                 try secretStore.deleteSecret(account: account)
+                removedAccountIDs.formUnion(
+                    configurations
+                        .filter { keychainAccount(for: $0) == account }
+                        .map(\.id)
+                )
+            } catch {
+                if firstDeletionError == nil {
+                    firstDeletionError = error.localizedDescription
+                }
             }
+        }
 
+        if firstDeletionError == nil {
             configurations = []
             groups = []
             secretAvailability = [:]
@@ -294,13 +315,36 @@ public final class ProviderConfigurationStore: ObservableObject {
             defaults.removeObject(forKey: dashboardCardOrderKey)
             defaults.removeObject(forKey: metricVisualizationPreferencesKey)
             defaults.removeObject(forKey: usageAlertActiveIDsKey)
+            defaults.removeObject(forKey: incompleteAccountResetKey)
+            hasIncompleteAccountReset = false
             lastError = nil
             return true
-        } catch {
-            lastError = error.localizedDescription
-            refreshSecretAvailability()
-            return false
         }
+
+        if !removedAccountIDs.isEmpty {
+            configurations.removeAll { removedAccountIDs.contains($0.id) }
+            sortConfigurations()
+            saveConfigurations()
+            updateDashboardCardOrder(
+                dashboardCardOrder.filter { !removedAccountIDs.contains($0) }
+            )
+            updateUsageAlertActiveIDs(
+                UsageAlertEvaluator.activeAlertIDs(
+                    usageAlertActiveIDs,
+                    belongingTo: Set(configurations.map(\.id)),
+                    knownAccountIDs: knownAccountIDs
+                )
+            )
+            for accountID in removedAccountIDs {
+                metricVisualizationPreferences.removeValue(forKey: accountID)
+            }
+            saveMetricVisualizationPreferences()
+        }
+        refreshSecretAvailability()
+        hasIncompleteAccountReset = true
+        defaults.set(true, forKey: incompleteAccountResetKey)
+        lastError = firstDeletionError
+        return false
     }
 
     @discardableResult
@@ -793,6 +837,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         static let metricVisualizationPreferences = "metricVisualizationPreferences"
         static let usageAlertSettings = "usageAlertSettings"
         static let usageAlertActiveIDs = "usageAlertActiveIDs"
+        static let incompleteAccountReset = "incompleteAccountReset"
     }
 
     private struct ConfigurationLoadResult {

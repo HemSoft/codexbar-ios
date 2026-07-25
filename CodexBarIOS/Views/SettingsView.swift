@@ -267,7 +267,10 @@ struct SettingsView: View {
                     Button("Reset Accounts", role: .destructive) {
                         isConfirmingReset = true
                     }
-                    .disabled(configurationStore.configurations.isEmpty)
+                    .disabled(
+                        configurationStore.configurations.isEmpty
+                            && !configurationStore.hasIncompleteAccountReset
+                    )
                 }
 
                 if let lastError = configurationStore.lastError {
@@ -290,7 +293,10 @@ struct SettingsView: View {
                 titleVisibility: .visible
             ) {
                 Button("Reset Accounts", role: .destructive) {
-                    if configurationStore.resetAccounts() {
+                    let accountIDsBeforeReset = Set(configurationStore.configurations.map(\.id))
+                    let resetCompleted = configurationStore.resetAccounts()
+                    let accountIDsAfterReset = Set(configurationStore.configurations.map(\.id))
+                    if resetCompleted || accountIDsBeforeReset != accountIDsAfterReset {
                         onAccountsChanged()
                     }
                 }
