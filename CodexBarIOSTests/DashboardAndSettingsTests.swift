@@ -924,6 +924,36 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderSettingsViewModelReportsBalanceFailureAfterGoRefresh() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id,
+            onAccountRefresh: { configuration in
+                ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openCodeZen,
+                    title: configuration.displayName,
+                    subtitle: "OpenCode Go usage",
+                    bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 20, limit: 100)],
+                    usageMessages: ["ZEN balance unavailable: Could not parse OpenCode ZEN balance."],
+                    fetchedAt: Date()
+                )
+            }
+        )
+
+        await viewModel.refreshOpenCode()
+
+        XCTAssertEqual(
+            viewModel.openCodeCredentialMessage,
+            "OpenCode Go usage refreshed. ZEN balance unavailable: Could not parse OpenCode ZEN balance."
+        )
+    }
+
+    @MainActor
     func testProviderSettingsViewModelReportsCredentialSaveFailureWithoutCompleting() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

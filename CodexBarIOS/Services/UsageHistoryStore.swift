@@ -90,7 +90,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         self.subtitle = result.subtitle
         self.capturedAt = capturedAt
         self.bars = recordableBars.map(UsageHistoryBarSnapshot.init)
-        self.creditsRemaining = result.creditsRemaining
+        self.creditsRemaining = result.freshCreditsRemaining
         self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
         self.highestSeverity = max(
             recordableBars.map { $0.effectiveSeverity(at: capturedAt) }.max() ?? .normal,
@@ -350,7 +350,7 @@ public final class UsageHistoryStore: ObservableObject {
 
         let recordableResults = results.filter { result in
             let hasFreshBars = result.hasFreshBars && !result.bars.isEmpty
-            return result.creditsRemaining != nil || hasFreshBars || !result.monetaryMetrics.isEmpty
+            return result.freshCreditsRemaining != nil || hasFreshBars || !result.monetaryMetrics.isEmpty
         }
         guard !recordableResults.isEmpty else {
             return

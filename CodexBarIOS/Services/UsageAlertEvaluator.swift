@@ -111,6 +111,13 @@ public enum UsageAlertEvaluator {
                 }
             }
 
+            let balanceAlertID = "balance.\(result.accountID)"
+            if !result.hasFreshCredits,
+               activeAlertIDs.contains(balanceAlertID)
+            {
+                nextActiveAlertIDs.insert(balanceAlertID)
+            }
+
             let alertBars = result.freshBars
             for bar in alertBars where bar.fractionUsed >= settings.usageThreshold {
                 let alertID = alertID(for: result, bar: bar)
@@ -145,10 +152,10 @@ public enum UsageAlertEvaluator {
                 )
             }
 
-            if let creditsRemaining = result.creditsRemaining,
+            if let creditsRemaining = result.freshCreditsRemaining,
                creditsRemaining <= settings.balanceThreshold
             {
-                let alertID = "balance.\(result.accountID)"
+                let alertID = balanceAlertID
                 nextActiveAlertIDs.insert(alertID)
 
                 let detail = balanceAlertDetail(

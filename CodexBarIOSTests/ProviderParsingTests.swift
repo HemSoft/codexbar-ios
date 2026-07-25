@@ -581,14 +581,20 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(goFailure.bars, full.bars)
         XCTAssertEqual(goFailure.barsFetchedAt, full.barsFetchedAt)
         XCTAssertEqual(try XCTUnwrap(goFailure.creditsRemaining), 20, accuracy: 0.0001)
+        XCTAssertFalse(goFailure.hasFreshBars)
+        XCTAssertTrue(goFailure.hasFreshCredits)
         XCTAssertNotNil(goFailure.failureMessage)
+        XCTAssertEqual(service.successfulRefreshResults, [goFailure])
 
         phase = 2
         _ = await service.refresh(configuration: configuration)
         let balanceFailure = try XCTUnwrap(service.results.first)
         XCTAssertEqual(balanceFailure.bars.map(\.used), [40, 50, 60])
         XCTAssertEqual(try XCTUnwrap(balanceFailure.creditsRemaining), 20, accuracy: 0.0001)
+        XCTAssertTrue(balanceFailure.hasFreshBars)
+        XCTAssertFalse(balanceFailure.hasFreshCredits)
         XCTAssertNotNil(balanceFailure.failureMessage)
+        XCTAssertEqual(service.successfulRefreshResults, [balanceFailure])
     }
 
     func testOpenCodeProviderDoesNotTreatDashboard404AsNotSubscribed() async throws {

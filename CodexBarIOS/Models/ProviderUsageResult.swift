@@ -118,6 +118,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let bars: [UsageBar]
     public let barsFetchedAt: Date?
     public let creditsRemaining: Double?
+    public let creditsFetchedAt: Date?
     public let monetaryMetrics: [ProviderMonetaryMetric]
     public let usageMessages: [String]
     public let codexBankedRateLimitResets: CodexBankedRateLimitResets?
@@ -134,6 +135,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         bars: [UsageBar],
         barsFetchedAt: Date? = nil,
         creditsRemaining: Double? = nil,
+        creditsFetchedAt: Date? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
         usageMessages: [String] = [],
         codexBankedRateLimitResets: CodexBankedRateLimitResets? = nil,
@@ -149,6 +151,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.bars = bars
         self.barsFetchedAt = bars.isEmpty ? nil : (barsFetchedAt ?? fetchedAt)
         self.creditsRemaining = creditsRemaining
+        self.creditsFetchedAt = creditsRemaining == nil ? nil : (creditsFetchedAt ?? fetchedAt)
         self.monetaryMetrics = monetaryMetrics
         self.usageMessages = usageMessages
         self.codexBankedRateLimitResets = codexBankedRateLimitResets.flatMap {
@@ -170,6 +173,14 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
 
     public var freshBars: [UsageBar] {
         hasFreshBars ? bars : []
+    }
+
+    public var hasFreshCredits: Bool {
+        creditsRemaining == nil || creditsFetchedAt == fetchedAt
+    }
+
+    public var freshCreditsRemaining: Double? {
+        hasFreshCredits ? creditsRemaining : nil
     }
 
     public var highestSeverity: UsageSeverity {

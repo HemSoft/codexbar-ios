@@ -466,6 +466,38 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertTrue(coldEvaluation.activeAlertIDs.isEmpty)
     }
 
+    func testUsageAlertEvaluatorProcessesFreshBarsWhilePreservingStaleBalance() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_580)
+        let accountID = "opencode.partial"
+        let result = ProviderUsageResult(
+            accountID: accountID,
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Fresh Go usage with cached ZEN balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 90, limit: 100)],
+            creditsRemaining: 3,
+            creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+        let balanceAlertID = "balance.\(accountID)"
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                usageThreshold: 0.80,
+                balanceThreshold: 5,
+                includesSeverityAlerts: false
+            ),
+            activeAlertIDs: [balanceAlertID],
+            now: fetchedAt
+        )
+
+        XCTAssertTrue(evaluation.activeAlertIDs.contains(balanceAlertID))
+        XCTAssertEqual(evaluation.notifications.map(\.kind), [.usage])
+        XCTAssertEqual(evaluation.activeAlerts.map(\.kind), [.usage])
+    }
+
     func testUsageAlertEvaluatorReturnsCardScopedActiveAlerts() {
         let codex = ProviderUsageResult(
             accountID: "codex.personal",

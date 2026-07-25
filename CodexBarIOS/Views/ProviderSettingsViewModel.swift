@@ -318,7 +318,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         if !result.bars.isEmpty, result.creditsRemaining != nil {
             openCodeCredentialMessage = "OpenCode Go usage and ZEN balance refreshed.\(usageContext)"
         } else if !result.bars.isEmpty {
-            openCodeCredentialMessage = "OpenCode Go usage refreshed."
+            openCodeCredentialMessage = "OpenCode Go usage refreshed.\(usageContext)"
         } else if let balance = result.creditsRemaining {
             let formatted = Self.openCodeBalanceFormatter.string(from: NSNumber(value: balance)) ?? "$\(balance)"
             openCodeCredentialMessage = "OpenCode ZEN balance refreshed: \(formatted)\(usageContext)"

@@ -33,8 +33,12 @@ public final class UsageRefreshService: ObservableObject {
 
     public var successfulRefreshResults: [ProviderUsageResult] {
         results.filter { result in
-            refreshErrorsByAccountID[result.accountID] == nil
-                && !refreshingAccountIDs.contains(result.accountID)
+            guard !refreshingAccountIDs.contains(result.accountID) else {
+                return false
+            }
+            return refreshErrorsByAccountID[result.accountID] == nil
+                || result.preserveCachedBarsOnFailure
+                || result.preserveCachedCreditsOnFailure
         }
     }
 
@@ -323,10 +327,13 @@ public final class UsageRefreshService: ObservableObject {
             bars: barsResult.bars,
             barsFetchedAt: barsResult.barsFetchedAt,
             creditsRemaining: creditsResult.creditsRemaining,
+            creditsFetchedAt: creditsResult.creditsFetchedAt,
             monetaryMetrics: dataResult.monetaryMetrics,
             usageMessages: dataResult.usageMessages,
             codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,
             failureMessage: failureResult.failureMessage,
+            preserveCachedBarsOnFailure: failureResult.preserveCachedBarsOnFailure,
+            preserveCachedCreditsOnFailure: failureResult.preserveCachedCreditsOnFailure,
             fetchedAt: dataResult.fetchedAt
         ))
     }

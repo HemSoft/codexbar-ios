@@ -373,6 +373,33 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testUsageHistoryStoreRecordsFreshBarsWithoutCachedCredits() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_260)
+        let result = ProviderUsageResult(
+            accountID: "opencode.partial",
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Fresh Go usage with cached ZEN balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 40, limit: 100)],
+            creditsRemaining: 3,
+            creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [result], now: fetchedAt)
+
+        let snapshot = store.snapshots(for: result.accountID).first
+        XCTAssertEqual(snapshot?.bars.map(\.used), [40])
+        XCTAssertNil(snapshot?.creditsRemaining)
+    }
+
+    @MainActor
     func testUsageHistoryTrendSummaryReportsUsageMovement() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
