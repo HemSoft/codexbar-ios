@@ -800,7 +800,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         if let firstReadError {
             lastError = firstReadError
         } else if lastError == previousSecretAvailabilityError {
-            lastError = nil
+            lastError = persistenceRecoveryErrorMessage
         }
     }
 
@@ -833,6 +833,18 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         return true
+    }
+
+    private var persistenceRecoveryErrorMessage: String? {
+        if isConfigurationRecoveryRequired {
+            return Self.configurationLoadErrorMessage
+        }
+
+        if isGroupRecoveryRequired {
+            return Self.groupLoadErrorMessage
+        }
+
+        return nil
     }
 
     private func saveGroups() {
