@@ -101,6 +101,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             guard let parsed = ClaudeUsageParser.parse(
                 data,
                 subscriptionType: credentials.subscriptionType,
+                rateLimitTier: credentials.rateLimitTier,
                 fetchedAt: fetchedAt
             ) else {
                 return OAuthUsageOutcome(result: nil)
@@ -269,6 +270,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             accountID: cached.accountID,
             providerID: cached.providerID,
             title: configuration.displayName,
+            plan: cached.plan,
             subtitle: "\(message) Showing last known data.",
             bars: cached.bars,
             barsFetchedAt: cached.barsFetchedAt,
@@ -312,6 +314,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             accountID: configuration.id,
             providerID: result.providerID,
             title: configuration.displayName,
+            plan: result.plan,
             subtitle: result.subtitle,
             bars: result.bars,
             barsFetchedAt: result.barsFetchedAt,
@@ -368,6 +371,7 @@ private actor ClaudeUsageSnapshotCache {
             accountID: result.accountID,
             providerID: result.providerID,
             title: result.title,
+            plan: result.plan,
             subtitle: "\(result.subtitle) • Cached rate-limit windows",
             bars: cached.bars,
             barsFetchedAt: cached.barsFetchedAt,

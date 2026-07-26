@@ -1878,7 +1878,15 @@ final class ProviderParsingTests: XCTestCase {
             dateTimeFormatter: formatter
         ))
 
-        XCTAssertEqual(result.title, "ChatGPT / Codex (Pro)")
+        XCTAssertEqual(result.title, "ChatGPT / Codex")
+        XCTAssertEqual(
+            result.plan,
+            ProviderPlanDescriptor(
+                identifier: "codex.pro",
+                displayLabel: "PRO",
+                accessibilityLabel: "Pro"
+            )
+        )
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
         XCTAssertEqual(result.bars.map(\.used), [42, 81])
         XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%"])
@@ -1901,6 +1909,59 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_893_438_000))
         XCTAssertEqual(result.bars.first?.projectionPeriodEnd, Date(timeIntervalSince1970: 1_893_456_000))
 
+    }
+
+    func testCodexUsageParserNormalizesOnlyVerifiedPlanValues() throws {
+        let mappings: [(rawValue: String, identifier: String, label: String)] = [
+            ("free", "codex.free", "FREE"),
+            ("go", "codex.go", "GO"),
+            ("plus", "codex.plus", "PLUS"),
+            ("pro", "codex.pro", "PRO"),
+            ("prolite", "codex.pro", "PRO"),
+            ("business", "codex.business", "BUSINESS"),
+            ("team", "codex.business", "BUSINESS"),
+            ("enterprise", "codex.enterprise", "ENTERPRISE"),
+            ("edu", "codex.edu", "EDU"),
+            ("health", "codex.health", "HEALTH"),
+            ("gov", "codex.gov", "GOV"),
+        ]
+
+        for mapping in mappings {
+            let payload = """
+            {
+              "plan_type": "\(mapping.rawValue)",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 1,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 18000
+                }
+              }
+            }
+            """
+            let result = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8)))
+            XCTAssertEqual(result.plan?.identifier, mapping.identifier, mapping.rawValue)
+            XCTAssertEqual(result.plan?.displayLabel, mapping.label, mapping.rawValue)
+        }
+
+        for rawJSON in ["null", #""""#, #""unknown_value""#, "42"] {
+            let payload = """
+            {
+              "plan_type": \(rawJSON),
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 1,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 18000
+                }
+              }
+            }
+            """
+            XCTAssertNil(
+                try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8))).plan,
+                rawJSON
+            )
+        }
     }
 
     func testCodexUsageParserReadsBankedResetCountsDefensively() throws {
@@ -2027,7 +2088,15 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.providerID, .claude)
-        XCTAssertEqual(result.title, "Claude (Pro)")
+        XCTAssertEqual(result.title, "Claude")
+        XCTAssertEqual(
+            result.plan,
+            ProviderPlanDescriptor(
+                identifier: "claude.pro",
+                displayLabel: "PRO",
+                accessibilityLabel: "Pro"
+            )
+        )
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
         XCTAssertEqual(result.bars.map(\.used), [42, 81])
         XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%"])
@@ -2051,6 +2120,40 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "pro"
         ))
         XCTAssertEqual(onePercentResult.bars.first?.used, 1)
+    }
+
+    func testClaudeUsageParserUsesOnlyExplicitVerifiedPlanCombinations() throws {
+        let payload = Data(#"{"five_hour":{"utilization":0.1,"resets_at":"2030-01-01T00:00:00Z"}}"#.utf8)
+        let mappings: [
+            (
+                subscription: String?,
+                rateLimitTier: String?,
+                identifier: String?,
+                displayLabel: String?
+            )
+        ] = [
+            ("free", nil, "claude.free", "FREE"),
+            ("pro", "standard", "claude.pro", "PRO"),
+            ("max", "max_20x", "claude.max20", "MAX 20×"),
+            ("max_20x", nil, "claude.max20", "MAX 20×"),
+            ("team", nil, "claude.team", "TEAM"),
+            ("team_premium", nil, "claude.team-premium", "TEAM PREMIUM"),
+            ("enterprise", nil, "claude.enterprise", "ENTERPRISE"),
+            ("max", nil, nil, nil),
+            ("subscription", nil, nil, nil),
+            ("unknown_value", "unknown_tier", nil, nil),
+            ("", "", nil, nil),
+        ]
+
+        for mapping in mappings {
+            let result = try XCTUnwrap(ClaudeUsageParser.parse(
+                payload,
+                subscriptionType: mapping.subscription,
+                rateLimitTier: mapping.rateLimitTier
+            ))
+            XCTAssertEqual(result.plan?.identifier, mapping.identifier, mapping.subscription ?? "nil")
+            XCTAssertEqual(result.plan?.displayLabel, mapping.displayLabel, mapping.subscription ?? "nil")
+        }
     }
 
     func testClaudeUsageParserPreservesScopedFiveHourLimits() throws {
@@ -2671,7 +2774,8 @@ final class ProviderParsingTests: XCTestCase {
             fetchedAt: fetchedAt
         ))
 
-        XCTAssertEqual(result.title, "Claude (Max)")
+        XCTAssertEqual(result.title, "Claude")
+        XCTAssertNil(result.plan)
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit"])
         XCTAssertEqual(result.bars.first?.stableKey, "session")
         XCTAssertEqual(result.bars.first?.used, 25)

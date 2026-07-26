@@ -111,12 +111,19 @@ final class WatchDashboardStateTests: XCTestCase {
                     metricID: "window",
                     fraction: 0.72,
                     generatedAt: now,
-                    style: .circularRing
+                    style: .circularRing,
+                    planIdentifier: "codex.pro",
+                    planDisplayLabel: "PRO",
+                    planAccessibilityLabel: "Pro"
                 ),
             ]
         )
 
-        XCTAssertEqual(try WatchDashboardSnapshot.decode(snapshot.encoded()), snapshot)
+        let roundTripped = try WatchDashboardSnapshot.decode(snapshot.encoded())
+        XCTAssertEqual(roundTripped, snapshot)
+        XCTAssertEqual(roundTripped.accounts[0].planIdentifier, "codex.pro")
+        XCTAssertEqual(roundTripped.accounts[0].planDisplayLabel, "PRO")
+        XCTAssertEqual(roundTripped.accounts[0].planAccessibilityLabel, "Pro")
 
         let encoded = try XCTUnwrap(String(data: snapshot.encoded(), encoding: .utf8))
         let futureStyle = encoded.replacingOccurrences(of: "circularRing", with: "futureStyle")
@@ -316,12 +323,18 @@ final class WatchDashboardStateTests: XCTestCase {
         metricID: String,
         fraction: Double,
         generatedAt: Date,
-        style: WatchMetricVisualizationStyle = .linearBar
+        style: WatchMetricVisualizationStyle = .linearBar,
+        planIdentifier: String? = nil,
+        planDisplayLabel: String? = nil,
+        planAccessibilityLabel: String? = nil
     ) -> WatchAccountSnapshot {
         WatchAccountSnapshot(
             id: id,
             providerName: provider,
             accountLabel: "Primary",
+            planIdentifier: planIdentifier,
+            planDisplayLabel: planDisplayLabel,
+            planAccessibilityLabel: planAccessibilityLabel,
             fetchedAt: generatedAt,
             metrics: [
                 WatchMetricSnapshot(

@@ -575,7 +575,9 @@ final class AppAndWidgetTests: XCTestCase {
         WidgetSnapshotStore.saveSnapshot(snapshot, defaults: defaults)
         WidgetSnapshotStore.saveRefreshInterval(.threeHours, defaults: defaults)
 
-        XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults), snapshot)
+        let loadedSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        XCTAssertEqual(loadedSnapshot, snapshot)
+        XCTAssertNil(loadedSnapshot.results.first?.planIdentifier)
         XCTAssertEqual(WidgetSnapshotStore.loadRefreshInterval(defaults: defaults), .threeHours)
     }
 
@@ -801,6 +803,11 @@ final class AppAndWidgetTests: XCTestCase {
             accountID: configuration.id,
             providerID: .openCodeZen,
             title: "OpenCode Go + Zen",
+            plan: ProviderPlanDescriptor(
+                identifier: "test.business",
+                displayLabel: "BUSINESS",
+                accessibilityLabel: "Business"
+            ),
             subtitle: "Balance",
             bars: [
                 UsageBar(label: "Balance", used: 1, limit: 4),
@@ -818,6 +825,9 @@ final class AppAndWidgetTests: XCTestCase {
         let provider = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first)
         XCTAssertEqual(provider.groupID, group.id)
         XCTAssertEqual(provider.groupName, "Work")
+        XCTAssertEqual(provider.planIdentifier, "test.business")
+        XCTAssertEqual(provider.planDisplayLabel, "BUSINESS")
+        XCTAssertEqual(provider.planAccessibilityLabel, "Business")
     }
 
     @MainActor

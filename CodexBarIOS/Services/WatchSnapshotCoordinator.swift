@@ -128,6 +128,9 @@ enum WatchSnapshotPublisher {
                         configuration: configuration,
                         result: result
                     ),
+                    planIdentifier: result.plan?.identifier,
+                    planDisplayLabel: result.plan?.displayLabel,
+                    planAccessibilityLabel: result.plan?.accessibilityLabel,
                     statusText: statusText(
                         for: result,
                         configurationStore: configurationStore

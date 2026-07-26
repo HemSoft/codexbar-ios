@@ -166,6 +166,9 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
     public let providerID: String
     public let title: String
     public let subtitle: String
+    public let planIdentifier: String?
+    public let planDisplayLabel: String?
+    public let planAccessibilityLabel: String?
     public let groupID: String?
     public let groupName: String?
     public let bars: [CodexBarWidgetUsageBarSnapshot]
@@ -180,6 +183,9 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
         providerID: String,
         title: String,
         subtitle: String,
+        planIdentifier: String? = nil,
+        planDisplayLabel: String? = nil,
+        planAccessibilityLabel: String? = nil,
         groupID: String? = nil,
         groupName: String? = nil,
         bars: [CodexBarWidgetUsageBarSnapshot],
@@ -193,6 +199,9 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
         self.providerID = providerID
         self.title = title
         self.subtitle = subtitle
+        self.planIdentifier = planIdentifier
+        self.planDisplayLabel = planDisplayLabel
+        self.planAccessibilityLabel = planAccessibilityLabel
         self.groupID = groupID
         self.groupName = groupName
         self.bars = bars

@@ -96,6 +96,7 @@ enum AppStoreScreenshotFixtures {
                         hasZenBalance: sample.creditsRemaining != nil
                     )
                     : configuration.displayName,
+                plan: sample.plan,
                 subtitle: sample.subtitle,
                 bars: sample.bars,
                 creditsRemaining: sample.creditsRemaining,
@@ -134,6 +135,7 @@ enum AppStoreScreenshotFixtures {
                 accountID: result.accountID,
                 providerID: result.providerID,
                 title: result.title,
+                plan: result.plan,
                 subtitle: result.subtitle,
                 bars: bars,
                 fetchedAt: capturedAt

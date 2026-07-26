@@ -85,12 +85,29 @@ struct ProviderUsageCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .center, spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
                         ProviderLogoTile(providerID: result.providerID)
 
-                        Text(result.title)
-                            .font(.headline)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(result.title)
+                                    .font(.headline)
+                                    .fixedSize(horizontal: true, vertical: false)
+
+                                planBadge
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(result.title)
+                                    .font(.headline)
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                planBadge
+                            }
+                        }
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Self.headerAccessibilityLabel(for: result))
 
                     Text(statusText)
                         .font(.subheadline)
@@ -333,6 +350,30 @@ struct ProviderUsageCard: View {
 
     private var cardSeverity: UsageSeverity {
         max(result.highestSeverity, alerts.map(\.severity).max() ?? .normal)
+    }
+
+    @ViewBuilder
+    private var planBadge: some View {
+        if let plan = result.plan {
+            Text(plan.displayLabel)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.14))
+                }
+                .fixedSize()
+                .accessibilityHidden(true)
+        }
+    }
+
+    static func headerAccessibilityLabel(for result: ProviderUsageResult) -> String {
+        guard let plan = result.plan else {
+            return result.title
+        }
+        return "\(result.title), \(plan.accessibilityLabel) plan"
     }
 
     var displayedAlerts: [UsageAlertDetail] {

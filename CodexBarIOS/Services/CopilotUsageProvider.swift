@@ -501,6 +501,7 @@ public final class CopilotUsageProvider: UsageProvider {
             accountID: configuration.id,
             providerID: result.providerID,
             title: configuration.displayName,
+            plan: result.plan,
             subtitle: result.subtitle,
             bars: result.bars,
             barsFetchedAt: result.barsFetchedAt,

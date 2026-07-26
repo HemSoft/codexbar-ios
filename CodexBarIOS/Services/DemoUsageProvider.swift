@@ -2,6 +2,7 @@ import Foundation
 
 public struct DemoUsageProvider: UsageProvider {
     public let providerID: ProviderID
+    public let plan: ProviderPlanDescriptor?
     public let bars: [UsageBar]
     public let creditsRemaining: Double?
     public let monetaryMetrics: [ProviderMonetaryMetric]
@@ -10,6 +11,7 @@ public struct DemoUsageProvider: UsageProvider {
 
     public init(
         providerID: ProviderID,
+        plan: ProviderPlanDescriptor? = nil,
         bars: [UsageBar],
         creditsRemaining: Double? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
@@ -17,6 +19,7 @@ public struct DemoUsageProvider: UsageProvider {
         subtitle: String = "Ready to refresh"
     ) {
         self.providerID = providerID
+        self.plan = plan
         self.bars = bars
         self.creditsRemaining = creditsRemaining
         self.monetaryMetrics = monetaryMetrics
@@ -34,6 +37,7 @@ public struct DemoUsageProvider: UsageProvider {
                     hasZenBalance: creditsRemaining != nil
                 )
                 : configuration.displayName,
+            plan: plan,
             subtitle: subtitle,
             bars: bars,
             creditsRemaining: creditsRemaining,
@@ -49,6 +53,11 @@ public extension DemoUsageProvider {
         [
             DemoUsageProvider(
                 providerID: .codex,
+                plan: ProviderPlanDescriptor(
+                    identifier: "codex.pro",
+                    displayLabel: "PRO",
+                    accessibilityLabel: "Pro"
+                ),
                 bars: [
                     UsageBar(
                         stableKey: "window-18000",
@@ -70,6 +79,11 @@ public extension DemoUsageProvider {
             ),
             DemoUsageProvider(
                 providerID: .copilot,
+                plan: ProviderPlanDescriptor(
+                    identifier: "copilot.business",
+                    displayLabel: "BUSINESS",
+                    accessibilityLabel: "Business"
+                ),
                 bars: [
                     UsageBar(
                         stableKey: "premium-interactions",
@@ -83,6 +97,11 @@ public extension DemoUsageProvider {
             ),
             DemoUsageProvider(
                 providerID: .claude,
+                plan: ProviderPlanDescriptor(
+                    identifier: "claude.max20",
+                    displayLabel: "MAX 20×",
+                    accessibilityLabel: "Max 20x"
+                ),
                 bars: [
                     UsageBar(
                         stableKey: "session",

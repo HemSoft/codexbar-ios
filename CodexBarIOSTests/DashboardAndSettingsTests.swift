@@ -616,6 +616,11 @@ final class DashboardAndSettingsTests: XCTestCase {
             accountID: failed.id,
             providerID: .codex,
             title: failed.displayName,
+            plan: ProviderPlanDescriptor(
+                identifier: "codex.pro",
+                displayLabel: "PRO",
+                accessibilityLabel: "Pro"
+            ),
             subtitle: "Cached usage",
             bars: [UsageBar(label: "Usage", used: 75, limit: 100)],
             codexBankedRateLimitResets: CodexBankedRateLimitResets(
@@ -636,6 +641,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(Set(service.results.map(\.accountID)), [failed.id, successful.id])
         let preservedFailure = service.results.first { $0.accountID == failed.id }
         XCTAssertEqual(preservedFailure?.bars, cachedFailedResult.bars)
+        XCTAssertNil(preservedFailure?.plan)
         XCTAssertEqual(preservedFailure?.codexBankedRateLimitResets, cachedFailedResult.codexBankedRateLimitResets)
         XCTAssertEqual(preservedFailure?.fetchedAt, cachedFailedResult.fetchedAt)
         XCTAssertEqual(preservedFailure?.failureMessage, "Refresh failed")
@@ -890,6 +896,11 @@ final class DashboardAndSettingsTests: XCTestCase {
             accountID: configuration.id,
             providerID: .codex,
             title: "Codex",
+            plan: ProviderPlanDescriptor(
+                identifier: "codex.pro",
+                displayLabel: "PRO",
+                accessibilityLabel: "Pro"
+            ),
             subtitle: "Pro",
             bars: bars,
             fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
@@ -905,6 +916,9 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts.map(\.id), ["codex.0"])
         XCTAssertEqual(snapshot.accounts[0].providerName, ProviderID.codex.displayName)
         XCTAssertEqual(snapshot.accounts[0].accountLabel, configuration.accountLabel)
+        XCTAssertEqual(snapshot.accounts[0].planIdentifier, "codex.pro")
+        XCTAssertEqual(snapshot.accounts[0].planDisplayLabel, "PRO")
+        XCTAssertEqual(snapshot.accounts[0].planAccessibilityLabel, "Pro")
         XCTAssertNotEqual(snapshot.accounts[0].providerName, snapshot.accounts[0].accountLabel)
         XCTAssertEqual(
             snapshot.accounts[0].metrics.map(\.visualizationStyle),

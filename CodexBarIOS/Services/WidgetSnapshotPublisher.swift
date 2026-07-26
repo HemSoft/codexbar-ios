@@ -26,6 +26,9 @@ enum WidgetSnapshotPublisher {
                     providerID: result.providerID.rawValue,
                     title: result.title,
                     subtitle: statusText(for: result, configurationStore: configurationStore),
+                    planIdentifier: result.plan?.identifier,
+                    planDisplayLabel: result.plan?.displayLabel,
+                    planAccessibilityLabel: result.plan?.accessibilityLabel,
                     groupID: configuration?.groupID,
                     groupName: configurationStore.group(for: configuration?.groupID)?.name,
                     bars: result.bars.enumerated().map { index, bar in
