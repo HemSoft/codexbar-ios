@@ -88,6 +88,65 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertNil(navigation.accountID)
     }
 
+    func testDashboardAccountConfigurationTargetsExactAccountAcrossSameProvider() {
+        var navigation = DashboardAccountConfigurationNavigationState()
+
+        navigation.present(accountID: "claude.personal")
+        XCTAssertEqual(navigation.presentation?.accountID, "claude.personal")
+        XCTAssertEqual(navigation.presentation?.id, "claude.personal")
+
+        navigation.present(accountID: "claude.work")
+        XCTAssertEqual(navigation.presentation?.accountID, "claude.work")
+        XCTAssertEqual(navigation.presentation?.id, "claude.work")
+    }
+
+    func testDashboardAccountConfigurationDismissalRefreshesOnlyPresentedAccount() {
+        var navigation = DashboardAccountConfigurationNavigationState()
+        navigation.present(accountID: "openRouter.personal")
+        navigation.present(accountID: "openRouter.work")
+
+        navigation.clearPresentation()
+        XCTAssertNil(navigation.presentation)
+
+        var refreshedAccountIDs: [String] = []
+        if let accountID = navigation.finishDismissal() {
+            refreshedAccountIDs.append(accountID)
+        }
+
+        XCTAssertEqual(refreshedAccountIDs, ["openRouter.work"])
+        XCTAssertNil(navigation.presentation)
+        XCTAssertNil(navigation.finishDismissal())
+    }
+
+    func testDashboardCardMenuKeepsAccountConfigurationOnBalanceOnlyCards() {
+        let balanceOnlyResult = ProviderUsageResult(
+            accountID: "moonshot.balance",
+            providerID: .moonshot,
+            title: "Kimi",
+            subtitle: "Credit balance",
+            bars: [],
+            creditsRemaining: 12.50,
+            fetchedAt: Date()
+        )
+        let meteredResult = ProviderUsageResult(
+            accountID: "codex.personal",
+            providerID: .codex,
+            title: "ChatGPT",
+            subtitle: "Usage limits",
+            bars: [UsageBar(label: "Weekly", used: 10, limit: 100)],
+            fetchedAt: Date()
+        )
+
+        XCTAssertEqual(
+            ProviderUsageCard.menuActions(for: balanceOnlyResult),
+            [.configureAccount]
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.menuActions(for: meteredResult),
+            [.configureAccount, .customizeMetrics]
+        )
+    }
+
     func testUsageSeverityThresholds() {
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.74), .normal)
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.75), .warning)

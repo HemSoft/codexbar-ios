@@ -17,6 +17,8 @@ struct ContentView: View {
     @Environment(\.requestReview) private var requestReview
     @State private var isShowingSettings = false
     @State private var selectedHistoryResult: ProviderUsageResult?
+    @State private var accountConfigurationNavigation =
+        DashboardAccountConfigurationNavigationState()
     @State private var draggedCardID: String?
     @State private var deepLinkNavigation = DashboardDeepLinkNavigationState()
     @State private var hasCompletedInitialRefresh = false
@@ -257,6 +259,39 @@ struct ContentView: View {
                 }
             )
         }
+        .sheet(
+            item: accountConfigurationPresentation,
+            onDismiss: {
+                guard let accountID = accountConfigurationNavigation.finishDismissal() else {
+                    return
+                }
+                Task {
+                    await refreshAccount(accountID: accountID)
+                }
+            }
+        ) { presentation in
+            NavigationStack {
+                ProviderSettingsView(
+                    configurationStore: configurationStore,
+                    accountID: presentation.accountID,
+                    onCredentialsChanged: {
+                        Task {
+                            await refreshAccount(accountID: presentation.accountID)
+                        }
+                    },
+                    onAccountRefresh: { configuration in
+                        await orchestrator.refreshAccount(configuration)
+                    }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {
+                            accountConfigurationNavigation.clearPresentation()
+                        }
+                    }
+                }
+            }
+        }
         .sheet(item: $selectedHistoryResult) { result in
             ProviderUsageHistoryDetailView(
                 result: result,
@@ -335,6 +370,9 @@ struct ContentView: View {
                 onShowHistory: {
                     selectedHistoryResult = result
                 },
+                onConfigureAccount: {
+                    accountConfigurationNavigation.present(accountID: result.accountID)
+                },
                 onRetry: {
                     performRecovery(for: item)
                 },
@@ -398,6 +436,30 @@ struct ContentView: View {
         case .signIn, .reauthenticate:
             claudeAuthenticationController.startSignIn(for: item.configuration)
         }
+    }
+
+    private var accountConfigurationPresentation:
+        Binding<DashboardAccountConfigurationPresentation?>
+    {
+        Binding(
+            get: {
+                accountConfigurationNavigation.presentation
+            },
+            set: { presentation in
+                if let presentation {
+                    accountConfigurationNavigation.present(accountID: presentation.accountID)
+                } else {
+                    accountConfigurationNavigation.clearPresentation()
+                }
+            }
+        )
+    }
+
+    private func refreshAccount(accountID: String) async {
+        guard let configuration = configurationStore.configuration(accountID: accountID) else {
+            return
+        }
+        await orchestrator.refreshAccount(configuration)
     }
 
     private func moveCard(_ draggedID: String, to targetID: String) {
@@ -493,6 +555,36 @@ struct DashboardDeepLinkNavigationState: Equatable {
         }
         self.accountID = nil
         waitsForRefresh = false
+    }
+}
+
+struct DashboardAccountConfigurationPresentation: Identifiable, Equatable {
+    let accountID: String
+
+    var id: String {
+        accountID
+    }
+}
+
+struct DashboardAccountConfigurationNavigationState: Equatable {
+    private(set) var presentation: DashboardAccountConfigurationPresentation?
+    private var accountIDAwaitingDismissalRefresh: String?
+
+    mutating func present(accountID: String) {
+        presentation = DashboardAccountConfigurationPresentation(accountID: accountID)
+        accountIDAwaitingDismissalRefresh = accountID
+    }
+
+    mutating func clearPresentation() {
+        presentation = nil
+    }
+
+    mutating func finishDismissal() -> String? {
+        defer {
+            presentation = nil
+            accountIDAwaitingDismissalRefresh = nil
+        }
+        return accountIDAwaitingDismissalRefresh
     }
 }
 
