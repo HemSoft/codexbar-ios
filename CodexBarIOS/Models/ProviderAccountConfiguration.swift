@@ -51,7 +51,41 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
 
     public var displayName: String {
         let label = accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        return label.isEmpty ? providerID.displayName : label
+        return isCustomAccountLabel(label) ? label : providerID.displayName
+    }
+
+    public func openCodeDisplayName(
+        hasGoUsage: Bool,
+        hasZenBalance: Bool
+    ) -> String {
+        let label = accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isCustomAccountLabel(label) else {
+            return label
+        }
+
+        switch (hasGoUsage, hasZenBalance) {
+        case (true, true):
+            return "OpenCode Go + Zen"
+        case (true, false):
+            return "OpenCode Go"
+        case (false, true):
+            return "OpenCode Zen"
+        case (false, false):
+            return providerID.displayName
+        }
+    }
+
+    public var hasCustomAccountLabel: Bool {
+        isCustomAccountLabel(
+            accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func isCustomAccountLabel(_ label: String) -> Bool {
+        guard !label.isEmpty else {
+            return false
+        }
+        return providerID != .openCodeZen || label != "OpenCode ZEN"
     }
 
     public func withNewAccountID() -> ProviderAccountConfiguration {

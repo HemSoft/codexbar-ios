@@ -187,7 +187,7 @@ private struct SemicircularMetricView: View {
             samples: [
                 WatchUsageSample(
                     id: "long-account",
-                    providerName: "OpenCode ZEN",
+                    providerName: "OpenCode Zen",
                     accountLabel: "A deliberately long account label",
                     metricLabel: "API balance",
                     exactValue: "$12.48",

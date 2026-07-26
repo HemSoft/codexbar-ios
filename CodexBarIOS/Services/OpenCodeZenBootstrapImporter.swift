@@ -120,9 +120,6 @@ enum OpenCodeZenBootstrapImporter {
         configuration.isEnabled = true
         configuration.authMethod = .apiKey
         configuration.openCodeWorkspaceId = workspaceId
-        if configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            configuration.accountLabel = "OpenCode ZEN"
-        }
 
         guard configurationStore.update(configuration) else {
             return false

@@ -24,7 +24,7 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
         case .openRouter:
             "OpenRouter"
         case .openCodeZen:
-            "OpenCode ZEN"
+            "OpenCode Go + Zen"
         case .moonshot:
             "Moonshot (Kimi)"
         case .cursor:

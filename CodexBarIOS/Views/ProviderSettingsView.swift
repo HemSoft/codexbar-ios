@@ -240,13 +240,13 @@ struct ProviderSettingsView: View {
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Remove Saved Credential", role: .destructive) {
-                            viewModel.removeSavedCredential(message: "OpenCode credential removed.")
+                            viewModel.removeSavedCredential(message: "OpenCode dashboard session removed.")
                         }
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
                         Label(
-                            "Enter the OpenCode workspace ID and dashboard auth value to track ZEN balance and Go usage.",
+                            "Enter the OpenCode workspace ID and dashboard auth value to track Zen balance and Go usage.",
                             systemImage: "key"
                         )
                         Label("You can paste the Windows settings JSON or OPENCODE_GO_AUTH_COOKIE value.", systemImage: "checkmark.circle")
@@ -336,6 +336,9 @@ struct ProviderSettingsView: View {
     }
 
     private func authMethodDisplayName(_ method: ProviderAuthMethod) -> String {
+        if providerID == .openCodeZen, method == .apiKey {
+            return "Dashboard Session"
+        }
         return method.displayName
     }
 

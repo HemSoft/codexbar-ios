@@ -1292,8 +1292,7 @@ public extension ProviderConfigurationStore {
             ProviderAccountConfiguration(
                 id: AppStoreScreenshotFixtureID.openCodeZenAccount,
                 providerID: .openCodeZen,
-                accountLabel: "OpenCode ZEN",
-                groupID: balanceGroup.id,
+                groupID: usageGroup.id,
                 authMethod: .apiKey,
                 openCodeWorkspaceId: "demo-workspace"
             ),

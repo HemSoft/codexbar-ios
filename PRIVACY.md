@@ -26,7 +26,7 @@ snapshot locally so it can remain useful during a temporary disconnection.
 
 ## Third-Party Provider Requests
 
-When you connect a provider, CodexBar uses the credentials you provide to request your own usage or balance data directly from that provider. Depending on what you configure, this may include services such as OpenAI/ChatGPT, Anthropic Claude, GitHub Copilot, Cursor, OpenRouter, OpenCode ZEN / Go, and Moonshot AI (Kimi).
+When you connect a provider, CodexBar uses the credentials you provide to request your own usage or balance data directly from that provider. Depending on what you configure, this may include services such as OpenAI/ChatGPT, Anthropic Claude, GitHub Copilot, Cursor, OpenRouter, OpenCode Go + Zen, and Moonshot AI (Kimi).
 
 Those requests are made to the provider's own APIs or web endpoints. The provider may process the request according to its own terms and privacy policy.
 

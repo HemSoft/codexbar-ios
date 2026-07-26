@@ -121,7 +121,9 @@ enum WatchSnapshotPublisher {
 
                 return WatchAccountSnapshot(
                     id: "\(result.providerID.rawValue).\(displayIndex)",
-                    providerName: configuration.providerID.displayName,
+                    providerName: result.providerID == .openCodeZen
+                        ? result.title
+                        : configuration.providerID.displayName,
                     accountLabel: watchAccountLabel(
                         configuration: configuration,
                         result: result
@@ -183,6 +185,10 @@ enum WatchSnapshotPublisher {
         configuration: ProviderAccountConfiguration,
         result: ProviderUsageResult
     ) -> String {
+        if result.providerID == .openCodeZen {
+            let subtitle = result.subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            return subtitle.isEmpty ? result.title : subtitle
+        }
         let configuredLabel = configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         if !configuredLabel.isEmpty {
             return configuredLabel

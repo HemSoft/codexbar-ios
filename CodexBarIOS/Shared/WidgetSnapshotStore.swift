@@ -104,7 +104,7 @@ public struct CodexBarWidgetSnapshot: Codable, Equatable, Sendable {
             ),
             previewBalanceProvider(
                 id: "openCodeZen",
-                title: "OpenCode ZEN",
+                title: "OpenCode Zen",
                 balance: 12.48
             ),
             previewBalanceProvider(

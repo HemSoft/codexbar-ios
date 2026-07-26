@@ -90,7 +90,12 @@ enum AppStoreScreenshotFixtures {
             return ProviderUsageResult(
                 accountID: configuration.id,
                 providerID: sample.providerID,
-                title: configuration.displayName,
+                title: sample.providerID == .openCodeZen
+                    ? configuration.openCodeDisplayName(
+                        hasGoUsage: !sample.bars.isEmpty,
+                        hasZenBalance: sample.creditsRemaining != nil
+                    )
+                    : configuration.displayName,
                 subtitle: sample.subtitle,
                 bars: sample.bars,
                 creditsRemaining: sample.creditsRemaining,
