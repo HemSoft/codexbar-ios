@@ -160,6 +160,25 @@ final class AppAndWidgetTests: XCTestCase {
             [.configureAccount]
         )
         XCTAssertEqual(
+            ProviderUsageCard.menuActions(
+                for: balanceOnlyResult,
+                isMetricVisible: { _ in false }
+            ),
+            [.configureAccount, .customizeMetrics]
+        )
+        XCTAssertTrue(
+            ProviderUsageCard.showsMetricVisibilityControls(
+                for: balanceOnlyResult,
+                isMetricVisible: { _ in false }
+            )
+        )
+        XCTAssertFalse(
+            ProviderUsageCard.showsMetricVisibilityControls(
+                for: balanceOnlyResult,
+                isMetricVisible: { _ in true }
+            )
+        )
+        XCTAssertEqual(
             ProviderUsageCard.menuActions(for: meteredResult),
             [.configureAccount, .customizeMetrics]
         )

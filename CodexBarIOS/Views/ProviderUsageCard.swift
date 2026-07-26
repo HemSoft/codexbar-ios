@@ -144,7 +144,10 @@ struct ProviderUsageCard: View {
                 .frame(width: 16, height: 16)
 
                 Menu {
-                    ForEach(Self.menuActions(for: result), id: \.self) { action in
+                    ForEach(
+                        Self.menuActions(for: result, isMetricVisible: isMetricVisible),
+                        id: \.self
+                    ) { action in
                         switch action {
                         case .configureAccount:
                             Button(action: onConfigureAccount) {
@@ -407,11 +410,28 @@ struct ProviderUsageCard: View {
         return "\(result.title), \(plan.accessibilityLabel) plan"
     }
 
-    static func menuActions(for result: ProviderUsageResult) -> [ProviderUsageCardMenuAction] {
-        if result.bars.isEmpty, result.availableMetrics.count < 2 {
+    static func menuActions(
+        for result: ProviderUsageResult,
+        isMetricVisible: (String) -> Bool = { _ in true }
+    ) -> [ProviderUsageCardMenuAction] {
+        if
+            result.bars.isEmpty,
+            !showsMetricVisibilityControls(
+                for: result,
+                isMetricVisible: isMetricVisible
+            )
+        {
             return [.configureAccount]
         }
         return [.configureAccount, .customizeMetrics]
+    }
+
+    static func showsMetricVisibilityControls(
+        for result: ProviderUsageResult,
+        isMetricVisible: (String) -> Bool
+    ) -> Bool {
+        result.availableMetrics.count > 1
+            || result.availableMetrics.contains { !isMetricVisible($0.id) }
     }
 
     static func metricVisibilityAccessibilityValue(isVisible: Bool) -> String {
@@ -1671,7 +1691,10 @@ private struct MetricVisualizationCustomizationView: View {
     }
 
     private var showsVisibilityControls: Bool {
-        result.availableMetrics.count > 1
+        ProviderUsageCard.showsMetricVisibilityControls(
+            for: result,
+            isMetricVisible: isMetricVisible
+        )
     }
 }
 
