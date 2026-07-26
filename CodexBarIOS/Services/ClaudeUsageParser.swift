@@ -39,6 +39,24 @@ public enum ClaudeUsageParser {
             case extraUsage = "extra_usage"
             case spend
         }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            fiveHour = try container.decodeIfPresent(UsageWindow.self, forKey: .fiveHour)
+            sevenDay = try container.decodeIfPresent(UsageWindow.self, forKey: .sevenDay)
+            sevenDayOAuthApps = try container.decodeIfPresent(
+                UsageWindow.self,
+                forKey: .sevenDayOAuthApps
+            )
+            sevenDayOpus = try container.decodeIfPresent(UsageWindow.self, forKey: .sevenDayOpus)
+            sevenDaySonnet = try container.decodeIfPresent(
+                UsageWindow.self,
+                forKey: .sevenDaySonnet
+            )
+            limits = try container.decodeIfPresent([StructuredLimit].self, forKey: .limits)
+            extraUsage = try container.decodeIfPresent(ExtraUsage.self, forKey: .extraUsage)
+            spend = try? container.decodeIfPresent(Spend.self, forKey: .spend)
+        }
     }
 
     private struct UsageWindow: Decodable {
@@ -527,6 +545,9 @@ public enum ClaudeUsageParser {
         let provider = providerSpendMetrics(from: spend)
         guard spend.enabled != false else {
             return provider
+        }
+        if spend.enabled == nil, extraUsage?.isEnabled == false {
+            return legacyExtraUsageMetrics(from: extraUsage)
         }
 
         let legacy = legacyExtraUsageMetrics(from: extraUsage)

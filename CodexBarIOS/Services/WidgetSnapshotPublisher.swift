@@ -147,9 +147,18 @@ enum WidgetSnapshotPublisher {
         index: Int
     ) -> String {
         // Keep saved Claude session tiles stable after matching the first-party
-        // "Current session" display label.
-        if bar.stableKey == "session" {
-            return "\(accountID).\(index).5-hour-usage-limit"
+        // "Current session" display label, including model-scoped sessions.
+        if
+            bar.stableKey == "session"
+                || bar.stableKey?.hasPrefix("session-scoped-") == true
+        {
+            let legacyLabel = bar.label.replacingOccurrences(
+                of: "current session",
+                with: "5-hour usage limit",
+                options: .caseInsensitive
+            )
+            let suffix = normalizedBarLabel(legacyLabel)
+            return "\(accountID).\(index).\(suffix)"
         }
         // Keep existing saved Claude weekly tiles resolvable when the visible label becomes more specific.
         if bar.stableKey == ClaudeUsageIdentity.allModelsWeeklyStableKey {
@@ -159,13 +168,15 @@ enum WidgetSnapshotPublisher {
             return "\(accountID).\(legacyKey)"
         }
 
-        let normalizedLabel = bar.label
+        return "\(accountID).\(index).\(normalizedBarLabel(bar.label))"
+    }
+
+    private static func normalizedBarLabel(_ label: String) -> String {
+        label
             .lowercased()
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined(separator: "-")
-
-        return "\(accountID).\(index).\(normalizedLabel)"
     }
 }
 

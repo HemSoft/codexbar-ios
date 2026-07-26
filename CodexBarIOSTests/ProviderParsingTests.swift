@@ -2248,6 +2248,17 @@ final class ProviderParsingTests: XCTestCase {
         )
     }
 
+    func testClaudeUsageParserLossilyOmitsMalformedSpendContainer() throws {
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"five_hour":{"utilization":13,"resets_at":"2030-01-01T02:00:00Z"},"spend":[]}"#.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), ["Current session"])
+        XCTAssertEqual(result.bars.map(\.used), [13])
+        XCTAssertTrue(result.monetaryMetrics.isEmpty)
+    }
+
     func testClaudeUsageParserFillsPartialSpendFromLegacyExtraUsage() throws {
         let result = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(#"{"spend":{"enabled":true,"used":{"amount_minor":500,"currency":"USD","exponent":2},"balance":{"amount_minor":1000,"currency":"USD","exponent":2}},"extra_usage":{"is_enabled":true,"used_credits":250,"monthly_limit":4000,"currency":"USD","decimal_places":2}}"#.utf8),
@@ -2263,6 +2274,16 @@ final class ProviderParsingTests: XCTestCase {
             [Decimal(5), Decimal(40), Decimal(10), Decimal(35)]
         )
         XCTAssertEqual(result.usageMessages, ["Usage credits are enabled."])
+    }
+
+    func testClaudeUsageParserHonorsFallbackDisabledSpendState() throws {
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"spend":{"used":{"amount_minor":500,"currency":"USD","exponent":2}},"extra_usage":{"is_enabled":false,"disabled_reason":"Not funded"}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertTrue(result.monetaryMetrics.isEmpty)
+        XCTAssertEqual(result.usageMessages, ["Usage credits are disabled: Not funded."])
     }
 
     func testClaudeUsageParserUsesOnlyExplicitVerifiedPlanCombinations() throws {
@@ -2670,6 +2691,50 @@ final class ProviderParsingTests: XCTestCase {
             "\(configuration.id).weekly-usage-limit",
             "\(configuration.id).2.fable-weekly-usage-limit",
         ])
+    }
+
+    @MainActor
+    func testClaudeScopedSessionWidgetIDsPreserveLegacyLabels() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let parsed = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"limits":[{"kind":"session","percent":27,"is_active":true},{"kind":"session","percent":64,"scope":{"model":{"display_name":"Fable"}},"is_active":true}]}"#.utf8),
+            subscriptionType: "max"
+        ))
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let configuration = store.addAccount(for: .claude)
+        store.saveSecret("claude-token", for: configuration)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: parsed.providerID,
+            title: parsed.title,
+            subtitle: parsed.subtitle,
+            bars: parsed.bars,
+            fetchedAt: parsed.fetchedAt
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let snapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        let widgetProvider = try XCTUnwrap(snapshot.results.first)
+
+        XCTAssertEqual(widgetProvider.bars.map(\.id), [
+            "\(configuration.id).0.other-models-5-hour-usage-limit",
+            "\(configuration.id).1.fable-5-hour-usage-limit",
+        ])
+        XCTAssertNotNil(snapshot.builderTile(
+            resolvingSavedID: "bar.\(configuration.id).0.other-models-5-hour-usage-limit"
+        ))
+        XCTAssertNotNil(snapshot.builderTile(
+            resolvingSavedID: "bar.\(configuration.id).1.fable-5-hour-usage-limit"
+        ))
     }
 
     func testClaudeScopedAlertKeysPreserveModelVersions() throws {
