@@ -1626,7 +1626,15 @@ final class ConfigurationAndAuthTests: XCTestCase {
         let result = try XCTUnwrap(CopilotUsageParser.parse(Data(payload.utf8), fetchedAt: fetchedAt))
 
         XCTAssertEqual(result.providerID, .copilot)
-        XCTAssertEqual(result.title, "GitHub Copilot (octocat) - Pro")
+        XCTAssertEqual(result.title, "GitHub Copilot (octocat)")
+        XCTAssertEqual(
+            result.plan,
+            ProviderPlanDescriptor(
+                identifier: "copilot.pro",
+                displayLabel: "PRO",
+                accessibilityLabel: "Pro"
+            )
+        )
         XCTAssertEqual(result.bars.map(\.label), ["Premium interactions (1,500 / 2,000)", "Chat (88 / 100)"])
         XCTAssertEqual(result.bars.map(\.usageText), ["75%", "88%"])
         XCTAssertEqual(result.subtitle, "Resets in 3d")
@@ -1635,6 +1643,33 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_890_950_400))
         XCTAssertEqual(result.bars.first?.projectionPeriodEnd, Date(timeIntervalSince1970: 1_893_628_800))
         XCTAssertEqual(result.bars.first?.showProjectionOnCurrentBar, true)
+    }
+
+    func testCopilotUsageParserNormalizesOnlyObservedPlanValues() throws {
+        let mappings: [(rawValue: String, identifier: String?, label: String?)] = [
+            ("individual_pro", "copilot.pro", "PRO"),
+            ("business", "copilot.business", "BUSINESS"),
+            ("enterprise", "copilot.enterprise", "ENTERPRISE"),
+            ("free", nil, nil),
+            ("student", nil, nil),
+            ("individual_pro_plus", nil, nil),
+            ("max", nil, nil),
+            ("unknown_value", nil, nil),
+            ("", nil, nil),
+        ]
+
+        for mapping in mappings {
+            let payload = """
+            {
+              "login": "octocat",
+              "copilot_plan": "\(mapping.rawValue)",
+              "quota_snapshots": {}
+            }
+            """
+            let result = try XCTUnwrap(CopilotUsageParser.parse(Data(payload.utf8)))
+            XCTAssertEqual(result.plan?.identifier, mapping.identifier, mapping.rawValue)
+            XCTAssertEqual(result.plan?.displayLabel, mapping.label, mapping.rawValue)
+        }
     }
 
     func testCopilotAccountMetadataPreservesAllUsageDetails() {
@@ -1651,6 +1686,11 @@ final class ConfigurationAndAuthTests: XCTestCase {
             accountID: "parsed-account",
             providerID: .copilot,
             title: "Parsed Copilot account",
+            plan: ProviderPlanDescriptor(
+                identifier: "copilot.business",
+                displayLabel: "BUSINESS",
+                accessibilityLabel: "Business"
+            ),
             subtitle: "Live GitHub Copilot usage",
             bars: [],
             creditsRemaining: 42.5,
@@ -1670,6 +1710,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
         XCTAssertEqual(result.accountID, "copilot.work")
         XCTAssertEqual(result.title, "Work Copilot")
+        XCTAssertEqual(result.plan, parsedResult.plan)
         XCTAssertEqual(result.creditsRemaining, parsedResult.creditsRemaining)
         XCTAssertEqual(result.monetaryMetrics, parsedResult.monetaryMetrics)
         XCTAssertEqual(result.usageMessages, parsedResult.usageMessages)

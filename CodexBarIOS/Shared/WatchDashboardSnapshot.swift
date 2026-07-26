@@ -132,6 +132,9 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let providerName: String
     public let accountLabel: String
+    public let planIdentifier: String?
+    public let planDisplayLabel: String?
+    public let planAccessibilityLabel: String?
     public let statusText: String?
     public let fetchedAt: Date
     public let metrics: [WatchMetricSnapshot]
@@ -140,6 +143,9 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
         id: String,
         providerName: String,
         accountLabel: String,
+        planIdentifier: String? = nil,
+        planDisplayLabel: String? = nil,
+        planAccessibilityLabel: String? = nil,
         statusText: String? = nil,
         fetchedAt: Date,
         metrics: [WatchMetricSnapshot]
@@ -147,6 +153,9 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
         self.id = id
         self.providerName = providerName
         self.accountLabel = accountLabel
+        self.planIdentifier = planIdentifier
+        self.planDisplayLabel = planDisplayLabel
+        self.planAccessibilityLabel = planAccessibilityLabel
         self.statusText = statusText
         self.fetchedAt = fetchedAt
         self.metrics = metrics
@@ -156,6 +165,9 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
         case id
         case providerName
         case accountLabel
+        case planIdentifier
+        case planDisplayLabel
+        case planAccessibilityLabel
         case statusText
         case fetchedAt
         case metrics
@@ -171,6 +183,9 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
             id: try container.decode(String.self, forKey: .id),
             providerName: try container.decode(String.self, forKey: .providerName),
             accountLabel: try container.decode(String.self, forKey: .accountLabel),
+            planIdentifier: try container.decodeIfPresent(String.self, forKey: .planIdentifier),
+            planDisplayLabel: try container.decodeIfPresent(String.self, forKey: .planDisplayLabel),
+            planAccessibilityLabel: try container.decodeIfPresent(String.self, forKey: .planAccessibilityLabel),
             statusText: try container.decodeIfPresent(String.self, forKey: .statusText),
             fetchedAt: try container.decode(Date.self, forKey: .fetchedAt),
             metrics: decodedMetrics.compactMap(\.value)
@@ -182,6 +197,9 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
         try container.encode(id, forKey: .id)
         try container.encode(providerName, forKey: .providerName)
         try container.encode(accountLabel, forKey: .accountLabel)
+        try container.encodeIfPresent(planIdentifier, forKey: .planIdentifier)
+        try container.encodeIfPresent(planDisplayLabel, forKey: .planDisplayLabel)
+        try container.encodeIfPresent(planAccessibilityLabel, forKey: .planAccessibilityLabel)
         try container.encodeIfPresent(statusText, forKey: .statusText)
         try container.encode(fetchedAt, forKey: .fetchedAt)
         try container.encode(metrics, forKey: .metrics)

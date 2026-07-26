@@ -53,7 +53,8 @@ public enum CodexUsageParser {
         }
         return ProviderUsageResult(
             providerID: .codex,
-            title: formatDisplayName(planType: root["plan_type"] as? String),
+            title: ProviderID.codex.displayName,
+            plan: planDescriptor(planType: root["plan_type"] as? String),
             subtitle: "Live ChatGPT usage",
             bars: bars,
             usageMessages: [],
@@ -167,33 +168,50 @@ public enum CodexUsageParser {
         ) ?? "Resets now"
     }
 
-    private static func formatDisplayName(planType: String?) -> String {
-        guard let planType, !planType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return ProviderID.codex.displayName
+    private static func planDescriptor(planType: String?) -> ProviderPlanDescriptor? {
+        guard let normalized = ProviderPlanDescriptor.normalizedPlanValue(planType) else {
+            return nil
         }
 
-        return "\(ProviderID.codex.displayName) (\(formatPlanName(planType)))"
-    }
-
-    private static func formatPlanName(_ planType: String) -> String {
-        switch planType.lowercased() {
+        let identifier: String
+        let label: String
+        switch normalized {
         case "free":
-            "Free"
+            identifier = "free"
+            label = "Free"
+        case "go":
+            identifier = "go"
+            label = "Go"
         case "plus":
-            "Plus"
+            identifier = "plus"
+            label = "Plus"
         case "pro", "prolite":
-            "Pro"
-        case "team":
-            "Team"
+            identifier = "pro"
+            label = "Pro"
+        case "business", "team":
+            identifier = "business"
+            label = "Business"
         case "enterprise":
-            "Enterprise"
+            identifier = "enterprise"
+            label = "Enterprise"
+        case "edu":
+            identifier = "edu"
+            label = "Edu"
+        case "health":
+            identifier = "health"
+            label = "Health"
+        case "gov":
+            identifier = "gov"
+            label = "Gov"
         default:
-            planType
-                .replacingOccurrences(of: "_", with: " ")
-                .split(separator: " ")
-                .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
-                .joined(separator: " ")
+            return nil
         }
+
+        return ProviderPlanDescriptor.make(
+            providerPrefix: "codex",
+            identifier: identifier,
+            label: label
+        )
     }
 
     private static func doubleValue(_ value: Any?) -> Double? {

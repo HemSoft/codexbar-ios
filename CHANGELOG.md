@@ -8,6 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added compact, accessible subscription-plan badges to ChatGPT / Codex,
+  Claude, and GitHub Copilot dashboard cards while preserving custom account
+  names and omitting unknown or unverified tiers.
+  ([#130](https://github.com/HemSoft/codexbar-ios/issues/130))
 - Added current-pace projections to OpenCode Go quota windows when their reset
   boundaries are trustworthy, while leaving ambiguous windows and Zen credit
   balances unprojected. ([#128](https://github.com/HemSoft/codexbar-ios/issues/128))

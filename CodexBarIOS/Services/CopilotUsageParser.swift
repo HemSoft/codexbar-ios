@@ -6,7 +6,7 @@ public enum CopilotUsageParser {
             return nil
         }
 
-        let title = formatDisplayName(username: response.login, plan: response.copilotPlan)
+        let title = formatDisplayName(username: response.login)
         let reset = parseReset(response.quotaResetDateUTC, fetchedAt: fetchedAt)
         var bars: [UsageBar] = []
 
@@ -33,6 +33,7 @@ public enum CopilotUsageParser {
         return ProviderUsageResult(
             providerID: .copilot,
             title: title,
+            plan: planDescriptor(plan: response.copilotPlan),
             subtitle: reset.description ?? "Live GitHub Copilot usage",
             bars: bars,
             fetchedAt: fetchedAt
@@ -92,25 +93,36 @@ public enum CopilotUsageParser {
         return (start, end)
     }
 
-    private static func formatDisplayName(username: String?, plan: String?) -> String {
-        let base = username.map { "GitHub Copilot (\($0))" } ?? ProviderID.copilot.displayName
-        guard let plan else {
-            return base
+    private static func formatDisplayName(username: String?) -> String {
+        username.map { "GitHub Copilot (\($0))" } ?? ProviderID.copilot.displayName
+    }
+
+    private static func planDescriptor(plan: String?) -> ProviderPlanDescriptor? {
+        guard let normalized = ProviderPlanDescriptor.normalizedPlanValue(plan) else {
+            return nil
         }
 
-        let planLabel: String
-        switch plan {
-        case "enterprise":
-            planLabel = "Ent"
+        let identifier: String
+        let label: String
+        switch normalized {
         case "individual_pro":
-            planLabel = "Pro"
+            identifier = "pro"
+            label = "Pro"
         case "business":
-            planLabel = "Biz"
+            identifier = "business"
+            label = "Business"
+        case "enterprise":
+            identifier = "enterprise"
+            label = "Enterprise"
         default:
-            planLabel = plan.replacingOccurrences(of: "_", with: " ")
+            return nil
         }
 
-        return "\(base) - \(planLabel)"
+        return ProviderPlanDescriptor.make(
+            providerPrefix: "copilot",
+            identifier: identifier,
+            label: label
+        )
     }
 
     private static func parseReset(_ resetDateUTC: String?, fetchedAt: Date) -> CopilotReset {

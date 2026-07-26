@@ -118,6 +118,7 @@ enum WatchSnapshotPublisher {
                 let displayedDataFetchedAt = barMetrics.isEmpty
                     ? result.fetchedAt
                     : result.barsFetchedAt ?? result.fetchedAt
+                let plan = result.providerID.supportsPlanBadge ? result.plan : nil
 
                 return WatchAccountSnapshot(
                     id: "\(result.providerID.rawValue).\(displayIndex)",
@@ -128,6 +129,9 @@ enum WatchSnapshotPublisher {
                         configuration: configuration,
                         result: result
                     ),
+                    planIdentifier: plan?.identifier,
+                    planDisplayLabel: plan?.displayLabel,
+                    planAccessibilityLabel: plan?.accessibilityLabel,
                     statusText: statusText(
                         for: result,
                         configurationStore: configurationStore

@@ -31,4 +31,13 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
             "Cursor"
         }
     }
+
+    public var supportsPlanBadge: Bool {
+        switch self {
+        case .codex, .copilot, .claude:
+            true
+        case .openRouter, .openCodeZen, .moonshot, .cursor:
+            false
+        }
+    }
 }

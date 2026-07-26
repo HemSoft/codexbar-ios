@@ -6,6 +6,45 @@ public enum ProviderUsageRecoveryAction: Equatable, Sendable {
     case reauthenticate
 }
 
+public struct ProviderPlanDescriptor: Codable, Equatable, Sendable {
+    public let identifier: String
+    public let displayLabel: String
+    public let accessibilityLabel: String
+
+    public init(
+        identifier: String,
+        displayLabel: String,
+        accessibilityLabel: String
+    ) {
+        self.identifier = identifier
+        self.displayLabel = displayLabel
+        self.accessibilityLabel = accessibilityLabel
+    }
+
+    static func normalizedPlanValue(_ value: String?) -> String? {
+        guard let normalized = value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(), !normalized.isEmpty
+        else {
+            return nil
+        }
+        return normalized
+    }
+
+    static func make(
+        providerPrefix: String,
+        identifier: String,
+        label: String,
+        displayLabel: String? = nil
+    ) -> ProviderPlanDescriptor {
+        ProviderPlanDescriptor(
+            identifier: "\(providerPrefix).\(identifier)",
+            displayLabel: displayLabel ?? label.uppercased(),
+            accessibilityLabel: label
+        )
+    }
+}
+
 public enum ProviderMonetaryMetricKind: String, Codable, Equatable, Sendable {
     case balance
     case spent
@@ -120,6 +159,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let accountID: String
     public let providerID: ProviderID
     public let title: String
+    public let plan: ProviderPlanDescriptor?
     public let subtitle: String
     public let bars: [UsageBar]
     public let barsFetchedAt: Date?
@@ -141,6 +181,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         accountID: String? = nil,
         providerID: ProviderID,
         title: String,
+        plan: ProviderPlanDescriptor? = nil,
         subtitle: String,
         bars: [UsageBar],
         barsFetchedAt: Date? = nil,
@@ -161,6 +202,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.accountID = accountID ?? providerID.rawValue
         self.providerID = providerID
         self.title = title
+        self.plan = plan
         self.subtitle = subtitle
         self.bars = bars
         self.barsFetchedAt = bars.isEmpty ? nil : (barsFetchedAt ?? fetchedAt)

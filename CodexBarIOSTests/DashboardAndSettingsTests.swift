@@ -616,6 +616,11 @@ final class DashboardAndSettingsTests: XCTestCase {
             accountID: failed.id,
             providerID: .codex,
             title: failed.displayName,
+            plan: ProviderPlanDescriptor(
+                identifier: "codex.pro",
+                displayLabel: "PRO",
+                accessibilityLabel: "Pro"
+            ),
             subtitle: "Cached usage",
             bars: [UsageBar(label: "Usage", used: 75, limit: 100)],
             codexBankedRateLimitResets: CodexBankedRateLimitResets(
@@ -636,6 +641,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(Set(service.results.map(\.accountID)), [failed.id, successful.id])
         let preservedFailure = service.results.first { $0.accountID == failed.id }
         XCTAssertEqual(preservedFailure?.bars, cachedFailedResult.bars)
+        XCTAssertEqual(preservedFailure?.plan, cachedFailedResult.plan)
         XCTAssertEqual(preservedFailure?.codexBankedRateLimitResets, cachedFailedResult.codexBankedRateLimitResets)
         XCTAssertEqual(preservedFailure?.fetchedAt, cachedFailedResult.fetchedAt)
         XCTAssertEqual(preservedFailure?.failureMessage, "Refresh failed")
@@ -726,6 +732,40 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(service.results.first?.bars, cachedResult.bars)
         XCTAssertEqual(service.results.first?.failureMessage, "Credential expired")
         XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Credential expired")
+    }
+
+    @MainActor
+    func testPartialFailureWithoutPlanPreservesCachedVerifiedPlan() async {
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.partial-failure",
+            providerID: .codex,
+            accountLabel: "Cached Codex",
+            authMethod: .browserSession
+        )
+        let cachedPlan = ProviderPlanDescriptor(
+            identifier: "codex.pro",
+            displayLabel: "PRO",
+            accessibilityLabel: "Pro"
+        )
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: configuration.displayName,
+            plan: cachedPlan,
+            subtitle: "Cached usage",
+            bars: [UsageBar(label: "Cached usage", used: 75, limit: 100)],
+            fetchedAt: Date().addingTimeInterval(-300)
+        )
+        let service = UsageRefreshService(
+            providers: [ReturningPartialFailureUsageProvider(providerID: .codex)],
+            initialResults: [cachedResult]
+        )
+
+        await service.refresh(configurations: [configuration])
+
+        XCTAssertEqual(service.results.first?.plan, cachedPlan)
+        XCTAssertEqual(service.results.first?.bars.first?.label, "Latest usage")
+        XCTAssertEqual(service.results.first?.failureMessage, "Partial refresh failed")
     }
 
     @MainActor
@@ -890,6 +930,11 @@ final class DashboardAndSettingsTests: XCTestCase {
             accountID: configuration.id,
             providerID: .codex,
             title: "Codex",
+            plan: ProviderPlanDescriptor(
+                identifier: "codex.pro",
+                displayLabel: "PRO",
+                accessibilityLabel: "Pro"
+            ),
             subtitle: "Pro",
             bars: bars,
             fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
@@ -905,6 +950,9 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts.map(\.id), ["codex.0"])
         XCTAssertEqual(snapshot.accounts[0].providerName, ProviderID.codex.displayName)
         XCTAssertEqual(snapshot.accounts[0].accountLabel, configuration.accountLabel)
+        XCTAssertEqual(snapshot.accounts[0].planIdentifier, "codex.pro")
+        XCTAssertEqual(snapshot.accounts[0].planDisplayLabel, "PRO")
+        XCTAssertEqual(snapshot.accounts[0].planAccessibilityLabel, "Pro")
         XCTAssertNotEqual(snapshot.accounts[0].providerName, snapshot.accounts[0].accountLabel)
         XCTAssertEqual(
             snapshot.accounts[0].metrics.map(\.visualizationStyle),
@@ -924,6 +972,44 @@ final class DashboardAndSettingsTests: XCTestCase {
             now: result.fetchedAt
         )
         XCTAssertTrue(afterRemoval.accounts.isEmpty)
+    }
+
+    @MainActor
+    func testWatchSnapshotOmitsUnsupportedProviderPlanMetadata() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        XCTAssertTrue(store.saveSecret("openrouter-test-key", for: configuration))
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openRouter,
+            title: "OpenRouter",
+            plan: ProviderPlanDescriptor(
+                identifier: "openrouter.business",
+                displayLabel: "BUSINESS",
+                accessibilityLabel: "Business"
+            ),
+            subtitle: "Balance",
+            bars: [UsageBar(label: "Usage", used: 1, limit: 4)],
+            fetchedAt: Date()
+        )
+
+        let snapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: result.fetchedAt
+        )
+
+        XCTAssertNil(snapshot.accounts.first?.planIdentifier)
+        XCTAssertNil(snapshot.accounts.first?.planDisplayLabel)
+        XCTAssertNil(snapshot.accounts.first?.planAccessibilityLabel)
     }
 
     func testWatchSnapshotDeduplicatorIgnoresGenerationTimeAndSupportsForcedReassertion() throws {

@@ -5,7 +5,8 @@ final class ProviderNetworkTests: XCTestCase {
     func testCodexUsageProviderProactivelyRefreshesAndPersistsRotation() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        configuration.accountLabel = "Personal Codex"
         let account = ProviderConfigurationStore.keychainAccount(for: configuration)
         try secretStore.saveSecret(
             CodexCredentialsParser.storedCredential(from: CodexCredentials(
@@ -62,6 +63,8 @@ final class ProviderNetworkTests: XCTestCase {
         let result = try await provider.fetchUsage(for: configuration)
 
         XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(result.title, "Personal Codex")
+        XCTAssertEqual(result.plan?.identifier, "codex.pro")
         XCTAssertEqual(result.bars.first?.used, 25)
     }
 
@@ -1595,6 +1598,8 @@ final class ProviderNetworkTests: XCTestCase {
 
         XCTAssertEqual(requestCount, 3)
         XCTAssertFalse(full.subtitle.contains("Cached rate-limit windows"))
+        XCTAssertEqual(full.plan?.identifier, "claude.pro")
+        XCTAssertEqual(partialAfterRefresh.plan, full.plan)
         XCTAssertEqual(partialAfterRefresh.bars, full.bars)
         XCTAssertEqual(partialAfterRefresh.barsFetchedAt, full.fetchedAt)
         XCTAssertEqual(partialAfterRefresh.fetchedAt, full.fetchedAt.addingTimeInterval(60))
@@ -1659,6 +1664,9 @@ final class ProviderNetworkTests: XCTestCase {
         let backedOff = try await provider.fetchUsage(for: configuration)
 
         XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(fresh.plan?.identifier, "claude.pro")
+        XCTAssertEqual(stale.plan, fresh.plan)
+        XCTAssertEqual(backedOff.plan, fresh.plan)
         XCTAssertEqual(fresh.bars, stale.bars)
         XCTAssertEqual(stale.bars, backedOff.bars)
         XCTAssertEqual(fresh.fetchedAt, stale.fetchedAt)

@@ -695,6 +695,44 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertFalse(refreshingCard.showsRetryAction)
     }
 
+    func testProviderUsageCardHeaderAccessibilityIncludesNaturalPlanName() {
+        let result = ProviderUsageResult(
+            accountID: "claude.work",
+            providerID: .claude,
+            title: "Work Claude",
+            plan: ProviderPlanDescriptor(
+                identifier: "claude.max20",
+                displayLabel: "MAX 20×",
+                accessibilityLabel: "Max 20x"
+            ),
+            subtitle: "Live Claude usage",
+            bars: [],
+            fetchedAt: Date()
+        )
+
+        XCTAssertEqual(
+            ProviderUsageCard.headerAccessibilityLabel(for: result),
+            "Work Claude, Max 20x plan"
+        )
+        let resultWithoutPlan = ProviderUsageResult(
+            accountID: "cursor.personal",
+            providerID: .cursor,
+            title: "Cursor",
+            plan: ProviderPlanDescriptor(
+                identifier: "cursor.business",
+                displayLabel: "BUSINESS",
+                accessibilityLabel: "Business"
+            ),
+            subtitle: "Live Cursor usage",
+            bars: [],
+            fetchedAt: Date()
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.headerAccessibilityLabel(for: resultWithoutPlan),
+            "Cursor"
+        )
+    }
+
     func testProviderUsageCardDistinguishesRetryAndClaudeSignInActions() {
         let result = makeHistoryResult(
             accountID: "claude.work",

@@ -21,11 +21,15 @@ enum WidgetSnapshotPublisher {
             results: displayable.map { result in
                 let configuration = configurationStore.configuration(accountID: result.accountID)
                 let barsAreFresh = result.hasFreshBars
+                let plan = result.providerID.supportsPlanBadge ? result.plan : nil
                 return CodexBarWidgetProviderSnapshot(
                     accountID: result.accountID,
                     providerID: result.providerID.rawValue,
                     title: result.title,
                     subtitle: statusText(for: result, configurationStore: configurationStore),
+                    planIdentifier: plan?.identifier,
+                    planDisplayLabel: plan?.displayLabel,
+                    planAccessibilityLabel: plan?.accessibilityLabel,
                     groupID: configuration?.groupID,
                     groupName: configurationStore.group(for: configuration?.groupID)?.name,
                     bars: result.bars.enumerated().map { index, bar in

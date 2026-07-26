@@ -110,6 +110,7 @@ public enum ClaudeUsageParser {
     public static func parse(
         _ data: Data,
         subscriptionType: String?,
+        rateLimitTier: String? = nil,
         fetchedAt: Date = Date(),
         dateTimeFormatter: UserFacingDateTimeFormatter = .current
     ) -> ProviderUsageResult? {
@@ -245,7 +246,11 @@ public enum ClaudeUsageParser {
 
         return ProviderUsageResult(
             providerID: .claude,
-            title: formatDisplayName(subscriptionType: subscriptionType),
+            title: ProviderID.claude.displayName,
+            plan: planDescriptor(
+                subscriptionType: subscriptionType,
+                rateLimitTier: rateLimitTier
+            ),
             subtitle: "Live Claude usage",
             bars: bars,
             monetaryMetrics: extraUsage.metrics,
@@ -257,6 +262,7 @@ public enum ClaudeUsageParser {
     public static func parseRateLimitHeaders(
         _ fields: [AnyHashable: Any],
         subscriptionType: String?,
+        rateLimitTier: String? = nil,
         fetchedAt: Date = Date(),
         dateTimeFormatter: UserFacingDateTimeFormatter = .current
     ) -> ProviderUsageResult? {
@@ -293,7 +299,11 @@ public enum ClaudeUsageParser {
 
         return ProviderUsageResult(
             providerID: .claude,
-            title: formatDisplayName(subscriptionType: subscriptionType),
+            title: ProviderID.claude.displayName,
+            plan: planDescriptor(
+                subscriptionType: subscriptionType,
+                rateLimitTier: rateLimitTier
+            ),
             subtitle: "Live Claude usage",
             bars: bars,
             fetchedAt: fetchedAt
@@ -688,22 +698,52 @@ public enum ClaudeUsageParser {
         ) ?? "Resets now"
     }
 
-    private static func formatDisplayName(subscriptionType: String?) -> String {
-        guard
-            let subscriptionType,
-            !subscriptionType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            return ProviderID.claude.displayName
+    private static func planDescriptor(
+        subscriptionType: String?,
+        rateLimitTier: String?
+    ) -> ProviderPlanDescriptor? {
+        let subscription = ProviderPlanDescriptor.normalizedPlanValue(subscriptionType)
+        let rateLimit = ProviderPlanDescriptor.normalizedPlanValue(rateLimitTier)
+
+        let identifier: String
+        let displayLabel: String
+        let accessibilityLabel: String
+        if subscription == "max_20x" || rateLimit == "max_20x" {
+            identifier = "max20"
+            displayLabel = "MAX 20×"
+            accessibilityLabel = "Max 20x"
+        } else {
+            switch subscription {
+            case "free":
+                identifier = "free"
+                displayLabel = "FREE"
+                accessibilityLabel = "Free"
+            case "pro":
+                identifier = "pro"
+                displayLabel = "PRO"
+                accessibilityLabel = "Pro"
+            case "team":
+                identifier = "team"
+                displayLabel = "TEAM"
+                accessibilityLabel = "Team"
+            case "team_premium":
+                identifier = "team-premium"
+                displayLabel = "TEAM PREMIUM"
+                accessibilityLabel = "Team Premium"
+            case "enterprise":
+                identifier = "enterprise"
+                displayLabel = "ENTERPRISE"
+                accessibilityLabel = "Enterprise"
+            default:
+                return nil
+            }
         }
 
-        return "\(ProviderID.claude.displayName) (\(formatPlanName(subscriptionType)))"
-    }
-
-    private static func formatPlanName(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "_", with: " ")
-            .split(separator: " ")
-            .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
-            .joined(separator: " ")
+        return ProviderPlanDescriptor.make(
+            providerPrefix: "claude",
+            identifier: identifier,
+            label: accessibilityLabel,
+            displayLabel: displayLabel
+        )
     }
 }
