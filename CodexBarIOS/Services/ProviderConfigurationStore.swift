@@ -747,10 +747,14 @@ public final class ProviderConfigurationStore: ObservableObject {
         layout.version = AccountMetricLayout.currentVersion
         layout.orderedMetricIDs = mergedOrder
         for metricID in reorderedMetricIDs {
-            var preference = layout.preferences[metricID] ?? MetricTilePreference()
+            var preference = layout.preferences[metricID] ?? MetricTilePreference(
+                width: layout.usesLegacyFullWidthDefaults ? .full : .automatic,
+                isNewlyDiscovered: !layout.usesLegacyFullWidthDefaults
+            )
             preference.isNewlyDiscovered = false
             layout.preferences[metricID] = preference
         }
+        layout.usesLegacyFullWidthDefaults = false
         metricLayouts[accountID] = layout
         saveMetricLayouts()
     }
@@ -880,7 +884,14 @@ public final class ProviderConfigurationStore: ObservableObject {
         accountID: String,
         metricID: String
     ) -> MetricTilePreference {
-        metricLayouts[accountID]?.preferences[metricID] ?? MetricTilePreference()
+        if let preference = metricLayouts[accountID]?.preferences[metricID] {
+            return preference
+        }
+        let usesLegacyDefaults = metricLayouts[accountID]?.usesLegacyFullWidthDefaults == true
+        return MetricTilePreference(
+            width: usesLegacyDefaults ? .full : .automatic,
+            isNewlyDiscovered: !usesLegacyDefaults
+        )
     }
 
     private func setMetricPreference(
@@ -889,7 +900,9 @@ public final class ProviderConfigurationStore: ObservableObject {
         metricID: String
     ) {
         var layout = metricLayouts[accountID] ?? AccountMetricLayout()
-        if !layout.orderedMetricIDs.contains(metricID) {
+        if !layout.orderedMetricIDs.isEmpty,
+           !layout.orderedMetricIDs.contains(metricID)
+        {
             layout.orderedMetricIDs.append(metricID)
         }
         layout.preferences[metricID] = preference

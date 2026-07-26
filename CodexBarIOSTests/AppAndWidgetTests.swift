@@ -1962,6 +1962,11 @@ final class AppAndWidgetTests: XCTestCase {
         )
 
         let existingUncustomizedMetricID = "claude.weekly"
+        migrated.updateVisualizationStyle(
+            .largeNumeric,
+            accountID: accountID,
+            metricID: existingUncustomizedMetricID
+        )
         XCTAssertEqual(
             migrated.metricOrder(
                 accountID: accountID,
@@ -1975,6 +1980,13 @@ final class AppAndWidgetTests: XCTestCase {
                 metricID: existingUncustomizedMetricID
             ),
             .full
+        )
+        XCTAssertEqual(
+            migrated.visualizationStyle(
+                accountID: accountID,
+                metricID: existingUncustomizedMetricID
+            ),
+            .largeNumeric
         )
         XCTAssertFalse(
             try XCTUnwrap(
