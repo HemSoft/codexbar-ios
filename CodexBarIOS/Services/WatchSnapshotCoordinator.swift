@@ -70,6 +70,10 @@ enum WatchSnapshotPublisher {
                 let barMetrics = result.bars.enumerated().map { index, bar in
                     let metricID = bar.metricIdentifier(providerID: result.providerID, index: index)
                     let fraction = bar.fractionUsed
+                    let localizedResetText = bar.localizedResetDescription(
+                        at: now,
+                        dateTimeFormatter: dateTimeFormatter
+                    )
                     return WatchMetricSnapshot(
                         id: metricID,
                         label: bar.label,
@@ -79,10 +83,8 @@ enum WatchSnapshotPublisher {
                         severity: result.hasFreshBars
                             ? WatchMetricSeverity(bar.effectiveSeverity(at: now))
                             : .normal,
-                        resetText: bar.localizedResetDescription(
-                            at: now,
-                            dateTimeFormatter: dateTimeFormatter
-                        ),
+                        resetText: localizedResetText
+                            ?? (result.hasFreshBars ? bar.projectionDescriptionOverride : nil),
                         visualizationStyle: WatchMetricVisualizationStyle(
                             configurationStore.visualizationStyle(
                                 accountID: result.accountID,

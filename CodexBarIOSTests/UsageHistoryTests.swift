@@ -251,6 +251,59 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testUsageHistoryStoreDoesNotMixHeadroomIntoBalanceSeries() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let firstDate = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = UsageHistoryStore(defaults: defaults)
+        let oldHeadroom = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live Claude usage",
+            bars: [],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .remainingHeadroom,
+                    label: "Remaining spend headroom",
+                    minorUnits: 3750,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: firstDate
+        )
+        let currentBalance = ProviderUsageResult(
+            accountID: oldHeadroom.accountID,
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live Claude usage",
+            bars: [],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .balance,
+                    label: "Current balance",
+                    minorUnits: 10000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+                oldHeadroom.monetaryMetrics[0],
+            ],
+            fetchedAt: firstDate.addingTimeInterval(60)
+        )
+
+        store.record(results: [oldHeadroom], now: oldHeadroom.fetchedAt)
+        store.record(results: [currentBalance], now: currentBalance.fetchedAt)
+
+        let series = store.historySeries(for: currentBalance)
+        XCTAssertEqual(series.points.map(\.value), [100])
+        XCTAssertEqual(series.currencyCode, "USD")
+    }
+
+    @MainActor
     func testUsageHistoryStorePrunesRetentionAndPerAccountLimit() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

@@ -105,14 +105,14 @@ public extension DemoUsageProvider {
                 bars: [
                     UsageBar(
                         stableKey: "session",
-                        label: "5-hour usage limit",
+                        label: "Current session",
                         used: 36,
                         limit: 100,
                         resetDescription: "Resets in 1h 40m"
                     ),
                     UsageBar(
                         stableKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
-                        label: "All models weekly usage limit",
+                        label: "All models",
                         used: 58,
                         limit: 100,
                         resetDescription: "Resets Monday"
