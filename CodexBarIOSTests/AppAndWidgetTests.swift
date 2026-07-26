@@ -136,6 +136,24 @@ final class AppAndWidgetTests: XCTestCase {
             bars: [UsageBar(label: "Weekly", used: 10, limit: 100)],
             fetchedAt: Date()
         )
+        let multiMetricBalanceResult = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Usage credits",
+            bars: [],
+            creditsRemaining: 12.50,
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spendLimit,
+                    label: "Monthly spend limit",
+                    minorUnits: 2_000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: Date()
+        )
 
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: balanceOnlyResult),
@@ -144,6 +162,18 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: meteredResult),
             [.configureAccount, .customizeMetrics]
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.menuActions(for: multiMetricBalanceResult),
+            [.configureAccount, .customizeMetrics]
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.metricVisibilityAccessibilityValue(isVisible: true),
+            "Shown"
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.metricVisibilityAccessibilityValue(isVisible: false),
+            "Hidden"
         )
     }
 
@@ -1798,6 +1828,154 @@ final class AppAndWidgetTests: XCTestCase {
             metricIDs: [metricID, "codex.window-604800"]
         )
         XCTAssertEqual(reloaded.visualizationStyle(accountID: firstAccount.id, metricID: metricID), .linearBar)
+    }
+
+    @MainActor
+    func testMetricCustomizationMigratesStylesAndPersistsVisibilityPerAccount() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let firstAccountID = "codex.personal"
+        let secondAccountID = "codex.work"
+        let metricID = "codex.window-18000"
+        let legacyStyles = [
+            firstAccountID: [metricID: MetricVisualizationStyle.circularRing],
+        ]
+        defaults.set(
+            try JSONEncoder().encode(legacyStyles),
+            forKey: "metricVisualizationPreferences"
+        )
+
+        let migrated = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        XCTAssertEqual(
+            migrated.visualizationStyle(accountID: firstAccountID, metricID: metricID),
+            .circularRing
+        )
+        XCTAssertTrue(migrated.isMetricVisible(accountID: firstAccountID, metricID: metricID))
+        XCTAssertTrue(migrated.isMetricVisible(accountID: firstAccountID, metricID: "codex.new"))
+
+        migrated.updateMetricVisibility(false, accountID: firstAccountID, metricID: metricID)
+        migrated.updateVisualizationStyle(
+            .segmentedBar,
+            accountID: firstAccountID,
+            metricID: metricID
+        )
+
+        let reloaded = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        XCTAssertFalse(reloaded.isMetricVisible(accountID: firstAccountID, metricID: metricID))
+        XCTAssertEqual(
+            reloaded.visualizationStyle(accountID: firstAccountID, metricID: metricID),
+            .segmentedBar
+        )
+        XCTAssertTrue(reloaded.isMetricVisible(accountID: secondAccountID, metricID: metricID))
+
+        reloaded.updateMetricVisibility(true, accountID: firstAccountID, metricID: metricID)
+        XCTAssertTrue(reloaded.isMetricVisible(accountID: firstAccountID, metricID: metricID))
+        XCTAssertEqual(
+            reloaded.visualizationStyle(accountID: firstAccountID, metricID: metricID),
+            .segmentedBar
+        )
+    }
+
+    func testAvailableMetricIdentifiersCoverEveryMetricTypeWithoutUsingLabels() {
+        let firstResult = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Pro",
+            bars: [
+                UsageBar(
+                    stableKey: "session",
+                    label: "Current session",
+                    used: 30,
+                    limit: 100
+                ),
+            ],
+            creditsRemaining: 5,
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: "Usage credits spent",
+                    minorUnits: 750,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: Date()
+        )
+        let renamedMoney = ProviderMonetaryMetric(
+            kind: .spent,
+            label: "Renamed amount",
+            minorUnits: 900,
+            currencyCode: "usd",
+            decimalPlaces: 2
+        )
+
+        XCTAssertEqual(
+            firstResult.availableMetrics.map(\.id),
+            [
+                "claude.session",
+                "claude.credits-remaining",
+                "claude.monetary.spent.usd",
+            ]
+        )
+        XCTAssertEqual(
+            firstResult.monetaryMetrics[0].metricIdentifier(providerID: .claude),
+            renamedMoney.metricIdentifier(providerID: .claude)
+        )
+    }
+
+    @MainActor
+    func testDashboardVisibilityDoesNotRemoveMetricsFromWidgetSnapshot() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("widget-test-secret", for: configuration))
+        let bars = [
+            UsageBar(stableKey: "session", label: "Session", used: 20, limit: 100),
+            UsageBar(stableKey: "weekly", label: "Weekly", used: 40, limit: 100),
+        ]
+        store.updateMetricVisibility(
+            false,
+            accountID: configuration.id,
+            metricID: bars[0].metricIdentifier(providerID: .codex, index: 0)
+        )
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Pro",
+            bars: bars,
+            fetchedAt: Date()
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+
+        let published = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        )
+        XCTAssertEqual(published.bars.map(\.label), ["Session", "Weekly"])
     }
 
     @MainActor

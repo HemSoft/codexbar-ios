@@ -29,6 +29,8 @@ struct ProviderUsageCard: View {
     let onConfigureAccount: () -> Void
     let onRetry: () -> Void
     let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
+    let isMetricVisible: (String) -> Bool
+    let onUpdateMetricVisibility: (String, Bool) -> Void
     let visualizationStyleForMetric: (String) -> MetricVisualizationStyle
     let onUpdateVisualizationStyle: (String, MetricVisualizationStyle) -> Void
     let onApplyVisualizationStyleToAll: (MetricVisualizationStyle, [String]) -> Void
@@ -57,6 +59,8 @@ struct ProviderUsageCard: View {
         onRetry: @escaping () -> Void = {},
         retainedCodexResetAttempt: CodexRetainedResetAttempt? = nil,
         onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)? = nil,
+        isMetricVisible: @escaping (String) -> Bool = { _ in true },
+        onUpdateMetricVisibility: @escaping (String, Bool) -> Void = { _, _ in },
         visualizationStyleForMetric: @escaping (String) -> MetricVisualizationStyle = { _ in .linearBar },
         onUpdateVisualizationStyle: @escaping (String, MetricVisualizationStyle) -> Void = { _, _ in },
         onApplyVisualizationStyleToAll: @escaping (MetricVisualizationStyle, [String]) -> Void = { _, _ in },
@@ -77,6 +81,8 @@ struct ProviderUsageCard: View {
         self.onConfigureAccount = onConfigureAccount
         self.onRetry = onRetry
         self.onUseCodexReset = onUseCodexReset
+        self.isMetricVisible = isMetricVisible
+        self.onUpdateMetricVisibility = onUpdateMetricVisibility
         self.visualizationStyleForMetric = visualizationStyleForMetric
         self.onUpdateVisualizationStyle = onUpdateVisualizationStyle
         self.onApplyVisualizationStyleToAll = onApplyVisualizationStyleToAll
@@ -192,7 +198,10 @@ struct ProviderUsageCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let creditsRemaining = result.creditsRemaining {
+            if
+                let creditsRemaining = result.creditsRemaining,
+                isMetricVisible(creditsMetricID)
+            {
                 if result.bars.isEmpty {
                     Text(CodexBarCurrencyText.format(creditsRemaining))
                         .font(.system(size: 34, weight: .semibold, design: .rounded))
@@ -212,7 +221,12 @@ struct ProviderUsageCard: View {
                 }
             }
 
-            ForEach(Array(result.bars.enumerated()), id: \.element.id) { index, bar in
+            ForEach(
+                Array(result.bars.enumerated()).filter { index, bar in
+                    isMetricVisible(metricID(for: bar, index: index))
+                },
+                id: \.element.id
+            ) { index, bar in
                 VStack(alignment: .leading, spacing: 7) {
                     HStack {
                         Text(bar.label)
@@ -286,10 +300,10 @@ struct ProviderUsageCard: View {
                 .accessibilityLabel(resetFeedback.message)
             }
 
-            if !result.monetaryMetrics.isEmpty {
+            if !visibleMonetaryMetrics.isEmpty {
                 Divider()
 
-                ForEach(result.monetaryMetrics) { metric in
+                ForEach(visibleMonetaryMetrics) { metric in
                     VStack(alignment: .leading, spacing: 7) {
                         HStack {
                             Text(metric.label)
@@ -343,9 +357,10 @@ struct ProviderUsageCard: View {
         .sheet(isPresented: $isCustomizingMetrics) {
             MetricVisualizationCustomizationView(
                 accountTitle: result.title,
-                providerID: result.providerID,
-                bars: result.bars,
+                result: result,
                 showsSeverity: result.hasFreshBars,
+                isMetricVisible: isMetricVisible,
+                onUpdateMetricVisibility: onUpdateMetricVisibility,
                 visualizationStyleForMetric: visualizationStyleForMetric,
                 onUpdateVisualizationStyle: onUpdateVisualizationStyle,
                 onApplyVisualizationStyleToAll: onApplyVisualizationStyleToAll,
@@ -393,10 +408,14 @@ struct ProviderUsageCard: View {
     }
 
     static func menuActions(for result: ProviderUsageResult) -> [ProviderUsageCardMenuAction] {
-        if result.bars.isEmpty {
+        if result.bars.isEmpty, result.availableMetrics.count < 2 {
             return [.configureAccount]
         }
         return [.configureAccount, .customizeMetrics]
+    }
+
+    static func metricVisibilityAccessibilityValue(isVisible: Bool) -> String {
+        isVisible ? "Shown" : "Hidden"
     }
 
     var displayedAlerts: [UsageAlertDetail] {
@@ -521,6 +540,16 @@ struct ProviderUsageCard: View {
 
     private func metricID(for bar: UsageBar, index: Int) -> String {
         bar.metricIdentifier(providerID: result.providerID, index: index)
+    }
+
+    private var creditsMetricID: String {
+        "\(result.providerID.rawValue).credits-remaining"
+    }
+
+    private var visibleMonetaryMetrics: [ProviderMonetaryMetric] {
+        result.monetaryMetrics.filter { metric in
+            isMetricVisible(metric.metricIdentifier(providerID: result.providerID))
+        }
     }
 
     private func metricAccessibilityLabel(_ bar: UsageBar) -> String {
@@ -1520,9 +1549,10 @@ private struct ProviderLogoTile: View {
 
 private struct MetricVisualizationCustomizationView: View {
     let accountTitle: String
-    let providerID: ProviderID
-    let bars: [UsageBar]
+    let result: ProviderUsageResult
     let showsSeverity: Bool
+    let isMetricVisible: (String) -> Bool
+    let onUpdateMetricVisibility: (String, Bool) -> Void
     let visualizationStyleForMetric: (String) -> MetricVisualizationStyle
     let onUpdateVisualizationStyle: (String, MetricVisualizationStyle) -> Void
     let onApplyVisualizationStyleToAll: (MetricVisualizationStyle, [String]) -> Void
@@ -1534,37 +1564,60 @@ private struct MetricVisualizationCustomizationView: View {
         NavigationStack {
             List {
                 Section {
-                    ForEach(Array(bars.enumerated()), id: \.element.id) { index, bar in
-                        let metricID = bar.metricIdentifier(providerID: providerID, index: index)
+                    ForEach(result.availableMetrics) { metric in
                         VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text(bar.label)
-                                    .font(.subheadline.weight(.semibold))
-
-                                Spacer(minLength: 12)
-
-                                Picker(
-                                    "Style for \(bar.label)",
-                                    selection: Binding(
-                                        get: { visualizationStyleForMetric(metricID) },
-                                        set: { onUpdateVisualizationStyle(metricID, $0) }
+                            if showsVisibilityControls {
+                                Toggle(
+                                    isOn: Binding(
+                                        get: { isMetricVisible(metric.id) },
+                                        set: { onUpdateMetricVisibility(metric.id, $0) }
                                     )
                                 ) {
-                                    ForEach(MetricVisualizationStyle.allCases) { style in
-                                        Text(style.displayName).tag(style)
-                                    }
+                                    Text(metric.label)
+                                        .font(.subheadline.weight(.semibold))
                                 }
-                                .labelsHidden()
-                                .pickerStyle(.menu)
+                                .accessibilityLabel(metric.label)
+                                .accessibilityValue(
+                                    ProviderUsageCard.metricVisibilityAccessibilityValue(
+                                        isVisible: isMetricVisible(metric.id)
+                                    )
+                                )
                             }
 
-                            MetricVisualizationView(
-                                bar: bar,
-                                style: visualizationStyleForMetric(metricID),
-                                showsSeverity: showsSeverity
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityHidden(true)
+                            if
+                                case let .usageBar(index) = metric.kind,
+                                result.bars.indices.contains(index)
+                            {
+                                let bar = result.bars[index]
+                                HStack {
+                                    Text(showsVisibilityControls ? "Visualization" : bar.label)
+                                        .font(.subheadline.weight(.semibold))
+
+                                    Spacer(minLength: 12)
+
+                                    Picker(
+                                        "Style for \(bar.label)",
+                                        selection: Binding(
+                                            get: { visualizationStyleForMetric(metric.id) },
+                                            set: { onUpdateVisualizationStyle(metric.id, $0) }
+                                        )
+                                    ) {
+                                        ForEach(MetricVisualizationStyle.allCases) { style in
+                                            Text(style.displayName).tag(style)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                }
+
+                                MetricVisualizationView(
+                                    bar: bar,
+                                    style: visualizationStyleForMetric(metric.id),
+                                    showsSeverity: showsSeverity
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityHidden(true)
+                            }
                         }
                         .padding(.vertical, 4)
                     }
@@ -1574,21 +1627,23 @@ private struct MetricVisualizationCustomizationView: View {
                     Text("Changes apply immediately and are saved automatically.")
                 }
 
-                Section {
-                    Menu {
-                        ForEach(MetricVisualizationStyle.allCases) { style in
-                            Button(style.displayName) {
-                                onApplyVisualizationStyleToAll(style, metricIDs)
+                if !styleMetricIDs.isEmpty {
+                    Section {
+                        Menu {
+                            ForEach(MetricVisualizationStyle.allCases) { style in
+                                Button(style.displayName) {
+                                    onApplyVisualizationStyleToAll(style, styleMetricIDs)
+                                }
                             }
+                        } label: {
+                            Label("Apply to all metrics in this card", systemImage: "square.stack.3d.up")
                         }
-                    } label: {
-                        Label("Apply to all metrics in this card", systemImage: "square.stack.3d.up")
-                    }
 
-                    Button {
-                        onResetVisualizationStyles(metricIDs)
-                    } label: {
-                        Label("Reset this card to linear bars", systemImage: "arrow.counterclockwise")
+                        Button {
+                            onResetVisualizationStyles(styleMetricIDs)
+                        } label: {
+                            Label("Reset this card to linear bars", systemImage: "arrow.counterclockwise")
+                        }
                     }
                 }
             }
@@ -1606,10 +1661,17 @@ private struct MetricVisualizationCustomizationView: View {
         .presentationDragIndicator(.visible)
     }
 
-    private var metricIDs: [String] {
-        bars.enumerated().map { index, bar in
-            bar.metricIdentifier(providerID: providerID, index: index)
+    private var styleMetricIDs: [String] {
+        result.availableMetrics.compactMap { metric in
+            guard case .usageBar = metric.kind else {
+                return nil
+            }
+            return metric.id
         }
+    }
+
+    private var showsVisibilityControls: Bool {
+        result.availableMetrics.count > 1
     }
 }
 

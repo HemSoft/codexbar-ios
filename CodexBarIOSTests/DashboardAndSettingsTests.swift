@@ -975,6 +975,73 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testWatchSnapshotFiltersHiddenMetricsAndRestoresThemWithSavedStyles() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .claude)
+        let session = UsageBar(
+            stableKey: "session",
+            label: "Current session",
+            used: 25,
+            limit: 100
+        )
+        let weekly = UsageBar(
+            stableKey: "weekly",
+            label: "Weekly",
+            used: 50,
+            limit: 100
+        )
+        let spent = ProviderMonetaryMetric(
+            kind: .spent,
+            label: "Usage credits spent",
+            minorUnits: 1_250,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let sessionID = session.metricIdentifier(providerID: .claude, index: 0)
+        let spentID = spent.metricIdentifier(providerID: .claude)
+        store.updateVisualizationStyle(
+            .circularRing,
+            accountID: configuration.id,
+            metricID: sessionID
+        )
+        store.updateMetricVisibility(false, accountID: configuration.id, metricID: sessionID)
+        store.updateMetricVisibility(false, accountID: configuration.id, metricID: spentID)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Pro",
+            bars: [session, weekly],
+            monetaryMetrics: [spent],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+
+        let hiddenSnapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: result.fetchedAt
+        )
+        XCTAssertEqual(hiddenSnapshot.accounts[0].metrics.map(\.id), ["claude.weekly"])
+
+        store.updateMetricVisibility(true, accountID: configuration.id, metricID: sessionID)
+        let restoredSnapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: result.fetchedAt
+        )
+        XCTAssertEqual(restoredSnapshot.accounts[0].metrics.map(\.id), [sessionID, "claude.weekly"])
+        XCTAssertEqual(restoredSnapshot.accounts[0].metrics[0].visualizationStyle, .circularRing)
+    }
+
+    @MainActor
     func testWatchSnapshotOmitsUnsupportedProviderPlanMetadata() throws {
         let defaults = UserDefaults(suiteName: #function)!
         defer {

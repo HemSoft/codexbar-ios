@@ -67,8 +67,15 @@ enum WatchSnapshotPublisher {
                     return nil
                 }
 
-                let barMetrics = result.bars.enumerated().map { index, bar in
+                let barMetrics: [WatchMetricSnapshot] = result.bars.enumerated().compactMap {
+                    index, bar -> WatchMetricSnapshot? in
                     let metricID = bar.metricIdentifier(providerID: result.providerID, index: index)
+                    guard configurationStore.isMetricVisible(
+                        accountID: result.accountID,
+                        metricID: metricID
+                    ) else {
+                        return nil
+                    }
                     let fraction = bar.fractionUsed
                     let localizedResetText = bar.localizedResetDescription(
                         at: now,
@@ -94,9 +101,17 @@ enum WatchSnapshotPublisher {
                     )
                 }
 
-                let monetaryMetrics = result.monetaryMetrics.map { metric in
-                    WatchMetricSnapshot(
-                        id: "\(result.providerID.rawValue).monetary.\(metric.id)",
+                let monetaryMetrics: [WatchMetricSnapshot] = result.monetaryMetrics.compactMap {
+                    metric -> WatchMetricSnapshot? in
+                    let metricID = metric.metricIdentifier(providerID: result.providerID)
+                    guard configurationStore.isMetricVisible(
+                        accountID: result.accountID,
+                        metricID: metricID
+                    ) else {
+                        return nil
+                    }
+                    return WatchMetricSnapshot(
+                        id: metricID,
                         label: metric.label,
                         exactValue: metric.formattedAmount(),
                         severity: result.hasReachedSpendLimit ? .critical : .normal,
@@ -105,10 +120,18 @@ enum WatchSnapshotPublisher {
                 }
 
                 var metrics = barMetrics + monetaryMetrics
-                if let creditsRemaining = result.freshCreditsRemaining, monetaryMetrics.isEmpty {
+                let creditsMetricID = "\(result.providerID.rawValue).credits-remaining"
+                if
+                    let creditsRemaining = result.freshCreditsRemaining,
+                    result.monetaryMetrics.isEmpty,
+                    configurationStore.isMetricVisible(
+                        accountID: result.accountID,
+                        metricID: creditsMetricID
+                    )
+                {
                     metrics.append(
                         WatchMetricSnapshot(
-                            id: "\(result.providerID.rawValue).credits-remaining",
+                            id: creditsMetricID,
                             label: "Credits remaining",
                             exactValue: creditsRemaining.formatted(
                                 .number.precision(.fractionLength(0...2))
@@ -265,7 +288,7 @@ final class WatchSnapshotCoordinator {
         configurationStore.$dashboardOrderingMode.dropFirst().sink { [weak self] _ in
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
-        configurationStore.$metricVisualizationPreferences.dropFirst().sink { [weak self] _ in
+        configurationStore.$metricCustomizationPreferences.dropFirst().sink { [weak self] _ in
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
         configurationStore.$autoRefreshInterval.dropFirst().sink { [weak self] _ in
