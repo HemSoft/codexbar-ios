@@ -2149,7 +2149,7 @@ final class AppAndWidgetTests: XCTestCase {
     }
 
     @MainActor
-    func testUnsupportedFutureMetricLayoutIsPreservedWhenKnownLayoutsSave() throws {
+    func testUndecodableFutureMetricLayoutIsPreservedWhenKnownLayoutsSave() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -2164,14 +2164,7 @@ final class AppAndWidgetTests: XCTestCase {
                   "\(futureAccountID)": {
                     "version": 99,
                     "orderedMetricIDs": ["codex.session"],
-                    "preferences": {
-                      "codex.session": {
-                        "isVisible": true,
-                        "visualizationStyle": "linearBar",
-                        "width": "full",
-                        "isNewlyDiscovered": false
-                      }
-                    },
+                    "preferences": {"codex.session": ["future", "shape"]},
                     "futureField": {"keep": "me"}
                   }
                 }
@@ -2191,9 +2184,13 @@ final class AppAndWidgetTests: XCTestCase {
         )
         let futureLayout = try XCTUnwrap(persistedRoot[futureAccountID] as? [String: Any])
         let futureField = try XCTUnwrap(futureLayout["futureField"] as? [String: String])
+        let futurePreferences = try XCTUnwrap(
+            futureLayout["preferences"] as? [String: [String]]
+        )
 
         XCTAssertEqual((futureLayout["version"] as? NSNumber)?.intValue, 99)
         XCTAssertEqual(futureField, ["keep": "me"])
+        XCTAssertEqual(futurePreferences["codex.session"], ["future", "shape"])
     }
 
     func testAvailableMetricIdentifiersCoverEveryMetricTypeWithoutUsingLabels() {

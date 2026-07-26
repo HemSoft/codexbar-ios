@@ -1501,20 +1501,8 @@ public final class ProviderConfigurationStore: ObservableObject {
             )
         }
 
-        if let decoded = try? JSONDecoder().decode(
-            [String: AccountMetricLayout].self,
-            from: data
-        ) {
-            let normalized = decoded.mapValues(Self.normalizedMetricLayout)
-            return MetricLayoutLoadResult(
-                layouts: normalized,
-                needsMigration: normalized != decoded,
-                // An empty object is ambiguous with the legacy dictionary's
-                // encoded empty state, so existing accounts must retain legacy
-                // full-width defaults until a versioned account entry exists.
-                usesVersionedStorage: !decoded.isEmpty,
-                unsupportedLayoutData: unsupportedMetricLayoutData(from: data)
-            )
+        if let versioned = loadVersionedMetricLayouts(from: data) {
+            return versioned
         }
 
         if let preferences = try? JSONDecoder().decode(
@@ -1554,6 +1542,64 @@ public final class ProviderConfigurationStore: ObservableObject {
         )
     }
 
+    private static func loadVersionedMetricLayouts(
+        from data: Data
+    ) -> MetricLayoutLoadResult? {
+        guard
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            root.values.contains(where: { value in
+                (value as? [String: Any])?["version"] is NSNumber
+            })
+        else {
+            // An empty object is ambiguous with the legacy dictionary's encoded
+            // empty state, so it must follow the legacy migration path.
+            return nil
+        }
+
+        var layouts: [String: AccountMetricLayout] = [:]
+        var preservedData: [String: Data] = [:]
+        var needsMigration = false
+
+        for (accountID, value) in root {
+            guard
+                let object = value as? [String: Any],
+                let data = try? JSONSerialization.data(
+                    withJSONObject: object,
+                    options: [.sortedKeys]
+                )
+            else {
+                continue
+            }
+
+            let version = (object["version"] as? NSNumber)?.intValue
+                ?? AccountMetricLayout.currentVersion
+            if
+                version <= AccountMetricLayout.currentVersion,
+                let decoded = try? JSONDecoder().decode(AccountMetricLayout.self, from: data)
+            {
+                let normalized = normalizedMetricLayout(decoded)
+                layouts[accountID] = normalized
+                needsMigration = needsMigration || normalized != decoded
+            } else {
+                // Preserve unsupported or otherwise undecodable account payloads
+                // semantically while allowing known accounts to continue
+                // loading and saving.
+                preservedData[accountID] = data
+                layouts[accountID] = (try? JSONDecoder().decode(
+                    AccountMetricLayout.self,
+                    from: data
+                )) ?? AccountMetricLayout(version: version)
+            }
+        }
+
+        return MetricLayoutLoadResult(
+            layouts: layouts,
+            needsMigration: needsMigration,
+            usesVersionedStorage: true,
+            unsupportedLayoutData: preservedData
+        )
+    }
+
     private static func migratedMetricLayout(
         from preferences: [String: MetricCustomizationPreference]
     ) -> AccountMetricLayout {
@@ -1581,28 +1627,6 @@ public final class ProviderConfigurationStore: ObservableObject {
         normalized.version = AccountMetricLayout.currentVersion
         normalized.orderedMetricIDs = uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
         return normalized
-    }
-
-    private static func unsupportedMetricLayoutData(from data: Data) -> [String: Data] {
-        guard
-            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return [:]
-        }
-
-        var unsupportedData: [String: Data] = [:]
-        for (accountID, value) in root {
-            guard
-                let layout = value as? [String: Any],
-                let version = layout["version"] as? NSNumber,
-                version.intValue > AccountMetricLayout.currentVersion,
-                let data = try? JSONSerialization.data(withJSONObject: layout, options: [.sortedKeys])
-            else {
-                continue
-            }
-            unsupportedData[accountID] = data
-        }
-        return unsupportedData
     }
 
     private static func uniqueNonemptyMetricIDs(_ metricIDs: [String]) -> [String] {
