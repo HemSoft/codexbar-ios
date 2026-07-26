@@ -1294,6 +1294,193 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(ordered.map(\.accountID), ["projection.exhausted", "projection.future"])
     }
 
+    func testDashboardUsageSorterPrioritizesProjectionHittingExactlyAtPeriodEnd() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let periodStart = now.addingTimeInterval(-2 * 60 * 60)
+        let periodEnd = now.addingTimeInterval(2 * 60 * 60)
+        let noProjection = makeHistoryResult(
+            accountID: "projection.none",
+            fetchedAt: now,
+            used: 100
+        )
+        let boundaryHit = makeHistoryResult(
+            accountID: "projection.boundary",
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 100,
+                    limit: 100,
+                    projectionCurrent: 50,
+                    projectionLimit: 100,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+
+        let orderedFromMissingProjection = DashboardUsageSorter.orderedResults(
+            [noProjection, boundaryHit],
+            mode: .smart,
+            manualOrder: [],
+            now: now
+        )
+        let orderedFromBoundaryProjection = DashboardUsageSorter.orderedResults(
+            [boundaryHit, noProjection],
+            mode: .smart,
+            manualOrder: [],
+            now: now
+        )
+
+        XCTAssertEqual(
+            orderedFromMissingProjection.map(\.accountID),
+            ["projection.boundary", "projection.none"]
+        )
+        XCTAssertEqual(
+            orderedFromBoundaryProjection.map(\.accountID),
+            ["projection.boundary", "projection.none"]
+        )
+    }
+
+    func testDashboardUsageSorterOrdersProjectedFractionsWhenLimitsAreNotReached() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let periodStart = now.addingTimeInterval(-60 * 60)
+        let periodEnd = now.addingTimeInterval(60 * 60)
+        let lowerProjection = makeHistoryResult(
+            accountID: "projection.lower",
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 10,
+                    limit: 100,
+                    projectionCurrent: 20,
+                    projectionLimit: 100,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+        let higherProjection = makeHistoryResult(
+            accountID: "projection.higher",
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 10,
+                    limit: 100,
+                    projectionCurrent: 30,
+                    projectionLimit: 100,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+
+        let ordered = DashboardUsageSorter.orderedResults(
+            [lowerProjection, higherProjection],
+            mode: .smart,
+            manualOrder: [],
+            now: now
+        )
+
+        XCTAssertEqual(ordered.map(\.accountID), ["projection.higher", "projection.lower"])
+    }
+
+    func testDashboardUsageSorterPreservesEqualScoresAndIgnoresInvalidProjections() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let plain = makeHistoryResult(accountID: "plain", fetchedAt: now, used: 20)
+        let zeroLimit = makeHistoryResult(
+            accountID: "projection.zero-limit",
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 20,
+                    limit: 100,
+                    projectionCurrent: 20,
+                    projectionLimit: 0,
+                    projectionPeriodStart: now.addingTimeInterval(-60 * 60),
+                    projectionPeriodEnd: now.addingTimeInterval(60 * 60)
+                ),
+            ]
+        )
+        let zeroElapsed = makeHistoryResult(
+            accountID: "projection.zero-elapsed",
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 20,
+                    limit: 100,
+                    projectionCurrent: 20,
+                    projectionLimit: 100,
+                    projectionPeriodStart: now,
+                    projectionPeriodEnd: now.addingTimeInterval(60 * 60)
+                ),
+            ]
+        )
+
+        let ordered = DashboardUsageSorter.orderedResults(
+            [plain, zeroLimit, zeroElapsed],
+            mode: .smart,
+            manualOrder: [],
+            now: now
+        )
+
+        XCTAssertEqual(
+            ordered.map(\.accountID),
+            ["plain", "projection.zero-limit", "projection.zero-elapsed"]
+        )
+    }
+
+    func testDashboardUsageSorterUsesElapsedRateToOrderLimitHits() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let periodEnd = now.addingTimeInterval(8 * 60 * 60)
+        let longerElapsed = makeHistoryResult(
+            accountID: "projection.longer-elapsed",
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 100,
+                    limit: 100,
+                    projectionCurrent: 50,
+                    projectionLimit: 100,
+                    projectionPeriodStart: now.addingTimeInterval(-4 * 60 * 60),
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+        let shorterElapsed = makeHistoryResult(
+            accountID: "projection.shorter-elapsed",
+            fetchedAt: now,
+            bars: [
+                UsageBar(
+                    label: "Weekly",
+                    used: 100,
+                    limit: 100,
+                    projectionCurrent: 25,
+                    projectionLimit: 100,
+                    projectionPeriodStart: now.addingTimeInterval(-60 * 60),
+                    projectionPeriodEnd: periodEnd
+                ),
+            ]
+        )
+
+        let ordered = DashboardUsageSorter.orderedResults(
+            [longerElapsed, shorterElapsed],
+            mode: .smart,
+            manualOrder: [],
+            now: now
+        )
+
+        XCTAssertEqual(
+            ordered.map(\.accountID),
+            ["projection.shorter-elapsed", "projection.longer-elapsed"]
+        )
+    }
+
     @MainActor
     func testProviderGroupsPersistAndAssignAccounts() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
