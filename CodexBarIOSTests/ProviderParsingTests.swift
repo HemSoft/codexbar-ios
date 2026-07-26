@@ -2244,7 +2244,7 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.monetaryMetrics.first?.amount, Decimal(40))
         XCTAssertEqual(
             result.usageMessages,
-            ["Usage credits are enabled.", "Auto-reload is on."]
+            ["Usage credits are enabled."]
         )
     }
 
@@ -2284,6 +2284,27 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertTrue(result.monetaryMetrics.isEmpty)
         XCTAssertEqual(result.usageMessages, ["Usage credits are disabled: Not funded."])
+    }
+
+    func testClaudeUsageParserValidatesAndClampsProviderMoney() throws {
+        let invalidExponent = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"spend":{"enabled":true,"used":{"amount_minor":500,"currency":"USD","exponent":20},"limit":{"amount_minor":4000,"currency":"USD","exponent":20}}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+        XCTAssertTrue(invalidExponent.monetaryMetrics.isEmpty)
+
+        let negativeAmounts = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"spend":{"enabled":true,"used":{"amount_minor":-500,"currency":"USD","exponent":2},"limit":{"amount_minor":-4000,"currency":"USD","exponent":2},"balance":{"amount_minor":-1000,"currency":"USD","exponent":2}}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+        XCTAssertEqual(
+            negativeAmounts.monetaryMetrics.map(\.kind),
+            [.spent, .spendLimit, .balance, .remainingHeadroom]
+        )
+        XCTAssertEqual(
+            negativeAmounts.monetaryMetrics.map(\.amount),
+            [Decimal(0), Decimal(0), Decimal(0), Decimal(0)]
+        )
     }
 
     func testClaudeUsageParserUsesOnlyExplicitVerifiedPlanCombinations() throws {

@@ -207,8 +207,12 @@ public enum ClaudeUsageParser {
                 }
             }
 
-            // A non-null provider configuration means auto-reload is configured.
-            isEnabled = true
+            throw DecodingError.dataCorrupted(
+                .init(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Expected an auto-reload Boolean."
+                )
+            )
         }
     }
 
@@ -608,23 +612,21 @@ public enum ClaudeUsageParser {
             ? ["Usage credits are enabled."]
             : ["Usage-credit enabled status was not reported."]
 
-        if let used = monetaryMetric(
+        let spentMetric = monetaryMetric(
             spend.used,
             kind: .spent,
             label: "Usage credits spent",
             detail: spend.percent.map { "\(Int(sanitizedPercent($0).rounded()))% used" }
                 ?? "Month to date"
-        ) {
-            metrics.append(used)
-        }
-        if let limit = monetaryMetric(
+        )
+        let limitMetric = monetaryMetric(
             spend.limit,
             kind: .spendLimit,
             label: "Monthly spend limit",
             detail: "Usage-credit policy cap"
-        ) {
-            metrics.append(limit)
-        }
+        )
+        if let spentMetric { metrics.append(spentMetric) }
+        if let limitMetric { metrics.append(limitMetric) }
         if let balance = monetaryMetric(
             spend.balance,
             kind: .balance,
@@ -635,18 +637,17 @@ public enum ClaudeUsageParser {
         }
 
         if
-            let used = spend.used,
-            let limit = spend.limit,
-            normalizedCurrency(used.currency) == normalizedCurrency(limit.currency),
-            used.exponent == limit.exponent,
-            let currency = normalizedCurrency(limit.currency)
+            let spentMetric,
+            let limitMetric,
+            spentMetric.currencyCode == limitMetric.currencyCode,
+            spentMetric.decimalPlaces == limitMetric.decimalPlaces
         {
             metrics.append(ProviderMonetaryMetric(
                 kind: .remainingHeadroom,
                 label: "Remaining spend headroom",
-                minorUnits: max(limit.amountMinor - used.amountMinor, 0),
-                currencyCode: currency,
-                decimalPlaces: limit.exponent,
+                minorUnits: max(limitMetric.minorUnits - spentMetric.minorUnits, 0),
+                currencyCode: limitMetric.currencyCode,
+                decimalPlaces: limitMetric.decimalPlaces,
                 detail: "Derived from spend limit; not a prepaid balance"
             ))
         }
@@ -676,7 +677,7 @@ public enum ClaudeUsageParser {
         return ProviderMonetaryMetric(
             kind: kind,
             label: label,
-            minorUnits: money.amountMinor,
+            minorUnits: max(money.amountMinor, 0),
             currencyCode: currency,
             decimalPlaces: money.exponent,
             detail: detail
