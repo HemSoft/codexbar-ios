@@ -54,7 +54,7 @@ public enum ClaudeUsageParser {
                 forKey: .sevenDaySonnet
             )
             limits = try container.decodeIfPresent([StructuredLimit].self, forKey: .limits)
-            extraUsage = try container.decodeIfPresent(ExtraUsage.self, forKey: .extraUsage)
+            extraUsage = try? container.decodeIfPresent(ExtraUsage.self, forKey: .extraUsage)
             spend = try? container.decodeIfPresent(Spend.self, forKey: .spend)
         }
     }
