@@ -582,9 +582,9 @@ public enum ClaudeUsageParser {
         }
 
         var messages = provider.messages
-        if spend.enabled == nil, let legacyStatus = legacy.messages.first {
+        if spend.enabled == nil, extraUsage?.isEnabled == true {
             messages.removeAll { $0 == "Usage-credit enabled status was not reported." }
-            messages.insert(legacyStatus, at: 0)
+            messages.insert("Usage credits are enabled.", at: 0)
         }
         if metrics.isEmpty {
             messages.append("Usage-credit monetary details are temporarily unavailable.")

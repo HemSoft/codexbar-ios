@@ -2286,6 +2286,19 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.usageMessages, ["Usage credits are disabled: Not funded."])
     }
 
+    func testClaudeUsageParserHonorsFallbackEnabledSpendState() throws {
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"spend":{"used":{"amount_minor":500,"currency":"USD","exponent":2},"limit":{"amount_minor":4000,"currency":"USD","exponent":2}},"extra_usage":{"is_enabled":true,"used_credits":500,"monthly_limit":4000,"currency":"USD","decimal_places":2}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertEqual(
+            result.monetaryMetrics.map(\.kind),
+            [.spent, .spendLimit, .remainingHeadroom]
+        )
+        XCTAssertEqual(result.usageMessages, ["Usage credits are enabled."])
+    }
+
     func testClaudeUsageParserValidatesAndClampsProviderMoney() throws {
         let invalidExponent = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(#"{"spend":{"enabled":true,"used":{"amount_minor":500,"currency":"USD","exponent":20},"limit":{"amount_minor":4000,"currency":"USD","exponent":20}}}"#.utf8),
