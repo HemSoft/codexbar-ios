@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added a Configure Account shortcut to each dashboard card menu so users can
+  edit the exact account and refresh its usage without navigating through
+  Settings. ([#131](https://github.com/HemSoft/codexbar-ios/issues/131))
 - Added compact, accessible subscription-plan badges to ChatGPT / Codex,
   Claude, and GitHub Copilot dashboard cards while preserving custom account
   names and omitting unknown or unverified tiers.

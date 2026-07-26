@@ -88,6 +88,36 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertNil(navigation.accountID)
     }
 
+    func testDashboardAccountConfigurationTargetsExactAccountAcrossSameProvider() {
+        var navigation = DashboardAccountConfigurationNavigationState()
+
+        navigation.present(accountID: "claude.personal")
+        XCTAssertEqual(navigation.presentation?.accountID, "claude.personal")
+        XCTAssertEqual(navigation.presentation?.id, "claude.personal")
+
+        navigation.present(accountID: "claude.work")
+        XCTAssertEqual(navigation.presentation?.accountID, "claude.work")
+        XCTAssertEqual(navigation.presentation?.id, "claude.work")
+    }
+
+    func testDashboardAccountConfigurationDismissalRefreshesOnlyPresentedAccount() {
+        var navigation = DashboardAccountConfigurationNavigationState()
+        navigation.present(accountID: "openRouter.personal")
+        navigation.present(accountID: "openRouter.work")
+
+        navigation.clearPresentation()
+        XCTAssertNil(navigation.presentation)
+
+        var refreshedAccountIDs: [String] = []
+        if let accountID = navigation.finishDismissal() {
+            refreshedAccountIDs.append(accountID)
+        }
+
+        XCTAssertEqual(refreshedAccountIDs, ["openRouter.work"])
+        XCTAssertNil(navigation.presentation)
+        XCTAssertNil(navigation.finishDismissal())
+    }
+
     func testUsageSeverityThresholds() {
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.74), .normal)
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.75), .warning)

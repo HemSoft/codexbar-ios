@@ -21,6 +21,7 @@ struct ProviderUsageCard: View {
     let recoveryStatusMessage: String?
     let recoveryErrorMessage: String?
     let onShowHistory: () -> Void
+    let onConfigureAccount: () -> Void
     let onRetry: () -> Void
     let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
     let visualizationStyleForMetric: (String) -> MetricVisualizationStyle
@@ -47,6 +48,7 @@ struct ProviderUsageCard: View {
         recoveryStatusMessage: String? = nil,
         recoveryErrorMessage: String? = nil,
         onShowHistory: @escaping () -> Void = {},
+        onConfigureAccount: @escaping () -> Void = {},
         onRetry: @escaping () -> Void = {},
         retainedCodexResetAttempt: CodexRetainedResetAttempt? = nil,
         onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)? = nil,
@@ -67,6 +69,7 @@ struct ProviderUsageCard: View {
         self.recoveryStatusMessage = recoveryStatusMessage
         self.recoveryErrorMessage = recoveryErrorMessage
         self.onShowHistory = onShowHistory
+        self.onConfigureAccount = onConfigureAccount
         self.onRetry = onRetry
         self.onUseCodexReset = onUseCodexReset
         self.visualizationStyleForMetric = visualizationStyleForMetric
@@ -131,6 +134,11 @@ struct ProviderUsageCard: View {
 
                 if !result.bars.isEmpty {
                     Menu {
+                        Button(action: onConfigureAccount) {
+                            Label("Configure Account…", systemImage: "gearshape")
+                        }
+                        .accessibilityLabel("Configure account \(result.title)")
+
                         Button {
                             isCustomizingMetrics = true
                         } label: {
