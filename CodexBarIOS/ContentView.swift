@@ -11,6 +11,7 @@ struct ContentView: View {
     @ObservedObject var historyStore: UsageHistoryStore
     @ObservedObject var appUpdateController: AppUpdateController
     @StateObject private var orchestrator: DashboardOrchestrator
+    @StateObject private var claudeAuthenticationController: DashboardClaudeAuthenticationController
     private let performsLifecycleWork: Bool
 
     @Environment(\.requestReview) private var requestReview
@@ -36,13 +37,22 @@ struct ContentView: View {
         self.historyStore = historyStore
         self.appUpdateController = appUpdateController
         self.performsLifecycleWork = performsLifecycleWork
+        let orchestrator = DashboardOrchestrator(
+            refreshService: refreshService,
+            configurationStore: configurationStore,
+            historyStore: historyStore,
+            usageAlertNotifier: usageAlertNotifier ?? LocalUsageAlertNotifier.shared,
+            appReviewPromptPolicy: appReviewPromptPolicy
+        )
         self._orchestrator = StateObject(
-            wrappedValue: DashboardOrchestrator(
-                refreshService: refreshService,
+            wrappedValue: orchestrator
+        )
+        self._claudeAuthenticationController = StateObject(
+            wrappedValue: DashboardClaudeAuthenticationController(
                 configurationStore: configurationStore,
-                historyStore: historyStore,
-                usageAlertNotifier: usageAlertNotifier ?? LocalUsageAlertNotifier.shared,
-                appReviewPromptPolicy: appReviewPromptPolicy
+                refreshAccount: { [weak orchestrator] configuration in
+                    await orchestrator?.refreshAccount(configuration)
+                }
             )
         )
     }
@@ -253,6 +263,12 @@ struct ContentView: View {
                 seriesOptions: historyStore.historySeriesOptions(for: result)
             )
         }
+        .sheet(
+            item: $claudeAuthenticationController.authURL,
+            onDismiss: claudeAuthenticationController.cancelAuthentication
+        ) { authURL in
+            SafariAuthSheet(url: authURL.url)
+        }
         .confirmationDialog(
             "Reset unreadable usage history?",
             isPresented: $isConfirmingHistoryReset,
@@ -301,6 +317,8 @@ struct ContentView: View {
         for item: DashboardProviderCardItem,
         alerts: [UsageAlertDetail]
     ) -> some View {
+        let authenticationState = claudeAuthenticationController.state(for: item.id)
+
         if let result = item.result {
             ProviderUsageCard(
                 result: result,
@@ -310,13 +328,15 @@ struct ContentView: View {
                 isHistoryEnabled: item.configuration.showsHistory,
                 isRefreshing: item.isRefreshing,
                 refreshErrorMessage: item.errorMessage,
+                recoveryAction: item.recoveryAction,
+                isPerformingRecovery: authenticationState.isSigningIn,
+                recoveryStatusMessage: authenticationState.statusMessage,
+                recoveryErrorMessage: authenticationState.errorMessage,
                 onShowHistory: {
                     selectedHistoryResult = result
                 },
                 onRetry: {
-                    Task {
-                        await orchestrator.refreshAccount(item.configuration)
-                    }
+                    performRecovery(for: item)
                 },
                 retainedCodexResetAttempt: orchestrator.retainedCodexResetAttempt(
                     for: item.configuration
@@ -358,12 +378,25 @@ struct ContentView: View {
             ProviderUsagePlaceholderCard(
                 configuration: item.configuration,
                 errorMessage: item.errorMessage,
+                recoveryAction: item.recoveryAction,
+                isPerformingRecovery: authenticationState.isSigningIn,
+                recoveryStatusMessage: authenticationState.statusMessage,
+                recoveryErrorMessage: authenticationState.errorMessage,
                 onRetry: {
-                    Task {
-                        await orchestrator.refreshAccount(item.configuration)
-                    }
+                    performRecovery(for: item)
                 }
             )
+        }
+    }
+
+    private func performRecovery(for item: DashboardProviderCardItem) {
+        switch item.recoveryAction {
+        case .retryRefresh:
+            Task {
+                await orchestrator.refreshAccount(item.configuration)
+            }
+        case .signIn, .reauthenticate:
+            claudeAuthenticationController.startSignIn(for: item.configuration)
         }
     }
 

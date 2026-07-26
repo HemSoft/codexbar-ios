@@ -305,7 +305,7 @@ struct ProviderSettingsView: View {
             viewModel.cancelAuthentication()
         }
         .sheet(item: $viewModel.authURL) { authURL in
-            SafariAuthSheet(authURL: authURL)
+            SafariAuthSheet(url: authURL.url)
         }
     }
 
@@ -359,15 +359,15 @@ struct PresentedAuthURL: Identifiable {
     }
 }
 
-private struct SafariAuthSheet: View {
-    let authURL: PresentedAuthURL
+struct SafariAuthSheet: View {
+    let url: URL
 
     var body: some View {
-        SafariAuthView(url: authURL.url)
+        SafariAuthView(url: url)
     }
 }
 
-private struct SafariAuthView: UIViewControllerRepresentable {
+struct SafariAuthView: UIViewControllerRepresentable {
     let url: URL
 
     func makeUIViewController(context: Context) -> SFSafariViewController {

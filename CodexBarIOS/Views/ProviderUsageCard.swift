@@ -16,6 +16,10 @@ struct ProviderUsageCard: View {
     let isHistoryEnabled: Bool
     let isRefreshing: Bool
     let refreshErrorMessage: String?
+    let recoveryAction: ProviderUsageRecoveryAction
+    let isPerformingRecovery: Bool
+    let recoveryStatusMessage: String?
+    let recoveryErrorMessage: String?
     let onShowHistory: () -> Void
     let onRetry: () -> Void
     let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
@@ -38,6 +42,10 @@ struct ProviderUsageCard: View {
         isHistoryEnabled: Bool = true,
         isRefreshing: Bool = false,
         refreshErrorMessage: String? = nil,
+        recoveryAction: ProviderUsageRecoveryAction = .retryRefresh,
+        isPerformingRecovery: Bool = false,
+        recoveryStatusMessage: String? = nil,
+        recoveryErrorMessage: String? = nil,
         onShowHistory: @escaping () -> Void = {},
         onRetry: @escaping () -> Void = {},
         retainedCodexResetAttempt: CodexRetainedResetAttempt? = nil,
@@ -54,6 +62,10 @@ struct ProviderUsageCard: View {
         self.isHistoryEnabled = isHistoryEnabled
         self.isRefreshing = isRefreshing
         self.refreshErrorMessage = refreshErrorMessage
+        self.recoveryAction = recoveryAction
+        self.isPerformingRecovery = isPerformingRecovery
+        self.recoveryStatusMessage = recoveryStatusMessage
+        self.recoveryErrorMessage = recoveryErrorMessage
         self.onShowHistory = onShowHistory
         self.onRetry = onRetry
         self.onUseCodexReset = onUseCodexReset
@@ -88,10 +100,14 @@ struct ProviderUsageCard: View {
                 Spacer()
 
                 ZStack {
-                    if isRefreshing {
+                    if isRefreshing || isPerformingRecovery {
                         ProgressView()
                             .controlSize(.small)
-                            .accessibilityLabel("Refreshing \(result.title)")
+                            .accessibilityLabel(
+                                isPerformingRecovery
+                                    ? "Signing in to \(result.title)"
+                                    : "Refreshing \(result.title)"
+                            )
                     }
                 }
                 .frame(width: 16, height: 16)
@@ -120,13 +136,27 @@ struct ProviderUsageCard: View {
                 UsageAlertSummaryView(alerts: displayedAlerts)
             }
 
-            if showsRetryAction {
+            if showsRecoveryAction {
                 Button(action: onRetry) {
-                    Label("Retry", systemImage: "arrow.clockwise")
+                    Label(recoveryActionTitle, systemImage: recoveryActionSystemImage)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .accessibilityHint("Refreshes usage for \(result.title)")
+                .accessibilityHint(recoveryAccessibilityHint)
+            }
+
+            if let recoveryStatusMessage {
+                Text(recoveryStatusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let recoveryErrorMessage {
+                Text(recoveryErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if let creditsRemaining = result.creditsRemaining {
@@ -319,8 +349,43 @@ struct ProviderUsageCard: View {
             || !history.points.isEmpty)
     }
 
+    var showsRecoveryAction: Bool {
+        refreshErrorMessage != nil && !isRefreshing && !isPerformingRecovery
+    }
+
     var showsRetryAction: Bool {
-        refreshErrorMessage != nil && !isRefreshing
+        showsRecoveryAction && recoveryAction == .retryRefresh
+    }
+
+    var recoveryActionTitle: String {
+        switch recoveryAction {
+        case .retryRefresh:
+            "Retry"
+        case .signIn:
+            "Sign in with Claude"
+        case .reauthenticate:
+            "Sign in again"
+        }
+    }
+
+    var recoveryActionSystemImage: String {
+        switch recoveryAction {
+        case .retryRefresh:
+            "arrow.clockwise"
+        case .signIn, .reauthenticate:
+            "person.badge.key"
+        }
+    }
+
+    var recoveryAccessibilityHint: String {
+        switch recoveryAction {
+        case .retryRefresh:
+            "Retries refreshing usage for \(result.title)"
+        case .signIn:
+            "Starts Claude sign-in for \(result.title)"
+        case .reauthenticate:
+            "Replaces the rejected Claude credential for \(result.title)"
+        }
     }
 
     var bankedResets: CodexBankedRateLimitResets? {
@@ -745,7 +810,29 @@ struct CodexBankedResetInventoryView: View {
 struct ProviderUsagePlaceholderCard: View {
     let configuration: ProviderAccountConfiguration
     let errorMessage: String?
+    let recoveryAction: ProviderUsageRecoveryAction
+    let isPerformingRecovery: Bool
+    let recoveryStatusMessage: String?
+    let recoveryErrorMessage: String?
     let onRetry: () -> Void
+
+    init(
+        configuration: ProviderAccountConfiguration,
+        errorMessage: String?,
+        recoveryAction: ProviderUsageRecoveryAction = .retryRefresh,
+        isPerformingRecovery: Bool = false,
+        recoveryStatusMessage: String? = nil,
+        recoveryErrorMessage: String? = nil,
+        onRetry: @escaping () -> Void
+    ) {
+        self.configuration = configuration
+        self.errorMessage = errorMessage
+        self.recoveryAction = recoveryAction
+        self.isPerformingRecovery = isPerformingRecovery
+        self.recoveryStatusMessage = recoveryStatusMessage
+        self.recoveryErrorMessage = recoveryErrorMessage
+        self.onRetry = onRetry
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -768,12 +855,32 @@ struct ProviderUsagePlaceholderCard: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Button(action: onRetry) {
-                    Label("Retry", systemImage: "arrow.clockwise")
+                if isPerformingRecovery {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("Signing in to \(configuration.displayName)")
+                } else {
+                    Button(action: onRetry) {
+                        Label(recoveryActionTitle, systemImage: recoveryActionSystemImage)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityHint(recoveryAccessibilityHint)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityHint("Refreshes usage for \(configuration.displayName)")
+
+                if let recoveryStatusMessage {
+                    Text(recoveryStatusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let recoveryErrorMessage {
+                    Text(recoveryErrorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else {
                 HStack(spacing: 8) {
                     ProgressView()
@@ -801,6 +908,32 @@ struct ProviderUsagePlaceholderCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color(.separator).opacity(0.22), lineWidth: 0.5)
+        }
+    }
+
+    var recoveryActionTitle: String {
+        switch recoveryAction {
+        case .retryRefresh:
+            "Retry"
+        case .signIn:
+            "Sign in with Claude"
+        case .reauthenticate:
+            "Sign in again"
+        }
+    }
+
+    var recoveryActionSystemImage: String {
+        recoveryAction == .retryRefresh ? "arrow.clockwise" : "person.badge.key"
+    }
+
+    var recoveryAccessibilityHint: String {
+        switch recoveryAction {
+        case .retryRefresh:
+            "Retries refreshing usage for \(configuration.displayName)"
+        case .signIn:
+            "Starts Claude sign-in for \(configuration.displayName)"
+        case .reauthenticate:
+            "Replaces the rejected Claude credential for \(configuration.displayName)"
         }
     }
 

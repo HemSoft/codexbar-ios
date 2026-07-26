@@ -1,5 +1,11 @@
 import Foundation
 
+public enum ProviderUsageRecoveryAction: Equatable, Sendable {
+    case retryRefresh
+    case signIn
+    case reauthenticate
+}
+
 public enum ProviderMonetaryMetricKind: String, Codable, Equatable, Sendable {
     case balance
     case spent
@@ -123,6 +129,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let usageMessages: [String]
     public let codexBankedRateLimitResets: CodexBankedRateLimitResets?
     public let failureMessage: String?
+    public let recoveryAction: ProviderUsageRecoveryAction
     public let preserveCachedBarsOnFailure: Bool
     public let preserveCachedCreditsOnFailure: Bool
     public let cacheIdentity: String?
@@ -143,6 +150,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         usageMessages: [String] = [],
         codexBankedRateLimitResets: CodexBankedRateLimitResets? = nil,
         failureMessage: String? = nil,
+        recoveryAction: ProviderUsageRecoveryAction = .retryRefresh,
         preserveCachedBarsOnFailure: Bool = false,
         preserveCachedCreditsOnFailure: Bool = false,
         cacheIdentity: String? = nil,
@@ -164,6 +172,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
             $0.availableCount > 0 ? $0 : nil
         }
         self.failureMessage = failureMessage
+        self.recoveryAction = recoveryAction
         self.preserveCachedBarsOnFailure = preserveCachedBarsOnFailure
         self.preserveCachedCreditsOnFailure = preserveCachedCreditsOnFailure
         self.cacheIdentity = cacheIdentity

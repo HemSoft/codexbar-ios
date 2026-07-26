@@ -2014,9 +2014,23 @@ final class ProviderNetworkTests: XCTestCase {
 
         XCTAssertEqual(requestCount, 4)
         XCTAssertEqual(unauthorized.subtitle, "Claude credential was rejected. Sign in again.")
+        XCTAssertEqual(unauthorized.recoveryAction, .reauthenticate)
         XCTAssertEqual(forbidden.subtitle, "Claude credential lacks permission to read subscription usage.")
+        XCTAssertEqual(forbidden.recoveryAction, .retryRefresh)
         XCTAssertEqual(missing.subtitle, "Claude subscription usage is unavailable for this account.")
+        XCTAssertEqual(missing.recoveryAction, .retryRefresh)
         XCTAssertEqual(unavailable.subtitle, "Claude usage is temporarily unavailable (server error 503).")
+        XCTAssertEqual(unavailable.recoveryAction, .retryRefresh)
+    }
+
+    func testClaudeUsageProviderOffersSignInForMissingCredential() async throws {
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        let provider = ClaudeUsageProvider(secretStore: MemorySecretStore())
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.failureMessage, "Not configured - sign in with Claude.")
+        XCTAssertEqual(result.recoveryAction, .signIn)
     }
 
     func testClaudeUsageProviderDoesNotProbeMessagesWhenOAuthPayloadIsUnrecognized() async throws {

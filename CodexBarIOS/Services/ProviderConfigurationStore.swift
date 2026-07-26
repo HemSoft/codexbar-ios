@@ -640,6 +640,10 @@ public final class ProviderConfigurationStore: ObservableObject {
                 || !configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
+        if configuration.providerID == .claude {
+            return true
+        }
+
         return false
     }
 

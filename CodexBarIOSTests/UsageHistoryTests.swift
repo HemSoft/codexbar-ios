@@ -695,6 +695,51 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertFalse(refreshingCard.showsRetryAction)
     }
 
+    func testProviderUsageCardDistinguishesRetryAndClaudeSignInActions() {
+        let result = makeHistoryResult(
+            accountID: "claude.work",
+            providerID: .claude,
+            fetchedAt: Date(),
+            used: 25
+        )
+        let reauthenticationCard = ProviderUsageCard(
+            result: result,
+            statusText: "Claude credential was rejected.",
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false),
+            refreshErrorMessage: "Claude credential was rejected.",
+            recoveryAction: .reauthenticate
+        )
+        let signingInCard = ProviderUsageCard(
+            result: result,
+            statusText: "Signing in",
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false),
+            refreshErrorMessage: "Claude credential was rejected.",
+            recoveryAction: .reauthenticate,
+            isPerformingRecovery: true
+        )
+        let retryCard = ProviderUsageCard(
+            result: result,
+            statusText: "Offline",
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false),
+            refreshErrorMessage: "The Internet connection appears to be offline."
+        )
+
+        XCTAssertTrue(reauthenticationCard.showsRecoveryAction)
+        XCTAssertFalse(reauthenticationCard.showsRetryAction)
+        XCTAssertEqual(reauthenticationCard.recoveryActionTitle, "Sign in again")
+        XCTAssertEqual(
+            reauthenticationCard.recoveryAccessibilityHint,
+            "Replaces the rejected Claude credential for \(result.title)"
+        )
+        XCTAssertFalse(signingInCard.showsRecoveryAction)
+        XCTAssertTrue(retryCard.showsRetryAction)
+        XCTAssertEqual(retryCard.recoveryActionTitle, "Retry")
+        XCTAssertEqual(
+            retryCard.recoveryAccessibilityHint,
+            "Retries refreshing usage for \(result.title)"
+        )
+    }
+
     @MainActor
     func testProviderUsageCardOpensBankedResetInventoryWithoutChangingSeverity() {
         let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)

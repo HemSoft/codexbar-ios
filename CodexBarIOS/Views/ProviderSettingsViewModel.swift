@@ -240,12 +240,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             )
             var updated = configuration
             updated.authMethod = .browserSession
-            guard persist(updated) else {
-                claudeAuthError = configurationStore.lastError
-                authURL = nil
-                return
-            }
-            guard persistSecret(result.storedCredential) else {
+            guard persistCredential(result.storedCredential, with: updated) else {
                 claudeAuthError = configurationStore.lastError
                 claudeAuthDiagnostic = "Claude sign-in failed."
                 authURL = nil

@@ -1145,6 +1145,34 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertEqual(URL(string: redirectURI)?.host, "localhost")
     }
 
+    @MainActor
+    func testClaudeBrowserSignInCancellationThrowsCancellationError() async throws {
+        let service = ClaudeWebAuthService(callbackTimeoutNanoseconds: 30_000_000_000)
+        var presentedURL: URL?
+        let authorizationPresented = expectation(description: "Claude authorization URL presented")
+        let signInTask = Task {
+            try await service.signIn {
+                presentedURL = $0
+                authorizationPresented.fulfill()
+            }
+        }
+
+        await fulfillment(of: [authorizationPresented], timeout: 2)
+        guard presentedURL != nil else {
+            signInTask.cancel()
+            _ = try? await signInTask.value
+            return
+        }
+        signInTask.cancel()
+
+        do {
+            _ = try await signInTask.value
+            XCTFail("Expected Claude browser sign-in cancellation.")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+    }
+
     func testClaudeTokenRequestBodyUsesAuthorizationCodeExchange() throws {
         let data = ClaudeWebAuthService.makeTokenRequestBody(
             code: "code value",

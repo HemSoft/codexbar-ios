@@ -39,6 +39,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Let Claude dashboard cards start account-specific sign-in when credentials are
+  missing or rejected, preserve the existing credential on cancellation or
+  failure, and refresh the card automatically after successful recovery.
+  ([#126](https://github.com/HemSoft/codexbar-ios/issues/126))
 - Kept the saved GitHub Copilot identity and sign-in method aligned with the
   existing credential when a replacement cannot be stored securely.
   ([#117](https://github.com/HemSoft/codexbar-ios/issues/117))
