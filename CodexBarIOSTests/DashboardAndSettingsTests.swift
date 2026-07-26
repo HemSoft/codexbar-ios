@@ -1020,6 +1020,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             title: "Claude",
             subtitle: "Pro",
             bars: [session, weekly],
+            creditsRemaining: 42,
             monetaryMetrics: [spent],
             fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
         )
@@ -1029,7 +1030,10 @@ final class DashboardAndSettingsTests: XCTestCase {
             configurationStore: store,
             now: result.fetchedAt
         )
-        XCTAssertEqual(hiddenSnapshot.accounts[0].metrics.map(\.id), ["claude.weekly"])
+        XCTAssertEqual(
+            hiddenSnapshot.accounts[0].metrics.map(\.id),
+            ["claude.weekly", "claude.credits-remaining"]
+        )
 
         store.updateMetricVisibility(true, accountID: configuration.id, metricID: sessionID)
         let restoredSnapshot = WatchSnapshotPublisher.makeSnapshot(
@@ -1037,8 +1041,22 @@ final class DashboardAndSettingsTests: XCTestCase {
             configurationStore: store,
             now: result.fetchedAt
         )
-        XCTAssertEqual(restoredSnapshot.accounts[0].metrics.map(\.id), [sessionID, "claude.weekly"])
+        XCTAssertEqual(
+            restoredSnapshot.accounts[0].metrics.map(\.id),
+            [sessionID, "claude.weekly", "claude.credits-remaining"]
+        )
         XCTAssertEqual(restoredSnapshot.accounts[0].metrics[0].visualizationStyle, .circularRing)
+
+        store.updateMetricVisibility(true, accountID: configuration.id, metricID: spentID)
+        let allVisibleSnapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: result.fetchedAt
+        )
+        XCTAssertEqual(
+            allVisibleSnapshot.accounts[0].metrics.map(\.id),
+            [sessionID, "claude.weekly", spentID, "claude.credits-remaining"]
+        )
     }
 
     @MainActor

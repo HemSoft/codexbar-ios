@@ -123,7 +123,6 @@ enum WatchSnapshotPublisher {
                 let creditsMetricID = "\(result.providerID.rawValue).credits-remaining"
                 if
                     let creditsRemaining = result.freshCreditsRemaining,
-                    result.monetaryMetrics.isEmpty,
                     configurationStore.isMetricVisible(
                         accountID: result.accountID,
                         metricID: creditsMetricID
