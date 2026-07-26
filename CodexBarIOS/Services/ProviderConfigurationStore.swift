@@ -163,6 +163,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let usageAlertActiveIDsKey = DefaultsKey.usageAlertActiveIDs
     private let incompleteAccountResetKey = DefaultsKey.incompleteAccountReset
     private var secretAvailabilityError: String?
+    private var unsupportedMetricLayoutData: [String: Data]
 
     public init(
         defaults: UserDefaults = .standard,
@@ -196,10 +197,11 @@ public final class ProviderConfigurationStore: ObservableObject {
         where loadedMetricLayouts[configuration.id] == nil
         {
             loadedMetricLayouts[configuration.id] = AccountMetricLayout(
-                usesLegacyFullWidthDefaults: true
+                usesLegacyFullWidthDefaults: !metricLayoutLoadResult.usesVersionedStorage
             )
         }
         self.metricLayouts = loadedMetricLayouts
+        self.unsupportedMetricLayoutData = metricLayoutLoadResult.unsupportedLayoutData
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
         self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
         self.isConfigurationRecoveryRequired = configurationLoadResult.error != nil
@@ -364,6 +366,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         let previousConfigurations = configurations
+        let isNewAccount = !configurations.contains { $0.id == normalized.id }
         if let index = configurations.firstIndex(where: { $0.id == normalized.id }) {
             configurations[index] = normalized
         } else {
@@ -374,6 +377,10 @@ public final class ProviderConfigurationStore: ObservableObject {
         guard saveConfigurations() else {
             configurations = previousConfigurations
             return false
+        }
+        if isNewAccount, metricLayouts[normalized.id] == nil {
+            metricLayouts[normalized.id] = AccountMetricLayout()
+            saveMetricLayouts()
         }
         return true
     }
@@ -467,6 +474,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             )
             for accountID in removedAccountIDs {
                 metricLayouts.removeValue(forKey: accountID)
+                unsupportedMetricLayoutData.removeValue(forKey: accountID)
             }
             saveMetricLayouts()
             refreshSecretAvailability()
@@ -512,6 +520,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             secretAvailability = [:]
             dashboardCardOrder = []
             metricLayouts = [:]
+            unsupportedMetricLayoutData = [:]
             usageAlertActiveIDs = []
             defaults.removeObject(forKey: configurationsKey)
             defaults.removeObject(forKey: groupsKey)
@@ -542,6 +551,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             )
             for accountID in removedAccountIDs {
                 metricLayouts.removeValue(forKey: accountID)
+                unsupportedMetricLayoutData.removeValue(forKey: accountID)
             }
             saveMetricLayouts()
         }
@@ -1348,6 +1358,8 @@ public final class ProviderConfigurationStore: ObservableObject {
     private struct MetricLayoutLoadResult {
         let layouts: [String: AccountMetricLayout]
         let needsMigration: Bool
+        let usesVersionedStorage: Bool
+        let unsupportedLayoutData: [String: Data]
     }
 
     private static let configurationLoadErrorMessage =
@@ -1481,7 +1493,12 @@ public final class ProviderConfigurationStore: ObservableObject {
         from defaults: UserDefaults
     ) -> MetricLayoutLoadResult {
         guard let data = defaults.data(forKey: DefaultsKey.metricCustomizationPreferences) else {
-            return MetricLayoutLoadResult(layouts: [:], needsMigration: false)
+            return MetricLayoutLoadResult(
+                layouts: [:],
+                needsMigration: false,
+                usesVersionedStorage: false,
+                unsupportedLayoutData: [:]
+            )
         }
 
         if let decoded = try? JSONDecoder().decode(
@@ -1491,7 +1508,12 @@ public final class ProviderConfigurationStore: ObservableObject {
             let normalized = decoded.mapValues(Self.normalizedMetricLayout)
             return MetricLayoutLoadResult(
                 layouts: normalized,
-                needsMigration: normalized != decoded
+                needsMigration: normalized != decoded,
+                // An empty object is ambiguous with the legacy dictionary's
+                // encoded empty state, so existing accounts must retain legacy
+                // full-width defaults until a versioned account entry exists.
+                usesVersionedStorage: !decoded.isEmpty,
+                unsupportedLayoutData: unsupportedMetricLayoutData(from: data)
             )
         }
 
@@ -1501,7 +1523,9 @@ public final class ProviderConfigurationStore: ObservableObject {
         ) {
             return MetricLayoutLoadResult(
                 layouts: preferences.mapValues(Self.migratedMetricLayout),
-                needsMigration: true
+                needsMigration: true,
+                usesVersionedStorage: false,
+                unsupportedLayoutData: [:]
             )
         }
 
@@ -1509,7 +1533,12 @@ public final class ProviderConfigurationStore: ObservableObject {
             [String: [String: MetricVisualizationStyle]].self,
             from: data
         ) else {
-            return MetricLayoutLoadResult(layouts: [:], needsMigration: false)
+            return MetricLayoutLoadResult(
+                layouts: [:],
+                needsMigration: false,
+                usesVersionedStorage: false,
+                unsupportedLayoutData: [:]
+            )
         }
         return MetricLayoutLoadResult(
             layouts: legacyStyles.mapValues { accountStyles in
@@ -1519,7 +1548,9 @@ public final class ProviderConfigurationStore: ObservableObject {
                     }
                 )
             },
-            needsMigration: true
+            needsMigration: true,
+            usesVersionedStorage: false,
+            unsupportedLayoutData: [:]
         )
     }
 
@@ -1542,10 +1573,36 @@ public final class ProviderConfigurationStore: ObservableObject {
     private static func normalizedMetricLayout(
         _ layout: AccountMetricLayout
     ) -> AccountMetricLayout {
+        guard layout.version <= AccountMetricLayout.currentVersion else {
+            return layout
+        }
+
         var normalized = layout
         normalized.version = AccountMetricLayout.currentVersion
         normalized.orderedMetricIDs = uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
         return normalized
+    }
+
+    private static func unsupportedMetricLayoutData(from data: Data) -> [String: Data] {
+        guard
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return [:]
+        }
+
+        var unsupportedData: [String: Data] = [:]
+        for (accountID, value) in root {
+            guard
+                let layout = value as? [String: Any],
+                let version = layout["version"] as? NSNumber,
+                version.intValue > AccountMetricLayout.currentVersion,
+                let data = try? JSONSerialization.data(withJSONObject: layout, options: [.sortedKeys])
+            else {
+                continue
+            }
+            unsupportedData[accountID] = data
+        }
+        return unsupportedData
     }
 
     private static func uniqueNonemptyMetricIDs(_ metricIDs: [String]) -> [String] {
@@ -1554,7 +1611,25 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     private func saveMetricLayouts() {
-        let data = try? JSONEncoder().encode(metricLayouts)
+        guard
+            let encoded = try? JSONEncoder().encode(metricLayouts),
+            var root = try? JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        else {
+            return
+        }
+
+        for (accountID, data) in unsupportedMetricLayoutData
+        where metricLayouts[accountID] != nil
+        {
+            guard let preserved = try? JSONSerialization.jsonObject(with: data) else {
+                continue
+            }
+            root[accountID] = preserved
+        }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: root, options: [.sortedKeys]) else {
+            return
+        }
         defaults.set(data, forKey: metricCustomizationPreferencesKey)
     }
 

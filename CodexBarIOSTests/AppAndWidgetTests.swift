@@ -2118,6 +2118,84 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertTrue(preference.isNewlyDiscovered)
     }
 
+    @MainActor
+    func testAccountInsertedThroughUpdateKeepsNewMetricDefaultsAfterReload() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        var imported = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        imported.openCodeWorkspaceId = "workspace"
+        XCTAssertTrue(store.update(imported))
+
+        let reloaded = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let metricID = "openCodeZen.go-weekly"
+        _ = reloaded.reconcileMetricLayout(
+            accountID: imported.id,
+            availableMetricIDs: [metricID]
+        )
+
+        XCTAssertEqual(reloaded.metricWidth(accountID: imported.id, metricID: metricID), .automatic)
+        XCTAssertTrue(
+            try XCTUnwrap(reloaded.metricLayouts[imported.id]?.preferences[metricID])
+                .isNewlyDiscovered
+        )
+    }
+
+    @MainActor
+    func testUnsupportedFutureMetricLayoutIsPreservedWhenKnownLayoutsSave() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let futureAccountID = "codex.future"
+        defaults.set(
+            Data(
+                """
+                {
+                  "\(futureAccountID)": {
+                    "version": 99,
+                    "orderedMetricIDs": ["codex.session"],
+                    "preferences": {
+                      "codex.session": {
+                        "isVisible": true,
+                        "visualizationStyle": "linearBar",
+                        "width": "full",
+                        "isNewlyDiscovered": false
+                      }
+                    },
+                    "futureField": {"keep": "me"}
+                  }
+                }
+                """.utf8
+            ),
+            forKey: "metricVisualizationPreferences"
+        )
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        _ = store.addAccount(for: .claude)
+
+        let persistedData = try XCTUnwrap(
+            defaults.data(forKey: "metricVisualizationPreferences")
+        )
+        let persistedRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: persistedData) as? [String: Any]
+        )
+        let futureLayout = try XCTUnwrap(persistedRoot[futureAccountID] as? [String: Any])
+        let futureField = try XCTUnwrap(futureLayout["futureField"] as? [String: String])
+
+        XCTAssertEqual((futureLayout["version"] as? NSNumber)?.intValue, 99)
+        XCTAssertEqual(futureField, ["keep": "me"])
+    }
+
     func testAvailableMetricIdentifiersCoverEveryMetricTypeWithoutUsingLabels() {
         let firstResult = ProviderUsageResult(
             accountID: "claude.personal",
