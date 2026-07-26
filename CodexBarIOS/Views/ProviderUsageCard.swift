@@ -8,6 +8,11 @@ struct CodexBankedResetInventoryPresentation: Identifiable, Equatable {
     let canRedeem: Bool
 }
 
+enum ProviderUsageCardMenuAction: Hashable {
+    case configureAccount
+    case customizeMetrics
+}
+
 struct ProviderUsageCard: View {
     let result: ProviderUsageResult
     let statusText: String
@@ -132,24 +137,27 @@ struct ProviderUsageCard: View {
                 }
                 .frame(width: 16, height: 16)
 
-                if !result.bars.isEmpty {
-                    Menu {
-                        Button(action: onConfigureAccount) {
-                            Label("Configure Account…", systemImage: "gearshape")
+                Menu {
+                    ForEach(Self.menuActions(for: result), id: \.self) { action in
+                        switch action {
+                        case .configureAccount:
+                            Button(action: onConfigureAccount) {
+                                Label("Configure Account…", systemImage: "gearshape")
+                            }
+                            .accessibilityLabel("Configure account \(result.title)")
+                        case .customizeMetrics:
+                            Button {
+                                isCustomizingMetrics = true
+                            } label: {
+                                Label("Customize Metrics…", systemImage: "gauge.with.dots.needle.50percent")
+                            }
                         }
-                        .accessibilityLabel("Configure account \(result.title)")
-
-                        Button {
-                            isCustomizingMetrics = true
-                        } label: {
-                            Label("Customize Metrics…", systemImage: "gauge.with.dots.needle.50percent")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.body)
                     }
-                    .accessibilityLabel("More options for \(result.title)")
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.body)
                 }
+                .accessibilityLabel("More options for \(result.title)")
 
                 Circle()
                     .fill(cardSeverity.tint)
@@ -382,6 +390,13 @@ struct ProviderUsageCard: View {
             return result.title
         }
         return "\(result.title), \(plan.accessibilityLabel) plan"
+    }
+
+    static func menuActions(for result: ProviderUsageResult) -> [ProviderUsageCardMenuAction] {
+        if result.bars.isEmpty {
+            return [.configureAccount]
+        }
+        return [.configureAccount, .customizeMetrics]
     }
 
     var displayedAlerts: [UsageAlertDetail] {

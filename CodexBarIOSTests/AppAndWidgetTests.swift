@@ -118,6 +118,35 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertNil(navigation.finishDismissal())
     }
 
+    func testDashboardCardMenuKeepsAccountConfigurationOnBalanceOnlyCards() {
+        let balanceOnlyResult = ProviderUsageResult(
+            accountID: "moonshot.balance",
+            providerID: .moonshot,
+            title: "Kimi",
+            subtitle: "Credit balance",
+            bars: [],
+            creditsRemaining: 12.50,
+            fetchedAt: Date()
+        )
+        let meteredResult = ProviderUsageResult(
+            accountID: "codex.personal",
+            providerID: .codex,
+            title: "ChatGPT",
+            subtitle: "Usage limits",
+            bars: [UsageBar(label: "Weekly", used: 10, limit: 100)],
+            fetchedAt: Date()
+        )
+
+        XCTAssertEqual(
+            ProviderUsageCard.menuActions(for: balanceOnlyResult),
+            [.configureAccount]
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.menuActions(for: meteredResult),
+            [.configureAccount, .customizeMetrics]
+        )
+    }
+
     func testUsageSeverityThresholds() {
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.74), .normal)
         XCTAssertEqual(UsageSeverity(fractionUsed: 0.75), .warning)
