@@ -614,6 +614,22 @@ struct ReturningFailureUsageProvider: UsageProvider {
     }
 }
 
+struct ReturningPartialFailureUsageProvider: UsageProvider {
+    let providerID: ProviderID
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: providerID,
+            title: configuration.displayName,
+            subtitle: "Partial refresh failed",
+            bars: [UsageBar(label: "Latest usage", used: 25, limit: 100)],
+            failureMessage: "Partial refresh failed",
+            fetchedAt: Date()
+        )
+    }
+}
+
 actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
     nonisolated let providerID = ProviderID.codex
     private let outcome: CodexBankedResetConsumptionOutcome

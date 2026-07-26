@@ -98,10 +98,7 @@ public enum CopilotUsageParser {
     }
 
     private static func planDescriptor(plan: String?) -> ProviderPlanDescriptor? {
-        guard let normalized = plan?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(), !normalized.isEmpty
-        else {
+        guard let normalized = ProviderPlanDescriptor.normalizedPlanValue(plan) else {
             return nil
         }
 
@@ -121,10 +118,10 @@ public enum CopilotUsageParser {
             return nil
         }
 
-        return ProviderPlanDescriptor(
-            identifier: "copilot.\(identifier)",
-            displayLabel: label.uppercased(),
-            accessibilityLabel: label
+        return ProviderPlanDescriptor.make(
+            providerPrefix: "copilot",
+            identifier: identifier,
+            label: label
         )
     }
 

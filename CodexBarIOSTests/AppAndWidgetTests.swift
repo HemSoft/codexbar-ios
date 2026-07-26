@@ -825,9 +825,9 @@ final class AppAndWidgetTests: XCTestCase {
         let provider = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first)
         XCTAssertEqual(provider.groupID, group.id)
         XCTAssertEqual(provider.groupName, "Work")
-        XCTAssertEqual(provider.planIdentifier, "test.business")
-        XCTAssertEqual(provider.planDisplayLabel, "BUSINESS")
-        XCTAssertEqual(provider.planAccessibilityLabel, "Business")
+        XCTAssertNil(provider.planIdentifier)
+        XCTAssertNil(provider.planDisplayLabel)
+        XCTAssertNil(provider.planAccessibilityLabel)
     }
 
     @MainActor

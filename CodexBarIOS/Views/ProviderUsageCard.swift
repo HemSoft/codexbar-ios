@@ -354,7 +354,7 @@ struct ProviderUsageCard: View {
 
     @ViewBuilder
     private var planBadge: some View {
-        if let plan = result.plan {
+        if result.providerID.supportsPlanBadge, let plan = result.plan {
             Text(plan.displayLabel)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -370,7 +370,7 @@ struct ProviderUsageCard: View {
     }
 
     static func headerAccessibilityLabel(for result: ProviderUsageResult) -> String {
-        guard let plan = result.plan else {
+        guard result.providerID.supportsPlanBadge, let plan = result.plan else {
             return result.title
         }
         return "\(result.title), \(plan.accessibilityLabel) plan"

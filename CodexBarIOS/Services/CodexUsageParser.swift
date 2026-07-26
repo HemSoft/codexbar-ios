@@ -169,10 +169,7 @@ public enum CodexUsageParser {
     }
 
     private static func planDescriptor(planType: String?) -> ProviderPlanDescriptor? {
-        guard let normalized = planType?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(), !normalized.isEmpty
-        else {
+        guard let normalized = ProviderPlanDescriptor.normalizedPlanValue(planType) else {
             return nil
         }
 
@@ -210,10 +207,10 @@ public enum CodexUsageParser {
             return nil
         }
 
-        return ProviderPlanDescriptor(
-            identifier: "codex.\(identifier)",
-            displayLabel: label.uppercased(),
-            accessibilityLabel: label
+        return ProviderPlanDescriptor.make(
+            providerPrefix: "codex",
+            identifier: identifier,
+            label: label
         )
     }
 

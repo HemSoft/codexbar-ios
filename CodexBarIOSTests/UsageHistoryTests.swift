@@ -718,6 +718,11 @@ final class UsageHistoryTests: XCTestCase {
             accountID: "cursor.personal",
             providerID: .cursor,
             title: "Cursor",
+            plan: ProviderPlanDescriptor(
+                identifier: "cursor.business",
+                displayLabel: "BUSINESS",
+                accessibilityLabel: "Business"
+            ),
             subtitle: "Live Cursor usage",
             bars: [],
             fetchedAt: Date()

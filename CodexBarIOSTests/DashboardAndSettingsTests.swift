@@ -735,6 +735,40 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testPartialFailureWithoutPlanPreservesCachedVerifiedPlan() async {
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.partial-failure",
+            providerID: .codex,
+            accountLabel: "Cached Codex",
+            authMethod: .browserSession
+        )
+        let cachedPlan = ProviderPlanDescriptor(
+            identifier: "codex.pro",
+            displayLabel: "PRO",
+            accessibilityLabel: "Pro"
+        )
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: configuration.displayName,
+            plan: cachedPlan,
+            subtitle: "Cached usage",
+            bars: [UsageBar(label: "Cached usage", used: 75, limit: 100)],
+            fetchedAt: Date().addingTimeInterval(-300)
+        )
+        let service = UsageRefreshService(
+            providers: [ReturningPartialFailureUsageProvider(providerID: .codex)],
+            initialResults: [cachedResult]
+        )
+
+        await service.refresh(configurations: [configuration])
+
+        XCTAssertEqual(service.results.first?.plan, cachedPlan)
+        XCTAssertEqual(service.results.first?.bars.first?.label, "Latest usage")
+        XCTAssertEqual(service.results.first?.failureMessage, "Partial refresh failed")
+    }
+
+    @MainActor
     func testLiveRefreshIncludesOpenRouterProvider() async throws {
         let secretStore = MemorySecretStore()
         var openRouter = ProviderAccountConfiguration.defaultConfiguration(for: .openRouter)
@@ -938,6 +972,44 @@ final class DashboardAndSettingsTests: XCTestCase {
             now: result.fetchedAt
         )
         XCTAssertTrue(afterRemoval.accounts.isEmpty)
+    }
+
+    @MainActor
+    func testWatchSnapshotOmitsUnsupportedProviderPlanMetadata() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        XCTAssertTrue(store.saveSecret("openrouter-test-key", for: configuration))
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openRouter,
+            title: "OpenRouter",
+            plan: ProviderPlanDescriptor(
+                identifier: "openrouter.business",
+                displayLabel: "BUSINESS",
+                accessibilityLabel: "Business"
+            ),
+            subtitle: "Balance",
+            bars: [UsageBar(label: "Usage", used: 1, limit: 4)],
+            fetchedAt: Date()
+        )
+
+        let snapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: result.fetchedAt
+        )
+
+        XCTAssertNil(snapshot.accounts.first?.planIdentifier)
+        XCTAssertNil(snapshot.accounts.first?.planDisplayLabel)
+        XCTAssertNil(snapshot.accounts.first?.planAccessibilityLabel)
     }
 
     func testWatchSnapshotDeduplicatorIgnoresGenerationTimeAndSupportsForcedReassertion() throws {

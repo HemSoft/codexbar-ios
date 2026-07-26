@@ -702,8 +702,8 @@ public enum ClaudeUsageParser {
         subscriptionType: String?,
         rateLimitTier: String?
     ) -> ProviderPlanDescriptor? {
-        let subscription = normalizedPlanValue(subscriptionType)
-        let rateLimit = normalizedPlanValue(rateLimitTier)
+        let subscription = ProviderPlanDescriptor.normalizedPlanValue(subscriptionType)
+        let rateLimit = ProviderPlanDescriptor.normalizedPlanValue(rateLimitTier)
 
         let identifier: String
         let displayLabel: String
@@ -739,20 +739,11 @@ public enum ClaudeUsageParser {
             }
         }
 
-        return ProviderPlanDescriptor(
-            identifier: "claude.\(identifier)",
-            displayLabel: displayLabel,
-            accessibilityLabel: accessibilityLabel
+        return ProviderPlanDescriptor.make(
+            providerPrefix: "claude",
+            identifier: identifier,
+            label: accessibilityLabel,
+            displayLabel: displayLabel
         )
-    }
-
-    private static func normalizedPlanValue(_ value: String?) -> String? {
-        guard let normalized = value?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(), !normalized.isEmpty
-        else {
-            return nil
-        }
-        return normalized
     }
 }

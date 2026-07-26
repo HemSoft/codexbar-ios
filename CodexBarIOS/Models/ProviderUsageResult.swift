@@ -20,6 +20,29 @@ public struct ProviderPlanDescriptor: Codable, Equatable, Sendable {
         self.displayLabel = displayLabel
         self.accessibilityLabel = accessibilityLabel
     }
+
+    static func normalizedPlanValue(_ value: String?) -> String? {
+        guard let normalized = value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(), !normalized.isEmpty
+        else {
+            return nil
+        }
+        return normalized
+    }
+
+    static func make(
+        providerPrefix: String,
+        identifier: String,
+        label: String,
+        displayLabel: String? = nil
+    ) -> ProviderPlanDescriptor {
+        ProviderPlanDescriptor(
+            identifier: "\(providerPrefix).\(identifier)",
+            displayLabel: displayLabel ?? label.uppercased(),
+            accessibilityLabel: label
+        )
+    }
 }
 
 public enum ProviderMonetaryMetricKind: String, Codable, Equatable, Sendable {
