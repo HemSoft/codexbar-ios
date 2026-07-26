@@ -227,6 +227,42 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testDashboardClaudeCredentialSaveFailurePreservesExistingCredential() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let secretStore = FailingSaveSecretStore(secret: "existing-credential")
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let claude = store.addAccount(for: .claude)
+        var refreshCount = 0
+        let controller = DashboardClaudeAuthenticationController(
+            configurationStore: store,
+            authenticate: { _, _ in
+                ClaudeWebAuthResult(
+                    credentials: ClaudeCredentials(accessToken: "replacement-token")
+                )
+            },
+            refreshAccount: { _ in
+                refreshCount += 1
+                return nil
+            }
+        )
+
+        XCTAssertTrue(controller.startSignIn(for: claude))
+        await controller.waitForAuthenticationToFinish()
+
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: claude)),
+            "existing-credential"
+        )
+        XCTAssertEqual(refreshCount, 0)
+        XCTAssertFalse(controller.state(for: claude.id).isSigningIn)
+        XCTAssertNotNil(controller.state(for: claude.id).errorMessage)
+    }
+
+    @MainActor
     func testDashboardClaudeSignInCancellationPreservesExistingCredential() async throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
