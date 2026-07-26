@@ -1149,12 +1149,19 @@ final class ConfigurationAndAuthTests: XCTestCase {
     func testClaudeBrowserSignInCancellationThrowsCancellationError() async throws {
         let service = ClaudeWebAuthService(callbackTimeoutNanoseconds: 30_000_000_000)
         var presentedURL: URL?
+        let authorizationPresented = expectation(description: "Claude authorization URL presented")
         let signInTask = Task {
-            try await service.signIn { presentedURL = $0 }
+            try await service.signIn {
+                presentedURL = $0
+                authorizationPresented.fulfill()
+            }
         }
 
-        while presentedURL == nil {
-            await Task.yield()
+        await fulfillment(of: [authorizationPresented], timeout: 2)
+        guard presentedURL != nil else {
+            signInTask.cancel()
+            _ = try? await signInTask.value
+            return
         }
         signInTask.cancel()
 
