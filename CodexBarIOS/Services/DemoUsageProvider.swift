@@ -28,7 +28,12 @@ public struct DemoUsageProvider: UsageProvider {
         ProviderUsageResult(
             accountID: configuration.id,
             providerID: providerID,
-            title: configuration.displayName,
+            title: providerID == .openCodeZen
+                ? configuration.openCodeDisplayName(
+                    hasGoUsage: !bars.isEmpty,
+                    hasZenBalance: creditsRemaining != nil
+                )
+                : configuration.displayName,
             subtitle: subtitle,
             bars: bars,
             creditsRemaining: creditsRemaining,
@@ -130,9 +135,31 @@ public extension DemoUsageProvider {
             ),
             DemoUsageProvider(
                 providerID: .openCodeZen,
-                bars: [],
+                bars: [
+                    UsageBar(
+                        stableKey: "go.rolling-5-hour",
+                        label: "5-hour usage limit",
+                        used: 44,
+                        limit: 100,
+                        resetDescription: "Resets in 2h 10m"
+                    ),
+                    UsageBar(
+                        stableKey: "go.weekly",
+                        label: "Weekly usage limit",
+                        used: 31,
+                        limit: 100,
+                        resetDescription: "Resets Monday"
+                    ),
+                    UsageBar(
+                        stableKey: "go.monthly",
+                        label: "Monthly usage limit",
+                        used: 24,
+                        limit: 100,
+                        resetDescription: "Resets Aug 1"
+                    ),
+                ],
                 creditsRemaining: 12.48,
-                subtitle: "Workspace balance"
+                subtitle: "Go usage and Zen credit balance"
             ),
             DemoUsageProvider(
                 providerID: .moonshot,

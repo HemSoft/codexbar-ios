@@ -288,6 +288,7 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.providerID, .openCodeZen)
+        XCTAssertEqual(result.title, "OpenCode Zen")
         XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 12.5, accuracy: 0.0001)
         XCTAssertTrue(result.bars.isEmpty)
     }
@@ -302,6 +303,7 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.providerID, .openCodeZen)
+        XCTAssertEqual(result.title, "OpenCode Zen")
         XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 8.75, accuracy: 0.0001)
         XCTAssertTrue(result.bars.isEmpty)
     }
@@ -325,6 +327,7 @@ final class ProviderParsingTests: XCTestCase {
             fetchedAt: fetchedAt
         ))
 
+        XCTAssertEqual(result.title, "OpenCode Go")
         XCTAssertEqual(result.bars.map(\.stableKey), [
             "go.rolling-5-hour",
             "go.weekly",
@@ -428,6 +431,74 @@ final class ProviderParsingTests: XCTestCase {
         ))
     }
 
+    func testOpenCodeProductTitlesTreatLegacyDefaultAsDerivedAndPreserveCustomLabels() {
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+
+        XCTAssertEqual(configuration.displayName, "OpenCode Go + Zen")
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: true, hasZenBalance: true),
+            "OpenCode Go + Zen"
+        )
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: true, hasZenBalance: false),
+            "OpenCode Go"
+        )
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: false, hasZenBalance: true),
+            "OpenCode Zen"
+        )
+
+        configuration.accountLabel = "OpenCode ZEN"
+        XCTAssertFalse(configuration.hasCustomAccountLabel)
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: true, hasZenBalance: true),
+            "OpenCode Go + Zen"
+        )
+
+        configuration.accountLabel = "OpenCode ZEN 1"
+        XCTAssertFalse(configuration.hasCustomAccountLabel)
+        XCTAssertEqual(configuration.displayName, "OpenCode Go + Zen 1")
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: true, hasZenBalance: false),
+            "OpenCode Go"
+        )
+
+        configuration.accountLabel = "OpenCode Go + Zen 2"
+        XCTAssertFalse(configuration.hasCustomAccountLabel)
+        XCTAssertEqual(configuration.displayName, "OpenCode Go + Zen 2")
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: false, hasZenBalance: true),
+            "OpenCode Zen"
+        )
+
+        configuration.accountLabel = "Team ZEN"
+        XCTAssertTrue(configuration.hasCustomAccountLabel)
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: true, hasZenBalance: true),
+            "Team ZEN"
+        )
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: false, hasZenBalance: true),
+            "Team ZEN"
+        )
+
+        for customLabel in [
+            "OpenCode ZEN Team 1",
+            "OpenCode Go + Zen Production",
+            "OpenCode ZEN 01",
+        ] {
+            configuration.accountLabel = customLabel
+            XCTAssertTrue(configuration.hasCustomAccountLabel)
+            XCTAssertEqual(
+                configuration.openCodeDisplayName(
+                    hasGoUsage: true,
+                    hasZenBalance: true
+                ),
+                customLabel
+            )
+        }
+    }
+
     func testOpenCodeProviderPreservesBalanceWhenGoPageIsMalformed() async throws {
         let secretStore = MemorySecretStore()
         var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
@@ -507,11 +578,11 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.used), [12.5, 20, 30.75])
         XCTAssertEqual(
             result.failureMessage,
-            "ZEN balance unavailable: Could not parse OpenCode ZEN balance."
+            "Zen balance unavailable: Could not parse OpenCode Zen balance."
         )
         XCTAssertTrue(result.preserveCachedCreditsOnFailure)
         XCTAssertEqual(result.usageMessages, [
-            "ZEN balance unavailable: Could not parse OpenCode ZEN balance.",
+            "Zen balance unavailable: Could not parse OpenCode Zen balance.",
         ])
     }
 
@@ -572,12 +643,14 @@ final class ProviderParsingTests: XCTestCase {
 
         _ = await service.refresh(configuration: configuration)
         let full = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(full.title, "OpenCode Go + Zen")
         XCTAssertEqual(full.bars.map(\.used), [10, 20, 30])
         XCTAssertEqual(try XCTUnwrap(full.creditsRemaining), 10, accuracy: 0.0001)
 
         phase = 1
         _ = await service.refresh(configuration: configuration)
         let goFailure = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(goFailure.title, "OpenCode Go + Zen")
         XCTAssertEqual(goFailure.bars, full.bars)
         XCTAssertEqual(goFailure.barsFetchedAt, full.barsFetchedAt)
         XCTAssertEqual(try XCTUnwrap(goFailure.creditsRemaining), 20, accuracy: 0.0001)
@@ -589,6 +662,7 @@ final class ProviderParsingTests: XCTestCase {
         phase = 2
         _ = await service.refresh(configuration: configuration)
         let balanceFailure = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(balanceFailure.title, "OpenCode Go + Zen")
         XCTAssertEqual(balanceFailure.bars.map(\.used), [40, 50, 60])
         XCTAssertEqual(try XCTUnwrap(balanceFailure.creditsRemaining), 20, accuracy: 0.0001)
         XCTAssertTrue(balanceFailure.hasFreshBars)
@@ -686,7 +760,7 @@ final class ProviderParsingTests: XCTestCase {
             accountID: configuration.id,
             providerID: .openCodeZen,
             title: configuration.displayName,
-            subtitle: "Go usage and ZEN credit balance",
+            subtitle: "Go usage and Zen credit balance",
             bars: [UsageBar(label: "Rolling", used: 25, limit: 100)],
             creditsRemaining: 12.5,
             cacheIdentity: "known-account-identity",
@@ -806,7 +880,8 @@ final class ProviderParsingTests: XCTestCase {
 
         let result = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(result.subtitle, "ZEN credit balance - Go owned by another member")
+        XCTAssertEqual(result.title, "OpenCode Zen")
+        XCTAssertEqual(result.subtitle, "Zen credit balance - Go owned by another member")
         XCTAssertEqual(result.usageMessages, [
             "Another workspace member owns the OpenCode Go subscription.",
         ])
@@ -850,7 +925,8 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 18.75, accuracy: 0.0001)
         XCTAssertEqual(result.bars.map(\.used), [11.25, 22.5, 33.75])
-        XCTAssertEqual(result.subtitle, "Go usage and ZEN credit balance")
+        XCTAssertEqual(result.title, "OpenCode Go + Zen")
+        XCTAssertEqual(result.subtitle, "Go usage and Zen credit balance")
         XCTAssertTrue(result.usageMessages.isEmpty)
         XCTAssertNil(result.failureMessage)
     }
@@ -901,7 +977,8 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.providerID, .openCodeZen)
         XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 25.75, accuracy: 0.0001)
         XCTAssertTrue(result.bars.isEmpty)
-        XCTAssertEqual(result.subtitle, "ZEN credit balance - Go not subscribed")
+        XCTAssertEqual(result.title, "OpenCode Zen")
+        XCTAssertEqual(result.subtitle, "Zen credit balance - Go not subscribed")
         XCTAssertEqual(result.usageMessages, [
             "This workspace is not subscribed to OpenCode Go.",
         ])
@@ -936,7 +1013,10 @@ final class ProviderParsingTests: XCTestCase {
         let result = try await provider.fetchUsage(for: configuration)
 
         XCTAssertEqual(result.providerID, .openCodeZen)
-        XCTAssertEqual(result.subtitle, "OpenCode ZEN API keys are valid for models, but OpenCode does not expose balance to API keys.")
+        XCTAssertEqual(
+            result.subtitle,
+            "This is an OpenCode Zen model API key, not an OpenCode dashboard auth value. Refresh the saved dashboard session."
+        )
         XCTAssertNil(result.creditsRemaining)
         XCTAssertTrue(result.bars.isEmpty)
     }
@@ -1027,7 +1107,8 @@ final class ProviderParsingTests: XCTestCase {
 
         let configuration = try XCTUnwrap(configurationStore.configurations(for: .openCodeZen).first)
         XCTAssertEqual(configuration.openCodeWorkspaceId, "wrk_from_windows")
-        XCTAssertEqual(configuration.accountLabel, "OpenCode ZEN")
+        XCTAssertEqual(configuration.accountLabel, "")
+        XCTAssertEqual(configuration.displayName, "OpenCode Go + Zen")
         let savedCredential = try XCTUnwrap(
             secretStore.readSecret(
                 account: ProviderConfigurationStore.keychainAccount(for: configuration)

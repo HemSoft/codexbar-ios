@@ -808,6 +808,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         let result = try XCTUnwrap(refreshedResult)
 
         XCTAssertEqual(result.providerID, .openCodeZen)
+        XCTAssertEqual(result.title, "OpenCode Zen")
         XCTAssertEqual(try XCTUnwrap(result.creditsRemaining), 12.25, accuracy: 0.0001)
         XCTAssertEqual(service.results.map(\.accountID), [openCode.id])
     }
@@ -1007,8 +1008,8 @@ final class DashboardAndSettingsTests: XCTestCase {
         let result = ProviderUsageResult(
             accountID: configuration.id,
             providerID: .openCodeZen,
-            title: "OpenCode",
-            subtitle: "Fresh Go usage with cached ZEN balance",
+            title: "OpenCode Go",
+            subtitle: "Fresh Go usage with cached Zen balance",
             bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 40, limit: 100)],
             creditsRemaining: 3,
             creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
@@ -1021,7 +1022,10 @@ final class DashboardAndSettingsTests: XCTestCase {
             now: fetchedAt
         )
 
-        let metrics = try XCTUnwrap(snapshot.accounts.first).metrics
+        let account = try XCTUnwrap(snapshot.accounts.first)
+        XCTAssertEqual(account.providerName, "OpenCode Go")
+        XCTAssertEqual(account.accountLabel, "Fresh Go usage with cached Zen balance")
+        let metrics = account.metrics
         XCTAssertEqual(metrics.map(\.id), ["openCodeZen.go.weekly"])
         XCTAssertEqual(metrics.map(\.exactValue), ["40%"])
     }
@@ -1210,7 +1214,7 @@ final class DashboardAndSettingsTests: XCTestCase {
                     accountID: configuration.id,
                     providerID: .openCodeZen,
                     title: configuration.displayName,
-                    subtitle: "ZEN credit balance - Go not subscribed",
+                    subtitle: "Zen credit balance - Go not subscribed",
                     bars: [],
                     creditsRemaining: 12.25,
                     usageMessages: ["This workspace is not subscribed to OpenCode Go."],
@@ -1223,7 +1227,7 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertEqual(
             viewModel.openCodeCredentialMessage,
-            "OpenCode ZEN balance refreshed: $12.25 This workspace is not subscribed to OpenCode Go."
+            "OpenCode Zen balance refreshed: $12.25 This workspace is not subscribed to OpenCode Go."
         )
     }
 
@@ -1243,7 +1247,7 @@ final class DashboardAndSettingsTests: XCTestCase {
                     title: configuration.displayName,
                     subtitle: "OpenCode Go usage",
                     bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 20, limit: 100)],
-                    usageMessages: ["ZEN balance unavailable: Could not parse OpenCode ZEN balance."],
+                    usageMessages: ["Zen balance unavailable: Could not parse OpenCode Zen balance."],
                     fetchedAt: Date()
                 )
             }
@@ -1253,7 +1257,7 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertEqual(
             viewModel.openCodeCredentialMessage,
-            "OpenCode Go usage refreshed. ZEN balance unavailable: Could not parse OpenCode ZEN balance."
+            "OpenCode Go usage refreshed. Zen balance unavailable: Could not parse OpenCode Zen balance."
         )
     }
 

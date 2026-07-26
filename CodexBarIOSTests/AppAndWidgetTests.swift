@@ -165,6 +165,10 @@ final class AppAndWidgetTests: XCTestCase {
         let claudeResult = results.first(where: { $0.providerID == .claude })
         XCTAssertEqual(claudeResult?.monetaryMetrics.count, 2)
         XCTAssertFalse(claudeResult?.usageMessages.isEmpty ?? true)
+        let openCodeResult = results.first(where: { $0.providerID == .openCodeZen })
+        XCTAssertEqual(openCodeResult?.title, "OpenCode Go + Zen")
+        XCTAssertFalse(openCodeResult?.bars.isEmpty ?? true)
+        XCTAssertNotNil(openCodeResult?.creditsRemaining)
 
         let historyStore = AppStoreScreenshotFixtures.historyStore(for: results)
         guard let codexResult = results.first(where: { $0.providerID == .codex }) else {
@@ -544,7 +548,7 @@ final class AppAndWidgetTests: XCTestCase {
                 CodexBarWidgetProviderSnapshot(
                     accountID: "openCodeZen",
                     providerID: "openCodeZen",
-                    title: "OpenCode ZEN",
+                    title: "OpenCode Zen",
                     subtitle: "Balance",
                     groupID: "work",
                     groupName: "Work",
@@ -796,7 +800,7 @@ final class AppAndWidgetTests: XCTestCase {
         let result = ProviderUsageResult(
             accountID: configuration.id,
             providerID: .openCodeZen,
-            title: "OpenCode ZEN",
+            title: "OpenCode Go + Zen",
             subtitle: "Balance",
             bars: [
                 UsageBar(label: "Balance", used: 1, limit: 4),
@@ -969,7 +973,7 @@ final class AppAndWidgetTests: XCTestCase {
             accountID: configuration.id,
             providerID: .openCodeZen,
             title: configuration.displayName,
-            subtitle: "Fresh Go usage with cached ZEN balance",
+            subtitle: "Fresh Go usage with cached Zen balance",
             bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 40, limit: 100)],
             creditsRemaining: 3,
             creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
@@ -1702,7 +1706,7 @@ final class AppAndWidgetTests: XCTestCase {
         let result = ProviderUsageResult(
             accountID: configuration.id,
             providerID: .openCodeZen,
-            title: "OpenCode ZEN",
+            title: "OpenCode Go",
             subtitle: "Live usage",
             bars: bars,
             fetchedAt: Date(timeIntervalSince1970: 1_788_475_200)

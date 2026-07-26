@@ -51,7 +51,71 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
 
     public var displayName: String {
         let label = accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if
+            providerID == .openCodeZen,
+            let generatedDisplayName = normalizedOpenCodeGeneratedDisplayName(label)
+        {
+            return generatedDisplayName
+        }
         return label.isEmpty ? providerID.displayName : label
+    }
+
+    public func openCodeDisplayName(
+        hasGoUsage: Bool,
+        hasZenBalance: Bool
+    ) -> String {
+        let label = accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isCustomAccountLabel(label) else {
+            return label
+        }
+
+        switch (hasGoUsage, hasZenBalance) {
+        case (true, true):
+            return "OpenCode Go + Zen"
+        case (true, false):
+            return "OpenCode Go"
+        case (false, true):
+            return "OpenCode Zen"
+        case (false, false):
+            return providerID.displayName
+        }
+    }
+
+    public var hasCustomAccountLabel: Bool {
+        isCustomAccountLabel(
+            accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func isCustomAccountLabel(_ label: String) -> Bool {
+        guard !label.isEmpty else {
+            return false
+        }
+        return providerID != .openCodeZen
+            || normalizedOpenCodeGeneratedDisplayName(label) == nil
+    }
+
+    private func normalizedOpenCodeGeneratedDisplayName(_ label: String) -> String? {
+        for base in ["OpenCode ZEN", "OpenCode Go + Zen"] {
+            if label == base {
+                return providerID.displayName
+            }
+
+            let prefix = "\(base) "
+            guard label.hasPrefix(prefix) else {
+                continue
+            }
+            let suffix = String(label.dropFirst(prefix.count))
+            guard
+                let accountNumber = Int(suffix),
+                accountNumber > 0,
+                suffix == String(accountNumber)
+            else {
+                continue
+            }
+            return "\(providerID.displayName) \(accountNumber)"
+        }
+        return nil
     }
 
     public func withNewAccountID() -> ProviderAccountConfiguration {

@@ -169,7 +169,7 @@ struct ProviderUsageCard: View {
                         .lineLimit(1)
                 } else {
                     HStack {
-                        Text(result.providerID == .openCodeZen ? "ZEN credit balance" : "Credit balance")
+                        Text(result.providerID == .openCodeZen ? "Zen credit balance" : "Credit balance")
                         Spacer()
                         Text(CodexBarCurrencyText.format(creditsRemaining))
                             .foregroundStyle(.secondary)

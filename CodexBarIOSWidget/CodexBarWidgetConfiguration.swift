@@ -195,7 +195,7 @@ enum CodexBarWidgetFocus: String, AppEnum {
         .claude: "Claude",
         .cursor: "Cursor",
         .moonshot: "Moonshot (Kimi)",
-        .openCodeZen: "OpenCode ZEN",
+        .openCodeZen: "OpenCode Go + Zen",
         .openRouter: "OpenRouter",
     ]
 

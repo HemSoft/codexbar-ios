@@ -10,7 +10,7 @@ building, testing, or releasing the app.
 
 - Added OpenCode Go subscription tracking for the rolling 5-hour, weekly, and
   monthly usage limits, including provider-reported reset times alongside the
-  existing ZEN credit balance. ([#122](https://github.com/HemSoft/codexbar-ios/issues/122))
+  existing Zen credit balance. ([#122](https://github.com/HemSoft/codexbar-ios/issues/122))
 - Added a live, read-only Apple Watch dashboard that mirrors iPhone account
   metrics, visualization choices, ordering, and freshness while keeping the
   last valid snapshot available when the devices disconnect.
@@ -25,7 +25,7 @@ building, testing, or releasing the app.
   account on the dashboard. ([#63](https://github.com/HemSoft/codexbar-ios/issues/63))
 - Added Moonshot (Kimi) as a new provider: paste an API key from
   platform.kimi.ai to track the available credit balance on the dashboard, in
-  history, and in widgets, alongside the existing OpenRouter and OpenCode ZEN
+  history, and in widgets, alongside the existing OpenRouter and OpenCode Zen
   balances. ([#66](https://github.com/HemSoft/codexbar-ios/issues/66))
 
 ### Changed
@@ -39,6 +39,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Labeled the OpenCode integration as Go + Zen, Go, or Zen based on the
+  products available in each workspace while preserving custom account labels.
+  ([#127](https://github.com/HemSoft/codexbar-ios/issues/127))
 - Let Claude dashboard cards start account-specific sign-in when credentials are
   missing or rejected, preserve the existing credential on cancellation or
   failure, and refresh the card automatically after successful recovery.

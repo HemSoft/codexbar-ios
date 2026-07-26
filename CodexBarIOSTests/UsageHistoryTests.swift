@@ -384,7 +384,7 @@ final class UsageHistoryTests: XCTestCase {
             accountID: "opencode.partial",
             providerID: .openCodeZen,
             title: "OpenCode",
-            subtitle: "Fresh Go usage with cached ZEN balance",
+            subtitle: "Fresh Go usage with cached Zen balance",
             bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 40, limit: 100)],
             creditsRemaining: 3,
             creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
@@ -411,7 +411,7 @@ final class UsageHistoryTests: XCTestCase {
             accountID: "opencode.mixed",
             providerID: .openCodeZen,
             title: "OpenCode",
-            subtitle: "Go usage and ZEN credit balance",
+            subtitle: "Go usage and Zen credit balance",
             bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 20, limit: 100)],
             creditsRemaining: 10,
             fetchedAt: firstFetch

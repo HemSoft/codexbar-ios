@@ -135,31 +135,31 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         do {
             let (data, response) = try await session.data(for: makeDashboardRequest(workspaceId: workspaceId, apiKey: apiKey))
             guard let httpResponse = response as? HTTPURLResponse else {
-                return .failure("OpenCode ZEN balance returned an invalid response.")
+                return .failure("OpenCode Zen balance returned an invalid response.")
             }
 
             switch httpResponse.statusCode {
             case 200..<300:
                 if let text = String(data: data, encoding: .utf8), Self.looksLikeOpenAuthPage(text) {
                     let message = Self.looksLikeZenModelAPIKey(apiKey)
-                        ? "OpenCode ZEN API keys are valid for models, but OpenCode does not expose balance to API keys."
+                        ? "This is an OpenCode Zen model API key, not an OpenCode dashboard auth value. Refresh the saved dashboard session."
                         : "OpenCode returned the sign-in page. Refresh the saved dashboard auth value."
                     return .failure(message)
                 }
 
                 guard let balance = Self.parsedBalance(data) else {
-                    return .failure("Could not parse OpenCode ZEN balance.")
+                    return .failure("Could not parse OpenCode Zen balance.")
                 }
                 return .value(balance)
             case 401, 403:
                 return .failure("OpenCode rejected the saved dashboard auth value.")
             case 429:
-                return .failure("OpenCode ZEN rate limit reached. Try again later.")
+                return .failure("OpenCode Zen rate limit reached. Try again later.")
             default:
-                return .failure("OpenCode ZEN dashboard returned HTTP \(httpResponse.statusCode).")
+                return .failure("OpenCode Zen dashboard returned HTTP \(httpResponse.statusCode).")
             }
         } catch {
-            return .failure("OpenCode ZEN balance could not be refreshed: \(error.localizedDescription)")
+            return .failure("OpenCode Zen balance could not be refreshed: \(error.localizedDescription)")
         }
     }
 
@@ -223,7 +223,10 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         return ProviderUsageResult(
             accountID: configuration.id,
             providerID: .openCodeZen,
-            title: configuration.displayName,
+            title: configuration.openCodeDisplayName(
+                hasGoUsage: true,
+                hasZenBalance: false
+            ),
             subtitle: "OpenCode Go usage",
             bars: bars(from: windows, fetchedAt: fetchedAt),
             fetchedAt: fetchedAt
@@ -778,7 +781,10 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         ProviderUsageResult(
             accountID: configuration.id,
             providerID: .openCodeZen,
-            title: configuration.displayName,
+            title: configuration.openCodeDisplayName(
+                hasGoUsage: false,
+                hasZenBalance: true
+            ),
             subtitle: "Credit balance",
             bars: [],
             creditsRemaining: balance,
@@ -847,7 +853,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         }
 
         if let balanceFailure, !usageBars.isEmpty || goStateIsAuthoritativeWithoutBars {
-            usageMessages.append("ZEN balance unavailable: \(balanceFailure)")
+            usageMessages.append("Zen balance unavailable: \(balanceFailure)")
         }
         if let goFailure, creditsRemaining != nil {
             usageMessages.append("Go usage unavailable: \(goFailure)")
@@ -857,7 +863,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             && (!usageBars.isEmpty || goStateIsAuthoritativeWithoutBars)
         let preserveCachedBars = goFailure != nil && creditsRemaining != nil
         let partialFailureMessage = [
-            preserveCachedCredits ? balanceFailure.map { "ZEN balance unavailable: \($0)" } : nil,
+            preserveCachedCredits ? balanceFailure.map { "Zen balance unavailable: \($0)" } : nil,
             preserveCachedBars ? goFailure.map { "Go usage unavailable: \($0)" } : nil,
         ].compactMap { $0 }.joined(separator: " ")
 
@@ -872,7 +878,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                 }
             if
                 let modelKeyExplanation = failures.first(where: {
-                    $0.contains("API keys are valid for models")
+                    $0.contains("model API key, not an OpenCode dashboard auth value")
                 })
             {
                 failures = [modelKeyExplanation]
@@ -883,7 +889,10 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             return ProviderUsageResult(
                 accountID: configuration.id,
                 providerID: .openCodeZen,
-                title: configuration.displayName,
+                title: configuration.openCodeDisplayName(
+                    hasGoUsage: false,
+                    hasZenBalance: false
+                ),
                 subtitle: message,
                 bars: [],
                 failureMessage: message,
@@ -896,15 +905,15 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         let subtitle: String
         switch (!usageBars.isEmpty, creditsRemaining != nil, goUsage) {
         case (true, true, _):
-            subtitle = "Go usage and ZEN credit balance"
+            subtitle = "Go usage and Zen credit balance"
         case (true, false, _):
             subtitle = "OpenCode Go usage"
         case (false, true, .notSubscribed):
-            subtitle = "ZEN credit balance - Go not subscribed"
+            subtitle = "Zen credit balance - Go not subscribed"
         case (false, true, .otherWorkspaceMember):
-            subtitle = "ZEN credit balance - Go owned by another member"
+            subtitle = "Zen credit balance - Go owned by another member"
         case (false, true, _):
-            subtitle = "ZEN credit balance"
+            subtitle = "Zen credit balance"
         case (false, false, .notSubscribed):
             subtitle = "OpenCode Go not subscribed"
         case (false, false, .otherWorkspaceMember):
@@ -916,7 +925,10 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         return ProviderUsageResult(
             accountID: configuration.id,
             providerID: .openCodeZen,
-            title: configuration.displayName,
+            title: configuration.openCodeDisplayName(
+                hasGoUsage: !usageBars.isEmpty,
+                hasZenBalance: creditsRemaining != nil
+            ),
             subtitle: subtitle,
             bars: usageBars,
             creditsRemaining: creditsRemaining,
@@ -945,7 +957,10 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         ProviderUsageResult(
             accountID: configuration.id,
             providerID: .openCodeZen,
-            title: configuration.displayName,
+            title: configuration.openCodeDisplayName(
+                hasGoUsage: false,
+                hasZenBalance: false
+            ),
             subtitle: message,
             bars: [],
             failureMessage: message,

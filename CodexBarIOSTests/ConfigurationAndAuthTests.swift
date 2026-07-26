@@ -482,6 +482,15 @@ final class ConfigurationAndAuthTests: XCTestCase {
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
         let openCodeZen = store.addAccount(for: .openCodeZen)
 
+        XCTAssertEqual(openCodeZen.accountLabel, "OpenCode Go + Zen 1")
+        XCTAssertFalse(openCodeZen.hasCustomAccountLabel)
+        XCTAssertEqual(
+            openCodeZen.openCodeDisplayName(
+                hasGoUsage: false,
+                hasZenBalance: true
+            ),
+            "OpenCode Zen"
+        )
         XCTAssertFalse(store.isConfigured(openCodeZen))
         XCTAssertFalse(store.shouldDisplayOnDashboard(openCodeZen))
 
