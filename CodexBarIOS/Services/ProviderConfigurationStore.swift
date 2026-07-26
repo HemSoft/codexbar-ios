@@ -1562,12 +1562,17 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         for (accountID, value) in root {
             guard
-                let object = value as? [String: Any],
                 let data = try? JSONSerialization.data(
-                    withJSONObject: object,
-                    options: [.sortedKeys]
+                    withJSONObject: value,
+                    options: [.fragmentsAllowed, .sortedKeys]
                 )
             else {
+                continue
+            }
+
+            guard let object = value as? [String: Any] else {
+                preservedData[accountID] = data
+                layouts[accountID] = AccountMetricLayout()
                 continue
             }
 
@@ -1645,7 +1650,10 @@ public final class ProviderConfigurationStore: ObservableObject {
         for (accountID, data) in unsupportedMetricLayoutData
         where metricLayouts[accountID] != nil
         {
-            guard let preserved = try? JSONSerialization.jsonObject(with: data) else {
+            guard let preserved = try? JSONSerialization.jsonObject(
+                with: data,
+                options: [.fragmentsAllowed]
+            ) else {
                 continue
             }
             root[accountID] = preserved
