@@ -349,6 +349,146 @@ final class ProviderParsingTests: XCTestCase {
         ])
     }
 
+    func testOpenCodeGoParserProjectsExactRollingWeeklyAndMonthlyBoundaries() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_784_980_800) // 2026-07-25 12:00 UTC
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        let payload = """
+        {
+          "rollingUsage": {"usagePercent": 80, "resetInSec": 3600},
+          "weeklyUsage": {"usagePercent": 40, "resetInSec": 129600},
+          "monthlyUsage": {"usagePercent": 20, "resetInSec": 1814400}
+        }
+        """
+
+        let result = try XCTUnwrap(OpenCodeZenUsageProvider.parseGoUsage(
+            Data(payload.utf8),
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ))
+
+        XCTAssertEqual(result.bars.map(\.projectionCurrent), [0.8, 0.4, 0.2])
+        XCTAssertEqual(result.bars.map(\.projectionLimit), [1, 1, 1])
+        XCTAssertEqual(result.bars.map(\.showProjectionOnCurrentBar), [true, true, true])
+        XCTAssertEqual(
+            result.bars.map(\.projectionPeriodStart),
+            [
+                Date(timeIntervalSince1970: 1_784_966_400),
+                Date(timeIntervalSince1970: 1_784_505_600),
+                Date(timeIntervalSince1970: 1_784_116_800),
+            ]
+        )
+        XCTAssertEqual(
+            result.bars.map(\.projectionPeriodEnd),
+            [
+                Date(timeIntervalSince1970: 1_784_984_400),
+                Date(timeIntervalSince1970: 1_785_110_400),
+                Date(timeIntervalSince1970: 1_786_795_200),
+            ]
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(result.bars[0].projectedFraction(at: fetchedAt)),
+            1,
+            accuracy: 0.000_001
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(result.bars[0].projectionDescription(at: fetchedAt))
+                .hasPrefix("Projected 100% at current pace")
+        )
+        XCTAssertEqual(
+            result.bars[1].projectionDescription(at: fetchedAt),
+            "Projected to stay under limit"
+        )
+    }
+
+    func testOpenCodeGoParserKeepsZeroUsageAndSelectivelySuppressesAmbiguousMonth() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_789_934_400) // 2026-09-20 20:00 UTC
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        let payload = """
+        {
+          "rollingUsage": {"usagePercent": 0, "resetInSec": 18000},
+          "weeklyUsage": {"usagePercent": 25, "resetInSec": 14400},
+          "monthlyUsage": {"usagePercent": 50, "resetInSec": 864000}
+        }
+        """
+
+        let result = try XCTUnwrap(OpenCodeZenUsageProvider.parseGoUsage(
+            Data(payload.utf8),
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ))
+
+        XCTAssertEqual(result.bars.map(\.used), [0, 25, 50])
+        XCTAssertEqual(result.bars.map(\.showProjectionOnCurrentBar), [true, true, false])
+        XCTAssertEqual(result.bars[0].projectionCurrent, 0)
+        XCTAssertNil(result.bars[0].projectedFraction(at: fetchedAt))
+        XCTAssertNotNil(result.bars[1].projectionPeriodStart)
+        XCTAssertNil(result.bars[2].projectionCurrent)
+        XCTAssertNil(result.bars[2].projectionLimit)
+        XCTAssertNil(result.bars[2].projectionPeriodStart)
+        XCTAssertNil(result.bars[2].projectionPeriodEnd)
+        XCTAssertEqual(
+            result.bars[2].resetsAt,
+            fetchedAt.addingTimeInterval(864_000)
+        )
+    }
+
+    func testOpenCodeGoWeeklyProjectionAllowsRequestTransitBeforeMondayBoundary() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_789_934_400) // 2026-09-20 20:00 UTC
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        let payload = """
+        {
+          "rollingUsage": {"usagePercent": 10, "resetInSec": 3600},
+          "weeklyUsage": {"usagePercent": 25, "resetInSec": 14398},
+          "monthlyUsage": {"usagePercent": 50, "resetInSec": 2116800}
+        }
+        """
+
+        let result = try XCTUnwrap(OpenCodeZenUsageProvider.parseGoUsage(
+            Data(payload.utf8),
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ))
+
+        XCTAssertTrue(result.bars[1].showProjectionOnCurrentBar)
+        XCTAssertEqual(
+            result.bars[1].projectionPeriodEnd,
+            Date(timeIntervalSince1970: 1_789_948_798)
+        )
+        XCTAssertEqual(
+            result.bars[1].projectionPeriodStart,
+            Date(timeIntervalSince1970: 1_789_343_998)
+        )
+    }
+
+    func testOpenCodeGoParserSuppressesInvalidOrExpiredProjectionPeriods() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_784_980_800)
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        let payload = """
+        {
+          "rollingUsage": {"usagePercent": 30, "resetInSec": 18001},
+          "weeklyUsage": {"usagePercent": 40, "resetInSec": 0},
+          "monthlyUsage": {"usagePercent": 50, "resetInSec": 1814400}
+        }
+        """
+
+        let result = try XCTUnwrap(OpenCodeZenUsageProvider.parseGoUsage(
+            Data(payload.utf8),
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ))
+
+        XCTAssertEqual(result.bars.map(\.used), [30, 40, 50])
+        XCTAssertEqual(result.bars.map(\.showProjectionOnCurrentBar), [false, false, true])
+        XCTAssertEqual(
+            result.bars[0].resetsAt,
+            fetchedAt.addingTimeInterval(18_001)
+        )
+        XCTAssertEqual(result.bars[1].resetsAt, fetchedAt)
+        XCTAssertNil(result.bars[0].projectionPeriodStart)
+        XCTAssertNil(result.bars[1].projectionPeriodStart)
+        XCTAssertNotNil(result.bars[2].projectionPeriodStart)
+    }
+
     func testOpenCodeGoParserFallsBackToRenderedUsageItems() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
@@ -380,6 +520,8 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.bars[0].resetsAt, fetchedAt.addingTimeInterval(5_400))
         XCTAssertEqual(result.bars[1].resetsAt, fetchedAt.addingTimeInterval(183_600))
         XCTAssertEqual(result.bars[2].resetsAt, fetchedAt.addingTimeInterval(2_520_000))
+        XCTAssertEqual(result.bars.map(\.showProjectionOnCurrentBar), [false, false, false])
+        XCTAssertTrue(result.bars.allSatisfy { $0.projectionCurrent == nil })
     }
 
     func testOpenCodeGoRenderedParserAcceptsRecognizedZeroResetDurations() throws {
