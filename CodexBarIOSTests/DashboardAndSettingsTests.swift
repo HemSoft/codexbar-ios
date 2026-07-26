@@ -1118,6 +1118,56 @@ final class DashboardAndSettingsTests: XCTestCase {
             try XCTUnwrap(snapshot.accounts.first?.metrics.first).resetText,
             "Starts when a message is sent"
         )
+
+        let resetResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Pro",
+            bars: [
+                UsageBar(
+                    stableKey: "session",
+                    label: "Current session",
+                    used: 13,
+                    limit: 100,
+                    resetsAt: fetchedAt.addingTimeInterval(60 * 60),
+                    resetDisplayStyle: .relativeWithLocalTime,
+                    projectionDescriptionOverride: "Projected text"
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+        let resetSnapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [resetResult],
+            configurationStore: store,
+            now: fetchedAt
+        )
+        let resetText = try XCTUnwrap(resetSnapshot.accounts.first?.metrics.first?.resetText)
+        XCTAssertNotEqual(resetText, "Projected text")
+
+        let staleResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Pro",
+            bars: [
+                UsageBar(
+                    stableKey: "session",
+                    label: "Current session",
+                    used: 0,
+                    limit: 100,
+                    projectionDescriptionOverride: "Stale projected text"
+                ),
+            ],
+            barsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+        let staleSnapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [staleResult],
+            configurationStore: store,
+            now: fetchedAt
+        )
+        XCTAssertNil(staleSnapshot.accounts.first?.metrics.first?.resetText)
     }
 
     @MainActor
