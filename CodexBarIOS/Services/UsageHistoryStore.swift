@@ -413,24 +413,31 @@ public final class UsageHistoryStore: ObservableObject {
             return balanceSeries(accountID: result.accountID, snapshots: accountSnapshots)
         }
 
-        let monetaryFormat = primaryMonetaryMetric(in: result.monetaryMetrics).map {
-            ($0.currencyCode, $0.decimalPlaces)
-        } ?? accountSnapshots.last.flatMap { snapshot in
-            primaryMonetaryMetric(in: snapshot.monetaryMetrics ?? []).map {
-                ($0.currencyCode, $0.decimalPlaces)
+        let primaryMetricIdentity = primaryMonetaryMetric(in: result.monetaryMetrics).map {
+            ($0.metricKind, $0.currencyCode, $0.decimalPlaces)
+        } ?? accountSnapshots.reversed().lazy.compactMap { snapshot in
+            self.primaryMonetaryMetric(in: snapshot.monetaryMetrics ?? []).map {
+                ($0.metricKind, $0.currencyCode, $0.decimalPlaces)
             }
-        }
+        }.first
 
         return UsageHistorySeries(
             accountID: result.accountID,
             points: accountSnapshots.compactMap { snapshot in
-                snapshot.monetaryPrimaryValue.map {
-                    UsageHistoryPoint(snapshot: snapshot, value: $0)
+                guard
+                    let primaryMetricIdentity,
+                    let storedMetric = snapshot.monetaryMetrics?.first(where: {
+                        $0.kind == primaryMetricIdentity.0
+                            && $0.currencyCode == primaryMetricIdentity.1
+                    })
+                else {
+                    return nil
                 }
+                return UsageHistoryPoint(snapshot: snapshot, value: storedMetric.doubleValue)
             },
             isBalance: true,
-            currencyCode: monetaryFormat?.0,
-            decimalPlaces: min(max(monetaryFormat?.1 ?? 2, 0), 6)
+            currencyCode: primaryMetricIdentity?.1,
+            decimalPlaces: min(max(primaryMetricIdentity?.2 ?? 2, 0), 6)
         )
     }
 

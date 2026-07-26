@@ -2305,6 +2305,12 @@ final class ProviderParsingTests: XCTestCase {
             negativeAmounts.monetaryMetrics.map(\.amount),
             [Decimal(0), Decimal(0), Decimal(0), Decimal(0)]
         )
+
+        let hugePercent = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"spend":{"enabled":true,"percent":1e20,"used":{"amount_minor":500,"currency":"USD","exponent":2}}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+        XCTAssertEqual(hugePercent.monetaryMetrics.first?.detail, "Month to date")
     }
 
     func testClaudeUsageParserUsesOnlyExplicitVerifiedPlanCombinations() throws {

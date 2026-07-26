@@ -616,7 +616,7 @@ public enum ClaudeUsageParser {
             spend.used,
             kind: .spent,
             label: "Usage credits spent",
-            detail: spend.percent.map { "\(Int(sanitizedPercent($0).rounded()))% used" }
+            detail: spendPercentDetail(spend.percent)
                 ?? "Month to date"
         )
         let limitMetric = monetaryMetric(
@@ -687,6 +687,17 @@ public enum ClaudeUsageParser {
     private static func normalizedCurrency(_ value: String) -> String? {
         let currency = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         return currency.count == 3 ? currency : nil
+    }
+
+    private static func spendPercentDetail(_ value: Double?) -> String? {
+        guard let value, value.isFinite else {
+            return nil
+        }
+        let rounded = max(value, 0).rounded()
+        guard rounded < Double(Int.max) else {
+            return nil
+        }
+        return "\(Int(rounded))% used"
     }
 
     private static func legacyExtraUsageMetrics(
