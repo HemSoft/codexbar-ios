@@ -2149,6 +2149,41 @@ final class AppAndWidgetTests: XCTestCase {
     }
 
     @MainActor
+    func testExistingAccountWithoutMetricPreferencesMigratesAtFullWidth() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let original = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let existingAccount = original.addAccount(for: .codex)
+        defaults.removeObject(forKey: "metricVisualizationPreferences")
+
+        let migrated = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let metricID = "codex.session"
+        _ = migrated.reconcileMetricLayout(
+            accountID: existingAccount.id,
+            availableMetricIDs: [metricID]
+        )
+
+        XCTAssertEqual(
+            migrated.metricWidth(accountID: existingAccount.id, metricID: metricID),
+            .full
+        )
+        XCTAssertFalse(
+            try XCTUnwrap(migrated.metricLayouts[existingAccount.id]?.preferences[metricID])
+                .isNewlyDiscovered
+        )
+    }
+
+    @MainActor
     func testUndecodableFutureMetricLayoutIsPreservedWhenKnownLayoutsSave() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -2191,6 +2226,31 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual((futureLayout["version"] as? NSNumber)?.intValue, 99)
         XCTAssertEqual(futureField, ["keep": "me"])
         XCTAssertEqual(futurePreferences["codex.session"], ["future", "shape"])
+
+        store.updateMetricWidth(
+            .half,
+            accountID: futureAccountID,
+            metricID: "codex.session"
+        )
+        let rewrittenData = try XCTUnwrap(
+            defaults.data(forKey: "metricVisualizationPreferences")
+        )
+        let rewrittenRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: rewrittenData) as? [String: Any]
+        )
+        let rewrittenLayout = try XCTUnwrap(
+            rewrittenRoot[futureAccountID] as? [String: Any]
+        )
+        let rewrittenPreferences = try XCTUnwrap(
+            rewrittenLayout["preferences"] as? [String: [String: Any]]
+        )
+
+        XCTAssertEqual(
+            (rewrittenLayout["version"] as? NSNumber)?.intValue,
+            AccountMetricLayout.currentVersion
+        )
+        XCTAssertNil(rewrittenLayout["futureField"])
+        XCTAssertEqual(rewrittenPreferences["codex.session"]?["width"] as? String, "half")
     }
 
     func testAvailableMetricIdentifiersCoverEveryMetricTypeWithoutUsingLabels() {

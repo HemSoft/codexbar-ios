@@ -684,6 +684,9 @@ public final class ProviderConfigurationStore: ObservableObject {
         guard !accountID.isEmpty else {
             return AccountMetricLayout()
         }
+        if unsupportedMetricLayoutData[accountID] != nil {
+            return metricLayouts[accountID] ?? AccountMetricLayout()
+        }
 
         let availableMetricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
         var layout = metricLayouts[accountID] ?? AccountMetricLayout()
@@ -742,6 +745,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             return
         }
 
+        prepareMetricLayoutForEditing(accountID: accountID)
         var layout = metricLayouts[accountID] ?? AccountMetricLayout()
         let reorderedMetricIDSet = Set(reorderedMetricIDs)
         var replacementIndex = 0
@@ -827,6 +831,9 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     public func markMetricsSeen(_ metricIDs: [String], accountID: String) {
+        guard unsupportedMetricLayoutData[accountID] == nil else {
+            return
+        }
         guard var layout = metricLayouts[accountID] else {
             return
         }
@@ -874,6 +881,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     public func resetVisualizationStyles(accountID: String, metricIDs: [String]) {
+        prepareMetricLayoutForEditing(accountID: accountID)
         guard var layout = metricLayouts[accountID] else {
             return
         }
@@ -909,6 +917,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         accountID: String,
         metricID: String
     ) {
+        prepareMetricLayoutForEditing(accountID: accountID)
         var layout = metricLayouts[accountID] ?? AccountMetricLayout()
         if !layout.orderedMetricIDs.isEmpty,
            !layout.orderedMetricIDs.contains(metricID)
@@ -917,6 +926,15 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
         layout.preferences[metricID] = preference
         metricLayouts[accountID] = layout
+    }
+
+    private func prepareMetricLayoutForEditing(accountID: String) {
+        guard unsupportedMetricLayoutData.removeValue(forKey: accountID) != nil else {
+            return
+        }
+        // An explicit customization opts this account into the current schema.
+        // Passive reconciliation never discards a payload written by a newer app.
+        metricLayouts[accountID] = AccountMetricLayout()
     }
 
     private func updateMetricPreference(
