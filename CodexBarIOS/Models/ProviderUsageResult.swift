@@ -80,6 +80,10 @@ public struct ProviderMonetaryMetric: Identifiable, Codable, Equatable, Sendable
         "\(kind.rawValue).\(label).\(currencyCode)"
     }
 
+    public func metricIdentifier(providerID: ProviderID) -> String {
+        "\(providerID.rawValue).monetary.\(kind.rawValue).\(currencyCode.lowercased())"
+    }
+
     public var amount: Decimal {
         var divisor = Decimal(1)
         for _ in 0..<max(decimalPlaces, 0) {
@@ -94,6 +98,24 @@ public struct ProviderMonetaryMetric: Identifiable, Codable, Equatable, Sendable
                 .precision(.fractionLength(decimalPlaces))
                 .locale(locale)
         )
+    }
+}
+
+public enum ProviderUsageMetricKind: Equatable, Sendable {
+    case usageBar(index: Int)
+    case creditsRemaining
+    case monetary(index: Int)
+}
+
+public struct ProviderUsageMetric: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let label: String
+    public let kind: ProviderUsageMetricKind
+
+    public init(id: String, label: String, kind: ProviderUsageMetricKind) {
+        self.id = id
+        self.label = label
+        self.kind = kind
     }
 }
 
@@ -241,6 +263,33 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
 
     public var freshCreditsRemaining: Double? {
         hasFreshCredits ? creditsRemaining : nil
+    }
+
+    public var availableMetrics: [ProviderUsageMetric] {
+        let usageMetrics = bars.enumerated().map { index, bar in
+            ProviderUsageMetric(
+                id: bar.metricIdentifier(providerID: providerID, index: index),
+                label: bar.label,
+                kind: .usageBar(index: index)
+            )
+        }
+        let creditMetrics = creditsRemaining == nil
+            ? []
+            : [
+                ProviderUsageMetric(
+                    id: "\(providerID.rawValue).credits-remaining",
+                    label: providerID == .openCodeZen ? "Zen credit balance" : "Credit balance",
+                    kind: .creditsRemaining
+                ),
+            ]
+        let moneyMetrics = monetaryMetrics.enumerated().map { index, metric in
+            ProviderUsageMetric(
+                id: metric.metricIdentifier(providerID: providerID),
+                label: metric.label,
+                kind: .monetary(index: index)
+            )
+        }
+        return usageMetrics + creditMetrics + moneyMetrics
     }
 
     public var highestSeverity: UsageSeverity {

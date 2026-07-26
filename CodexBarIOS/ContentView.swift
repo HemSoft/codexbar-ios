@@ -385,6 +385,19 @@ struct ContentView: View {
                         creditID: creditID
                     )
                 },
+                isMetricVisible: { metricID in
+                    configurationStore.isMetricVisible(
+                        accountID: result.accountID,
+                        metricID: metricID
+                    )
+                },
+                onUpdateMetricVisibility: { metricID, isVisible in
+                    configurationStore.updateMetricVisibility(
+                        isVisible,
+                        accountID: result.accountID,
+                        metricID: metricID
+                    )
+                },
                 visualizationStyleForMetric: { metricID in
                     configurationStore.visualizationStyle(
                         accountID: result.accountID,

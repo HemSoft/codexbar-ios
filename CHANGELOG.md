@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added account-specific show/hide controls for every usage, balance, and
+  monetary metric on multi-metric dashboard cards, with matching Apple Watch
+  visibility and unchanged widget selections. ([#132](https://github.com/HemSoft/codexbar-ios/issues/132))
 - Added a Configure Account shortcut to each dashboard card menu so users can
   edit the exact account and refresh its usage without navigating through
   Settings. ([#131](https://github.com/HemSoft/codexbar-ios/issues/131))
