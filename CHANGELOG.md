@@ -52,6 +52,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Prevented additional iPad windows from starting duplicate dashboard refresh,
+  history, alert, widget, and Apple Watch publication work.
+  ([#139](https://github.com/HemSoft/codexbar-ios/issues/139))
 - Matched Claude's current-session and All models labels, represented the idle
   session state, and kept provider-reported usage-credit balance separate from
   monthly spend headroom. ([#125](https://github.com/HemSoft/codexbar-ios/issues/125))

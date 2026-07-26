@@ -2,6 +2,18 @@ import XCTest
 @testable import CodexBarIOS
 
 final class AppAndWidgetTests: XCTestCase {
+    func testBuiltAppDisablesMultipleScenesWhileDashboardLifecycleIsSceneOwned() throws {
+        let sceneManifest = try XCTUnwrap(
+            Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest")
+                as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            sceneManifest["UIApplicationSupportsMultipleScenes"] as? Bool,
+            false
+        )
+    }
+
     func testBuiltAppAndWidgetContainRequiredPrivacyManifests() throws {
         XCTAssertEqual(
             try privacyReasons(in: Bundle.main),
