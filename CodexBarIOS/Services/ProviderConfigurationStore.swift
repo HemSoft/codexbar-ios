@@ -11,6 +11,123 @@ public struct MetricCustomizationPreference: Codable, Equatable, Sendable {
         self.visualizationStyle = visualizationStyle
         self.isVisible = isVisible
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case visualizationStyle
+        case isVisible
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        visualizationStyle = try container.decodeIfPresent(
+            MetricVisualizationStyle.self,
+            forKey: .visualizationStyle
+        )
+        isVisible = try container.decodeIfPresent(Bool.self, forKey: .isVisible) ?? true
+    }
+}
+
+public enum MetricTileWidthPreference: String, CaseIterable, Codable, Equatable, Sendable {
+    case automatic
+    case half
+    case full
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self = (try? container.decode(String.self))
+            .flatMap(Self.init(rawValue:))
+            ?? .automatic
+    }
+}
+
+public struct MetricTilePreference: Codable, Equatable, Sendable {
+    public var isVisible: Bool
+    public var visualizationStyle: MetricVisualizationStyle?
+    public var width: MetricTileWidthPreference
+    public var isNewlyDiscovered: Bool
+
+    public init(
+        isVisible: Bool = true,
+        visualizationStyle: MetricVisualizationStyle? = nil,
+        width: MetricTileWidthPreference = .automatic,
+        isNewlyDiscovered: Bool = true
+    ) {
+        self.isVisible = isVisible
+        self.visualizationStyle = visualizationStyle
+        self.width = width
+        self.isNewlyDiscovered = isNewlyDiscovered
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case isVisible
+        case visualizationStyle
+        case width
+        case isNewlyDiscovered
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isVisible = try container.decodeIfPresent(Bool.self, forKey: .isVisible) ?? true
+        visualizationStyle = try container.decodeIfPresent(
+            MetricVisualizationStyle.self,
+            forKey: .visualizationStyle
+        )
+        width = try container.decodeIfPresent(
+            MetricTileWidthPreference.self,
+            forKey: .width
+        ) ?? .automatic
+        isNewlyDiscovered = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isNewlyDiscovered
+        ) ?? false
+    }
+}
+
+public struct AccountMetricLayout: Codable, Equatable, Sendable {
+    public static let currentVersion = 1
+
+    public var version: Int
+    public var orderedMetricIDs: [String]
+    public var preferences: [String: MetricTilePreference]
+    public var usesLegacyFullWidthDefaults: Bool
+
+    public init(
+        version: Int = AccountMetricLayout.currentVersion,
+        orderedMetricIDs: [String] = [],
+        preferences: [String: MetricTilePreference] = [:],
+        usesLegacyFullWidthDefaults: Bool = false
+    ) {
+        self.version = version
+        self.orderedMetricIDs = orderedMetricIDs
+        self.preferences = preferences
+        self.usesLegacyFullWidthDefaults = usesLegacyFullWidthDefaults
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case orderedMetricIDs
+        case preferences
+        case usesLegacyFullWidthDefaults
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // The required version is also the discriminator from the legacy
+        // account -> metric -> preference dictionary stored under the same key.
+        version = try container.decode(Int.self, forKey: .version)
+        orderedMetricIDs = try container.decodeIfPresent(
+            [String].self,
+            forKey: .orderedMetricIDs
+        ) ?? []
+        preferences = try container.decodeIfPresent(
+            [String: MetricTilePreference].self,
+            forKey: .preferences
+        ) ?? [:]
+        usesLegacyFullWidthDefaults = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .usesLegacyFullWidthDefaults
+        ) ?? false
+    }
 }
 
 @MainActor
@@ -23,9 +140,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var widgetRefreshInterval: WidgetRefreshInterval
     @Published public private(set) var dashboardOrderingMode: DashboardOrderingMode
     @Published public private(set) var dashboardCardOrder: [String]
-    @Published public private(set) var metricCustomizationPreferences: [
-        String: [String: MetricCustomizationPreference]
-    ]
+    @Published public private(set) var metricLayouts: [String: AccountMetricLayout]
     @Published public private(set) var usageAlertSettings: UsageAlertSettings
     @Published public private(set) var usageAlertActiveIDs: Set<String>
     @Published public private(set) var isConfigurationRecoveryRequired: Bool
@@ -75,13 +190,27 @@ public final class ProviderConfigurationStore: ObservableObject {
         )
         self.dashboardOrderingMode = Self.loadDashboardOrderingMode(from: defaults)
         self.dashboardCardOrder = Self.loadDashboardCardOrder(from: defaults)
-        self.metricCustomizationPreferences = Self.loadMetricCustomizationPreferences(from: defaults)
+        let metricLayoutLoadResult = Self.loadMetricLayouts(from: defaults)
+        var loadedMetricLayouts = metricLayoutLoadResult.layouts
+        for configuration in configurationLoadResult.configurations
+        where loadedMetricLayouts[configuration.id] == nil
+        {
+            loadedMetricLayouts[configuration.id] = AccountMetricLayout(
+                usesLegacyFullWidthDefaults: true
+            )
+        }
+        self.metricLayouts = loadedMetricLayouts
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
         self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
         self.isConfigurationRecoveryRequired = configurationLoadResult.error != nil
         self.isGroupRecoveryRequired = groupLoadResult.error != nil
         self.hasIncompleteAccountReset = defaults.bool(forKey: DefaultsKey.incompleteAccountReset)
         self.lastError = configurationLoadResult.error ?? groupLoadResult.error
+        if metricLayoutLoadResult.needsMigration
+            || loadedMetricLayouts.count != metricLayoutLoadResult.layouts.count
+        {
+            saveMetricLayouts()
+        }
         sortConfigurations()
         refreshSecretAvailability()
     }
@@ -211,6 +340,9 @@ public final class ProviderConfigurationStore: ObservableObject {
         sortConfigurations()
         if !saveConfigurations() {
             configurations = previousConfigurations
+        } else {
+            metricLayouts[configuration.id] = AccountMetricLayout()
+            saveMetricLayouts()
         }
         refreshSecretAvailability()
         return configuration
@@ -334,9 +466,9 @@ public final class ProviderConfigurationStore: ObservableObject {
                 )
             )
             for accountID in removedAccountIDs {
-                metricCustomizationPreferences.removeValue(forKey: accountID)
+                metricLayouts.removeValue(forKey: accountID)
             }
-            saveMetricCustomizationPreferences()
+            saveMetricLayouts()
             refreshSecretAvailability()
         }
         if let firstDeletionError {
@@ -379,7 +511,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             groups = []
             secretAvailability = [:]
             dashboardCardOrder = []
-            metricCustomizationPreferences = [:]
+            metricLayouts = [:]
             usageAlertActiveIDs = []
             defaults.removeObject(forKey: configurationsKey)
             defaults.removeObject(forKey: groupsKey)
@@ -409,9 +541,9 @@ public final class ProviderConfigurationStore: ObservableObject {
                 )
             )
             for accountID in removedAccountIDs {
-                metricCustomizationPreferences.removeValue(forKey: accountID)
+                metricLayouts.removeValue(forKey: accountID)
             }
-            saveMetricCustomizationPreferences()
+            saveMetricLayouts()
         }
         refreshSecretAvailability()
         hasIncompleteAccountReset = true
@@ -503,17 +635,124 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     public func visualizationStyle(accountID: String, metricID: String) -> MetricVisualizationStyle {
-        metricCustomizationPreferences[accountID]?[metricID]?.visualizationStyle ?? .linearBar
+        metricLayouts[accountID]?.preferences[metricID]?.visualizationStyle ?? .linearBar
+    }
+
+    public var metricCustomizationPreferences: [String: [String: MetricCustomizationPreference]] {
+        metricLayouts.mapValues { layout in
+            layout.preferences.mapValues { preference in
+                MetricCustomizationPreference(
+                    visualizationStyle: preference.visualizationStyle,
+                    isVisible: preference.isVisible
+                )
+            }
+        }
     }
 
     public var metricVisualizationPreferences: [String: [String: MetricVisualizationStyle]] {
-        metricCustomizationPreferences.mapValues { accountPreferences in
-            accountPreferences.compactMapValues(\.visualizationStyle)
+        metricLayouts.mapValues { layout in
+            layout.preferences.compactMapValues(\.visualizationStyle)
         }
     }
 
     public func isMetricVisible(accountID: String, metricID: String) -> Bool {
-        metricCustomizationPreferences[accountID]?[metricID]?.isVisible ?? true
+        metricLayouts[accountID]?.preferences[metricID]?.isVisible ?? true
+    }
+
+    public func metricWidth(
+        accountID: String,
+        metricID: String
+    ) -> MetricTileWidthPreference {
+        metricLayouts[accountID]?.preferences[metricID]?.width ?? .automatic
+    }
+
+    @discardableResult
+    public func reconcileMetricLayout(
+        accountID: String,
+        availableMetricIDs: [String]
+    ) -> AccountMetricLayout {
+        guard !accountID.isEmpty else {
+            return AccountMetricLayout()
+        }
+
+        let availableMetricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
+        var layout = metricLayouts[accountID] ?? AccountMetricLayout()
+        let originalLayout = layout
+        var orderedMetricIDs = Self.uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
+        let orderedMetricIDSet = Set(orderedMetricIDs)
+
+        if orderedMetricIDs.isEmpty, !layout.preferences.isEmpty {
+            orderedMetricIDs = availableMetricIDs
+            let availableMetricIDSet = Set(availableMetricIDs)
+            orderedMetricIDs.append(
+                contentsOf: layout.preferences.keys
+                    .filter { !availableMetricIDSet.contains($0) }
+                    .sorted()
+            )
+        } else {
+            orderedMetricIDs.append(
+                contentsOf: availableMetricIDs.filter { !orderedMetricIDSet.contains($0) }
+            )
+        }
+
+        layout.version = AccountMetricLayout.currentVersion
+        layout.orderedMetricIDs = orderedMetricIDs
+        for metricID in availableMetricIDs where layout.preferences[metricID] == nil {
+            layout.preferences[metricID] = MetricTilePreference(
+                width: layout.usesLegacyFullWidthDefaults ? .full : .automatic,
+                isNewlyDiscovered: !layout.usesLegacyFullWidthDefaults
+            )
+        }
+        layout.usesLegacyFullWidthDefaults = false
+
+        if layout != originalLayout {
+            metricLayouts[accountID] = layout
+            saveMetricLayouts()
+        }
+        return layout
+    }
+
+    public func metricOrder(
+        accountID: String,
+        availableMetricIDs: [String]
+    ) -> [String] {
+        reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: availableMetricIDs
+        ).orderedMetricIDs
+    }
+
+    public func updateMetricOrder(_ metricIDs: [String], accountID: String) {
+        guard !accountID.isEmpty else {
+            return
+        }
+
+        let reorderedMetricIDs = Self.uniqueNonemptyMetricIDs(metricIDs)
+        guard !reorderedMetricIDs.isEmpty else {
+            return
+        }
+
+        var layout = metricLayouts[accountID] ?? AccountMetricLayout()
+        let reorderedMetricIDSet = Set(reorderedMetricIDs)
+        var replacementIndex = 0
+        var mergedOrder = Self.uniqueNonemptyMetricIDs(layout.orderedMetricIDs).map { metricID in
+            guard reorderedMetricIDSet.contains(metricID) else {
+                return metricID
+            }
+            defer { replacementIndex += 1 }
+            return reorderedMetricIDs[replacementIndex]
+        }
+        mergedOrder.append(contentsOf: reorderedMetricIDs.dropFirst(replacementIndex))
+
+        layout.version = AccountMetricLayout.currentVersion
+        layout.orderedMetricIDs = mergedOrder
+        for metricID in reorderedMetricIDs {
+            var preference = layout.preferences[metricID] ?? MetricTilePreference()
+            preference.isNewlyDiscovered = false
+            layout.preferences[metricID] = preference
+        }
+        metricLayouts[accountID] = layout
+        saveMetricLayouts()
     }
 
     public func updateMetricVisibility(
@@ -525,10 +764,10 @@ public final class ProviderConfigurationStore: ObservableObject {
             return
         }
 
-        var preference = metricCustomizationPreferences[accountID]?[metricID]
-            ?? MetricCustomizationPreference()
+        var preference = metricPreference(accountID: accountID, metricID: metricID)
         preference.isVisible = isVisible
-        updateMetricCustomizationPreference(
+        preference.isNewlyDiscovered = false
+        updateMetricPreference(
             preference,
             accountID: accountID,
             metricID: metricID
@@ -544,14 +783,57 @@ public final class ProviderConfigurationStore: ObservableObject {
             return
         }
 
-        var preference = metricCustomizationPreferences[accountID]?[metricID]
-            ?? MetricCustomizationPreference()
+        var preference = metricPreference(accountID: accountID, metricID: metricID)
         preference.visualizationStyle = style
-        updateMetricCustomizationPreference(
+        preference.isNewlyDiscovered = false
+        updateMetricPreference(
             preference,
             accountID: accountID,
             metricID: metricID
         )
+    }
+
+    public func updateMetricWidth(
+        _ width: MetricTileWidthPreference,
+        accountID: String,
+        metricID: String
+    ) {
+        guard !accountID.isEmpty, !metricID.isEmpty else {
+            return
+        }
+
+        var preference = metricPreference(accountID: accountID, metricID: metricID)
+        preference.width = width
+        preference.isNewlyDiscovered = false
+        updateMetricPreference(
+            preference,
+            accountID: accountID,
+            metricID: metricID
+        )
+    }
+
+    public func markMetricsSeen(_ metricIDs: [String], accountID: String) {
+        guard var layout = metricLayouts[accountID] else {
+            return
+        }
+
+        var changed = false
+        for metricID in Self.uniqueNonemptyMetricIDs(metricIDs) {
+            guard var preference = layout.preferences[metricID],
+                  preference.isNewlyDiscovered
+            else {
+                continue
+            }
+            preference.isNewlyDiscovered = false
+            layout.preferences[metricID] = preference
+            changed = true
+        }
+        guard changed else {
+            return
+        }
+
+        metricLayouts[accountID] = layout
+        saveMetricLayouts()
     }
 
     public func applyVisualizationStyle(
@@ -563,58 +845,64 @@ public final class ProviderConfigurationStore: ObservableObject {
             return
         }
 
-        let uniqueMetricIDs = Set(metricIDs.filter { !$0.isEmpty })
+        let uniqueMetricIDs = Self.uniqueNonemptyMetricIDs(metricIDs)
         guard !uniqueMetricIDs.isEmpty else {
             return
         }
 
         for metricID in uniqueMetricIDs {
-            var preference = metricCustomizationPreferences[accountID]?[metricID]
-                ?? MetricCustomizationPreference()
+            var preference = metricPreference(accountID: accountID, metricID: metricID)
             preference.visualizationStyle = style
-            metricCustomizationPreferences[accountID, default: [:]][metricID] = preference
+            preference.isNewlyDiscovered = false
+            setMetricPreference(preference, accountID: accountID, metricID: metricID)
         }
-        saveMetricCustomizationPreferences()
+        saveMetricLayouts()
     }
 
     public func resetVisualizationStyles(accountID: String, metricIDs: [String]) {
-        guard var accountPreferences = metricCustomizationPreferences[accountID] else {
+        guard var layout = metricLayouts[accountID] else {
             return
         }
 
         for metricID in metricIDs {
-            guard var preference = accountPreferences[metricID] else {
+            guard var preference = layout.preferences[metricID] else {
                 continue
             }
             preference.visualizationStyle = nil
-            if preference.isVisible {
-                accountPreferences.removeValue(forKey: metricID)
-            } else {
-                accountPreferences[metricID] = preference
-            }
+            preference.isNewlyDiscovered = false
+            layout.preferences[metricID] = preference
         }
-        if accountPreferences.isEmpty {
-            metricCustomizationPreferences.removeValue(forKey: accountID)
-        } else {
-            metricCustomizationPreferences[accountID] = accountPreferences
-        }
-        saveMetricCustomizationPreferences()
+        metricLayouts[accountID] = layout
+        saveMetricLayouts()
     }
 
-    private func updateMetricCustomizationPreference(
-        _ preference: MetricCustomizationPreference,
+    private func metricPreference(
+        accountID: String,
+        metricID: String
+    ) -> MetricTilePreference {
+        metricLayouts[accountID]?.preferences[metricID] ?? MetricTilePreference()
+    }
+
+    private func setMetricPreference(
+        _ preference: MetricTilePreference,
         accountID: String,
         metricID: String
     ) {
-        if preference.isVisible, preference.visualizationStyle == nil {
-            metricCustomizationPreferences[accountID]?.removeValue(forKey: metricID)
-            if metricCustomizationPreferences[accountID]?.isEmpty == true {
-                metricCustomizationPreferences.removeValue(forKey: accountID)
-            }
-        } else {
-            metricCustomizationPreferences[accountID, default: [:]][metricID] = preference
+        var layout = metricLayouts[accountID] ?? AccountMetricLayout()
+        if !layout.orderedMetricIDs.contains(metricID) {
+            layout.orderedMetricIDs.append(metricID)
         }
-        saveMetricCustomizationPreferences()
+        layout.preferences[metricID] = preference
+        metricLayouts[accountID] = layout
+    }
+
+    private func updateMetricPreference(
+        _ preference: MetricTilePreference,
+        accountID: String,
+        metricID: String
+    ) {
+        setMetricPreference(preference, accountID: accountID, metricID: metricID)
+        saveMetricLayouts()
     }
 
     public func updateUsageAlertSettings(_ settings: UsageAlertSettings) {
@@ -1044,6 +1332,11 @@ public final class ProviderConfigurationStore: ObservableObject {
         let error: String?
     }
 
+    private struct MetricLayoutLoadResult {
+        let layouts: [String: AccountMetricLayout]
+        let needsMigration: Bool
+    }
+
     private static let configurationLoadErrorMessage =
         "Saved account data couldn't be read. Replace the damaged account list in Settings to resume saving configurations."
     private static let groupLoadErrorMessage =
@@ -1171,35 +1464,84 @@ public final class ProviderConfigurationStore: ObservableObject {
             .filter { seenAccountIDs.insert($0).inserted }
     }
 
-    private static func loadMetricCustomizationPreferences(
+    private static func loadMetricLayouts(
         from defaults: UserDefaults
-    ) -> [String: [String: MetricCustomizationPreference]] {
+    ) -> MetricLayoutLoadResult {
         guard let data = defaults.data(forKey: DefaultsKey.metricCustomizationPreferences) else {
-            return [:]
+            return MetricLayoutLoadResult(layouts: [:], needsMigration: false)
         }
 
         if let decoded = try? JSONDecoder().decode(
+            [String: AccountMetricLayout].self,
+            from: data
+        ) {
+            let normalized = decoded.mapValues(Self.normalizedMetricLayout)
+            return MetricLayoutLoadResult(
+                layouts: normalized,
+                needsMigration: normalized != decoded
+            )
+        }
+
+        if let preferences = try? JSONDecoder().decode(
             [String: [String: MetricCustomizationPreference]].self,
             from: data
         ) {
-            return decoded
+            return MetricLayoutLoadResult(
+                layouts: preferences.mapValues(Self.migratedMetricLayout),
+                needsMigration: true
+            )
         }
 
         guard let legacyStyles = try? JSONDecoder().decode(
             [String: [String: MetricVisualizationStyle]].self,
             from: data
         ) else {
-            return [:]
+            return MetricLayoutLoadResult(layouts: [:], needsMigration: false)
         }
-        return legacyStyles.mapValues { accountStyles in
-            accountStyles.mapValues {
-                MetricCustomizationPreference(visualizationStyle: $0)
-            }
-        }
+        return MetricLayoutLoadResult(
+            layouts: legacyStyles.mapValues { accountStyles in
+                migratedMetricLayout(
+                    from: accountStyles.mapValues {
+                        MetricCustomizationPreference(visualizationStyle: $0)
+                    }
+                )
+            },
+            needsMigration: true
+        )
     }
 
-    private func saveMetricCustomizationPreferences() {
-        let data = try? JSONEncoder().encode(metricCustomizationPreferences)
+    private static func migratedMetricLayout(
+        from preferences: [String: MetricCustomizationPreference]
+    ) -> AccountMetricLayout {
+        AccountMetricLayout(
+            preferences: preferences.mapValues { preference in
+                MetricTilePreference(
+                    isVisible: preference.isVisible,
+                    visualizationStyle: preference.visualizationStyle,
+                    width: .full,
+                    isNewlyDiscovered: false
+                )
+            },
+            usesLegacyFullWidthDefaults: true
+        )
+    }
+
+    private static func normalizedMetricLayout(
+        _ layout: AccountMetricLayout
+    ) -> AccountMetricLayout {
+        var normalized = layout
+        normalized.version = AccountMetricLayout.currentVersion
+        normalized.orderedMetricIDs = uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
+        return normalized
+    }
+
+    private static func uniqueNonemptyMetricIDs(_ metricIDs: [String]) -> [String] {
+        var seenMetricIDs = Set<String>()
+        return metricIDs.filter { !$0.isEmpty && seenMetricIDs.insert($0).inserted }
+    }
+
+    private func saveMetricLayouts() {
+        let data = try? JSONEncoder().encode(metricLayouts)
         defaults.set(data, forKey: metricCustomizationPreferencesKey)
     }
 

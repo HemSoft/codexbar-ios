@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added a versioned, account-specific metric layout foundation that preserves
+  existing visibility and visualization choices while enabling saved tile
+  order and adaptive width preferences. ([#142](https://github.com/HemSoft/codexbar-ios/issues/142))
 - Added account-specific show/hide controls for every usage, balance, and
   monetary metric on multi-metric dashboard cards, with matching Apple Watch
   visibility and unchanged widget selections. ([#132](https://github.com/HemSoft/codexbar-ios/issues/132))
