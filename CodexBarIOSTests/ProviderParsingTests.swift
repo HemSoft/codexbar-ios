@@ -2261,15 +2261,26 @@ final class ProviderParsingTests: XCTestCase {
 
     func testClaudeUsageParserLossilyOmitsMalformedLimitsContainer() throws {
         let result = try XCTUnwrap(ClaudeUsageParser.parse(
-            Data(#"{"five_hour":{"utilization":13,"resets_at":"2030-01-01T02:00:00Z"},"limits":[{"kind":"weekly","percent":"unknown"}],"spend":{"enabled":true,"balance":{"amount_minor":1000,"currency":"USD","exponent":2}}}"#.utf8),
+            Data(#"{"limits":[{"kind":"session","percent":13,"resets_at":"2030-01-01T02:00:00Z"},{"kind":"weekly_all","percent":"unknown"},"unexpected",{"kind":"weekly_all","percent":36,"resets_at":"2030-01-08T02:00:00Z"}],"spend":{"enabled":true,"balance":{"amount_minor":1000,"currency":"USD","exponent":2}}}"#.utf8),
             subscriptionType: "pro"
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Current session"])
-        XCTAssertEqual(result.bars.map(\.used), [13])
+        XCTAssertEqual(result.bars.map(\.label), ["Current session", "All models"])
+        XCTAssertEqual(result.bars.map(\.used), [13, 36])
         XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.balance])
         XCTAssertEqual(result.monetaryMetrics.map(\.amount), [Decimal(10)])
         XCTAssertEqual(result.usageMessages, ["Usage credits are enabled."])
+    }
+
+    func testClaudeUsageParserLossilyOmitsMalformedWindowFields() throws {
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"five_hour":{"utilization":13,"resets_at":[]},"seven_day":{"utilization":36,"resets_at":{}}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), ["Current session", "All models"])
+        XCTAssertEqual(result.bars.map(\.used), [13, 36])
+        XCTAssertEqual(result.bars.map(\.resetsAt), [nil, nil])
     }
 
     func testClaudeUsageParserLossilyOmitsMalformedLegacyExtraUsage() throws {

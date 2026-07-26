@@ -53,9 +53,20 @@ public enum ClaudeUsageParser {
                 UsageWindow.self,
                 forKey: .sevenDaySonnet
             )
-            limits = try? container.decodeIfPresent([StructuredLimit].self, forKey: .limits)
+            limits = (try? container.decodeIfPresent(
+                [LossyElement<StructuredLimit>].self,
+                forKey: .limits
+            ))?.compactMap(\.value)
             extraUsage = try? container.decodeIfPresent(ExtraUsage.self, forKey: .extraUsage)
             spend = try? container.decodeIfPresent(Spend.self, forKey: .spend)
+        }
+    }
+
+    private struct LossyElement<Value: Decodable>: Decodable {
+        let value: Value?
+
+        init(from decoder: Decoder) throws {
+            value = try? Value(from: decoder)
         }
     }
 
@@ -66,6 +77,12 @@ public enum ClaudeUsageParser {
         enum CodingKeys: String, CodingKey {
             case utilization
             case resetsAt = "resets_at"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            utilization = try? container.decodeIfPresent(Double.self, forKey: .utilization)
+            resetsAt = try? container.decodeIfPresent(String.self, forKey: .resetsAt)
         }
     }
 
@@ -85,6 +102,16 @@ public enum ClaudeUsageParser {
             case scope
             case isActive = "is_active"
         }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            kind = try? container.decodeIfPresent(String.self, forKey: .kind)
+            group = try? container.decodeIfPresent(String.self, forKey: .group)
+            percent = try? container.decodeIfPresent(Double.self, forKey: .percent)
+            resetsAt = try? container.decodeIfPresent(String.self, forKey: .resetsAt)
+            scope = try? container.decodeIfPresent(LimitScope.self, forKey: .scope)
+            isActive = try? container.decodeIfPresent(Bool.self, forKey: .isActive)
+        }
     }
 
     private struct StructuredLimitDefinition {
@@ -99,6 +126,15 @@ public enum ClaudeUsageParser {
 
     private struct LimitScope: Decodable {
         let model: LimitModel?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            model = try? container.decodeIfPresent(LimitModel.self, forKey: .model)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case model
+        }
     }
 
     private struct LimitModel: Decodable {
@@ -106,6 +142,11 @@ public enum ClaudeUsageParser {
 
         enum CodingKeys: String, CodingKey {
             case displayName = "display_name"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            displayName = try? container.decodeIfPresent(String.self, forKey: .displayName)
         }
     }
 
