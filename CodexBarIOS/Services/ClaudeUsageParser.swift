@@ -131,20 +131,23 @@ public enum ClaudeUsageParser {
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            used = try container.decodeIfPresent(Money.self, forKey: .used)
-            limit = try container.decodeIfPresent(Money.self, forKey: .limit)
-            balance = try container.decodeIfPresent(Money.self, forKey: .balance)
-            percent = try container.decodeIfPresent(Double.self, forKey: .percent)
-            enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
-            disabledReason = try container.decodeIfPresent(String.self, forKey: .disabledReason)
+            used = try? container.decodeIfPresent(Money.self, forKey: .used)
+            limit = try? container.decodeIfPresent(Money.self, forKey: .limit)
+            balance = try? container.decodeIfPresent(Money.self, forKey: .balance)
+            percent = try? container.decodeIfPresent(Double.self, forKey: .percent)
+            enabled = try? container.decodeIfPresent(Bool.self, forKey: .enabled)
+            disabledReason = try? container.decodeIfPresent(String.self, forKey: .disabledReason)
             reportsAutoReload = container.contains(.autoReload)
             let autoReloadIsNull = reportsAutoReload
-                ? try container.decodeNil(forKey: .autoReload)
+                ? (try? container.decodeNil(forKey: .autoReload)) == true
                 : false
             if !reportsAutoReload || autoReloadIsNull {
                 autoReload = reportsAutoReload ? false : nil
             } else {
-                autoReload = try container.decodeIfPresent(AutoReload.self, forKey: .autoReload)?.isEnabled
+                autoReload = try? container.decodeIfPresent(
+                    AutoReload.self,
+                    forKey: .autoReload
+                )?.isEnabled
             }
         }
     }
@@ -517,10 +520,55 @@ public enum ClaudeUsageParser {
         from spend: Spend?,
         fallback extraUsage: ExtraUsage?
     ) -> (metrics: [ProviderMonetaryMetric], messages: [String]) {
-        if let spend {
-            return providerSpendMetrics(from: spend)
+        guard let spend else {
+            return legacyExtraUsageMetrics(from: extraUsage)
         }
-        return legacyExtraUsageMetrics(from: extraUsage)
+
+        let provider = providerSpendMetrics(from: spend)
+        guard spend.enabled != false else {
+            return provider
+        }
+
+        let legacy = legacyExtraUsageMetrics(from: extraUsage)
+        let providerByKind = Dictionary(
+            uniqueKeysWithValues: provider.metrics.map { ($0.kind, $0) }
+        )
+        let legacyByKind = Dictionary(
+            uniqueKeysWithValues: legacy.metrics.map { ($0.kind, $0) }
+        )
+        let spent = providerByKind[.spent] ?? legacyByKind[.spent]
+        let limit = providerByKind[.spendLimit] ?? legacyByKind[.spendLimit]
+        let balance = providerByKind[.balance]
+        var metrics = [spent, limit, balance].compactMap { $0 }
+        if
+            let spent,
+            let limit,
+            spent.currencyCode == limit.currencyCode,
+            spent.decimalPlaces == limit.decimalPlaces
+        {
+            metrics.append(ProviderMonetaryMetric(
+                kind: .remainingHeadroom,
+                label: "Remaining spend headroom",
+                minorUnits: max(limit.minorUnits - spent.minorUnits, 0),
+                currencyCode: limit.currencyCode,
+                decimalPlaces: limit.decimalPlaces,
+                detail: "Derived from spend limit; not a prepaid balance"
+            ))
+        }
+
+        var messages = provider.messages
+        if spend.enabled == nil, let legacyStatus = legacy.messages.first {
+            messages.removeAll { $0 == "Usage-credit enabled status was not reported." }
+            messages.insert(legacyStatus, at: 0)
+        }
+        if metrics.isEmpty {
+            messages.append("Usage-credit monetary details are temporarily unavailable.")
+        } else {
+            messages.removeAll {
+                $0 == "Usage-credit monetary details are temporarily unavailable."
+            }
+        }
+        return (metrics, uniqueMessages(messages))
     }
 
     private static func providerSpendMetrics(

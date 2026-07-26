@@ -2232,6 +2232,39 @@ final class ProviderParsingTests: XCTestCase {
         )
     }
 
+    func testClaudeUsageParserLossilyOmitsMalformedSpendFields() throws {
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"five_hour":{"utilization":13,"resets_at":"2030-01-01T02:00:00Z"},"spend":{"enabled":true,"percent":"unknown","used":{"amount_minor":250,"currency":"USD"},"limit":{"amount_minor":4000,"currency":"USD","exponent":2},"balance":[],"auto_reload":[]}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), ["Current session"])
+        XCTAssertEqual(result.bars.map(\.used), [13])
+        XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.spendLimit])
+        XCTAssertEqual(result.monetaryMetrics.first?.amount, Decimal(40))
+        XCTAssertEqual(
+            result.usageMessages,
+            ["Usage credits are enabled.", "Auto-reload is on."]
+        )
+    }
+
+    func testClaudeUsageParserFillsPartialSpendFromLegacyExtraUsage() throws {
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"spend":{"enabled":true,"used":{"amount_minor":500,"currency":"USD","exponent":2},"balance":{"amount_minor":1000,"currency":"USD","exponent":2}},"extra_usage":{"is_enabled":true,"used_credits":250,"monthly_limit":4000,"currency":"USD","decimal_places":2}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertEqual(
+            result.monetaryMetrics.map(\.kind),
+            [.spent, .spendLimit, .balance, .remainingHeadroom]
+        )
+        XCTAssertEqual(
+            result.monetaryMetrics.map(\.amount),
+            [Decimal(5), Decimal(40), Decimal(10), Decimal(35)]
+        )
+        XCTAssertEqual(result.usageMessages, ["Usage credits are enabled."])
+    }
+
     func testClaudeUsageParserUsesOnlyExplicitVerifiedPlanCombinations() throws {
         let payload = Data(#"{"five_hour":{"utilization":0.1,"resets_at":"2030-01-01T00:00:00Z"}}"#.utf8)
         let mappings: [
