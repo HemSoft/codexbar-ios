@@ -611,12 +611,14 @@ final class ProviderParsingTests: XCTestCase {
 
         _ = await service.refresh(configuration: configuration)
         let full = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(full.title, "OpenCode Go + Zen")
         XCTAssertEqual(full.bars.map(\.used), [10, 20, 30])
         XCTAssertEqual(try XCTUnwrap(full.creditsRemaining), 10, accuracy: 0.0001)
 
         phase = 1
         _ = await service.refresh(configuration: configuration)
         let goFailure = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(goFailure.title, "OpenCode Go + Zen")
         XCTAssertEqual(goFailure.bars, full.bars)
         XCTAssertEqual(goFailure.barsFetchedAt, full.barsFetchedAt)
         XCTAssertEqual(try XCTUnwrap(goFailure.creditsRemaining), 20, accuracy: 0.0001)
@@ -628,6 +630,7 @@ final class ProviderParsingTests: XCTestCase {
         phase = 2
         _ = await service.refresh(configuration: configuration)
         let balanceFailure = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(balanceFailure.title, "OpenCode Go + Zen")
         XCTAssertEqual(balanceFailure.bars.map(\.used), [40, 50, 60])
         XCTAssertEqual(try XCTUnwrap(balanceFailure.creditsRemaining), 20, accuracy: 0.0001)
         XCTAssertTrue(balanceFailure.hasFreshBars)

@@ -121,7 +121,7 @@ public final class UsageRefreshService: ObservableObject {
                         let result = try await provider.fetchUsage(for: configuration)
                         if let message = result.failureMessage {
                             return .failure(
-                                accountID: configuration.id,
+                                configuration: configuration,
                                 message: message,
                                 result: result
                             )
@@ -136,7 +136,7 @@ public final class UsageRefreshService: ObservableObject {
                             message: error.localizedDescription
                         )
                         return .failure(
-                            accountID: configuration.id,
+                            configuration: configuration,
                             message: error.localizedDescription,
                             result: result
                         )
@@ -150,8 +150,9 @@ public final class UsageRefreshService: ObservableObject {
                     replaceResult(result)
                     refreshErrorsByAccountID.removeValue(forKey: accountID)
                     finishRefresh(accountID: accountID)
-                case .failure(let accountID, let message, let result):
-                    preserveFailureResult(result, accountID: accountID)
+                case .failure(let configuration, let message, let result):
+                    preserveFailureResult(result, configuration: configuration)
+                    let accountID = configuration.id
                     refreshErrorsByAccountID[accountID] = message
                     errorsByAccountID[accountID] = message
                     finishRefresh(accountID: accountID)
@@ -184,7 +185,7 @@ public final class UsageRefreshService: ObservableObject {
         do {
             let result = try await provider.fetchUsage(for: configuration)
             if let message = result.failureMessage {
-                preserveFailureResult(result, accountID: configuration.id)
+                preserveFailureResult(result, configuration: configuration)
                 refreshErrorsByAccountID[configuration.id] = message
                 lastRefreshError = message
                 return result
@@ -196,7 +197,7 @@ public final class UsageRefreshService: ObservableObject {
         } catch {
             let message = error.localizedDescription
             let result = Self.failureResult(for: configuration, message: message)
-            preserveFailureResult(result, accountID: configuration.id)
+            preserveFailureResult(result, configuration: configuration)
             refreshErrorsByAccountID[configuration.id] = message
             lastRefreshError = message
             return result
@@ -291,7 +292,11 @@ public final class UsageRefreshService: ObservableObject {
         results = nextResults
     }
 
-    private func preserveFailureResult(_ failureResult: ProviderUsageResult, accountID: String) {
+    private func preserveFailureResult(
+        _ failureResult: ProviderUsageResult,
+        configuration: ProviderAccountConfiguration
+    ) {
+        let accountID = configuration.id
         let cachedResult = results.first {
             $0.accountID == accountID
                 && Self.canReuseCachedResult($0, for: failureResult)
@@ -322,10 +327,16 @@ public final class UsageRefreshService: ObservableObject {
             || failureResult.subtitle.localizedCaseInsensitiveContains("last known data")
             ? failureResult.subtitle
             : "\(failureResult.subtitle) Showing last known data."
+        let title = failureResult.providerID == .openCodeZen
+            ? configuration.openCodeDisplayName(
+                hasGoUsage: !barsResult.bars.isEmpty,
+                hasZenBalance: creditsResult.creditsRemaining != nil
+            )
+            : failureResult.title
         replaceResult(ProviderUsageResult(
             accountID: accountID,
             providerID: failureResult.providerID,
-            title: failureResult.title,
+            title: title,
             subtitle: subtitle,
             bars: barsResult.bars,
             barsFetchedAt: barsResult.barsFetchedAt,
@@ -409,7 +420,11 @@ private struct CodexResetAttempt {
 
 private enum AccountRefreshOutcome: Sendable {
     case success(accountID: String, result: ProviderUsageResult)
-    case failure(accountID: String, message: String, result: ProviderUsageResult)
+    case failure(
+        configuration: ProviderAccountConfiguration,
+        message: String,
+        result: ProviderUsageResult
+    )
 }
 
 public extension UsageRefreshService {
