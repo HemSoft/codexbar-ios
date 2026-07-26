@@ -115,9 +115,17 @@ public final class ClaudeWebAuthService: Sendable {
 
         presentAuthorizationURL(authorizationURL)
         reportStage("Waiting for Claude to return to the app...")
-        let callbackURL = try await callbackServer.waitForCallback(
-            timeoutNanoseconds: callbackTimeoutNanoseconds
+        let callbackURL = try await withTaskCancellationHandler(
+            operation: {
+                try await callbackServer.waitForCallback(
+                    timeoutNanoseconds: callbackTimeoutNanoseconds
+                )
+            },
+            onCancel: {
+                callbackServer.cancel()
+            }
         )
+        try Task.checkCancellation()
         reportStage("Claude returned to the app. Exchanging authorization code...")
 
         let result = try await exchangeCallbackForTokens(

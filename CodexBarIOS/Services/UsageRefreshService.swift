@@ -335,6 +335,7 @@ public final class UsageRefreshService: ObservableObject {
             usageMessages: dataResult.usageMessages,
             codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,
             failureMessage: failureResult.failureMessage,
+            recoveryAction: failureResult.recoveryAction,
             preserveCachedBarsOnFailure: failureResult.preserveCachedBarsOnFailure,
             preserveCachedCreditsOnFailure: failureResult.preserveCachedCreditsOnFailure,
             cacheIdentity: failureResult.cacheIdentity,

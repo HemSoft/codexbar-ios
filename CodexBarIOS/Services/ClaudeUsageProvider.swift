@@ -29,14 +29,22 @@ public final class ClaudeUsageProvider: UsageProvider {
             let accessToken = parsedCredentials.accessToken,
             !accessToken.isEmpty
         else {
-            return failureResult("Not configured - sign in with Claude.", configuration: configuration)
+            return failureResult(
+                "Not configured - sign in with Claude.",
+                configuration: configuration,
+                recoveryAction: .signIn
+            )
         }
 
         await snapshotCache.prepare(accountID: configuration.id, credential: accessToken)
         let refreshOutcome = try await refreshedCredentialsIfNeeded(parsedCredentials, configuration: configuration)
         let credentials = refreshOutcome.credentials
         guard let token = credentials.accessToken, !token.isEmpty else {
-            return failureResult("Claude credential is missing an access token.", configuration: configuration)
+            return failureResult(
+                "Claude credential is missing an access token.",
+                configuration: configuration,
+                recoveryAction: .reauthenticate
+            )
         }
         if let rotatedCredential = refreshOutcome.rotatedCredentialFrom {
             await snapshotCache.rotateCredential(
@@ -104,7 +112,11 @@ public final class ClaudeUsageProvider: UsageProvider {
             )
         case 401:
             return OAuthUsageOutcome(
-                result: failureResult("Claude credential was rejected. Sign in again.", configuration: configuration)
+                result: failureResult(
+                    "Claude credential was rejected. Sign in again.",
+                    configuration: configuration,
+                    recoveryAction: .reauthenticate
+                )
             )
         case 403:
             return OAuthUsageOutcome(
@@ -228,7 +240,11 @@ public final class ClaudeUsageProvider: UsageProvider {
         return request
     }
 
-    private func failureResult(_ message: String, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
+    private func failureResult(
+        _ message: String,
+        configuration: ProviderAccountConfiguration,
+        recoveryAction: ProviderUsageRecoveryAction = .retryRefresh
+    ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id,
             providerID: .claude,
@@ -236,6 +252,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             subtitle: message,
             bars: [],
             failureMessage: message,
+            recoveryAction: recoveryAction,
             fetchedAt: Date()
         )
     }
@@ -260,6 +277,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             monetaryMetrics: cached.monetaryMetrics,
             usageMessages: cached.usageMessages,
             failureMessage: message,
+            recoveryAction: .retryRefresh,
             fetchedAt: cached.fetchedAt
         )
     }

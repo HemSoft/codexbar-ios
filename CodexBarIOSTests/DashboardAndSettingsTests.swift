@@ -55,6 +55,19 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertTrue(items.isEmpty)
     }
 
+    @MainActor
+    func testUnconfiguredClaudeAccountRemainsAvailableForDashboardSignIn() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defer { defaults.removePersistentDomain(forName: #function) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let claude = store.addAccount(for: .claude)
+        let openRouter = store.addAccount(for: .openRouter)
+
+        XCTAssertTrue(store.shouldDisplayOnDashboard(claude))
+        XCTAssertFalse(store.shouldDisplayOnDashboard(openRouter))
+    }
+
     func testDashboardCardItemsKeepLoadedAndFailedAccountsVisible() {
         let codex = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
         let claude = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
@@ -79,6 +92,176 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertTrue(items[0].isRefreshing)
         XCTAssertNil(items[1].result)
         XCTAssertEqual(items[1].errorMessage, "Session expired")
+    }
+
+    func testDashboardCardItemsUseTypedRecoveryActionFromProviderResult() {
+        let claude = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+        let rejected = ProviderUsageResult(
+            accountID: claude.id,
+            providerID: .claude,
+            title: claude.displayName,
+            subtitle: "Claude credential was rejected. Sign in again.",
+            bars: [],
+            failureMessage: "Claude credential was rejected. Sign in again.",
+            recoveryAction: .reauthenticate,
+            fetchedAt: Date()
+        )
+
+        let item = DashboardProviderCardItem.items(
+            configurations: [claude],
+            results: [rejected],
+            refreshingAccountIDs: [],
+            errorsByAccountID: [claude.id: rejected.subtitle],
+            orderingMode: .manual,
+            manualOrder: []
+        ).first
+
+        XCTAssertEqual(item?.recoveryAction, .reauthenticate)
+    }
+
+    @MainActor
+    func testDashboardClaudeSignInReplacesAndRefreshesOnlyInitiatingAccount() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var first = store.addAccount(for: .claude)
+        first.accountLabel = "Work Claude"
+        first.showsHistory = false
+        XCTAssertTrue(store.update(first))
+        var second = store.addAccount(for: .claude)
+        second.accountLabel = "Personal Claude"
+        XCTAssertTrue(store.update(second))
+        XCTAssertTrue(store.saveSecret("first-old-credential", for: first))
+        XCTAssertTrue(store.saveSecret("second-old-credential", for: second))
+
+        var refreshedAccountIDs: [String] = []
+        let replacement = ClaudeCredentials(
+            subscriptionType: "pro",
+            accessToken: "first-new-token",
+            refreshToken: "first-new-refresh"
+        )
+        let controller = DashboardClaudeAuthenticationController(
+            configurationStore: store,
+            authenticate: { _, reportStage in
+                reportStage("Waiting for Claude to return to the app...")
+                return ClaudeWebAuthResult(credentials: replacement)
+            },
+            refreshAccount: { configuration in
+                refreshedAccountIDs.append(configuration.id)
+                return ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .claude,
+                    title: configuration.displayName,
+                    subtitle: "Claude usage",
+                    bars: [],
+                    fetchedAt: Date()
+                )
+            }
+        )
+
+        XCTAssertTrue(controller.startSignIn(for: first))
+        XCTAssertFalse(controller.startSignIn(for: second))
+        await controller.waitForAuthenticationToFinish()
+
+        let savedFirst = try XCTUnwrap(store.configuration(accountID: first.id))
+        let savedSecond = try XCTUnwrap(store.configuration(accountID: second.id))
+        XCTAssertEqual(savedFirst.accountLabel, "Work Claude")
+        XCTAssertFalse(savedFirst.showsHistory)
+        XCTAssertEqual(savedSecond.accountLabel, "Personal Claude")
+        XCTAssertEqual(refreshedAccountIDs, [first.id])
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: savedFirst)),
+            ClaudeCredentialsParser.storedCredential(from: replacement)
+        )
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: savedSecond)),
+            "second-old-credential"
+        )
+        XCTAssertEqual(
+            controller.state(for: first.id),
+            DashboardClaudeAuthenticationState(
+                isSigningIn: false,
+                statusMessage: "Claude sign-in complete.",
+                errorMessage: nil
+            )
+        )
+    }
+
+    @MainActor
+    func testDashboardClaudeSignInFailurePreservesExistingCredential() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let claude = store.addAccount(for: .claude)
+        XCTAssertTrue(store.saveSecret("existing-credential", for: claude))
+        var refreshCount = 0
+        let controller = DashboardClaudeAuthenticationController(
+            configurationStore: store,
+            authenticate: { _, _ in
+                throw URLError(.notConnectedToInternet)
+            },
+            refreshAccount: { _ in
+                refreshCount += 1
+                return nil
+            }
+        )
+
+        XCTAssertTrue(controller.startSignIn(for: claude))
+        await controller.waitForAuthenticationToFinish()
+
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: claude)),
+            "existing-credential"
+        )
+        XCTAssertEqual(refreshCount, 0)
+        XCTAssertFalse(controller.state(for: claude.id).isSigningIn)
+        XCTAssertNotNil(controller.state(for: claude.id).errorMessage)
+    }
+
+    @MainActor
+    func testDashboardClaudeSignInCancellationPreservesExistingCredential() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let claude = store.addAccount(for: .claude)
+        XCTAssertTrue(store.saveSecret("existing-credential", for: claude))
+        let controller = DashboardClaudeAuthenticationController(
+            configurationStore: store,
+            authenticate: { _, _ in
+                try await Task.sleep(for: .seconds(30))
+                return ClaudeWebAuthResult(credentials: ClaudeCredentials(accessToken: "unused"))
+            },
+            refreshAccount: { _ in
+                XCTFail("Canceled sign-in must not refresh.")
+                return nil
+            }
+        )
+
+        XCTAssertTrue(controller.startSignIn(for: claude))
+        await Task.yield()
+        controller.cancelAuthentication()
+        await controller.waitForAuthenticationToFinish()
+
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: claude)),
+            "existing-credential"
+        )
+        XCTAssertEqual(
+            controller.state(for: claude.id).errorMessage,
+            "Claude sign-in canceled. The existing credential was not changed."
+        )
     }
 
     @MainActor

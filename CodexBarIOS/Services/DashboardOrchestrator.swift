@@ -508,6 +508,9 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
     let errorMessage: String?
 
     var id: String { configuration.id }
+    var recoveryAction: ProviderUsageRecoveryAction {
+        result?.recoveryAction ?? .retryRefresh
+    }
 
     static func items(
         configurations: [ProviderAccountConfiguration],
@@ -543,5 +546,180 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
             mode: orderingMode,
             manualOrder: manualOrder
         ).compactMap { itemsByAccountID[$0.accountID] }
+    }
+}
+
+struct DashboardClaudeAuthenticationState: Equatable {
+    var isSigningIn = false
+    var statusMessage: String?
+    var errorMessage: String?
+}
+
+struct DashboardPresentedAuthURL: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+@MainActor
+final class DashboardClaudeAuthenticationController: ObservableObject {
+    typealias Authenticate = @MainActor (
+        _ presentAuthorizationURL: @escaping @MainActor (URL) -> Void,
+        _ reportStage: @escaping @MainActor (String) -> Void
+    ) async throws -> ClaudeWebAuthResult
+    typealias RefreshAccount = @MainActor (
+        _ configuration: ProviderAccountConfiguration
+    ) async -> ProviderUsageResult?
+
+    @Published var authURL: DashboardPresentedAuthURL?
+    @Published private(set) var statesByAccountID: [String: DashboardClaudeAuthenticationState] = [:]
+
+    private let configurationStore: ProviderConfigurationStore
+    private let authenticate: Authenticate
+    private let refreshAccount: RefreshAccount
+    private var activeAccountID: String?
+    private var authenticationTask: Task<Void, Never>?
+
+    init(
+        configurationStore: ProviderConfigurationStore,
+        authenticate: @escaping Authenticate = { presentAuthorizationURL, reportStage in
+            try await ClaudeWebAuthService().signIn(
+                presentAuthorizationURL: presentAuthorizationURL,
+                reportStage: reportStage
+            )
+        },
+        refreshAccount: @escaping RefreshAccount
+    ) {
+        self.configurationStore = configurationStore
+        self.authenticate = authenticate
+        self.refreshAccount = refreshAccount
+    }
+
+    @discardableResult
+    func startSignIn(for configuration: ProviderAccountConfiguration) -> Bool {
+        guard configuration.providerID == .claude, authenticationTask == nil else {
+            return false
+        }
+
+        activeAccountID = configuration.id
+        statesByAccountID[configuration.id] = DashboardClaudeAuthenticationState(
+            isSigningIn: true,
+            statusMessage: "Starting Claude sign-in...",
+            errorMessage: nil
+        )
+        authenticationTask = Task { [weak self] in
+            await self?.performSignIn(accountID: configuration.id)
+        }
+        return true
+    }
+
+    func cancelAuthentication() {
+        guard
+            let activeAccountID,
+            statesByAccountID[activeAccountID]?.isSigningIn == true
+        else {
+            return
+        }
+        authenticationTask?.cancel()
+        authURL = nil
+    }
+
+    func state(for accountID: String) -> DashboardClaudeAuthenticationState {
+        statesByAccountID[accountID] ?? DashboardClaudeAuthenticationState()
+    }
+
+    func waitForAuthenticationToFinish() async {
+        await authenticationTask?.value
+    }
+
+    private func performSignIn(accountID: String) async {
+        guard configurationStore.configuration(accountID: accountID) != nil else {
+            finish(
+                accountID: accountID,
+                statusMessage: nil,
+                errorMessage: "This Claude account is no longer available."
+            )
+            return
+        }
+
+        do {
+            let result = try await authenticate(
+                { [weak self] url in
+                    guard self?.activeAccountID == accountID else { return }
+                    self?.authURL = DashboardPresentedAuthURL(url: url)
+                },
+                { [weak self] message in
+                    self?.updateStatus(message, accountID: accountID)
+                }
+            )
+            try Task.checkCancellation()
+
+            guard var currentConfiguration = configurationStore.configuration(accountID: accountID) else {
+                finish(
+                    accountID: accountID,
+                    statusMessage: nil,
+                    errorMessage: "This Claude account is no longer available."
+                )
+                return
+            }
+            currentConfiguration.authMethod = .browserSession
+            guard configurationStore.replaceCredential(
+                result.storedCredential,
+                for: currentConfiguration
+            ) else {
+                finish(
+                    accountID: accountID,
+                    statusMessage: nil,
+                    errorMessage: configurationStore.lastError
+                        ?? "Claude sign-in completed, but the replacement credential could not be saved."
+                )
+                return
+            }
+
+            updateStatus("Claude sign-in complete. Refreshing usage...", accountID: accountID)
+            let savedConfiguration = configurationStore.configuration(accountID: accountID)
+                ?? currentConfiguration
+            _ = await refreshAccount(savedConfiguration)
+            finish(
+                accountID: accountID,
+                statusMessage: "Claude sign-in complete.",
+                errorMessage: nil
+            )
+        } catch is CancellationError {
+            finish(
+                accountID: accountID,
+                statusMessage: nil,
+                errorMessage: "Claude sign-in canceled. The existing credential was not changed."
+            )
+        } catch {
+            finish(
+                accountID: accountID,
+                statusMessage: nil,
+                errorMessage: error.localizedDescription
+            )
+        }
+    }
+
+    private func updateStatus(_ message: String, accountID: String) {
+        guard activeAccountID == accountID else { return }
+        statesByAccountID[accountID] = DashboardClaudeAuthenticationState(
+            isSigningIn: true,
+            statusMessage: message,
+            errorMessage: nil
+        )
+    }
+
+    private func finish(
+        accountID: String,
+        statusMessage: String?,
+        errorMessage: String?
+    ) {
+        statesByAccountID[accountID] = DashboardClaudeAuthenticationState(
+            isSigningIn: false,
+            statusMessage: statusMessage,
+            errorMessage: errorMessage
+        )
+        activeAccountID = nil
+        authenticationTask = nil
+        authURL = nil
     }
 }
