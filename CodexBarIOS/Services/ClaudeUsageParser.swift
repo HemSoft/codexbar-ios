@@ -27,6 +27,7 @@ public enum ClaudeUsageParser {
         let sevenDaySonnet: UsageWindow?
         let limits: [StructuredLimit]?
         let extraUsage: ExtraUsage?
+        let spend: Spend?
 
         enum CodingKeys: String, CodingKey {
             case fiveHour = "five_hour"
@@ -36,6 +37,7 @@ public enum ClaudeUsageParser {
             case sevenDaySonnet = "seven_day_sonnet"
             case limits
             case extraUsage = "extra_usage"
+            case spend
         }
     }
 
@@ -107,6 +109,88 @@ public enum ClaudeUsageParser {
         }
     }
 
+    private struct Spend: Decodable {
+        let used: Money?
+        let limit: Money?
+        let balance: Money?
+        let percent: Double?
+        let enabled: Bool?
+        let disabledReason: String?
+        let autoReload: Bool?
+        let reportsAutoReload: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case used
+            case limit
+            case balance
+            case percent
+            case enabled
+            case disabledReason = "disabled_reason"
+            case autoReload = "auto_reload"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            used = try container.decodeIfPresent(Money.self, forKey: .used)
+            limit = try container.decodeIfPresent(Money.self, forKey: .limit)
+            balance = try container.decodeIfPresent(Money.self, forKey: .balance)
+            percent = try container.decodeIfPresent(Double.self, forKey: .percent)
+            enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+            disabledReason = try container.decodeIfPresent(String.self, forKey: .disabledReason)
+            reportsAutoReload = container.contains(.autoReload)
+            let autoReloadIsNull = reportsAutoReload
+                ? try container.decodeNil(forKey: .autoReload)
+                : false
+            if !reportsAutoReload || autoReloadIsNull {
+                autoReload = reportsAutoReload ? false : nil
+            } else {
+                autoReload = try container.decodeIfPresent(AutoReload.self, forKey: .autoReload)?.isEnabled
+            }
+        }
+    }
+
+    private struct Money: Decodable {
+        let amountMinor: Decimal
+        let currency: String
+        let exponent: Int
+
+        enum CodingKeys: String, CodingKey {
+            case amountMinor = "amount_minor"
+            case currency
+            case exponent
+        }
+    }
+
+    private struct AutoReload: Decodable {
+        let isEnabled: Bool
+
+        private enum CodingKeys: String, CodingKey {
+            case enabled
+            case isEnabled = "is_enabled"
+        }
+
+        init(from decoder: Decoder) throws {
+            if let bool = try? decoder.singleValueContainer().decode(Bool.self) {
+                isEnabled = bool
+                return
+            }
+
+            if let container = try? decoder.container(keyedBy: CodingKeys.self) {
+                if let enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) {
+                    isEnabled = enabled
+                    return
+                }
+                if let enabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) {
+                    isEnabled = enabled
+                    return
+                }
+            }
+
+            // A non-null provider configuration means auto-reload is configured.
+            isEnabled = true
+        }
+    }
+
     public static func parse(
         _ data: Data,
         subscriptionType: String?,
@@ -172,15 +256,21 @@ public enum ClaudeUsageParser {
             guard semanticKeys.insert(definition.key).inserted else {
                 continue
             }
+            let reset = parseReset(limit.resetsAt)
+                ?? definition.legacyFallbackKey.flatMap { legacyReset(for: $0, usage: usage) }
             bars.append(usageBar(
                 stableKey: definition.stableBarKey,
                 label: definition.label,
                 usedPercent: sanitizedPercent(percent),
-                reset: parseReset(limit.resetsAt)
-                    ?? definition.legacyFallbackKey.flatMap { legacyReset(for: $0, usage: usage) },
+                reset: reset,
                 durationSeconds: definition.duration,
                 fetchedAt: fetchedAt,
-                dateTimeFormatter: dateTimeFormatter
+                dateTimeFormatter: dateTimeFormatter,
+                projectionDescriptionOverride: sessionIdleDescription(
+                    stableKey: definition.stableBarKey,
+                    percent: percent,
+                    reset: reset
+                )
             ))
             if let legacySemanticKey = definition.legacySemanticKey {
                 semanticKeys.insert(legacySemanticKey)
@@ -193,7 +283,7 @@ public enum ClaudeUsageParser {
         appendLegacyBar(
             key: "session",
             stableBarKey: "session",
-            label: "5 hour usage limit",
+            label: "Current session",
             window: usage.fiveHour,
             durationSeconds: 18_000,
             semanticKeys: &semanticKeys,
@@ -204,9 +294,7 @@ public enum ClaudeUsageParser {
         appendLegacyBar(
             key: ClaudeUsageIdentity.allModelsWeeklyStableKey,
             stableBarKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
-            label: hasScopedWeeklyLimit
-                ? "All models weekly usage limit"
-                : "Weekly usage limit",
+            label: "All models",
             window: usage.sevenDay ?? usage.sevenDayOAuthApps,
             durationSeconds: 604_800,
             semanticKeys: &semanticKeys,
@@ -237,7 +325,7 @@ public enum ClaudeUsageParser {
             dateTimeFormatter: dateTimeFormatter
         )
 
-        let extraUsage = extraUsageMetrics(from: usage.extraUsage)
+        let extraUsage = spendMetrics(from: usage.spend, fallback: usage.extraUsage)
         usageMessages.append(contentsOf: extraUsage.messages)
 
         guard !bars.isEmpty || !extraUsage.metrics.isEmpty || !usageMessages.isEmpty else {
@@ -269,7 +357,7 @@ public enum ClaudeUsageParser {
         var bars: [UsageBar] = []
         if let bar = usageBarFromHeaders(
             stableKey: "session",
-            label: "5 hour usage limit",
+            label: "Current session",
             utilizationKey: "anthropic-ratelimit-unified-5h-utilization",
             resetKey: "anthropic-ratelimit-unified-5h-reset",
             durationSeconds: 18_000,
@@ -282,7 +370,7 @@ public enum ClaudeUsageParser {
 
         if let bar = usageBarFromHeaders(
             stableKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
-            label: "Weekly usage limit",
+            label: "All models",
             utilizationKey: "anthropic-ratelimit-unified-7d-utilization",
             resetKey: "anthropic-ratelimit-unified-7d-reset",
             durationSeconds: 604_800,
@@ -329,7 +417,12 @@ public enum ClaudeUsageParser {
             reset: parseReset(window?.resetsAt),
             durationSeconds: durationSeconds,
             fetchedAt: fetchedAt,
-            dateTimeFormatter: dateTimeFormatter
+            dateTimeFormatter: dateTimeFormatter,
+            projectionDescriptionOverride: sessionIdleDescription(
+                stableKey: stableKey,
+                percent: normalizedOAuthPercent(utilization),
+                reset: parseReset(window?.resetsAt)
+            )
         )
     }
 
@@ -368,7 +461,8 @@ public enum ClaudeUsageParser {
         reset: Date?,
         durationSeconds: TimeInterval,
         fetchedAt: Date,
-        dateTimeFormatter: UserFacingDateTimeFormatter
+        dateTimeFormatter: UserFacingDateTimeFormatter,
+        projectionDescriptionOverride: String? = nil
     ) -> UsageBar {
         return UsageBar(
             stableKey: stableKey,
@@ -386,7 +480,8 @@ public enum ClaudeUsageParser {
             projectionLimit: reset == nil ? nil : 1,
             projectionPeriodStart: reset?.addingTimeInterval(-durationSeconds),
             projectionPeriodEnd: reset,
-            showProjectionOnCurrentBar: reset != nil
+            showProjectionOnCurrentBar: reset != nil,
+            projectionDescriptionOverride: projectionDescriptionOverride
         )
     }
 
@@ -418,7 +513,113 @@ public enum ClaudeUsageParser {
         bars.append(bar)
     }
 
-    private static func extraUsageMetrics(
+    private static func spendMetrics(
+        from spend: Spend?,
+        fallback extraUsage: ExtraUsage?
+    ) -> (metrics: [ProviderMonetaryMetric], messages: [String]) {
+        if let spend {
+            return providerSpendMetrics(from: spend)
+        }
+        return legacyExtraUsageMetrics(from: extraUsage)
+    }
+
+    private static func providerSpendMetrics(
+        from spend: Spend
+    ) -> (metrics: [ProviderMonetaryMetric], messages: [String]) {
+        if spend.enabled == false {
+            let reason = spend.disabledReason?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let reason, !reason.isEmpty {
+                return ([], ["Usage credits are disabled: \(reason)."])
+            }
+            return ([], ["Usage credits are disabled."])
+        }
+
+        var metrics: [ProviderMonetaryMetric] = []
+        var messages: [String] = spend.enabled == true
+            ? ["Usage credits are enabled."]
+            : ["Usage-credit enabled status was not reported."]
+
+        if let used = monetaryMetric(
+            spend.used,
+            kind: .spent,
+            label: "Usage credits spent",
+            detail: spend.percent.map { "\(Int(sanitizedPercent($0).rounded()))% used" }
+                ?? "Month to date"
+        ) {
+            metrics.append(used)
+        }
+        if let limit = monetaryMetric(
+            spend.limit,
+            kind: .spendLimit,
+            label: "Monthly spend limit",
+            detail: "Usage-credit policy cap"
+        ) {
+            metrics.append(limit)
+        }
+        if let balance = monetaryMetric(
+            spend.balance,
+            kind: .balance,
+            label: "Current balance",
+            detail: "Provider-reported prepaid balance"
+        ) {
+            metrics.append(balance)
+        }
+
+        if
+            let used = spend.used,
+            let limit = spend.limit,
+            normalizedCurrency(used.currency) == normalizedCurrency(limit.currency),
+            used.exponent == limit.exponent,
+            let currency = normalizedCurrency(limit.currency)
+        {
+            metrics.append(ProviderMonetaryMetric(
+                kind: .remainingHeadroom,
+                label: "Remaining spend headroom",
+                minorUnits: max(limit.amountMinor - used.amountMinor, 0),
+                currencyCode: currency,
+                decimalPlaces: limit.exponent,
+                detail: "Derived from spend limit; not a prepaid balance"
+            ))
+        }
+
+        if spend.reportsAutoReload, let autoReload = spend.autoReload {
+            messages.append("Auto-reload is \(autoReload ? "on" : "off").")
+        }
+        if metrics.isEmpty {
+            messages.append("Usage-credit monetary details are temporarily unavailable.")
+        }
+        return (metrics, messages)
+    }
+
+    private static func monetaryMetric(
+        _ money: Money?,
+        kind: ProviderMonetaryMetricKind,
+        label: String,
+        detail: String?
+    ) -> ProviderMonetaryMetric? {
+        guard
+            let money,
+            let currency = normalizedCurrency(money.currency),
+            (0...6).contains(money.exponent)
+        else {
+            return nil
+        }
+        return ProviderMonetaryMetric(
+            kind: kind,
+            label: label,
+            minorUnits: money.amountMinor,
+            currencyCode: currency,
+            decimalPlaces: money.exponent,
+            detail: detail
+        )
+    }
+
+    private static func normalizedCurrency(_ value: String) -> String? {
+        let currency = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return currency.count == 3 ? currency : nil
+    }
+
+    private static func legacyExtraUsageMetrics(
         from extraUsage: ExtraUsage?
     ) -> (metrics: [ProviderMonetaryMetric], messages: [String]) {
         guard let extraUsage else {
@@ -483,6 +684,17 @@ public enum ClaudeUsageParser {
         return messages.filter { seen.insert($0).inserted }
     }
 
+    private static func sessionIdleDescription(
+        stableKey: String?,
+        percent: Double,
+        reset: Date?
+    ) -> String? {
+        guard stableKey == "session", sanitizedPercent(percent) == 0, reset == nil else {
+            return nil
+        }
+        return "Starts when a message is sent"
+    }
+
     // Current OAuth windows use percentages; values below 1 retain legacy fraction compatibility.
     private static func normalizedOAuthPercent(_ value: Double) -> Double {
         sanitizedPercent(value < 1 ? value * 100 : value)
@@ -516,7 +728,7 @@ public enum ClaudeUsageParser {
                 return StructuredLimitDefinition(
                     key: key,
                     stableBarKey: key,
-                    label: "\(modelName) 5 hour usage limit",
+                    label: "\(modelName) current session",
                     duration: 18_000,
                     legacyFallbackKey: nil,
                     legacySemanticKey: nil,
@@ -527,8 +739,8 @@ public enum ClaudeUsageParser {
                 key: "session",
                 stableBarKey: "session",
                 label: hasScopedSessionLimit
-                    ? "Other models 5 hour usage limit"
-                    : "5 hour usage limit",
+                    ? "Other models current session"
+                    : "Current session",
                 duration: 18_000,
                 legacyFallbackKey: "session",
                 legacySemanticKey: nil,
@@ -541,9 +753,7 @@ public enum ClaudeUsageParser {
             return StructuredLimitDefinition(
                 key: ClaudeUsageIdentity.allModelsWeeklyStableKey,
                 stableBarKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
-                label: hasScopedWeeklyLimit
-                    ? "All models weekly usage limit"
-                    : "Weekly usage limit",
+                label: "All models",
                 duration: 604_800,
                 legacyFallbackKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
                 legacySemanticKey: nil,
@@ -578,6 +788,15 @@ public enum ClaudeUsageParser {
 
     private static func shouldIncludeStructuredLimit(_ limit: StructuredLimit) -> Bool {
         switch limit.kind {
+        case "session":
+            // The idle first-party state is an inactive zero-percent session
+            // without a reset because its window has not started yet.
+            return limit.isActive != false
+                || (
+                    limit.percent == 0
+                        && limit.resetsAt == nil
+                        && sanitizedModelName(limit.scope?.model?.displayName) == nil
+                )
         case "weekly_all", "weekly_scoped":
             // Anthropic reports enforceable weekly limits with is_active false.
             return true

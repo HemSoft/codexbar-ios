@@ -46,6 +46,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Matched Claude's current-session and All models labels, represented the idle
+  session state, and kept provider-reported usage-credit balance separate from
+  monthly spend headroom. ([#125](https://github.com/HemSoft/codexbar-ios/issues/125))
 - Labeled the OpenCode integration as Go + Zen, Go, or Zen based on the
   products available in each workspace while preserving custom account labels.
   ([#127](https://github.com/HemSoft/codexbar-ios/issues/127))

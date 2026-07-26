@@ -146,6 +146,11 @@ enum WidgetSnapshotPublisher {
         bar: UsageBar,
         index: Int
     ) -> String {
+        // Keep saved Claude session tiles stable after matching the first-party
+        // "Current session" display label.
+        if bar.stableKey == "session" {
+            return "\(accountID).\(index).5-hour-usage-limit"
+        }
         // Keep existing saved Claude weekly tiles resolvable when the visible label becomes more specific.
         if bar.stableKey == ClaudeUsageIdentity.allModelsWeeklyStableKey {
             return "\(accountID).\(ClaudeUsageIdentity.allModelsWeeklyLegacyKey)"

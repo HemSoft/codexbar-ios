@@ -2097,7 +2097,7 @@ final class ProviderParsingTests: XCTestCase {
                 accessibilityLabel: "Pro"
             )
         )
-        XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
+        XCTAssertEqual(result.bars.map(\.label), ["Current session", "All models"])
         XCTAssertEqual(result.bars.map(\.used), [42, 81])
         XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%"])
         let resetDescription = try XCTUnwrap(result.bars.first?.resetDescription)
@@ -2120,6 +2120,116 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "pro"
         ))
         XCTAssertEqual(onePercentResult.bars.first?.used, 1)
+    }
+
+    func testClaudeUsageParserRepresentsIdleAndActiveCurrentSessions() throws {
+        let idle = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"limits":[{"kind":"session","percent":0,"resets_at":null,"is_active":false}]}"#.utf8),
+            subscriptionType: "pro"
+        ))
+        XCTAssertEqual(idle.bars.first?.label, "Current session")
+        XCTAssertEqual(idle.bars.first?.used, 0)
+        XCTAssertNil(idle.bars.first?.resetsAt)
+        XCTAssertEqual(
+            idle.bars.first?.projectionDescriptionOverride,
+            "Starts when a message is sent"
+        )
+
+        let active = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"five_hour":{"utilization":13,"resets_at":"2030-01-01T02:00:00Z"}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+        XCTAssertEqual(active.bars.first?.label, "Current session")
+        XCTAssertEqual(active.bars.first?.used, 13)
+        XCTAssertNotNil(active.bars.first?.resetsAt)
+        XCTAssertNil(active.bars.first?.projectionDescriptionOverride)
+    }
+
+    func testClaudeUsageParserPrefersProviderSpendAndKeepsBalanceDistinctFromHeadroom() throws {
+        let payload = """
+        {
+          "limits": [
+            {"kind":"session","percent":0,"resets_at":null,"is_active":false},
+            {"kind":"weekly_all","group":"weekly","percent":13,"resets_at":"2026-07-27T09:59:00Z","is_active":true}
+          ],
+          "extra_usage": {
+            "is_enabled": true,
+            "used_credits": 9999,
+            "monthly_limit": 9999,
+            "currency": "USD",
+            "decimal_places": 2
+          },
+          "spend": {
+            "used": {"amount_minor":0,"currency":"USD","exponent":2},
+            "limit": {"amount_minor":4000,"currency":"USD","exponent":2},
+            "percent": 0,
+            "enabled": true,
+            "balance": {"amount_minor":10000,"currency":"USD","exponent":2},
+            "auto_reload": null
+          }
+        }
+        """
+
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(payload.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), ["Current session", "All models"])
+        XCTAssertEqual(result.bars.map(\.used), [0, 13])
+        XCTAssertEqual(
+            result.monetaryMetrics.map(\.kind),
+            [.spent, .spendLimit, .balance, .remainingHeadroom]
+        )
+        XCTAssertEqual(
+            result.monetaryMetrics.map(\.amount),
+            [Decimal(0), Decimal(40), Decimal(100), Decimal(40)]
+        )
+        XCTAssertEqual(
+            result.monetaryMetrics.map(\.label),
+            [
+                "Usage credits spent",
+                "Monthly spend limit",
+                "Current balance",
+                "Remaining spend headroom",
+            ]
+        )
+        XCTAssertEqual(result.monetaryMetrics[0].detail, "0% used")
+        XCTAssertEqual(
+            result.monetaryMetrics[2].detail,
+            "Provider-reported prepaid balance"
+        )
+        XCTAssertEqual(
+            result.monetaryMetrics[3].detail,
+            "Derived from spend limit; not a prepaid balance"
+        )
+        XCTAssertEqual(
+            result.usageMessages,
+            ["Usage credits are enabled.", "Auto-reload is off."]
+        )
+    }
+
+    func testClaudeUsageParserOmitsUnreportedSpendFieldsAndPreservesAutoReloadObjectState() throws {
+        let partial = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"spend":{"enabled":true,"used":{"amount_minor":250,"currency":"GBP","exponent":2},"auto_reload":{"enabled":true}}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+        XCTAssertEqual(partial.monetaryMetrics.map(\.kind), [.spent])
+        XCTAssertEqual(partial.monetaryMetrics.first?.amount, Decimal(string: "2.5"))
+        XCTAssertEqual(
+            partial.usageMessages,
+            ["Usage credits are enabled.", "Auto-reload is on."]
+        )
+
+        let missingOptionalFields = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"spend":{"enabled":true,"used":{"amount_minor":0,"currency":"USD","exponent":2}}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+        XCTAssertEqual(missingOptionalFields.monetaryMetrics.map(\.kind), [.spent])
+        XCTAssertEqual(
+            missingOptionalFields.usageMessages,
+            ["Usage credits are enabled."]
+        )
     }
 
     func testClaudeUsageParserUsesOnlyExplicitVerifiedPlanCombinations() throws {
@@ -2176,8 +2286,8 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.bars.map(\.label), [
-            "Other models 5 hour usage limit",
-            "Fable 5 hour usage limit",
+            "Other models current session",
+            "Fable current session",
         ])
         XCTAssertEqual(result.bars.map(\.used), [27, 64])
         XCTAssertEqual(
@@ -2210,8 +2320,8 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(legacyAndScoped.bars.map(\.label), [
-            "Fable 5 hour usage limit",
-            "5 hour usage limit",
+            "Fable current session",
+            "Current session",
         ])
         XCTAssertEqual(legacyAndScoped.bars.map(\.used), [44, 31])
         XCTAssertEqual(
@@ -2235,7 +2345,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "max",
             fetchedAt: fetchedAt
         ))
-        XCTAssertEqual(inactiveScoped.bars.map(\.label), ["5 hour usage limit"])
+        XCTAssertEqual(inactiveScoped.bars.map(\.label), ["Current session"])
         XCTAssertEqual(inactiveScoped.bars.map(\.used), [25])
     }
 
@@ -2258,8 +2368,8 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.bars.map(\.label), [
-            "5 hour usage limit",
-            "All models weekly usage limit",
+            "Current session",
+            "All models",
             "Fable weekly usage limit",
         ])
         XCTAssertEqual(result.bars.map(\.used), [11, 9, 5])
@@ -2294,7 +2404,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "max"
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Weekly usage limit"])
+        XCTAssertEqual(result.bars.map(\.label), ["All models"])
         XCTAssertEqual(result.bars.map(\.used), [14])
         XCTAssertEqual(result.bars.map(\.stableKey), ["weekly-all"])
     }
@@ -2598,8 +2708,8 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "max"
         ))
 
-        XCTAssertEqual(unscopedResult.bars.first?.label, "5 hour usage limit")
-        XCTAssertEqual(scopedResult.bars.first?.label, "Other models 5 hour usage limit")
+        XCTAssertEqual(unscopedResult.bars.first?.label, "Current session")
+        XCTAssertEqual(scopedResult.bars.first?.label, "Other models current session")
         XCTAssertEqual(unscopedResult.bars.first?.stableKey, "session")
         XCTAssertEqual(scopedResult.bars.first?.stableKey, "session")
         XCTAssertEqual(legacyResult.bars.first?.stableKey, "session")
@@ -2643,8 +2753,8 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.bars.map(\.label), [
-            "5 hour usage limit",
-            "All models weekly usage limit",
+            "Current session",
+            "All models",
             "Fable weekly usage limit",
             "Future Model weekly usage limit",
             "Claude Sonnet 4.5 weekly usage limit",
@@ -2776,7 +2886,7 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertEqual(result.title, "Claude")
         XCTAssertNil(result.plan)
-        XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit"])
+        XCTAssertEqual(result.bars.map(\.label), ["Current session"])
         XCTAssertEqual(result.bars.first?.stableKey, "session")
         XCTAssertEqual(result.bars.first?.used, 25)
         XCTAssertEqual(result.bars.first?.projectionCurrent, 0.25)
