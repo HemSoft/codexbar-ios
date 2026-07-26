@@ -641,7 +641,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(Set(service.results.map(\.accountID)), [failed.id, successful.id])
         let preservedFailure = service.results.first { $0.accountID == failed.id }
         XCTAssertEqual(preservedFailure?.bars, cachedFailedResult.bars)
-        XCTAssertNil(preservedFailure?.plan)
+        XCTAssertEqual(preservedFailure?.plan, cachedFailedResult.plan)
         XCTAssertEqual(preservedFailure?.codexBankedRateLimitResets, cachedFailedResult.codexBankedRateLimitResets)
         XCTAssertEqual(preservedFailure?.fetchedAt, cachedFailedResult.fetchedAt)
         XCTAssertEqual(preservedFailure?.failureMessage, "Refresh failed")
