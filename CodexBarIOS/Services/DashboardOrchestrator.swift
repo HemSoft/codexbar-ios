@@ -564,7 +564,8 @@ struct DashboardPresentedAuthURL: Identifiable {
 final class DashboardClaudeAuthenticationController: ObservableObject {
     typealias Authenticate = @MainActor (
         _ presentAuthorizationURL: @escaping @MainActor (URL) -> Void,
-        _ reportStage: @escaping @MainActor (String) -> Void
+        _ reportStage: @escaping @MainActor (String) -> Void,
+        _ didReceiveCallback: @escaping @MainActor () -> Void
     ) async throws -> ClaudeWebAuthResult
     typealias RefreshAccount = @MainActor (
         _ configuration: ProviderAccountConfiguration
@@ -578,13 +579,18 @@ final class DashboardClaudeAuthenticationController: ObservableObject {
     private let refreshAccount: RefreshAccount
     private var activeAccountID: String?
     private var authenticationTask: Task<Void, Never>?
+    private var isAwaitingBrowserCallback = false
 
     init(
         configurationStore: ProviderConfigurationStore,
-        authenticate: @escaping Authenticate = { presentAuthorizationURL, reportStage in
+        authenticate: @escaping Authenticate = {
+            presentAuthorizationURL,
+            reportStage,
+            didReceiveCallback in
             try await ClaudeWebAuthService().signIn(
                 presentAuthorizationURL: presentAuthorizationURL,
-                reportStage: reportStage
+                reportStage: reportStage,
+                didReceiveCallback: didReceiveCallback
             )
         },
         refreshAccount: @escaping RefreshAccount
@@ -601,6 +607,7 @@ final class DashboardClaudeAuthenticationController: ObservableObject {
         }
 
         activeAccountID = configuration.id
+        isAwaitingBrowserCallback = false
         statesByAccountID[configuration.id] = DashboardClaudeAuthenticationState(
             isSigningIn: true,
             statusMessage: "Starting Claude sign-in...",
@@ -615,7 +622,8 @@ final class DashboardClaudeAuthenticationController: ObservableObject {
     func cancelAuthentication() {
         guard
             let activeAccountID,
-            statesByAccountID[activeAccountID]?.isSigningIn == true
+            statesByAccountID[activeAccountID]?.isSigningIn == true,
+            isAwaitingBrowserCallback
         else {
             return
         }
@@ -645,10 +653,16 @@ final class DashboardClaudeAuthenticationController: ObservableObject {
             let result = try await authenticate(
                 { [weak self] url in
                     guard self?.activeAccountID == accountID else { return }
+                    self?.isAwaitingBrowserCallback = true
                     self?.authURL = DashboardPresentedAuthURL(url: url)
                 },
                 { [weak self] message in
                     self?.updateStatus(message, accountID: accountID)
+                },
+                { [weak self] in
+                    guard self?.activeAccountID == accountID else { return }
+                    self?.isAwaitingBrowserCallback = false
+                    self?.authURL = nil
                 }
             )
             try Task.checkCancellation()
@@ -720,6 +734,7 @@ final class DashboardClaudeAuthenticationController: ObservableObject {
         )
         activeAccountID = nil
         authenticationTask = nil
+        isAwaitingBrowserCallback = false
         authURL = nil
     }
 }

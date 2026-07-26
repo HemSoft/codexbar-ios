@@ -146,7 +146,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
         let controller = DashboardClaudeAuthenticationController(
             configurationStore: store,
-            authenticate: { _, reportStage in
+            authenticate: { _, reportStage, _ in
                 reportStage("Waiting for Claude to return to the app...")
                 return ClaudeWebAuthResult(credentials: replacement)
             },
@@ -205,7 +205,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         var refreshCount = 0
         let controller = DashboardClaudeAuthenticationController(
             configurationStore: store,
-            authenticate: { _, _ in
+            authenticate: { _, _, _ in
                 throw URLError(.notConnectedToInternet)
             },
             refreshAccount: { _ in
@@ -239,7 +239,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         var refreshCount = 0
         let controller = DashboardClaudeAuthenticationController(
             configurationStore: store,
-            authenticate: { _, _ in
+            authenticate: { _, _, _ in
                 ClaudeWebAuthResult(
                     credentials: ClaudeCredentials(accessToken: "replacement-token")
                 )
@@ -275,7 +275,8 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertTrue(store.saveSecret("existing-credential", for: claude))
         let controller = DashboardClaudeAuthenticationController(
             configurationStore: store,
-            authenticate: { _, _ in
+            authenticate: { presentAuthorizationURL, _, _ in
+                presentAuthorizationURL(URL(string: "https://claude.ai/oauth")!)
                 try await Task.sleep(for: .seconds(30))
                 return ClaudeWebAuthResult(credentials: ClaudeCredentials(accessToken: "unused"))
             },
@@ -298,6 +299,56 @@ final class DashboardAndSettingsTests: XCTestCase {
             controller.state(for: claude.id).errorMessage,
             "Claude sign-in canceled. The existing credential was not changed."
         )
+    }
+
+    @MainActor
+    func testDashboardClaudeSheetDismissalAfterCallbackKeepsTokenExchangeAlive() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let claude = store.addAccount(for: .claude)
+        XCTAssertTrue(store.saveSecret("existing-credential", for: claude))
+        let exchangeGate = UsageProviderGate()
+        var refreshCount = 0
+        let controller = DashboardClaudeAuthenticationController(
+            configurationStore: store,
+            authenticate: { presentAuthorizationURL, reportStage, didReceiveCallback in
+                presentAuthorizationURL(URL(string: "https://claude.ai/oauth")!)
+                reportStage("Waiting for Claude to return to the app...")
+                didReceiveCallback()
+                await exchangeGate.wait()
+                return ClaudeWebAuthResult(
+                    credentials: ClaudeCredentials(accessToken: "replacement-token")
+                )
+            },
+            refreshAccount: { _ in
+                refreshCount += 1
+                return nil
+            }
+        )
+
+        XCTAssertTrue(controller.startSignIn(for: claude))
+        await exchangeGate.waitUntilBlocked()
+        XCTAssertNil(controller.authURL)
+
+        controller.cancelAuthentication()
+        XCTAssertTrue(controller.state(for: claude.id).isSigningIn)
+
+        await exchangeGate.release()
+        await controller.waitForAuthenticationToFinish()
+
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: claude)),
+            ClaudeCredentialsParser.storedCredential(
+                from: ClaudeCredentials(accessToken: "replacement-token")
+            )
+        )
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertNil(controller.state(for: claude.id).errorMessage)
     }
 
     @MainActor

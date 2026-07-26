@@ -81,7 +81,8 @@ public final class ClaudeWebAuthService: Sendable {
     @MainActor
     public func signIn(
         presentAuthorizationURL: @escaping @MainActor (URL) -> Void,
-        reportStage: @escaping @MainActor (String) -> Void = { _ in }
+        reportStage: @escaping @MainActor (String) -> Void = { _ in },
+        didReceiveCallback: @escaping @MainActor () -> Void = {}
     ) async throws -> ClaudeWebAuthResult {
         reportStage("Starting Claude sign-in...")
         let state = Self.randomBase64URL(byteCount: 32)
@@ -126,6 +127,7 @@ public final class ClaudeWebAuthService: Sendable {
             }
         )
         try Task.checkCancellation()
+        didReceiveCallback()
         reportStage("Claude returned to the app. Exchanging authorization code...")
 
         let result = try await exchangeCallbackForTokens(
