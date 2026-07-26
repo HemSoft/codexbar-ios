@@ -79,10 +79,11 @@ enum WatchSnapshotPublisher {
                         severity: result.hasFreshBars
                             ? WatchMetricSeverity(bar.effectiveSeverity(at: now))
                             : .normal,
-                        resetText: bar.localizedResetDescription(
-                            at: now,
-                            dateTimeFormatter: dateTimeFormatter
-                        ),
+                        resetText: bar.projectionDescriptionOverride
+                            ?? bar.localizedResetDescription(
+                                at: now,
+                                dateTimeFormatter: dateTimeFormatter
+                            ),
                         visualizationStyle: WatchMetricVisualizationStyle(
                             configurationStore.visualizationStyle(
                                 accountID: result.accountID,

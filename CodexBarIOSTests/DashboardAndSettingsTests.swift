@@ -1080,6 +1080,47 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testWatchSnapshotIncludesIdleSessionDescription() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .claude)
+        XCTAssertTrue(store.saveSecret("secret", for: configuration))
+        let fetchedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Pro",
+            bars: [
+                UsageBar(
+                    stableKey: "session",
+                    label: "Current session",
+                    used: 0,
+                    limit: 100,
+                    projectionDescriptionOverride: "Starts when a message is sent"
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+
+        let snapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: fetchedAt
+        )
+
+        XCTAssertEqual(
+            try XCTUnwrap(snapshot.accounts.first?.metrics.first).resetText,
+            "Starts when a message is sent"
+        )
+    }
+
+    @MainActor
     func testWatchSnapshotOmitsCachedCreditsFromPartialRefresh() throws {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
