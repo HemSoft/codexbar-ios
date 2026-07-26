@@ -2259,6 +2259,19 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertTrue(result.monetaryMetrics.isEmpty)
     }
 
+    func testClaudeUsageParserLossilyOmitsMalformedLimitsContainer() throws {
+        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"five_hour":{"utilization":13,"resets_at":"2030-01-01T02:00:00Z"},"limits":[{"kind":"weekly","percent":"unknown"}],"spend":{"enabled":true,"balance":{"amount_minor":1000,"currency":"USD","exponent":2}}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), ["Current session"])
+        XCTAssertEqual(result.bars.map(\.used), [13])
+        XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.balance])
+        XCTAssertEqual(result.monetaryMetrics.map(\.amount), [Decimal(10)])
+        XCTAssertEqual(result.usageMessages, ["Usage credits are enabled."])
+    }
+
     func testClaudeUsageParserLossilyOmitsMalformedLegacyExtraUsage() throws {
         let preferredSpend = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(#"{"five_hour":{"utilization":13,"resets_at":"2030-01-01T02:00:00Z"},"spend":{"enabled":true,"used":{"amount_minor":500,"currency":"USD","exponent":2},"limit":{"amount_minor":4000,"currency":"USD","exponent":2},"balance":{"amount_minor":1000,"currency":"USD","exponent":2}},"extra_usage":{"is_enabled":true,"used_credits":"unknown"}}"#.utf8),

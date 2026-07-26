@@ -42,18 +42,18 @@ public enum ClaudeUsageParser {
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            fiveHour = try container.decodeIfPresent(UsageWindow.self, forKey: .fiveHour)
-            sevenDay = try container.decodeIfPresent(UsageWindow.self, forKey: .sevenDay)
-            sevenDayOAuthApps = try container.decodeIfPresent(
+            fiveHour = try? container.decodeIfPresent(UsageWindow.self, forKey: .fiveHour)
+            sevenDay = try? container.decodeIfPresent(UsageWindow.self, forKey: .sevenDay)
+            sevenDayOAuthApps = try? container.decodeIfPresent(
                 UsageWindow.self,
                 forKey: .sevenDayOAuthApps
             )
-            sevenDayOpus = try container.decodeIfPresent(UsageWindow.self, forKey: .sevenDayOpus)
-            sevenDaySonnet = try container.decodeIfPresent(
+            sevenDayOpus = try? container.decodeIfPresent(UsageWindow.self, forKey: .sevenDayOpus)
+            sevenDaySonnet = try? container.decodeIfPresent(
                 UsageWindow.self,
                 forKey: .sevenDaySonnet
             )
-            limits = try container.decodeIfPresent([StructuredLimit].self, forKey: .limits)
+            limits = try? container.decodeIfPresent([StructuredLimit].self, forKey: .limits)
             extraUsage = try? container.decodeIfPresent(ExtraUsage.self, forKey: .extraUsage)
             spend = try? container.decodeIfPresent(Spend.self, forKey: .spend)
         }
