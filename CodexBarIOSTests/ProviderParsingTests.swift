@@ -2260,18 +2260,30 @@ final class ProviderParsingTests: XCTestCase {
     }
 
     func testClaudeUsageParserLossilyOmitsMalformedLegacyExtraUsage() throws {
-        let result = try XCTUnwrap(ClaudeUsageParser.parse(
+        let preferredSpend = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(#"{"five_hour":{"utilization":13,"resets_at":"2030-01-01T02:00:00Z"},"spend":{"enabled":true,"used":{"amount_minor":500,"currency":"USD","exponent":2},"limit":{"amount_minor":4000,"currency":"USD","exponent":2},"balance":{"amount_minor":1000,"currency":"USD","exponent":2}},"extra_usage":{"is_enabled":true,"used_credits":"unknown"}}"#.utf8),
             subscriptionType: "pro"
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Current session"])
-        XCTAssertEqual(result.bars.map(\.used), [13])
+        XCTAssertEqual(preferredSpend.bars.map(\.label), ["Current session"])
+        XCTAssertEqual(preferredSpend.bars.map(\.used), [13])
         XCTAssertEqual(
-            result.monetaryMetrics.map(\.kind),
+            preferredSpend.monetaryMetrics.map(\.kind),
             [.spent, .spendLimit, .balance, .remainingHeadroom]
         )
-        XCTAssertEqual(result.usageMessages, ["Usage credits are enabled."])
+        XCTAssertEqual(preferredSpend.usageMessages, ["Usage credits are enabled."])
+
+        let legacySpend = try XCTUnwrap(ClaudeUsageParser.parse(
+            Data(#"{"extra_usage":{"is_enabled":true,"used_credits":500,"monthly_limit":"unknown","currency":"USD","decimal_places":2}}"#.utf8),
+            subscriptionType: "pro"
+        ))
+
+        XCTAssertEqual(legacySpend.monetaryMetrics.map(\.kind), [.spent])
+        XCTAssertEqual(legacySpend.monetaryMetrics.map(\.amount), [Decimal(5)])
+        XCTAssertEqual(
+            legacySpend.usageMessages,
+            ["Usage credits are enabled with no monthly spend limit reported."]
+        )
     }
 
     func testClaudeUsageParserFillsPartialSpendFromLegacyExtraUsage() throws {
