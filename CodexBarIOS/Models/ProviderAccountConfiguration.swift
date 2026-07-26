@@ -51,7 +51,13 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
 
     public var displayName: String {
         let label = accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        return isCustomAccountLabel(label) ? label : providerID.displayName
+        if
+            providerID == .openCodeZen,
+            let generatedDisplayName = normalizedOpenCodeGeneratedDisplayName(label)
+        {
+            return generatedDisplayName
+        }
+        return label.isEmpty ? providerID.displayName : label
     }
 
     public func openCodeDisplayName(
@@ -85,7 +91,31 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         guard !label.isEmpty else {
             return false
         }
-        return providerID != .openCodeZen || label != "OpenCode ZEN"
+        return providerID != .openCodeZen
+            || normalizedOpenCodeGeneratedDisplayName(label) == nil
+    }
+
+    private func normalizedOpenCodeGeneratedDisplayName(_ label: String) -> String? {
+        for base in ["OpenCode ZEN", "OpenCode Go + Zen"] {
+            if label == base {
+                return providerID.displayName
+            }
+
+            let prefix = "\(base) "
+            guard label.hasPrefix(prefix) else {
+                continue
+            }
+            let suffix = String(label.dropFirst(prefix.count))
+            guard
+                let accountNumber = Int(suffix),
+                accountNumber > 0,
+                suffix == String(accountNumber)
+            else {
+                continue
+            }
+            return "\(providerID.displayName) \(accountNumber)"
+        }
+        return nil
     }
 
     public func withNewAccountID() -> ProviderAccountConfiguration {

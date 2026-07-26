@@ -455,6 +455,22 @@ final class ProviderParsingTests: XCTestCase {
             "OpenCode Go + Zen"
         )
 
+        configuration.accountLabel = "OpenCode ZEN 1"
+        XCTAssertFalse(configuration.hasCustomAccountLabel)
+        XCTAssertEqual(configuration.displayName, "OpenCode Go + Zen 1")
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: true, hasZenBalance: false),
+            "OpenCode Go"
+        )
+
+        configuration.accountLabel = "OpenCode Go + Zen 2"
+        XCTAssertFalse(configuration.hasCustomAccountLabel)
+        XCTAssertEqual(configuration.displayName, "OpenCode Go + Zen 2")
+        XCTAssertEqual(
+            configuration.openCodeDisplayName(hasGoUsage: false, hasZenBalance: true),
+            "OpenCode Zen"
+        )
+
         configuration.accountLabel = "Team ZEN"
         XCTAssertTrue(configuration.hasCustomAccountLabel)
         XCTAssertEqual(
@@ -465,6 +481,22 @@ final class ProviderParsingTests: XCTestCase {
             configuration.openCodeDisplayName(hasGoUsage: false, hasZenBalance: true),
             "Team ZEN"
         )
+
+        for customLabel in [
+            "OpenCode ZEN Team 1",
+            "OpenCode Go + Zen Production",
+            "OpenCode ZEN 01",
+        ] {
+            configuration.accountLabel = customLabel
+            XCTAssertTrue(configuration.hasCustomAccountLabel)
+            XCTAssertEqual(
+                configuration.openCodeDisplayName(
+                    hasGoUsage: true,
+                    hasZenBalance: true
+                ),
+                customLabel
+            )
+        }
     }
 
     func testOpenCodeProviderPreservesBalanceWhenGoPageIsMalformed() async throws {
