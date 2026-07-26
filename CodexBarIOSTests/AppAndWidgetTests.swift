@@ -959,6 +959,81 @@ final class AppAndWidgetTests: XCTestCase {
     }
 
     @MainActor
+    func testOpenCodeGoProjectionSurvivesWidgetSerializationAndIsNeutralizedWhenStale() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_784_980_800)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .openCodeZen)
+        store.saveSecret("secret", for: configuration)
+        let projectionBar = UsageBar(
+            stableKey: "go.weekly",
+            label: "Weekly usage limit",
+            used: 40,
+            limit: 100,
+            resetsAt: fetchedAt.addingTimeInterval(129_600),
+            projectionCurrent: 0.4,
+            projectionLimit: 1,
+            projectionPeriodStart: fetchedAt.addingTimeInterval(-475_200),
+            projectionPeriodEnd: fetchedAt.addingTimeInterval(129_600),
+            showProjectionOnCurrentBar: true
+        )
+        let freshResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openCodeZen,
+            title: "OpenCode Go",
+            subtitle: "OpenCode Go usage",
+            bars: [projectionBar],
+            fetchedAt: fetchedAt
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [freshResult],
+            configurationStore: store,
+            snapshotDefaults: defaults,
+            now: fetchedAt
+        )
+
+        let freshProvider = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        )
+        let freshBar = try XCTUnwrap(freshProvider.bars.first)
+        XCTAssertEqual(try XCTUnwrap(freshBar.projectedFraction), 0.509_090, accuracy: 0.000_001)
+        XCTAssertEqual(freshBar.projectionDescription, "Projected to stay under limit")
+        XCTAssertNotNil(freshBar.projectedSeverity)
+
+        let staleResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openCodeZen,
+            title: "OpenCode Go",
+            subtitle: "Showing cached Go usage",
+            bars: [projectionBar],
+            barsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+        WidgetSnapshotPublisher.publish(
+            results: [staleResult],
+            configurationStore: store,
+            snapshotDefaults: defaults,
+            now: fetchedAt
+        )
+
+        let staleProvider = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        )
+        let staleBar = try XCTUnwrap(staleProvider.bars.first)
+        XCTAssertNil(staleBar.projectedFraction)
+        XCTAssertNil(staleBar.projectionDescription)
+        XCTAssertNil(staleBar.projectedSeverity)
+    }
+
+    @MainActor
     func testWidgetSnapshotPublisherOmitsCachedCreditsFromPartialRefresh() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

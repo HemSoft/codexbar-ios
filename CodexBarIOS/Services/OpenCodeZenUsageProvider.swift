@@ -6,6 +6,7 @@ private struct OpenCodeGoWindow {
     let label: String
     let usagePercent: Double
     let resetInSeconds: TimeInterval
+    let hasExactResetBoundary: Bool
 }
 
 private enum OpenCodeBalanceFetchOutcome {
@@ -406,7 +407,8 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                     stableKey: descriptor.stableKey,
                     label: descriptor.label,
                     usagePercent: values.usagePercent,
-                    resetInSeconds: values.resetInSeconds
+                    resetInSeconds: values.resetInSeconds,
+                    hasExactResetBoundary: true
                 )
             )
         }
@@ -524,7 +526,10 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                 stableKey: descriptor.stableKey,
                 label: descriptor.label,
                 usagePercent: usagePercent,
-                resetInSeconds: resetInSeconds
+                resetInSeconds: resetInSeconds,
+                // Rendered reset copy is rounded to human-readable units. Keep
+                // displaying it, but do not use it as a projection boundary.
+                hasExactResetBoundary: false
             )
         }
 
@@ -797,15 +802,182 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         fetchedAt: Date
     ) -> [UsageBar] {
         windows.map { window in
-            UsageBar(
+            let projectionPeriod = projectionPeriod(
+                for: window,
+                fetchedAt: fetchedAt
+            )
+            return UsageBar(
                 stableKey: window.stableKey,
                 label: window.label,
                 used: window.usagePercent,
                 limit: 100,
                 resetsAt: fetchedAt.addingTimeInterval(window.resetInSeconds),
-                resetDisplayStyle: .relativeWithLocalTime
+                resetDisplayStyle: .relativeWithLocalTime,
+                projectionCurrent: projectionPeriod == nil
+                    ? nil
+                    : window.usagePercent / 100,
+                projectionLimit: projectionPeriod == nil ? nil : 1,
+                projectionPeriodStart: projectionPeriod?.start,
+                projectionPeriodEnd: projectionPeriod?.end,
+                showProjectionOnCurrentBar: projectionPeriod != nil
             )
         }
+    }
+
+    private static func projectionPeriod(
+        for window: OpenCodeGoWindow,
+        fetchedAt: Date
+    ) -> (start: Date, end: Date)? {
+        guard
+            window.hasExactResetBoundary,
+            window.resetInSeconds.isFinite,
+            window.resetInSeconds > 0
+        else {
+            return nil
+        }
+
+        let end = fetchedAt.addingTimeInterval(window.resetInSeconds)
+        let start: Date?
+
+        // OpenCode's current server implementation exposes only an exact reset
+        // countdown and usage percentage. Its rolling counter retains the first
+        // usage timestamp for a five-hour window, while its weekly counter uses
+        // a fixed seven-day UTC week. These exact mappings let us recover their
+        // starts without reconstructing usage from local refresh history.
+        switch window.stableKey {
+        case "go.rolling-5-hour":
+            let duration: TimeInterval = 5 * 60 * 60
+            guard window.resetInSeconds <= duration else {
+                return nil
+            }
+            start = end.addingTimeInterval(-duration)
+        case "go.weekly":
+            let duration: TimeInterval = 7 * 24 * 60 * 60
+            guard
+                window.resetInSeconds <= duration,
+                isWeeklyResetBoundary(end)
+            else {
+                return nil
+            }
+            start = end.addingTimeInterval(-duration)
+        case "go.monthly":
+            start = monthlyPeriodStart(endingAt: end)
+        default:
+            start = nil
+        }
+
+        guard
+            let start,
+            start <= fetchedAt,
+            fetchedAt < end,
+            start < end
+        else {
+            return nil
+        }
+        return (start, end)
+    }
+
+    private static func isWeeklyResetBoundary(_ date: Date) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let startOfDay = calendar.startOfDay(for: date)
+        let weekday = calendar.component(.weekday, from: date)
+        let daysUntilMonday = (2 - weekday + 7) % 7
+        guard
+            let nextMonday = calendar.date(
+                byAdding: .day,
+                value: daysUntilMonday,
+                to: startOfDay
+            ),
+            let previousMonday = calendar.date(
+                byAdding: .day,
+                value: -7,
+                to: nextMonday
+            )
+        else {
+            return false
+        }
+
+        // fetchedAt is captured before the request while OpenCode computes the
+        // countdown during it, so the reconstructed end can fall just before
+        // Monday. Accept a small symmetric transit/rounding tolerance around
+        // the nearest Monday 00:00 UTC.
+        let tolerance: TimeInterval = 5 * 60
+        return min(
+            abs(date.timeIntervalSince(previousMonday)),
+            abs(date.timeIntervalSince(nextMonday))
+        ) <= tolerance
+    }
+
+    private static func monthlyPeriodStart(endingAt end: Date) -> Date? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        let endComponents = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second, .nanosecond],
+            from: end
+        )
+        guard
+            let year = endComponents.year,
+            let month = endComponents.month,
+            let day = endComponents.day,
+            let daysInEndMonth = calendar.range(of: .day, in: .month, for: end)?.count
+        else {
+            return nil
+        }
+
+        // A request captured just before a midnight subscription anchor can
+        // reconstruct a date a few seconds early. Suppress that narrow case
+        // rather than let transit time change the inferred renewal day.
+        let secondsSinceStartOfDay = end.timeIntervalSince(
+            calendar.startOfDay(for: end)
+        )
+        if secondsSinceStartOfDay >= 24 * 60 * 60 - 5 * 60 {
+            return nil
+        }
+
+        // OpenCode anchors subscription months to the subscription's UTC
+        // day/time and clamps that day to each month's length. A reset on the
+        // last day of February or a 30-day month can therefore represent more
+        // than one original subscription day. Suppress only that ambiguous
+        // monthly projection; day 31 and non-month-end dates are reversible.
+        if day == daysInEndMonth && day < 31 {
+            return nil
+        }
+
+        guard
+            let endMonthStart = calendar.date(
+                from: DateComponents(year: year, month: month, day: 1)
+            ),
+            let previousMonth = calendar.date(
+                byAdding: .month,
+                value: -1,
+                to: endMonthStart
+            ),
+            let daysInPreviousMonth = calendar.range(
+                of: .day,
+                in: .month,
+                for: previousMonth
+            )?.count
+        else {
+            return nil
+        }
+
+        let previousMonthComponents = calendar.dateComponents(
+            [.year, .month],
+            from: previousMonth
+        )
+        return calendar.date(
+            from: DateComponents(
+                year: previousMonthComponents.year,
+                month: previousMonthComponents.month,
+                day: min(day, daysInPreviousMonth),
+                hour: endComponents.hour,
+                minute: endComponents.minute,
+                second: endComponents.second,
+                nanosecond: endComponents.nanosecond
+            )
+        )
     }
 
     private static func buildCombinedResult(

@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added current-pace projections to OpenCode Go quota windows when their reset
+  boundaries are trustworthy, while leaving ambiguous windows and Zen credit
+  balances unprojected. ([#128](https://github.com/HemSoft/codexbar-ios/issues/128))
 - Added OpenCode Go subscription tracking for the rolling 5-hour, weekly, and
   monthly usage limits, including provider-reported reset times alongside the
   existing Zen credit balance. ([#122](https://github.com/HemSoft/codexbar-ios/issues/122))
