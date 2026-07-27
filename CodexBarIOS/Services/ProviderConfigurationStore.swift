@@ -40,21 +40,48 @@ public enum MetricTileWidthPreference: String, CaseIterable, Codable, Equatable,
     }
 }
 
+public enum WatchMetricVisibilityPolicy: String, CaseIterable, Codable, Equatable, Sendable {
+    case inherit
+    case show
+    case hide
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self = (try? container.decode(String.self))
+            .flatMap(Self.init(rawValue:))
+            ?? .inherit
+    }
+
+    public func resolves(isVisibleOnIPhone: Bool) -> Bool {
+        switch self {
+        case .inherit:
+            isVisibleOnIPhone
+        case .show:
+            true
+        case .hide:
+            false
+        }
+    }
+}
+
 public struct MetricTilePreference: Codable, Equatable, Sendable {
     public var isVisible: Bool
     public var visualizationStyle: MetricVisualizationStyle?
     public var width: MetricTileWidthPreference
+    public var watchVisibility: WatchMetricVisibilityPolicy
     public var isNewlyDiscovered: Bool
 
     public init(
         isVisible: Bool = true,
         visualizationStyle: MetricVisualizationStyle? = nil,
         width: MetricTileWidthPreference = .automatic,
+        watchVisibility: WatchMetricVisibilityPolicy = .inherit,
         isNewlyDiscovered: Bool = true
     ) {
         self.isVisible = isVisible
         self.visualizationStyle = visualizationStyle
         self.width = width
+        self.watchVisibility = watchVisibility
         self.isNewlyDiscovered = isNewlyDiscovered
     }
 
@@ -62,6 +89,7 @@ public struct MetricTilePreference: Codable, Equatable, Sendable {
         case isVisible
         case visualizationStyle
         case width
+        case watchVisibility
         case isNewlyDiscovered
     }
 
@@ -76,6 +104,10 @@ public struct MetricTilePreference: Codable, Equatable, Sendable {
             MetricTileWidthPreference.self,
             forKey: .width
         ) ?? .automatic
+        watchVisibility = try container.decodeIfPresent(
+            WatchMetricVisibilityPolicy.self,
+            forKey: .watchVisibility
+        ) ?? .inherit
         isNewlyDiscovered = try container.decodeIfPresent(
             Bool.self,
             forKey: .isNewlyDiscovered
@@ -84,7 +116,7 @@ public struct MetricTilePreference: Codable, Equatable, Sendable {
 }
 
 public struct AccountMetricLayout: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public var version: Int
     public var orderedMetricIDs: [String]
@@ -709,6 +741,19 @@ public final class ProviderConfigurationStore: ObservableObject {
         metricLayouts[accountID]?.preferences[metricID]?.isVisible ?? true
     }
 
+    public func watchVisibilityPolicy(
+        accountID: String,
+        metricID: String
+    ) -> WatchMetricVisibilityPolicy {
+        metricLayouts[accountID]?.preferences[metricID]?.watchVisibility ?? .inherit
+    }
+
+    public func isMetricVisibleOnWatch(accountID: String, metricID: String) -> Bool {
+        watchVisibilityPolicy(accountID: accountID, metricID: metricID).resolves(
+            isVisibleOnIPhone: isMetricVisible(accountID: accountID, metricID: metricID)
+        )
+    }
+
     public func metricWidth(
         accountID: String,
         metricID: String
@@ -806,6 +851,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             !preference.isVisible
                 || preference.visualizationStyle != nil
                 || preference.width != .automatic
+                || preference.watchVisibility != .inherit
         }
     }
 
@@ -941,6 +987,25 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         var preference = metricPreference(accountID: accountID, metricID: metricID)
         preference.isVisible = isVisible
+        preference.isNewlyDiscovered = false
+        updateMetricPreference(
+            preference,
+            accountID: accountID,
+            metricID: metricID
+        )
+    }
+
+    public func updateWatchMetricVisibility(
+        _ policy: WatchMetricVisibilityPolicy,
+        accountID: String,
+        metricID: String
+    ) {
+        guard !accountID.isEmpty, !metricID.isEmpty else {
+            return
+        }
+
+        var preference = metricPreference(accountID: accountID, metricID: metricID)
+        preference.watchVisibility = policy
         preference.isNewlyDiscovered = false
         updateMetricPreference(
             preference,

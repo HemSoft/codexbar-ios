@@ -1055,7 +1055,84 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
         XCTAssertEqual(
             allVisibleSnapshot.accounts[0].metrics.map(\.id),
-            [sessionID, "claude.weekly", spentID, "claude.credits-remaining"]
+            [sessionID, "claude.weekly", "claude.credits-remaining", spentID]
+        )
+    }
+
+    @MainActor
+    func testWatchSnapshotUsesSavedIPhoneOrderAndTriStateVisibilityWithoutTileWidths() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .claude)
+        let session = UsageBar(
+            stableKey: "session",
+            label: "Current session",
+            used: 25,
+            limit: 100
+        )
+        let weekly = UsageBar(
+            stableKey: "weekly",
+            label: "Weekly",
+            used: 50,
+            limit: 100
+        )
+        let spent = ProviderMonetaryMetric(
+            kind: .spent,
+            label: "Usage credits spent",
+            minorUnits: 1_250,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let sessionID = session.metricIdentifier(providerID: .claude, index: 0)
+        let weeklyID = weekly.metricIdentifier(providerID: .claude, index: 1)
+        let spentID = spent.metricIdentifier(providerID: .claude)
+        let creditsID = "claude.credits-remaining"
+        _ = store.reconcileMetricLayout(
+            accountID: configuration.id,
+            availableMetricIDs: [sessionID, weeklyID, creditsID, spentID]
+        )
+        store.updateMetricOrder(
+            [spentID, weeklyID, sessionID, creditsID],
+            accountID: configuration.id
+        )
+        store.updateMetricWidth(.half, accountID: configuration.id, metricID: sessionID)
+        store.updateMetricWidth(.full, accountID: configuration.id, metricID: creditsID)
+        store.updateMetricVisibility(false, accountID: configuration.id, metricID: spentID)
+        store.updateMetricVisibility(false, accountID: configuration.id, metricID: sessionID)
+        store.updateWatchMetricVisibility(.hide, accountID: configuration.id, metricID: weeklyID)
+        store.updateWatchMetricVisibility(.show, accountID: configuration.id, metricID: sessionID)
+
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Pro",
+            bars: [session, weekly],
+            creditsRemaining: 42,
+            monetaryMetrics: [spent],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let snapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store,
+            now: result.fetchedAt
+        )
+
+        XCTAssertEqual(snapshot.accounts[0].metrics.map(\.id), [sessionID, creditsID])
+        XCTAssertEqual(
+            store.watchVisibilityPolicy(accountID: configuration.id, metricID: spentID),
+            .inherit
+        )
+        XCTAssertEqual(
+            store.watchVisibilityPolicy(accountID: configuration.id, metricID: sessionID),
+            .show
         )
     }
 
@@ -1325,11 +1402,15 @@ final class DashboardAndSettingsTests: XCTestCase {
         sender.completeActivation()
         XCTAssertEqual(sender.publishedForces, [true])
 
+        let snapshotPublished = expectation(description: "Coalesced Watch snapshot published")
+        sender.onPublish = {
+            snapshotPublished.fulfill()
+        }
         let metricID = bar.metricIdentifier(providerID: .codex, index: 0)
         store.updateVisualizationStyle(.segmentedBar, accountID: configuration.id, metricID: metricID)
         store.updateVisualizationStyle(.circularRing, accountID: configuration.id, metricID: metricID)
         store.updateVisualizationStyle(.largeNumeric, accountID: configuration.id, metricID: metricID)
-        try? await Task.sleep(for: .milliseconds(30))
+        await fulfillment(of: [snapshotPublished], timeout: 1)
 
         XCTAssertEqual(sender.publishedForces, [true, false])
         XCTAssertEqual(
@@ -1362,8 +1443,12 @@ final class DashboardAndSettingsTests: XCTestCase {
         sender.completeActivation()
         XCTAssertTrue(sender.snapshots.isEmpty)
 
+        let snapshotPublished = expectation(description: "Empty Watch snapshot published")
+        sender.onPublish = {
+            snapshotPublished.fulfill()
+        }
         XCTAssertTrue(store.removeAccount(configuration))
-        try? await Task.sleep(for: .milliseconds(30))
+        await fulfillment(of: [snapshotPublished], timeout: 1)
         XCTAssertEqual(sender.snapshots.count, 1)
         XCTAssertTrue(sender.snapshots[0].accounts.isEmpty)
         withExtendedLifetime(coordinator) {}
@@ -2119,6 +2204,7 @@ private final class RecordingWatchSnapshotSender: WatchSnapshotSending {
     private(set) var activationCount = 0
     private(set) var snapshots: [WatchDashboardSnapshot] = []
     private(set) var publishedForces: [Bool] = []
+    var onPublish: (() -> Void)?
 
     func activate(onActivated: @escaping @MainActor () -> Void) {
         activationCount += 1
@@ -2128,6 +2214,7 @@ private final class RecordingWatchSnapshotSender: WatchSnapshotSending {
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool {
         snapshots.append(snapshot)
         publishedForces.append(force)
+        onPublish?()
         return true
     }
 

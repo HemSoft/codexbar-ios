@@ -4,6 +4,7 @@ struct WatchUsageSample: Equatable, Identifiable, Sendable {
     let id: String
     let providerName: String
     let accountLabel: String
+    let showsAccountContext: Bool
     let metricLabel: String
     let exactValue: String
     let usedFraction: Double?
@@ -11,6 +12,32 @@ struct WatchUsageSample: Equatable, Identifiable, Sendable {
     let resetText: String?
     let visualizationStyle: WatchMetricVisualizationStyle
     let freshnessText: String
+
+    init(
+        id: String,
+        providerName: String,
+        accountLabel: String,
+        showsAccountContext: Bool = true,
+        metricLabel: String,
+        exactValue: String,
+        usedFraction: Double?,
+        severity: WatchMetricSeverity,
+        resetText: String?,
+        visualizationStyle: WatchMetricVisualizationStyle,
+        freshnessText: String
+    ) {
+        self.id = id
+        self.providerName = providerName
+        self.accountLabel = accountLabel
+        self.showsAccountContext = showsAccountContext
+        self.metricLabel = metricLabel
+        self.exactValue = exactValue
+        self.usedFraction = usedFraction
+        self.severity = severity
+        self.resetText = resetText
+        self.visualizationStyle = visualizationStyle
+        self.freshnessText = freshnessText
+    }
 
     var clampedUsedFraction: Double {
         min(max(usedFraction ?? 0, 0), 1)
@@ -88,11 +115,12 @@ struct WatchDashboardState: Equatable, Sendable {
 
         samples = snapshot.accounts.flatMap { account in
             let accountFreshnessText = Self.lastUpdatedText(account.fetchedAt, now: now)
-            return account.metrics.map { metric in
+            return account.metrics.enumerated().map { index, metric in
                 WatchUsageSample(
                     id: "\(account.id).\(metric.id)",
                     providerName: account.providerName,
                     accountLabel: account.accountLabel,
+                    showsAccountContext: index == 0,
                     metricLabel: metric.label,
                     exactValue: metric.exactValue,
                     usedFraction: metric.usedFraction,

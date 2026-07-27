@@ -67,15 +67,9 @@ enum WatchSnapshotPublisher {
                     return nil
                 }
 
-                let barMetrics: [WatchMetricSnapshot] = result.bars.enumerated().compactMap {
-                    index, bar -> WatchMetricSnapshot? in
+                let barMetrics: [WatchMetricSnapshot] = result.bars.enumerated().map {
+                    index, bar in
                     let metricID = bar.metricIdentifier(providerID: result.providerID, index: index)
-                    guard configurationStore.isMetricVisible(
-                        accountID: result.accountID,
-                        metricID: metricID
-                    ) else {
-                        return nil
-                    }
                     let fraction = bar.fractionUsed
                     let localizedResetText = bar.localizedResetDescription(
                         at: now,
@@ -101,15 +95,9 @@ enum WatchSnapshotPublisher {
                     )
                 }
 
-                let monetaryMetrics: [WatchMetricSnapshot] = result.monetaryMetrics.compactMap {
-                    metric -> WatchMetricSnapshot? in
+                let monetaryMetrics: [WatchMetricSnapshot] = result.monetaryMetrics.map {
+                    metric in
                     let metricID = metric.metricIdentifier(providerID: result.providerID)
-                    guard configurationStore.isMetricVisible(
-                        accountID: result.accountID,
-                        metricID: metricID
-                    ) else {
-                        return nil
-                    }
                     return WatchMetricSnapshot(
                         id: metricID,
                         label: metric.label,
@@ -119,16 +107,10 @@ enum WatchSnapshotPublisher {
                     )
                 }
 
-                var metrics = barMetrics + monetaryMetrics
+                var availableMetrics = barMetrics + monetaryMetrics
                 let creditsMetricID = "\(result.providerID.rawValue).credits-remaining"
-                if
-                    let creditsRemaining = result.freshCreditsRemaining,
-                    configurationStore.isMetricVisible(
-                        accountID: result.accountID,
-                        metricID: creditsMetricID
-                    )
-                {
-                    metrics.append(
+                if let creditsRemaining = result.freshCreditsRemaining {
+                    availableMetrics.append(
                         WatchMetricSnapshot(
                             id: creditsMetricID,
                             label: "Credits remaining",
@@ -139,9 +121,20 @@ enum WatchSnapshotPublisher {
                         )
                     )
                 }
-                let displayedDataFetchedAt = barMetrics.isEmpty
-                    ? result.fetchedAt
-                    : result.barsFetchedAt ?? result.fetchedAt
+                let savedOrder = configurationStore.metricLayouts[result.accountID]?.orderedMetricIDs ?? []
+                let metrics = orderedVisibleMetrics(
+                    accountID: result.accountID,
+                    availableMetrics: availableMetrics,
+                    providerAvailableMetricIDs: result.availableMetrics.map(\.id),
+                    savedOrder: savedOrder,
+                    configurationStore: configurationStore
+                )
+                let displayedBarMetricIDs = Set(barMetrics.map(\.id))
+                let displayedDataFetchedAt = metrics.contains {
+                    displayedBarMetricIDs.contains($0.id)
+                }
+                    ? (result.barsFetchedAt ?? result.fetchedAt)
+                    : result.fetchedAt
                 let plan = result.providerID.supportsPlanBadge ? result.plan : nil
 
                 return WatchAccountSnapshot(
@@ -207,6 +200,42 @@ enum WatchSnapshotPublisher {
             manualOrder: configurationStore.dashboardCardOrder,
             now: now
         )
+    }
+
+    private static func orderedVisibleMetrics(
+        accountID: String,
+        availableMetrics: [WatchMetricSnapshot],
+        providerAvailableMetricIDs: [String],
+        savedOrder: [String],
+        configurationStore: ProviderConfigurationStore
+    ) -> [WatchMetricSnapshot] {
+        let snapshotsByID = Dictionary(
+            availableMetrics.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var seenMetricIDs = Set<String>()
+        var orderedMetricIDs: [String] = []
+
+        func appendAvailableMetricIDs<S: Sequence>(_ metricIDs: S) where S.Element == String {
+            for metricID in metricIDs
+            where snapshotsByID[metricID] != nil && seenMetricIDs.insert(metricID).inserted {
+                orderedMetricIDs.append(metricID)
+            }
+        }
+
+        appendAvailableMetricIDs(savedOrder)
+        appendAvailableMetricIDs(providerAvailableMetricIDs)
+        appendAvailableMetricIDs(availableMetrics.map(\.id))
+
+        return orderedMetricIDs.compactMap { metricID in
+            guard configurationStore.isMetricVisibleOnWatch(
+                accountID: accountID,
+                metricID: metricID
+            ) else {
+                return nil
+            }
+            return snapshotsByID[metricID]
+        }
     }
 
     private static func watchAccountLabel(
