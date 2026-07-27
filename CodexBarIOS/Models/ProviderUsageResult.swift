@@ -254,7 +254,11 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     }
 
     public var hasCurrentBars: Bool {
-        failureMessage == nil && hasFreshBars
+        hasFreshBars
+            && (
+                failureMessage == nil
+                    || (!preserveCachedBarsOnFailure && preserveCachedCreditsOnFailure)
+            )
     }
 
     public var freshBars: [UsageBar] {
@@ -266,7 +270,11 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     }
 
     public var hasCurrentCredits: Bool {
-        failureMessage == nil && hasFreshCredits
+        hasFreshCredits
+            && (
+                failureMessage == nil
+                    || (preserveCachedBarsOnFailure && !preserveCachedCreditsOnFailure)
+            )
     }
 
     public var freshCreditsRemaining: Double? {

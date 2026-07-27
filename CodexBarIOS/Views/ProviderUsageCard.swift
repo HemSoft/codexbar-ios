@@ -813,7 +813,7 @@ struct ProviderUsageCard: View {
             return [
                 monetaryMetric.label,
                 monetaryMetric.formattedAmount(),
-                result.hasReachedSpendLimit ? "critical" : "normal",
+                Self.isCritical(monetaryMetric, in: result) ? "critical" : "normal",
                 monetaryFreshnessDescription.lowercased(),
                 monetaryMetric.detail,
             ]
@@ -826,6 +826,13 @@ struct ProviderUsageCard: View {
 
     static func formattedUsageAmount(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    static func isCritical(
+        _ monetaryMetric: ProviderMonetaryMetric,
+        in result: ProviderUsageResult
+    ) -> Bool {
+        monetaryMetric.kind == .spent && result.hasReachedSpendLimit
     }
 
     var monetaryFreshnessDescription: String {
@@ -1930,7 +1937,7 @@ private struct ProviderMetricTileDetailView: View {
                 "Freshness",
                 result.failureMessage == nil ? "Current" : "Last known value"
             )
-            if result.hasReachedSpendLimit {
+            if ProviderUsageCard.isCritical(monetaryMetric, in: result) {
                 detailRow("Severity", "Critical")
             }
             if let detail = monetaryMetric.detail {

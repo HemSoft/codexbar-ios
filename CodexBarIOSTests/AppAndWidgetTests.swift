@@ -2076,6 +2076,75 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertFalse(failedCachedResult.hasCurrentCredits)
     }
 
+    func testPartialFailureKeepsSuccessfulComponentCurrent() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_785_000_100)
+        let barsPreserved = ProviderUsageResult(
+            accountID: "opencode.partial-bars",
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Zen refreshed",
+            bars: [UsageBar(label: "Weekly", used: 20, limit: 100)],
+            creditsRemaining: 8,
+            failureMessage: "Go refresh failed",
+            preserveCachedBarsOnFailure: true,
+            fetchedAt: fetchedAt
+        )
+        let creditsPreserved = ProviderUsageResult(
+            accountID: "opencode.partial-credits",
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Go refreshed",
+            bars: [UsageBar(label: "Weekly", used: 20, limit: 100)],
+            creditsRemaining: 8,
+            failureMessage: "Zen refresh failed",
+            preserveCachedCreditsOnFailure: true,
+            fetchedAt: fetchedAt
+        )
+
+        XCTAssertFalse(barsPreserved.hasCurrentBars)
+        XCTAssertTrue(barsPreserved.hasCurrentCredits)
+        XCTAssertTrue(creditsPreserved.hasCurrentBars)
+        XCTAssertFalse(creditsPreserved.hasCurrentCredits)
+    }
+
+    func testSpendLimitSeverityAppliesOnlyToSpentMetric() {
+        let balance = ProviderMonetaryMetric(
+            kind: .balance,
+            label: "Current balance",
+            minorUnits: 5_000,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let spent = ProviderMonetaryMetric(
+            kind: .spent,
+            label: "Spent this month",
+            minorUnits: 10_000,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let limit = ProviderMonetaryMetric(
+            kind: .spendLimit,
+            label: "Monthly limit",
+            minorUnits: 10_000,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let result = ProviderUsageResult(
+            accountID: "claude.spend-limit",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Current",
+            bars: [],
+            monetaryMetrics: [balance, spent, limit],
+            fetchedAt: Date()
+        )
+
+        XCTAssertTrue(result.hasReachedSpendLimit)
+        XCTAssertFalse(ProviderUsageCard.isCritical(balance, in: result))
+        XCTAssertTrue(ProviderUsageCard.isCritical(spent, in: result))
+        XCTAssertFalse(ProviderUsageCard.isCritical(limit, in: result))
+    }
+
     func testMetricDetailResolvesCurrentKindByStableIDAfterRefresh() throws {
         let selectedBar = UsageBar(
             stableKey: "window-18000",
