@@ -2661,6 +2661,7 @@ final class AppAndWidgetTests: XCTestCase {
         )
         XCTAssertNotNil(copied.preferences[temporarilyMissingDestinationID])
         XCTAssertNil(copied.preferences[sourceOnlyID])
+        XCTAssertFalse(try XCTUnwrap(copied.preferences[sharedID]).isNewlyDiscovered)
     }
 
     @MainActor

@@ -2112,6 +2112,8 @@ private struct MetricVisualizationCustomizationView: View {
     @State private var copyStatusMessage: String?
 
     var body: some View {
+        let copyDestinations = copyLayoutDestinationsProvider()
+
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -2186,7 +2188,7 @@ private struct MetricVisualizationCustomizationView: View {
                             .font(.headline)
 
                         Menu {
-                            ForEach(copyLayoutDestinationsProvider()) { destination in
+                            ForEach(copyDestinations) { destination in
                                 Button(destination.title) {
                                     requestCopy(to: destination)
                                 }
@@ -2196,9 +2198,9 @@ private struct MetricVisualizationCustomizationView: View {
                                 .frame(minHeight: 44)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(copyLayoutDestinationsProvider().isEmpty)
+                        .disabled(copyDestinations.isEmpty)
 
-                        if copyLayoutDestinationsProvider().isEmpty {
+                        if copyDestinations.isEmpty {
                             Text("Add another configured account for this provider to reuse its layout.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -2309,7 +2311,10 @@ private struct MetricVisualizationCustomizationView: View {
     }
 
     private var orderedMetrics: [ProviderUsageMetric] {
-        let metricsByID = Dictionary(uniqueKeysWithValues: result.availableMetrics.map { ($0.id, $0) })
+        let metricsByID = Dictionary(
+            result.availableMetrics.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         var seen = Set<String>()
         return metricLayoutProvider().orderedMetricIDs.compactMap { metricID in
             guard seen.insert(metricID).inserted else {
@@ -2547,7 +2552,9 @@ private struct MetricVisualizationCustomizationView: View {
 
     private func copyLayout(to destination: MetricLayoutCopyDestination) {
         onCopyMetricLayout(destination)
-        copyStatusMessage = "Layout copied to \(destination.title)."
+        let message = "Layout copied to \(destination.title)."
+        copyStatusMessage = message
+        UIAccessibility.post(notification: .announcement, argument: message)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
