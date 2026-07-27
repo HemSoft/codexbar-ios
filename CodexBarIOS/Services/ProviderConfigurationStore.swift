@@ -898,9 +898,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     public func resetVisualizationStyles(accountID: String, metricIDs: [String]) {
         prepareMetricLayoutForEditing(accountID: accountID)
-        guard var layout = metricLayouts[accountID] else {
-            return
-        }
+        var layout = metricLayouts[accountID] ?? AccountMetricLayout()
 
         for metricID in metricIDs {
             guard var preference = layout.preferences[metricID] else {

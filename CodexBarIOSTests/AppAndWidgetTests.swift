@@ -2341,6 +2341,46 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testResetVisualizationStylesReplacesOpaqueMetricLayoutStorage() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let originalStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let existingAccount = originalStore.addAccount(for: .codex)
+        defaults.set(
+            Data(#"{"futureEnvelope":{"schema":2,"accounts":[]}}"#.utf8),
+            forKey: "metricVisualizationPreferences"
+        )
+
+        let preservingStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        preservingStore.resetVisualizationStyles(
+            accountID: existingAccount.id,
+            metricIDs: ["codex.session"]
+        )
+
+        let rewrittenData = try XCTUnwrap(
+            defaults.data(forKey: "metricVisualizationPreferences")
+        )
+        let rewrittenLayouts = try JSONDecoder().decode(
+            [String: AccountMetricLayout].self,
+            from: rewrittenData
+        )
+        let rewrittenLayout = try XCTUnwrap(rewrittenLayouts[existingAccount.id])
+
+        XCTAssertEqual(rewrittenLayout.version, AccountMetricLayout.currentVersion)
+        XCTAssertTrue(rewrittenLayout.preferences.isEmpty)
+    }
+
     func testAvailableMetricIdentifiersCoverEveryMetricTypeWithoutUsingLabels() {
         let firstResult = ProviderUsageResult(
             accountID: "claude.personal",
