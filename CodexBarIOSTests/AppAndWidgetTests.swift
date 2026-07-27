@@ -2149,6 +2149,38 @@ final class AppAndWidgetTests: XCTestCase {
     }
 
     @MainActor
+    func testAccountInsertedThroughCredentialReplacementKeepsNewMetricDefaultsAfterReload() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        XCTAssertTrue(store.replaceCredential("token", for: configuration))
+
+        let reloaded = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let metricID = "codex.session"
+        _ = reloaded.reconcileMetricLayout(
+            accountID: configuration.id,
+            availableMetricIDs: [metricID]
+        )
+
+        XCTAssertEqual(
+            reloaded.metricWidth(accountID: configuration.id, metricID: metricID),
+            .automatic
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(reloaded.metricLayouts[configuration.id]?.preferences[metricID])
+                .isNewlyDiscovered
+        )
+    }
+
+    @MainActor
     func testExistingAccountWithoutMetricPreferencesMigratesAtFullWidth() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

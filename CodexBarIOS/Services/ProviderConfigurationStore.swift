@@ -407,6 +407,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         var updatedConfigurations = configurations
+        let isNewAccount = !configurations.contains { $0.id == normalized.id }
         if let index = updatedConfigurations.firstIndex(where: { $0.id == normalized.id }) {
             updatedConfigurations[index] = normalized
         } else {
@@ -423,6 +424,10 @@ public final class ProviderConfigurationStore: ObservableObject {
             }
             defaults.set(data, forKey: configurationsKey)
             configurations = updatedConfigurations
+            if isNewAccount, metricLayouts[normalized.id] == nil {
+                metricLayouts[normalized.id] = AccountMetricLayout()
+                saveMetricLayouts()
+            }
             lastError = nil
             refreshSecretAvailability()
             return true
