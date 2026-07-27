@@ -1933,6 +1933,40 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertTrue(rows.allSatisfy { $0.leading.width == .full && $0.trailing == nil })
     }
 
+    func testMetricTileDragOrderingSupportsAdjacentAndFinalDownwardPlacement() {
+        XCTAssertEqual(
+            ProviderMetricTileOrderResolver.moving(
+                "a",
+                toward: "b",
+                in: ["a", "b", "c"]
+            ),
+            ["b", "a", "c"]
+        )
+        XCTAssertEqual(
+            ProviderMetricTileOrderResolver.moving(
+                "a",
+                toward: "c",
+                in: ["a", "b", "c"]
+            ),
+            ["b", "c", "a"]
+        )
+        XCTAssertEqual(
+            ProviderMetricTileOrderResolver.moving(
+                "c",
+                toward: "a",
+                in: ["a", "b", "c"]
+            ),
+            ["c", "a", "b"]
+        )
+        XCTAssertNil(
+            ProviderMetricTileOrderResolver.moving(
+                "b",
+                toward: "b",
+                in: ["a", "b", "c"]
+            )
+        )
+    }
+
     func testMetricTileHistoryIsBuiltLazilyAndFailedMoneyIsLastKnown() throws {
         let monetaryMetric = ProviderMonetaryMetric(
             kind: .balance,

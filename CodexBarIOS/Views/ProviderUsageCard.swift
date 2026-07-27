@@ -133,6 +133,30 @@ enum ProviderMetricTileGridResolver {
     }
 }
 
+enum ProviderMetricTileOrderResolver {
+    static func moving(
+        _ metricID: String,
+        toward targetMetricID: String,
+        in metricIDs: [String]
+    ) -> [String]? {
+        guard
+            metricID != targetMetricID,
+            let sourceIndex = metricIDs.firstIndex(of: metricID),
+            let targetIndex = metricIDs.firstIndex(of: targetMetricID)
+        else {
+            return nil
+        }
+
+        var reorderedMetricIDs = metricIDs
+        reorderedMetricIDs.remove(at: sourceIndex)
+        reorderedMetricIDs.insert(
+            metricID,
+            at: min(targetIndex, reorderedMetricIDs.endIndex)
+        )
+        return reorderedMetricIDs
+    }
+}
+
 private struct ProviderMetricTileDetailPresentation: Identifiable {
     let metricID: String
 
@@ -2483,21 +2507,18 @@ private struct MetricVisualizationCustomizationView: View {
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
-    private func moveMetric(_ draggedID: String, before targetID: String) {
-        var order = visibleMetrics.map(\.id)
-        guard
-            let sourceIndex = order.firstIndex(of: draggedID),
-            let targetIndex = order.firstIndex(of: targetID),
-            sourceIndex != targetIndex
-        else {
+    private func moveMetric(_ draggedID: String, toward targetID: String) {
+        guard let order = ProviderMetricTileOrderResolver.moving(
+            draggedID,
+            toward: targetID,
+            in: visibleMetrics.map(\.id)
+        ) else {
             return
         }
         if !dragHasRecordedUndo {
             undoHistory.record(metricLayoutProvider())
             dragHasRecordedUndo = true
         }
-        order.remove(at: sourceIndex)
-        order.insert(draggedID, at: order.firstIndex(of: targetID) ?? targetIndex)
         onUpdateMetricOrder(order)
     }
 
