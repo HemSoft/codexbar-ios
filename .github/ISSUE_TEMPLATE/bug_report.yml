@@ -33,6 +33,7 @@ body:
         - Widget
         - Apple Watch
         - Authentication
+        - Settings
         - Other
     validations:
       required: true
@@ -78,6 +79,8 @@ body:
         1. Open…
         2. Choose…
         3. Observe…
+    validations:
+      required: true
 
   - type: input
     id: system-details

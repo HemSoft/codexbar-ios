@@ -11,6 +11,8 @@ body:
 
         GitHub issues and attachments are public. Do not include API keys, access or refresh tokens, passwords, cookies, authorization headers, account identifiers, email addresses, or other secrets.
 
+        If you need help with an existing problem, read the [CodexBar support guide](https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md).
+
   - type: textarea
     id: underlying-problem
     attributes:
