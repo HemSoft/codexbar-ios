@@ -743,7 +743,7 @@ struct ProviderUsageCard: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(metricAccessibilityLabel(item.metric))
-        .accessibilityHint("Shows complete metric details and history.")
+        .accessibilityHint(Self.metricDetailAccessibilityHint)
         .accessibilityAddTraits(.isButton)
     }
 
@@ -827,6 +827,8 @@ struct ProviderUsageCard: View {
     static func formattedUsageAmount(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0...2)))
     }
+
+    static let metricDetailAccessibilityHint = "Shows complete metric details."
 
     static func isCritical(
         _ monetaryMetric: ProviderMonetaryMetric,

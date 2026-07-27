@@ -2145,6 +2145,18 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertFalse(ProviderUsageCard.isCritical(limit, in: result))
     }
 
+    func testMetricTileAccessibilityHintPromisesOnlyAvailableContent() {
+        XCTAssertEqual(
+            ProviderUsageCard.metricDetailAccessibilityHint,
+            "Shows complete metric details."
+        )
+        XCTAssertFalse(
+            ProviderUsageCard.metricDetailAccessibilityHint.localizedCaseInsensitiveContains(
+                "history"
+            )
+        )
+    }
+
     func testMetricDetailResolvesCurrentKindByStableIDAfterRefresh() throws {
         let selectedBar = UsageBar(
             stableKey: "window-18000",
