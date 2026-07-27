@@ -13,6 +13,13 @@ enum ProviderUsageCardMenuAction: Hashable {
     case customizeMetrics
 }
 
+struct MetricLayoutCopyDestination: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let availableMetricIDs: [String]
+    let hasCustomLayout: Bool
+}
+
 enum ProviderMetricTileResolvedWidth: Equatable, Sendable {
     case half
     case full
@@ -126,6 +133,30 @@ enum ProviderMetricTileGridResolver {
     }
 }
 
+enum ProviderMetricTileOrderResolver {
+    static func moving(
+        _ metricID: String,
+        toward targetMetricID: String,
+        in metricIDs: [String]
+    ) -> [String]? {
+        guard
+            metricID != targetMetricID,
+            let sourceIndex = metricIDs.firstIndex(of: metricID),
+            let targetIndex = metricIDs.firstIndex(of: targetMetricID)
+        else {
+            return nil
+        }
+
+        var reorderedMetricIDs = metricIDs
+        reorderedMetricIDs.remove(at: sourceIndex)
+        reorderedMetricIDs.insert(
+            metricID,
+            at: min(targetIndex, reorderedMetricIDs.endIndex)
+        )
+        return reorderedMetricIDs
+    }
+}
+
 private struct ProviderMetricTileDetailPresentation: Identifiable {
     let metricID: String
 
@@ -157,6 +188,14 @@ struct ProviderUsageCard: View {
     let metricOrder: [String]
     let metricWidthForMetric: (String) -> MetricTileWidthPreference
     let onUpdateMetricWidth: (String, MetricTileWidthPreference) -> Void
+    let metricLayoutProvider: () -> AccountMetricLayout
+    let isMetricNewlyDiscovered: (String) -> Bool
+    let onUpdateMetricOrder: ([String]) -> Void
+    let onReplaceMetricLayout: (AccountMetricLayout) -> Void
+    let onResetMetricLayout: ([String]) -> Void
+    let copyLayoutDestinationsProvider: () -> [MetricLayoutCopyDestination]
+    let onCopyMetricLayout: (MetricLayoutCopyDestination) -> Void
+    let onMarkMetricsSeen: ([String]) -> Void
     let historySeriesOptionsProvider: () -> [UsageHistorySeriesOption]
     let onMetricsDiscovered: ([String]) -> Void
 
@@ -195,6 +234,14 @@ struct ProviderUsageCard: View {
         metricOrder: [String] = [],
         metricWidthForMetric: @escaping (String) -> MetricTileWidthPreference = { _ in .automatic },
         onUpdateMetricWidth: @escaping (String, MetricTileWidthPreference) -> Void = { _, _ in },
+        metricLayout: @escaping () -> AccountMetricLayout = { AccountMetricLayout() },
+        isMetricNewlyDiscovered: @escaping (String) -> Bool = { _ in false },
+        onUpdateMetricOrder: @escaping ([String]) -> Void = { _ in },
+        onReplaceMetricLayout: @escaping (AccountMetricLayout) -> Void = { _ in },
+        onResetMetricLayout: @escaping ([String]) -> Void = { _ in },
+        copyLayoutDestinations: @escaping () -> [MetricLayoutCopyDestination] = { [] },
+        onCopyMetricLayout: @escaping (MetricLayoutCopyDestination) -> Void = { _ in },
+        onMarkMetricsSeen: @escaping ([String]) -> Void = { _ in },
         historySeriesOptions: @escaping () -> [UsageHistorySeriesOption] = { [] },
         onMetricsDiscovered: @escaping ([String]) -> Void = { _ in }
     ) {
@@ -222,6 +269,14 @@ struct ProviderUsageCard: View {
         self.metricOrder = metricOrder
         self.metricWidthForMetric = metricWidthForMetric
         self.onUpdateMetricWidth = onUpdateMetricWidth
+        self.metricLayoutProvider = metricLayout
+        self.isMetricNewlyDiscovered = isMetricNewlyDiscovered
+        self.onUpdateMetricOrder = onUpdateMetricOrder
+        self.onReplaceMetricLayout = onReplaceMetricLayout
+        self.onResetMetricLayout = onResetMetricLayout
+        self.copyLayoutDestinationsProvider = copyLayoutDestinations
+        self.onCopyMetricLayout = onCopyMetricLayout
+        self.onMarkMetricsSeen = onMarkMetricsSeen
         self.historySeriesOptionsProvider = {
             let options = historySeriesOptions()
             return options.isEmpty
@@ -300,7 +355,7 @@ struct ProviderUsageCard: View {
                             Button {
                                 isCustomizingMetrics = true
                             } label: {
-                                Label("Customize Metrics…", systemImage: "gauge.with.dots.needle.50percent")
+                                Label("Customize Card…", systemImage: "gauge.with.dots.needle.50percent")
                             }
                         }
                     }
@@ -443,7 +498,15 @@ struct ProviderUsageCard: View {
                 onApplyVisualizationStyleToAll: onApplyVisualizationStyleToAll,
                 onResetVisualizationStyles: onResetVisualizationStyles,
                 metricWidthForMetric: metricWidthForMetric,
-                onUpdateMetricWidth: onUpdateMetricWidth
+                onUpdateMetricWidth: onUpdateMetricWidth,
+                metricLayoutProvider: metricLayoutProvider,
+                isMetricNewlyDiscovered: isMetricNewlyDiscovered,
+                onUpdateMetricOrder: onUpdateMetricOrder,
+                onReplaceMetricLayout: onReplaceMetricLayout,
+                onResetMetricLayout: onResetMetricLayout,
+                copyLayoutDestinationsProvider: copyLayoutDestinationsProvider,
+                onCopyMetricLayout: onCopyMetricLayout,
+                onMarkMetricsSeen: onMarkMetricsSeen
             )
         }
         .sheet(item: $metricDetailPresentation) { presentation in
@@ -2027,120 +2090,179 @@ private struct MetricVisualizationCustomizationView: View {
     let onResetVisualizationStyles: ([String]) -> Void
     let metricWidthForMetric: (String) -> MetricTileWidthPreference
     let onUpdateMetricWidth: (String, MetricTileWidthPreference) -> Void
+    let metricLayoutProvider: () -> AccountMetricLayout
+    let isMetricNewlyDiscovered: (String) -> Bool
+    let onUpdateMetricOrder: ([String]) -> Void
+    let onReplaceMetricLayout: (AccountMetricLayout) -> Void
+    let onResetMetricLayout: ([String]) -> Void
+    let copyLayoutDestinationsProvider: () -> [MetricLayoutCopyDestination]
+    let onCopyMetricLayout: (MetricLayoutCopyDestination) -> Void
+    let onMarkMetricsSeen: ([String]) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var undoHistory = MetricLayoutUndoHistory()
+    @State private var draggedMetricID: String?
+    @State private var dropTargetMetricID: String?
+    @State private var dragHasRecordedUndo = false
+    @State private var newMetricIDs = Set<String>()
+    @State private var didCaptureNewMetricIDs = false
+    @State private var pendingCopyDestination: MetricLayoutCopyDestination?
+    @State private var copyStatusMessage: String?
 
     var body: some View {
+        let copyDestinations = copyLayoutDestinationsProvider()
+
         NavigationStack {
-            List {
-                Section {
-                    ForEach(result.availableMetrics) { metric in
-                        VStack(alignment: .leading, spacing: 10) {
-                            if showsVisibilityControls {
-                                Toggle(
-                                    isOn: Binding(
-                                        get: { isMetricVisible(metric.id) },
-                                        set: { onUpdateMetricVisibility(metric.id, $0) }
-                                    )
-                                ) {
-                                    Text(metric.label)
-                                        .font(.subheadline.weight(.semibold))
-                                }
-                                .accessibilityLabel(metric.label)
-                                .accessibilityValue(
-                                    ProviderUsageCard.metricVisibilityAccessibilityValue(
-                                        isVisible: isMetricVisible(metric.id)
-                                    )
-                                )
-                            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(accountTitle)
+                            .font(.subheadline.weight(.semibold))
+                        Text("Drag tiles by their handles or use each tile’s menu. Changes apply immediately and autosave.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
-                            if
-                                case let .usageBar(index) = metric.kind,
-                                result.bars.indices.contains(index)
-                            {
-                                let bar = result.bars[index]
-                                HStack {
-                                    Text(showsVisibilityControls ? "Visualization" : bar.label)
-                                        .font(.subheadline.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Live Preview")
+                            .font(.headline)
 
-                                    Spacer(minLength: 12)
+                        if visibleMetrics.isEmpty {
+                            ContentUnavailableView(
+                                "No Visible Metrics",
+                                systemImage: "rectangle.slash",
+                                description: Text("Restore a metric from Hidden Metrics below.")
+                            )
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 10) {
+                                ForEach(previewRows) { row in
+                                    GridRow(alignment: .top) {
+                                        editorTile(row.leading)
+                                            .gridCellColumns(row.leading.width == .full ? 2 : 1)
 
-                                    Picker(
-                                        "Style for \(bar.label)",
-                                        selection: Binding(
-                                            get: { visualizationStyleForMetric(metric.id) },
-                                            set: { onUpdateVisualizationStyle(metric.id, $0) }
-                                        )
-                                    ) {
-                                        ForEach(MetricVisualizationStyle.allCases) { style in
-                                            Text(style.displayName).tag(style)
+                                        if let trailing = row.trailing {
+                                            editorTile(trailing)
+                                        } else if row.leading.width == .half {
+                                            Color.clear
+                                                .accessibilityHidden(true)
                                         }
                                     }
-                                    .labelsHidden()
-                                    .pickerStyle(.menu)
                                 }
-
-                                MetricVisualizationView(
-                                    bar: bar,
-                                    style: visualizationStyleForMetric(metric.id),
-                                    showsSeverity: showsSeverity
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .accessibilityHidden(true)
                             }
+                            .animation(.snappy(duration: 0.22), value: visibleMetrics.map(\.id))
+                        }
+                    }
 
-                            HStack {
-                                Text("Tile width")
-                                    .font(.subheadline.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Hidden Metrics")
+                            .font(.headline)
 
-                                Spacer(minLength: 12)
+                        if hiddenMetrics.isEmpty {
+                            Text("No hidden metrics")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(hiddenMetrics) { metric in
+                                HStack(spacing: 12) {
+                                    Label(metric.label, systemImage: "eye.slash")
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    Button("Show") {
+                                        performChange {
+                                            onUpdateMetricVisibility(metric.id, true)
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .accessibilityLabel("Show \(metric.label)")
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
 
-                                Picker(
-                                    "Width for \(metric.label)",
-                                    selection: Binding(
-                                        get: { metricWidthForMetric(metric.id) },
-                                        set: { onUpdateMetricWidth(metric.id, $0) }
-                                    )
-                                ) {
-                                    ForEach(MetricTileWidthPreference.allCases, id: \.self) { width in
-                                        Text(width.displayName).tag(width)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Reuse Layout")
+                            .font(.headline)
+
+                        Menu {
+                            ForEach(copyDestinations) { destination in
+                                Button(destination.title) {
+                                    requestCopy(to: destination)
+                                }
+                            }
+                        } label: {
+                            Label("Copy Layout…", systemImage: "rectangle.on.rectangle")
+                                .frame(minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(copyDestinations.isEmpty)
+
+                        if copyDestinations.isEmpty {
+                            Text("Add another configured account for this provider to reuse its layout.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let copyStatusMessage {
+                            Label(copyStatusMessage, systemImage: "checkmark.circle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .accessibilityAddTraits(.isStaticText)
+                        }
+                    }
+
+                    if !styleMetricIDs.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("All Usage Metrics")
+                                .font(.headline)
+
+                            Menu {
+                                ForEach(MetricVisualizationStyle.allCases) { style in
+                                    Button(style.displayName) {
+                                        performChange {
+                                            onApplyVisualizationStyleToAll(style, styleMetricIDs)
+                                        }
                                     }
                                 }
-                                .labelsHidden()
-                                .pickerStyle(.menu)
+                            } label: {
+                                Label("Apply a visualization to all", systemImage: "square.stack.3d.up")
+                                    .frame(minHeight: 44)
                             }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                } header: {
-                    Text("Metrics")
-                } footer: {
-                    Text("Changes apply immediately and are saved automatically.")
-                }
+                            .buttonStyle(.bordered)
 
-                if !styleMetricIDs.isEmpty {
-                    Section {
-                        Menu {
-                            ForEach(MetricVisualizationStyle.allCases) { style in
-                                Button(style.displayName) {
-                                    onApplyVisualizationStyleToAll(style, styleMetricIDs)
+                            Button {
+                                performChange {
+                                    onResetVisualizationStyles(styleMetricIDs)
                                 }
+                            } label: {
+                                Label("Reset visualizations to linear bars", systemImage: "arrow.counterclockwise")
+                                    .frame(minHeight: 44)
                             }
-                        } label: {
-                            Label("Apply to all metrics in this card", systemImage: "square.stack.3d.up")
-                        }
-
-                        Button {
-                            onResetVisualizationStyles(styleMetricIDs)
-                        } label: {
-                            Label("Reset this card to linear bars", systemImage: "arrow.counterclockwise")
+                            .buttonStyle(.bordered)
                         }
                     }
                 }
+                .padding(16)
             }
-            .navigationTitle("Customize Metrics")
+            .navigationTitle("Customize Card")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button("Undo", systemImage: "arrow.uturn.backward") {
+                        undo()
+                    }
+                    .disabled(!undoHistory.canUndo)
+
+                    Button("Reset", systemImage: "arrow.counterclockwise") {
+                        performChange {
+                            onResetMetricLayout(availableMetricIDs)
+                        }
+                    }
+                }
+
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         dismiss()
@@ -2148,8 +2270,304 @@ private struct MetricVisualizationCustomizationView: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .onAppear {
+            guard !didCaptureNewMetricIDs else {
+                return
+            }
+            newMetricIDs = Set(
+                availableMetricIDs.filter(isMetricNewlyDiscovered)
+            )
+            didCaptureNewMetricIDs = true
+        }
+        .onDisappear {
+            onMarkMetricsSeen(Array(newMetricIDs))
+        }
+        .alert(
+            "Replace \(pendingCopyDestination?.title ?? "destination") layout?",
+            isPresented: Binding(
+                get: { pendingCopyDestination != nil },
+                set: { if !$0 { pendingCopyDestination = nil } }
+            )
+        ) {
+            Button("Cancel", role: .cancel) {
+                pendingCopyDestination = nil
+            }
+            Button("Replace Layout", role: .destructive) {
+                guard let destination = pendingCopyDestination else {
+                    return
+                }
+                copyLayout(to: destination)
+                pendingCopyDestination = nil
+            }
+        } message: {
+            Text("This account already has a custom layout. Matching metrics will be replaced; destination-only metrics will stay available.")
+        }
+    }
+
+    private var availableMetricIDs: [String] {
+        result.availableMetrics.map(\.id)
+    }
+
+    private var orderedMetrics: [ProviderUsageMetric] {
+        let metricsByID = Dictionary(
+            result.availableMetrics.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var seen = Set<String>()
+        return metricLayoutProvider().orderedMetricIDs.compactMap { metricID in
+            guard seen.insert(metricID).inserted else {
+                return nil
+            }
+            return metricsByID[metricID]
+        } + result.availableMetrics.filter { seen.insert($0.id).inserted }
+    }
+
+    private var visibleMetrics: [ProviderUsageMetric] {
+        orderedMetrics.filter { isMetricVisible($0.id) }
+    }
+
+    private var hiddenMetrics: [ProviderUsageMetric] {
+        orderedMetrics.filter { !isMetricVisible($0.id) }
+    }
+
+    private var previewRows: [ProviderMetricTileGridRow] {
+        ProviderMetricTileGridResolver.rows(
+            metrics: visibleMetrics,
+            orderedMetricIDs: visibleMetrics.map(\.id),
+            widthForMetric: metricWidthForMetric,
+            visualizationStyleForMetric: visualizationStyleForMetric,
+            usesRegularHorizontalSizeClass: horizontalSizeClass == .regular,
+            collapsesToSingleColumn: dynamicTypeSize.isAccessibilitySize
+        )
+    }
+
+    private func editorTile(_ item: ProviderMetricTileGridItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 4) {
+                Image(systemName: "line.3.horizontal")
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(.secondary)
+                    .onDrag {
+                        beginDrag(item.metric.id)
+                        return NSItemProvider(object: item.metric.id as NSString)
+                    }
+                    .accessibilityLabel("Drag \(item.metric.label)")
+                    .accessibilityHint("Reorders this metric tile")
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.metric.label)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(2)
+                    if newMetricIDs.contains(item.metric.id) {
+                        Text("New")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.tint)
+                            .accessibilityLabel("New metric")
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                tileMenu(for: item.metric)
+            }
+
+            previewValue(for: item.metric)
+                .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
+                    dropTargetMetricID == item.metric.id ? Color.accentColor : Color.clear,
+                    style: StrokeStyle(lineWidth: 2, dash: [6, 4])
+                )
+                .animation(.easeInOut(duration: 0.16), value: dropTargetMetricID)
+        }
+        .onDrop(
+            of: [.text],
+            delegate: MetricEditorDropDelegate(
+                targetMetricID: item.metric.id,
+                draggedMetricID: $draggedMetricID,
+                dropTargetMetricID: $dropTargetMetricID,
+                moveMetric: moveMetric
+            )
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private func tileMenu(for metric: ProviderUsageMetric) -> some View {
+        Menu {
+            Button("Move Earlier", systemImage: "arrow.left") {
+                moveMetric(metric.id, by: -1)
+            }
+            .disabled(visibleMetrics.first?.id == metric.id)
+
+            Button("Move Later", systemImage: "arrow.right") {
+                moveMetric(metric.id, by: 1)
+            }
+            .disabled(visibleMetrics.last?.id == metric.id)
+
+            Menu("Tile Width") {
+                ForEach(MetricTileWidthPreference.allCases, id: \.self) { width in
+                    Button {
+                        performChange(haptic: .rigid) {
+                            onUpdateMetricWidth(metric.id, width)
+                        }
+                    } label: {
+                        if metricWidthForMetric(metric.id) == width {
+                            Label(width.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(width.displayName)
+                        }
+                    }
+                }
+            }
+
+            if case .usageBar = metric.kind {
+                Menu("Visualization") {
+                    ForEach(MetricVisualizationStyle.allCases) { style in
+                        Button {
+                            performChange {
+                                onUpdateVisualizationStyle(metric.id, style)
+                            }
+                        } label: {
+                            if visualizationStyleForMetric(metric.id) == style {
+                                Label(style.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(style.displayName)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            Button("Hide", systemImage: "eye.slash") {
+                performChange {
+                    onUpdateMetricVisibility(metric.id, false)
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Actions for \(metric.label)")
+        .accessibilityHint("Move, resize, restyle, or hide this metric")
+    }
+
+    @ViewBuilder
+    private func previewValue(for metric: ProviderUsageMetric) -> some View {
+        switch metric.kind {
+        case let .usageBar(index) where result.bars.indices.contains(index):
+            let bar = result.bars[index]
+            VStack(alignment: .leading, spacing: 8) {
+                Text(bar.usageText)
+                    .font(.title3.weight(.semibold))
+                    .monospacedDigit()
+                MetricVisualizationView(
+                    bar: bar,
+                    style: visualizationStyleForMetric(metric.id),
+                    showsSeverity: showsSeverity
+                )
+            }
+        case .creditsRemaining:
+            Text(result.creditsRemaining.map { CodexBarCurrencyText.format($0) } ?? "Unavailable")
+                .font(.title3.weight(.semibold))
+                .monospacedDigit()
+        case let .monetary(index) where result.monetaryMetrics.indices.contains(index):
+            Text(result.monetaryMetrics[index].formattedAmount())
+                .font(.title3.weight(.semibold))
+                .monospacedDigit()
+        default:
+            Text("Unavailable")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func performChange(
+        haptic: UIImpactFeedbackGenerator.FeedbackStyle = .light,
+        _ change: () -> Void
+    ) {
+        let previousLayout = metricLayoutProvider()
+        withAnimation(.snappy(duration: 0.22)) {
+            change()
+        }
+        guard undoHistory.record(
+            previousLayout,
+            ifChangedTo: metricLayoutProvider()
+        ) else {
+            return
+        }
+        UIImpactFeedbackGenerator(style: haptic).impactOccurred()
+    }
+
+    private func undo() {
+        guard let previous = undoHistory.undo() else {
+            return
+        }
+        withAnimation(.snappy(duration: 0.22)) {
+            onReplaceMetricLayout(previous)
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    private func beginDrag(_ metricID: String) {
+        dragHasRecordedUndo = false
+        draggedMetricID = metricID
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
+    private func moveMetric(_ draggedID: String, toward targetID: String) {
+        guard let order = ProviderMetricTileOrderResolver.moving(
+            draggedID,
+            toward: targetID,
+            in: visibleMetrics.map(\.id)
+        ) else {
+            return
+        }
+        if !dragHasRecordedUndo {
+            undoHistory.record(metricLayoutProvider())
+            dragHasRecordedUndo = true
+        }
+        onUpdateMetricOrder(order)
+    }
+
+    private func moveMetric(_ metricID: String, by offset: Int) {
+        var order = visibleMetrics.map(\.id)
+        guard let sourceIndex = order.firstIndex(of: metricID) else {
+            return
+        }
+        let destinationIndex = sourceIndex + offset
+        guard order.indices.contains(destinationIndex) else {
+            return
+        }
+        performChange {
+            order.swapAt(sourceIndex, destinationIndex)
+            onUpdateMetricOrder(order)
+        }
+    }
+
+    private func requestCopy(to destination: MetricLayoutCopyDestination) {
+        if destination.hasCustomLayout {
+            pendingCopyDestination = destination
+        } else {
+            copyLayout(to: destination)
+        }
+    }
+
+    private func copyLayout(to destination: MetricLayoutCopyDestination) {
+        onCopyMetricLayout(destination)
+        let message = "Layout copied to \(destination.title)."
+        copyStatusMessage = message
+        UIAccessibility.post(notification: .announcement, argument: message)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private var styleMetricIDs: [String] {
@@ -2161,11 +2579,39 @@ private struct MetricVisualizationCustomizationView: View {
         }
     }
 
-    private var showsVisibilityControls: Bool {
-        ProviderUsageCard.showsMetricVisibilityControls(
-            for: result,
-            isMetricVisible: isMetricVisible
-        )
+}
+
+private struct MetricEditorDropDelegate: DropDelegate {
+    let targetMetricID: String
+    @Binding var draggedMetricID: String?
+    @Binding var dropTargetMetricID: String?
+    let moveMetric: (String, String) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedMetricID, draggedMetricID != targetMetricID else {
+            return
+        }
+        dropTargetMetricID = targetMetricID
+        withAnimation(.snappy(duration: 0.18)) {
+            moveMetric(draggedMetricID, targetMetricID)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        if dropTargetMetricID == targetMetricID {
+            dropTargetMetricID = nil
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedMetricID = nil
+        dropTargetMetricID = nil
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        return true
     }
 }
 
@@ -2357,7 +2803,146 @@ private extension UsageSeverity {
     }
 }
 
-#Preview {
+private struct MetricCustomizationPreview: View {
+    @State private var layout: AccountMetricLayout
+
+    init() {
+        let metricIDs = Self.result.availableMetrics.map(\.id)
+        let preferences = Dictionary(
+            uniqueKeysWithValues: metricIDs.enumerated().map { index, metricID in
+                (
+                    metricID,
+                    MetricTilePreference(
+                        isVisible: index != metricIDs.count - 1,
+                        visualizationStyle: index == 1 ? .circularRing : nil,
+                        width: index == 0 ? .full : .half,
+                        isNewlyDiscovered: index == 2
+                    )
+                )
+            }
+        )
+        _layout = State(
+            initialValue: AccountMetricLayout(
+                orderedMetricIDs: metricIDs,
+                preferences: preferences
+            )
+        )
+    }
+
+    var body: some View {
+        MetricVisualizationCustomizationView(
+            accountTitle: "Personal Codex",
+            result: Self.result,
+            showsSeverity: true,
+            isMetricVisible: { metricID in
+                layout.preferences[metricID]?.isVisible ?? true
+            },
+            onUpdateMetricVisibility: { metricID, isVisible in
+                updatePreference(metricID) { $0.isVisible = isVisible }
+            },
+            visualizationStyleForMetric: { metricID in
+                layout.preferences[metricID]?.visualizationStyle ?? .linearBar
+            },
+            onUpdateVisualizationStyle: { metricID, style in
+                updatePreference(metricID) { $0.visualizationStyle = style }
+            },
+            onApplyVisualizationStyleToAll: { style, metricIDs in
+                for metricID in metricIDs {
+                    updatePreference(metricID) { $0.visualizationStyle = style }
+                }
+            },
+            onResetVisualizationStyles: { metricIDs in
+                for metricID in metricIDs {
+                    updatePreference(metricID) { $0.visualizationStyle = nil }
+                }
+            },
+            metricWidthForMetric: { metricID in
+                layout.preferences[metricID]?.width ?? .automatic
+            },
+            onUpdateMetricWidth: { metricID, width in
+                updatePreference(metricID) { $0.width = width }
+            },
+            metricLayoutProvider: { layout },
+            isMetricNewlyDiscovered: { metricID in
+                layout.preferences[metricID]?.isNewlyDiscovered == true
+            },
+            onUpdateMetricOrder: { metricIDs in
+                layout.orderedMetricIDs = metricIDs
+            },
+            onReplaceMetricLayout: { layout = $0 },
+            onResetMetricLayout: { metricIDs in
+                layout = AccountMetricLayout(
+                    orderedMetricIDs: metricIDs,
+                    preferences: Dictionary(
+                        uniqueKeysWithValues: metricIDs.map {
+                            ($0, MetricTilePreference(isNewlyDiscovered: false))
+                        }
+                    )
+                )
+            },
+            copyLayoutDestinationsProvider: {
+                [
+                    MetricLayoutCopyDestination(
+                        id: "codex.work",
+                        title: "Work Codex",
+                        availableMetricIDs: Self.result.availableMetrics.map(\.id),
+                        hasCustomLayout: true
+                    ),
+                ]
+            },
+            onCopyMetricLayout: { _ in },
+            onMarkMetricsSeen: { metricIDs in
+                for metricID in metricIDs {
+                    updatePreference(metricID) { $0.isNewlyDiscovered = false }
+                }
+            }
+        )
+    }
+
+    private func updatePreference(
+        _ metricID: String,
+        change: (inout MetricTilePreference) -> Void
+    ) {
+        var updatedLayout = layout
+        var preference = updatedLayout.preferences[metricID] ?? MetricTilePreference()
+        change(&preference)
+        updatedLayout.preferences[metricID] = preference
+        layout = updatedLayout
+    }
+
+    private static let result = ProviderUsageResult(
+        accountID: "codex.preview",
+        providerID: .codex,
+        title: "Codex",
+        subtitle: "Preview data",
+        bars: [
+            UsageBar(stableKey: "session", label: "5 hour usage limit", used: 45, limit: 100),
+            UsageBar(stableKey: "weekly", label: "Weekly usage limit", used: 72, limit: 100),
+        ],
+        creditsRemaining: 18.75,
+        monetaryMetrics: [
+            ProviderMonetaryMetric(
+                kind: .spent,
+                label: "On-demand spend",
+                minorUnits: 1_240,
+                currencyCode: "USD",
+                decimalPlaces: 2
+            ),
+        ],
+        fetchedAt: Date()
+    )
+}
+
+#Preview("Customize Card – iPhone Compact", traits: .fixedLayout(width: 393, height: 852)) {
+    MetricCustomizationPreview()
+}
+
+#Preview("Customize Card – iPad Accessibility", traits: .fixedLayout(width: 1024, height: 1366)) {
+    MetricCustomizationPreview()
+        .environment(\.dynamicTypeSize, .accessibility2)
+}
+
+#Preview("Provider Card") {
     let fiveHourReset = Date().addingTimeInterval(8_100)
     let weeklyReset = Date().addingTimeInterval(2 * 24 * 60 * 60 + 4 * 60 * 60)
     let formatter = UserFacingDateTimeFormatter.current

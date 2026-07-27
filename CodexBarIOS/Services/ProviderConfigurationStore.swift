@@ -130,6 +130,37 @@ public struct AccountMetricLayout: Codable, Equatable, Sendable {
     }
 }
 
+struct MetricLayoutUndoHistory {
+    private(set) var layouts: [AccountMetricLayout] = []
+
+    var canUndo: Bool {
+        !layouts.isEmpty
+    }
+
+    mutating func record(_ layout: AccountMetricLayout) {
+        guard layouts.last != layout else {
+            return
+        }
+        layouts.append(layout)
+    }
+
+    @discardableResult
+    mutating func record(
+        _ layout: AccountMetricLayout,
+        ifChangedTo updatedLayout: AccountMetricLayout
+    ) -> Bool {
+        guard layout != updatedLayout else {
+            return false
+        }
+        record(layout)
+        return true
+    }
+
+    mutating func undo() -> AccountMetricLayout? {
+        layouts.popLast()
+    }
+}
+
 @MainActor
 public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
@@ -746,6 +777,119 @@ public final class ProviderConfigurationStore: ObservableObject {
             accountID: accountID,
             availableMetricIDs: availableMetricIDs
         ).orderedMetricIDs
+    }
+
+    public func isMetricNewlyDiscovered(accountID: String, metricID: String) -> Bool {
+        metricLayouts[accountID]?.preferences[metricID]?.isNewlyDiscovered == true
+    }
+
+    public func isMetricLayoutCustomized(
+        accountID: String,
+        availableMetricIDs: [String]
+    ) -> Bool {
+        guard let layout = metricLayouts[accountID] else {
+            return false
+        }
+        let availableMetricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
+        let availableMetricIDSet = Set(availableMetricIDs)
+        let storedOrder = Self.uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
+        let visibleOrder = storedOrder
+            .filter { availableMetricIDSet.contains($0) }
+        if visibleOrder != availableMetricIDs {
+            return true
+        }
+        let unavailableOrder = storedOrder.filter { !availableMetricIDSet.contains($0) }
+        if storedOrder != availableMetricIDs + unavailableOrder {
+            return true
+        }
+        return layout.preferences.values.contains { preference in
+            !preference.isVisible
+                || preference.visualizationStyle != nil
+                || preference.width != .automatic
+        }
+    }
+
+    public func replaceMetricLayout(_ replacement: AccountMetricLayout, accountID: String) {
+        guard !accountID.isEmpty else {
+            return
+        }
+        prepareMetricLayoutForEditing(accountID: accountID)
+        var replacement = replacement
+        replacement.version = AccountMetricLayout.currentVersion
+        replacement.orderedMetricIDs = Self.uniqueNonemptyMetricIDs(replacement.orderedMetricIDs)
+        replacement.usesLegacyFullWidthDefaults = false
+        metricLayouts[accountID] = replacement
+        saveMetricLayouts()
+    }
+
+    public func resetMetricLayout(accountID: String, availableMetricIDs: [String]) {
+        guard !accountID.isEmpty else {
+            return
+        }
+        var metricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
+        var seenMetricIDs = Set(metricIDs)
+        metricIDs.append(
+            contentsOf: Self.uniqueNonemptyMetricIDs(
+                metricLayouts[accountID]?.orderedMetricIDs ?? []
+            ).filter { seenMetricIDs.insert($0).inserted }
+        )
+        let preferences = Dictionary(
+            uniqueKeysWithValues: metricIDs.map {
+                ($0, MetricTilePreference(isNewlyDiscovered: false))
+            }
+        )
+        replaceMetricLayout(
+            AccountMetricLayout(
+                orderedMetricIDs: metricIDs,
+                preferences: preferences
+            ),
+            accountID: accountID
+        )
+    }
+
+    public func copyMetricLayout(
+        from sourceAccountID: String,
+        to destinationAccountID: String,
+        destinationAvailableMetricIDs: [String]
+    ) {
+        guard
+            !sourceAccountID.isEmpty,
+            !destinationAccountID.isEmpty,
+            sourceAccountID != destinationAccountID,
+            let sourceLayout = metricLayouts[sourceAccountID]
+        else {
+            return
+        }
+
+        let destinationMetricIDs = Self.uniqueNonemptyMetricIDs(destinationAvailableMetricIDs)
+        guard !destinationMetricIDs.isEmpty else {
+            return
+        }
+        var destinationLayout = reconcileMetricLayout(
+            accountID: destinationAccountID,
+            availableMetricIDs: destinationMetricIDs
+        )
+        let destinationMetricIDSet = Set(destinationLayout.orderedMetricIDs)
+            .union(destinationLayout.preferences.keys)
+        let copiedOrder = Self.uniqueNonemptyMetricIDs(sourceLayout.orderedMetricIDs)
+            .filter { destinationMetricIDSet.contains($0) }
+        var seen = Set(copiedOrder)
+        let destinationOnlyOrder = Self.uniqueNonemptyMetricIDs(destinationLayout.orderedMetricIDs)
+            .filter { seen.insert($0).inserted }
+
+        destinationLayout.version = AccountMetricLayout.currentVersion
+        destinationLayout.orderedMetricIDs = copiedOrder + destinationOnlyOrder
+        for metricID in copiedOrder {
+            guard var preference = sourceLayout.preferences[metricID] else {
+                continue
+            }
+            preference.isNewlyDiscovered = false
+            destinationLayout.preferences[metricID] = preference
+        }
+        for metricID in destinationOnlyOrder where destinationLayout.preferences[metricID] == nil {
+            destinationLayout.preferences[metricID] = MetricTilePreference()
+        }
+        replaceMetricLayout(destinationLayout, accountID: destinationAccountID)
     }
 
     public func updateMetricOrder(_ metricIDs: [String], accountID: String) {
