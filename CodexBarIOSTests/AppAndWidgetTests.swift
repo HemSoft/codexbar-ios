@@ -2253,6 +2253,58 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(rewrittenPreferences["codex.session"]?["width"] as? String, "half")
     }
 
+    @MainActor
+    func testOpaqueMetricLayoutStorageSurvivesUntilExplicitCustomization() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let originalStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let existingAccount = originalStore.addAccount(for: .codex)
+        let opaqueData = Data(
+            #"{"futureEnvelope":{"schema":2,"accounts":[]}}"#.utf8
+        )
+        defaults.set(opaqueData, forKey: "metricVisualizationPreferences")
+
+        let preservingStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        XCTAssertEqual(
+            defaults.data(forKey: "metricVisualizationPreferences"),
+            opaqueData
+        )
+
+        _ = preservingStore.addAccount(for: .claude)
+        XCTAssertEqual(
+            defaults.data(forKey: "metricVisualizationPreferences"),
+            opaqueData
+        )
+
+        preservingStore.updateMetricWidth(
+            .half,
+            accountID: existingAccount.id,
+            metricID: "codex.session"
+        )
+        let rewrittenData = try XCTUnwrap(
+            defaults.data(forKey: "metricVisualizationPreferences")
+        )
+        let rewrittenLayouts = try JSONDecoder().decode(
+            [String: AccountMetricLayout].self,
+            from: rewrittenData
+        )
+
+        XCTAssertEqual(
+            rewrittenLayouts[existingAccount.id]?.preferences["codex.session"]?.width,
+            .half
+        )
+    }
+
     func testAvailableMetricIdentifiersCoverEveryMetricTypeWithoutUsingLabels() {
         let firstResult = ProviderUsageResult(
             accountID: "claude.personal",

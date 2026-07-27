@@ -164,6 +164,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let incompleteAccountResetKey = DefaultsKey.incompleteAccountReset
     private var secretAvailabilityError: String?
     private var unsupportedMetricLayoutData: [String: Data]
+    private var opaqueMetricLayoutData: Data?
 
     public init(
         defaults: UserDefaults = .standard,
@@ -202,13 +203,15 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
         self.metricLayouts = loadedMetricLayouts
         self.unsupportedMetricLayoutData = metricLayoutLoadResult.unsupportedLayoutData
+        self.opaqueMetricLayoutData = metricLayoutLoadResult.opaqueData
         self.usageAlertSettings = Self.loadUsageAlertSettings(from: defaults)
         self.usageAlertActiveIDs = Self.loadUsageAlertActiveIDs(from: defaults)
         self.isConfigurationRecoveryRequired = configurationLoadResult.error != nil
         self.isGroupRecoveryRequired = groupLoadResult.error != nil
         self.hasIncompleteAccountReset = defaults.bool(forKey: DefaultsKey.incompleteAccountReset)
         self.lastError = configurationLoadResult.error ?? groupLoadResult.error
-        if metricLayoutLoadResult.needsMigration
+        if metricLayoutLoadResult.opaqueData == nil,
+           metricLayoutLoadResult.needsMigration
             || loadedMetricLayouts.count != metricLayoutLoadResult.layouts.count
         {
             saveMetricLayouts()
@@ -521,6 +524,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             dashboardCardOrder = []
             metricLayouts = [:]
             unsupportedMetricLayoutData = [:]
+            opaqueMetricLayoutData = nil
             usageAlertActiveIDs = []
             defaults.removeObject(forKey: configurationsKey)
             defaults.removeObject(forKey: groupsKey)
@@ -684,7 +688,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         guard !accountID.isEmpty else {
             return AccountMetricLayout()
         }
-        if unsupportedMetricLayoutData[accountID] != nil {
+        if opaqueMetricLayoutData != nil || unsupportedMetricLayoutData[accountID] != nil {
             return metricLayouts[accountID] ?? AccountMetricLayout()
         }
 
@@ -831,7 +835,10 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     public func markMetricsSeen(_ metricIDs: [String], accountID: String) {
-        guard unsupportedMetricLayoutData[accountID] == nil else {
+        guard
+            opaqueMetricLayoutData == nil,
+            unsupportedMetricLayoutData[accountID] == nil
+        else {
             return
         }
         guard var layout = metricLayouts[accountID] else {
@@ -929,6 +936,11 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     private func prepareMetricLayoutForEditing(accountID: String) {
+        if opaqueMetricLayoutData != nil {
+            opaqueMetricLayoutData = nil
+            metricLayouts = [:]
+            unsupportedMetricLayoutData = [:]
+        }
         guard unsupportedMetricLayoutData.removeValue(forKey: accountID) != nil else {
             return
         }
@@ -1378,6 +1390,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         let needsMigration: Bool
         let usesVersionedStorage: Bool
         let unsupportedLayoutData: [String: Data]
+        let opaqueData: Data?
     }
 
     private static let configurationLoadErrorMessage =
@@ -1515,7 +1528,8 @@ public final class ProviderConfigurationStore: ObservableObject {
                 layouts: [:],
                 needsMigration: false,
                 usesVersionedStorage: false,
-                unsupportedLayoutData: [:]
+                unsupportedLayoutData: [:],
+                opaqueData: nil
             )
         }
 
@@ -1531,7 +1545,8 @@ public final class ProviderConfigurationStore: ObservableObject {
                 layouts: preferences.mapValues(Self.migratedMetricLayout),
                 needsMigration: true,
                 usesVersionedStorage: false,
-                unsupportedLayoutData: [:]
+                unsupportedLayoutData: [:],
+                opaqueData: nil
             )
         }
 
@@ -1543,7 +1558,8 @@ public final class ProviderConfigurationStore: ObservableObject {
                 layouts: [:],
                 needsMigration: false,
                 usesVersionedStorage: false,
-                unsupportedLayoutData: [:]
+                unsupportedLayoutData: [:],
+                opaqueData: data
             )
         }
         return MetricLayoutLoadResult(
@@ -1556,7 +1572,8 @@ public final class ProviderConfigurationStore: ObservableObject {
             },
             needsMigration: true,
             usesVersionedStorage: false,
-            unsupportedLayoutData: [:]
+            unsupportedLayoutData: [:],
+            opaqueData: nil
         )
     }
 
@@ -1619,7 +1636,8 @@ public final class ProviderConfigurationStore: ObservableObject {
             layouts: layouts,
             needsMigration: needsMigration,
             usesVersionedStorage: true,
-            unsupportedLayoutData: preservedData
+            unsupportedLayoutData: preservedData,
+            opaqueData: nil
         )
     }
 
@@ -1658,6 +1676,9 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     private func saveMetricLayouts() {
+        guard opaqueMetricLayoutData == nil else {
+            return
+        }
         guard
             let encoded = try? JSONEncoder().encode(metricLayouts),
             var root = try? JSONSerialization.jsonObject(with: encoded) as? [String: Any]
