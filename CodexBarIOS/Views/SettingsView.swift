@@ -1,8 +1,23 @@
 import StoreKit
 import SwiftUI
+import UIKit
 
 enum SettingsScrollTarget: Hashable {
     case accounts
+}
+
+private extension FeedbackSupportContext {
+    @MainActor
+    static func current(installedVersion: InstalledAppVersion) -> FeedbackSupportContext {
+        let device = UIDevice.current
+        return FeedbackSupportContext(
+            appVersion: installedVersion.marketingVersion,
+            buildNumber: installedVersion.buildNumber,
+            operatingSystemName: device.systemName,
+            operatingSystemVersion: device.systemVersion,
+            deviceCategory: device.localizedModel
+        )
+    }
 }
 
 struct SettingsView: View {
@@ -243,12 +258,17 @@ struct SettingsView: View {
                 .id(SettingsScrollTarget.accounts)
 
                 Section {
-                    Link(destination: AppReviewLinks.writeReviewURL) {
-                        Label("Rate CodexBar", systemImage: "star")
-                    }
-
-                    Link(destination: AppReviewLinks.supportURL) {
-                        Label("Get Support", systemImage: "questionmark.circle")
+                    NavigationLink {
+                        FeedbackSupportView(
+                            context: .current(
+                                installedVersion: appUpdateController.installedVersion
+                            )
+                        )
+                    } label: {
+                        Label(
+                            "Feedback & Support",
+                            systemImage: "bubble.left.and.text.bubble.right"
+                        )
                     }
 
                     #if DEBUG
@@ -610,4 +630,97 @@ private extension ProviderID {
         configurationStore: ProviderConfigurationStore(),
         appUpdateController: AppUpdateController()
     )
+}
+
+private struct FeedbackSupportView: View {
+    let context: FeedbackSupportContext
+
+    @Environment(\.openURL) private var openURL
+    @State private var failedDestination: FeedbackSupportDestination?
+
+    var body: some View {
+        List {
+            Section {
+                Label {
+                    Text(
+                        "GitHub reports are public and require a GitHub account. Do not include credentials, tokens, cookies, account identifiers, email addresses, or other secrets."
+                    )
+                } icon: {
+                    Image(systemName: "exclamationmark.shield")
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+            } header: {
+                Text("Before You Share")
+            }
+
+            Section {
+                ForEach(FeedbackSupportDestination.allCases) { destination in
+                    Button {
+                        open(destination)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: destination.systemImage)
+                                .foregroundStyle(.tint)
+                                .frame(width: 24)
+                                .accessibilityHidden(true)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(destination.title)
+                                    .foregroundStyle(.primary)
+                                Text(destination.detail)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            VStack(alignment: .trailing, spacing: 3) {
+                                Text(destination.serviceName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "arrow.up.forward")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("\(destination.title), opens \(destination.serviceName)")
+                    .accessibilityHint(destination.detail)
+                }
+            } footer: {
+                Text(
+                    "GitHub report forms include only the CodexBar version, build, operating-system version, and general device category. You can review or remove that text in GitHub before submitting."
+                )
+            }
+        }
+        .navigationTitle("Feedback & Support")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            "Couldn’t Open \(failedDestination?.serviceName ?? "Link")",
+            isPresented: Binding(
+                get: { failedDestination != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        failedDestination = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The link couldn’t be opened. Please try again later.")
+        }
+    }
+
+    private func open(_ destination: FeedbackSupportDestination) {
+        openURL(destination.url(context: context)) { accepted in
+            if !accepted {
+                failedDestination = destination
+            }
+        }
+    }
 }

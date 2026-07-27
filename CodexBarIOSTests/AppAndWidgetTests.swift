@@ -653,6 +653,112 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    func testFeedbackSupportDestinationsIncludeEveryUserAction() {
+        XCTAssertEqual(
+            FeedbackSupportDestination.allCases,
+            [
+                .reportProblem,
+                .suggestImprovement,
+                .knownIssues,
+                .supportGuide,
+                .rateCodexBar,
+            ]
+        )
+        XCTAssertEqual(
+            Set(FeedbackSupportDestination.allCases.map(\.title)),
+            [
+                "Report a Problem",
+                "Suggest an Improvement",
+                "View Known Issues",
+                "Support Guide",
+                "Rate CodexBar",
+            ]
+        )
+    }
+
+    func testFeedbackSupportURLsTargetSpecificFormsAndEncodeSafeSystemDetails() throws {
+        let context = FeedbackSupportContext(
+            appVersion: "1.2+beta",
+            buildNumber: "42+7",
+            operatingSystemName: "iPadOS",
+            operatingSystemVersion: "26.1 (23B 12)",
+            deviceCategory: "iPad"
+        )
+
+        let problemURL = FeedbackSupportDestination.reportProblem.url(context: context)
+        let problemComponents = try XCTUnwrap(
+            URLComponents(url: problemURL, resolvingAgainstBaseURL: false)
+        )
+        XCTAssertEqual(problemComponents.host, "github.com")
+        XCTAssertEqual(problemComponents.path, "/HemSoft/codexbar-ios/issues/new")
+        XCTAssertEqual(
+            problemComponents.queryItems?.first(where: { $0.name == "template" })?.value,
+            "bug_report.yml"
+        )
+        XCTAssertEqual(
+            problemComponents.queryItems?.first(where: { $0.name == "system-details" })?.value,
+            "CodexBar 1.2+beta (42+7), iPadOS 26.1 (23B 12), iPad"
+        )
+        XCTAssertTrue(try XCTUnwrap(problemComponents.percentEncodedQuery).contains("%2B"))
+        XCTAssertFalse(try XCTUnwrap(problemComponents.percentEncodedQuery).contains("+"))
+
+        let improvementURL = FeedbackSupportDestination.suggestImprovement.url(context: context)
+        let improvementComponents = try XCTUnwrap(
+            URLComponents(url: improvementURL, resolvingAgainstBaseURL: false)
+        )
+        XCTAssertEqual(
+            improvementComponents.queryItems?.first(where: { $0.name == "template" })?.value,
+            "feature_request.yml"
+        )
+        XCTAssertEqual(
+            improvementComponents.queryItems?.first(where: { $0.name == "system-details" })?.value,
+            context.systemDetails
+        )
+        XCTAssertTrue(try XCTUnwrap(improvementComponents.percentEncodedQuery).contains("%2B"))
+
+        let knownIssuesURL = FeedbackSupportDestination.knownIssues.url(context: context)
+        let knownIssuesComponents = try XCTUnwrap(
+            URLComponents(url: knownIssuesURL, resolvingAgainstBaseURL: false)
+        )
+        XCTAssertEqual(knownIssuesComponents.path, "/HemSoft/codexbar-ios/issues")
+        XCTAssertEqual(
+            knownIssuesComponents.queryItems?.first(where: { $0.name == "q" })?.value,
+            "is:issue is:open"
+        )
+        XCTAssertEqual(
+            FeedbackSupportDestination.supportGuide.url(context: context),
+            AppReviewLinks.supportURL
+        )
+        XCTAssertEqual(
+            FeedbackSupportDestination.rateCodexBar.url(context: context),
+            AppReviewLinks.writeReviewURL
+        )
+    }
+
+    func testFeedbackSupportURLsCannotIncludeAccountConfigurationOrSecrets() {
+        let context = FeedbackSupportContext(
+            appVersion: "1.2",
+            buildNumber: "42",
+            operatingSystemName: "iOS",
+            operatingSystemVersion: "26.0",
+            deviceCategory: "iPhone"
+        )
+        let seededSensitiveValues = [
+            "sk-secret-api-key",
+            "bearer-token",
+            "franz@example.com",
+            "Personal Claude Account",
+            "account-123",
+        ]
+
+        for destination in FeedbackSupportDestination.allCases {
+            let url = destination.url(context: context).absoluteString
+            for sensitiveValue in seededSensitiveValues {
+                XCTAssertFalse(url.contains(sensitiveValue))
+            }
+        }
+    }
+
     func testAppReviewPromptPolicyRequiresSustainedSuccessfulRefreshes() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

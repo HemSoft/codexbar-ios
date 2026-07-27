@@ -89,6 +89,7 @@
 		100000000000000000000038 /* DashboardOrderingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000039 /* DashboardOrderingMode.swift */; };
 		100000000000000000000039 /* DashboardUsageSorter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003A /* DashboardUsageSorter.swift */; };
 		10000000000000000000003A /* AppReviewPromptPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003B /* AppReviewPromptPolicy.swift */; };
+		F10000000000000000000001 /* FeedbackSupportDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* FeedbackSupportDestination.swift */; };
 		10000000000000000000003B /* AppUpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003C /* AppUpdateService.swift */; };
 		10000000000000000000003C /* AppStoreScreenshotFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003D /* AppStoreScreenshotFixtures.swift */; };
 		10000000000000000000003D /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
@@ -238,6 +239,7 @@
 		200000000000000000000039 /* DashboardOrderingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardOrderingMode.swift; sourceTree = "<group>"; };
 		20000000000000000000003A /* DashboardUsageSorter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardUsageSorter.swift; sourceTree = "<group>"; };
 		20000000000000000000003B /* AppReviewPromptPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewPromptPolicy.swift; sourceTree = "<group>"; };
+		F20000000000000000000001 /* FeedbackSupportDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackSupportDestination.swift; sourceTree = "<group>"; };
 		20000000000000000000003C /* AppUpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateService.swift; sourceTree = "<group>"; };
 		20000000000000000000003D /* AppStoreScreenshotFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotFixtures.swift; sourceTree = "<group>"; };
 		20000000000000000000003E /* UserFacingDateTimeFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserFacingDateTimeFormatter.swift; sourceTree = "<group>"; };
@@ -360,6 +362,7 @@
 				200000000000000000000011 /* ProviderConfigurationStore.swift */,
 				20000000000000000000003A /* DashboardUsageSorter.swift */,
 				20000000000000000000003B /* AppReviewPromptPolicy.swift */,
+				F20000000000000000000001 /* FeedbackSupportDestination.swift */,
 				200000000000000000000042 /* DashboardOrchestrator.swift */,
 				20000000000000000000003C /* AppUpdateService.swift */,
 				20000000000000000000003D /* AppStoreScreenshotFixtures.swift */,
@@ -738,6 +741,7 @@
 				100000000000000000000027 /* OpenCodeZenBootstrapImporter.swift in Sources */,
 				100000000000000000000039 /* DashboardUsageSorter.swift in Sources */,
 				10000000000000000000003A /* AppReviewPromptPolicy.swift in Sources */,
+				F10000000000000000000001 /* FeedbackSupportDestination.swift in Sources */,
 				100000000000000000000042 /* DashboardOrchestrator.swift in Sources */,
 				10000000000000000000003B /* AppUpdateService.swift in Sources */,
 				10000000000000000000003C /* AppStoreScreenshotFixtures.swift in Sources */,

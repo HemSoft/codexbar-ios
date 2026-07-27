@@ -61,6 +61,11 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Replaced the single support link with a quiet Feedback & Support hub for
+  reporting problems, suggesting improvements, viewing known issues, reading
+  support guidance, and rating CodexBar, with clear public-report privacy
+  warnings and safe version and operating-system prefill.
+  ([#163](https://github.com/HemSoft/codexbar-ios/issues/163))
 - Made public support requests easier and safer with separate structured forms
   for reporting problems and suggesting improvements, plus clearer routing for
   known issues and privacy-sensitive concerns.

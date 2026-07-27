@@ -61,6 +61,13 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: system-details
+    attributes:
+      label: CodexBar, operating system, and device
+      description: Include the CodexBar version/build, relevant iOS or iPadOS version, and general device model. Do not include serial numbers or other device identifiers.
+      placeholder: CodexBar 1.2.0 (123), iOS 26.0, iPhone
+
   - type: textarea
     id: additional-context
     attributes:
