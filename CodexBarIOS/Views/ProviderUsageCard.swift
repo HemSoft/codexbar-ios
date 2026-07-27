@@ -2465,11 +2465,17 @@ private struct MetricVisualizationCustomizationView: View {
     private func previewValue(for metric: ProviderUsageMetric) -> some View {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
-            MetricVisualizationView(
-                bar: result.bars[index],
-                style: visualizationStyleForMetric(metric.id),
-                showsSeverity: showsSeverity
-            )
+            let bar = result.bars[index]
+            VStack(alignment: .leading, spacing: 8) {
+                Text(bar.usageText)
+                    .font(.title3.weight(.semibold))
+                    .monospacedDigit()
+                MetricVisualizationView(
+                    bar: bar,
+                    style: visualizationStyleForMetric(metric.id),
+                    showsSeverity: showsSeverity
+                )
+            }
         case .creditsRemaining:
             Text(result.creditsRemaining.map { CodexBarCurrencyText.format($0) } ?? "Unavailable")
                 .font(.title3.weight(.semibold))
