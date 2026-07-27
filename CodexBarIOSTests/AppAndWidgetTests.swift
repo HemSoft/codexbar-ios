@@ -2704,8 +2704,12 @@ final class AppAndWidgetTests: XCTestCase {
 
         let accountID = "codex.copy-target"
         let metricIDs = ["codex.session", "codex.weekly"]
+        let temporarilyMissingID = "codex.temporarily-missing"
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
-        _ = store.reconcileMetricLayout(accountID: accountID, availableMetricIDs: metricIDs)
+        _ = store.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: metricIDs + [temporarilyMissingID]
+        )
 
         XCTAssertFalse(
             store.isMetricLayoutCustomized(
@@ -2714,6 +2718,22 @@ final class AppAndWidgetTests: XCTestCase {
             )
         )
         store.updateMetricWidth(.half, accountID: accountID, metricID: metricIDs[0])
+        XCTAssertTrue(
+            store.isMetricLayoutCustomized(
+                accountID: accountID,
+                availableMetricIDs: metricIDs
+            )
+        )
+
+        store.resetMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: metricIDs + [temporarilyMissingID]
+        )
+        store.updateMetricVisibility(
+            false,
+            accountID: accountID,
+            metricID: temporarilyMissingID
+        )
         XCTAssertTrue(
             store.isMetricLayoutCustomized(
                 accountID: accountID,
