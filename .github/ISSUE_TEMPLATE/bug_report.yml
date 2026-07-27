@@ -80,29 +80,13 @@ body:
         3. Observe…
 
   - type: input
-    id: app-version
+    id: system-details
     attributes:
-      label: CodexBar version and build
-      description: Find this in CodexBar Settings.
-      placeholder: 1.2.0 (123)
+      label: CodexBar, operating system, and device
+      description: Include the CodexBar version/build, relevant iOS, iPadOS, or watchOS version, and general device model. Do not include serial numbers or other device identifiers.
+      placeholder: CodexBar 1.2.0 (123), iOS 26.0, iPhone 17
     validations:
       required: true
-
-  - type: input
-    id: operating-system
-    attributes:
-      label: Operating-system version
-      description: Include the relevant iOS, iPadOS, or watchOS version.
-      placeholder: iOS 26.0
-    validations:
-      required: true
-
-  - type: input
-    id: device-model
-    attributes:
-      label: General device model
-      description: A general model is enough; do not include serial numbers or other device identifiers.
-      placeholder: iPhone 17 or Apple Watch Series 11
 
   - type: textarea
     id: privacy-safe-diagnostics
