@@ -1,0 +1,126 @@
+name: Report a problem
+description: Tell us about a reproducible problem with CodexBar
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve CodexBar.
+
+        GitHub issues and attachments are public. Do not include API keys, access or refresh tokens, passwords, cookies, authorization headers, account identifiers, email addresses, or other secrets.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the problem.
+      placeholder: CodexBar shows…
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected-surface
+    attributes:
+      label: Affected surface
+      description: Where did the problem occur?
+      options:
+        - Provider or account setup
+        - Dashboard
+        - History
+        - Alerts
+        - Widget
+        - Apple Watch
+        - Authentication
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected-provider
+    attributes:
+      label: Affected provider
+      description: Select the provider when the problem is provider-specific.
+      options:
+        - ChatGPT / Codex
+        - Claude
+        - Cursor
+        - GitHub Copilot
+        - OpenRouter
+        - OpenCode Go / Zen
+        - Moonshot (Kimi)
+        - Not provider-specific
+        - Other
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What did you expect CodexBar to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to reproduce
+      description: List the shortest reliable sequence, or explain why the problem is intermittent.
+      placeholder: |
+        1. Open…
+        2. Choose…
+        3. Observe…
+
+  - type: input
+    id: app-version
+    attributes:
+      label: CodexBar version and build
+      description: Find this in CodexBar Settings.
+      placeholder: 1.2.0 (123)
+    validations:
+      required: true
+
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating-system version
+      description: Include the relevant iOS, iPadOS, or watchOS version.
+      placeholder: iOS 26.0
+    validations:
+      required: true
+
+  - type: input
+    id: device-model
+    attributes:
+      label: General device model
+      description: A general model is enough; do not include serial numbers or other device identifiers.
+      placeholder: iPhone 17 or Apple Watch Series 11
+
+  - type: textarea
+    id: privacy-safe-diagnostics
+    attributes:
+      label: Privacy-safe diagnostic text
+      description: Optional. Paste only details you have reviewed and know contain no secrets or personal information.
+      render: text
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Optional. Drag images here only after removing account names, email addresses, identifiers, credentials, and other private information.
+
+  - type: checkboxes
+    id: privacy-confirmation
+    attributes:
+      label: Public-report confirmation
+      options:
+        - label: I understand this report and its attachments are public, and I have removed secrets and personal information.
+          required: true

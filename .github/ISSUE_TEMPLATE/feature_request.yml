@@ -1,0 +1,74 @@
+name: Suggest an improvement
+description: Describe a problem or outcome that would make CodexBar better
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea for CodexBar. Start with the problem and desired outcome so we can consider the smallest useful solution.
+
+        GitHub issues and attachments are public. Do not include API keys, access or refresh tokens, passwords, cookies, authorization headers, account identifiers, email addresses, or other secrets.
+
+  - type: textarea
+    id: underlying-problem
+    attributes:
+      label: Underlying problem
+      description: What is difficult, missing, or taking too much effort today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired-outcome
+    attributes:
+      label: Desired outcome
+      description: What would a successful improvement let you accomplish?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency-importance
+    attributes:
+      label: Frequency or importance
+      description: How often does this affect you, or how important is the outcome?
+      options:
+        - Every day
+        - Several times a week
+        - Occasionally
+        - Rarely, but high impact
+        - Nice to have
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected-surface
+    attributes:
+      label: Affected surface
+      description: Which part of CodexBar would benefit?
+      options:
+        - Provider or account setup
+        - Dashboard
+        - History
+        - Alerts
+        - Widget
+        - Apple Watch
+        - Authentication
+        - Settings
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Optional. Add examples, constraints, or sketches that clarify the outcome without exposing private information.
+
+  - type: checkboxes
+    id: privacy-confirmation
+    attributes:
+      label: Public-request confirmation
+      options:
+        - label: I understand this request and its attachments are public, and I have removed secrets and personal information.
+          required: true
