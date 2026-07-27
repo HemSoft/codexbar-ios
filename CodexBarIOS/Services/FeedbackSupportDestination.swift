@@ -80,20 +80,15 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
     func url(context: FeedbackSupportContext) -> URL {
         switch self {
         case .reportProblem:
-            var components = URLComponents(
-                string: "https://github.com/HemSoft/codexbar-ios/issues/new"
-            )!
-            components.queryItems = [
-                URLQueryItem(name: "template", value: "bug_report.yml"),
-                URLQueryItem(name: "system-details", value: context.systemDetails),
-            ]
-            components.percentEncodedQuery = components.percentEncodedQuery?
-                .replacingOccurrences(of: "+", with: "%2B")
-            return components.url!
+            return Self.issueFormURL(
+                template: "bug_report.yml",
+                systemDetails: context.systemDetails
+            )
         case .suggestImprovement:
-            return URL(
-                string: "https://github.com/HemSoft/codexbar-ios/issues/new?template=feature_request.yml"
-            )!
+            return Self.issueFormURL(
+                template: "feature_request.yml",
+                systemDetails: context.systemDetails
+            )
         case .knownIssues:
             var components = URLComponents(
                 string: "https://github.com/HemSoft/codexbar-ios/issues"
@@ -107,5 +102,18 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
         case .rateCodexBar:
             return AppReviewLinks.writeReviewURL
         }
+    }
+
+    private static func issueFormURL(template: String, systemDetails: String) -> URL {
+        var components = URLComponents(
+            string: "https://github.com/HemSoft/codexbar-ios/issues/new"
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "template", value: template),
+            URLQueryItem(name: "system-details", value: systemDetails),
+        ]
+        components.percentEncodedQuery = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
+        return components.url!
     }
 }

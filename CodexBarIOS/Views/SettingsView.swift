@@ -693,7 +693,7 @@ private struct FeedbackSupportView: View {
                 }
             } footer: {
                 Text(
-                    "Problem reports include only the CodexBar version, build, operating-system version, and general device category. You can review or remove that text in GitHub before submitting."
+                    "GitHub report forms include only the CodexBar version, build, operating-system version, and general device category. You can review or remove that text in GitHub before submitting."
                 )
             }
         }

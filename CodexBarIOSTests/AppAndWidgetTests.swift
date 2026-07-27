@@ -710,6 +710,11 @@ final class AppAndWidgetTests: XCTestCase {
             improvementComponents.queryItems?.first(where: { $0.name == "template" })?.value,
             "feature_request.yml"
         )
+        XCTAssertEqual(
+            improvementComponents.queryItems?.first(where: { $0.name == "system-details" })?.value,
+            context.systemDetails
+        )
+        XCTAssertTrue(try XCTUnwrap(improvementComponents.percentEncodedQuery).contains("%2B"))
 
         let knownIssuesURL = FeedbackSupportDestination.knownIssues.url(context: context)
         let knownIssuesComponents = try XCTUnwrap(
