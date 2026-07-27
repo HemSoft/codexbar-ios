@@ -573,6 +573,12 @@ struct ProviderUsageCard: View {
                 metricDetailPresentation = nil
             }
         }
+        .onChange(of: informationSections) {
+            isShowingMoreInformation = Self.reconciledMoreInformationPresentation(
+                currentlyPresented: isShowingMoreInformation,
+                sections: informationSections
+            )
+        }
     }
 
     private var cardSeverity: UsageSeverity {
@@ -639,6 +645,13 @@ struct ProviderUsageCard: View {
             ))
         }
         return sections.filter { !$0.items.isEmpty }
+    }
+
+    static func reconciledMoreInformationPresentation(
+        currentlyPresented: Bool,
+        sections: [ProviderCardInformationSection]
+    ) -> Bool {
+        currentlyPresented && !sections.isEmpty
     }
 
     static func showsMetricVisibilityControls(

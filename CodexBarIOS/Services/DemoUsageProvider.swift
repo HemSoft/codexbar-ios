@@ -155,8 +155,19 @@ public extension DemoUsageProvider {
                     ),
                 ],
                 usageMessages: ["Fable usage is capped within the all-model weekly allowance."],
-                dashboardUsageMessages: ["Fable usage is capped within the all-model weekly allowance."],
+                dashboardUsageMessages: [],
                 cardInformationSections: [
+                    ProviderCardInformationSection(
+                        id: "claude.limit-details",
+                        title: "Limit details",
+                        items: [
+                            ProviderCardInformationItem(
+                                id: "claude.limit.weekly-scoped-fable",
+                                label: "Fable weekly limit",
+                                detail: "Counts toward the all-model weekly allowance"
+                            ),
+                        ]
+                    ),
                     ProviderCardInformationSection(
                         id: "claude.account-details",
                         title: "Account details",

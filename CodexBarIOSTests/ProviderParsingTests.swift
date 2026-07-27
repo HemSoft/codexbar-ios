@@ -3056,6 +3056,33 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertTrue(result.usageMessages.contains {
             $0 == "Fable usage is capped within the all-model weekly allowance."
         })
+        XCTAssertFalse(result.dashboardUsageMessages.contains {
+            $0 == "Fable usage is capped within the all-model weekly allowance."
+        })
+        XCTAssertEqual(
+            result.cardInformationSections.first,
+            ProviderCardInformationSection(
+                id: "claude.limit-details",
+                title: "Limit details",
+                items: [
+                    ProviderCardInformationItem(
+                        id: "claude.limit.weekly-scoped-fable",
+                        label: "Fable weekly limit",
+                        detail: "Counts toward the all-model weekly allowance"
+                    ),
+                    ProviderCardInformationItem(
+                        id: "claude.limit.weekly-scoped-futuremodel",
+                        label: "Future Model weekly limit",
+                        detail: "Counts toward the all-model weekly allowance"
+                    ),
+                    ProviderCardInformationItem(
+                        id: "claude.limit.weekly-scoped-claudesonnet45",
+                        label: "Claude Sonnet 4.5 weekly limit",
+                        detail: "Counts toward the all-model weekly allowance"
+                    ),
+                ]
+            )
+        )
         XCTAssertFalse(result.bars.contains { $0.label.contains("Do Not Show") })
 
         let incompleteStructured = try XCTUnwrap(ClaudeUsageParser.parse(

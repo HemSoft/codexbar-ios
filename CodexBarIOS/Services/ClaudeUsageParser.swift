@@ -165,6 +165,7 @@ public enum ClaudeUsageParser {
         let legacyFallbackKey: String?
         let legacySemanticKey: String?
         let usageMessage: String?
+        let informationItem: ProviderCardInformationItem?
     }
 
     private struct LimitScope: Decodable {
@@ -324,6 +325,7 @@ public enum ClaudeUsageParser {
         var bars: [UsageBar] = []
         var semanticKeys = Set<String>()
         var usageMessages: [String] = []
+        var limitInformationItems: [ProviderCardInformationItem] = []
 
         let structuredLimits = usage.limits ?? []
         let hasScopedSessionLimit = structuredLimits.contains { limit in
@@ -397,6 +399,9 @@ public enum ClaudeUsageParser {
             if let usageMessage = definition.usageMessage {
                 usageMessages.append(usageMessage)
             }
+            if let informationItem = definition.informationItem {
+                limitInformationItems.append(informationItem)
+            }
         }
 
         appendLegacyBar(
@@ -446,12 +451,27 @@ public enum ClaudeUsageParser {
 
         let extraUsage = spendMetrics(from: usage.spend, fallback: usage.extraUsage)
         let dashboardUsageMessages = uniqueMessages(
-            usageMessages + extraUsage.messages
+            extraUsage.messages
                 .filter { $0.kind != .routine }
                 .map(\.text)
         )
         usageMessages.append(contentsOf: extraUsage.messages.map(\.text))
-        let informationItems = extraUsage.messages.compactMap(\.informationItem)
+        let accountInformationItems = extraUsage.messages.compactMap(\.informationItem)
+        var cardInformationSections: [ProviderCardInformationSection] = []
+        if !limitInformationItems.isEmpty {
+            cardInformationSections.append(ProviderCardInformationSection(
+                id: "claude.limit-details",
+                title: "Limit details",
+                items: limitInformationItems
+            ))
+        }
+        if !accountInformationItems.isEmpty {
+            cardInformationSections.append(ProviderCardInformationSection(
+                id: "claude.account-details",
+                title: "Account details",
+                items: accountInformationItems
+            ))
+        }
 
         guard !bars.isEmpty || !extraUsage.metrics.isEmpty || !usageMessages.isEmpty else {
             return nil
@@ -469,15 +489,7 @@ public enum ClaudeUsageParser {
             monetaryMetrics: extraUsage.metrics,
             usageMessages: uniqueMessages(usageMessages),
             dashboardUsageMessages: dashboardUsageMessages,
-            cardInformationSections: informationItems.isEmpty
-                ? []
-                : [
-                    ProviderCardInformationSection(
-                        id: "claude.account-details",
-                        title: "Account details",
-                        items: informationItems
-                    ),
-                ],
+            cardInformationSections: cardInformationSections,
             fetchedAt: fetchedAt
         )
     }
@@ -983,7 +995,8 @@ public enum ClaudeUsageParser {
                     duration: 18_000,
                     legacyFallbackKey: nil,
                     legacySemanticKey: nil,
-                    usageMessage: nil
+                    usageMessage: nil,
+                    informationItem: nil
                 )
             }
             return StructuredLimitDefinition(
@@ -995,7 +1008,8 @@ public enum ClaudeUsageParser {
                 duration: 18_000,
                 legacyFallbackKey: "session",
                 legacySemanticKey: nil,
-                usageMessage: nil
+                usageMessage: nil,
+                informationItem: nil
             )
         case "weekly_all":
             guard limit.group == nil || limit.group == "weekly" else {
@@ -1008,7 +1022,8 @@ public enum ClaudeUsageParser {
                 duration: 604_800,
                 legacyFallbackKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
                 legacySemanticKey: nil,
-                usageMessage: nil
+                usageMessage: nil,
+                informationItem: nil
             )
         case "weekly_scoped":
             guard
@@ -1030,7 +1045,12 @@ public enum ClaudeUsageParser {
                 duration: 604_800,
                 legacyFallbackKey: legacyFamilyIdentity?.semanticKey,
                 legacySemanticKey: legacyFamilyIdentity?.semanticKey,
-                usageMessage: "\(modelName) usage is capped within the all-model weekly allowance."
+                usageMessage: "\(modelName) usage is capped within the all-model weekly allowance.",
+                informationItem: ProviderCardInformationItem(
+                    id: "claude.limit.\(key)",
+                    label: "\(modelName) weekly limit",
+                    detail: "Counts toward the all-model weekly allowance"
+                )
             )
         default:
             return nil

@@ -228,6 +228,24 @@ final class AppAndWidgetTests: XCTestCase {
             ProviderUsageCard.informationSections(for: resultWithInformation),
             resultWithInformation.cardInformationSections
         )
+        XCTAssertTrue(
+            ProviderUsageCard.reconciledMoreInformationPresentation(
+                currentlyPresented: true,
+                sections: resultWithInformation.cardInformationSections
+            )
+        )
+        XCTAssertFalse(
+            ProviderUsageCard.reconciledMoreInformationPresentation(
+                currentlyPresented: true,
+                sections: []
+            )
+        )
+        XCTAssertFalse(
+            ProviderUsageCard.reconciledMoreInformationPresentation(
+                currentlyPresented: false,
+                sections: resultWithInformation.cardInformationSections
+            )
+        )
         XCTAssertEqual(
             ProviderUsageCard.metricVisibilityAccessibilityValue(isVisible: true),
             "Shown"
@@ -361,7 +379,15 @@ final class AppAndWidgetTests: XCTestCase {
             claudeResult?.dashboardUsageMessages.contains("Usage credits are enabled.") ?? true
         )
         XCTAssertEqual(
-            claudeResult?.cardInformationSections.first?.items.map(\.label),
+            claudeResult?.cardInformationSections.first {
+                $0.id == "claude.limit-details"
+            }?.items.map(\.label),
+            ["Fable weekly limit"]
+        )
+        XCTAssertEqual(
+            claudeResult?.cardInformationSections.first {
+                $0.id == "claude.account-details"
+            }?.items.map(\.label),
             ["Usage credits", "Auto-reload"]
         )
         let openCodeResult = results.first(where: { $0.providerID == .openCodeZen })
