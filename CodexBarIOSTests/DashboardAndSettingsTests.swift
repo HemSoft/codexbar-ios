@@ -1402,11 +1402,15 @@ final class DashboardAndSettingsTests: XCTestCase {
         sender.completeActivation()
         XCTAssertEqual(sender.publishedForces, [true])
 
+        let snapshotPublished = expectation(description: "Coalesced Watch snapshot published")
+        sender.onPublish = {
+            snapshotPublished.fulfill()
+        }
         let metricID = bar.metricIdentifier(providerID: .codex, index: 0)
         store.updateVisualizationStyle(.segmentedBar, accountID: configuration.id, metricID: metricID)
         store.updateVisualizationStyle(.circularRing, accountID: configuration.id, metricID: metricID)
         store.updateVisualizationStyle(.largeNumeric, accountID: configuration.id, metricID: metricID)
-        try? await Task.sleep(for: .milliseconds(30))
+        await fulfillment(of: [snapshotPublished], timeout: 1)
 
         XCTAssertEqual(sender.publishedForces, [true, false])
         XCTAssertEqual(
@@ -1439,8 +1443,12 @@ final class DashboardAndSettingsTests: XCTestCase {
         sender.completeActivation()
         XCTAssertTrue(sender.snapshots.isEmpty)
 
+        let snapshotPublished = expectation(description: "Empty Watch snapshot published")
+        sender.onPublish = {
+            snapshotPublished.fulfill()
+        }
         XCTAssertTrue(store.removeAccount(configuration))
-        try? await Task.sleep(for: .milliseconds(30))
+        await fulfillment(of: [snapshotPublished], timeout: 1)
         XCTAssertEqual(sender.snapshots.count, 1)
         XCTAssertTrue(sender.snapshots[0].accounts.isEmpty)
         withExtendedLifetime(coordinator) {}
@@ -2196,6 +2204,7 @@ private final class RecordingWatchSnapshotSender: WatchSnapshotSending {
     private(set) var activationCount = 0
     private(set) var snapshots: [WatchDashboardSnapshot] = []
     private(set) var publishedForces: [Bool] = []
+    var onPublish: (() -> Void)?
 
     func activate(onActivated: @escaping @MainActor () -> Void) {
         activationCount += 1
@@ -2205,6 +2214,7 @@ private final class RecordingWatchSnapshotSender: WatchSnapshotSending {
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool {
         snapshots.append(snapshot)
         publishedForces.append(force)
+        onPublish?()
         return true
     }
 
