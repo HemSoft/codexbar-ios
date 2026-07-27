@@ -145,24 +145,28 @@ struct ContentView: View {
                                                             finishDrag: finishCardDrag
                                                         )
                                                     )
-                                                    .accessibilityAction(
-                                                        named: Text("Move Earlier")
-                                                    ) {
-                                                        moveCard(
-                                                            item.id,
-                                                            within: section.items,
-                                                            offset: -1
+                                                    .modifier(
+                                                        DashboardCardReorderActions(
+                                                            canMoveEarlier:
+                                                                section.items.first?.id != item.id,
+                                                            canMoveLater:
+                                                                section.items.last?.id != item.id,
+                                                            moveEarlier: {
+                                                                moveCard(
+                                                                    item.id,
+                                                                    within: section.items,
+                                                                    offset: -1
+                                                                )
+                                                            },
+                                                            moveLater: {
+                                                                moveCard(
+                                                                    item.id,
+                                                                    within: section.items,
+                                                                    offset: 1
+                                                                )
+                                                            }
                                                         )
-                                                    }
-                                                    .accessibilityAction(
-                                                        named: Text("Move Later")
-                                                    ) {
-                                                        moveCard(
-                                                            item.id,
-                                                            within: section.items,
-                                                            offset: 1
-                                                        )
-                                                    }
+                                                    )
                                             } else {
                                                 card
                                                     .frame(
@@ -767,6 +771,30 @@ private struct ProviderUsageCardDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         finishDrag()
         return true
+    }
+}
+
+private struct DashboardCardReorderActions: ViewModifier {
+    let canMoveEarlier: Bool
+    let canMoveLater: Bool
+    let moveEarlier: () -> Void
+    let moveLater: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if canMoveEarlier, canMoveLater {
+            content
+                .accessibilityAction(named: Text("Move Earlier"), moveEarlier)
+                .accessibilityAction(named: Text("Move Later"), moveLater)
+        } else if canMoveEarlier {
+            content
+                .accessibilityAction(named: Text("Move Earlier"), moveEarlier)
+        } else if canMoveLater {
+            content
+                .accessibilityAction(named: Text("Move Later"), moveLater)
+        } else {
+            content
+        }
     }
 }
 
