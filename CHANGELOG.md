@@ -70,6 +70,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Removed duplicated percentages from semicircular usage gauges and centered
+  their values while preserving aligned, accessible metric tiles.
+  ([#151](https://github.com/HemSoft/codexbar-ios/issues/151))
 - Prevented additional iPad windows from starting duplicate dashboard refresh,
   history, alert, widget, and Apple Watch publication work.
   ([#139](https://github.com/HemSoft/codexbar-ios/issues/139))

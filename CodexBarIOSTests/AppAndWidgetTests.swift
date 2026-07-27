@@ -1923,6 +1923,59 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    func testSemicircularMetricTilesShowOneValueAndKeepOneAccessibilitySummary() {
+        XCTAssertFalse(MetricVisualizationStyle.semicircularDial.showsStandaloneMetricTileValue)
+        XCTAssertTrue(
+            MetricVisualizationStyle.allCases
+                .filter { $0 != .semicircularDial }
+                .allSatisfy(\.showsStandaloneMetricTileValue)
+        )
+
+        let bar = UsageBar(
+            stableKey: "session",
+            label: "Current session",
+            used: 42,
+            limit: 100
+        )
+        let result = ProviderUsageResult(
+            accountID: "claude.work",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Claude usage",
+            bars: [bar],
+            fetchedAt: Date()
+        )
+        let accessibilityLabel = ProviderUsageCard.usageMetricAccessibilityLabel(bar, in: result)
+        XCTAssertEqual(
+            accessibilityLabel.components(separatedBy: bar.usageText).count - 1,
+            1
+        )
+        XCTAssertTrue(accessibilityLabel.hasPrefix("Current session, 42%"))
+    }
+
+    func testSemicircularMetricTilesPairAtCompactWidthsAndCollapseForAccessibilitySizes() {
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .semicircularDial,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .half
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .semicircularDial,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: true
+            ),
+            .full
+        )
+    }
+
     func testMetricTileRowsPackInSavedOrderWithoutAvoidableHoles() {
         let metrics = [
             ProviderUsageMetric(id: "a", label: "A", kind: .usageBar(index: 0)),

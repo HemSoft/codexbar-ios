@@ -25,6 +25,12 @@ enum ProviderMetricTileResolvedWidth: Equatable, Sendable {
     case full
 }
 
+extension MetricVisualizationStyle {
+    var showsStandaloneMetricTileValue: Bool {
+        self != .semicircularDial
+    }
+}
+
 struct ProviderMetricTileGridItem: Identifiable, Equatable, Sendable {
     let metric: ProviderUsageMetric
     let width: ProviderMetricTileResolvedWidth
@@ -741,14 +747,17 @@ struct ProviderUsageCard: View {
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Text(bar.usageText)
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .monospacedDigit()
+                        let visualizationStyle = visualizationStyleForMetric(item.metric.id)
+                        if visualizationStyle.showsStandaloneMetricTileValue {
+                            Text(bar.usageText)
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .monospacedDigit()
+                        }
 
                         MetricVisualizationView(
                             bar: bar,
-                            style: visualizationStyleForMetric(item.metric.id),
+                            style: visualizationStyle,
                             showsSeverity: result.hasCurrentBars
                         )
 
@@ -859,18 +868,7 @@ struct ProviderUsageCard: View {
     private func metricAccessibilityLabel(_ metric: ProviderUsageMetric) -> String {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
-            let bar = result.bars[index]
-            return [
-                bar.label,
-                bar.usageText,
-                "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit))",
-                result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName : "status unavailable",
-                result.hasCurrentBars ? "fresh" : "stale",
-                bar.localizedResetDescription(),
-                result.hasCurrentBars ? bar.projectionDescription() : nil,
-            ]
-            .compactMap { $0 }
-            .joined(separator: ", ")
+            return Self.usageMetricAccessibilityLabel(result.bars[index], in: result)
         case .creditsRemaining:
             return [
                 metric.label,
@@ -893,6 +891,23 @@ struct ProviderUsageCard: View {
         default:
             return metric.label
         }
+    }
+
+    static func usageMetricAccessibilityLabel(
+        _ bar: UsageBar,
+        in result: ProviderUsageResult
+    ) -> String {
+        [
+            bar.label,
+            bar.usageText,
+            "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit))",
+            result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName : "status unavailable",
+            result.hasCurrentBars ? "fresh" : "stale",
+            bar.localizedResetDescription(),
+            result.hasCurrentBars ? bar.projectionDescription() : nil,
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
     }
 
     static func formattedUsageAmount(_ value: Double) -> String {
@@ -2510,13 +2525,16 @@ private struct MetricVisualizationCustomizationView: View {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
             let bar = result.bars[index]
+            let visualizationStyle = visualizationStyleForMetric(metric.id)
             VStack(alignment: .leading, spacing: 8) {
-                Text(bar.usageText)
-                    .font(.title3.weight(.semibold))
-                    .monospacedDigit()
+                if visualizationStyle.showsStandaloneMetricTileValue {
+                    Text(bar.usageText)
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                }
                 MetricVisualizationView(
                     bar: bar,
-                    style: visualizationStyleForMetric(metric.id),
+                    style: visualizationStyle,
                     showsSeverity: showsSeverity
                 )
             }
@@ -2803,17 +2821,23 @@ private struct SemicircularUsageDial: View {
     let tint: Color
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             SemicircleShape()
                 .stroke(Color(.tertiarySystemFill), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .frame(width: 112, height: 58)
             SemicircleShape()
                 .trim(from: 0, to: min(max(fraction, 0), 1))
                 .stroke(tint, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .frame(width: 112, height: 58)
             Text(valueText)
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .frame(maxWidth: 88)
+                .offset(y: 5)
         }
-        .frame(width: 112, height: 58)
+        .frame(minWidth: 112, minHeight: 58)
     }
 }
 
