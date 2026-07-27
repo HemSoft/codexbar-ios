@@ -61,6 +61,10 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Simplified provider cards by moving routine Claude and Cursor context plus
+  Cursor alert details into an accessible More Information sheet, and by
+  hiding safe projection copy while keeping limit-hit warnings visible.
+  ([#160](https://github.com/HemSoft/codexbar-ios/issues/160))
 - Let users open a native inventory from the Codex card, inspect each saved
   reset and its localized expiration, and explicitly choose which reset to use.
   ([#101](https://github.com/HemSoft/codexbar-ios/issues/101))

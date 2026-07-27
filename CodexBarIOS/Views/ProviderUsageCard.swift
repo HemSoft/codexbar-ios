@@ -9,6 +9,7 @@ struct CodexBankedResetInventoryPresentation: Identifiable, Equatable {
 }
 
 enum ProviderUsageCardMenuAction: Hashable {
+    case moreInformation
     case configureAccount
     case customizeMetrics
 }
@@ -211,6 +212,7 @@ struct ProviderUsageCard: View {
     @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
     @State private var isResetActionUnavailable = false
     @State private var isCustomizingMetrics = false
+    @State private var isShowingMoreInformation = false
     @State private var metricDetailPresentation: ProviderMetricTileDetailPresentation?
     @StateObject private var resetRedemptionController: CodexBankedResetRedemptionController
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -354,10 +356,21 @@ struct ProviderUsageCard: View {
 
                 Menu {
                     ForEach(
-                        Self.menuActions(for: result, isMetricVisible: isMetricVisible),
+                        Self.menuActions(
+                            for: result,
+                            alerts: displayedAlerts,
+                            isMetricVisible: isMetricVisible
+                        ),
                         id: \.self
                     ) { action in
                         switch action {
+                        case .moreInformation:
+                            Button {
+                                isShowingMoreInformation = true
+                            } label: {
+                                Label("More Information…", systemImage: "info.circle")
+                            }
+                            .accessibilityLabel("More information for \(result.title)")
                         case .configureAccount:
                             Button(action: onConfigureAccount) {
                                 Label("Configure Account…", systemImage: "gearshape")
@@ -383,8 +396,8 @@ struct ProviderUsageCard: View {
                     .accessibilityHidden(true)
             }
 
-            if !displayedAlerts.isEmpty {
-                UsageAlertSummaryView(alerts: displayedAlerts)
+            if !inlineAlerts.isEmpty {
+                UsageAlertSummaryView(alerts: inlineAlerts)
             }
 
             if showsRecoveryAction {
@@ -469,7 +482,7 @@ struct ProviderUsageCard: View {
                 .accessibilityLabel(resetFeedback.message)
             }
 
-            ForEach(result.usageMessages, id: \.self) { message in
+            ForEach(result.dashboardUsageMessages, id: \.self) { message in
                 Label(message, systemImage: "info.circle")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -523,6 +536,11 @@ struct ProviderUsageCard: View {
                 onMarkMetricsSeen: onMarkMetricsSeen
             )
         }
+        .sheet(isPresented: $isShowingMoreInformation) {
+            ProviderCardInformationView(
+                sections: informationSections
+            )
+        }
         .sheet(item: $metricDetailPresentation) { presentation in
             if let metric = Self.metric(withID: presentation.metricID, in: result) {
                 ProviderMetricTileDetailView(
@@ -554,6 +572,12 @@ struct ProviderUsageCard: View {
             if Self.metric(withID: metricID, in: result) == nil {
                 metricDetailPresentation = nil
             }
+        }
+        .onChange(of: informationSections) {
+            isShowingMoreInformation = Self.reconciledMoreInformationPresentation(
+                currentlyPresented: isShowingMoreInformation,
+                sections: informationSections
+            )
         }
     }
 
@@ -587,12 +611,47 @@ struct ProviderUsageCard: View {
 
     static func menuActions(
         for result: ProviderUsageResult,
+        alerts: [UsageAlertDetail] = [],
         isMetricVisible: (String) -> Bool = { _ in true }
     ) -> [ProviderUsageCardMenuAction] {
-        if result.availableMetrics.isEmpty {
-            return [.configureAccount]
+        var actions: [ProviderUsageCardMenuAction] = []
+        if !informationSections(for: result, alerts: alerts).isEmpty {
+            actions.append(.moreInformation)
         }
-        return [.configureAccount, .customizeMetrics]
+        if result.availableMetrics.isEmpty {
+            actions.append(.configureAccount)
+            return actions
+        }
+        actions.append(contentsOf: [.configureAccount, .customizeMetrics])
+        return actions
+    }
+
+    static func informationSections(
+        for result: ProviderUsageResult,
+        alerts: [UsageAlertDetail] = []
+    ) -> [ProviderCardInformationSection] {
+        var sections = result.cardInformationSections
+        if result.providerID == .cursor, !alerts.isEmpty {
+            sections.append(ProviderCardInformationSection(
+                id: "cursor.active-alerts",
+                title: "Active alerts",
+                items: alerts.map {
+                    ProviderCardInformationItem(
+                        id: "cursor.alert.\($0.id)",
+                        label: $0.title,
+                        detail: $0.message
+                    )
+                }
+            ))
+        }
+        return sections.filter { !$0.items.isEmpty }
+    }
+
+    static func reconciledMoreInformationPresentation(
+        currentlyPresented: Bool,
+        sections: [ProviderCardInformationSection]
+    ) -> Bool {
+        currentlyPresented && !sections.isEmpty
     }
 
     static func showsMetricVisibilityControls(
@@ -612,6 +671,14 @@ struct ProviderUsageCard: View {
             return alerts
         }
         return alerts.filter { $0.kind != .usage }
+    }
+
+    var inlineAlerts: [UsageAlertDetail] {
+        result.providerID == .cursor ? [] : displayedAlerts
+    }
+
+    var informationSections: [ProviderCardInformationSection] {
+        Self.informationSections(for: result, alerts: displayedAlerts)
     }
 
     var showsHistory: Bool {
@@ -765,7 +832,9 @@ struct ProviderUsageCard: View {
                             if let resetDescription = bar.localizedResetDescription() {
                                 supportingText(resetDescription)
                             }
-                            if result.hasCurrentBars, let projectionDescription = bar.projectionDescription() {
+                            if result.hasCurrentBars,
+                               let projectionDescription = bar.dashboardProjectionDescription()
+                            {
                                 supportingText(projectionDescription)
                             }
                         }
@@ -904,7 +973,7 @@ struct ProviderUsageCard: View {
             result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName : "status unavailable",
             result.hasCurrentBars ? "fresh" : "stale",
             bar.localizedResetDescription(),
-            result.hasCurrentBars ? bar.projectionDescription() : nil,
+            result.hasCurrentBars ? bar.dashboardProjectionDescription() : nil,
         ]
         .compactMap { $0 }
         .joined(separator: ", ")
@@ -1408,6 +1477,45 @@ struct ProviderUsagePlaceholderCard: View {
         Capsule()
             .fill(Color(.tertiarySystemFill))
             .frame(width: width, height: height)
+    }
+}
+
+private struct ProviderCardInformationView: View {
+    let sections: [ProviderCardInformationSection]
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(sections) { section in
+                    Section(section.title) {
+                        ForEach(section.items) { item in
+                            LabeledContent {
+                                Text(item.detail)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.trailing)
+                            } label: {
+                                Text(item.label)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(item.label), \(item.detail)")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("More Information")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 

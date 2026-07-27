@@ -164,6 +164,32 @@ final class UsageAlertTests: XCTestCase {
         )
 
         XCTAssertEqual(cursorCard.displayedAlerts, [usageAlert, severityAlert])
+        XCTAssertTrue(cursorCard.inlineAlerts.isEmpty)
+        XCTAssertEqual(
+            cursorCard.informationSections,
+            [
+                ProviderCardInformationSection(
+                    id: "cursor.active-alerts",
+                    title: "Active alerts",
+                    items: [
+                        ProviderCardInformationItem(
+                            id: "cursor.alert.usage.codex.personal.weekly",
+                            label: "Weekly at 92%",
+                            detail: "92 of 100 used. Alert threshold: 80%."
+                        ),
+                        ProviderCardInformationItem(
+                            id: "cursor.alert.severity.codex.personal",
+                            label: "Critical status",
+                            detail: "Weekly is projected to reach 100%."
+                        ),
+                    ]
+                ),
+            ]
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.menuActions(for: cursorResult, alerts: cursorCard.displayedAlerts),
+            [.moreInformation, .configureAccount, .customizeMetrics]
+        )
     }
 
     func testUsageAlertEvaluatorUsesInjectedNowForResetDescription() throws {

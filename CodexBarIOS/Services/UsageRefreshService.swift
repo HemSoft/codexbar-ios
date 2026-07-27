@@ -345,6 +345,8 @@ public final class UsageRefreshService: ObservableObject {
             creditsFetchedAt: creditsResult.creditsFetchedAt,
             monetaryMetrics: dataResult.monetaryMetrics,
             usageMessages: dataResult.usageMessages,
+            dashboardUsageMessages: dataResult.dashboardUsageMessages,
+            cardInformationSections: dataResult.cardInformationSections,
             codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,
             failureMessage: failureResult.failureMessage,
             recoveryAction: failureResult.recoveryAction,

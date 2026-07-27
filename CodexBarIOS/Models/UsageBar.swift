@@ -1,14 +1,26 @@
 import Foundation
 
+public enum UsageProjectionSignificance: Equatable, Sendable {
+    case benign
+    case warning
+}
+
 public struct UsageProjectionDescriptionParts: Equatable, Sendable {
     public let leadingText: String
     public let timestamp: Date?
     public let trailingText: String
+    public let significance: UsageProjectionSignificance
 
-    public init(leadingText: String, timestamp: Date? = nil, trailingText: String = "") {
+    public init(
+        leadingText: String,
+        timestamp: Date? = nil,
+        trailingText: String = "",
+        significance: UsageProjectionSignificance = .warning
+    ) {
         self.leadingText = leadingText
         self.timestamp = timestamp
         self.trailingText = trailingText
+        self.significance = significance
     }
 
     public func formatted(using formatter: UserFacingDateTimeFormatter) -> String {
@@ -35,6 +47,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
     public let projectionPeriodEnd: Date?
     public let showProjectionOnCurrentBar: Bool
     public let projectionDescriptionOverride: String?
+    public let projectionSignificanceOverride: UsageProjectionSignificance?
 
     public init(
         id: UUID = UUID(),
@@ -50,7 +63,8 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         projectionPeriodStart: Date? = nil,
         projectionPeriodEnd: Date? = nil,
         showProjectionOnCurrentBar: Bool = false,
-        projectionDescriptionOverride: String? = nil
+        projectionDescriptionOverride: String? = nil,
+        projectionSignificanceOverride: UsageProjectionSignificance? = nil
     ) {
         self.id = id
         self.stableKey = stableKey
@@ -66,6 +80,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         self.projectionPeriodEnd = projectionPeriodEnd
         self.showProjectionOnCurrentBar = showProjectionOnCurrentBar
         self.projectionDescriptionOverride = projectionDescriptionOverride
+        self.projectionSignificanceOverride = projectionSignificanceOverride
     }
 
     public var fractionUsed: Double {
@@ -151,9 +166,22 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         projectionDescriptionParts(at: now)?.formatted(using: dateTimeFormatter)
     }
 
+    public func dashboardProjectionDescription(
+        at now: Date = Date(),
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current
+    ) -> String? {
+        guard let parts = projectionDescriptionParts(at: now), parts.significance != .benign else {
+            return nil
+        }
+        return parts.formatted(using: dateTimeFormatter)
+    }
+
     public func projectionDescriptionParts(at now: Date = Date()) -> UsageProjectionDescriptionParts? {
         if let projectionDescriptionOverride {
-            return UsageProjectionDescriptionParts(leadingText: projectionDescriptionOverride)
+            return UsageProjectionDescriptionParts(
+                leadingText: projectionDescriptionOverride,
+                significance: projectionSignificanceOverride ?? .warning
+            )
         }
 
         guard
@@ -177,7 +205,10 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         )
 
         guard limitHit.leadingText != Self.limitNotReachedDescription else {
-            return UsageProjectionDescriptionParts(leadingText: "Projected to stay under limit")
+            return UsageProjectionDescriptionParts(
+                leadingText: "Projected to stay under limit",
+                significance: .benign
+            )
         }
 
         return UsageProjectionDescriptionParts(

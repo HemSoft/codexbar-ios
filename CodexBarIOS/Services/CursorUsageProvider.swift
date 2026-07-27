@@ -78,8 +78,9 @@ public final class CursorUsageProvider: UsageProvider {
             accountID: configuration.id,
             providerID: .cursor,
             title: configuration.displayName,
-            subtitle: buildUsageSubtitle(usage.planUsage),
+            subtitle: "Cursor plan usage",
             bars: bars,
+            cardInformationSections: buildUsageInformationSections(usage.planUsage),
             fetchedAt: fetchedAt
         )
     }
@@ -223,23 +224,47 @@ public final class CursorUsageProvider: UsageProvider {
         return CursorBillingPeriod(start: start, end: end)
     }
 
-    private static func buildUsageSubtitle(_ plan: CursorPlanUsage?) -> String {
+    private static func buildUsageInformationSections(
+        _ plan: CursorPlanUsage?
+    ) -> [ProviderCardInformationSection] {
         guard let plan else {
-            return "Cursor plan usage"
+            return []
         }
 
-        var parts = ["Included usage"]
-        if let auto = plan.autoPercentUsed {
-            parts.append("Auto \(formatPercent(auto))")
-        }
-        if let api = plan.apiPercentUsed {
-            parts.append("API \(formatPercent(api))")
-        }
-        if parts.count == 1, let total = plan.totalPercentUsed {
-            parts.append("Total \(formatPercent(total))")
-        }
+        let items = [
+            plan.autoPercentUsed.map {
+                ProviderCardInformationItem(
+                    id: "cursor.included-usage.auto",
+                    label: "Auto",
+                    detail: formatPercent($0)
+                )
+            },
+            plan.apiPercentUsed.map {
+                ProviderCardInformationItem(
+                    id: "cursor.included-usage.api",
+                    label: "API",
+                    detail: formatPercent($0)
+                )
+            },
+            plan.totalPercentUsed.map {
+                ProviderCardInformationItem(
+                    id: "cursor.included-usage.total",
+                    label: "Total",
+                    detail: formatPercent($0)
+                )
+            },
+        ].compactMap { $0 }
 
-        return parts.joined(separator: " - ")
+        guard !items.isEmpty else {
+            return []
+        }
+        return [
+            ProviderCardInformationSection(
+                id: "cursor.included-usage",
+                title: "Included usage",
+                items: items
+            ),
+        ]
     }
 
     private static func parseUnixMilliseconds(_ value: String?) -> Date? {

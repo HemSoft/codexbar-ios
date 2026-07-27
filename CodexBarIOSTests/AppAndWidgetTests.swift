@@ -167,6 +167,27 @@ final class AppAndWidgetTests: XCTestCase {
             ],
             fetchedAt: Date()
         )
+        let resultWithInformation = ProviderUsageResult(
+            accountID: "claude.information",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live Claude usage",
+            bars: [],
+            cardInformationSections: [
+                ProviderCardInformationSection(
+                    id: "claude.account-details",
+                    title: "Account details",
+                    items: [
+                        ProviderCardInformationItem(
+                            id: "claude.auto-reload",
+                            label: "Auto-reload",
+                            detail: "Off"
+                        ),
+                    ]
+                ),
+            ],
+            fetchedAt: Date()
+        )
 
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: balanceOnlyResult),
@@ -198,6 +219,32 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: multiMetricBalanceResult),
             [.configureAccount, .customizeMetrics]
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.menuActions(for: resultWithInformation),
+            [.moreInformation, .configureAccount]
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.informationSections(for: resultWithInformation),
+            resultWithInformation.cardInformationSections
+        )
+        XCTAssertTrue(
+            ProviderUsageCard.reconciledMoreInformationPresentation(
+                currentlyPresented: true,
+                sections: resultWithInformation.cardInformationSections
+            )
+        )
+        XCTAssertFalse(
+            ProviderUsageCard.reconciledMoreInformationPresentation(
+                currentlyPresented: true,
+                sections: []
+            )
+        )
+        XCTAssertFalse(
+            ProviderUsageCard.reconciledMoreInformationPresentation(
+                currentlyPresented: false,
+                sections: resultWithInformation.cardInformationSections
+            )
         )
         XCTAssertEqual(
             ProviderUsageCard.metricVisibilityAccessibilityValue(isVisible: true),
@@ -328,10 +375,46 @@ final class AppAndWidgetTests: XCTestCase {
         let claudeResult = results.first(where: { $0.providerID == .claude })
         XCTAssertEqual(claudeResult?.monetaryMetrics.count, 2)
         XCTAssertFalse(claudeResult?.usageMessages.isEmpty ?? true)
+        XCTAssertFalse(
+            claudeResult?.dashboardUsageMessages.contains("Usage credits are enabled.") ?? true
+        )
+        XCTAssertEqual(
+            claudeResult?.cardInformationSections.first {
+                $0.id == "claude.limit-details"
+            }?.items.map(\.label),
+            ["Fable weekly limit"]
+        )
+        XCTAssertEqual(
+            claudeResult?.cardInformationSections.first {
+                $0.id == "claude.account-details"
+            }?.items.map(\.label),
+            ["Usage credits", "Auto-reload"]
+        )
         let openCodeResult = results.first(where: { $0.providerID == .openCodeZen })
         XCTAssertEqual(openCodeResult?.title, "OpenCode Go + Zen")
         XCTAssertFalse(openCodeResult?.bars.isEmpty ?? true)
         XCTAssertNotNil(openCodeResult?.creditsRemaining)
+        let cursorResult = results.first(where: { $0.providerID == .cursor })
+        XCTAssertEqual(cursorResult?.subtitle, "Cursor plan usage")
+        XCTAssertEqual(
+            cursorResult?.cardInformationSections.first?.items.map(\.label),
+            ["Auto", "API"]
+        )
+        for providerID in [ProviderID.cursor, .openCodeZen, .copilot] {
+            let safeProjection = results
+                .first(where: { $0.providerID == providerID })?
+                .bars
+                .first(where: { $0.projectionDescription() != nil })
+            XCTAssertEqual(
+                safeProjection?.projectionDescription(),
+                "Projected to stay under limit",
+                "Expected deterministic safe projection detail for \(providerID.rawValue)"
+            )
+            XCTAssertNil(
+                safeProjection?.dashboardProjectionDescription(),
+                "Safe projection copy should be absent from the \(providerID.rawValue) dashboard card"
+            )
+        }
 
         let historyStore = AppStoreScreenshotFixtures.historyStore(for: results)
         guard let codexResult = results.first(where: { $0.providerID == .codex }) else {
@@ -1957,6 +2040,46 @@ final class AppAndWidgetTests: XCTestCase {
             1
         )
         XCTAssertTrue(accessibilityLabel.hasPrefix("Current session, 42%"))
+    }
+
+    func testMetricTileAccessibilityOmitsBenignProjectionButKeepsWarning() {
+        let now = Date()
+        let start = now.addingTimeInterval(-24 * 60 * 60)
+        let end = now.addingTimeInterval(6 * 24 * 60 * 60)
+        let safeBar = UsageBar(
+            label: "API",
+            used: 5,
+            limit: 100,
+            projectionCurrent: 0.05,
+            projectionLimit: 1,
+            projectionPeriodStart: start,
+            projectionPeriodEnd: end,
+            showProjectionOnCurrentBar: true
+        )
+        let warningBar = UsageBar(
+            label: "Total",
+            used: 80,
+            limit: 100,
+            projectionCurrent: 0.8,
+            projectionLimit: 1,
+            projectionPeriodStart: start,
+            projectionPeriodEnd: end,
+            showProjectionOnCurrentBar: true
+        )
+        let result = ProviderUsageResult(
+            accountID: "cursor.accessibility",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Cursor plan usage",
+            bars: [safeBar, warningBar],
+            fetchedAt: now
+        )
+
+        let safeLabel = ProviderUsageCard.usageMetricAccessibilityLabel(safeBar, in: result)
+        let warningLabel = ProviderUsageCard.usageMetricAccessibilityLabel(warningBar, in: result)
+
+        XCTAssertFalse(safeLabel.contains("Projected to stay under limit"))
+        XCTAssertTrue(warningLabel.contains("Projected 100% at current pace"))
     }
 
     func testSemicircularMetricTilesPairAtCompactWidthsAndCollapseForAccessibilitySizes() {

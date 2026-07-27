@@ -509,6 +509,8 @@ public final class CopilotUsageProvider: UsageProvider {
             creditsFetchedAt: result.creditsFetchedAt,
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
+            dashboardUsageMessages: result.dashboardUsageMessages,
+            cardInformationSections: result.cardInformationSections,
             failureMessage: result.failureMessage,
             fetchedAt: result.fetchedAt
         )
