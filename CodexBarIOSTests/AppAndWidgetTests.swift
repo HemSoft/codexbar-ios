@@ -1888,6 +1888,11 @@ final class AppAndWidgetTests: XCTestCase {
             migrated.visualizationStyle(accountID: firstAccountID, metricID: metricID),
             .circularRing
         )
+        XCTAssertEqual(migrated.metricWidth(accountID: firstAccountID, metricID: metricID), .full)
+        XCTAssertFalse(
+            try XCTUnwrap(migrated.metricLayouts[firstAccountID]?.preferences[metricID])
+                .isNewlyDiscovered
+        )
         XCTAssertTrue(migrated.isMetricVisible(accountID: firstAccountID, metricID: metricID))
         XCTAssertTrue(migrated.isMetricVisible(accountID: firstAccountID, metricID: "codex.new"))
 
@@ -1915,6 +1920,465 @@ final class AppAndWidgetTests: XCTestCase {
             reloaded.visualizationStyle(accountID: firstAccountID, metricID: metricID),
             .segmentedBar
         )
+    }
+
+    @MainActor
+    func testCurrentDictionaryMetricPreferencesMigrateLosslessly() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let accountID = "claude.work"
+        let metricID = "claude.session"
+        let dictionaryPreferences = [
+            accountID: [
+                metricID: MetricCustomizationPreference(
+                    visualizationStyle: .semicircularDial,
+                    isVisible: false
+                ),
+            ],
+        ]
+        defaults.set(
+            try JSONEncoder().encode(dictionaryPreferences),
+            forKey: "metricVisualizationPreferences"
+        )
+
+        let migrated = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertFalse(migrated.isMetricVisible(accountID: accountID, metricID: metricID))
+        XCTAssertEqual(
+            migrated.visualizationStyle(accountID: accountID, metricID: metricID),
+            .semicircularDial
+        )
+        XCTAssertEqual(migrated.metricWidth(accountID: accountID, metricID: metricID), .full)
+        XCTAssertFalse(
+            try XCTUnwrap(migrated.metricLayouts[accountID]?.preferences[metricID])
+                .isNewlyDiscovered
+        )
+
+        let existingUncustomizedMetricID = "claude.weekly"
+        migrated.updateVisualizationStyle(
+            .largeNumeric,
+            accountID: accountID,
+            metricID: existingUncustomizedMetricID
+        )
+        XCTAssertEqual(
+            migrated.metricOrder(
+                accountID: accountID,
+                availableMetricIDs: [existingUncustomizedMetricID, metricID]
+            ),
+            [existingUncustomizedMetricID, metricID]
+        )
+        XCTAssertEqual(
+            migrated.metricWidth(
+                accountID: accountID,
+                metricID: existingUncustomizedMetricID
+            ),
+            .full
+        )
+        XCTAssertEqual(
+            migrated.visualizationStyle(
+                accountID: accountID,
+                metricID: existingUncustomizedMetricID
+            ),
+            .largeNumeric
+        )
+        XCTAssertFalse(
+            try XCTUnwrap(
+                migrated.metricLayouts[accountID]?.preferences[existingUncustomizedMetricID]
+            ).isNewlyDiscovered
+        )
+
+        let newlyAddedMetricID = "claude.monthly"
+        _ = migrated.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: [existingUncustomizedMetricID, metricID, newlyAddedMetricID]
+        )
+        XCTAssertEqual(
+            migrated.metricWidth(accountID: accountID, metricID: newlyAddedMetricID),
+            .automatic
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(migrated.metricLayouts[accountID]?.preferences[newlyAddedMetricID])
+                .isNewlyDiscovered
+        )
+
+        let persistedData = try XCTUnwrap(
+            defaults.data(forKey: "metricVisualizationPreferences")
+        )
+        let persistedLayouts = try JSONDecoder().decode(
+            [String: AccountMetricLayout].self,
+            from: persistedData
+        )
+        XCTAssertEqual(persistedLayouts, migrated.metricLayouts)
+    }
+
+    @MainActor
+    func testMetricLayoutsPersistOrderWidthAndDiscoveryAcrossStoreRecreation() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let accountID = "codex.personal"
+        let sessionID = "codex.session"
+        let missingID = "codex.temporarily-missing"
+        let weeklyID = "codex.weekly"
+        let newID = "codex.monthly"
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+
+        XCTAssertEqual(
+            store.metricOrder(
+                accountID: accountID,
+                availableMetricIDs: [sessionID, missingID, weeklyID]
+            ),
+            [sessionID, missingID, weeklyID]
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(store.metricLayouts[accountID]?.preferences[sessionID])
+                .isNewlyDiscovered
+        )
+
+        store.updateMetricOrder([weeklyID, sessionID, missingID], accountID: accountID)
+        store.updateMetricWidth(.half, accountID: accountID, metricID: weeklyID)
+        store.updateMetricVisibility(false, accountID: accountID, metricID: missingID)
+        store.updateVisualizationStyle(.circularRing, accountID: accountID, metricID: missingID)
+
+        let reloaded = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        XCTAssertEqual(reloaded.metricWidth(accountID: accountID, metricID: weeklyID), .half)
+        XCTAssertFalse(reloaded.isMetricVisible(accountID: accountID, metricID: missingID))
+        XCTAssertEqual(
+            reloaded.visualizationStyle(accountID: accountID, metricID: missingID),
+            .circularRing
+        )
+        XCTAssertEqual(
+            reloaded.metricOrder(
+                accountID: accountID,
+                availableMetricIDs: [sessionID, weeklyID, newID]
+            ),
+            [weeklyID, sessionID, missingID, newID]
+        )
+        XCTAssertEqual(
+            reloaded.metricLayouts[accountID]?.preferences[missingID]?.width,
+            .automatic
+        )
+        XCTAssertFalse(
+            try XCTUnwrap(reloaded.metricLayouts[accountID]?.preferences[missingID])
+                .isNewlyDiscovered
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(reloaded.metricLayouts[accountID]?.preferences[newID])
+                .isNewlyDiscovered
+        )
+
+        reloaded.markMetricsSeen([newID], accountID: accountID)
+        let seenReloaded = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        XCTAssertFalse(
+            try XCTUnwrap(seenReloaded.metricLayouts[accountID]?.preferences[newID])
+                .isNewlyDiscovered
+        )
+    }
+
+    func testMetricLayoutUnknownEnumValuesFallBackSafely() throws {
+        let data = Data(
+            """
+            {
+              "version": 99,
+              "orderedMetricIDs": ["codex.session"],
+              "preferences": {
+                "codex.session": {
+                  "isVisible": false,
+                  "visualizationStyle": "future-hologram",
+                  "width": "quarter",
+                  "isNewlyDiscovered": true
+                }
+              }
+            }
+            """.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(AccountMetricLayout.self, from: data)
+        let preference = try XCTUnwrap(decoded.preferences["codex.session"])
+
+        XCTAssertFalse(preference.isVisible)
+        XCTAssertEqual(preference.visualizationStyle, .automatic)
+        XCTAssertEqual(preference.width, .automatic)
+        XCTAssertTrue(preference.isNewlyDiscovered)
+    }
+
+    @MainActor
+    func testAccountInsertedThroughUpdateKeepsNewMetricDefaultsAfterReload() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        var imported = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
+        imported.openCodeWorkspaceId = "workspace"
+        XCTAssertTrue(store.update(imported))
+
+        let reloaded = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let metricID = "openCodeZen.go-weekly"
+        _ = reloaded.reconcileMetricLayout(
+            accountID: imported.id,
+            availableMetricIDs: [metricID]
+        )
+
+        XCTAssertEqual(reloaded.metricWidth(accountID: imported.id, metricID: metricID), .automatic)
+        XCTAssertTrue(
+            try XCTUnwrap(reloaded.metricLayouts[imported.id]?.preferences[metricID])
+                .isNewlyDiscovered
+        )
+    }
+
+    @MainActor
+    func testAccountInsertedThroughCredentialReplacementKeepsNewMetricDefaultsAfterReload() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        XCTAssertTrue(store.replaceCredential("token", for: configuration))
+
+        let reloaded = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let metricID = "codex.session"
+        _ = reloaded.reconcileMetricLayout(
+            accountID: configuration.id,
+            availableMetricIDs: [metricID]
+        )
+
+        XCTAssertEqual(
+            reloaded.metricWidth(accountID: configuration.id, metricID: metricID),
+            .automatic
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(reloaded.metricLayouts[configuration.id]?.preferences[metricID])
+                .isNewlyDiscovered
+        )
+    }
+
+    @MainActor
+    func testExistingAccountWithoutMetricPreferencesMigratesAtFullWidth() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let original = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let existingAccount = original.addAccount(for: .codex)
+        defaults.removeObject(forKey: "metricVisualizationPreferences")
+
+        let migrated = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let metricID = "codex.session"
+        XCTAssertEqual(
+            migrated.metricWidth(accountID: existingAccount.id, metricID: metricID),
+            .full
+        )
+        _ = migrated.reconcileMetricLayout(
+            accountID: existingAccount.id,
+            availableMetricIDs: [metricID]
+        )
+
+        XCTAssertEqual(
+            migrated.metricWidth(accountID: existingAccount.id, metricID: metricID),
+            .full
+        )
+        XCTAssertFalse(
+            try XCTUnwrap(migrated.metricLayouts[existingAccount.id]?.preferences[metricID])
+                .isNewlyDiscovered
+        )
+    }
+
+    @MainActor
+    func testUndecodableFutureMetricLayoutIsPreservedWhenKnownLayoutsSave() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let futureAccountID = "codex.future"
+        defaults.set(
+            Data(
+                """
+                {
+                  "\(futureAccountID)": {
+                    "version": 99,
+                    "orderedMetricIDs": ["codex.session"],
+                    "preferences": {"codex.session": ["future", "shape"]},
+                    "futureField": {"keep": "me"}
+                  }
+                }
+                """.utf8
+            ),
+            forKey: "metricVisualizationPreferences"
+        )
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        _ = store.addAccount(for: .claude)
+
+        let persistedData = try XCTUnwrap(
+            defaults.data(forKey: "metricVisualizationPreferences")
+        )
+        let persistedRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: persistedData) as? [String: Any]
+        )
+        let futureLayout = try XCTUnwrap(persistedRoot[futureAccountID] as? [String: Any])
+        let futureField = try XCTUnwrap(futureLayout["futureField"] as? [String: String])
+        let futurePreferences = try XCTUnwrap(
+            futureLayout["preferences"] as? [String: [String]]
+        )
+
+        XCTAssertEqual((futureLayout["version"] as? NSNumber)?.intValue, 99)
+        XCTAssertEqual(futureField, ["keep": "me"])
+        XCTAssertEqual(futurePreferences["codex.session"], ["future", "shape"])
+
+        store.updateMetricWidth(
+            .half,
+            accountID: futureAccountID,
+            metricID: "codex.session"
+        )
+        let rewrittenData = try XCTUnwrap(
+            defaults.data(forKey: "metricVisualizationPreferences")
+        )
+        let rewrittenRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: rewrittenData) as? [String: Any]
+        )
+        let rewrittenLayout = try XCTUnwrap(
+            rewrittenRoot[futureAccountID] as? [String: Any]
+        )
+        let rewrittenPreferences = try XCTUnwrap(
+            rewrittenLayout["preferences"] as? [String: [String: Any]]
+        )
+
+        XCTAssertEqual(
+            (rewrittenLayout["version"] as? NSNumber)?.intValue,
+            AccountMetricLayout.currentVersion
+        )
+        XCTAssertNil(rewrittenLayout["futureField"])
+        XCTAssertEqual(rewrittenPreferences["codex.session"]?["width"] as? String, "half")
+    }
+
+    @MainActor
+    func testOpaqueMetricLayoutStorageSurvivesUntilExplicitCustomization() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let originalStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let existingAccount = originalStore.addAccount(for: .codex)
+        let opaqueData = Data(
+            #"{"futureEnvelope":{"schema":2,"accounts":[]}}"#.utf8
+        )
+        defaults.set(opaqueData, forKey: "metricVisualizationPreferences")
+
+        let preservingStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        XCTAssertEqual(
+            defaults.data(forKey: "metricVisualizationPreferences"),
+            opaqueData
+        )
+
+        _ = preservingStore.addAccount(for: .claude)
+        XCTAssertEqual(
+            defaults.data(forKey: "metricVisualizationPreferences"),
+            opaqueData
+        )
+
+        preservingStore.updateMetricWidth(
+            .half,
+            accountID: existingAccount.id,
+            metricID: "codex.session"
+        )
+        let rewrittenData = try XCTUnwrap(
+            defaults.data(forKey: "metricVisualizationPreferences")
+        )
+        let rewrittenLayouts = try JSONDecoder().decode(
+            [String: AccountMetricLayout].self,
+            from: rewrittenData
+        )
+
+        XCTAssertEqual(
+            rewrittenLayouts[existingAccount.id]?.preferences["codex.session"]?.width,
+            .half
+        )
+    }
+
+    @MainActor
+    func testResetVisualizationStylesReplacesOpaqueMetricLayoutStorage() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let originalStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let existingAccount = originalStore.addAccount(for: .codex)
+        defaults.set(
+            Data(#"{"futureEnvelope":{"schema":2,"accounts":[]}}"#.utf8),
+            forKey: "metricVisualizationPreferences"
+        )
+
+        let preservingStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        preservingStore.resetVisualizationStyles(
+            accountID: existingAccount.id,
+            metricIDs: ["codex.session"]
+        )
+
+        let rewrittenData = try XCTUnwrap(
+            defaults.data(forKey: "metricVisualizationPreferences")
+        )
+        let rewrittenLayouts = try JSONDecoder().decode(
+            [String: AccountMetricLayout].self,
+            from: rewrittenData
+        )
+        let rewrittenLayout = try XCTUnwrap(rewrittenLayouts[existingAccount.id])
+
+        XCTAssertEqual(rewrittenLayout.version, AccountMetricLayout.currentVersion)
+        XCTAssertTrue(rewrittenLayout.preferences.isEmpty)
     }
 
     func testAvailableMetricIdentifiersCoverEveryMetricTypeWithoutUsingLabels() {
@@ -2010,7 +2474,7 @@ final class AppAndWidgetTests: XCTestCase {
     }
 
     @MainActor
-    func testRemovingAccountCleansUpMetricVisualizationPreferences() {
+    func testRemovingAndResettingAccountsCleanUpMetricLayouts() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -2027,6 +2491,17 @@ final class AppAndWidgetTests: XCTestCase {
 
         XCTAssertTrue(store.removeAccount(account))
         XCTAssertNil(store.metricVisualizationPreferences[account.id])
+        XCTAssertNil(store.metricLayouts[account.id])
+
+        let resetAccount = store.addAccount(for: .claude)
+        store.updateMetricWidth(
+            .half,
+            accountID: resetAccount.id,
+            metricID: "claude.session"
+        )
+        XCTAssertTrue(store.resetAccounts())
+        XCTAssertTrue(store.metricLayouts.isEmpty)
+        XCTAssertNil(defaults.data(forKey: "metricVisualizationPreferences"))
     }
 
     @MainActor
