@@ -15,6 +15,7 @@ struct ContentView: View {
     private let performsLifecycleWork: Bool
 
     @Environment(\.requestReview) private var requestReview
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isShowingSettings = false
     @State private var selectedHistoryResult: ProviderUsageResult?
     @State private var accountConfigurationNavigation =
@@ -66,127 +67,170 @@ struct ContentView: View {
         let usageAlertsByAccountID = orchestrator.currentUsageAlertsByAccountID
 
         NavigationStack {
-            ScrollViewReader { scrollProxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        if let historyError = historyStore.lastError {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Label(historyError, systemImage: "exclamationmark.triangle.fill")
-                                    .font(.footnote)
-                                    .foregroundStyle(.red)
-                                    .accessibilityIdentifier("usage-history-persistence-error")
+            GeometryReader { geometry in
+                let gridColumns = DashboardCardGridLayout.columns(
+                    containerWidth: geometry.size.width,
+                    idiom: UIDevice.current.userInterfaceIdiom,
+                    dynamicTypeSize: dynamicTypeSize
+                )
 
-                                if historyStore.requiresRecovery {
-                                    Button("Reset History", role: .destructive) {
-                                        isConfirmingHistoryReset = true
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 14) {
+                            if let historyError = historyStore.lastError {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Label(historyError, systemImage: "exclamationmark.triangle.fill")
+                                        .font(.footnote)
+                                        .foregroundStyle(.red)
+                                        .accessibilityIdentifier("usage-history-persistence-error")
+
+                                    if historyStore.requiresRecovery {
+                                        Button("Reset History", role: .destructive) {
+                                            isConfirmingHistoryReset = true
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .accessibilityIdentifier("reset-corrupted-usage-history")
                                     }
-                                    .buttonStyle(.bordered)
-                                    .accessibilityIdentifier("reset-corrupted-usage-history")
                                 }
                             }
-                        }
 
-                        if !cardItems.isEmpty,
-                           let release = appUpdateController.dashboardRelease {
-                            AppUpdateNotice(
-                                release: release,
-                                onDismiss: appUpdateController.dismissDashboardNotice
-                            )
-                        }
+                            if !cardItems.isEmpty,
+                               let release = appUpdateController.dashboardRelease {
+                                AppUpdateNotice(
+                                    release: release,
+                                    onDismiss: appUpdateController.dismissDashboardNotice
+                                )
+                            }
 
-                        ForEach(sections) { section in
-                            VStack(alignment: .leading, spacing: 8) {
-                                if showGroupHeaders {
-                                    Text(section.title)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                        .textCase(.uppercase)
-                                        .padding(.horizontal, 4)
-                                }
+                            ForEach(sections) { section in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    if showGroupHeaders {
+                                        Text(section.title)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                            .textCase(.uppercase)
+                                            .padding(.horizontal, 4)
+                                    }
 
-                                ForEach(section.items) { item in
-                                    let card = dashboardCard(
-                                        for: item,
-                                        alerts: usageAlertsByAccountID[item.id] ?? []
-                                    )
+                                    LazyVGrid(
+                                        columns: gridColumns,
+                                        alignment: .leading,
+                                        spacing: DashboardCardGridLayout.cardSpacing
+                                    ) {
+                                        ForEach(section.items) { item in
+                                            let card = dashboardCard(
+                                                for: item,
+                                                alerts: usageAlertsByAccountID[item.id] ?? []
+                                            )
 
-                                    if orchestrator.isManualDashboardOrdering {
-                                        card
-                                            .id(item.id)
-                                            .onDrag {
-                                                draggedCardID = item.id
-                                                return NSItemProvider(object: item.id as NSString)
+                                            if orchestrator.isManualDashboardOrdering {
+                                                card
+                                                    .frame(
+                                                        maxWidth: .infinity,
+                                                        alignment: .topLeading
+                                                    )
+                                                    .id(item.id)
+                                                    .onDrag {
+                                                        draggedCardID = item.id
+                                                        return NSItemProvider(
+                                                            object: item.id as NSString
+                                                        )
+                                                    }
+                                                    .onDrop(
+                                                        of: [UTType.text],
+                                                        delegate: ProviderUsageCardDropDelegate(
+                                                            targetID: item.id,
+                                                            draggedCardID: $draggedCardID,
+                                                            moveCard: moveCard,
+                                                            finishDrag: finishCardDrag
+                                                        )
+                                                    )
+                                                    .accessibilityAction(
+                                                        named: Text("Move Earlier")
+                                                    ) {
+                                                        moveCard(
+                                                            item.id,
+                                                            within: section.items,
+                                                            offset: -1
+                                                        )
+                                                    }
+                                                    .accessibilityAction(
+                                                        named: Text("Move Later")
+                                                    ) {
+                                                        moveCard(
+                                                            item.id,
+                                                            within: section.items,
+                                                            offset: 1
+                                                        )
+                                                    }
+                                            } else {
+                                                card
+                                                    .frame(
+                                                        maxWidth: .infinity,
+                                                        alignment: .topLeading
+                                                    )
+                                                    .id(item.id)
+                                                    .accessibilityHint(
+                                                        Text("Smart ordering is active.")
+                                                    )
                                             }
-                                            .onDrop(
-                                                of: [UTType.text],
-                                                delegate: ProviderUsageCardDropDelegate(
-                                                    targetID: item.id,
-                                                    draggedCardID: $draggedCardID,
-                                                    moveCard: moveCard,
-                                                    finishDrag: finishCardDrag
-                                                )
-                                            )
-                                    } else {
-                                        card
-                                            .id(item.id)
-                                            .accessibilityHint(
-                                                Text("Smart ordering is active.")
-                                            )
+                                        }
                                     }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
+                        .padding()
                     }
-                    .padding()
-                }
-                .background(Color(.systemGroupedBackground))
-                .onOpenURL { url in
-                    handleDeepLink(
-                        url,
-                        scrollProxy: scrollProxy,
-                        availableAccountIDs: cardItems.map(\.id)
-                    )
-                }
-                .onChange(of: cardItems.map(\.id)) { _, accountIDs in
-                    scrollToPendingDeepLink(
-                        scrollProxy: scrollProxy,
-                        availableAccountIDs: accountIDs,
-                        completesNavigation: false
-                    )
-                }
-                .onChange(of: refreshService.isRefreshing) { _, isRefreshing in
-                    guard !isRefreshing, deepLinkNavigation.waitsForRefresh else {
-                        return
+                    .background(Color(.systemGroupedBackground))
+                    .onOpenURL { url in
+                        handleDeepLink(
+                            url,
+                            scrollProxy: scrollProxy,
+                            availableAccountIDs: cardItems.map(\.id)
+                        )
                     }
-                    scrollToPendingDeepLink(
-                        scrollProxy: scrollProxy,
-                        availableAccountIDs: cardItems.map(\.id),
-                        completesNavigation: true
-                    )
-                }
-                .onChange(of: hasCompletedInitialRefresh) { _, hasCompletedInitialRefresh in
-                    guard
-                        hasCompletedInitialRefresh,
-                        !refreshService.isRefreshing,
-                        deepLinkNavigation.waitsForRefresh
-                    else {
-                        return
+                    .onChange(of: cardItems.map(\.id)) { _, accountIDs in
+                        scrollToPendingDeepLink(
+                            scrollProxy: scrollProxy,
+                            availableAccountIDs: accountIDs,
+                            completesNavigation: false
+                        )
                     }
-                    scrollToPendingDeepLink(
-                        scrollProxy: scrollProxy,
-                        availableAccountIDs: cardItems.map(\.id),
-                        completesNavigation: true
-                    )
-                }
-                .onChange(of: settingsRefreshCompletionID) { _, _ in
-                    guard deepLinkNavigation.waitsForRefresh else {
-                        return
+                    .onChange(of: refreshService.isRefreshing) { _, isRefreshing in
+                        guard !isRefreshing, deepLinkNavigation.waitsForRefresh else {
+                            return
+                        }
+                        scrollToPendingDeepLink(
+                            scrollProxy: scrollProxy,
+                            availableAccountIDs: cardItems.map(\.id),
+                            completesNavigation: true
+                        )
                     }
-                    scrollToPendingDeepLink(
-                        scrollProxy: scrollProxy,
-                        availableAccountIDs: cardItems.map(\.id),
-                        completesNavigation: true
-                    )
+                    .onChange(of: hasCompletedInitialRefresh) { _, hasCompletedInitialRefresh in
+                        guard
+                            hasCompletedInitialRefresh,
+                            !refreshService.isRefreshing,
+                            deepLinkNavigation.waitsForRefresh
+                        else {
+                            return
+                        }
+                        scrollToPendingDeepLink(
+                            scrollProxy: scrollProxy,
+                            availableAccountIDs: cardItems.map(\.id),
+                            completesNavigation: true
+                        )
+                    }
+                    .onChange(of: settingsRefreshCompletionID) { _, _ in
+                        guard deepLinkNavigation.waitsForRefresh else {
+                            return
+                        }
+                        scrollToPendingDeepLink(
+                            scrollProxy: scrollProxy,
+                            availableAccountIDs: cardItems.map(\.id),
+                            completesNavigation: true
+                        )
+                    }
                 }
             }
             .navigationTitle("CodexBar")
@@ -567,6 +611,21 @@ struct ContentView: View {
         }
     }
 
+    private func moveCard(
+        _ cardID: String,
+        within items: [DashboardProviderCardItem],
+        offset: Int
+    ) {
+        guard
+            let sourceIndex = items.firstIndex(where: { $0.id == cardID }),
+            items.indices.contains(sourceIndex + offset)
+        else {
+            return
+        }
+
+        moveCard(cardID, to: items[sourceIndex + offset].id)
+    }
+
     private func finishCardDrag() {
         orchestrator.finishCardDrag()
         draggedCardID = nil
@@ -708,6 +767,41 @@ private struct ProviderUsageCardDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         finishDrag()
         return true
+    }
+}
+
+struct DashboardCardGridLayout {
+    static let cardSpacing: CGFloat = 14
+    static let horizontalPadding: CGFloat = 32
+    static let minimumReadableCardWidth: CGFloat = 340
+
+    static func columnCount(
+        containerWidth: CGFloat,
+        idiom: UIUserInterfaceIdiom,
+        dynamicTypeSize: DynamicTypeSize
+    ) -> Int {
+        guard idiom == .pad, !dynamicTypeSize.isAccessibilitySize else {
+            return 1
+        }
+
+        let usableWidth = max(0, containerWidth - horizontalPadding)
+        let requiredWidth = (minimumReadableCardWidth * 2) + cardSpacing
+        return usableWidth >= requiredWidth ? 2 : 1
+    }
+
+    static func columns(
+        containerWidth: CGFloat,
+        idiom: UIUserInterfaceIdiom,
+        dynamicTypeSize: DynamicTypeSize
+    ) -> [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: cardSpacing, alignment: .top),
+            count: columnCount(
+                containerWidth: containerWidth,
+                idiom: idiom,
+                dynamicTypeSize: dynamicTypeSize
+            )
+        )
     }
 }
 
