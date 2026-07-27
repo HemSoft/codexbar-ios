@@ -144,6 +144,18 @@ struct MetricLayoutUndoHistory {
         layouts.append(layout)
     }
 
+    @discardableResult
+    mutating func record(
+        _ layout: AccountMetricLayout,
+        ifChangedTo updatedLayout: AccountMetricLayout
+    ) -> Bool {
+        guard layout != updatedLayout else {
+            return false
+        }
+        record(layout)
+        return true
+    }
+
     mutating func undo() -> AccountMetricLayout? {
         layouts.popLast()
     }

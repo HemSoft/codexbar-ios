@@ -2569,10 +2569,18 @@ final class AppAndWidgetTests: XCTestCase {
         let original = try XCTUnwrap(store.metricLayouts[accountID])
         var undoHistory = MetricLayoutUndoHistory()
 
-        undoHistory.record(original)
+        XCTAssertFalse(undoHistory.record(original, ifChangedTo: original))
+        XCTAssertFalse(undoHistory.canUndo)
+
         store.updateMetricOrder([secondID, firstID], accountID: accountID)
         store.updateMetricWidth(.half, accountID: accountID, metricID: secondID)
         store.updateMetricVisibility(false, accountID: accountID, metricID: firstID)
+        XCTAssertTrue(
+            undoHistory.record(
+                original,
+                ifChangedTo: try XCTUnwrap(store.metricLayouts[accountID])
+            )
+        )
         XCTAssertTrue(undoHistory.canUndo)
 
         store.replaceMetricLayout(try XCTUnwrap(undoHistory.undo()), accountID: accountID)

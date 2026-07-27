@@ -2489,9 +2489,15 @@ private struct MetricVisualizationCustomizationView: View {
         haptic: UIImpactFeedbackGenerator.FeedbackStyle = .light,
         _ change: () -> Void
     ) {
-        undoHistory.record(metricLayoutProvider())
+        let previousLayout = metricLayoutProvider()
         withAnimation(.snappy(duration: 0.22)) {
             change()
+        }
+        guard undoHistory.record(
+            previousLayout,
+            ifChangedTo: metricLayoutProvider()
+        ) else {
+            return
         }
         UIImpactFeedbackGenerator(style: haptic).impactOccurred()
     }
