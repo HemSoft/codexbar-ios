@@ -121,31 +121,14 @@ enum WatchSnapshotPublisher {
                         )
                     )
                 }
-                let snapshotsByID = Dictionary(
-                    availableMetrics.map { ($0.id, $0) },
-                    uniquingKeysWith: { first, _ in first }
-                )
-                var seenMetricIDs = Set<String>()
                 let savedOrder = configurationStore.metricLayouts[result.accountID]?.orderedMetricIDs ?? []
-                let orderedMetricIDs = savedOrder.filter {
-                    snapshotsByID[$0] != nil && seenMetricIDs.insert($0).inserted
-                } + result.availableMetrics.map(\.id).filter {
-                    snapshotsByID[$0] != nil && seenMetricIDs.insert($0).inserted
-                } + availableMetrics.map(\.id).filter {
-                    seenMetricIDs.insert($0).inserted
-                }
-                let metrics: [WatchMetricSnapshot] = orderedMetricIDs.compactMap {
-                    metricID -> WatchMetricSnapshot? in
-                    guard
-                        configurationStore.isMetricVisibleOnWatch(
-                            accountID: result.accountID,
-                            metricID: metricID
-                        )
-                    else {
-                        return nil
-                    }
-                    return snapshotsByID[metricID]
-                }
+                let metrics = orderedVisibleMetrics(
+                    accountID: result.accountID,
+                    availableMetrics: availableMetrics,
+                    providerAvailableMetricIDs: result.availableMetrics.map(\.id),
+                    savedOrder: savedOrder,
+                    configurationStore: configurationStore
+                )
                 let displayedBarMetricIDs = Set(barMetrics.map(\.id))
                 let displayedDataFetchedAt = metrics.contains {
                     displayedBarMetricIDs.contains($0.id)
@@ -217,6 +200,42 @@ enum WatchSnapshotPublisher {
             manualOrder: configurationStore.dashboardCardOrder,
             now: now
         )
+    }
+
+    private static func orderedVisibleMetrics(
+        accountID: String,
+        availableMetrics: [WatchMetricSnapshot],
+        providerAvailableMetricIDs: [String],
+        savedOrder: [String],
+        configurationStore: ProviderConfigurationStore
+    ) -> [WatchMetricSnapshot] {
+        let snapshotsByID = Dictionary(
+            availableMetrics.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var seenMetricIDs = Set<String>()
+        var orderedMetricIDs: [String] = []
+
+        func appendAvailableMetricIDs<S: Sequence>(_ metricIDs: S) where S.Element == String {
+            for metricID in metricIDs
+            where snapshotsByID[metricID] != nil && seenMetricIDs.insert(metricID).inserted {
+                orderedMetricIDs.append(metricID)
+            }
+        }
+
+        appendAvailableMetricIDs(savedOrder)
+        appendAvailableMetricIDs(providerAvailableMetricIDs)
+        appendAvailableMetricIDs(availableMetrics.map(\.id))
+
+        return orderedMetricIDs.compactMap { metricID in
+            guard configurationStore.isMetricVisibleOnWatch(
+                accountID: accountID,
+                metricID: metricID
+            ) else {
+                return nil
+            }
+            return snapshotsByID[metricID]
+        }
     }
 
     private static func watchAccountLabel(
