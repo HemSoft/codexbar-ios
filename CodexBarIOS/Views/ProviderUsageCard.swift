@@ -2525,13 +2525,16 @@ private struct MetricVisualizationCustomizationView: View {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
             let bar = result.bars[index]
+            let visualizationStyle = visualizationStyleForMetric(metric.id)
             VStack(alignment: .leading, spacing: 8) {
-                Text(bar.usageText)
-                    .font(.title3.weight(.semibold))
-                    .monospacedDigit()
+                if visualizationStyle.showsStandaloneMetricTileValue {
+                    Text(bar.usageText)
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                }
                 MetricVisualizationView(
                     bar: bar,
-                    style: visualizationStyleForMetric(metric.id),
+                    style: visualizationStyle,
                     showsSeverity: showsSeverity
                 )
             }
