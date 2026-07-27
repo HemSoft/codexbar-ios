@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added a width-aware, row-aligned two-column dashboard for sufficiently wide
+  iPads, with automatic single-column fallbacks and accessible account-card
+  reordering. ([#145](https://github.com/HemSoft/codexbar-ios/issues/145))
 - Added a live Customize Card editor for rearranging, resizing, restyling,
   showing, and hiding metric tiles, with undo/reset controls, new-metric
   markers, accessible move actions, and reusable layouts across compatible

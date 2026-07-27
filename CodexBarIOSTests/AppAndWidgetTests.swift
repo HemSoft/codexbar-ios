@@ -274,6 +274,41 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(fallback?.settleDelay, 2)
     }
 
+    func testDashboardCardGridLayoutUsesContainerWidthAndAccessibilityFallbacks() {
+        XCTAssertEqual(
+            DashboardCardGridLayout.columnCount(
+                containerWidth: 768,
+                idiom: .pad,
+                dynamicTypeSize: .large
+            ),
+            2
+        )
+        XCTAssertEqual(
+            DashboardCardGridLayout.columnCount(
+                containerWidth: 700,
+                idiom: .pad,
+                dynamicTypeSize: .large
+            ),
+            1
+        )
+        XCTAssertEqual(
+            DashboardCardGridLayout.columnCount(
+                containerWidth: 1_366,
+                idiom: .phone,
+                dynamicTypeSize: .large
+            ),
+            1
+        )
+        XCTAssertEqual(
+            DashboardCardGridLayout.columnCount(
+                containerWidth: 1_366,
+                idiom: .pad,
+                dynamicTypeSize: .accessibility1
+            ),
+            1
+        )
+    }
+
     @MainActor
     func testAppStoreScreenshotFixturesCoverEveryProviderAndSeedHistory() {
         let configurationStore = ProviderConfigurationStore.appStoreScreenshotDemo()
@@ -281,6 +316,13 @@ final class AppAndWidgetTests: XCTestCase {
 
         XCTAssertEqual(Set(results.map(\.providerID)), Set(ProviderID.allCases))
         XCTAssertTrue(results.allSatisfy { $0.accountID.hasPrefix("app-store-screenshots.") })
+        XCTAssertGreaterThanOrEqual(
+            configurationStore.configurations.filter {
+                $0.groupID == AppStoreScreenshotFixtureID.usageGroup
+            }.count,
+            2,
+            "The deterministic iPad dashboard fixture should exercise a complete two-card row."
+        )
         XCTAssertEqual(Set(results.map(\.fetchedAt)).count, 1)
         let claudeResult = results.first(where: { $0.providerID == .claude })
         XCTAssertEqual(claudeResult?.monetaryMetrics.count, 2)
