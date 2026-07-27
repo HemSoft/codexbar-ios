@@ -451,7 +451,7 @@ struct ProviderUsageCard: View {
                 result: result,
                 statusText: statusText,
                 metric: presentation.metric,
-                history: historySeries(for: presentation.metric),
+                history: metricDetailHistorySeries(for: presentation.metric),
                 visualizationStyle: visualizationStyleForMetric(presentation.metric.id)
             )
         }
@@ -745,11 +745,17 @@ struct ProviderUsageCard: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    func historySeries(for metric: ProviderUsageMetric) -> UsageHistorySeries? {
+    func metricDetailHistorySeries(for metric: ProviderUsageMetric) -> UsageHistorySeries? {
+        guard isHistoryEnabled else {
+            return nil
+        }
+
         let preferredOptionID: String?
         switch metric.kind {
         case .usageBar:
-            preferredOptionID = "usage"
+            // The usage series is the card-wide maximum across usage bars, so it
+            // is not accurate to present it as one selected bar's history.
+            return nil
         case .creditsRemaining:
             preferredOptionID = "balance"
         case let .monetary(index):

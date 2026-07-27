@@ -1977,10 +1977,71 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(historyBuildCount, 0)
         XCTAssertEqual(card.monetaryFreshnessDescription, "Last known value")
         XCTAssertEqual(
-            card.historySeries(for: try XCTUnwrap(result.availableMetrics.first)),
+            card.metricDetailHistorySeries(for: try XCTUnwrap(result.availableMetrics.first)),
             series
         )
         XCTAssertEqual(historyBuildCount, 1)
+    }
+
+    func testMetricTileDetailsHonorHistorySettingAndOmitAggregateUsageHistory() throws {
+        let usageBar = UsageBar(
+            label: "5-hour limit",
+            used: 25,
+            limit: 100
+        )
+        let result = ProviderUsageResult(
+            accountID: "codex.history",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Current",
+            bars: [usageBar],
+            fetchedAt: Date()
+        )
+        let series = UsageHistorySeries(
+            accountID: result.accountID,
+            points: [],
+            isBalance: false
+        )
+        var historyBuildCount = 0
+        let balanceResult = ProviderUsageResult(
+            accountID: "openrouter.history",
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Current",
+            bars: [],
+            creditsRemaining: 12.50,
+            fetchedAt: Date()
+        )
+        let disabledCard = ProviderUsageCard(
+            result: balanceResult,
+            statusText: balanceResult.subtitle,
+            history: series,
+            isHistoryEnabled: false,
+            historySeriesOptions: {
+                historyBuildCount += 1
+                return [UsageHistorySeriesOption(id: "balance", label: "Balance", series: series)]
+            }
+        )
+
+        XCTAssertNil(
+            disabledCard.metricDetailHistorySeries(
+                for: try XCTUnwrap(balanceResult.availableMetrics.first)
+            )
+        )
+        XCTAssertEqual(historyBuildCount, 0)
+
+        let enabledCard = ProviderUsageCard(
+            result: result,
+            statusText: result.subtitle,
+            history: series,
+            historySeriesOptions: {
+                historyBuildCount += 1
+                return [UsageHistorySeriesOption(id: "usage", label: "Usage", series: series)]
+            }
+        )
+        let usageMetric = try XCTUnwrap(result.availableMetrics.first)
+        XCTAssertNil(enabledCard.metricDetailHistorySeries(for: usageMetric))
+        XCTAssertEqual(historyBuildCount, 0)
     }
 
     @MainActor
