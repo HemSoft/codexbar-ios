@@ -70,6 +70,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Kept the current usage percentage prominent in widgets while preserving
+  projections as secondary context in fills, details, and severity.
+  ([#157](https://github.com/HemSoft/codexbar-ios/issues/157))
 - Centered semicircular usage gauges within dashboard and Customize Card
   metric tiles across compact, full-width, and accessibility layouts.
   ([#156](https://github.com/HemSoft/codexbar-ios/issues/156))
