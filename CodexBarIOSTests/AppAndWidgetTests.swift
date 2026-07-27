@@ -2016,6 +2016,46 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertTrue(accessibilityLabel.hasPrefix("Current session, 42%"))
     }
 
+    func testMetricTileAccessibilityOmitsBenignProjectionButKeepsWarning() {
+        let now = Date()
+        let start = now.addingTimeInterval(-24 * 60 * 60)
+        let end = now.addingTimeInterval(6 * 24 * 60 * 60)
+        let safeBar = UsageBar(
+            label: "API",
+            used: 5,
+            limit: 100,
+            projectionCurrent: 0.05,
+            projectionLimit: 1,
+            projectionPeriodStart: start,
+            projectionPeriodEnd: end,
+            showProjectionOnCurrentBar: true
+        )
+        let warningBar = UsageBar(
+            label: "Total",
+            used: 80,
+            limit: 100,
+            projectionCurrent: 0.8,
+            projectionLimit: 1,
+            projectionPeriodStart: start,
+            projectionPeriodEnd: end,
+            showProjectionOnCurrentBar: true
+        )
+        let result = ProviderUsageResult(
+            accountID: "cursor.accessibility",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Cursor plan usage",
+            bars: [safeBar, warningBar],
+            fetchedAt: now
+        )
+
+        let safeLabel = ProviderUsageCard.usageMetricAccessibilityLabel(safeBar, in: result)
+        let warningLabel = ProviderUsageCard.usageMetricAccessibilityLabel(warningBar, in: result)
+
+        XCTAssertFalse(safeLabel.contains("Projected to stay under limit"))
+        XCTAssertTrue(warningLabel.contains("Projected 100% at current pace"))
+    }
+
     func testSemicircularMetricTilesPairAtCompactWidthsAndCollapseForAccessibilitySizes() {
         XCTAssertEqual(
             ProviderMetricTileGridResolver.resolvedWidth(

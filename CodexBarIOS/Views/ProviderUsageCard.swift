@@ -960,7 +960,7 @@ struct ProviderUsageCard: View {
             result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName : "status unavailable",
             result.hasCurrentBars ? "fresh" : "stale",
             bar.localizedResetDescription(),
-            result.hasCurrentBars ? bar.projectionDescription() : nil,
+            result.hasCurrentBars ? bar.dashboardProjectionDescription() : nil,
         ]
         .compactMap { $0 }
         .joined(separator: ", ")
