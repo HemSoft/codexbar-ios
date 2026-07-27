@@ -2521,6 +2521,7 @@ final class AppAndWidgetTests: XCTestCase {
         store.updateMetricOrder([weeklyID, sessionID, missingID], accountID: accountID)
         store.updateMetricWidth(.half, accountID: accountID, metricID: weeklyID)
         store.updateMetricVisibility(false, accountID: accountID, metricID: missingID)
+        store.updateWatchMetricVisibility(.show, accountID: accountID, metricID: missingID)
         store.updateVisualizationStyle(.circularRing, accountID: accountID, metricID: missingID)
 
         let reloaded = ProviderConfigurationStore(
@@ -2529,6 +2530,11 @@ final class AppAndWidgetTests: XCTestCase {
         )
         XCTAssertEqual(reloaded.metricWidth(accountID: accountID, metricID: weeklyID), .half)
         XCTAssertFalse(reloaded.isMetricVisible(accountID: accountID, metricID: missingID))
+        XCTAssertTrue(reloaded.isMetricVisibleOnWatch(accountID: accountID, metricID: missingID))
+        XCTAssertEqual(
+            reloaded.watchVisibilityPolicy(accountID: accountID, metricID: missingID),
+            .show
+        )
         XCTAssertEqual(
             reloaded.visualizationStyle(accountID: accountID, metricID: missingID),
             .circularRing
@@ -2575,6 +2581,7 @@ final class AppAndWidgetTests: XCTestCase {
                   "isVisible": false,
                   "visualizationStyle": "future-hologram",
                   "width": "quarter",
+                  "watchVisibility": "future-watch-policy",
                   "isNewlyDiscovered": true
                 }
               }
@@ -2588,7 +2595,51 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertFalse(preference.isVisible)
         XCTAssertEqual(preference.visualizationStyle, .automatic)
         XCTAssertEqual(preference.width, .automatic)
+        XCTAssertEqual(preference.watchVisibility, .inherit)
         XCTAssertTrue(preference.isNewlyDiscovered)
+    }
+
+    @MainActor
+    func testVersionOneMetricLayoutMigratesWatchVisibilityToInherit() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let accountID = "codex.personal"
+        let metricID = "codex.session"
+        defaults.set(
+            Data(
+                """
+                {
+                  "\(accountID)": {
+                    "version": 1,
+                    "orderedMetricIDs": ["\(metricID)"],
+                    "preferences": {
+                      "\(metricID)": {
+                        "isVisible": false,
+                        "width": "half",
+                        "isNewlyDiscovered": false
+                      }
+                    }
+                  }
+                }
+                """.utf8
+            ),
+            forKey: "metricVisualizationPreferences"
+        )
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertEqual(store.metricLayouts[accountID]?.version, AccountMetricLayout.currentVersion)
+        XCTAssertEqual(
+            store.watchVisibilityPolicy(accountID: accountID, metricID: metricID),
+            .inherit
+        )
+        XCTAssertFalse(store.isMetricVisibleOnWatch(accountID: accountID, metricID: metricID))
     }
 
     @MainActor
@@ -2641,6 +2692,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertTrue(reset.preferences.values.allSatisfy(\.isVisible))
         XCTAssertTrue(reset.preferences.values.allSatisfy { $0.visualizationStyle == nil })
         XCTAssertTrue(reset.preferences.values.allSatisfy { $0.width == .automatic })
+        XCTAssertTrue(reset.preferences.values.allSatisfy { $0.watchVisibility == .inherit })
         XCTAssertTrue(reset.preferences.values.allSatisfy { !$0.isNewlyDiscovered })
 
         let reloaded = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())

@@ -181,6 +181,8 @@ struct ProviderUsageCard: View {
     let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
     let isMetricVisible: (String) -> Bool
     let onUpdateMetricVisibility: (String, Bool) -> Void
+    let watchVisibilityForMetric: (String) -> WatchMetricVisibilityPolicy
+    let onUpdateWatchVisibility: (String, WatchMetricVisibilityPolicy) -> Void
     let visualizationStyleForMetric: (String) -> MetricVisualizationStyle
     let onUpdateVisualizationStyle: (String, MetricVisualizationStyle) -> Void
     let onApplyVisualizationStyleToAll: (MetricVisualizationStyle, [String]) -> Void
@@ -227,6 +229,8 @@ struct ProviderUsageCard: View {
         onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)? = nil,
         isMetricVisible: @escaping (String) -> Bool = { _ in true },
         onUpdateMetricVisibility: @escaping (String, Bool) -> Void = { _, _ in },
+        watchVisibilityForMetric: @escaping (String) -> WatchMetricVisibilityPolicy = { _ in .inherit },
+        onUpdateWatchVisibility: @escaping (String, WatchMetricVisibilityPolicy) -> Void = { _, _ in },
         visualizationStyleForMetric: @escaping (String) -> MetricVisualizationStyle = { _ in .linearBar },
         onUpdateVisualizationStyle: @escaping (String, MetricVisualizationStyle) -> Void = { _, _ in },
         onApplyVisualizationStyleToAll: @escaping (MetricVisualizationStyle, [String]) -> Void = { _, _ in },
@@ -262,6 +266,8 @@ struct ProviderUsageCard: View {
         self.onUseCodexReset = onUseCodexReset
         self.isMetricVisible = isMetricVisible
         self.onUpdateMetricVisibility = onUpdateMetricVisibility
+        self.watchVisibilityForMetric = watchVisibilityForMetric
+        self.onUpdateWatchVisibility = onUpdateWatchVisibility
         self.visualizationStyleForMetric = visualizationStyleForMetric
         self.onUpdateVisualizationStyle = onUpdateVisualizationStyle
         self.onApplyVisualizationStyleToAll = onApplyVisualizationStyleToAll
@@ -493,6 +499,8 @@ struct ProviderUsageCard: View {
                 showsSeverity: result.hasCurrentBars,
                 isMetricVisible: isMetricVisible,
                 onUpdateMetricVisibility: onUpdateMetricVisibility,
+                watchVisibilityForMetric: watchVisibilityForMetric,
+                onUpdateWatchVisibility: onUpdateWatchVisibility,
                 visualizationStyleForMetric: visualizationStyleForMetric,
                 onUpdateVisualizationStyle: onUpdateVisualizationStyle,
                 onApplyVisualizationStyleToAll: onApplyVisualizationStyleToAll,
@@ -2084,6 +2092,8 @@ private struct MetricVisualizationCustomizationView: View {
     let showsSeverity: Bool
     let isMetricVisible: (String) -> Bool
     let onUpdateMetricVisibility: (String, Bool) -> Void
+    let watchVisibilityForMetric: (String) -> WatchMetricVisibilityPolicy
+    let onUpdateWatchVisibility: (String, WatchMetricVisibilityPolicy) -> Void
     let visualizationStyleForMetric: (String) -> MetricVisualizationStyle
     let onUpdateVisualizationStyle: (String, MetricVisualizationStyle) -> Void
     let onApplyVisualizationStyleToAll: (MetricVisualizationStyle, [String]) -> Void
@@ -2169,6 +2179,7 @@ private struct MetricVisualizationCustomizationView: View {
                                 HStack(spacing: 12) {
                                     Label(metric.label, systemImage: "eye.slash")
                                         .frame(maxWidth: .infinity, alignment: .leading)
+                                    watchVisibilityControl(for: metric)
                                     Button("Show") {
                                         performChange {
                                             onUpdateMetricVisibility(metric.id, true)
@@ -2445,6 +2456,8 @@ private struct MetricVisualizationCustomizationView: View {
                 }
             }
 
+            watchVisibilityControl(for: metric)
+
             Divider()
 
             Button("Hide", systemImage: "eye.slash") {
@@ -2459,6 +2472,37 @@ private struct MetricVisualizationCustomizationView: View {
         }
         .accessibilityLabel("Actions for \(metric.label)")
         .accessibilityHint("Move, resize, restyle, or hide this metric")
+    }
+
+    private func watchVisibilityControl(for metric: ProviderUsageMetric) -> some View {
+        let policy = watchVisibilityForMetric(metric.id)
+        return Menu {
+            ForEach(WatchMetricVisibilityPolicy.allCases, id: \.self) { option in
+                Button {
+                    performChange {
+                        onUpdateWatchVisibility(metric.id, option)
+                    }
+                } label: {
+                    if policy == option {
+                        Label(
+                            option.displayName(isVisibleOnIPhone: isMetricVisible(metric.id)),
+                            systemImage: "checkmark"
+                        )
+                    } else {
+                        Text(option.displayName(isVisibleOnIPhone: isMetricVisible(metric.id)))
+                    }
+                }
+            }
+        } label: {
+            Label(
+                policy.controlLabel(isVisibleOnIPhone: isMetricVisible(metric.id)),
+                systemImage: "applewatch"
+            )
+            .frame(minWidth: 44, minHeight: 44)
+        }
+        .accessibilityLabel("Show \(metric.label) on Watch")
+        .accessibilityValue(policy.accessibilityValue(isVisibleOnIPhone: isMetricVisible(metric.id)))
+        .accessibilityHint("Choose whether Watch inherits iPhone visibility or always shows or hides this metric")
     }
 
     @ViewBuilder
@@ -2625,6 +2669,34 @@ private extension MetricTileWidthPreference {
         case .full:
             "Full"
         }
+    }
+}
+
+private extension WatchMetricVisibilityPolicy {
+    func displayName(isVisibleOnIPhone: Bool) -> String {
+        switch self {
+        case .inherit:
+            "Inherit iPhone (\(isVisibleOnIPhone ? "Shown" : "Hidden"))"
+        case .show:
+            "Always Show"
+        case .hide:
+            "Always Hide"
+        }
+    }
+
+    func controlLabel(isVisibleOnIPhone: Bool) -> String {
+        switch self {
+        case .inherit:
+            "Watch: Inherited \(isVisibleOnIPhone ? "Shown" : "Hidden")"
+        case .show:
+            "Watch: Shown"
+        case .hide:
+            "Watch: Hidden"
+        }
+    }
+
+    func accessibilityValue(isVisibleOnIPhone: Bool) -> String {
+        displayName(isVisibleOnIPhone: isVisibleOnIPhone)
     }
 }
 
@@ -2839,6 +2911,12 @@ private struct MetricCustomizationPreview: View {
             },
             onUpdateMetricVisibility: { metricID, isVisible in
                 updatePreference(metricID) { $0.isVisible = isVisible }
+            },
+            watchVisibilityForMetric: { metricID in
+                layout.preferences[metricID]?.watchVisibility ?? .inherit
+            },
+            onUpdateWatchVisibility: { metricID, policy in
+                updatePreference(metricID) { $0.watchVisibility = policy }
             },
             visualizationStyleForMetric: { metricID in
                 layout.preferences[metricID]?.visualizationStyle ?? .linearBar

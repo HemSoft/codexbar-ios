@@ -23,9 +23,20 @@ struct WatchDashboardView: View {
                 } else {
                     ForEach(state.samples) { sample in
                         VStack(alignment: .leading, spacing: 6) {
+                            if sample.showsAccountContext {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(sample.providerName)
+                                        .font(.headline)
+                                    Text(sample.accountLabel)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
                             HStack(alignment: .firstTextBaseline) {
-                                Text(sample.providerName)
-                                    .font(.headline)
+                                Text(sample.metricLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                                 Spacer(minLength: 4)
                                 if sample.visualizationStyle.showsHeaderExactValueOnWatch(
                                     allowsGauge: !dynamicTypeSize.isAccessibilitySize
@@ -35,22 +46,14 @@ struct WatchDashboardView: View {
                                 }
                             }
 
-                            Text(sample.metricLabel)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
                             WatchMetricVisualization(sample: sample)
 
-                            HStack(spacing: 4) {
-                                Text(sample.accountLabel)
-                                if let severityText = sample.severityText {
-                                    Text("•")
-                                    Label(severityText, systemImage: "exclamationmark.triangle.fill")
-                                        .labelStyle(.titleOnly)
-                                }
+                            if let severityText = sample.severityText {
+                                Label(severityText, systemImage: "exclamationmark.triangle.fill")
+                                    .labelStyle(.titleOnly)
+                                    .font(.caption2)
+                                    .foregroundStyle(.primary)
                             }
-                            .font(.caption2)
-                            .foregroundStyle(sample.severity == .normal ? .secondary : .primary)
 
                             if let resetText = sample.resetText {
                                 Text(resetText)

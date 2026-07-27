@@ -446,6 +446,19 @@ struct ContentView: View {
                         metricID: metricID
                     )
                 },
+                watchVisibilityForMetric: { metricID in
+                    configurationStore.watchVisibilityPolicy(
+                        accountID: result.accountID,
+                        metricID: metricID
+                    )
+                },
+                onUpdateWatchVisibility: { metricID, policy in
+                    configurationStore.updateWatchMetricVisibility(
+                        policy,
+                        accountID: result.accountID,
+                        metricID: metricID
+                    )
+                },
                 visualizationStyleForMetric: { metricID in
                     configurationStore.visualizationStyle(
                         accountID: result.accountID,

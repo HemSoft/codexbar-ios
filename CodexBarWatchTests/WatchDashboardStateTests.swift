@@ -68,6 +68,47 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertEqual(state.statusText, "Updated just now")
     }
 
+    func testRepeatedMetricsShowAccountContextOnceButRemainCoherentForVoiceOver() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "claude",
+                    providerName: "Claude",
+                    accountLabel: "Work",
+                    fetchedAt: now,
+                    metrics: [
+                        WatchMetricSnapshot(
+                            id: "session",
+                            label: "Current session",
+                            usedFraction: 0.2,
+                            exactValue: "20%"
+                        ),
+                        WatchMetricSnapshot(
+                            id: "weekly",
+                            label: "Weekly",
+                            usedFraction: 0.4,
+                            exactValue: "40%"
+                        ),
+                    ]
+                ),
+            ]
+        )
+
+        let state = WatchDashboardState(
+            snapshot: snapshot,
+            now: now,
+            isPhoneReachable: true,
+            decodingError: nil
+        )
+
+        XCTAssertEqual(state.samples.map(\.showsAccountContext), [true, false])
+        XCTAssertTrue(state.samples[0].accessibilitySummary.contains("Claude, Work"))
+        XCTAssertTrue(state.samples[1].accessibilitySummary.contains("Claude, Work"))
+    }
+
     func testAccessibilitySummaryIncludesMeaningWithoutColorOrGeometry() {
         let sample = WatchUsageSample(
             id: "codex",
@@ -147,13 +188,20 @@ final class WatchDashboardStateTests: XCTestCase {
         {
           "schemaVersion": 1,
           "generatedAt": 2000000000000,
+          "futureDashboardLayout": "constellation",
           "accounts": [{
             "id": "codex",
             "providerName": "Codex",
             "accountLabel": "Primary",
             "fetchedAt": 2000000000000,
             "metrics": [
-              {"id":"valid","label":"Usage","exactValue":"42%","usedFraction":0.42},
+              {
+                "id":"valid",
+                "label":"Usage",
+                "exactValue":"42%",
+                "usedFraction":0.42,
+                "futureTileWidth":"quarter"
+              },
               {"label":"Missing required identity"}
             ]
           }]
