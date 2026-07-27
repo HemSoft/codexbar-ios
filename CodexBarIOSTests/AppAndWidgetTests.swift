@@ -2044,6 +2044,86 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(historyBuildCount, 0)
     }
 
+    func testFailedCachedMetricComponentsAreLastKnownDespiteMatchingTimestamps() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_785_000_000)
+        let successfulResult = ProviderUsageResult(
+            accountID: "codex.cached",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Current",
+            bars: [UsageBar(label: "Weekly", used: 20, limit: 100)],
+            creditsRemaining: 5,
+            fetchedAt: fetchedAt
+        )
+        let failedCachedResult = ProviderUsageResult(
+            accountID: successfulResult.accountID,
+            providerID: successfulResult.providerID,
+            title: successfulResult.title,
+            subtitle: "Refresh failed. Showing last known data.",
+            bars: successfulResult.bars,
+            barsFetchedAt: fetchedAt,
+            creditsRemaining: successfulResult.creditsRemaining,
+            creditsFetchedAt: fetchedAt,
+            failureMessage: "Refresh failed",
+            fetchedAt: fetchedAt
+        )
+
+        XCTAssertTrue(successfulResult.hasCurrentBars)
+        XCTAssertTrue(successfulResult.hasCurrentCredits)
+        XCTAssertTrue(failedCachedResult.hasFreshBars)
+        XCTAssertTrue(failedCachedResult.hasFreshCredits)
+        XCTAssertFalse(failedCachedResult.hasCurrentBars)
+        XCTAssertFalse(failedCachedResult.hasCurrentCredits)
+    }
+
+    func testMetricDetailResolvesCurrentKindByStableIDAfterRefresh() throws {
+        let selectedBar = UsageBar(
+            stableKey: "window-18000",
+            label: "5-hour limit",
+            used: 20,
+            limit: 100
+        )
+        let otherBar = UsageBar(
+            stableKey: "window-604800",
+            label: "Weekly limit",
+            used: 40,
+            limit: 100
+        )
+        let initialResult = ProviderUsageResult(
+            accountID: "codex.reordered",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Current",
+            bars: [selectedBar, otherBar],
+            fetchedAt: Date()
+        )
+        let reorderedResult = ProviderUsageResult(
+            accountID: initialResult.accountID,
+            providerID: initialResult.providerID,
+            title: initialResult.title,
+            subtitle: initialResult.subtitle,
+            bars: [otherBar, selectedBar],
+            fetchedAt: Date()
+        )
+        let selectedMetricID = try XCTUnwrap(initialResult.availableMetrics.first?.id)
+
+        let resolvedMetric = try XCTUnwrap(
+            ProviderUsageCard.metric(withID: selectedMetricID, in: reorderedResult)
+        )
+        XCTAssertEqual(resolvedMetric.label, selectedBar.label)
+        XCTAssertEqual(resolvedMetric.kind, .usageBar(index: 1))
+
+        let removedResult = ProviderUsageResult(
+            accountID: initialResult.accountID,
+            providerID: initialResult.providerID,
+            title: initialResult.title,
+            subtitle: initialResult.subtitle,
+            bars: [otherBar],
+            fetchedAt: Date()
+        )
+        XCTAssertNil(ProviderUsageCard.metric(withID: selectedMetricID, in: removedResult))
+    }
+
     @MainActor
     func testMetricVisualizationPreferencesPersistPerAccountAndStableMetric() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"

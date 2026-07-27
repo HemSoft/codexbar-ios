@@ -127,9 +127,9 @@ enum ProviderMetricTileGridResolver {
 }
 
 private struct ProviderMetricTileDetailPresentation: Identifiable {
-    let metric: ProviderUsageMetric
+    let metricID: String
 
-    var id: String { metric.id }
+    var id: String { metricID }
 }
 
 struct ProviderUsageCard: View {
@@ -435,7 +435,7 @@ struct ProviderUsageCard: View {
             MetricVisualizationCustomizationView(
                 accountTitle: result.title,
                 result: result,
-                showsSeverity: result.hasFreshBars,
+                showsSeverity: result.hasCurrentBars,
                 isMetricVisible: isMetricVisible,
                 onUpdateMetricVisibility: onUpdateMetricVisibility,
                 visualizationStyleForMetric: visualizationStyleForMetric,
@@ -447,13 +447,15 @@ struct ProviderUsageCard: View {
             )
         }
         .sheet(item: $metricDetailPresentation) { presentation in
-            ProviderMetricTileDetailView(
-                result: result,
-                statusText: statusText,
-                metric: presentation.metric,
-                history: metricDetailHistorySeries(for: presentation.metric),
-                visualizationStyle: visualizationStyleForMetric(presentation.metric.id)
-            )
+            if let metric = Self.metric(withID: presentation.metricID, in: result) {
+                ProviderMetricTileDetailView(
+                    result: result,
+                    statusText: statusText,
+                    metric: metric,
+                    history: metricDetailHistorySeries(for: metric),
+                    visualizationStyle: visualizationStyleForMetric(metric.id)
+                )
+            }
         }
         .task(id: result.availableMetrics.map(\.id)) {
             onMetricsDiscovered(result.availableMetrics.map(\.id))
@@ -467,6 +469,14 @@ struct ProviderUsageCard: View {
             )
             isResetActionUnavailable = false
             resetFeedback = nil
+        }
+        .onChange(of: result.availableMetrics.map(\.id)) {
+            guard let metricID = metricDetailPresentation?.metricID else {
+                return
+            }
+            if Self.metric(withID: metricID, in: result) == nil {
+                metricDetailPresentation = nil
+            }
         }
     }
 
@@ -647,7 +657,7 @@ struct ProviderUsageCard: View {
 
     private func metricTile(_ item: ProviderMetricTileGridItem) -> some View {
         Button {
-            metricDetailPresentation = ProviderMetricTileDetailPresentation(metric: item.metric)
+            metricDetailPresentation = ProviderMetricTileDetailPresentation(metricID: item.metric.id)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 switch item.metric.kind {
@@ -668,14 +678,14 @@ struct ProviderUsageCard: View {
                         MetricVisualizationView(
                             bar: bar,
                             style: visualizationStyleForMetric(item.metric.id),
-                            showsSeverity: result.hasFreshBars
+                            showsSeverity: result.hasCurrentBars
                         )
 
                         if item.width == .full {
                             if let resetDescription = bar.localizedResetDescription() {
                                 supportingText(resetDescription)
                             }
-                            if result.hasFreshBars, let projectionDescription = bar.projectionDescription() {
+                            if result.hasCurrentBars, let projectionDescription = bar.projectionDescription() {
                                 supportingText(projectionDescription)
                             }
                         }
@@ -696,7 +706,7 @@ struct ProviderUsageCard: View {
                             .lineLimit(1)
 
                         if item.width == .full {
-                            supportingText(result.hasFreshCredits ? "Current balance" : "Last known balance")
+                            supportingText(result.hasCurrentCredits ? "Current balance" : "Last known balance")
                         }
                     }
                 case let .monetary(index):
@@ -768,6 +778,13 @@ struct ProviderUsageCard: View {
             ?? (options.count == 1 ? options.first?.series : nil)
     }
 
+    static func metric(
+        withID metricID: String,
+        in result: ProviderUsageResult
+    ) -> ProviderUsageMetric? {
+        result.availableMetrics.first { $0.id == metricID }
+    }
+
     private func metricAccessibilityLabel(_ metric: ProviderUsageMetric) -> String {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
@@ -776,10 +793,10 @@ struct ProviderUsageCard: View {
                 bar.label,
                 bar.usageText,
                 "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit))",
-                result.hasFreshBars ? bar.effectiveSeverity().accessibilityName : "status unavailable",
-                result.hasFreshBars ? "fresh" : "stale",
+                result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName : "status unavailable",
+                result.hasCurrentBars ? "fresh" : "stale",
                 bar.localizedResetDescription(),
-                result.hasFreshBars ? bar.projectionDescription() : nil,
+                result.hasCurrentBars ? bar.projectionDescription() : nil,
             ]
             .compactMap { $0 }
             .joined(separator: ", ")
@@ -787,7 +804,7 @@ struct ProviderUsageCard: View {
             return [
                 metric.label,
                 result.creditsRemaining.map { CodexBarCurrencyText.format($0) },
-                result.hasFreshCredits ? "fresh" : "stale",
+                result.hasCurrentCredits ? "fresh" : "stale",
             ]
             .compactMap { $0 }
             .joined(separator: ", ")
@@ -1870,7 +1887,7 @@ private struct ProviderMetricTileDetailView: View {
                 MetricVisualizationView(
                     bar: result.bars[index],
                     style: visualizationStyle,
-                    showsSeverity: result.hasFreshBars
+                    showsSeverity: result.hasCurrentBars
                 )
             }
         }
@@ -1891,19 +1908,19 @@ private struct ProviderMetricTileDetailView: View {
             detailRow("Limit", ProviderUsageCard.formattedUsageAmount(bar.limit))
             detailRow(
                 "Severity",
-                result.hasFreshBars ? bar.effectiveSeverity().accessibilityName.capitalized : "Unavailable"
+                result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName.capitalized : "Unavailable"
             )
-            detailRow("Freshness", result.hasFreshBars ? "Current" : "Last known value")
+            detailRow("Freshness", result.hasCurrentBars ? "Current" : "Last known value")
             if let resetDescription = bar.localizedResetDescription() {
                 detailRow("Reset", resetDescription)
             }
-            if result.hasFreshBars, let projectionDescription = bar.projectionDescription() {
+            if result.hasCurrentBars, let projectionDescription = bar.projectionDescription() {
                 detailRow("Projection", projectionDescription)
             }
             detailRow("Account status", statusText)
         case .creditsRemaining:
             detailRow("Balance", valueText)
-            detailRow("Freshness", result.hasFreshCredits ? "Current" : "Last known value")
+            detailRow("Freshness", result.hasCurrentCredits ? "Current" : "Last known value")
             detailRow("Account status", statusText)
         case let .monetary(index) where result.monetaryMetrics.indices.contains(index):
             let monetaryMetric = result.monetaryMetrics[index]
