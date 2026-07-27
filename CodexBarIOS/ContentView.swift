@@ -438,7 +438,9 @@ struct ContentView: View {
                         metricID: metricID
                     )
                 },
-                historySeriesOptions: historyStore.historySeriesOptions(for: result),
+                historySeriesOptions: {
+                    historyStore.historySeriesOptions(for: result)
+                },
                 onMetricsDiscovered: { metricIDs in
                     configurationStore.reconcileMetricLayout(
                         accountID: result.accountID,

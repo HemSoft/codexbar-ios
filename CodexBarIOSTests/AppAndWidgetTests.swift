@@ -169,7 +169,7 @@ final class AppAndWidgetTests: XCTestCase {
 
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: balanceOnlyResult),
-            [.configureAccount]
+            [.configureAccount, .customizeMetrics]
         )
         XCTAssertEqual(
             ProviderUsageCard.menuActions(
@@ -1931,6 +1931,56 @@ final class AppAndWidgetTests: XCTestCase {
 
         XCTAssertEqual(rows.map(\.leading.id), ["credits", "money"])
         XCTAssertTrue(rows.allSatisfy { $0.leading.width == .full && $0.trailing == nil })
+    }
+
+    func testMetricTileHistoryIsBuiltLazilyAndFailedMoneyIsLastKnown() throws {
+        let monetaryMetric = ProviderMonetaryMetric(
+            kind: .balance,
+            label: "Usage credit balance",
+            minorUnits: 1_250,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let result = ProviderUsageResult(
+            accountID: "claude.cached",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Refresh failed. Showing last known data.",
+            bars: [],
+            monetaryMetrics: [monetaryMetric],
+            failureMessage: "Refresh failed",
+            fetchedAt: Date()
+        )
+        let series = UsageHistorySeries(
+            accountID: result.accountID,
+            points: [],
+            isBalance: true,
+            currencyCode: "USD"
+        )
+        var historyBuildCount = 0
+        let card = ProviderUsageCard(
+            result: result,
+            statusText: result.subtitle,
+            history: series,
+            historySeriesOptions: {
+                historyBuildCount += 1
+                return [
+                    UsageHistorySeriesOption(
+                        id: "money.\(monetaryMetric.id)",
+                        label: monetaryMetric.label,
+                        series: series
+                    ),
+                ]
+            }
+        )
+
+        XCTAssertEqual(historyBuildCount, 0)
+        XCTAssertEqual(card.monetaryFreshnessDescription, "Last known value")
+        XCTAssertEqual(
+            card.historySeries(for: try XCTUnwrap(result.availableMetrics.first)),
+            series
+        )
+        XCTAssertEqual(historyBuildCount, 1)
     }
 
     @MainActor

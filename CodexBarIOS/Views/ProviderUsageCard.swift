@@ -157,7 +157,7 @@ struct ProviderUsageCard: View {
     let metricOrder: [String]
     let metricWidthForMetric: (String) -> MetricTileWidthPreference
     let onUpdateMetricWidth: (String, MetricTileWidthPreference) -> Void
-    let historySeriesOptions: [UsageHistorySeriesOption]
+    let historySeriesOptionsProvider: () -> [UsageHistorySeriesOption]
     let onMetricsDiscovered: ([String]) -> Void
 
     @State private var resetInventoryPresentation: CodexBankedResetInventoryPresentation?
@@ -195,7 +195,7 @@ struct ProviderUsageCard: View {
         metricOrder: [String] = [],
         metricWidthForMetric: @escaping (String) -> MetricTileWidthPreference = { _ in .automatic },
         onUpdateMetricWidth: @escaping (String, MetricTileWidthPreference) -> Void = { _, _ in },
-        historySeriesOptions: [UsageHistorySeriesOption]? = nil,
+        historySeriesOptions: @escaping () -> [UsageHistorySeriesOption] = { [] },
         onMetricsDiscovered: @escaping ([String]) -> Void = { _ in }
     ) {
         self.result = result
@@ -222,9 +222,12 @@ struct ProviderUsageCard: View {
         self.metricOrder = metricOrder
         self.metricWidthForMetric = metricWidthForMetric
         self.onUpdateMetricWidth = onUpdateMetricWidth
-        self.historySeriesOptions = historySeriesOptions ?? [
-            UsageHistorySeriesOption(id: "primary", label: "Usage", series: history),
-        ]
+        self.historySeriesOptionsProvider = {
+            let options = historySeriesOptions()
+            return options.isEmpty
+                ? [UsageHistorySeriesOption(id: "primary", label: "Usage", series: history)]
+                : options
+        }
         self.onMetricsDiscovered = onMetricsDiscovered
         _resetRedemptionController = StateObject(
             wrappedValue: CodexBankedResetRedemptionController(
@@ -499,13 +502,7 @@ struct ProviderUsageCard: View {
         for result: ProviderUsageResult,
         isMetricVisible: (String) -> Bool = { _ in true }
     ) -> [ProviderUsageCardMenuAction] {
-        if
-            result.bars.isEmpty,
-            !showsMetricVisibilityControls(
-                for: result,
-                isMetricVisible: isMetricVisible
-            )
-        {
+        if result.availableMetrics.isEmpty {
             return [.configureAccount]
         }
         return [.configureAccount, .customizeMetrics]
@@ -748,7 +745,7 @@ struct ProviderUsageCard: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func historySeries(for metric: ProviderUsageMetric) -> UsageHistorySeries? {
+    func historySeries(for metric: ProviderUsageMetric) -> UsageHistorySeries? {
         let preferredOptionID: String?
         switch metric.kind {
         case .usageBar:
@@ -760,8 +757,9 @@ struct ProviderUsageCard: View {
                 ? "money.\(result.monetaryMetrics[index].id)"
                 : nil
         }
-        return historySeriesOptions.first(where: { $0.id == preferredOptionID })?.series
-            ?? (historySeriesOptions.count == 1 ? historySeriesOptions.first?.series : nil)
+        let options = historySeriesOptionsProvider()
+        return options.first(where: { $0.id == preferredOptionID })?.series
+            ?? (options.count == 1 ? options.first?.series : nil)
     }
 
     private func metricAccessibilityLabel(_ metric: ProviderUsageMetric) -> String {
@@ -793,7 +791,7 @@ struct ProviderUsageCard: View {
                 monetaryMetric.label,
                 monetaryMetric.formattedAmount(),
                 result.hasReachedSpendLimit ? "critical" : "normal",
-                "fresh",
+                monetaryFreshnessDescription.lowercased(),
                 monetaryMetric.detail,
             ]
             .compactMap { $0 }
@@ -805,6 +803,10 @@ struct ProviderUsageCard: View {
 
     static func formattedUsageAmount(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    var monetaryFreshnessDescription: String {
+        result.failureMessage == nil ? "Current" : "Last known value"
     }
 }
 
@@ -1853,7 +1855,7 @@ private struct ProviderMetricTileDetailView: View {
     private var metricSummary: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(valueText)
-                .font(.system(size: 34, weight: .semibold, design: .rounded))
+                .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                 .monospacedDigit()
                 .minimumScaleFactor(0.65)
                 .lineLimit(1)
@@ -1901,7 +1903,10 @@ private struct ProviderMetricTileDetailView: View {
             let monetaryMetric = result.monetaryMetrics[index]
             detailRow("Amount", monetaryMetric.formattedAmount())
             detailRow("Currency", monetaryMetric.currencyCode)
-            detailRow("Freshness", "Current")
+            detailRow(
+                "Freshness",
+                result.failureMessage == nil ? "Current" : "Last known value"
+            )
             if result.hasReachedSpendLimit {
                 detailRow("Severity", "Critical")
             }
