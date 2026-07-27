@@ -854,7 +854,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             .filter { destinationMetricIDSet.contains($0) }
         var seen = Set(copiedOrder)
         let destinationOnlyOrder = Self.uniqueNonemptyMetricIDs(destinationLayout.orderedMetricIDs)
-            .filter { destinationMetricIDSet.contains($0) && seen.insert($0).inserted }
+            .filter { seen.insert($0).inserted }
 
         destinationLayout.version = AccountMetricLayout.currentVersion
         destinationLayout.orderedMetricIDs = copiedOrder + destinationOnlyOrder

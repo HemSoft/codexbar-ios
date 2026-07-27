@@ -2575,6 +2575,7 @@ final class AppAndWidgetTests: XCTestCase {
         let sharedID = "claude.weekly"
         let sourceOnlyID = "claude.session"
         let destinationOnlyID = "claude.monthly"
+        let temporarilyMissingDestinationID = "claude.temporarily-missing"
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
         _ = store.reconcileMetricLayout(
             accountID: sourceAccountID,
@@ -2587,7 +2588,11 @@ final class AppAndWidgetTests: XCTestCase {
 
         _ = store.reconcileMetricLayout(
             accountID: destinationAccountID,
-            availableMetricIDs: [destinationOnlyID, sharedID]
+            availableMetricIDs: [
+                destinationOnlyID,
+                sharedID,
+                temporarilyMissingDestinationID,
+            ]
         )
         store.updateMetricWidth(
             .full,
@@ -2602,7 +2607,10 @@ final class AppAndWidgetTests: XCTestCase {
         )
 
         let copied = try XCTUnwrap(store.metricLayouts[destinationAccountID])
-        XCTAssertEqual(copied.orderedMetricIDs, [sharedID, destinationOnlyID])
+        XCTAssertEqual(
+            copied.orderedMetricIDs,
+            [sharedID, destinationOnlyID, temporarilyMissingDestinationID]
+        )
         XCTAssertFalse(store.isMetricVisible(accountID: destinationAccountID, metricID: sharedID))
         XCTAssertEqual(store.metricWidth(accountID: destinationAccountID, metricID: sharedID), .half)
         XCTAssertEqual(
@@ -2616,6 +2624,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertTrue(
             store.isMetricVisible(accountID: destinationAccountID, metricID: destinationOnlyID)
         )
+        XCTAssertNotNil(copied.preferences[temporarilyMissingDestinationID])
         XCTAssertNil(copied.preferences[sourceOnlyID])
     }
 
