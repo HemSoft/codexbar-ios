@@ -103,9 +103,54 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertEqual(result.providerID, .openRouter)
         XCTAssertEqual(result.accountID, configuration.id)
-        XCTAssertEqual(result.subtitle, "Not configured - enter API key.")
+        XCTAssertEqual(result.subtitle, "Not configured - enter OpenRouter Management API Key.")
         XCTAssertNil(result.creditsRemaining)
         XCTAssertTrue(result.bars.isEmpty)
+    }
+
+    func testOpenRouterProviderDistinguishesInvalidKeysFromMissingCreditsPermission() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openRouter)
+        try secretStore.saveSecret(
+            "sk-or-management-test",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [ProviderParsingMockURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        let provider = OpenRouterUsageProvider(secretStore: secretStore, session: session)
+        defer {
+            ProviderParsingMockURLProtocol.handler = nil
+        }
+
+        let cases = [
+            (401, "OpenRouter Management API Key is invalid or expired."),
+            (
+                403,
+                "This key lacks permission to read account credits. Enter an OpenRouter Management API Key."
+            ),
+        ]
+
+        for (statusCode, expectedMessage) in cases {
+            ProviderParsingMockURLProtocol.handler = { request in
+                (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: statusCode,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data()
+                )
+            }
+
+            let result = try await provider.fetchUsage(for: configuration)
+
+            XCTAssertEqual(result.subtitle, expectedMessage)
+            XCTAssertEqual(result.failureMessage, expectedMessage)
+            XCTAssertNil(result.creditsRemaining)
+        }
     }
 
     func testMoonshotBalanceParserReadsAvailableBalance() throws {

@@ -1458,6 +1458,10 @@ public final class ProviderConfigurationStore: ObservableObject {
             return "Not configured - enter OpenCode dashboard auth value"
         }
 
+        if configuration.providerID == .openRouter {
+            return "Not configured - enter OpenRouter Management API Key"
+        }
+
         return "Not configured"
     }
 

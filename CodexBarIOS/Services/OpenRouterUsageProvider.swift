@@ -23,7 +23,10 @@ public final class OpenRouterUsageProvider: UsageProvider {
             let apiKey = Self.normalizedAPIKey(from: storedSecret),
             !apiKey.isEmpty
         else {
-            return failureResult("Not configured - enter API key.", configuration: configuration)
+            return failureResult(
+                "Not configured - enter OpenRouter Management API Key.",
+                configuration: configuration
+            )
         }
 
         do {
@@ -36,8 +39,16 @@ public final class OpenRouterUsageProvider: UsageProvider {
             case 200..<300:
                 return Self.parseCredits(data, configuration: configuration)
                     ?? failureResult("Could not parse OpenRouter balance.", configuration: configuration)
-            case 401, 403:
-                return failureResult("OpenRouter rejected this API key.", configuration: configuration)
+            case 401:
+                return failureResult(
+                    "OpenRouter Management API Key is invalid or expired.",
+                    configuration: configuration
+                )
+            case 403:
+                return failureResult(
+                    "This key lacks permission to read account credits. Enter an OpenRouter Management API Key.",
+                    configuration: configuration
+                )
             case 429:
                 return failureResult("OpenRouter rate limit reached. Try again later.", configuration: configuration)
             default:
