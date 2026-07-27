@@ -2200,6 +2200,10 @@ final class AppAndWidgetTests: XCTestCase {
             secretStore: EmptySecretStore()
         )
         let metricID = "codex.session"
+        XCTAssertEqual(
+            migrated.metricWidth(accountID: existingAccount.id, metricID: metricID),
+            .full
+        )
         _ = migrated.reconcileMetricLayout(
             accountID: existingAccount.id,
             availableMetricIDs: [metricID]

@@ -682,7 +682,11 @@ public final class ProviderConfigurationStore: ObservableObject {
         accountID: String,
         metricID: String
     ) -> MetricTileWidthPreference {
-        metricLayouts[accountID]?.preferences[metricID]?.width ?? .automatic
+        guard let layout = metricLayouts[accountID] else {
+            return .automatic
+        }
+        return layout.preferences[metricID]?.width
+            ?? (layout.usesLegacyFullWidthDefaults ? .full : .automatic)
     }
 
     @discardableResult
