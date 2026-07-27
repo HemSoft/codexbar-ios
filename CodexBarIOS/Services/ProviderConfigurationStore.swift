@@ -863,11 +863,12 @@ public final class ProviderConfigurationStore: ObservableObject {
         guard !destinationMetricIDs.isEmpty else {
             return
         }
-        let destinationMetricIDSet = Set(destinationMetricIDs)
         var destinationLayout = reconcileMetricLayout(
             accountID: destinationAccountID,
             availableMetricIDs: destinationMetricIDs
         )
+        let destinationMetricIDSet = Set(destinationLayout.orderedMetricIDs)
+            .union(destinationLayout.preferences.keys)
         let copiedOrder = Self.uniqueNonemptyMetricIDs(sourceLayout.orderedMetricIDs)
             .filter { destinationMetricIDSet.contains($0) }
         var seen = Set(copiedOrder)
