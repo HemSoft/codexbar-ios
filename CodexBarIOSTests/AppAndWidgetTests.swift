@@ -1976,6 +1976,34 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    func testSemicircularDialContentIsCenteredAcrossTileWidthsAndValueLengths() {
+        let dialSize = CGSize(width: 112, height: 58)
+        let cases: [(valueText: String, tileWidth: CGFloat)] = [
+            ("0%", 154),
+            ("42%", 154),
+            ("100%", 154),
+            ("100%", 318),
+        ]
+
+        for testCase in cases {
+            let tileBounds = CGRect(x: 12, y: 8, width: testCase.tileWidth, height: 58)
+            let frame = SemicircularUsageDialLayout.contentFrame(
+                contentSize: dialSize,
+                in: tileBounds
+            )
+
+            XCTAssertEqual(
+                frame.midX,
+                tileBounds.midX,
+                accuracy: 0.001,
+                "\(testCase.valueText) should remain centered in a \(testCase.tileWidth)-point tile"
+            )
+            XCTAssertEqual(frame.minY, tileBounds.minY)
+            XCTAssertGreaterThanOrEqual(frame.minX, tileBounds.minX)
+            XCTAssertLessThanOrEqual(frame.maxX, tileBounds.maxX)
+        }
+    }
+
     func testMetricTileRowsPackInSavedOrderWithoutAvoidableHoles() {
         let metrics = [
             ProviderUsageMetric(id: "a", label: "A", kind: .usageBar(index: 0)),
