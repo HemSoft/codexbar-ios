@@ -8,6 +8,12 @@ Use the destination that best matches what you need:
 - [Suggest an improvement](https://github.com/HemSoft/codexbar-ios/issues/new?template=feature_request.yml)
 - [View known issues](https://github.com/HemSoft/codexbar-ios/issues?q=is%3Aissue%20is%3Aopen)
 
+The iPhone and iPad app exposes these destinations together under
+**Settings > Feedback & Support**, alongside the support guide and App Store
+rating link. Choosing **Report a Problem** prefills only the CodexBar
+version/build, operating-system version, and general device category. You can
+review or remove that text in GitHub before submitting.
+
 Bug reports and feature requests are public. GitHub requires an account to
 submit them. Before opening a bug report, gather:
 

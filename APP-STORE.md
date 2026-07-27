@@ -225,8 +225,8 @@ to the App Store Connect 1.1 draft on 2026-07-11:
 - [ ] If no demo mode is appropriate, provide a concise demo video showing configured providers, widgets, and refresh behavior.
 - [ ] Verify all error states are helpful and do not strand the user.
 - [ ] Verify settings can add, edit, refresh, and remove each provider cleanly.
-- [x] Provide persistent Settings links for writing an App Store review and
-  opening the public support channel.
+- [x] Provide a persistent Settings Feedback & Support destination for writing
+  an App Store review and opening structured public support channels.
 - [x] Gate native rating requests behind sustained successful use, with no
   first-launch, onboarding, automatic-refresh, incentive, or sentiment gate.
 

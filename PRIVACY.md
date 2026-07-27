@@ -43,6 +43,15 @@ HemSoft does not operate a backend service for CodexBar and does not collect you
 
 CodexBar does not include third-party analytics, advertising, or crash-reporting SDKs in the current release.
 
+When you explicitly choose **Report a Problem** in Feedback & Support,
+CodexBar opens GitHub with only the app version/build, operating-system
+version, and general device category prefilled. CodexBar does not read or add
+provider credentials, account labels, email addresses, balances, usage
+history, raw provider responses, widget selections, or Apple Watch snapshots
+to that link. Nothing is sent to GitHub until you choose an external action,
+and you can review or remove the prefilled text before submitting the public
+issue.
+
 ## Sharing And Sale Of Data
 
 HemSoft does not sell your data and does not share your CodexBar data with advertisers or data brokers.
