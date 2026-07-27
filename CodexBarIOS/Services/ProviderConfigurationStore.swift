@@ -812,7 +812,13 @@ public final class ProviderConfigurationStore: ObservableObject {
         guard !accountID.isEmpty else {
             return
         }
-        let metricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
+        var metricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
+        var seenMetricIDs = Set(metricIDs)
+        metricIDs.append(
+            contentsOf: Self.uniqueNonemptyMetricIDs(
+                metricLayouts[accountID]?.orderedMetricIDs ?? []
+            ).filter { seenMetricIDs.insert($0).inserted }
+        )
         let preferences = Dictionary(
             uniqueKeysWithValues: metricIDs.map {
                 ($0, MetricTilePreference(isNewlyDiscovered: false))

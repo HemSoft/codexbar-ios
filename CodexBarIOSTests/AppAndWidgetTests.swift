@@ -2526,10 +2526,11 @@ final class AppAndWidgetTests: XCTestCase {
         let accountID = "codex.editor"
         let firstID = "codex.session"
         let secondID = "codex.weekly"
+        let temporarilyMissingID = "codex.temporarily-missing"
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
         _ = store.reconcileMetricLayout(
             accountID: accountID,
-            availableMetricIDs: [firstID, secondID]
+            availableMetricIDs: [firstID, secondID, temporarilyMissingID]
         )
         let original = try XCTUnwrap(store.metricLayouts[accountID])
         var undoHistory = MetricLayoutUndoHistory()
@@ -2552,7 +2553,7 @@ final class AppAndWidgetTests: XCTestCase {
         )
 
         let reset = try XCTUnwrap(store.metricLayouts[accountID])
-        XCTAssertEqual(reset.orderedMetricIDs, [firstID, secondID])
+        XCTAssertEqual(reset.orderedMetricIDs, [firstID, secondID, temporarilyMissingID])
         XCTAssertTrue(reset.preferences.values.allSatisfy(\.isVisible))
         XCTAssertTrue(reset.preferences.values.allSatisfy { $0.visualizationStyle == nil })
         XCTAssertTrue(reset.preferences.values.allSatisfy { $0.width == .automatic })
