@@ -792,9 +792,14 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
         let availableMetricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
         let availableMetricIDSet = Set(availableMetricIDs)
-        let visibleOrder = Self.uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
+        let storedOrder = Self.uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
+        let visibleOrder = storedOrder
             .filter { availableMetricIDSet.contains($0) }
         if visibleOrder != availableMetricIDs {
+            return true
+        }
+        let unavailableOrder = storedOrder.filter { !availableMetricIDSet.contains($0) }
+        if storedOrder != availableMetricIDs + unavailableOrder {
             return true
         }
         return layout.preferences.values.contains { preference in

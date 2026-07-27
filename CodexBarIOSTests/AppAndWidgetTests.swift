@@ -2717,6 +2717,22 @@ final class AppAndWidgetTests: XCTestCase {
                 availableMetricIDs: metricIDs
             )
         )
+
+        store.updateMetricOrder(
+            [temporarilyMissingID] + metricIDs,
+            accountID: accountID
+        )
+        XCTAssertTrue(
+            store.isMetricLayoutCustomized(
+                accountID: accountID,
+                availableMetricIDs: metricIDs
+            )
+        )
+
+        store.resetMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: metricIDs + [temporarilyMissingID]
+        )
         store.updateMetricWidth(.half, accountID: accountID, metricID: metricIDs[0])
         XCTAssertTrue(
             store.isMetricLayoutCustomized(
