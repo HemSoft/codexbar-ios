@@ -438,6 +438,69 @@ struct ContentView: View {
                         metricID: metricID
                     )
                 },
+                metricLayout: {
+                    configurationStore.metricLayouts[result.accountID]
+                        ?? AccountMetricLayout(orderedMetricIDs: result.availableMetrics.map(\.id))
+                },
+                isMetricNewlyDiscovered: { metricID in
+                    configurationStore.isMetricNewlyDiscovered(
+                        accountID: result.accountID,
+                        metricID: metricID
+                    )
+                },
+                onUpdateMetricOrder: { metricIDs in
+                    configurationStore.updateMetricOrder(
+                        metricIDs,
+                        accountID: result.accountID
+                    )
+                },
+                onReplaceMetricLayout: { layout in
+                    configurationStore.replaceMetricLayout(
+                        layout,
+                        accountID: result.accountID
+                    )
+                },
+                onResetMetricLayout: { metricIDs in
+                    configurationStore.resetMetricLayout(
+                        accountID: result.accountID,
+                        availableMetricIDs: metricIDs
+                    )
+                },
+                copyLayoutDestinations: {
+                    orchestrator.dashboardCardItems.compactMap { destination in
+                        guard
+                            destination.id != result.accountID,
+                            destination.configuration.providerID == result.providerID,
+                            let destinationResult = destination.result,
+                            !destinationResult.availableMetrics.isEmpty
+                        else {
+                            return nil
+                        }
+                        let metricIDs = destinationResult.availableMetrics.map(\.id)
+                        return MetricLayoutCopyDestination(
+                            id: destination.id,
+                            title: destination.configuration.displayName,
+                            availableMetricIDs: metricIDs,
+                            hasCustomLayout: configurationStore.isMetricLayoutCustomized(
+                                accountID: destination.id,
+                                availableMetricIDs: metricIDs
+                            )
+                        )
+                    }
+                },
+                onCopyMetricLayout: { destination in
+                    configurationStore.copyMetricLayout(
+                        from: result.accountID,
+                        to: destination.id,
+                        destinationAvailableMetricIDs: destination.availableMetricIDs
+                    )
+                },
+                onMarkMetricsSeen: { metricIDs in
+                    configurationStore.markMetricsSeen(
+                        metricIDs,
+                        accountID: result.accountID
+                    )
+                },
                 historySeriesOptions: {
                     historyStore.historySeriesOptions(for: result)
                 },

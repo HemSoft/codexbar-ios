@@ -2516,6 +2516,138 @@ final class AppAndWidgetTests: XCTestCase {
     }
 
     @MainActor
+    func testMetricLayoutUndoAndResetRestoreCompletePersistedSnapshots() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let accountID = "codex.editor"
+        let firstID = "codex.session"
+        let secondID = "codex.weekly"
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        _ = store.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: [firstID, secondID]
+        )
+        let original = try XCTUnwrap(store.metricLayouts[accountID])
+        var undoHistory = MetricLayoutUndoHistory()
+
+        undoHistory.record(original)
+        store.updateMetricOrder([secondID, firstID], accountID: accountID)
+        store.updateMetricWidth(.half, accountID: accountID, metricID: secondID)
+        store.updateMetricVisibility(false, accountID: accountID, metricID: firstID)
+        XCTAssertTrue(undoHistory.canUndo)
+
+        store.replaceMetricLayout(try XCTUnwrap(undoHistory.undo()), accountID: accountID)
+        XCTAssertEqual(store.metricLayouts[accountID], original)
+        XCTAssertFalse(undoHistory.canUndo)
+
+        store.updateMetricWidth(.full, accountID: accountID, metricID: firstID)
+        store.updateVisualizationStyle(.circularRing, accountID: accountID, metricID: firstID)
+        store.resetMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: [firstID, secondID]
+        )
+
+        let reset = try XCTUnwrap(store.metricLayouts[accountID])
+        XCTAssertEqual(reset.orderedMetricIDs, [firstID, secondID])
+        XCTAssertTrue(reset.preferences.values.allSatisfy(\.isVisible))
+        XCTAssertTrue(reset.preferences.values.allSatisfy { $0.visualizationStyle == nil })
+        XCTAssertTrue(reset.preferences.values.allSatisfy { $0.width == .automatic })
+        XCTAssertTrue(reset.preferences.values.allSatisfy { !$0.isNewlyDiscovered })
+
+        let reloaded = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        XCTAssertEqual(reloaded.metricLayouts[accountID], reset)
+    }
+
+    @MainActor
+    func testCopyMetricLayoutCopiesMatchingIDsAndPreservesDestinationOnlyMetrics() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let sourceAccountID = "claude.source"
+        let destinationAccountID = "claude.destination"
+        let sharedID = "claude.weekly"
+        let sourceOnlyID = "claude.session"
+        let destinationOnlyID = "claude.monthly"
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        _ = store.reconcileMetricLayout(
+            accountID: sourceAccountID,
+            availableMetricIDs: [sourceOnlyID, sharedID]
+        )
+        store.updateMetricOrder([sharedID, sourceOnlyID], accountID: sourceAccountID)
+        store.updateMetricVisibility(false, accountID: sourceAccountID, metricID: sharedID)
+        store.updateMetricWidth(.half, accountID: sourceAccountID, metricID: sharedID)
+        store.updateVisualizationStyle(.semicircularDial, accountID: sourceAccountID, metricID: sharedID)
+
+        _ = store.reconcileMetricLayout(
+            accountID: destinationAccountID,
+            availableMetricIDs: [destinationOnlyID, sharedID]
+        )
+        store.updateMetricWidth(
+            .full,
+            accountID: destinationAccountID,
+            metricID: destinationOnlyID
+        )
+
+        store.copyMetricLayout(
+            from: sourceAccountID,
+            to: destinationAccountID,
+            destinationAvailableMetricIDs: [destinationOnlyID, sharedID]
+        )
+
+        let copied = try XCTUnwrap(store.metricLayouts[destinationAccountID])
+        XCTAssertEqual(copied.orderedMetricIDs, [sharedID, destinationOnlyID])
+        XCTAssertFalse(store.isMetricVisible(accountID: destinationAccountID, metricID: sharedID))
+        XCTAssertEqual(store.metricWidth(accountID: destinationAccountID, metricID: sharedID), .half)
+        XCTAssertEqual(
+            store.visualizationStyle(accountID: destinationAccountID, metricID: sharedID),
+            .semicircularDial
+        )
+        XCTAssertEqual(
+            store.metricWidth(accountID: destinationAccountID, metricID: destinationOnlyID),
+            .full
+        )
+        XCTAssertTrue(
+            store.isMetricVisible(accountID: destinationAccountID, metricID: destinationOnlyID)
+        )
+        XCTAssertNil(copied.preferences[sourceOnlyID])
+    }
+
+    @MainActor
+    func testCustomLayoutDetectionIgnoresNewMarkersButFindsUserEdits() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let accountID = "codex.copy-target"
+        let metricIDs = ["codex.session", "codex.weekly"]
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        _ = store.reconcileMetricLayout(accountID: accountID, availableMetricIDs: metricIDs)
+
+        XCTAssertFalse(
+            store.isMetricLayoutCustomized(
+                accountID: accountID,
+                availableMetricIDs: metricIDs
+            )
+        )
+        store.updateMetricWidth(.half, accountID: accountID, metricID: metricIDs[0])
+        XCTAssertTrue(
+            store.isMetricLayoutCustomized(
+                accountID: accountID,
+                availableMetricIDs: metricIDs
+            )
+        )
+    }
+
+    @MainActor
     func testAccountInsertedThroughUpdateKeepsNewMetricDefaultsAfterReload() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
