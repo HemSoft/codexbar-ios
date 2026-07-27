@@ -196,7 +196,7 @@ final class WidgetConfigurationTests: XCTestCase {
         XCTAssertEqual(tile.summaryText, "27%")
         XCTAssertEqual(
             tile.urgentStatusDetail(for: criticalProjection),
-            "27% now - Projected 100% at current pace"
+            "27% used - Projected 100% at current pace"
         )
         XCTAssertEqual(
             tile.urgentStatusDetail(for: noProjection),

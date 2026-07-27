@@ -76,7 +76,7 @@ struct CodexBarWidgetTile: Identifiable {
 
     func urgentStatusDetail(for bar: CodexBarWidgetUsageBarSnapshot) -> String {
         if let projectionDescription = bar.localizedProjectionDescription() {
-            return "\(bar.usageText) now - \(projectionDescription)"
+            return "\(bar.usageText) used - \(projectionDescription)"
         }
 
         return [bar.usageText, bar.localizedResetDescription()]
