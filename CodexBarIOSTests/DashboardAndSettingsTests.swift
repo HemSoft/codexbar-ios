@@ -1482,6 +1482,37 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testOpenRouterSettingsExplainManagementKeyRequirementsAndStorage() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .openRouter)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id
+        )
+
+        let presentation = viewModel.credentialPresentation
+
+        XCTAssertEqual(presentation.sectionTitle, "OpenRouter Management API Key")
+        XCTAssertEqual(presentation.unsavedPlaceholder, "Paste OpenRouter Management API Key")
+        XCTAssertEqual(presentation.saveButtonTitle, "Save Management API Key")
+        XCTAssertEqual(
+            presentation.setupMessage,
+            "OpenRouter credit balances require a Management API Key, not a regular inference key."
+        )
+        XCTAssertEqual(
+            presentation.setupURL?.absoluteString,
+            "https://openrouter.ai/settings/management-keys"
+        )
+        XCTAssertTrue(presentation.securityMessage?.contains("more sensitive than inference keys") == true)
+        XCTAssertTrue(presentation.securityMessage?.contains("only in Keychain") == true)
+    }
+
+    @MainActor
     func testProviderSettingsViewModelRegistersDefaultAccountBeforeSavingCredential() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

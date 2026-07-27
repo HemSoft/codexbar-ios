@@ -471,6 +471,24 @@ final class ConfigurationAndAuthTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderConfigurationStoreRequestsOpenRouterManagementAPIKey() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openRouter = store.addAccount(for: .openRouter)
+
+        XCTAssertFalse(store.isConfigured(openRouter))
+        XCTAssertEqual(
+            store.statusText(for: openRouter),
+            "Not configured - enter OpenRouter Management API Key"
+        )
+    }
+
+    @MainActor
     func testOpenCodeZenDisplaysOnDashboardWhenKeyIsSavedBeforeWorkspace() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

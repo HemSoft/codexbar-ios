@@ -265,7 +265,7 @@ struct ProviderSettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    Button("Save Credential") {
+                    Button(viewModel.credentialPresentation.saveButtonTitle) {
                         viewModel.saveGenericCredential()
                     }
                     .disabled(viewModel.secret.isEmpty)
@@ -274,6 +274,25 @@ struct ProviderSettingsView: View {
                         Button("Remove Saved Credential", role: .destructive) {
                             viewModel.removeSavedCredential()
                         }
+                    }
+
+                    if let setupMessage = viewModel.credentialPresentation.setupMessage {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(setupMessage, systemImage: "key")
+
+                            if
+                                let setupLinkTitle = viewModel.credentialPresentation.setupLinkTitle,
+                                let setupURL = viewModel.credentialPresentation.setupURL
+                            {
+                                Link(setupLinkTitle, destination: setupURL)
+                            }
+
+                            if let securityMessage = viewModel.credentialPresentation.securityMessage {
+                                Label(securityMessage, systemImage: "lock.shield")
+                            }
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
                 } else {
                     Text(nonSecretAuthText)
@@ -285,7 +304,7 @@ struct ProviderSettingsView: View {
                         .foregroundStyle(.red)
                 }
             } header: {
-                Text("Credential")
+                Text(viewModel.credentialPresentation.sectionTitle)
             }
 
             Section {
@@ -316,9 +335,10 @@ struct ProviderSettingsView: View {
                 : "Paste OpenCode dashboard auth value"
         }
 
+        let presentation = viewModel.credentialPresentation
         return configurationStore.hasSecret(for: viewModel.configuration)
-            ? "Credential saved"
-            : "Paste credential"
+            ? presentation.savedPlaceholder
+            : presentation.unsavedPlaceholder
     }
 
     private var copilotSecretPlaceholder: String {

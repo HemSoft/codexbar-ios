@@ -70,6 +70,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Clarified that OpenRouter credit balances require a sensitive Management API
+  Key stored only in Keychain, and now distinguish invalid credentials from
+  keys that lack account-credits permission.
+  ([#152](https://github.com/HemSoft/codexbar-ios/issues/152))
 - Removed duplicated percentages from semicircular usage gauges and centered
   their values while preserving aligned, accessible metric tiles.
   ([#151](https://github.com/HemSoft/codexbar-ios/issues/151))

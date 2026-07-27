@@ -1,6 +1,17 @@
 import Foundation
 import SwiftUI
 
+struct ProviderCredentialPresentation: Equatable {
+    let sectionTitle: String
+    let unsavedPlaceholder: String
+    let savedPlaceholder: String
+    let saveButtonTitle: String
+    let setupMessage: String?
+    let setupLinkTitle: String?
+    let setupURL: URL?
+    let securityMessage: String?
+}
+
 @MainActor
 final class ProviderSettingsViewModel: ObservableObject {
     enum PersistenceBehavior {
@@ -78,6 +89,32 @@ final class ProviderSettingsViewModel: ObservableObject {
         case .openRouter, .openCodeZen, .moonshot:
             [.apiKey]
         }
+    }
+
+    var credentialPresentation: ProviderCredentialPresentation {
+        if providerID == .openRouter {
+            return ProviderCredentialPresentation(
+                sectionTitle: "OpenRouter Management API Key",
+                unsavedPlaceholder: "Paste OpenRouter Management API Key",
+                savedPlaceholder: "OpenRouter Management API Key saved",
+                saveButtonTitle: "Save Management API Key",
+                setupMessage: "OpenRouter credit balances require a Management API Key, not a regular inference key.",
+                setupLinkTitle: "Create a Management API Key in OpenRouter",
+                setupURL: URL(string: "https://openrouter.ai/settings/management-keys"),
+                securityMessage: "Management keys can administer API keys and are more sensitive than inference keys. CodexBar stores this credential only in Keychain."
+            )
+        }
+
+        return ProviderCredentialPresentation(
+            sectionTitle: "Credential",
+            unsavedPlaceholder: "Paste credential",
+            savedPlaceholder: "Credential saved",
+            saveButtonTitle: "Save Credential",
+            setupMessage: nil,
+            setupLinkTitle: nil,
+            setupURL: nil,
+            securityMessage: nil
+        )
     }
 
     func binding<Value>(
