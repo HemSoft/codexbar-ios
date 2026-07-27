@@ -61,6 +61,10 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Made public support requests easier and safer with separate structured forms
+  for reporting problems and suggesting improvements, plus clearer routing for
+  known issues and privacy-sensitive concerns.
+  ([#162](https://github.com/HemSoft/codexbar-ios/issues/162))
 - Simplified provider cards by moving routine Claude and Cursor context plus
   Cursor alert details into an accessible More Information sheet, and by
   hiding safe projection copy while keeping limit-hit warnings visible.
