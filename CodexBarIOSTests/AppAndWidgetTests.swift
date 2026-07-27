@@ -781,6 +781,11 @@ final class AppAndWidgetTests: XCTestCase {
             CodexBarWidgetSnapshot.preview.results.map(\.providerID),
             ["codex", "copilot", "claude", "cursor", "moonshot", "openCodeZen", "openRouter"]
         )
+        let projectedPreviewBar = try? XCTUnwrap(
+            CodexBarWidgetSnapshot.preview.results.first?.bars.first
+        )
+        XCTAssertEqual(projectedPreviewBar?.usageText, "27%")
+        XCTAssertEqual(projectedPreviewBar?.projectedFraction, 1)
     }
 
     func testSharedWidgetRenderingMapsEveryProviderLogo() {

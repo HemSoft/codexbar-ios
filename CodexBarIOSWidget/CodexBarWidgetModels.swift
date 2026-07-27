@@ -71,14 +71,17 @@ struct CodexBarWidgetTile: Identifiable {
     }
 
     func metricText(for bar: CodexBarWidgetUsageBarSnapshot) -> String {
-        guard
-            let projectedFraction = bar.projectedFraction,
-            bar.effectiveSeverity > bar.severity
-        else {
-            return bar.usageText
+        bar.usageText
+    }
+
+    func urgentStatusDetail(for bar: CodexBarWidgetUsageBarSnapshot) -> String {
+        if let projectionDescription = bar.localizedProjectionDescription() {
+            return "\(bar.usageText) now - \(projectionDescription)"
         }
 
-        return "Proj \(Int((projectedFraction * 100).rounded()))%"
+        return [bar.usageText, bar.localizedResetDescription()]
+            .compactMap { $0 }
+            .joined(separator: " - ")
     }
 }
 

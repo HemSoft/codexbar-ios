@@ -724,13 +724,7 @@ struct ProviderWidgetTile: View {
 
     private var statusDetail: String {
         if let bar = tile.bar {
-            if let projectionDescription = bar.localizedProjectionDescription() {
-                return projectionDescription
-            }
-
-            return [bar.usageText, bar.localizedResetDescription()]
-                .compactMap { $0 }
-                .joined(separator: " - ")
+            return tile.urgentStatusDetail(for: bar)
         }
 
         if let metric = tile.monetaryMetric {

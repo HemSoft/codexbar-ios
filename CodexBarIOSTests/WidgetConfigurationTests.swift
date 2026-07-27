@@ -135,6 +135,75 @@ final class WidgetConfigurationTests: XCTestCase {
         XCTAssertEqual(monetaryOnly.summaryTile.monetaryMetric, monetaryOnly.monetaryMetrics?.first)
     }
 
+    func testUsageTileHeadlineAlwaysUsesCurrentUsageAcrossProjectionStates() {
+        let criticalProjection = CodexBarWidgetUsageBarSnapshot(
+            id: "critical-projection",
+            label: "Weekly usage",
+            fractionUsed: 0.27,
+            usageText: "27%",
+            resetDescription: "Resets Friday",
+            severity: .normal,
+            projectedFraction: 1,
+            projectionDescription: "Projected 100% at current pace",
+            projectedSeverity: .critical
+        )
+        let underLimitProjection = CodexBarWidgetUsageBarSnapshot(
+            id: "under-limit-projection",
+            label: "Weekly usage",
+            fractionUsed: 0.27,
+            usageText: "27%",
+            resetDescription: "Resets Friday",
+            severity: .normal,
+            projectedFraction: 0.6,
+            projectionDescription: "Projected to stay under limit",
+            projectedSeverity: .normal
+        )
+        let noProjection = CodexBarWidgetUsageBarSnapshot(
+            id: "no-projection",
+            label: "Weekly usage",
+            fractionUsed: 0.27,
+            usageText: "27%",
+            resetDescription: "Resets Friday",
+            severity: .normal
+        )
+        let staleProjection = CodexBarWidgetUsageBarSnapshot(
+            id: "stale-projection",
+            label: "Weekly usage",
+            fractionUsed: 0.27,
+            usageText: "27%",
+            resetDescription: "Resets Friday",
+            severity: .normal,
+            projectedFraction: nil,
+            projectionDescription: nil,
+            projectedSeverity: nil
+        )
+        let tile = CodexBarWidgetTile(
+            id: "bar.codex.weekly",
+            accountID: "codex",
+            providerID: "codex",
+            providerTitle: "ChatGPT / Codex",
+            title: "Weekly usage",
+            subtitle: "Pro",
+            bar: criticalProjection,
+            creditsRemaining: nil,
+            monetaryMetric: nil,
+            severity: .critical
+        )
+
+        for bar in [criticalProjection, underLimitProjection, noProjection, staleProjection] {
+            XCTAssertEqual(tile.metricText(for: bar), "27%")
+        }
+        XCTAssertEqual(tile.summaryText, "27%")
+        XCTAssertEqual(
+            tile.urgentStatusDetail(for: criticalProjection),
+            "27% now - Projected 100% at current pace"
+        )
+        XCTAssertEqual(
+            tile.urgentStatusDetail(for: noProjection),
+            "27% - Resets Friday"
+        )
+    }
+
     func testUnavailableTilesDisplayModesAndAccountDeepLinks() throws {
         let unavailable = CodexBarWidgetTile.unavailable(
             choice: CodexBarWidgetTileChoice(

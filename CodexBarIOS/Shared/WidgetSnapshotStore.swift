@@ -74,7 +74,10 @@ public struct CodexBarWidgetSnapshot: Codable, Equatable, Sendable {
                 title: "ChatGPT / Codex",
                 subtitle: "Pro",
                 barLabel: "5-hour usage limit",
-                fractionUsed: 0.42
+                fractionUsed: 0.27,
+                projectedFraction: 1,
+                projectionDescription: "Projected 100% at current pace",
+                projectedSeverity: .critical
             ),
             previewUsageProvider(
                 id: "copilot",
@@ -120,9 +123,13 @@ public struct CodexBarWidgetSnapshot: Codable, Equatable, Sendable {
         title: String,
         subtitle: String,
         barLabel: String,
-        fractionUsed: Double
+        fractionUsed: Double,
+        projectedFraction: Double? = nil,
+        projectionDescription: String? = nil,
+        projectedSeverity: CodexBarWidgetSeverity? = nil
     ) -> CodexBarWidgetProviderSnapshot {
-        CodexBarWidgetProviderSnapshot(
+        let currentSeverity = CodexBarWidgetSeverity(fractionUsed: fractionUsed)
+        return CodexBarWidgetProviderSnapshot(
             accountID: id,
             providerID: id,
             title: title,
@@ -134,12 +141,15 @@ public struct CodexBarWidgetSnapshot: Codable, Equatable, Sendable {
                     fractionUsed: fractionUsed,
                     usageText: "\(Int((fractionUsed * 100).rounded()))%",
                     resetDescription: "Resets soon",
-                    severity: CodexBarWidgetSeverity(fractionUsed: fractionUsed)
+                    severity: currentSeverity,
+                    projectedFraction: projectedFraction,
+                    projectionDescription: projectionDescription,
+                    projectedSeverity: projectedSeverity
                 )
             ],
             creditsRemaining: nil,
             fetchedAt: Date(),
-            severity: CodexBarWidgetSeverity(fractionUsed: fractionUsed)
+            severity: max(currentSeverity, projectedSeverity ?? .normal)
         )
     }
 
