@@ -167,6 +167,27 @@ final class AppAndWidgetTests: XCTestCase {
             ],
             fetchedAt: Date()
         )
+        let resultWithInformation = ProviderUsageResult(
+            accountID: "claude.information",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Live Claude usage",
+            bars: [],
+            cardInformationSections: [
+                ProviderCardInformationSection(
+                    id: "claude.account-details",
+                    title: "Account details",
+                    items: [
+                        ProviderCardInformationItem(
+                            id: "claude.auto-reload",
+                            label: "Auto-reload",
+                            detail: "Off"
+                        ),
+                    ]
+                ),
+            ],
+            fetchedAt: Date()
+        )
 
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: balanceOnlyResult),
@@ -198,6 +219,14 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: multiMetricBalanceResult),
             [.configureAccount, .customizeMetrics]
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.menuActions(for: resultWithInformation),
+            [.moreInformation, .configureAccount]
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.informationSections(for: resultWithInformation),
+            resultWithInformation.cardInformationSections
         )
         XCTAssertEqual(
             ProviderUsageCard.metricVisibilityAccessibilityValue(isVisible: true),
@@ -328,10 +357,38 @@ final class AppAndWidgetTests: XCTestCase {
         let claudeResult = results.first(where: { $0.providerID == .claude })
         XCTAssertEqual(claudeResult?.monetaryMetrics.count, 2)
         XCTAssertFalse(claudeResult?.usageMessages.isEmpty ?? true)
+        XCTAssertFalse(
+            claudeResult?.dashboardUsageMessages.contains("Usage credits are enabled.") ?? true
+        )
+        XCTAssertEqual(
+            claudeResult?.cardInformationSections.first?.items.map(\.label),
+            ["Usage credits", "Auto-reload"]
+        )
         let openCodeResult = results.first(where: { $0.providerID == .openCodeZen })
         XCTAssertEqual(openCodeResult?.title, "OpenCode Go + Zen")
         XCTAssertFalse(openCodeResult?.bars.isEmpty ?? true)
         XCTAssertNotNil(openCodeResult?.creditsRemaining)
+        let cursorResult = results.first(where: { $0.providerID == .cursor })
+        XCTAssertEqual(cursorResult?.subtitle, "Cursor plan usage")
+        XCTAssertEqual(
+            cursorResult?.cardInformationSections.first?.items.map(\.label),
+            ["Auto", "API"]
+        )
+        for providerID in [ProviderID.cursor, .openCodeZen, .copilot] {
+            let safeProjection = results
+                .first(where: { $0.providerID == providerID })?
+                .bars
+                .first(where: { $0.projectionDescription() != nil })
+            XCTAssertEqual(
+                safeProjection?.projectionDescription(),
+                "Projected to stay under limit",
+                "Expected deterministic safe projection detail for \(providerID.rawValue)"
+            )
+            XCTAssertNil(
+                safeProjection?.dashboardProjectionDescription(),
+                "Safe projection copy should be absent from the \(providerID.rawValue) dashboard card"
+            )
+        }
 
         let historyStore = AppStoreScreenshotFixtures.historyStore(for: results)
         guard let codexResult = results.first(where: { $0.providerID == .codex }) else {

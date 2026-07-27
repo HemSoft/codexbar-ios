@@ -458,6 +458,8 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
             creditsFetchedAt: result.creditsFetchedAt,
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
+            dashboardUsageMessages: result.dashboardUsageMessages,
+            cardInformationSections: result.cardInformationSections,
             codexBankedRateLimitResets: result.codexBankedRateLimitResets,
             failureMessage: result.failureMessage,
             fetchedAt: result.fetchedAt
@@ -480,6 +482,8 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
             creditsFetchedAt: result.creditsFetchedAt,
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
+            dashboardUsageMessages: result.dashboardUsageMessages,
+            cardInformationSections: result.cardInformationSections,
             codexBankedRateLimitResets: resets,
             failureMessage: result.failureMessage,
             fetchedAt: result.fetchedAt

@@ -1771,7 +1771,33 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertEqual(result.providerID, .cursor)
         XCTAssertEqual(result.title, "Cursor Pro")
-        XCTAssertEqual(result.subtitle, "Included usage - Auto 42% - API 18%")
+        XCTAssertEqual(result.subtitle, "Cursor plan usage")
+        XCTAssertEqual(
+            result.cardInformationSections,
+            [
+                ProviderCardInformationSection(
+                    id: "cursor.included-usage",
+                    title: "Included usage",
+                    items: [
+                        ProviderCardInformationItem(
+                            id: "cursor.included-usage.auto",
+                            label: "Auto",
+                            detail: "42%"
+                        ),
+                        ProviderCardInformationItem(
+                            id: "cursor.included-usage.api",
+                            label: "API",
+                            detail: "18%"
+                        ),
+                        ProviderCardInformationItem(
+                            id: "cursor.included-usage.total",
+                            label: "Total",
+                            detail: "63%"
+                        ),
+                    ]
+                ),
+            ]
+        )
         XCTAssertEqual(result.bars.map(\.label), [
             "Total",
             "Auto",
@@ -1797,6 +1823,11 @@ final class ProviderParsingTests: XCTestCase {
             "Projected 100% at current pace - Limit hit "
         ))
         XCTAssertEqual(result.bars[2].projectionDescription(at: fetchedAt), "Projected to stay under limit")
+        XCTAssertTrue(
+            try XCTUnwrap(result.bars[0].dashboardProjectionDescription(at: fetchedAt))
+                .hasPrefix("Projected 100% at current pace - Limit hit ")
+        )
+        XCTAssertNil(result.bars[2].dashboardProjectionDescription(at: fetchedAt))
         XCTAssertTrue(try XCTUnwrap(result.bars[3].projectionDescription(at: fetchedAt)).hasPrefix(
             "Projected 100% at current pace - Limit hit "
         ))
@@ -2252,6 +2283,28 @@ final class ProviderParsingTests: XCTestCase {
             result.usageMessages,
             ["Usage credits are enabled.", "Auto-reload is off."]
         )
+        XCTAssertTrue(result.dashboardUsageMessages.isEmpty)
+        XCTAssertEqual(
+            result.cardInformationSections,
+            [
+                ProviderCardInformationSection(
+                    id: "claude.account-details",
+                    title: "Account details",
+                    items: [
+                        ProviderCardInformationItem(
+                            id: "claude.usage-credits",
+                            label: "Usage credits",
+                            detail: "Enabled"
+                        ),
+                        ProviderCardInformationItem(
+                            id: "claude.auto-reload",
+                            label: "Auto-reload",
+                            detail: "Off"
+                        ),
+                    ]
+                ),
+            ]
+        )
     }
 
     func testClaudeUsageParserOmitsUnreportedSpendFieldsAndPreservesAutoReloadObjectState() throws {
@@ -2265,6 +2318,7 @@ final class ProviderParsingTests: XCTestCase {
             partial.usageMessages,
             ["Usage credits are enabled.", "Auto-reload is on."]
         )
+        XCTAssertTrue(partial.dashboardUsageMessages.isEmpty)
 
         let missingOptionalFields = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(#"{"spend":{"enabled":true,"used":{"amount_minor":0,"currency":"USD","exponent":2}}}"#.utf8),
@@ -2275,6 +2329,7 @@ final class ProviderParsingTests: XCTestCase {
             missingOptionalFields.usageMessages,
             ["Usage credits are enabled."]
         )
+        XCTAssertTrue(missingOptionalFields.dashboardUsageMessages.isEmpty)
     }
 
     func testClaudeUsageParserLossilyOmitsMalformedSpendFields() throws {
@@ -3044,6 +3099,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: nil
         ))
         XCTAssertEqual(disabled.usageMessages, ["Usage credits are disabled: Not funded."])
+        XCTAssertEqual(disabled.dashboardUsageMessages, disabled.usageMessages)
         XCTAssertTrue(disabled.monetaryMetrics.isEmpty)
 
         let unlimited = try XCTUnwrap(ClaudeUsageParser.parse(
@@ -3062,6 +3118,7 @@ final class ProviderParsingTests: XCTestCase {
             malformed.usageMessages,
             ["Usage credits are enabled, but monetary details are temporarily unavailable."]
         )
+        XCTAssertEqual(malformed.dashboardUsageMessages, malformed.usageMessages)
 
         let missingCurrency = try XCTUnwrap(ClaudeUsageParser.parse(
             Data(#"{"extra_usage":{"is_enabled":true,"used_credits":1250,"monthly_limit":5000,"decimal_places":2}}"#.utf8),
@@ -3104,6 +3161,10 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(
             unreportedEnabledState.usageMessages,
             ["Usage-credit enabled status was not reported."]
+        )
+        XCTAssertEqual(
+            unreportedEnabledState.dashboardUsageMessages,
+            unreportedEnabledState.usageMessages
         )
     }
 
@@ -3388,6 +3449,7 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(bar.projectedSeverity(at: now), .normal)
         XCTAssertEqual(bar.effectiveSeverity(at: now), .normal)
         XCTAssertEqual(bar.projectionDescription(at: now), "Projected to stay under limit")
+        XCTAssertNil(bar.dashboardProjectionDescription(at: now))
     }
 
     func testUsageBarKeepsOverLimitPercentVisible() {

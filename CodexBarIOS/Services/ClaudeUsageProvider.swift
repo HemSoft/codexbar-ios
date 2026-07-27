@@ -278,6 +278,8 @@ public final class ClaudeUsageProvider: UsageProvider {
             creditsFetchedAt: cached.creditsFetchedAt,
             monetaryMetrics: cached.monetaryMetrics,
             usageMessages: cached.usageMessages,
+            dashboardUsageMessages: cached.dashboardUsageMessages,
+            cardInformationSections: cached.cardInformationSections,
             failureMessage: message,
             recoveryAction: .retryRefresh,
             fetchedAt: cached.fetchedAt
@@ -322,6 +324,8 @@ public final class ClaudeUsageProvider: UsageProvider {
             creditsFetchedAt: result.creditsFetchedAt,
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
+            dashboardUsageMessages: result.dashboardUsageMessages,
+            cardInformationSections: result.cardInformationSections,
             failureMessage: result.failureMessage,
             fetchedAt: result.fetchedAt
         )
@@ -379,6 +383,8 @@ private actor ClaudeUsageSnapshotCache {
             creditsFetchedAt: result.creditsFetchedAt,
             monetaryMetrics: result.monetaryMetrics,
             usageMessages: result.usageMessages,
+            dashboardUsageMessages: result.dashboardUsageMessages,
+            cardInformationSections: result.cardInformationSections,
             failureMessage: result.failureMessage,
             fetchedAt: result.fetchedAt
         )

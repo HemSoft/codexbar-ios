@@ -102,6 +102,8 @@ enum AppStoreScreenshotFixtures {
                 creditsRemaining: sample.creditsRemaining,
                 monetaryMetrics: sample.monetaryMetrics,
                 usageMessages: sample.usageMessages,
+                dashboardUsageMessages: sample.dashboardUsageMessages,
+                cardInformationSections: sample.cardInformationSections,
                 fetchedAt: capturedAt
             )
         }
@@ -128,7 +130,8 @@ enum AppStoreScreenshotFixtures {
                     used: bar.limit * adjustedFraction,
                     limit: bar.limit,
                     resetDescription: bar.resetDescription,
-                    projectionDescriptionOverride: bar.projectionDescriptionOverride
+                    projectionDescriptionOverride: bar.projectionDescriptionOverride,
+                    projectionSignificanceOverride: bar.projectionSignificanceOverride
                 )
             }
             let historicalResult = ProviderUsageResult(

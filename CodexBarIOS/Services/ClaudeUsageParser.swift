@@ -19,6 +19,49 @@ enum ClaudeUsageIdentity {
 }
 
 public enum ClaudeUsageParser {
+    private enum SpendMessageKind {
+        case routine
+        case enabledStatusUnreported
+        case monetaryDetailsUnavailable
+        case actionable
+    }
+
+    private struct SpendMessage {
+        let kind: SpendMessageKind
+        let text: String
+        let informationItem: ProviderCardInformationItem?
+
+        static func routine(
+            id: String,
+            text: String,
+            label: String,
+            detail: String
+        ) -> SpendMessage {
+            SpendMessage(
+                kind: .routine,
+                text: text,
+                informationItem: ProviderCardInformationItem(
+                    id: id,
+                    label: label,
+                    detail: detail
+                )
+            )
+        }
+
+        static func dashboard(_ text: String) -> SpendMessage {
+            SpendMessage(kind: .actionable, text: text, informationItem: nil)
+        }
+
+        static func dashboard(_ kind: SpendMessageKind, _ text: String) -> SpendMessage {
+            SpendMessage(kind: kind, text: text, informationItem: nil)
+        }
+    }
+
+    private struct SpendPresentation {
+        let metrics: [ProviderMonetaryMetric]
+        let messages: [SpendMessage]
+    }
+
     private struct UsageResponse: Decodable {
         let fiveHour: UsageWindow?
         let sevenDay: UsageWindow?
@@ -402,7 +445,13 @@ public enum ClaudeUsageParser {
         )
 
         let extraUsage = spendMetrics(from: usage.spend, fallback: usage.extraUsage)
-        usageMessages.append(contentsOf: extraUsage.messages)
+        let dashboardUsageMessages = uniqueMessages(
+            usageMessages + extraUsage.messages
+                .filter { $0.kind != .routine }
+                .map(\.text)
+        )
+        usageMessages.append(contentsOf: extraUsage.messages.map(\.text))
+        let informationItems = extraUsage.messages.compactMap(\.informationItem)
 
         guard !bars.isEmpty || !extraUsage.metrics.isEmpty || !usageMessages.isEmpty else {
             return nil
@@ -419,6 +468,16 @@ public enum ClaudeUsageParser {
             bars: bars,
             monetaryMetrics: extraUsage.metrics,
             usageMessages: uniqueMessages(usageMessages),
+            dashboardUsageMessages: dashboardUsageMessages,
+            cardInformationSections: informationItems.isEmpty
+                ? []
+                : [
+                    ProviderCardInformationSection(
+                        id: "claude.account-details",
+                        title: "Account details",
+                        items: informationItems
+                    ),
+                ],
             fetchedAt: fetchedAt
         )
     }
@@ -592,7 +651,7 @@ public enum ClaudeUsageParser {
     private static func spendMetrics(
         from spend: Spend?,
         fallback extraUsage: ExtraUsage?
-    ) -> (metrics: [ProviderMonetaryMetric], messages: [String]) {
+    ) -> SpendPresentation {
         guard let spend else {
             return legacyExtraUsageMetrics(from: extraUsage)
         }
@@ -634,34 +693,61 @@ public enum ClaudeUsageParser {
 
         var messages = provider.messages
         if spend.enabled == nil, extraUsage?.isEnabled == true {
-            messages.removeAll { $0 == "Usage-credit enabled status was not reported." }
-            messages.insert("Usage credits are enabled.", at: 0)
+            messages.removeAll { $0.kind == .enabledStatusUnreported }
+            messages.insert(
+                .routine(
+                    id: "claude.usage-credits",
+                    text: "Usage credits are enabled.",
+                    label: "Usage credits",
+                    detail: "Enabled"
+                ),
+                at: 0
+            )
         }
         if metrics.isEmpty {
-            messages.append("Usage-credit monetary details are temporarily unavailable.")
+            messages.append(.dashboard(
+                .monetaryDetailsUnavailable,
+                "Usage-credit monetary details are temporarily unavailable."
+            ))
         } else {
-            messages.removeAll {
-                $0 == "Usage-credit monetary details are temporarily unavailable."
-            }
+            messages.removeAll { $0.kind == .monetaryDetailsUnavailable }
         }
-        return (metrics, uniqueMessages(messages))
+        return SpendPresentation(metrics: metrics, messages: uniqueSpendMessages(messages))
     }
 
     private static func providerSpendMetrics(
         from spend: Spend
-    ) -> (metrics: [ProviderMonetaryMetric], messages: [String]) {
+    ) -> SpendPresentation {
         if spend.enabled == false {
             let reason = spend.disabledReason?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let reason, !reason.isEmpty {
-                return ([], ["Usage credits are disabled: \(reason)."])
+                return SpendPresentation(
+                    metrics: [],
+                    messages: [.dashboard("Usage credits are disabled: \(reason).")]
+                )
             }
-            return ([], ["Usage credits are disabled."])
+            return SpendPresentation(
+                metrics: [],
+                messages: [.dashboard("Usage credits are disabled.")]
+            )
         }
 
         var metrics: [ProviderMonetaryMetric] = []
-        var messages: [String] = spend.enabled == true
-            ? ["Usage credits are enabled."]
-            : ["Usage-credit enabled status was not reported."]
+        var messages: [SpendMessage] = spend.enabled == true
+            ? [
+                .routine(
+                    id: "claude.usage-credits",
+                    text: "Usage credits are enabled.",
+                    label: "Usage credits",
+                    detail: "Enabled"
+                ),
+            ]
+            : [
+                .dashboard(
+                    .enabledStatusUnreported,
+                    "Usage-credit enabled status was not reported."
+                ),
+            ]
 
         let spentMetric = monetaryMetric(
             spend.used,
@@ -704,12 +790,20 @@ public enum ClaudeUsageParser {
         }
 
         if spend.reportsAutoReload, let autoReload = spend.autoReload {
-            messages.append("Auto-reload is \(autoReload ? "on" : "off").")
+            messages.append(.routine(
+                id: "claude.auto-reload",
+                text: "Auto-reload is \(autoReload ? "on" : "off").",
+                label: "Auto-reload",
+                detail: autoReload ? "On" : "Off"
+            ))
         }
         if metrics.isEmpty {
-            messages.append("Usage-credit monetary details are temporarily unavailable.")
+            messages.append(.dashboard(
+                .monetaryDetailsUnavailable,
+                "Usage-credit monetary details are temporarily unavailable."
+            ))
         }
-        return (metrics, messages)
+        return SpendPresentation(metrics: metrics, messages: messages)
     }
 
     private static func monetaryMetric(
@@ -753,21 +847,32 @@ public enum ClaudeUsageParser {
 
     private static func legacyExtraUsageMetrics(
         from extraUsage: ExtraUsage?
-    ) -> (metrics: [ProviderMonetaryMetric], messages: [String]) {
+    ) -> SpendPresentation {
         guard let extraUsage else {
-            return ([], [])
+            return SpendPresentation(metrics: [], messages: [])
         }
         if extraUsage.isEnabled == false {
             let reason = extraUsage.disabledReason?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let reason, !reason.isEmpty {
-                return ([], ["Usage credits are disabled: \(reason)."])
+                return SpendPresentation(
+                    metrics: [],
+                    messages: [.dashboard("Usage credits are disabled: \(reason).")]
+                )
             }
-            return ([], ["Usage credits are disabled."])
+            return SpendPresentation(
+                metrics: [],
+                messages: [.dashboard("Usage credits are disabled.")]
+            )
         }
         let reportedCurrency = extraUsage.currency?.trimmingCharacters(in: .whitespacesAndNewlines)
         let currency = reportedCurrency.flatMap { $0.isEmpty ? nil : $0 } ?? "USD"
         guard currency.count == 3, let usedCredits = extraUsage.usedCredits else {
-            return ([], ["Usage credits are enabled, but monetary details are temporarily unavailable."])
+            return SpendPresentation(
+                metrics: [],
+                messages: [
+                    .dashboard("Usage credits are enabled, but monetary details are temporarily unavailable."),
+                ]
+            )
         }
         let decimalPlaces = extraUsage.decimalPlaces ?? currencyDecimalPlaces(currency)
 
@@ -780,8 +885,13 @@ public enum ClaudeUsageParser {
             decimalPlaces: decimalPlaces,
             detail: "Month to date"
         )]
-        var messages: [String] = extraUsage.isEnabled == nil
-            ? ["Usage-credit enabled status was not reported."]
+        var messages: [SpendMessage] = extraUsage.isEnabled == nil
+            ? [
+                .dashboard(
+                    .enabledStatusUnreported,
+                    "Usage-credit enabled status was not reported."
+                ),
+            ]
             : []
 
         if let monthlyLimit = extraUsage.monthlyLimit {
@@ -803,17 +913,26 @@ public enum ClaudeUsageParser {
                 detail: "Not a prepaid balance"
             ))
             if limit > 0, spent >= limit {
-                messages.append("The monthly usage-credit spend limit has been reached.")
+                messages.append(.dashboard(
+                    "The monthly usage-credit spend limit has been reached."
+                ))
             }
         } else {
-            messages.append("Usage credits are enabled with no monthly spend limit reported.")
+            messages.append(.dashboard(
+                "Usage credits are enabled with no monthly spend limit reported."
+            ))
         }
-        return (metrics, messages)
+        return SpendPresentation(metrics: metrics, messages: messages)
     }
 
     private static func uniqueMessages(_ messages: [String]) -> [String] {
         var seen = Set<String>()
         return messages.filter { seen.insert($0).inserted }
+    }
+
+    private static func uniqueSpendMessages(_ messages: [SpendMessage]) -> [SpendMessage] {
+        var seen = Set<String>()
+        return messages.filter { seen.insert($0.text).inserted }
     }
 
     private static func sessionIdleDescription(

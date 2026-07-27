@@ -6,6 +6,30 @@ public enum ProviderUsageRecoveryAction: Equatable, Sendable {
     case reauthenticate
 }
 
+public struct ProviderCardInformationItem: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let label: String
+    public let detail: String
+
+    public init(id: String, label: String, detail: String) {
+        self.id = id
+        self.label = label
+        self.detail = detail
+    }
+}
+
+public struct ProviderCardInformationSection: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let items: [ProviderCardInformationItem]
+
+    public init(id: String, title: String, items: [ProviderCardInformationItem]) {
+        self.id = id
+        self.title = title
+        self.items = items
+    }
+}
+
 public struct ProviderPlanDescriptor: Codable, Equatable, Sendable {
     public let identifier: String
     public let displayLabel: String
@@ -189,6 +213,8 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let creditsFetchedAt: Date?
     public let monetaryMetrics: [ProviderMonetaryMetric]
     public let usageMessages: [String]
+    public let dashboardUsageMessages: [String]
+    public let cardInformationSections: [ProviderCardInformationSection]
     public let codexBankedRateLimitResets: CodexBankedRateLimitResets?
     public let failureMessage: String?
     public let recoveryAction: ProviderUsageRecoveryAction
@@ -211,6 +237,8 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         creditsFetchedAt: Date? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
         usageMessages: [String] = [],
+        dashboardUsageMessages: [String]? = nil,
+        cardInformationSections: [ProviderCardInformationSection] = [],
         codexBankedRateLimitResets: CodexBankedRateLimitResets? = nil,
         failureMessage: String? = nil,
         recoveryAction: ProviderUsageRecoveryAction = .retryRefresh,
@@ -232,6 +260,8 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.creditsFetchedAt = creditsRemaining == nil ? nil : (creditsFetchedAt ?? fetchedAt)
         self.monetaryMetrics = monetaryMetrics
         self.usageMessages = usageMessages
+        self.dashboardUsageMessages = dashboardUsageMessages ?? usageMessages
+        self.cardInformationSections = cardInformationSections.filter { !$0.items.isEmpty }
         self.codexBankedRateLimitResets = codexBankedRateLimitResets.flatMap {
             $0.availableCount > 0 ? $0 : nil
         }

@@ -7,6 +7,8 @@ public struct DemoUsageProvider: UsageProvider {
     public let creditsRemaining: Double?
     public let monetaryMetrics: [ProviderMonetaryMetric]
     public let usageMessages: [String]
+    public let dashboardUsageMessages: [String]?
+    public let cardInformationSections: [ProviderCardInformationSection]
     public let subtitle: String
 
     public init(
@@ -16,6 +18,8 @@ public struct DemoUsageProvider: UsageProvider {
         creditsRemaining: Double? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
         usageMessages: [String] = [],
+        dashboardUsageMessages: [String]? = nil,
+        cardInformationSections: [ProviderCardInformationSection] = [],
         subtitle: String = "Ready to refresh"
     ) {
         self.providerID = providerID
@@ -24,6 +28,8 @@ public struct DemoUsageProvider: UsageProvider {
         self.creditsRemaining = creditsRemaining
         self.monetaryMetrics = monetaryMetrics
         self.usageMessages = usageMessages
+        self.dashboardUsageMessages = dashboardUsageMessages
+        self.cardInformationSections = cardInformationSections
         self.subtitle = subtitle
     }
 
@@ -43,6 +49,8 @@ public struct DemoUsageProvider: UsageProvider {
             creditsRemaining: creditsRemaining,
             monetaryMetrics: monetaryMetrics,
             usageMessages: usageMessages,
+            dashboardUsageMessages: dashboardUsageMessages,
+            cardInformationSections: cardInformationSections,
             fetchedAt: Date()
         )
     }
@@ -65,7 +73,8 @@ public extension DemoUsageProvider {
                         used: 42,
                         limit: 100,
                         resetDescription: "Resets in 2h 15m",
-                        projectionDescriptionOverride: "Projected to stay under limit"
+                        projectionDescriptionOverride: "Projected to stay under limit",
+                        projectionSignificanceOverride: .benign
                     ),
                     UsageBar(
                         stableKey: "window-604800",
@@ -90,7 +99,9 @@ public extension DemoUsageProvider {
                         label: "Premium requests",
                         used: 73,
                         limit: 100,
-                        resetDescription: "Resets in 9 days"
+                        resetDescription: "Resets in 9 days",
+                        projectionDescriptionOverride: "Projected to stay under limit",
+                        projectionSignificanceOverride: .benign
                     )
                 ],
                 subtitle: "Engineering organization"
@@ -144,6 +155,25 @@ public extension DemoUsageProvider {
                     ),
                 ],
                 usageMessages: ["Fable usage is capped within the all-model weekly allowance."],
+                dashboardUsageMessages: ["Fable usage is capped within the all-model weekly allowance."],
+                cardInformationSections: [
+                    ProviderCardInformationSection(
+                        id: "claude.account-details",
+                        title: "Account details",
+                        items: [
+                            ProviderCardInformationItem(
+                                id: "claude.usage-credits",
+                                label: "Usage credits",
+                                detail: "Enabled"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "claude.auto-reload",
+                                label: "Auto-reload",
+                                detail: "Off"
+                            ),
+                        ]
+                    ),
+                ],
                 subtitle: "Browser session connected"
             ),
             DemoUsageProvider(
@@ -160,7 +190,9 @@ public extension DemoUsageProvider {
                         label: "5-hour usage limit",
                         used: 44,
                         limit: 100,
-                        resetDescription: "Resets in 2h 10m"
+                        resetDescription: "Resets in 2h 10m",
+                        projectionDescriptionOverride: "Projected to stay under limit",
+                        projectionSignificanceOverride: .benign
                     ),
                     UsageBar(
                         stableKey: "go.weekly",
@@ -194,10 +226,30 @@ public extension DemoUsageProvider {
                         label: "Monthly included usage",
                         used: 51,
                         limit: 100,
-                        resetDescription: "Resets Aug 1"
+                        resetDescription: "Resets Aug 1",
+                        projectionDescriptionOverride: "Projected to stay under limit",
+                        projectionSignificanceOverride: .benign
                     )
                 ],
-                subtitle: "Cursor account connected"
+                cardInformationSections: [
+                    ProviderCardInformationSection(
+                        id: "cursor.included-usage",
+                        title: "Included usage",
+                        items: [
+                            ProviderCardInformationItem(
+                                id: "cursor.included-usage.auto",
+                                label: "Auto",
+                                detail: "34%"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "cursor.included-usage.api",
+                                label: "API",
+                                detail: "17%"
+                            ),
+                        ]
+                    ),
+                ],
+                subtitle: "Cursor plan usage"
             )
         ]
     }
