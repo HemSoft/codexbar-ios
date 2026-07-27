@@ -2816,6 +2816,10 @@ private struct CircularUsageRing: View {
 }
 
 struct SemicircularUsageDialLayout: Layout {
+    static let contentSize = CGSize(width: 112, height: 58)
+    static let valueMaxWidth: CGFloat = 88
+    static let valueMinimumScaleFactor = 0.65
+
     static func contentFrame(contentSize: CGSize, in bounds: CGRect) -> CGRect {
         CGRect(
             x: bounds.midX - (contentSize.width / 2),
@@ -2876,11 +2880,14 @@ private struct SemicircularUsageDial: View {
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
                     .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-                    .frame(maxWidth: 88)
+                    .minimumScaleFactor(SemicircularUsageDialLayout.valueMinimumScaleFactor)
+                    .frame(maxWidth: SemicircularUsageDialLayout.valueMaxWidth)
                     .offset(y: 5)
             }
-            .frame(width: 112, height: 58)
+            .frame(
+                width: SemicircularUsageDialLayout.contentSize.width,
+                height: SemicircularUsageDialLayout.contentSize.height
+            )
         }
     }
 }
