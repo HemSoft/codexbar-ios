@@ -423,6 +423,29 @@ struct ContentView: View {
                         accountID: result.accountID,
                         metricIDs: metricIDs
                     )
+                },
+                metricOrder: configurationStore.metricLayouts[result.accountID]?.orderedMetricIDs ?? [],
+                metricWidthForMetric: { metricID in
+                    configurationStore.metricWidth(
+                        accountID: result.accountID,
+                        metricID: metricID
+                    )
+                },
+                onUpdateMetricWidth: { metricID, width in
+                    configurationStore.updateMetricWidth(
+                        width,
+                        accountID: result.accountID,
+                        metricID: metricID
+                    )
+                },
+                historySeriesOptions: {
+                    historyStore.historySeriesOptions(for: result)
+                },
+                onMetricsDiscovered: { metricIDs in
+                    configurationStore.reconcileMetricLayout(
+                        accountID: result.accountID,
+                        availableMetricIDs: metricIDs
+                    )
                 }
             )
         } else {

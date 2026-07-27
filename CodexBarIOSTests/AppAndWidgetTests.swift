@@ -169,7 +169,7 @@ final class AppAndWidgetTests: XCTestCase {
 
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: balanceOnlyResult),
-            [.configureAccount]
+            [.configureAccount, .customizeMetrics]
         )
         XCTAssertEqual(
             ProviderUsageCard.menuActions(
@@ -1806,6 +1806,403 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(MetricVisualizationStyle.semicircularDial.resolvedForWidget(allowsGauge: false), .linearBar)
         XCTAssertEqual(MetricVisualizationStyle.segmentedBar.resolvedForWidget(allowsGauge: false), .segmentedBar)
         XCTAssertEqual(MetricVisualizationStyle.largeNumeric.resolvedForWidget(allowsGauge: true), .largeNumeric)
+    }
+
+    func testMetricTileWidthResolutionHonorsDefaultsOverridesAndAccessibilityCollapse() {
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .linearBar,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .full
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .circularRing,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .half
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .automatic,
+                usesRegularHorizontalSizeClass: true,
+                collapsesToSingleColumn: false
+            ),
+            .half
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .creditsRemaining,
+                visualizationStyle: .automatic,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .half
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .full,
+                kind: .monetary(index: 0),
+                visualizationStyle: .automatic,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .full
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .half,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .linearBar,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .half
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .half,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .linearBar,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: true
+            ),
+            .full
+        )
+    }
+
+    func testMetricTileRowsPackInSavedOrderWithoutAvoidableHoles() {
+        let metrics = [
+            ProviderUsageMetric(id: "a", label: "A", kind: .usageBar(index: 0)),
+            ProviderUsageMetric(id: "b", label: "B", kind: .creditsRemaining),
+            ProviderUsageMetric(id: "c", label: "C", kind: .monetary(index: 0)),
+            ProviderUsageMetric(id: "d", label: "D", kind: .usageBar(index: 1)),
+            ProviderUsageMetric(id: "e", label: "E", kind: .monetary(index: 1)),
+        ]
+        let preferences: [String: MetricTileWidthPreference] = [
+            "a": .half,
+            "b": .half,
+            "c": .full,
+            "d": .half,
+            "e": .half,
+        ]
+
+        let rows = ProviderMetricTileGridResolver.rows(
+            metrics: metrics,
+            orderedMetricIDs: ["d", "c", "b", "a", "unknown"],
+            widthForMetric: { preferences[$0] ?? .automatic },
+            visualizationStyleForMetric: { _ in .linearBar },
+            usesRegularHorizontalSizeClass: false,
+            collapsesToSingleColumn: false
+        )
+
+        XCTAssertEqual(rows.map(\.leading.id), ["d", "c", "b", "e"])
+        XCTAssertEqual(rows.map { $0.trailing?.id }, [nil, nil, "a", nil])
+        XCTAssertEqual(
+            rows.flatMap { [$0.leading.id, $0.trailing?.id].compactMap { $0 } },
+            ["d", "c", "b", "a", "e"]
+        )
+    }
+
+    func testMetricTileRowsBecomeSingleColumnWithoutChangingRequestedWidths() {
+        let metrics = [
+            ProviderUsageMetric(id: "credits", label: "Credits", kind: .creditsRemaining),
+            ProviderUsageMetric(id: "money", label: "Balance", kind: .monetary(index: 0)),
+        ]
+
+        let rows = ProviderMetricTileGridResolver.rows(
+            metrics: metrics,
+            orderedMetricIDs: [],
+            widthForMetric: { _ in .half },
+            visualizationStyleForMetric: { _ in .largeNumeric },
+            usesRegularHorizontalSizeClass: false,
+            collapsesToSingleColumn: true
+        )
+
+        XCTAssertEqual(rows.map(\.leading.id), ["credits", "money"])
+        XCTAssertTrue(rows.allSatisfy { $0.leading.width == .full && $0.trailing == nil })
+    }
+
+    func testMetricTileHistoryIsBuiltLazilyAndFailedMoneyIsLastKnown() throws {
+        let monetaryMetric = ProviderMonetaryMetric(
+            kind: .balance,
+            label: "Usage credit balance",
+            minorUnits: 1_250,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let result = ProviderUsageResult(
+            accountID: "claude.cached",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Refresh failed. Showing last known data.",
+            bars: [],
+            monetaryMetrics: [monetaryMetric],
+            failureMessage: "Refresh failed",
+            fetchedAt: Date()
+        )
+        let series = UsageHistorySeries(
+            accountID: result.accountID,
+            points: [],
+            isBalance: true,
+            currencyCode: "USD"
+        )
+        var historyBuildCount = 0
+        let card = ProviderUsageCard(
+            result: result,
+            statusText: result.subtitle,
+            history: series,
+            historySeriesOptions: {
+                historyBuildCount += 1
+                return [
+                    UsageHistorySeriesOption(
+                        id: "money.\(monetaryMetric.id)",
+                        label: monetaryMetric.label,
+                        series: series
+                    ),
+                ]
+            }
+        )
+
+        XCTAssertEqual(historyBuildCount, 0)
+        XCTAssertEqual(card.monetaryFreshnessDescription, "Last known value")
+        XCTAssertEqual(
+            card.metricDetailHistorySeries(for: try XCTUnwrap(result.availableMetrics.first)),
+            series
+        )
+        XCTAssertEqual(historyBuildCount, 1)
+    }
+
+    func testMetricTileDetailsHonorHistorySettingAndOmitAggregateUsageHistory() throws {
+        let usageBar = UsageBar(
+            label: "5-hour limit",
+            used: 25,
+            limit: 100
+        )
+        let result = ProviderUsageResult(
+            accountID: "codex.history",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Current",
+            bars: [usageBar],
+            fetchedAt: Date()
+        )
+        let series = UsageHistorySeries(
+            accountID: result.accountID,
+            points: [],
+            isBalance: false
+        )
+        var historyBuildCount = 0
+        let balanceResult = ProviderUsageResult(
+            accountID: "openrouter.history",
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Current",
+            bars: [],
+            creditsRemaining: 12.50,
+            fetchedAt: Date()
+        )
+        let disabledCard = ProviderUsageCard(
+            result: balanceResult,
+            statusText: balanceResult.subtitle,
+            history: series,
+            isHistoryEnabled: false,
+            historySeriesOptions: {
+                historyBuildCount += 1
+                return [UsageHistorySeriesOption(id: "balance", label: "Balance", series: series)]
+            }
+        )
+
+        XCTAssertNil(
+            disabledCard.metricDetailHistorySeries(
+                for: try XCTUnwrap(balanceResult.availableMetrics.first)
+            )
+        )
+        XCTAssertEqual(historyBuildCount, 0)
+
+        let enabledCard = ProviderUsageCard(
+            result: result,
+            statusText: result.subtitle,
+            history: series,
+            historySeriesOptions: {
+                historyBuildCount += 1
+                return [UsageHistorySeriesOption(id: "usage", label: "Usage", series: series)]
+            }
+        )
+        let usageMetric = try XCTUnwrap(result.availableMetrics.first)
+        XCTAssertNil(enabledCard.metricDetailHistorySeries(for: usageMetric))
+        XCTAssertEqual(historyBuildCount, 0)
+    }
+
+    func testFailedCachedMetricComponentsAreLastKnownDespiteMatchingTimestamps() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_785_000_000)
+        let successfulResult = ProviderUsageResult(
+            accountID: "codex.cached",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Current",
+            bars: [UsageBar(label: "Weekly", used: 20, limit: 100)],
+            creditsRemaining: 5,
+            fetchedAt: fetchedAt
+        )
+        let failedCachedResult = ProviderUsageResult(
+            accountID: successfulResult.accountID,
+            providerID: successfulResult.providerID,
+            title: successfulResult.title,
+            subtitle: "Refresh failed. Showing last known data.",
+            bars: successfulResult.bars,
+            barsFetchedAt: fetchedAt,
+            creditsRemaining: successfulResult.creditsRemaining,
+            creditsFetchedAt: fetchedAt,
+            failureMessage: "Refresh failed",
+            fetchedAt: fetchedAt
+        )
+
+        XCTAssertTrue(successfulResult.hasCurrentBars)
+        XCTAssertTrue(successfulResult.hasCurrentCredits)
+        XCTAssertTrue(failedCachedResult.hasFreshBars)
+        XCTAssertTrue(failedCachedResult.hasFreshCredits)
+        XCTAssertFalse(failedCachedResult.hasCurrentBars)
+        XCTAssertFalse(failedCachedResult.hasCurrentCredits)
+    }
+
+    func testPartialFailureKeepsSuccessfulComponentCurrent() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_785_000_100)
+        let barsPreserved = ProviderUsageResult(
+            accountID: "opencode.partial-bars",
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Zen refreshed",
+            bars: [UsageBar(label: "Weekly", used: 20, limit: 100)],
+            creditsRemaining: 8,
+            failureMessage: "Go refresh failed",
+            preserveCachedBarsOnFailure: true,
+            fetchedAt: fetchedAt
+        )
+        let creditsPreserved = ProviderUsageResult(
+            accountID: "opencode.partial-credits",
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Go refreshed",
+            bars: [UsageBar(label: "Weekly", used: 20, limit: 100)],
+            creditsRemaining: 8,
+            failureMessage: "Zen refresh failed",
+            preserveCachedCreditsOnFailure: true,
+            fetchedAt: fetchedAt
+        )
+
+        XCTAssertFalse(barsPreserved.hasCurrentBars)
+        XCTAssertTrue(barsPreserved.hasCurrentCredits)
+        XCTAssertTrue(creditsPreserved.hasCurrentBars)
+        XCTAssertFalse(creditsPreserved.hasCurrentCredits)
+    }
+
+    func testSpendLimitSeverityAppliesOnlyToSpentMetric() {
+        let balance = ProviderMonetaryMetric(
+            kind: .balance,
+            label: "Current balance",
+            minorUnits: 5_000,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let spent = ProviderMonetaryMetric(
+            kind: .spent,
+            label: "Spent this month",
+            minorUnits: 10_000,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let limit = ProviderMonetaryMetric(
+            kind: .spendLimit,
+            label: "Monthly limit",
+            minorUnits: 10_000,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let result = ProviderUsageResult(
+            accountID: "claude.spend-limit",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Current",
+            bars: [],
+            monetaryMetrics: [balance, spent, limit],
+            fetchedAt: Date()
+        )
+
+        XCTAssertTrue(result.hasReachedSpendLimit)
+        XCTAssertFalse(ProviderUsageCard.isCritical(balance, in: result))
+        XCTAssertTrue(ProviderUsageCard.isCritical(spent, in: result))
+        XCTAssertFalse(ProviderUsageCard.isCritical(limit, in: result))
+    }
+
+    func testMetricTileAccessibilityHintPromisesOnlyAvailableContent() {
+        XCTAssertEqual(
+            ProviderUsageCard.metricDetailAccessibilityHint,
+            "Shows complete metric details."
+        )
+        XCTAssertFalse(
+            ProviderUsageCard.metricDetailAccessibilityHint.localizedCaseInsensitiveContains(
+                "history"
+            )
+        )
+    }
+
+    func testMetricDetailResolvesCurrentKindByStableIDAfterRefresh() throws {
+        let selectedBar = UsageBar(
+            stableKey: "window-18000",
+            label: "5-hour limit",
+            used: 20,
+            limit: 100
+        )
+        let otherBar = UsageBar(
+            stableKey: "window-604800",
+            label: "Weekly limit",
+            used: 40,
+            limit: 100
+        )
+        let initialResult = ProviderUsageResult(
+            accountID: "codex.reordered",
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Current",
+            bars: [selectedBar, otherBar],
+            fetchedAt: Date()
+        )
+        let reorderedResult = ProviderUsageResult(
+            accountID: initialResult.accountID,
+            providerID: initialResult.providerID,
+            title: initialResult.title,
+            subtitle: initialResult.subtitle,
+            bars: [otherBar, selectedBar],
+            fetchedAt: Date()
+        )
+        let selectedMetricID = try XCTUnwrap(initialResult.availableMetrics.first?.id)
+
+        let resolvedMetric = try XCTUnwrap(
+            ProviderUsageCard.metric(withID: selectedMetricID, in: reorderedResult)
+        )
+        XCTAssertEqual(resolvedMetric.label, selectedBar.label)
+        XCTAssertEqual(resolvedMetric.kind, .usageBar(index: 1))
+
+        let removedResult = ProviderUsageResult(
+            accountID: initialResult.accountID,
+            providerID: initialResult.providerID,
+            title: initialResult.title,
+            subtitle: initialResult.subtitle,
+            bars: [otherBar],
+            fetchedAt: Date()
+        )
+        XCTAssertNil(ProviderUsageCard.metric(withID: selectedMetricID, in: removedResult))
     }
 
     @MainActor

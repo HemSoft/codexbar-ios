@@ -253,12 +253,28 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         bars.isEmpty || barsFetchedAt == fetchedAt
     }
 
+    public var hasCurrentBars: Bool {
+        hasFreshBars
+            && (
+                failureMessage == nil
+                    || (!preserveCachedBarsOnFailure && preserveCachedCreditsOnFailure)
+            )
+    }
+
     public var freshBars: [UsageBar] {
         hasFreshBars ? bars : []
     }
 
     public var hasFreshCredits: Bool {
         creditsRemaining == nil || creditsFetchedAt == fetchedAt
+    }
+
+    public var hasCurrentCredits: Bool {
+        hasFreshCredits
+            && (
+                failureMessage == nil
+                    || (preserveCachedBarsOnFailure && !preserveCachedCreditsOnFailure)
+            )
     }
 
     public var freshCreditsRemaining: Double? {

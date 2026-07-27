@@ -13,6 +13,125 @@ enum ProviderUsageCardMenuAction: Hashable {
     case customizeMetrics
 }
 
+enum ProviderMetricTileResolvedWidth: Equatable, Sendable {
+    case half
+    case full
+}
+
+struct ProviderMetricTileGridItem: Identifiable, Equatable, Sendable {
+    let metric: ProviderUsageMetric
+    let width: ProviderMetricTileResolvedWidth
+
+    var id: String { metric.id }
+}
+
+struct ProviderMetricTileGridRow: Identifiable, Equatable, Sendable {
+    let leading: ProviderMetricTileGridItem
+    let trailing: ProviderMetricTileGridItem?
+
+    var id: String {
+        [leading.id, trailing?.id].compactMap { $0 }.joined(separator: "|")
+    }
+}
+
+enum ProviderMetricTileGridResolver {
+    static func resolvedWidth(
+        preference: MetricTileWidthPreference,
+        kind: ProviderUsageMetricKind,
+        visualizationStyle: MetricVisualizationStyle,
+        usesRegularHorizontalSizeClass: Bool,
+        collapsesToSingleColumn: Bool
+    ) -> ProviderMetricTileResolvedWidth {
+        if collapsesToSingleColumn {
+            return .full
+        }
+
+        switch preference {
+        case .half:
+            return .half
+        case .full:
+            return .full
+        case .automatic:
+            break
+        }
+
+        switch kind {
+        case .creditsRemaining, .monetary:
+            return .half
+        case .usageBar:
+            switch visualizationStyle {
+            case .circularRing, .semicircularDial, .largeNumeric:
+                return .half
+            case .automatic:
+                return usesRegularHorizontalSizeClass ? .half : .full
+            case .linearBar, .segmentedBar:
+                return .full
+            }
+        }
+    }
+
+    static func rows(
+        metrics: [ProviderUsageMetric],
+        orderedMetricIDs: [String],
+        widthForMetric: (String) -> MetricTileWidthPreference,
+        visualizationStyleForMetric: (String) -> MetricVisualizationStyle,
+        usesRegularHorizontalSizeClass: Bool,
+        collapsesToSingleColumn: Bool
+    ) -> [ProviderMetricTileGridRow] {
+        let metricsByID = Dictionary(metrics.map { ($0.id, $0) }) { first, _ in first }
+        var seen = Set<String>()
+        let orderedMetrics = orderedMetricIDs.compactMap { metricID -> ProviderUsageMetric? in
+            guard seen.insert(metricID).inserted else {
+                return nil
+            }
+            return metricsByID[metricID]
+        } + metrics.filter { seen.insert($0.id).inserted }
+
+        let items = orderedMetrics.map { metric in
+            ProviderMetricTileGridItem(
+                metric: metric,
+                width: resolvedWidth(
+                    preference: widthForMetric(metric.id),
+                    kind: metric.kind,
+                    visualizationStyle: visualizationStyleForMetric(metric.id),
+                    usesRegularHorizontalSizeClass: usesRegularHorizontalSizeClass,
+                    collapsesToSingleColumn: collapsesToSingleColumn
+                )
+            )
+        }
+
+        var rows: [ProviderMetricTileGridRow] = []
+        var unmatchedHalf: ProviderMetricTileGridItem?
+        for item in items {
+            switch item.width {
+            case .full:
+                if let pendingHalf = unmatchedHalf {
+                    rows.append(ProviderMetricTileGridRow(leading: pendingHalf, trailing: nil))
+                }
+                unmatchedHalf = nil
+                rows.append(ProviderMetricTileGridRow(leading: item, trailing: nil))
+            case .half:
+                if let pendingHalf = unmatchedHalf {
+                    rows.append(ProviderMetricTileGridRow(leading: pendingHalf, trailing: item))
+                    unmatchedHalf = nil
+                } else {
+                    unmatchedHalf = item
+                }
+            }
+        }
+        if let unmatchedHalf {
+            rows.append(ProviderMetricTileGridRow(leading: unmatchedHalf, trailing: nil))
+        }
+        return rows
+    }
+}
+
+private struct ProviderMetricTileDetailPresentation: Identifiable {
+    let metricID: String
+
+    var id: String { metricID }
+}
+
 struct ProviderUsageCard: View {
     let result: ProviderUsageResult
     let statusText: String
@@ -35,12 +154,20 @@ struct ProviderUsageCard: View {
     let onUpdateVisualizationStyle: (String, MetricVisualizationStyle) -> Void
     let onApplyVisualizationStyleToAll: (MetricVisualizationStyle, [String]) -> Void
     let onResetVisualizationStyles: ([String]) -> Void
+    let metricOrder: [String]
+    let metricWidthForMetric: (String) -> MetricTileWidthPreference
+    let onUpdateMetricWidth: (String, MetricTileWidthPreference) -> Void
+    let historySeriesOptionsProvider: () -> [UsageHistorySeriesOption]
+    let onMetricsDiscovered: ([String]) -> Void
 
     @State private var resetInventoryPresentation: CodexBankedResetInventoryPresentation?
     @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
     @State private var isResetActionUnavailable = false
     @State private var isCustomizingMetrics = false
+    @State private var metricDetailPresentation: ProviderMetricTileDetailPresentation?
     @StateObject private var resetRedemptionController: CodexBankedResetRedemptionController
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     init(
         result: ProviderUsageResult,
@@ -64,7 +191,12 @@ struct ProviderUsageCard: View {
         visualizationStyleForMetric: @escaping (String) -> MetricVisualizationStyle = { _ in .linearBar },
         onUpdateVisualizationStyle: @escaping (String, MetricVisualizationStyle) -> Void = { _, _ in },
         onApplyVisualizationStyleToAll: @escaping (MetricVisualizationStyle, [String]) -> Void = { _, _ in },
-        onResetVisualizationStyles: @escaping ([String]) -> Void = { _ in }
+        onResetVisualizationStyles: @escaping ([String]) -> Void = { _ in },
+        metricOrder: [String] = [],
+        metricWidthForMetric: @escaping (String) -> MetricTileWidthPreference = { _ in .automatic },
+        onUpdateMetricWidth: @escaping (String, MetricTileWidthPreference) -> Void = { _, _ in },
+        historySeriesOptions: @escaping () -> [UsageHistorySeriesOption] = { [] },
+        onMetricsDiscovered: @escaping ([String]) -> Void = { _ in }
     ) {
         self.result = result
         self.statusText = statusText
@@ -87,6 +219,16 @@ struct ProviderUsageCard: View {
         self.onUpdateVisualizationStyle = onUpdateVisualizationStyle
         self.onApplyVisualizationStyleToAll = onApplyVisualizationStyleToAll
         self.onResetVisualizationStyles = onResetVisualizationStyles
+        self.metricOrder = metricOrder
+        self.metricWidthForMetric = metricWidthForMetric
+        self.onUpdateMetricWidth = onUpdateMetricWidth
+        self.historySeriesOptionsProvider = {
+            let options = historySeriesOptions()
+            return options.isEmpty
+                ? [UsageHistorySeriesOption(id: "primary", label: "Usage", series: history)]
+                : options
+        }
+        self.onMetricsDiscovered = onMetricsDiscovered
         _resetRedemptionController = StateObject(
             wrappedValue: CodexBankedResetRedemptionController(
                 retainedAttempt: retainedCodexResetAttempt,
@@ -201,67 +343,24 @@ struct ProviderUsageCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if
-                let creditsRemaining = result.creditsRemaining,
-                isMetricVisible(creditsMetricID)
-            {
-                if result.bars.isEmpty {
-                    Text(CodexBarCurrencyText.format(creditsRemaining))
-                        .font(.system(size: 34, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color.primary)
-                        .monospacedDigit()
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-                } else {
-                    HStack {
-                        Text(result.providerID == .openCodeZen ? "Zen credit balance" : "Credit balance")
-                        Spacer()
-                        Text(CodexBarCurrencyText.format(creditsRemaining))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                    .font(.footnote)
-                }
-            }
+            if !metricGridRows.isEmpty {
+                Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 10) {
+                    ForEach(metricGridRows) { row in
+                        GridRow(alignment: .top) {
+                            metricTile(row.leading)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                .gridCellColumns(row.leading.width == .full ? 2 : 1)
 
-            ForEach(
-                Array(result.bars.enumerated()).filter { index, bar in
-                    isMetricVisible(metricID(for: bar, index: index))
-                },
-                id: \.element.id
-            ) { index, bar in
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack {
-                        Text(bar.label)
-                        Spacer()
-                        Text(bar.usageText)
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.footnote)
-
-                    if let resetDescription = bar.localizedResetDescription() {
-                        Text(resetDescription)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    MetricVisualizationView(
-                        bar: bar,
-                        style: visualizationStyleForMetric(metricID(for: bar, index: index)),
-                        showsSeverity: result.hasFreshBars
-                    )
-
-                    if result.hasFreshBars, let projectionDescription = bar.projectionDescription() {
-                        Text(projectionDescription)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                            if let trailing = row.trailing {
+                                metricTile(trailing)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            } else if row.leading.width == .half {
+                                Color.clear
+                                    .accessibilityHidden(true)
+                            }
+                        }
                     }
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(metricAccessibilityLabel(bar))
             }
 
             if bankedResets != nil {
@@ -303,31 +402,6 @@ struct ProviderUsageCard: View {
                 .accessibilityLabel(resetFeedback.message)
             }
 
-            if !visibleMonetaryMetrics.isEmpty {
-                Divider()
-
-                ForEach(visibleMonetaryMetrics) { metric in
-                    VStack(alignment: .leading, spacing: 7) {
-                        HStack {
-                            Text(metric.label)
-                            Spacer()
-                            Text(metric.formattedAmount())
-                                .fontWeight(.semibold)
-                                .monospacedDigit()
-                        }
-                        .font(.footnote)
-
-                        if let detail = metric.detail {
-                            Text(detail)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(monetaryAccessibilityLabel(metric))
-                }
-            }
-
             ForEach(result.usageMessages, id: \.self) { message in
                 Label(message, systemImage: "info.circle")
                     .font(.caption2)
@@ -361,14 +435,30 @@ struct ProviderUsageCard: View {
             MetricVisualizationCustomizationView(
                 accountTitle: result.title,
                 result: result,
-                showsSeverity: result.hasFreshBars,
+                showsSeverity: result.hasCurrentBars,
                 isMetricVisible: isMetricVisible,
                 onUpdateMetricVisibility: onUpdateMetricVisibility,
                 visualizationStyleForMetric: visualizationStyleForMetric,
                 onUpdateVisualizationStyle: onUpdateVisualizationStyle,
                 onApplyVisualizationStyleToAll: onApplyVisualizationStyleToAll,
-                onResetVisualizationStyles: onResetVisualizationStyles
+                onResetVisualizationStyles: onResetVisualizationStyles,
+                metricWidthForMetric: metricWidthForMetric,
+                onUpdateMetricWidth: onUpdateMetricWidth
             )
+        }
+        .sheet(item: $metricDetailPresentation) { presentation in
+            if let metric = Self.metric(withID: presentation.metricID, in: result) {
+                ProviderMetricTileDetailView(
+                    result: result,
+                    statusText: statusText,
+                    metric: metric,
+                    history: metricDetailHistorySeries(for: metric),
+                    visualizationStyle: visualizationStyleForMetric(metric.id)
+                )
+            }
+        }
+        .task(id: result.availableMetrics.map(\.id)) {
+            onMetricsDiscovered(result.availableMetrics.map(\.id))
         }
         .onChange(of: result.fetchedAt) {
             resetInventoryPresentation = Self.reconciledResetInventoryPresentation(
@@ -379,6 +469,14 @@ struct ProviderUsageCard: View {
             )
             isResetActionUnavailable = false
             resetFeedback = nil
+        }
+        .onChange(of: result.availableMetrics.map(\.id)) {
+            guard let metricID = metricDetailPresentation?.metricID else {
+                return
+            }
+            if Self.metric(withID: metricID, in: result) == nil {
+                metricDetailPresentation = nil
+            }
         }
     }
 
@@ -414,13 +512,7 @@ struct ProviderUsageCard: View {
         for result: ProviderUsageResult,
         isMetricVisible: (String) -> Bool = { _ in true }
     ) -> [ProviderUsageCardMenuAction] {
-        if
-            result.bars.isEmpty,
-            !showsMetricVisibilityControls(
-                for: result,
-                isMetricVisible: isMetricVisible
-            )
-        {
+        if result.availableMetrics.isEmpty {
             return [.configureAccount]
         }
         return [.configureAccount, .customizeMetrics]
@@ -552,37 +644,201 @@ struct ProviderUsageCard: View {
         )
     }
 
-    private func monetaryAccessibilityLabel(_ metric: ProviderMonetaryMetric) -> String {
-        [metric.label, metric.formattedAmount(), metric.detail]
+    private var metricGridRows: [ProviderMetricTileGridRow] {
+        ProviderMetricTileGridResolver.rows(
+            metrics: result.availableMetrics.filter { isMetricVisible($0.id) },
+            orderedMetricIDs: metricOrder,
+            widthForMetric: metricWidthForMetric,
+            visualizationStyleForMetric: visualizationStyleForMetric,
+            usesRegularHorizontalSizeClass: horizontalSizeClass == .regular,
+            collapsesToSingleColumn: dynamicTypeSize.isAccessibilitySize
+        )
+    }
+
+    private func metricTile(_ item: ProviderMetricTileGridItem) -> some View {
+        Button {
+            metricDetailPresentation = ProviderMetricTileDetailPresentation(metricID: item.metric.id)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                switch item.metric.kind {
+                case let .usageBar(index):
+                    if result.bars.indices.contains(index) {
+                        let bar = result.bars[index]
+                        Text(bar.label)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(bar.usageText)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .monospacedDigit()
+
+                        MetricVisualizationView(
+                            bar: bar,
+                            style: visualizationStyleForMetric(item.metric.id),
+                            showsSeverity: result.hasCurrentBars
+                        )
+
+                        if item.width == .full {
+                            if let resetDescription = bar.localizedResetDescription() {
+                                supportingText(resetDescription)
+                            }
+                            if result.hasCurrentBars, let projectionDescription = bar.projectionDescription() {
+                                supportingText(projectionDescription)
+                            }
+                        }
+                    }
+                case .creditsRemaining:
+                    if let creditsRemaining = result.creditsRemaining {
+                        Text(item.metric.label)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(CodexBarCurrencyText.format(creditsRemaining))
+                            .font(.system(.title3, design: .rounded, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.7)
+                            .lineLimit(1)
+
+                        if item.width == .full {
+                            supportingText(result.hasCurrentCredits ? "Current balance" : "Last known balance")
+                        }
+                    }
+                case let .monetary(index):
+                    if result.monetaryMetrics.indices.contains(index) {
+                        let metric = result.monetaryMetrics[index]
+                        Text(metric.label)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(metric.formattedAmount())
+                            .font(.system(.title3, design: .rounded, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.65)
+                            .lineLimit(1)
+
+                        if item.width == .full, let detail = metric.detail {
+                            supportingText(detail)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(12)
+            .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color(.separator).opacity(0.22), lineWidth: 0.5)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(metricAccessibilityLabel(item.metric))
+        .accessibilityHint(Self.metricDetailAccessibilityHint)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func supportingText(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    func metricDetailHistorySeries(for metric: ProviderUsageMetric) -> UsageHistorySeries? {
+        guard isHistoryEnabled else {
+            return nil
+        }
+
+        let preferredOptionID: String?
+        switch metric.kind {
+        case .usageBar:
+            // The usage series is the card-wide maximum across usage bars, so it
+            // is not accurate to present it as one selected bar's history.
+            return nil
+        case .creditsRemaining:
+            preferredOptionID = "balance"
+        case let .monetary(index):
+            preferredOptionID = result.monetaryMetrics.indices.contains(index)
+                ? "money.\(result.monetaryMetrics[index].id)"
+                : nil
+        }
+        let options = historySeriesOptionsProvider()
+        return options.first(where: { $0.id == preferredOptionID })?.series
+            ?? (options.count == 1 ? options.first?.series : nil)
+    }
+
+    static func metric(
+        withID metricID: String,
+        in result: ProviderUsageResult
+    ) -> ProviderUsageMetric? {
+        result.availableMetrics.first { $0.id == metricID }
+    }
+
+    private func metricAccessibilityLabel(_ metric: ProviderUsageMetric) -> String {
+        switch metric.kind {
+        case let .usageBar(index) where result.bars.indices.contains(index):
+            let bar = result.bars[index]
+            return [
+                bar.label,
+                bar.usageText,
+                "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit))",
+                result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName : "status unavailable",
+                result.hasCurrentBars ? "fresh" : "stale",
+                bar.localizedResetDescription(),
+                result.hasCurrentBars ? bar.projectionDescription() : nil,
+            ]
             .compactMap { $0 }
             .joined(separator: ", ")
-    }
-
-    private func metricID(for bar: UsageBar, index: Int) -> String {
-        bar.metricIdentifier(providerID: result.providerID, index: index)
-    }
-
-    private var creditsMetricID: String {
-        "\(result.providerID.rawValue).credits-remaining"
-    }
-
-    private var visibleMonetaryMetrics: [ProviderMonetaryMetric] {
-        result.monetaryMetrics.filter { metric in
-            isMetricVisible(metric.metricIdentifier(providerID: result.providerID))
+        case .creditsRemaining:
+            return [
+                metric.label,
+                result.creditsRemaining.map { CodexBarCurrencyText.format($0) },
+                result.hasCurrentCredits ? "fresh" : "stale",
+            ]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+        case let .monetary(index) where result.monetaryMetrics.indices.contains(index):
+            let monetaryMetric = result.monetaryMetrics[index]
+            return [
+                monetaryMetric.label,
+                monetaryMetric.formattedAmount(),
+                Self.isCritical(monetaryMetric, in: result) ? "critical" : "normal",
+                monetaryFreshnessDescription.lowercased(),
+                monetaryMetric.detail,
+            ]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+        default:
+            return metric.label
         }
     }
 
-    private func metricAccessibilityLabel(_ bar: UsageBar) -> String {
-        let severity = result.hasFreshBars ? bar.effectiveSeverity().accessibilityName : "status unavailable"
-        return [
-            bar.label,
-            bar.usageText,
-            severity,
-            bar.localizedResetDescription(),
-            result.hasFreshBars ? bar.projectionDescription() : nil,
-        ]
-        .compactMap { $0 }
-        .joined(separator: ", ")
+    static func formattedUsageAmount(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    static let metricDetailAccessibilityHint = "Shows complete metric details."
+
+    static func isCritical(
+        _ monetaryMetric: ProviderMonetaryMetric,
+        in result: ProviderUsageResult
+    ) -> Bool {
+        monetaryMetric.kind == .spent && result.hasReachedSpendLimit
+    }
+
+    var monetaryFreshnessDescription: String {
+        result.failureMessage == nil ? "Current" : "Last known value"
     }
 }
 
@@ -1567,6 +1823,198 @@ private struct ProviderLogoTile: View {
     }
 }
 
+private struct ProviderMetricTileDetailView: View {
+    let result: ProviderUsageResult
+    let statusText: String
+    let metric: ProviderUsageMetric
+    let history: UsageHistorySeries?
+    let visualizationStyle: MetricVisualizationStyle
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    HStack(spacing: 10) {
+                        ProviderLogoTile(providerID: result.providerID)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(metric.label)
+                                .font(.headline)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(result.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    metricSummary
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Details")
+                            .font(.headline)
+                        detailRows
+                    }
+                    .padding(16)
+                    .background(
+                        Color(.secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: 12)
+                    )
+
+                    historySection
+                }
+                .frame(maxWidth: 640, alignment: .leading)
+                .padding(20)
+                .frame(maxWidth: .infinity)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Metric Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var metricSummary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(valueText)
+                .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.65)
+                .lineLimit(1)
+
+            if case let .usageBar(index) = metric.kind, result.bars.indices.contains(index) {
+                MetricVisualizationView(
+                    bar: result.bars[index],
+                    style: visualizationStyle,
+                    showsSeverity: result.hasCurrentBars
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            Color(.secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
+    }
+
+    @ViewBuilder
+    private var detailRows: some View {
+        switch metric.kind {
+        case let .usageBar(index) where result.bars.indices.contains(index):
+            let bar = result.bars[index]
+            detailRow("Used", ProviderUsageCard.formattedUsageAmount(bar.used))
+            detailRow("Limit", ProviderUsageCard.formattedUsageAmount(bar.limit))
+            detailRow(
+                "Severity",
+                result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName.capitalized : "Unavailable"
+            )
+            detailRow("Freshness", result.hasCurrentBars ? "Current" : "Last known value")
+            if let resetDescription = bar.localizedResetDescription() {
+                detailRow("Reset", resetDescription)
+            }
+            if result.hasCurrentBars, let projectionDescription = bar.projectionDescription() {
+                detailRow("Projection", projectionDescription)
+            }
+            detailRow("Account status", statusText)
+        case .creditsRemaining:
+            detailRow("Balance", valueText)
+            detailRow("Freshness", result.hasCurrentCredits ? "Current" : "Last known value")
+            detailRow("Account status", statusText)
+        case let .monetary(index) where result.monetaryMetrics.indices.contains(index):
+            let monetaryMetric = result.monetaryMetrics[index]
+            detailRow("Amount", monetaryMetric.formattedAmount())
+            detailRow("Currency", monetaryMetric.currencyCode)
+            detailRow(
+                "Freshness",
+                result.failureMessage == nil ? "Current" : "Last known value"
+            )
+            if ProviderUsageCard.isCritical(monetaryMetric, in: result) {
+                detailRow("Severity", "Critical")
+            }
+            if let detail = monetaryMetric.detail {
+                detailRow("Context", detail)
+            }
+            detailRow("Account status", statusText)
+        default:
+            detailRow("Account status", statusText)
+        }
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var historySection: some View {
+        if let history {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("History")
+                    .font(.headline)
+
+                if history.points.isEmpty {
+                    ContentUnavailableView(
+                        "No History Yet",
+                        systemImage: "chart.xyaxis.line",
+                        description: Text("History will appear after this metric is refreshed again.")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 180)
+                } else {
+                    UsageTrendSparkline(series: history, tint: history.tint)
+                        .frame(height: 110)
+
+                    HStack(spacing: 12) {
+                        HistoryMetricView(title: "Latest", value: history.latestValueDescription)
+                        HistoryMetricView(title: "Change", value: history.changeDescription)
+                        HistoryMetricView(title: "Range", value: history.rangeDescription)
+                    }
+
+                    Text(history.sampleWindowDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .background(
+                Color(.secondarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private var valueText: String {
+        switch metric.kind {
+        case let .usageBar(index) where result.bars.indices.contains(index):
+            return result.bars[index].usageText
+        case .creditsRemaining:
+            return result.creditsRemaining.map { CodexBarCurrencyText.format($0) } ?? "Unavailable"
+        case let .monetary(index) where result.monetaryMetrics.indices.contains(index):
+            return result.monetaryMetrics[index].formattedAmount()
+        default:
+            return "Unavailable"
+        }
+    }
+}
+
 private struct MetricVisualizationCustomizationView: View {
     let accountTitle: String
     let result: ProviderUsageResult
@@ -1577,6 +2025,8 @@ private struct MetricVisualizationCustomizationView: View {
     let onUpdateVisualizationStyle: (String, MetricVisualizationStyle) -> Void
     let onApplyVisualizationStyleToAll: (MetricVisualizationStyle, [String]) -> Void
     let onResetVisualizationStyles: ([String]) -> Void
+    let metricWidthForMetric: (String) -> MetricTileWidthPreference
+    let onUpdateMetricWidth: (String, MetricTileWidthPreference) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -1638,6 +2088,27 @@ private struct MetricVisualizationCustomizationView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .accessibilityHidden(true)
                             }
+
+                            HStack {
+                                Text("Tile width")
+                                    .font(.subheadline.weight(.semibold))
+
+                                Spacer(minLength: 12)
+
+                                Picker(
+                                    "Width for \(metric.label)",
+                                    selection: Binding(
+                                        get: { metricWidthForMetric(metric.id) },
+                                        set: { onUpdateMetricWidth(metric.id, $0) }
+                                    )
+                                ) {
+                                    ForEach(MetricTileWidthPreference.allCases, id: \.self) { width in
+                                        Text(width.displayName).tag(width)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                            }
                         }
                         .padding(.vertical, 4)
                     }
@@ -1695,6 +2166,19 @@ private struct MetricVisualizationCustomizationView: View {
             for: result,
             isMetricVisible: isMetricVisible
         )
+    }
+}
+
+private extension MetricTileWidthPreference {
+    var displayName: String {
+        switch self {
+        case .automatic:
+            "Automatic"
+        case .half:
+            "Half"
+        case .full:
+            "Full"
+        }
     }
 }
 
@@ -1886,6 +2370,7 @@ private extension UsageSeverity {
             subtitle: "Preview data",
             bars: [
                 UsageBar(
+                    stableKey: "session",
                     label: "5 hour usage limit",
                     used: 45,
                     limit: 100,
@@ -1898,11 +2383,23 @@ private extension UsageSeverity {
                     showProjectionOnCurrentBar: true
                 ),
                 UsageBar(
+                    stableKey: "weekly",
                     label: "Weekly usage limit",
                     used: 92,
                     limit: 100,
                     resetDescription: weeklyResetDescription
                 )
+            ],
+            creditsRemaining: 18.75,
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: "On-demand spend",
+                    minorUnits: 1_240,
+                    currencyCode: "USD",
+                    decimalPlaces: 2,
+                    detail: "of a $25.00 monthly limit"
+                ),
             ],
             fetchedAt: Date()
         ),
@@ -1928,7 +2425,10 @@ private extension UsageSeverity {
                 message: "92 of 100 used. Alert threshold: 80%. Resets 2d 4h.",
                 severity: .critical
             ),
-        ]
+        ],
+        visualizationStyleForMetric: { metricID in
+            metricID.hasSuffix(".weekly") ? .circularRing : .linearBar
+        }
     )
     .padding()
     .background(Color(.systemGroupedBackground))

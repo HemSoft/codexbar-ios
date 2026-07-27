@@ -8,6 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added adaptive metric-tile grids to provider cards, including saved
+  automatic, half, and full widths, single-column accessibility layouts, and
+  complete per-tile details with available history.
+  ([#143](https://github.com/HemSoft/codexbar-ios/issues/143))
 - Added a versioned, account-specific metric layout foundation that preserves
   existing visibility and visualization choices while enabling saved tile
   order and adaptive width preferences. ([#142](https://github.com/HemSoft/codexbar-ios/issues/142))
