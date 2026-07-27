@@ -678,8 +678,8 @@ final class AppAndWidgetTests: XCTestCase {
 
     func testFeedbackSupportURLsTargetSpecificFormsAndEncodeSafeSystemDetails() throws {
         let context = FeedbackSupportContext(
-            appVersion: "1.2 beta",
-            buildNumber: "42/7",
+            appVersion: "1.2+beta",
+            buildNumber: "42+7",
             operatingSystemName: "iPadOS",
             operatingSystemVersion: "26.1 (23B 12)",
             deviceCategory: "iPad"
@@ -697,8 +697,10 @@ final class AppAndWidgetTests: XCTestCase {
         )
         XCTAssertEqual(
             problemComponents.queryItems?.first(where: { $0.name == "system-details" })?.value,
-            "CodexBar 1.2 beta (42/7), iPadOS 26.1 (23B 12), iPad"
+            "CodexBar 1.2+beta (42+7), iPadOS 26.1 (23B 12), iPad"
         )
+        XCTAssertTrue(try XCTUnwrap(problemComponents.percentEncodedQuery).contains("%2B"))
+        XCTAssertFalse(try XCTUnwrap(problemComponents.percentEncodedQuery).contains("+"))
 
         let improvementURL = FeedbackSupportDestination.suggestImprovement.url(context: context)
         let improvementComponents = try XCTUnwrap(

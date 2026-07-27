@@ -8,8 +8,7 @@ enum SettingsScrollTarget: Hashable {
 
 private extension FeedbackSupportContext {
     @MainActor
-    static var current: FeedbackSupportContext {
-        let installedVersion = InstalledAppVersion.current()
+    static func current(installedVersion: InstalledAppVersion) -> FeedbackSupportContext {
         let device = UIDevice.current
         return FeedbackSupportContext(
             appVersion: installedVersion.marketingVersion,
@@ -260,7 +259,11 @@ struct SettingsView: View {
 
                 Section {
                     NavigationLink {
-                        FeedbackSupportView(context: .current)
+                        FeedbackSupportView(
+                            context: .current(
+                                installedVersion: appUpdateController.installedVersion
+                            )
+                        )
                     } label: {
                         Label(
                             "Feedback & Support",
@@ -709,7 +712,7 @@ private struct FeedbackSupportView: View {
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Check your connection and try again.")
+            Text("The link couldn’t be opened. Please try again later.")
         }
     }
 
