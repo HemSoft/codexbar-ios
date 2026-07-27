@@ -70,6 +70,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Centered semicircular usage gauges within dashboard and Customize Card
+  metric tiles across compact, full-width, and accessibility layouts.
+  ([#156](https://github.com/HemSoft/codexbar-ios/issues/156))
 - Clarified that OpenRouter credit balances require a sensitive Management API
   Key stored only in Keychain, and now distinguish invalid credentials from
   keys that lack account-credits permission.

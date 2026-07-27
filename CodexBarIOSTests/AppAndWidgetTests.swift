@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import CodexBarIOS
 
@@ -1974,6 +1975,59 @@ final class AppAndWidgetTests: XCTestCase {
             ),
             .full
         )
+    }
+
+    func testSemicircularDialContentFrameCentersFixedDialAcrossTileWidths() {
+        for tileWidth: CGFloat in [154, 318] {
+            let tileBounds = CGRect(x: 12, y: 8, width: tileWidth, height: 58)
+            let frame = SemicircularUsageDialLayout.contentFrame(
+                contentSize: SemicircularUsageDialLayout.contentSize,
+                in: tileBounds
+            )
+
+            XCTAssertEqual(
+                frame.midX,
+                tileBounds.midX,
+                accuracy: 0.001
+            )
+            XCTAssertEqual(frame.minY, tileBounds.minY)
+            XCTAssertGreaterThanOrEqual(frame.minX, tileBounds.minX)
+            XCTAssertLessThanOrEqual(frame.maxX, tileBounds.maxX)
+        }
+    }
+
+    func testSemicircularDialValuesFitAtNormalAndAccessibilityTextSizes() {
+        let valueTexts = ["0%", "42%", "100%"]
+        let contentSizeCategories: [UIContentSizeCategory] = [
+            .extraSmall,
+            .large,
+            .extraExtraExtraLarge,
+            .accessibilityMedium,
+            .accessibilityExtraExtraExtraLarge,
+        ]
+
+        for category in contentSizeCategories {
+            let traits = UITraitCollection(preferredContentSizeCategory: category)
+            let preferredCaptionFont = UIFont.preferredFont(
+                forTextStyle: .caption1,
+                compatibleWith: traits
+            )
+            let dialFont = UIFont.systemFont(
+                ofSize: preferredCaptionFont.pointSize,
+                weight: .semibold
+            )
+
+            for valueText in valueTexts {
+                let unscaledWidth = (valueText as NSString).size(
+                    withAttributes: [.font: dialFont]
+                ).width
+                XCTAssertLessThanOrEqual(
+                    unscaledWidth * SemicircularUsageDialLayout.valueMinimumScaleFactor,
+                    SemicircularUsageDialLayout.valueMaxWidth,
+                    "\(valueText) should fit at \(category.rawValue) after the dial's minimum scale"
+                )
+            }
+        }
     }
 
     func testMetricTileRowsPackInSavedOrderWithoutAvoidableHoles() {

@@ -2815,29 +2815,80 @@ private struct CircularUsageRing: View {
     }
 }
 
+struct SemicircularUsageDialLayout: Layout {
+    static let contentSize = CGSize(width: 112, height: 58)
+    static let valueMaxWidth: CGFloat = 88
+    static let valueMinimumScaleFactor = 0.65
+
+    static func contentFrame(contentSize: CGSize, in bounds: CGRect) -> CGRect {
+        CGRect(
+            x: bounds.midX - (contentSize.width / 2),
+            y: bounds.minY,
+            width: contentSize.width,
+            height: contentSize.height
+        )
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout ()
+    ) -> CGSize {
+        guard let subview = subviews.first else {
+            return .zero
+        }
+        let contentSize = subview.sizeThatFits(.unspecified)
+        return CGSize(
+            width: max(proposal.width ?? contentSize.width, contentSize.width),
+            height: contentSize.height
+        )
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal _: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout ()
+    ) {
+        guard let subview = subviews.first else {
+            return
+        }
+        let contentSize = subview.sizeThatFits(.unspecified)
+        let frame = Self.contentFrame(contentSize: contentSize, in: bounds)
+        subview.place(
+            at: frame.origin,
+            anchor: .topLeading,
+            proposal: ProposedViewSize(contentSize)
+        )
+    }
+}
+
 private struct SemicircularUsageDial: View {
     let fraction: Double
     let valueText: String
     let tint: Color
 
     var body: some View {
-        ZStack {
-            SemicircleShape()
-                .stroke(Color(.tertiarySystemFill), style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                .frame(width: 112, height: 58)
-            SemicircleShape()
-                .trim(from: 0, to: min(max(fraction, 0), 1))
-                .stroke(tint, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                .frame(width: 112, height: 58)
-            Text(valueText)
-                .font(.caption.weight(.semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
-                .frame(maxWidth: 88)
-                .offset(y: 5)
+        SemicircularUsageDialLayout {
+            ZStack {
+                SemicircleShape()
+                    .stroke(Color(.tertiarySystemFill), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                SemicircleShape()
+                    .trim(from: 0, to: min(max(fraction, 0), 1))
+                    .stroke(tint, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                Text(valueText)
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(SemicircularUsageDialLayout.valueMinimumScaleFactor)
+                    .frame(maxWidth: SemicircularUsageDialLayout.valueMaxWidth)
+                    .offset(y: 5)
+            }
+            .frame(
+                width: SemicircularUsageDialLayout.contentSize.width,
+                height: SemicircularUsageDialLayout.contentSize.height
+            )
         }
-        .frame(minWidth: 112, minHeight: 58)
     }
 }
 
