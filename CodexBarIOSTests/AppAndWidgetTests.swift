@@ -1808,6 +1808,131 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(MetricVisualizationStyle.largeNumeric.resolvedForWidget(allowsGauge: true), .largeNumeric)
     }
 
+    func testMetricTileWidthResolutionHonorsDefaultsOverridesAndAccessibilityCollapse() {
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .linearBar,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .full
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .circularRing,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .half
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .automatic,
+                usesRegularHorizontalSizeClass: true,
+                collapsesToSingleColumn: false
+            ),
+            .half
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .automatic,
+                kind: .creditsRemaining,
+                visualizationStyle: .automatic,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .half
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .full,
+                kind: .monetary(index: 0),
+                visualizationStyle: .automatic,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .full
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .half,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .linearBar,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: false
+            ),
+            .half
+        )
+        XCTAssertEqual(
+            ProviderMetricTileGridResolver.resolvedWidth(
+                preference: .half,
+                kind: .usageBar(index: 0),
+                visualizationStyle: .linearBar,
+                usesRegularHorizontalSizeClass: false,
+                collapsesToSingleColumn: true
+            ),
+            .full
+        )
+    }
+
+    func testMetricTileRowsPackInSavedOrderWithoutAvoidableHoles() {
+        let metrics = [
+            ProviderUsageMetric(id: "a", label: "A", kind: .usageBar(index: 0)),
+            ProviderUsageMetric(id: "b", label: "B", kind: .creditsRemaining),
+            ProviderUsageMetric(id: "c", label: "C", kind: .monetary(index: 0)),
+            ProviderUsageMetric(id: "d", label: "D", kind: .usageBar(index: 1)),
+            ProviderUsageMetric(id: "e", label: "E", kind: .monetary(index: 1)),
+        ]
+        let preferences: [String: MetricTileWidthPreference] = [
+            "a": .half,
+            "b": .half,
+            "c": .full,
+            "d": .half,
+            "e": .half,
+        ]
+
+        let rows = ProviderMetricTileGridResolver.rows(
+            metrics: metrics,
+            orderedMetricIDs: ["d", "c", "b", "a", "unknown"],
+            widthForMetric: { preferences[$0] ?? .automatic },
+            visualizationStyleForMetric: { _ in .linearBar },
+            usesRegularHorizontalSizeClass: false,
+            collapsesToSingleColumn: false
+        )
+
+        XCTAssertEqual(rows.map(\.leading.id), ["d", "c", "b", "e"])
+        XCTAssertEqual(rows.map { $0.trailing?.id }, [nil, nil, "a", nil])
+        XCTAssertEqual(
+            rows.flatMap { [$0.leading.id, $0.trailing?.id].compactMap { $0 } },
+            ["d", "c", "b", "a", "e"]
+        )
+    }
+
+    func testMetricTileRowsBecomeSingleColumnWithoutChangingRequestedWidths() {
+        let metrics = [
+            ProviderUsageMetric(id: "credits", label: "Credits", kind: .creditsRemaining),
+            ProviderUsageMetric(id: "money", label: "Balance", kind: .monetary(index: 0)),
+        ]
+
+        let rows = ProviderMetricTileGridResolver.rows(
+            metrics: metrics,
+            orderedMetricIDs: [],
+            widthForMetric: { _ in .half },
+            visualizationStyleForMetric: { _ in .largeNumeric },
+            usesRegularHorizontalSizeClass: false,
+            collapsesToSingleColumn: true
+        )
+
+        XCTAssertEqual(rows.map(\.leading.id), ["credits", "money"])
+        XCTAssertTrue(rows.allSatisfy { $0.leading.width == .full && $0.trailing == nil })
+    }
+
     @MainActor
     func testMetricVisualizationPreferencesPersistPerAccountAndStableMetric() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
