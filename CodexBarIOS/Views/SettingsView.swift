@@ -631,7 +631,7 @@ private struct FeedbackSupportView: View {
             Section {
                 Label {
                     Text(
-                        "Email feedback is private and does not require a GitHub account. Opening a draft does not send it; you review and explicitly send. GitHub forms remain public and require an account."
+                        "Email feedback is private and does not require a GitHub account. Opening a draft does not send it; you review and explicitly send. Do not add credentials, tokens, cookies, account identifiers, or other secrets to either channel. GitHub forms remain public, require an account, and must not include email addresses."
                     )
                 } icon: {
                     Image(systemName: "exclamationmark.shield")

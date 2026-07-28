@@ -46,8 +46,9 @@ reporting a problem, gather:
 - A short description of what you expected and what happened.
 
 Do not include API keys, access or refresh tokens, passwords, cookies,
-authorization headers, account identifiers, or other secrets in email, GitHub
-issues, or attachments.
+authorization headers, account identifiers, or other secrets in email. Do not
+include email addresses or any of these sensitive values in public GitHub issues
+or attachments.
 
 CodexBar never prefills credentials, tokens, cookies, account labels or
 identifiers, your email address, balances, usage history, raw provider responses
