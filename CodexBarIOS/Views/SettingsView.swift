@@ -748,12 +748,7 @@ private struct FeedbackSupportView: View {
             return
         }
         if destination == .suggestImprovement {
-            let draft = FeedbackEmailDraft.improvementSuggestion(context: context)
-            openURL(draft.url) { accepted in
-                if !accepted {
-                    emailFallbackDraft = draft
-                }
-            }
+            emailFallbackDraft = FeedbackEmailDraft.improvementSuggestion(context: context)
             return
         }
         openURL(destination.url(context: context)) { accepted in

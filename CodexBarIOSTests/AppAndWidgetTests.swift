@@ -843,6 +843,18 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertTrue(improvementDraft.body.contains("What would you like CodexBar to improve?"))
         XCTAssertTrue(improvementDraft.body.contains("How would this help?"))
         XCTAssertTrue(improvementDraft.body.contains(system.systemDetails))
+        XCTAssertEqual(
+            problemDraft.copyableFields.map(\.kind),
+            [.recipient, .subject, .message]
+        )
+        XCTAssertEqual(
+            problemDraft.copyableFields.map(\.value),
+            [FeedbackEmailDraft.recipient, problemDraft.subject, problemDraft.body]
+        )
+        XCTAssertEqual(
+            improvementDraft.copyableFields.map(\.value),
+            [FeedbackEmailDraft.recipient, improvementDraft.subject, improvementDraft.body]
+        )
 
         for draft in [problemDraft, improvementDraft] {
             XCTAssertTrue(draft.body.contains("opening the email composer does not send it"))

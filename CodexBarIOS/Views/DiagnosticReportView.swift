@@ -67,6 +67,12 @@ struct DiagnosticReportView: View {
                     }
 
                     Button {
+                        emailFallbackDraft = problemEmailDraft
+                    } label: {
+                        Label("Review or Copy Email Details", systemImage: "doc.on.doc")
+                    }
+
+                    Button {
                         openGitHubProblemReport()
                     } label: {
                         Label("Open Public GitHub Bug Form", systemImage: "arrow.up.forward.app")
@@ -107,15 +113,19 @@ struct DiagnosticReportView: View {
     }
 
     private func openProblemEmail() {
-        let draft = FeedbackEmailDraft.problemReport(
-            context: context,
-            includeTechnicalDetails: includesTechnicalDetails
-        )
+        let draft = problemEmailDraft
         openURL(draft.url) { accepted in
             if !accepted {
                 emailFallbackDraft = draft
             }
         }
+    }
+
+    private var problemEmailDraft: FeedbackEmailDraft {
+        FeedbackEmailDraft.problemReport(
+            context: context,
+            includeTechnicalDetails: includesTechnicalDetails
+        )
     }
 
     private func openGitHubProblemReport() {
@@ -156,6 +166,7 @@ struct FeedbackEmailFallbackView: View {
     let draft: FeedbackEmailDraft
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var notice: Notice?
 
     var body: some View {
@@ -163,33 +174,31 @@ struct FeedbackEmailFallbackView: View {
             Form {
                 Section {
                     Text(
-                        "No configured email app could be opened. Copy these fields into any email service. Nothing has been sent."
+                        "Review or copy these fields for any email service. Opening an email draft does not send it."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 }
 
-                Section("Recipient") {
-                    Text(FeedbackEmailDraft.recipient)
-                        .textSelection(.enabled)
-                    copyButton(
-                        "Copy Recipient",
-                        fieldName: "Recipient",
-                        value: FeedbackEmailDraft.recipient
-                    )
+                Section {
+                    Button {
+                        openEmailDraft()
+                    } label: {
+                        Label("Open Email Draft", systemImage: "envelope")
+                    }
                 }
 
-                Section("Subject") {
-                    Text(draft.subject)
-                        .textSelection(.enabled)
-                    copyButton("Copy Subject", fieldName: "Subject", value: draft.subject)
-                }
-
-                Section("Message") {
-                    Text(draft.body)
-                        .font(.callout)
-                        .textSelection(.enabled)
-                    copyButton("Copy Message", fieldName: "Message", value: draft.body)
+                ForEach(draft.copyableFields) { field in
+                    Section(field.title) {
+                        Text(field.value)
+                            .font(field.kind == .message ? .callout : .body)
+                            .textSelection(.enabled)
+                        copyButton(
+                            "Copy \(field.title)",
+                            fieldName: field.title,
+                            value: field.value
+                        )
+                    }
                 }
             }
             .navigationTitle("Copy Email Details")
@@ -206,6 +215,17 @@ struct FeedbackEmailFallbackView: View {
                     title: Text(notice.title),
                     message: Text(notice.message),
                     dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+    }
+
+    private func openEmailDraft() {
+        openURL(draft.url) { accepted in
+            if !accepted {
+                notice = Notice(
+                    title: "Couldn’t Open Email",
+                    message: "Copy the recipient, subject, and message into another email service."
                 )
             }
         }

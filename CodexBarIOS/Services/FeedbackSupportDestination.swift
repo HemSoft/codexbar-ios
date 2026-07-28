@@ -498,6 +498,14 @@ struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
         return components.url!
     }
 
+    var copyableFields: [FeedbackEmailDraftField] {
+        [
+            FeedbackEmailDraftField(kind: .recipient, value: Self.recipient),
+            FeedbackEmailDraftField(kind: .subject, value: subject),
+            FeedbackEmailDraftField(kind: .message, value: body),
+        ]
+    }
+
     static func problemReport(
         context: PrivacySafeDiagnosticContext,
         includeTechnicalDetails: Bool
@@ -549,6 +557,25 @@ struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
             CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances, usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or screenshots.
             """
         )
+    }
+}
+
+struct FeedbackEmailDraftField: Equatable, Identifiable, Sendable {
+    enum Kind: String, Equatable, Sendable {
+        case recipient
+        case subject
+        case message
+    }
+
+    let kind: Kind
+    let value: String
+
+    var id: Kind {
+        kind
+    }
+
+    var title: String {
+        kind.rawValue.capitalized
     }
 }
 
