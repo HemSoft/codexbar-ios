@@ -355,6 +355,8 @@ public final class UsageRefreshService: ObservableObject {
             cacheIdentity: failureResult.cacheIdentity,
             cacheScope: failureResult.cacheScope,
             allowsUnscopedCacheReuse: failureResult.allowsUnscopedCacheReuse,
+            hasSuccessfulRefreshHistory: failureResult.hasSuccessfulRefreshHistory
+                || cachedResult?.hasSuccessfulRefreshHistory == true,
             fetchedAt: dataResult.fetchedAt
         ))
     }

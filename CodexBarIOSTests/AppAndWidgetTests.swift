@@ -998,7 +998,15 @@ final class AppAndWidgetTests: XCTestCase {
             isConfigured: false,
             isSecretPresent: false,
             userVisibleMessage: "Provider returned HTTP 401: raw body must-not-leak",
-            hasPreviousResult: true
+            result: ProviderUsageResult(
+                providerID: .claude,
+                title: "Claude",
+                subtitle: "Showing last known data",
+                bars: [],
+                creditsRemaining: 1,
+                failureMessage: "Provider returned HTTP 401",
+                fetchedAt: .distantPast
+            )
         )
 
         XCTAssertTrue(enabledButNotReady.isEnabled)
@@ -1013,10 +1021,34 @@ final class AppAndWidgetTests: XCTestCase {
             isConfigured: false,
             isSecretPresent: false,
             userVisibleMessage: "Network connection failed",
-            hasPreviousResult: false
+            result: ProviderUsageResult(
+                providerID: .claude,
+                title: "Claude",
+                subtitle: "Network connection failed",
+                bars: [],
+                failureMessage: "Network connection failed",
+                fetchedAt: .distantPast
+            )
         )
         XCTAssertEqual(noResultDetails.failureCategory, .connectivity)
         XCTAssertEqual(noResultDetails.freshness, .noSuccessfulRefresh)
+
+        let priorEmptySuccessDetails = DiagnosticTechnicalDetails.providerRefreshFailure(
+            configuration: enabledButNotReady,
+            isConfigured: false,
+            isSecretPresent: false,
+            userVisibleMessage: "Network connection failed",
+            result: ProviderUsageResult(
+                providerID: .claude,
+                title: "Claude",
+                subtitle: "Network connection failed. Showing last known data.",
+                bars: [],
+                failureMessage: "Network connection failed",
+                hasSuccessfulRefreshHistory: true,
+                fetchedAt: .distantPast
+            )
+        )
+        XCTAssertEqual(priorEmptySuccessDetails.freshness, .stale)
     }
 
     func testPrivacySafeDiagnosticURLFallsBackToCopyWithoutExternalNavigation() {

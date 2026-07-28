@@ -330,7 +330,7 @@ struct DiagnosticTechnicalDetails: Equatable, Sendable {
         isConfigured: Bool,
         isSecretPresent: Bool,
         userVisibleMessage: String,
-        hasPreviousResult: Bool
+        result: ProviderUsageResult?
     ) -> Self {
         let statusCode = DiagnosticFailureCategory.safeHTTPStatusCode(
             userVisibleMessage: userVisibleMessage
@@ -344,8 +344,20 @@ struct DiagnosticTechnicalDetails: Equatable, Sendable {
             failureCategory: failureCategory,
             httpStatusCode: statusCode,
             refreshKind: .unknown,
-            freshness: hasPreviousResult ? .stale : .noSuccessfulRefresh
+            freshness: result?.hasRetainedDiagnosticUsage == true
+                ? .stale
+                : .noSuccessfulRefresh
         )
+    }
+}
+
+private extension ProviderUsageResult {
+    var hasRetainedDiagnosticUsage: Bool {
+        hasSuccessfulRefreshHistory
+            || !bars.isEmpty
+            || creditsRemaining != nil
+            || !monetaryMetrics.isEmpty
+            || codexBankedRateLimitResets != nil
     }
 }
 

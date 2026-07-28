@@ -615,7 +615,7 @@ struct ContentView: View {
                 isConfigured: configurationStore.isConfigured(item.configuration),
                 isSecretPresent: configurationStore.hasSecret(for: item.configuration),
                 userVisibleMessage: errorMessage,
-                hasPreviousResult: item.result != nil
+                result: item.result
             )
         )
     }

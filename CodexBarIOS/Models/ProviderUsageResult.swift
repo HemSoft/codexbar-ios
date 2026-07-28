@@ -223,6 +223,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let cacheIdentity: String?
     public let cacheScope: String?
     public let allowsUnscopedCacheReuse: Bool
+    public let hasSuccessfulRefreshHistory: Bool
     public let fetchedAt: Date
 
     public init(
@@ -247,6 +248,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         cacheIdentity: String? = nil,
         cacheScope: String? = nil,
         allowsUnscopedCacheReuse: Bool = false,
+        hasSuccessfulRefreshHistory: Bool? = nil,
         fetchedAt: Date
     ) {
         self.accountID = accountID ?? providerID.rawValue
@@ -272,6 +274,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.cacheIdentity = cacheIdentity
         self.cacheScope = cacheScope
         self.allowsUnscopedCacheReuse = allowsUnscopedCacheReuse
+        self.hasSuccessfulRefreshHistory = hasSuccessfulRefreshHistory ?? (failureMessage == nil)
         self.fetchedAt = fetchedAt
     }
 
