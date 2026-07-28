@@ -955,10 +955,17 @@ struct ProviderUsageCard: View {
 
         let preferredOptionID: String?
         switch metric.kind {
-        case .usageBar:
-            // The usage series is the card-wide maximum across usage bars, so it
-            // is not accurate to present it as one selected bar's history.
-            return nil
+        case let .usageBar(index):
+            guard
+                result.providerID == .cursor,
+                result.bars.indices.contains(index),
+                let stableKey = result.bars[index].stableKey
+            else {
+                // Other providers still expose a card-wide aggregate usage series,
+                // which is not accurate for one selected bar.
+                return nil
+            }
+            preferredOptionID = "usage.\(stableKey)"
         case .creditsRemaining:
             preferredOptionID = "balance"
         case let .monetary(index):

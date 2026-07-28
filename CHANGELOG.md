@@ -96,6 +96,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Corrected Cursor history to track Total usage by default instead of whichever
+  hidden or secondary metric is highest, while adding separate stable history
+  series for Total, Auto, API, and On-demand usage.
+  ([#178](https://github.com/HemSoft/codexbar-ios/issues/178))
 - Kept the current usage percentage prominent in widgets while preserving
   projections as secondary context in fills, details, and severity.
   ([#157](https://github.com/HemSoft/codexbar-ios/issues/157))

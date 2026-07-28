@@ -111,6 +111,92 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertNil(reloadedStore.snapshots.first?.creditsRemaining)
     }
 
+    func testUsageHistoryBarSnapshotDecodesLegacyLabelOnlyData() throws {
+        let data = Data(
+            #"{"label":"Total","fractionUsed":0.38,"used":38,"limit":100}"#.utf8
+        )
+
+        let snapshot = try JSONDecoder().decode(UsageHistoryBarSnapshot.self, from: data)
+
+        XCTAssertNil(snapshot.stableKey)
+        XCTAssertEqual(snapshot.label, "Total")
+        XCTAssertEqual(snapshot.fractionUsed, 0.38)
+    }
+
+    @MainActor
+    func testCursorHistoryUsesStableTotalAndExposesDistinctMetricSeries() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = ProviderUsageResult(
+            accountID: "cursor.personal",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Current",
+            bars: [
+                UsageBar(stableKey: "total", label: "Total", used: 38, limit: 100),
+                UsageBar(stableKey: "auto", label: "Auto", used: 29, limit: 100),
+                UsageBar(stableKey: "api", label: "API", used: 100, limit: 100),
+                UsageBar(
+                    stableKey: "on-demand",
+                    label: "On-demand $0.00 / $20.00",
+                    used: 0,
+                    limit: 2_000
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(results: [result], now: fetchedAt)
+
+        let snapshot = try XCTUnwrap(store.snapshots.first)
+        XCTAssertEqual(snapshot.bars.map(\.stableKey), ["total", "auto", "api", "on-demand"])
+        XCTAssertEqual(snapshot.primaryValue, 0.38)
+        XCTAssertEqual(store.historySeries(for: result).points.map(\.value), [0.38])
+
+        let options = store.historySeriesOptions(for: result)
+        XCTAssertEqual(options.map(\.id), [
+            "usage.total",
+            "usage.auto",
+            "usage.api",
+            "usage.on-demand",
+        ])
+        XCTAssertEqual(options.map(\.label), ["Total", "Auto", "API", "On-demand"])
+        XCTAssertEqual(options.map { $0.series.points.map(\.value) }, [
+            [0.38],
+            [0.29],
+            [1],
+            [0],
+        ])
+
+        let reorderedAndRelabeledResult = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: [
+                UsageBar(stableKey: "api", label: "API requests", used: 100, limit: 100),
+                UsageBar(stableKey: "on-demand", label: "On-demand spend", used: 0, limit: 2_000),
+                UsageBar(stableKey: "auto", label: "Included Auto", used: 29, limit: 100),
+                UsageBar(stableKey: "total", label: "Overall plan", used: 38, limit: 100),
+            ],
+            fetchedAt: fetchedAt.addingTimeInterval(60)
+        )
+
+        XCTAssertEqual(
+            store.historySeries(for: reorderedAndRelabeledResult).points.map(\.value),
+            [0.38]
+        )
+        XCTAssertEqual(
+            store.historySeriesOptions(for: reorderedAndRelabeledResult).map(\.id),
+            options.map(\.id)
+        )
+    }
+
     @MainActor
     func testUsageHistoryStoreSurfacesEncodingFailures() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"

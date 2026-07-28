@@ -10,12 +10,14 @@ private enum UsageHistoryFormatting {
 }
 
 public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
+    public let stableKey: String?
     public let label: String
     public let fractionUsed: Double
     public let used: Double
     public let limit: Double
 
     public init(bar: UsageBar) {
+        self.stableKey = bar.stableKey
         self.label = bar.label
         self.fractionUsed = bar.fractionUsed
         self.used = bar.used
@@ -101,6 +103,14 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
     public var primaryValue: Double? {
         if let creditsRemaining {
             return creditsRemaining
+        }
+
+        if providerID == .cursor {
+            return bars.first(where: {
+                $0.stableKey == "total"
+                    || ($0.stableKey == nil
+                        && $0.label.caseInsensitiveCompare("Total") == .orderedSame)
+            })?.fractionUsed
         }
 
         if let usage = bars.map(\.fractionUsed).max() {
@@ -404,7 +414,7 @@ public final class UsageHistoryStore: ObservableObject {
         if (result.hasFreshBars && !result.bars.isEmpty)
             || (!result.bars.isEmpty && hasUsageHistory)
         {
-            return usageSeries(accountID: result.accountID, snapshots: accountSnapshots)
+            return usageSeries(for: result, snapshots: accountSnapshots)
         }
 
         if result.freshCreditsRemaining != nil
@@ -442,6 +452,21 @@ public final class UsageHistoryStore: ObservableObject {
     }
 
     private func usageSeries(
+        for result: ProviderUsageResult,
+        snapshots: [UsageHistorySnapshot]
+    ) -> UsageHistorySeries {
+        if result.providerID == .cursor {
+            return usageSeries(
+                accountID: result.accountID,
+                snapshots: snapshots,
+                stableKey: "total"
+            )
+        }
+
+        return aggregateUsageSeries(accountID: result.accountID, snapshots: snapshots)
+    }
+
+    private func aggregateUsageSeries(
         accountID: String,
         snapshots: [UsageHistorySnapshot]
     ) -> UsageHistorySeries {
@@ -454,6 +479,79 @@ public final class UsageHistoryStore: ObservableObject {
             },
             isBalance: false
         )
+    }
+
+    private func usageSeries(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot],
+        stableKey: String
+    ) -> UsageHistorySeries {
+        UsageHistorySeries(
+            accountID: accountID,
+            points: snapshots.compactMap { snapshot in
+                snapshot.bars.first(where: {
+                    $0.stableKey == stableKey
+                        || ($0.stableKey == nil && Self.matchesLegacyCursorBar($0, stableKey: stableKey))
+                }).map {
+                    UsageHistoryPoint(snapshot: snapshot, value: $0.fractionUsed)
+                }
+            },
+            isBalance: false
+        )
+    }
+
+    private static func matchesLegacyCursorBar(
+        _ bar: UsageHistoryBarSnapshot,
+        stableKey: String
+    ) -> Bool {
+        let label = bar.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch stableKey {
+        case "total":
+            return label.caseInsensitiveCompare("Total") == .orderedSame
+        case "auto":
+            return label.caseInsensitiveCompare("Auto") == .orderedSame
+        case "api":
+            return label.caseInsensitiveCompare("API") == .orderedSame
+        case "on-demand":
+            return label.lowercased().hasPrefix("on-demand")
+        default:
+            return false
+        }
+    }
+
+    private func cursorUsageSeriesOptions(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot],
+        currentBars: [UsageBar]
+    ) -> [UsageHistorySeriesOption] {
+        [
+            ("total", "Total"),
+            ("auto", "Auto"),
+            ("api", "API"),
+            ("on-demand", "On-demand"),
+        ].compactMap { stableKey, label in
+            let isAvailable = currentBars.contains(where: { $0.stableKey == stableKey })
+                || snapshots.contains(where: { snapshot in
+                    snapshot.bars.contains(where: {
+                        $0.stableKey == stableKey
+                            || ($0.stableKey == nil
+                                && Self.matchesLegacyCursorBar($0, stableKey: stableKey))
+                    })
+                })
+            guard isAvailable else {
+                return nil
+            }
+
+            return UsageHistorySeriesOption(
+                id: "usage.\(stableKey)",
+                label: label,
+                series: usageSeries(
+                    accountID: accountID,
+                    snapshots: snapshots,
+                    stableKey: stableKey
+                )
+            )
+        }
     }
 
     private func balanceSeries(
@@ -487,11 +585,22 @@ public final class UsageHistoryStore: ObservableObject {
         if (result.hasFreshBars && !result.bars.isEmpty)
             || accountSnapshots.contains(where: { !$0.bars.isEmpty })
         {
-            options.append(UsageHistorySeriesOption(
-                id: "usage",
-                label: "Usage",
-                series: usageSeries(accountID: result.accountID, snapshots: accountSnapshots)
-            ))
+            if result.providerID == .cursor {
+                options.append(contentsOf: cursorUsageSeriesOptions(
+                    accountID: result.accountID,
+                    snapshots: accountSnapshots,
+                    currentBars: result.bars
+                ))
+            } else {
+                options.append(UsageHistorySeriesOption(
+                    id: "usage",
+                    label: "Usage",
+                    series: aggregateUsageSeries(
+                        accountID: result.accountID,
+                        snapshots: accountSnapshots
+                    )
+                ))
+            }
         }
 
         if result.freshCreditsRemaining != nil
