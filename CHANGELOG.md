@@ -173,8 +173,8 @@ building, testing, or releasing the app.
 ### Developer Experience
 
 - Required every code, documentation, configuration, build, and process change
-  to start from a GitHub issue, use an issue-specific branch, and return to a
-  clean `main` branch only through a linked pull request.
+  to start from a GitHub issue and a clean, synchronized `main`, use an
+  issue-specific branch, and deliver the change through a linked pull request.
   ([#169](https://github.com/HemSoft/codexbar-ios/issues/169))
 - Added a pinned, sandboxed mutation-testing pilot for dashboard sorting,
   documented its measured baseline and survivor triage, and strengthened
