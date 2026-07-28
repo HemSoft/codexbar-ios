@@ -121,6 +121,54 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertNil(snapshot.stableKey)
         XCTAssertEqual(snapshot.label, "Total")
         XCTAssertEqual(snapshot.fractionUsed, 0.38)
+        XCTAssertEqual(snapshot.effectiveSeverity, .normal)
+    }
+
+    @MainActor
+    func testCursorHistoryPersistsProjectedSeverityForSelectedMetric() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let capturedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = ProviderUsageResult(
+            accountID: "cursor.projected",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Projected",
+            bars: [
+                UsageBar(
+                    stableKey: "total",
+                    label: "Total",
+                    used: 63,
+                    limit: 100,
+                    projectionCurrent: 63,
+                    projectionLimit: 100,
+                    projectionPeriodStart: capturedAt.addingTimeInterval(-50),
+                    projectionPeriodEnd: capturedAt.addingTimeInterval(50)
+                ),
+            ],
+            fetchedAt: capturedAt
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(results: [result], now: capturedAt)
+
+        let reloadedStore = UsageHistoryStore(defaults: defaults)
+        let snapshot = try XCTUnwrap(reloadedStore.snapshots.first)
+        XCTAssertEqual(snapshot.bars.first?.fractionUsed, 0.63)
+        XCTAssertEqual(snapshot.bars.first?.effectiveSeverity, .critical)
+        XCTAssertEqual(
+            reloadedStore.historySeries(for: result).points.map(\.severity),
+            [.critical]
+        )
+        XCTAssertEqual(
+            reloadedStore.historySeriesOptions(for: result)
+                .first(where: { $0.id == "usage.total" })?
+                .series.points.map(\.severity),
+            [.critical]
+        )
     }
 
     @MainActor

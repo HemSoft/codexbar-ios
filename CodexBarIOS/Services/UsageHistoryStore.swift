@@ -15,13 +15,37 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
     public let fractionUsed: Double
     public let used: Double
     public let limit: Double
+    public let effectiveSeverity: UsageSeverity
 
-    public init(bar: UsageBar) {
+    private enum CodingKeys: String, CodingKey {
+        case stableKey
+        case label
+        case fractionUsed
+        case used
+        case limit
+        case effectiveSeverity
+    }
+
+    public init(bar: UsageBar, capturedAt: Date) {
         self.stableKey = bar.stableKey
         self.label = bar.label
         self.fractionUsed = bar.fractionUsed
         self.used = bar.used
         self.limit = bar.limit
+        self.effectiveSeverity = bar.effectiveSeverity(at: capturedAt)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.stableKey = try container.decodeIfPresent(String.self, forKey: .stableKey)
+        self.label = try container.decode(String.self, forKey: .label)
+        self.fractionUsed = try container.decode(Double.self, forKey: .fractionUsed)
+        self.used = try container.decode(Double.self, forKey: .used)
+        self.limit = try container.decode(Double.self, forKey: .limit)
+        self.effectiveSeverity = try container.decodeIfPresent(
+            UsageSeverity.self,
+            forKey: .effectiveSeverity
+        ) ?? UsageSeverity(fractionUsed: fractionUsed)
     }
 }
 
@@ -91,7 +115,9 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         self.title = result.title
         self.subtitle = result.subtitle
         self.capturedAt = capturedAt
-        self.bars = recordableBars.map(UsageHistoryBarSnapshot.init)
+        self.bars = recordableBars.map {
+            UsageHistoryBarSnapshot(bar: $0, capturedAt: capturedAt)
+        }
         self.creditsRemaining = result.freshCreditsRemaining
         self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
         self.highestSeverity = max(
@@ -501,7 +527,7 @@ public final class UsageHistoryStore: ObservableObject {
                         id: snapshot.id,
                         capturedAt: snapshot.capturedAt,
                         value: $0.fractionUsed,
-                        severity: UsageSeverity(fractionUsed: $0.fractionUsed)
+                        severity: $0.effectiveSeverity
                     )
                 }
             },
@@ -525,7 +551,7 @@ public final class UsageHistoryStore: ObservableObject {
                         id: snapshot.id,
                         capturedAt: snapshot.capturedAt,
                         value: $0.fractionUsed,
-                        severity: UsageSeverity(fractionUsed: $0.fractionUsed)
+                        severity: $0.effectiveSeverity
                     )
                 }
             },
