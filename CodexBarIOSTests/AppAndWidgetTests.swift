@@ -3001,6 +3001,49 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(historyBuildCount, 0)
     }
 
+    func testCursorMetricTileUsesItsStableHistorySeries() throws {
+        let result = ProviderUsageResult(
+            accountID: "cursor.history",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Current",
+            bars: [UsageBar(stableKey: "total", label: "Total", used: 38, limit: 100)],
+            fetchedAt: Date()
+        )
+        let series = UsageHistorySeries(
+            accountID: result.accountID,
+            points: [],
+            isBalance: false
+        )
+        let card = ProviderUsageCard(
+            result: result,
+            statusText: result.subtitle,
+            history: series,
+            historySeriesOptions: {
+                [UsageHistorySeriesOption(id: "usage.total", label: "Total", series: series)]
+            }
+        )
+
+        XCTAssertEqual(
+            card.metricDetailHistorySeries(for: try XCTUnwrap(result.availableMetrics.first)),
+            series
+        )
+
+        let aggregateOnlyCard = ProviderUsageCard(
+            result: result,
+            statusText: result.subtitle,
+            history: series,
+            historySeriesOptions: {
+                [UsageHistorySeriesOption(id: "usage", label: "Usage", series: series)]
+            }
+        )
+        XCTAssertNil(
+            aggregateOnlyCard.metricDetailHistorySeries(
+                for: try XCTUnwrap(result.availableMetrics.first)
+            )
+        )
+    }
+
     func testFailedCachedMetricComponentsAreLastKnownDespiteMatchingTimestamps() {
         let fetchedAt = Date(timeIntervalSince1970: 1_785_000_000)
         let successfulResult = ProviderUsageResult(

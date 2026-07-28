@@ -10,16 +10,42 @@ private enum UsageHistoryFormatting {
 }
 
 public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
+    public let stableKey: String?
     public let label: String
     public let fractionUsed: Double
     public let used: Double
     public let limit: Double
+    public let effectiveSeverity: UsageSeverity
 
-    public init(bar: UsageBar) {
+    private enum CodingKeys: String, CodingKey {
+        case stableKey
+        case label
+        case fractionUsed
+        case used
+        case limit
+        case effectiveSeverity
+    }
+
+    public init(bar: UsageBar, capturedAt: Date) {
+        self.stableKey = bar.stableKey
         self.label = bar.label
         self.fractionUsed = bar.fractionUsed
         self.used = bar.used
         self.limit = bar.limit
+        self.effectiveSeverity = bar.effectiveSeverity(at: capturedAt)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.stableKey = try container.decodeIfPresent(String.self, forKey: .stableKey)
+        self.label = try container.decode(String.self, forKey: .label)
+        self.fractionUsed = try container.decode(Double.self, forKey: .fractionUsed)
+        self.used = try container.decode(Double.self, forKey: .used)
+        self.limit = try container.decode(Double.self, forKey: .limit)
+        self.effectiveSeverity = try container.decodeIfPresent(
+            UsageSeverity.self,
+            forKey: .effectiveSeverity
+        ) ?? UsageSeverity(fractionUsed: fractionUsed)
     }
 }
 
@@ -89,7 +115,9 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         self.title = result.title
         self.subtitle = result.subtitle
         self.capturedAt = capturedAt
-        self.bars = recordableBars.map(UsageHistoryBarSnapshot.init)
+        self.bars = recordableBars.map {
+            UsageHistoryBarSnapshot(bar: $0, capturedAt: capturedAt)
+        }
         self.creditsRemaining = result.freshCreditsRemaining
         self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
         self.highestSeverity = max(
@@ -101,6 +129,16 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
     public var primaryValue: Double? {
         if let creditsRemaining {
             return creditsRemaining
+        }
+
+        if providerID == .cursor,
+           let total = bars.first(where: {
+                $0.stableKey == "total"
+                    || ($0.stableKey == nil
+                        && $0.label.caseInsensitiveCompare("Total") == .orderedSame)
+           })
+        {
+            return total.fractionUsed
         }
 
         if let usage = bars.map(\.fractionUsed).max() {
@@ -404,7 +442,7 @@ public final class UsageHistoryStore: ObservableObject {
         if (result.hasFreshBars && !result.bars.isEmpty)
             || (!result.bars.isEmpty && hasUsageHistory)
         {
-            return usageSeries(accountID: result.accountID, snapshots: accountSnapshots)
+            return usageSeries(for: result, snapshots: accountSnapshots)
         }
 
         if result.freshCreditsRemaining != nil
@@ -442,6 +480,20 @@ public final class UsageHistoryStore: ObservableObject {
     }
 
     private func usageSeries(
+        for result: ProviderUsageResult,
+        snapshots: [UsageHistorySnapshot]
+    ) -> UsageHistorySeries {
+        if result.providerID == .cursor {
+            return cursorPrimaryUsageSeries(
+                accountID: result.accountID,
+                snapshots: snapshots
+            )
+        }
+
+        return aggregateUsageSeries(accountID: result.accountID, snapshots: snapshots)
+    }
+
+    private func aggregateUsageSeries(
         accountID: String,
         snapshots: [UsageHistorySnapshot]
     ) -> UsageHistorySeries {
@@ -454,6 +506,144 @@ public final class UsageHistoryStore: ObservableObject {
             },
             isBalance: false
         )
+    }
+
+    private func cursorPrimaryUsageSeries(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot]
+    ) -> UsageHistorySeries {
+        UsageHistorySeries(
+            accountID: accountID,
+            points: snapshots.compactMap { snapshot in
+                let total = snapshot.bars.first(where: {
+                    $0.stableKey == "total"
+                        || ($0.stableKey == nil
+                            && Self.matchesLegacyCursorBar($0, stableKey: "total"))
+                })
+                let selectedBar = total
+                    ?? snapshot.bars.max(by: { $0.fractionUsed < $1.fractionUsed })
+                return selectedBar.map {
+                    UsageHistoryPoint(
+                        id: snapshot.id,
+                        capturedAt: snapshot.capturedAt,
+                        value: $0.fractionUsed,
+                        severity: $0.effectiveSeverity
+                    )
+                }
+            },
+            isBalance: false
+        )
+    }
+
+    private func usageSeries(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot],
+        stableKey: String
+    ) -> UsageHistorySeries {
+        UsageHistorySeries(
+            accountID: accountID,
+            points: snapshots.compactMap { snapshot in
+                snapshot.bars.first(where: {
+                    $0.stableKey == stableKey
+                        || ($0.stableKey == nil && Self.matchesLegacyCursorBar($0, stableKey: stableKey))
+                }).map {
+                    UsageHistoryPoint(
+                        id: snapshot.id,
+                        capturedAt: snapshot.capturedAt,
+                        value: $0.fractionUsed,
+                        severity: $0.effectiveSeverity
+                    )
+                }
+            },
+            isBalance: false
+        )
+    }
+
+    private static func matchesLegacyCursorBar(
+        _ bar: UsageHistoryBarSnapshot,
+        stableKey: String
+    ) -> Bool {
+        let label = bar.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch stableKey {
+        case "total":
+            return label.caseInsensitiveCompare("Total") == .orderedSame
+        case "auto":
+            return label.caseInsensitiveCompare("Auto") == .orderedSame
+        case "api":
+            return label.caseInsensitiveCompare("API") == .orderedSame
+        case "on-demand":
+            return label.lowercased().hasPrefix("on-demand")
+        default:
+            return false
+        }
+    }
+
+    private func cursorUsageSeriesOptions(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot],
+        currentBars: [UsageBar]
+    ) -> [UsageHistorySeriesOption] {
+        let metricOptions: [UsageHistorySeriesOption] = [
+            ("total", "Total"),
+            ("auto", "Auto"),
+            ("api", "API"),
+            ("on-demand", "On-demand"),
+        ].compactMap { stableKey, label in
+            let isAvailable = currentBars.contains(where: { $0.stableKey == stableKey })
+                || snapshots.contains(where: { snapshot in
+                    snapshot.bars.contains(where: {
+                        $0.stableKey == stableKey
+                            || ($0.stableKey == nil
+                                && Self.matchesLegacyCursorBar($0, stableKey: stableKey))
+                    })
+                })
+            guard isAvailable else {
+                return nil
+            }
+
+            return UsageHistorySeriesOption(
+                id: "usage.\(stableKey)",
+                label: label,
+                series: usageSeries(
+                    accountID: accountID,
+                    snapshots: snapshots,
+                    stableKey: stableKey
+                )
+            )
+        }
+
+        guard !metricOptions.contains(where: { $0.id == "usage.total" }) else {
+            let hasFallbackSamples = snapshots.contains(where: { snapshot in
+                !snapshot.bars.isEmpty
+                    && !snapshot.bars.contains(where: {
+                        $0.stableKey == "total"
+                            || ($0.stableKey == nil
+                                && Self.matchesLegacyCursorBar($0, stableKey: "total"))
+                    })
+            })
+            guard hasFallbackSamples else {
+                return metricOptions
+            }
+
+            return [
+                UsageHistorySeriesOption(
+                    id: "usage",
+                    label: "Total / highest available",
+                    series: cursorPrimaryUsageSeries(
+                        accountID: accountID,
+                        snapshots: snapshots
+                    )
+                ),
+            ] + metricOptions
+        }
+
+        return [
+            UsageHistorySeriesOption(
+                id: "usage",
+                label: "Highest usage",
+                series: cursorPrimaryUsageSeries(accountID: accountID, snapshots: snapshots)
+            ),
+        ] + metricOptions
     }
 
     private func balanceSeries(
@@ -487,11 +677,22 @@ public final class UsageHistoryStore: ObservableObject {
         if (result.hasFreshBars && !result.bars.isEmpty)
             || accountSnapshots.contains(where: { !$0.bars.isEmpty })
         {
-            options.append(UsageHistorySeriesOption(
-                id: "usage",
-                label: "Usage",
-                series: usageSeries(accountID: result.accountID, snapshots: accountSnapshots)
-            ))
+            if result.providerID == .cursor {
+                options.append(contentsOf: cursorUsageSeriesOptions(
+                    accountID: result.accountID,
+                    snapshots: accountSnapshots,
+                    currentBars: result.bars
+                ))
+            } else {
+                options.append(UsageHistorySeriesOption(
+                    id: "usage",
+                    label: "Usage",
+                    series: aggregateUsageSeries(
+                        accountID: result.accountID,
+                        snapshots: accountSnapshots
+                    )
+                ))
+            }
         }
 
         if result.freshCreditsRemaining != nil

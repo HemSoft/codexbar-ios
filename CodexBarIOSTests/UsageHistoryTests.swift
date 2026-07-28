@@ -111,6 +111,194 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertNil(reloadedStore.snapshots.first?.creditsRemaining)
     }
 
+    func testUsageHistoryBarSnapshotDecodesLegacyLabelOnlyData() throws {
+        let data = Data(
+            #"{"label":"Total","fractionUsed":0.38,"used":38,"limit":100}"#.utf8
+        )
+
+        let snapshot = try JSONDecoder().decode(UsageHistoryBarSnapshot.self, from: data)
+
+        XCTAssertNil(snapshot.stableKey)
+        XCTAssertEqual(snapshot.label, "Total")
+        XCTAssertEqual(snapshot.fractionUsed, 0.38)
+        XCTAssertEqual(snapshot.effectiveSeverity, .normal)
+    }
+
+    @MainActor
+    func testCursorHistoryPersistsProjectedSeverityForSelectedMetric() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let capturedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = ProviderUsageResult(
+            accountID: "cursor.projected",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Projected",
+            bars: [
+                UsageBar(
+                    stableKey: "total",
+                    label: "Total",
+                    used: 63,
+                    limit: 100,
+                    projectionCurrent: 63,
+                    projectionLimit: 100,
+                    projectionPeriodStart: capturedAt.addingTimeInterval(-50),
+                    projectionPeriodEnd: capturedAt.addingTimeInterval(50)
+                ),
+            ],
+            fetchedAt: capturedAt
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(results: [result], now: capturedAt)
+
+        let reloadedStore = UsageHistoryStore(defaults: defaults)
+        let snapshot = try XCTUnwrap(reloadedStore.snapshots.first)
+        XCTAssertEqual(snapshot.bars.first?.fractionUsed, 0.63)
+        XCTAssertEqual(snapshot.bars.first?.effectiveSeverity, .critical)
+        XCTAssertEqual(
+            reloadedStore.historySeries(for: result).points.map(\.severity),
+            [.critical]
+        )
+        XCTAssertEqual(
+            reloadedStore.historySeriesOptions(for: result)
+                .first(where: { $0.id == "usage.total" })?
+                .series.points.map(\.severity),
+            [.critical]
+        )
+    }
+
+    @MainActor
+    func testCursorHistoryUsesStableTotalAndExposesDistinctMetricSeries() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let result = ProviderUsageResult(
+            accountID: "cursor.personal",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Current",
+            bars: [
+                UsageBar(stableKey: "total", label: "Total", used: 38, limit: 100),
+                UsageBar(stableKey: "auto", label: "Auto", used: 29, limit: 100),
+                UsageBar(stableKey: "api", label: "API", used: 100, limit: 100),
+                UsageBar(
+                    stableKey: "on-demand",
+                    label: "On-demand $0.00 / $20.00",
+                    used: 0,
+                    limit: 2_000
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(results: [result], now: fetchedAt)
+
+        let snapshot = try XCTUnwrap(store.snapshots.first)
+        XCTAssertEqual(snapshot.bars.map(\.stableKey), ["total", "auto", "api", "on-demand"])
+        XCTAssertEqual(snapshot.primaryValue, 0.38)
+        XCTAssertEqual(store.historySeries(for: result).points.map(\.value), [0.38])
+
+        let options = store.historySeriesOptions(for: result)
+        XCTAssertEqual(options.map(\.id), [
+            "usage.total",
+            "usage.auto",
+            "usage.api",
+            "usage.on-demand",
+        ])
+        XCTAssertEqual(options.map(\.label), ["Total", "Auto", "API", "On-demand"])
+        XCTAssertEqual(options.map { $0.series.points.map(\.value) }, [
+            [0.38],
+            [0.29],
+            [1],
+            [0],
+        ])
+        XCTAssertEqual(options.map { $0.series.points.map(\.severity) }, [
+            [.normal],
+            [.normal],
+            [.critical],
+            [.normal],
+        ])
+
+        let reorderedAndRelabeledResult = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: result.subtitle,
+            bars: [
+                UsageBar(stableKey: "api", label: "API requests", used: 100, limit: 100),
+                UsageBar(stableKey: "on-demand", label: "On-demand spend", used: 0, limit: 2_000),
+                UsageBar(stableKey: "auto", label: "Included Auto", used: 29, limit: 100),
+                UsageBar(stableKey: "total", label: "Overall plan", used: 38, limit: 100),
+            ],
+            fetchedAt: fetchedAt.addingTimeInterval(60)
+        )
+
+        XCTAssertEqual(
+            store.historySeries(for: reorderedAndRelabeledResult).points.map(\.value),
+            [0.38]
+        )
+        XCTAssertEqual(
+            store.historySeriesOptions(for: reorderedAndRelabeledResult).map(\.id),
+            options.map(\.id)
+        )
+
+        let resultWithoutTotal = ProviderUsageResult(
+            accountID: "cursor.partial",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Current without Total",
+            bars: [
+                UsageBar(stableKey: "auto", label: "Auto", used: 29, limit: 100),
+                UsageBar(stableKey: "api", label: "API", used: 100, limit: 100),
+            ],
+            fetchedAt: fetchedAt
+        )
+        store.record(results: [resultWithoutTotal], now: fetchedAt)
+
+        let partialSnapshot = try XCTUnwrap(store.snapshots(for: resultWithoutTotal.accountID).first)
+        XCTAssertEqual(partialSnapshot.primaryValue, 1)
+        XCTAssertEqual(store.historySeries(for: resultWithoutTotal).points.map(\.value), [1])
+        let partialOptions = store.historySeriesOptions(for: resultWithoutTotal)
+        XCTAssertEqual(partialOptions.map(\.id), ["usage", "usage.auto", "usage.api"])
+        XCTAssertEqual(partialOptions.map(\.label), ["Highest usage", "Auto", "API"])
+        XCTAssertEqual(partialOptions.first?.series.points.map(\.value), [1])
+        XCTAssertEqual(partialOptions.first?.series, store.historySeries(for: resultWithoutTotal))
+
+        let laterResultWithoutTotal = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Current without Total",
+            bars: [
+                UsageBar(stableKey: "auto", label: "Auto", used: 45, limit: 100),
+                UsageBar(stableKey: "api", label: "API", used: 90, limit: 100),
+            ],
+            fetchedAt: fetchedAt.addingTimeInterval(120)
+        )
+        store.record(results: [laterResultWithoutTotal], now: laterResultWithoutTotal.fetchedAt)
+
+        XCTAssertEqual(store.historySeries(for: laterResultWithoutTotal).points.map(\.value), [
+            0.38,
+            0.9,
+        ])
+        let mixedOptions = store.historySeriesOptions(for: laterResultWithoutTotal)
+        XCTAssertEqual(mixedOptions.first?.id, "usage")
+        XCTAssertEqual(mixedOptions.first?.label, "Total / highest available")
+        XCTAssertEqual(mixedOptions.first?.series.points.map(\.value), [0.38, 0.9])
+        XCTAssertEqual(
+            mixedOptions.first(where: { $0.id == "usage.total" })?.series.points.map(\.value),
+            [0.38]
+        )
+    }
+
     @MainActor
     func testUsageHistoryStoreSurfacesEncodingFailures() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
