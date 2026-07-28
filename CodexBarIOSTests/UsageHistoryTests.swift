@@ -212,6 +212,10 @@ final class UsageHistoryTests: XCTestCase {
         let partialSnapshot = try XCTUnwrap(store.snapshots(for: resultWithoutTotal.accountID).first)
         XCTAssertEqual(partialSnapshot.primaryValue, 1)
         XCTAssertEqual(store.historySeries(for: resultWithoutTotal).points.map(\.value), [1])
+        let partialOptions = store.historySeriesOptions(for: resultWithoutTotal)
+        XCTAssertEqual(partialOptions.map(\.id), ["usage", "usage.auto", "usage.api"])
+        XCTAssertEqual(partialOptions.map(\.label), ["Highest usage", "Auto", "API"])
+        XCTAssertEqual(partialOptions.first?.series.points.map(\.value), [1])
     }
 
     @MainActor

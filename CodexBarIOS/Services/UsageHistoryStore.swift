@@ -529,7 +529,7 @@ public final class UsageHistoryStore: ObservableObject {
         snapshots: [UsageHistorySnapshot],
         currentBars: [UsageBar]
     ) -> [UsageHistorySeriesOption] {
-        [
+        let metricOptions: [UsageHistorySeriesOption] = [
             ("total", "Total"),
             ("auto", "Auto"),
             ("api", "API"),
@@ -557,6 +557,18 @@ public final class UsageHistoryStore: ObservableObject {
                 )
             )
         }
+
+        guard !metricOptions.contains(where: { $0.id == "usage.total" }) else {
+            return metricOptions
+        }
+
+        return [
+            UsageHistorySeriesOption(
+                id: "usage",
+                label: "Highest usage",
+                series: aggregateUsageSeries(accountID: accountID, snapshots: snapshots)
+            ),
+        ] + metricOptions
     }
 
     private func balanceSeries(
