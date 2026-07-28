@@ -8,8 +8,455 @@ struct FeedbackSupportContext: Equatable, Sendable {
     let deviceCategory: String
 
     var systemDetails: String {
-        "CodexBar \(appVersion) (\(buildNumber)), \(operatingSystemName) \(operatingSystemVersion), \(deviceCategory)"
+        PrivacySafeDiagnosticBuilder.systemDetails(self)
     }
+}
+
+enum DiagnosticSurface: String, CaseIterable, Equatable, Sendable {
+    case providerSetup
+    case dashboard
+    case history
+    case alerts
+    case widget
+    case appleWatch
+    case authentication
+    case settings
+    case other
+
+    var displayName: String {
+        switch self {
+        case .providerSetup:
+            "Provider or account setup"
+        case .dashboard:
+            "Dashboard"
+        case .history:
+            "History"
+        case .alerts:
+            "Alerts"
+        case .widget:
+            "Widget"
+        case .appleWatch:
+            "Apple Watch"
+        case .authentication:
+            "Authentication"
+        case .settings:
+            "Settings"
+        case .other:
+            "Other"
+        }
+    }
+}
+
+enum DiagnosticAuthenticationMethod: String, Equatable, Sendable {
+    case apiKey
+    case browserSession
+    case cliToken
+
+    init(_ method: ProviderAuthMethod) {
+        switch method {
+        case .apiKey:
+            self = .apiKey
+        case .browserSession:
+            self = .browserSession
+        case .cliToken:
+            self = .cliToken
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .apiKey:
+            "API key"
+        case .browserSession:
+            "Browser session"
+        case .cliToken:
+            "CLI token"
+        }
+    }
+}
+
+enum DiagnosticFailureCategory: String, CaseIterable, Equatable, Sendable {
+    case authentication
+    case authorization
+    case connectivity
+    case timeout
+    case rateLimited
+    case clientRequest
+    case server
+    case invalidResponse
+    case localStorage
+    case unavailable
+    case cancelled
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .authentication:
+            "Authentication"
+        case .authorization:
+            "Authorization"
+        case .connectivity:
+            "Connectivity"
+        case .timeout:
+            "Timeout"
+        case .rateLimited:
+            "Rate limited"
+        case .clientRequest:
+            "Client request"
+        case .server:
+            "Provider server"
+        case .invalidResponse:
+            "Invalid response"
+        case .localStorage:
+            "Local storage"
+        case .unavailable:
+            "Temporarily unavailable"
+        case .cancelled:
+            "Cancelled"
+        case .unknown:
+            "Unknown"
+        }
+    }
+
+    static func normalized(error: Error, httpStatusCode: Int? = nil) -> Self {
+        if let httpStatusCode {
+            return normalized(httpStatusCode: httpStatusCode)
+        }
+        if error is DecodingError {
+            return .invalidResponse
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return .timeout
+            case .cancelled:
+                return .cancelled
+            case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
+                 .cannotFindHost, .dnsLookupFailed:
+                return .connectivity
+            default:
+                return .unavailable
+            }
+        }
+        return .unknown
+    }
+
+    static func normalized(httpStatusCode: Int) -> Self {
+        switch httpStatusCode {
+        case 401:
+            .authentication
+        case 403:
+            .authorization
+        case 408:
+            .timeout
+        case 429:
+            .rateLimited
+        case 400..<500:
+            .clientRequest
+        case 500..<600:
+            .server
+        default:
+            .unknown
+        }
+    }
+
+    /// Maps existing presentation text to a fixed category. The input is never retained or emitted.
+    static func normalized(userVisibleMessage: String) -> Self {
+        let value = userVisibleMessage.lowercased()
+        if value.contains("timed out") || value.contains("timeout") {
+            return .timeout
+        }
+        if value.contains("rate limit") || value.contains("too many requests") {
+            return .rateLimited
+        }
+        if value.contains("sign in") || value.contains("credential") || value.contains("token") {
+            return .authentication
+        }
+        if value.contains("permission") || value.contains("forbidden") {
+            return .authorization
+        }
+        if value.contains("offline") || value.contains("network") || value.contains("connect") {
+            return .connectivity
+        }
+        if value.contains("decode") || value.contains("parse") || value.contains("invalid response") {
+            return .invalidResponse
+        }
+        if value.contains("keychain") || value.contains("save") || value.contains("storage") {
+            return .localStorage
+        }
+        if value.contains("unavailable") {
+            return .unavailable
+        }
+        return .unknown
+    }
+
+    static func safeHTTPStatusCode(userVisibleMessage: String) -> Int? {
+        guard let range = userVisibleMessage.range(
+            of: "HTTP ",
+            options: [.caseInsensitive, .literal]
+        ) else {
+            return nil
+        }
+        let suffix = userVisibleMessage[range.upperBound...]
+        let digits = suffix.prefix(3)
+        guard
+            digits.count == 3,
+            digits.allSatisfy(\.isNumber),
+            suffix.dropFirst(3).first?.isNumber != true,
+            let code = Int(digits),
+            (100...599).contains(code)
+        else {
+            return nil
+        }
+        return code
+    }
+}
+
+enum DiagnosticRefreshKind: String, Equatable, Sendable {
+    case manual
+    case automatic
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .manual:
+            "Manual"
+        case .automatic:
+            "Automatic"
+        case .unknown:
+            "Unknown"
+        }
+    }
+}
+
+enum DiagnosticFreshness: String, Equatable, Sendable {
+    case current
+    case stale
+    case noSuccessfulRefresh
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .current:
+            "Current"
+        case .stale:
+            "Stale"
+        case .noSuccessfulRefresh:
+            "No successful refresh"
+        case .unknown:
+            "Unknown"
+        }
+    }
+}
+
+enum DiagnosticWidgetState: String, Equatable, Sendable {
+    case current
+    case stale
+    case noData
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .current:
+            "Current"
+        case .stale:
+            "Stale"
+        case .noData:
+            "No data"
+        case .unknown:
+            "Unknown"
+        }
+    }
+}
+
+enum DiagnosticWatchState: String, Equatable, Sendable {
+    case connected
+    case phoneUnavailable
+    case stale
+    case noData
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .connected:
+            "Connected"
+        case .phoneUnavailable:
+            "iPhone unavailable"
+        case .stale:
+            "Stale"
+        case .noData:
+            "No data"
+        case .unknown:
+            "Unknown"
+        }
+    }
+}
+
+struct DiagnosticTechnicalDetails: Equatable, Sendable {
+    let authenticationMethod: DiagnosticAuthenticationMethod?
+    let isConfigured: Bool?
+    let isSecretPresent: Bool?
+    let failureCategory: DiagnosticFailureCategory?
+    let httpStatusCode: Int?
+    let refreshKind: DiagnosticRefreshKind?
+    let freshness: DiagnosticFreshness?
+    let widgetState: DiagnosticWidgetState?
+    let watchState: DiagnosticWatchState?
+
+    init(
+        authenticationMethod: DiagnosticAuthenticationMethod? = nil,
+        isConfigured: Bool? = nil,
+        isSecretPresent: Bool? = nil,
+        failureCategory: DiagnosticFailureCategory? = nil,
+        httpStatusCode: Int? = nil,
+        refreshKind: DiagnosticRefreshKind? = nil,
+        freshness: DiagnosticFreshness? = nil,
+        widgetState: DiagnosticWidgetState? = nil,
+        watchState: DiagnosticWatchState? = nil
+    ) {
+        self.authenticationMethod = authenticationMethod
+        self.isConfigured = isConfigured
+        self.isSecretPresent = isSecretPresent
+        self.failureCategory = failureCategory
+        self.httpStatusCode = httpStatusCode.flatMap { (100...599).contains($0) ? $0 : nil }
+        self.refreshKind = refreshKind
+        self.freshness = freshness
+        self.widgetState = widgetState
+        self.watchState = watchState
+    }
+
+    static func providerRefreshFailure(
+        configuration: ProviderAccountConfiguration,
+        isConfigured: Bool,
+        isSecretPresent: Bool,
+        userVisibleMessage: String,
+        result: ProviderUsageResult?
+    ) -> Self {
+        let statusCode = DiagnosticFailureCategory.safeHTTPStatusCode(
+            userVisibleMessage: userVisibleMessage
+        )
+        let failureCategory = statusCode.map(DiagnosticFailureCategory.normalized)
+            ?? DiagnosticFailureCategory.normalized(userVisibleMessage: userVisibleMessage)
+        return Self(
+            authenticationMethod: DiagnosticAuthenticationMethod(configuration.authMethod),
+            isConfigured: isConfigured,
+            isSecretPresent: isSecretPresent,
+            failureCategory: failureCategory,
+            httpStatusCode: statusCode,
+            refreshKind: .unknown,
+            freshness: result?.diagnosticFailureFreshness ?? .noSuccessfulRefresh
+        )
+    }
+}
+
+private extension ProviderUsageResult {
+    var diagnosticFailureFreshness: DiagnosticFreshness {
+        if (!bars.isEmpty && hasCurrentBars)
+            || (creditsRemaining != nil && hasCurrentCredits)
+        {
+            return .current
+        }
+        if hasSuccessfulRefreshHistory
+            || !bars.isEmpty
+            || creditsRemaining != nil
+            || !monetaryMetrics.isEmpty
+            || codexBankedRateLimitResets != nil
+        {
+            return .stale
+        }
+        return .noSuccessfulRefresh
+    }
+}
+
+struct PrivacySafeDiagnosticContext: Equatable, Identifiable, Sendable {
+    let system: FeedbackSupportContext
+    let surface: DiagnosticSurface
+    let providerID: ProviderID?
+    let technicalDetails: DiagnosticTechnicalDetails?
+
+    var id: String {
+        "\(surface.rawValue)-\(providerID?.rawValue ?? "none")"
+    }
+}
+
+extension ProviderID {
+    var problemReportFormValue: String {
+        switch self {
+        case .codex:
+            "ChatGPT / Codex"
+        case .copilot:
+            "GitHub Copilot"
+        case .claude:
+            "Claude"
+        case .openRouter:
+            "OpenRouter"
+        case .openCodeZen:
+            "OpenCode Go / Zen"
+        case .moonshot:
+            "Moonshot (Kimi)"
+        case .cursor:
+            "Cursor"
+        }
+    }
+}
+
+enum PrivacySafeDiagnosticBuilder {
+    static func systemDetails(_ context: FeedbackSupportContext) -> String {
+        "CodexBar \(safeSystemValue(context.appVersion)) (\(safeSystemValue(context.buildNumber))), \(safeSystemValue(context.operatingSystemName)) \(safeSystemValue(context.operatingSystemVersion)), \(safeSystemValue(context.deviceCategory))"
+    }
+
+    static func summary(
+        context: PrivacySafeDiagnosticContext,
+        includeTechnicalDetails: Bool = true
+    ) -> String {
+        var lines = [
+            "CodexBar privacy-safe diagnostic",
+            "App: \(safeSystemValue(context.system.appVersion)) (\(safeSystemValue(context.system.buildNumber)))",
+            "Operating system: \(safeSystemValue(context.system.operatingSystemName)) \(safeSystemValue(context.system.operatingSystemVersion))",
+            "Device: \(safeSystemValue(context.system.deviceCategory))",
+            "Affected surface: \(context.surface.displayName)",
+            "Provider: \(context.providerID?.displayName ?? "Not provider-specific")",
+        ]
+
+        if includeTechnicalDetails, let details = context.technicalDetails {
+            lines.append("Technical details:")
+            append(details.authenticationMethod?.displayName, label: "Authentication method", to: &lines)
+            append(details.isConfigured.map(yesNo), label: "Configured", to: &lines)
+            append(details.isSecretPresent.map(yesNo), label: "Secret present", to: &lines)
+            append(details.failureCategory?.displayName, label: "Failure category", to: &lines)
+            append(details.httpStatusCode.map(String.init), label: "HTTP status", to: &lines)
+            append(details.refreshKind?.displayName, label: "Refresh", to: &lines)
+            append(details.freshness?.displayName, label: "Freshness", to: &lines)
+            append(details.widgetState?.displayName, label: "Widget state", to: &lines)
+            append(details.watchState?.displayName, label: "Apple Watch state", to: &lines)
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func safeSystemValue(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics
+            .union(.whitespaces)
+            .union(CharacterSet(charactersIn: ".,()+-_"))
+        let scalars = value.unicodeScalars.filter { allowed.contains($0) }
+        let normalized = String(String.UnicodeScalarView(scalars))
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(normalized.prefix(80))
+    }
+
+    private static func append(_ value: String?, label: String, to lines: inout [String]) {
+        guard let value else { return }
+        lines.append("- \(label): \(value)")
+    }
+
+    private static func yesNo(_ value: Bool) -> String {
+        value ? "Yes" : "No"
+    }
+}
+
+enum ProblemReportLaunch: Equatable, Sendable {
+    case url(URL)
+    case copyOnly(String)
 }
 
 enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
@@ -62,6 +509,10 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var presentsDiagnosticPreview: Bool {
+        self == .reportProblem
+    }
+
     var systemImage: String {
         switch self {
         case .reportProblem:
@@ -104,14 +555,51 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    static let maximumPrefilledURLLength = 1_800
+
+    static func problemReportLaunch(
+        context: PrivacySafeDiagnosticContext,
+        includeTechnicalDetails: Bool,
+        maximumURLLength: Int = maximumPrefilledURLLength
+    ) -> ProblemReportLaunch {
+        let summary = PrivacySafeDiagnosticBuilder.summary(
+            context: context,
+            includeTechnicalDetails: includeTechnicalDetails
+        )
+        let url = issueFormURL(
+            template: "bug_report.yml",
+            queryItems: [
+                URLQueryItem(name: "system-details", value: context.system.systemDetails),
+                URLQueryItem(name: "affected-surface", value: context.surface.displayName),
+                URLQueryItem(
+                    name: "affected-provider",
+                    value: context.providerID?.problemReportFormValue
+                        ?? "Not provider-specific"
+                ),
+                URLQueryItem(name: "privacy-safe-diagnostics", value: summary),
+            ]
+        )
+        guard url.absoluteString.utf8.count <= maximumURLLength else {
+            return .copyOnly(summary)
+        }
+        return .url(url)
+    }
+
     private static func issueFormURL(template: String, systemDetails: String) -> URL {
+        issueFormURL(
+            template: template,
+            queryItems: [URLQueryItem(name: "system-details", value: systemDetails)]
+        )
+    }
+
+    private static func issueFormURL(
+        template: String,
+        queryItems: [URLQueryItem]
+    ) -> URL {
         var components = URLComponents(
             string: "https://github.com/HemSoft/codexbar-ios/issues/new"
         )!
-        components.queryItems = [
-            URLQueryItem(name: "template", value: template),
-            URLQueryItem(name: "system-details", value: systemDetails),
-        ]
+        components.queryItems = [URLQueryItem(name: "template", value: template)] + queryItems
         components.percentEncodedQuery = components.percentEncodedQuery?
             .replacingOccurrences(of: "+", with: "%2B")
         return components.url!

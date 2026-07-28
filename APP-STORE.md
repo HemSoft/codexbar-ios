@@ -227,6 +227,10 @@ to the App Store Connect 1.1 draft on 2026-07-11:
 - [ ] Verify settings can add, edit, refresh, and remove each provider cleanly.
 - [x] Provide a persistent Settings Feedback & Support destination for writing
   an App Store review and opening structured public support channels.
+- [x] Review diagnostic reporting against App Store privacy answers: reports
+  are user-initiated public GitHub transfers previewed on device, use only a
+  typed allowlist, and add no analytics, crash reporting, background upload,
+  protected-resource access, backend collection, or new privacy-manifest API.
 - [x] Gate native rating requests behind sustained successful use, with no
   first-launch, onboarding, automatic-refresh, incentive, or sentiment gate.
 

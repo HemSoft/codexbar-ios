@@ -8,6 +8,11 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added previewable, privacy-safe problem diagnostics for provider, widget, and
+  Apple Watch failures, with optional technical categories, copy support, and
+  bounded GitHub bug-form prefill that never includes account labels,
+  credentials, usage, balances, raw responses, or stored snapshots.
+  ([#164](https://github.com/HemSoft/codexbar-ios/issues/164))
 - Added Apple Watch metric prioritization that follows each iPhone card’s saved
   order, plus per-metric controls to inherit, always show, or always hide a
   metric on Watch without changing the iPhone dashboard.

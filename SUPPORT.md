@@ -10,10 +10,19 @@ Use the destination that best matches what you need:
 
 The iPhone and iPad app exposes these destinations together under
 **Settings > Feedback & Support**, alongside the support guide and App Store
-rating link. Choosing **Report a Problem** or **Suggest an Improvement**
-prefills only the CodexBar version/build, operating-system version, and general
-device category. You can review or remove that text in GitHub before
-submitting.
+rating link. Choosing **Report a Problem** shows an on-device preview before
+leaving CodexBar. It contains general app/device details and an affected
+surface/provider, plus optional fixed categories for configuration,
+authentication, failure, refresh, Widget freshness, or Apple Watch connection
+state. You can remove the optional technical details, copy the diagnostic,
+cancel, or open the GitHub form. If the prefilled URL would be too long,
+CodexBar copies the diagnostic without opening another app. **Suggest an
+Improvement** prefills only general app and device details.
+
+Provider-card report actions appear only after you expand a visible problem.
+Widget and Apple Watch report entries are available under **Feedback &
+Support** and use presentation-safe state categories rather than stored
+snapshots.
 
 Bug reports and feature requests are public. GitHub requires an account to
 submit them. Before opening a bug report, gather:
@@ -28,6 +37,11 @@ submit them. Before opening a bug report, gather:
 Do not include API keys, access or refresh tokens, passwords, cookies,
 authorization headers, account identifiers, email addresses, or other secrets
 in GitHub issues or attachments.
+
+CodexBar never attaches raw provider responses, arbitrary error descriptions,
+account labels, usage or balance history, widget selections, Watch snapshots,
+logs, files, or screenshots. Screenshots are attachments you choose in GitHub;
+redact private details before adding them.
 
 CodexBar does not currently offer a private support channel. Do not post
 security or privacy-sensitive details in a public issue. A private reporting

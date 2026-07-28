@@ -6,20 +6,6 @@ enum SettingsScrollTarget: Hashable {
     case accounts
 }
 
-private extension FeedbackSupportContext {
-    @MainActor
-    static func current(installedVersion: InstalledAppVersion) -> FeedbackSupportContext {
-        let device = UIDevice.current
-        return FeedbackSupportContext(
-            appVersion: installedVersion.marketingVersion,
-            buildNumber: installedVersion.buildNumber,
-            operatingSystemName: device.systemName,
-            operatingSystemVersion: device.systemVersion,
-            deviceCategory: device.localizedModel
-        )
-    }
-}
-
 struct SettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var appUpdateController: AppUpdateController
@@ -637,6 +623,7 @@ private struct FeedbackSupportView: View {
 
     @Environment(\.openURL) private var openURL
     @State private var failedDestination: FeedbackSupportDestination?
+    @State private var problemReportContext: PrivacySafeDiagnosticContext?
 
     var body: some View {
         List {
@@ -676,29 +663,64 @@ private struct FeedbackSupportView: View {
 
                             Spacer(minLength: 8)
 
-                            VStack(alignment: .trailing, spacing: 3) {
-                                Text(destination.serviceName)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Image(systemName: "arrow.up.forward")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityHidden(true)
+                            if !destination.presentsDiagnosticPreview {
+                                VStack(alignment: .trailing, spacing: 3) {
+                                    Text(destination.serviceName)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Image(systemName: "arrow.up.forward")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .accessibilityHidden(true)
+                                }
                             }
                         }
                         .contentShape(Rectangle())
                     }
-                    .accessibilityLabel("\(destination.title), opens \(destination.serviceName)")
+                    .accessibilityLabel(
+                        destination.presentsDiagnosticPreview
+                            ? "\(destination.title), opens a diagnostic preview"
+                            : "\(destination.title), opens \(destination.serviceName)"
+                    )
                     .accessibilityHint(destination.detail)
                 }
             } footer: {
                 Text(
-                    "GitHub report forms include only the CodexBar version, build, operating-system version, and general device category. You can review or remove that text in GitHub before submitting."
+                    "Reporting a problem previews an allowlisted diagnostic before opening a public GitHub bug report. You can remove optional technical details or cancel. The other links open directly."
                 )
+            }
+
+            Section {
+                Button {
+                    presentProblemReport(
+                        surface: .widget,
+                        technicalDetails: DiagnosticTechnicalDetails(widgetState: .unknown)
+                    )
+                } label: {
+                    Label("Report a Widget Problem", systemImage: "rectangle.stack.badge.exclamationmark")
+                }
+                .accessibilityHint("Previews a privacy-safe Widget diagnostic")
+
+                Button {
+                    presentProblemReport(
+                        surface: .appleWatch,
+                        technicalDetails: DiagnosticTechnicalDetails(watchState: .unknown)
+                    )
+                } label: {
+                    Label("Report an Apple Watch Problem", systemImage: "applewatch")
+                }
+                .accessibilityHint("Previews a privacy-safe Apple Watch diagnostic")
+            } header: {
+                Text("Contextual Reports")
+            } footer: {
+                Text("These reports include only presentation-safe freshness or connection categories, never widget selections or stored watch snapshots.")
             }
         }
         .navigationTitle("Feedback & Support")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $problemReportContext) { context in
+            DiagnosticReportView(context: context)
+        }
         .alert(
             "Couldn’t Open \(failedDestination?.serviceName ?? "Link")",
             isPresented: Binding(
@@ -717,10 +739,26 @@ private struct FeedbackSupportView: View {
     }
 
     private func open(_ destination: FeedbackSupportDestination) {
+        if destination == .reportProblem {
+            presentProblemReport(surface: .other)
+            return
+        }
         openURL(destination.url(context: context)) { accepted in
             if !accepted {
                 failedDestination = destination
             }
         }
+    }
+
+    private func presentProblemReport(
+        surface: DiagnosticSurface,
+        technicalDetails: DiagnosticTechnicalDetails? = nil
+    ) {
+        problemReportContext = PrivacySafeDiagnosticContext(
+            system: context,
+            surface: surface,
+            providerID: nil,
+            technicalDetails: technicalDetails
+        )
     }
 }

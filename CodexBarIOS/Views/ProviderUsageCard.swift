@@ -14,6 +14,39 @@ enum ProviderUsageCardMenuAction: Hashable {
     case customizeMetrics
 }
 
+private struct ProviderProblemReportDisclosure: View {
+    let title: String
+    let message: String
+    let onReport: (() -> Void)?
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        DisclosureGroup(title, isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let onReport {
+                    Button {
+                        onReport()
+                    } label: {
+                        Label("Report This Problem", systemImage: "ladybug")
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+                    .accessibilityHint(
+                        "Previews the privacy-safe diagnostic before opening GitHub"
+                    )
+                }
+            }
+        }
+        .font(.caption)
+    }
+}
+
 struct MetricLayoutCopyDestination: Identifiable, Equatable {
     let id: String
     let title: String
@@ -182,6 +215,7 @@ struct ProviderUsageCard: View {
     let isPerformingRecovery: Bool
     let recoveryStatusMessage: String?
     let recoveryErrorMessage: String?
+    let onReportProblem: (() -> Void)?
     let onShowHistory: () -> Void
     let onConfigureAccount: () -> Void
     let onRetry: () -> Void
@@ -230,6 +264,7 @@ struct ProviderUsageCard: View {
         isPerformingRecovery: Bool = false,
         recoveryStatusMessage: String? = nil,
         recoveryErrorMessage: String? = nil,
+        onReportProblem: (() -> Void)? = nil,
         onShowHistory: @escaping () -> Void = {},
         onConfigureAccount: @escaping () -> Void = {},
         onRetry: @escaping () -> Void = {},
@@ -268,6 +303,7 @@ struct ProviderUsageCard: View {
         self.isPerformingRecovery = isPerformingRecovery
         self.recoveryStatusMessage = recoveryStatusMessage
         self.recoveryErrorMessage = recoveryErrorMessage
+        self.onReportProblem = onReportProblem
         self.onShowHistory = onShowHistory
         self.onConfigureAccount = onConfigureAccount
         self.onRetry = onRetry
@@ -421,6 +457,14 @@ struct ProviderUsageCard: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let refreshErrorMessage {
+                ProviderProblemReportDisclosure(
+                    title: "Refresh problem details",
+                    message: refreshErrorMessage,
+                    onReport: onReportProblem
+                )
             }
 
             if !metricGridRows.isEmpty {
@@ -1338,7 +1382,9 @@ struct ProviderUsagePlaceholderCard: View {
     let isPerformingRecovery: Bool
     let recoveryStatusMessage: String?
     let recoveryErrorMessage: String?
+    let onReportProblem: (() -> Void)?
     let onRetry: () -> Void
+
 
     init(
         configuration: ProviderAccountConfiguration,
@@ -1347,6 +1393,7 @@ struct ProviderUsagePlaceholderCard: View {
         isPerformingRecovery: Bool = false,
         recoveryStatusMessage: String? = nil,
         recoveryErrorMessage: String? = nil,
+        onReportProblem: (() -> Void)? = nil,
         onRetry: @escaping () -> Void
     ) {
         self.configuration = configuration
@@ -1355,6 +1402,7 @@ struct ProviderUsagePlaceholderCard: View {
         self.isPerformingRecovery = isPerformingRecovery
         self.recoveryStatusMessage = recoveryStatusMessage
         self.recoveryErrorMessage = recoveryErrorMessage
+        self.onReportProblem = onReportProblem
         self.onRetry = onRetry
     }
 
@@ -1374,10 +1422,11 @@ struct ProviderUsagePlaceholderCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.orange)
 
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                ProviderProblemReportDisclosure(
+                    title: "Problem details",
+                    message: errorMessage,
+                    onReport: onReportProblem
+                )
 
                 if isPerformingRecovery {
                     ProgressView()

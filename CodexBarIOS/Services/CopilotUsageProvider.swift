@@ -512,6 +512,7 @@ public final class CopilotUsageProvider: UsageProvider {
             dashboardUsageMessages: result.dashboardUsageMessages,
             cardInformationSections: result.cardInformationSections,
             failureMessage: result.failureMessage,
+            hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory,
             fetchedAt: result.fetchedAt
         )
     }

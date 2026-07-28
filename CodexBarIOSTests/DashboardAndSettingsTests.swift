@@ -645,6 +645,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(preservedFailure?.codexBankedRateLimitResets, cachedFailedResult.codexBankedRateLimitResets)
         XCTAssertEqual(preservedFailure?.fetchedAt, cachedFailedResult.fetchedAt)
         XCTAssertEqual(preservedFailure?.failureMessage, "Refresh failed")
+        XCTAssertEqual(preservedFailure?.hasSuccessfulRefreshHistory, true)
         XCTAssertEqual(
             preservedFailure?.subtitle,
             "Refresh failed Showing last known data."
@@ -689,6 +690,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(service.results.first?.subtitle, "Refresh failed")
         XCTAssertEqual(service.results.first?.failureMessage, "Refresh failed")
         XCTAssertTrue(service.results.first?.bars.isEmpty == true)
+        XCTAssertEqual(service.results.first?.hasSuccessfulRefreshHistory, false)
         XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Refresh failed")
     }
 
