@@ -17,10 +17,9 @@ enum ProviderUsageCardMenuAction: Hashable {
 private struct ProviderProblemReportDisclosure: View {
     let title: String
     let message: String
-    let context: PrivacySafeDiagnosticContext?
+    let onReport: (() -> Void)?
 
     @State private var isExpanded = false
-    @State private var isShowingReport = false
 
     var body: some View {
         DisclosureGroup(title, isExpanded: $isExpanded) {
@@ -30,9 +29,9 @@ private struct ProviderProblemReportDisclosure: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if context != nil {
+                if let onReport {
                     Button {
-                        isShowingReport = true
+                        onReport()
                     } label: {
                         Label("Report This Problem", systemImage: "ladybug")
                     }
@@ -45,11 +44,6 @@ private struct ProviderProblemReportDisclosure: View {
             }
         }
         .font(.caption)
-        .sheet(isPresented: $isShowingReport) {
-            if let context {
-                DiagnosticReportView(context: context)
-            }
-        }
     }
 }
 
@@ -221,7 +215,7 @@ struct ProviderUsageCard: View {
     let isPerformingRecovery: Bool
     let recoveryStatusMessage: String?
     let recoveryErrorMessage: String?
-    let problemReportContext: PrivacySafeDiagnosticContext?
+    let onReportProblem: (() -> Void)?
     let onShowHistory: () -> Void
     let onConfigureAccount: () -> Void
     let onRetry: () -> Void
@@ -270,7 +264,7 @@ struct ProviderUsageCard: View {
         isPerformingRecovery: Bool = false,
         recoveryStatusMessage: String? = nil,
         recoveryErrorMessage: String? = nil,
-        problemReportContext: PrivacySafeDiagnosticContext? = nil,
+        onReportProblem: (() -> Void)? = nil,
         onShowHistory: @escaping () -> Void = {},
         onConfigureAccount: @escaping () -> Void = {},
         onRetry: @escaping () -> Void = {},
@@ -309,7 +303,7 @@ struct ProviderUsageCard: View {
         self.isPerformingRecovery = isPerformingRecovery
         self.recoveryStatusMessage = recoveryStatusMessage
         self.recoveryErrorMessage = recoveryErrorMessage
-        self.problemReportContext = problemReportContext
+        self.onReportProblem = onReportProblem
         self.onShowHistory = onShowHistory
         self.onConfigureAccount = onConfigureAccount
         self.onRetry = onRetry
@@ -469,7 +463,7 @@ struct ProviderUsageCard: View {
                 ProviderProblemReportDisclosure(
                     title: "Refresh problem details",
                     message: refreshErrorMessage,
-                    context: problemReportContext
+                    onReport: onReportProblem
                 )
             }
 
@@ -1388,7 +1382,7 @@ struct ProviderUsagePlaceholderCard: View {
     let isPerformingRecovery: Bool
     let recoveryStatusMessage: String?
     let recoveryErrorMessage: String?
-    let problemReportContext: PrivacySafeDiagnosticContext?
+    let onReportProblem: (() -> Void)?
     let onRetry: () -> Void
 
 
@@ -1399,7 +1393,7 @@ struct ProviderUsagePlaceholderCard: View {
         isPerformingRecovery: Bool = false,
         recoveryStatusMessage: String? = nil,
         recoveryErrorMessage: String? = nil,
-        problemReportContext: PrivacySafeDiagnosticContext? = nil,
+        onReportProblem: (() -> Void)? = nil,
         onRetry: @escaping () -> Void
     ) {
         self.configuration = configuration
@@ -1408,7 +1402,7 @@ struct ProviderUsagePlaceholderCard: View {
         self.isPerformingRecovery = isPerformingRecovery
         self.recoveryStatusMessage = recoveryStatusMessage
         self.recoveryErrorMessage = recoveryErrorMessage
-        self.problemReportContext = problemReportContext
+        self.onReportProblem = onReportProblem
         self.onRetry = onRetry
     }
 
@@ -1431,7 +1425,7 @@ struct ProviderUsagePlaceholderCard: View {
                 ProviderProblemReportDisclosure(
                     title: "Problem details",
                     message: errorMessage,
-                    context: problemReportContext
+                    onReport: onReportProblem
                 )
 
                 if isPerformingRecovery {

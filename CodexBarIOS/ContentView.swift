@@ -25,6 +25,7 @@ struct ContentView: View {
     @State private var hasCompletedInitialRefresh = false
     @State private var settingsRefreshCompletionID = UUID()
     @State private var isConfirmingHistoryReset = false
+    @State private var problemReportPresentation: PrivacySafeDiagnosticContext?
 
     init(
         refreshService: UsageRefreshService,
@@ -346,6 +347,9 @@ struct ContentView: View {
                 seriesOptions: historyStore.historySeriesOptions(for: result)
             )
         }
+        .sheet(item: $problemReportPresentation) { context in
+            DiagnosticReportView(context: context)
+        }
         .sheet(
             item: $claudeAuthenticationController.authURL,
             onDismiss: claudeAuthenticationController.cancelAuthentication
@@ -401,6 +405,12 @@ struct ContentView: View {
         alerts: [UsageAlertDetail]
     ) -> some View {
         let authenticationState = claudeAuthenticationController.state(for: item.id)
+        let reportContext = problemReportContext(for: item)
+        let onReportProblem = reportContext.map { context in
+            {
+                problemReportPresentation = context
+            }
+        }
 
         if let result = item.result {
             ProviderUsageCard(
@@ -415,7 +425,7 @@ struct ContentView: View {
                 isPerformingRecovery: authenticationState.isSigningIn,
                 recoveryStatusMessage: authenticationState.statusMessage,
                 recoveryErrorMessage: authenticationState.errorMessage,
-                problemReportContext: problemReportContext(for: item),
+                onReportProblem: onReportProblem,
                 onShowHistory: {
                     selectedHistoryResult = result
                 },
@@ -581,7 +591,7 @@ struct ContentView: View {
                 isPerformingRecovery: authenticationState.isSigningIn,
                 recoveryStatusMessage: authenticationState.statusMessage,
                 recoveryErrorMessage: authenticationState.errorMessage,
-                problemReportContext: problemReportContext(for: item),
+                onReportProblem: onReportProblem,
                 onRetry: {
                     performRecovery(for: item)
                 }

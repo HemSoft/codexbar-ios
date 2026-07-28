@@ -1002,10 +1002,11 @@ final class AppAndWidgetTests: XCTestCase {
                 providerID: .claude,
                 title: "Claude",
                 subtitle: "Showing last known data",
-                bars: [],
-                creditsRemaining: 1,
+                bars: [UsageBar(label: "Weekly", used: 1, limit: 10)],
+                barsFetchedAt: Date(timeIntervalSince1970: 1_699_999_000),
                 failureMessage: "Provider returned HTTP 401",
-                fetchedAt: .distantPast
+                hasSuccessfulRefreshHistory: true,
+                fetchedAt: Date(timeIntervalSince1970: 1_700_000_000)
             )
         )
 
@@ -1032,6 +1033,25 @@ final class AppAndWidgetTests: XCTestCase {
         )
         XCTAssertEqual(noResultDetails.failureCategory, .connectivity)
         XCTAssertEqual(noResultDetails.freshness, .noSuccessfulRefresh)
+
+        let partialFetchedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let currentPartialDetails = DiagnosticTechnicalDetails.providerRefreshFailure(
+            configuration: enabledButNotReady,
+            isConfigured: false,
+            isSecretPresent: false,
+            userVisibleMessage: "OpenCode Go usage could not be refreshed",
+            result: ProviderUsageResult(
+                providerID: .openCodeZen,
+                title: "OpenCode Zen",
+                subtitle: "Zen credit balance",
+                bars: [],
+                creditsRemaining: 5,
+                failureMessage: "OpenCode Go usage could not be refreshed",
+                preserveCachedBarsOnFailure: true,
+                fetchedAt: partialFetchedAt
+            )
+        )
+        XCTAssertEqual(currentPartialDetails.freshness, .current)
 
         let priorEmptySuccessDetails = DiagnosticTechnicalDetails.providerRefreshFailure(
             configuration: enabledButNotReady,

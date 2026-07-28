@@ -462,6 +462,7 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
             cardInformationSections: result.cardInformationSections,
             codexBankedRateLimitResets: result.codexBankedRateLimitResets,
             failureMessage: result.failureMessage,
+            hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory,
             fetchedAt: result.fetchedAt
         )
     }
@@ -486,6 +487,7 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
             cardInformationSections: result.cardInformationSections,
             codexBankedRateLimitResets: resets,
             failureMessage: result.failureMessage,
+            hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory,
             fetchedAt: result.fetchedAt
         )
     }

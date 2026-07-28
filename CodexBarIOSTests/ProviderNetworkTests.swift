@@ -1924,6 +1924,9 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertEqual(partial.monetaryMetrics.map(\.kind), [.spent, .spendLimit, .remainingHeadroom])
         XCTAssertEqual(stale.bars, full.bars)
         XCTAssertTrue(stale.subtitle.contains("last known data"))
+        XCTAssertTrue(full.hasSuccessfulRefreshHistory)
+        XCTAssertTrue(partial.hasSuccessfulRefreshHistory)
+        XCTAssertTrue(stale.hasSuccessfulRefreshHistory)
 
         let historySnapshot = UsageHistorySnapshot(result: partial)
         XCTAssertTrue(historySnapshot.bars.isEmpty)

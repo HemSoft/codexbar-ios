@@ -344,20 +344,27 @@ struct DiagnosticTechnicalDetails: Equatable, Sendable {
             failureCategory: failureCategory,
             httpStatusCode: statusCode,
             refreshKind: .unknown,
-            freshness: result?.hasRetainedDiagnosticUsage == true
-                ? .stale
-                : .noSuccessfulRefresh
+            freshness: result?.diagnosticFailureFreshness ?? .noSuccessfulRefresh
         )
     }
 }
 
 private extension ProviderUsageResult {
-    var hasRetainedDiagnosticUsage: Bool {
-        hasSuccessfulRefreshHistory
+    var diagnosticFailureFreshness: DiagnosticFreshness {
+        if (!bars.isEmpty && hasCurrentBars)
+            || (creditsRemaining != nil && hasCurrentCredits)
+        {
+            return .current
+        }
+        if hasSuccessfulRefreshHistory
             || !bars.isEmpty
             || creditsRemaining != nil
             || !monetaryMetrics.isEmpty
             || codexBankedRateLimitResets != nil
+        {
+            return .stale
+        }
+        return .noSuccessfulRefresh
     }
 }
 

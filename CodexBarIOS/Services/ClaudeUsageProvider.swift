@@ -282,6 +282,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             cardInformationSections: cached.cardInformationSections,
             failureMessage: message,
             recoveryAction: .retryRefresh,
+            hasSuccessfulRefreshHistory: cached.hasSuccessfulRefreshHistory,
             fetchedAt: cached.fetchedAt
         )
     }
@@ -327,6 +328,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             dashboardUsageMessages: result.dashboardUsageMessages,
             cardInformationSections: result.cardInformationSections,
             failureMessage: result.failureMessage,
+            hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory,
             fetchedAt: result.fetchedAt
         )
     }
@@ -386,6 +388,8 @@ private actor ClaudeUsageSnapshotCache {
             dashboardUsageMessages: result.dashboardUsageMessages,
             cardInformationSections: result.cardInformationSections,
             failureMessage: result.failureMessage,
+            hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory
+                || cached.hasSuccessfulRefreshHistory,
             fetchedAt: result.fetchedAt
         )
         results[accountID] = preserved
