@@ -222,6 +222,7 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(partialOptions.map(\.id), ["usage", "usage.auto", "usage.api"])
         XCTAssertEqual(partialOptions.map(\.label), ["Highest usage", "Auto", "API"])
         XCTAssertEqual(partialOptions.first?.series.points.map(\.value), [1])
+        XCTAssertEqual(partialOptions.first?.series, store.historySeries(for: resultWithoutTotal))
 
         let laterResultWithoutTotal = ProviderUsageResult(
             accountID: result.accountID,

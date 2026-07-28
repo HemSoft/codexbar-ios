@@ -615,7 +615,7 @@ public final class UsageHistoryStore: ObservableObject {
             UsageHistorySeriesOption(
                 id: "usage",
                 label: "Highest usage",
-                series: aggregateUsageSeries(accountID: accountID, snapshots: snapshots)
+                series: cursorPrimaryUsageSeries(accountID: accountID, snapshots: snapshots)
             ),
         ] + metricOptions
     }
