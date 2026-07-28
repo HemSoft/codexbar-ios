@@ -61,12 +61,25 @@ tokens, cookies, logs, screenshots, or attachments. **Suggest an Improvement**
 prefills a structured editable message plus general app and device details.
 
 Private feedback drafts are addressed to `fphemmer@gmail.com` and use a subject
-beginning `[CodexBar Feedback]`. Opening the email composer does not send the
-message; you review and explicitly send it. Your configured email app and email
-provider process the draft, and Gmail processes a message you send to the
-recipient mailbox. Your email provider normally adds your sender address; that
-address is not read or prefilled by CodexBar. If no email app can open, CodexBar
-keeps the recipient, subject, and message available for you to copy.
+beginning `[CodexBar Feedback]`. CodexBar shows the recipient, subject, and
+message as copyable fields before offering to open an external email composer.
+Opening the composer does not send the message; you review and explicitly send
+it. Before leaving CodexBar, the app warns that your configured email app may
+display and use its currently selected sending account. Your email app and
+provider process a draft you open, and Gmail processes a message you send to
+the recipient mailbox.
+
+CodexBar opens email through a standard `mailto:` URL. iOS hands that URL to an
+external handler and does not give CodexBar control over that app's
+system-managed sender interface. Apple's in-app mail composer likewise exposes
+configuration for recipients, subject, body, attachments, and preferred sending
+address, but no supported control for hiding the sender row. CodexBar therefore
+does not read, store, log, or prefill the selected sender address, and its
+`mailto:` URL contains only the recipient path plus `subject` and `body` query
+fields. See Apple's documentation for
+[`UIApplication.open`](https://developer.apple.com/documentation/uikit/uiapplication/open(_:options:completionhandler:))
+and
+[`MFMailComposeViewController`](https://developer.apple.com/documentation/messageui/mfmailcomposeviewcontroller).
 
 GitHub reports remain public and require a GitHub account. No issue is submitted
 to GitHub until you explicitly submit the public form; opening a prefilled form

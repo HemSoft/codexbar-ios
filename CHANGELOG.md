@@ -96,6 +96,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Made private feedback copy-first and warned before opening an external mail
+  composer that it may display and use the currently selected sending account.
+  ([#181](https://github.com/HemSoft/codexbar-ios/issues/181))
 - Corrected Cursor history to track Total usage by default instead of whichever
   hidden or secondary metric is highest, while adding separate stable history
   series for Total, Auto, API, and On-demand usage.

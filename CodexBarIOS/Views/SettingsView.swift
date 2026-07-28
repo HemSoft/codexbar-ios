@@ -664,7 +664,9 @@ private struct FeedbackSupportView: View {
 
                             Spacer(minLength: 8)
 
-                            if !destination.presentsDiagnosticPreview {
+                            if destination != .reportProblem
+                                && destination != .suggestImprovement
+                            {
                                 VStack(alignment: .trailing, spacing: 3) {
                                     Text(destination.serviceName)
                                         .font(.caption)
@@ -681,20 +683,15 @@ private struct FeedbackSupportView: View {
                     .accessibilityLabel(
                         destination.presentsDiagnosticPreview
                             ? "\(destination.title), opens a diagnostic preview"
-                            : "\(destination.title), opens \(destination.serviceName)"
+                            : destination == .suggestImprovement
+                                ? "\(destination.title), opens copyable email details"
+                                : "\(destination.title), opens \(destination.serviceName)"
                     )
                     .accessibilityHint(destination.detail)
                 }
-
-                Button {
-                    emailFallbackDraft = improvementEmailPlan.copyDetailsDraft
-                } label: {
-                    Label("Copy Improvement Email Details", systemImage: "doc.on.doc")
-                }
-                .accessibilityHint("Shows copyable recipient, subject, and message fields")
             } footer: {
                 Text(
-                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. If Mail is unavailable, CodexBar shows copyable recipient, subject, and message fields."
+                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. CodexBar shows copyable recipient, subject, and message fields before offering to open Mail."
                 )
             }
 
@@ -755,10 +752,7 @@ private struct FeedbackSupportView: View {
             return
         }
         if destination == .suggestImprovement {
-            let plan = improvementEmailPlan
-            openURL(plan.primaryURL) { accepted in
-                emailFallbackDraft = plan.fallbackDraft(openAccepted: accepted)
-            }
+            emailFallbackDraft = improvementEmailDraft
             return
         }
         openURL(destination.url(context: context)) { accepted in
@@ -780,9 +774,7 @@ private struct FeedbackSupportView: View {
         )
     }
 
-    private var improvementEmailPlan: FeedbackEmailActionPlan {
-        FeedbackEmailActionPlan(
-            draft: FeedbackEmailDraft.improvementSuggestion(context: context)
-        )
+    private var improvementEmailDraft: FeedbackEmailDraft {
+        FeedbackEmailDraft.improvementSuggestion(context: context)
     }
 }
