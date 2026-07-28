@@ -374,11 +374,6 @@ final class IsolatedTestURLProtocol: TestURLProtocol, @unchecked Sendable {
 
     private static let lock = NSLock()
     private static var handlers: [String: TestURLProtocolHandler] = [:]
-    private static let unusedStore = TestURLProtocolHandlerStore()
-
-    override class var handlerStore: TestURLProtocolHandlerStore {
-        unusedStore
-    }
 
     static func register(_ handler: @escaping TestURLProtocolHandler, for handlerID: String) {
         lock.withLock {
