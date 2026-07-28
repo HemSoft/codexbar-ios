@@ -141,13 +141,14 @@ struct DiagnosticReportView: View {
         }
     }
 
-    private struct Notice: Identifiable {
-        let title: String
-        let message: String
+}
 
-        var id: String {
-            "\(title)-\(message)"
-        }
+private struct Notice: Identifiable {
+    let title: String
+    let message: String
+
+    var id: String {
+        "\(title)-\(message)"
     }
 }
 
@@ -155,6 +156,7 @@ struct FeedbackEmailFallbackView: View {
     let draft: FeedbackEmailDraft
 
     @Environment(\.dismiss) private var dismiss
+    @State private var notice: Notice?
 
     var body: some View {
         NavigationStack {
@@ -170,20 +172,24 @@ struct FeedbackEmailFallbackView: View {
                 Section("Recipient") {
                     Text(FeedbackEmailDraft.recipient)
                         .textSelection(.enabled)
-                    copyButton("Copy Recipient", value: FeedbackEmailDraft.recipient)
+                    copyButton(
+                        "Copy Recipient",
+                        fieldName: "Recipient",
+                        value: FeedbackEmailDraft.recipient
+                    )
                 }
 
                 Section("Subject") {
                     Text(draft.subject)
                         .textSelection(.enabled)
-                    copyButton("Copy Subject", value: draft.subject)
+                    copyButton("Copy Subject", fieldName: "Subject", value: draft.subject)
                 }
 
                 Section("Message") {
                     Text(draft.body)
                         .font(.callout)
                         .textSelection(.enabled)
-                    copyButton("Copy Message", value: draft.body)
+                    copyButton("Copy Message", fieldName: "Message", value: draft.body)
                 }
             }
             .navigationTitle("Copy Email Details")
@@ -195,12 +201,23 @@ struct FeedbackEmailFallbackView: View {
                     }
                 }
             }
+            .alert(item: $notice) { notice in
+                Alert(
+                    title: Text(notice.title),
+                    message: Text(notice.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
         }
     }
 
-    private func copyButton(_ title: String, value: String) -> some View {
+    private func copyButton(_ title: String, fieldName: String, value: String) -> some View {
         Button {
             UIPasteboard.general.string = value
+            notice = Notice(
+                title: "\(fieldName) Copied",
+                message: "\(fieldName) copied to the clipboard."
+            )
         } label: {
             Label(title, systemImage: "doc.on.doc")
         }

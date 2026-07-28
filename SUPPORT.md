@@ -50,7 +50,7 @@ authorization headers, account identifiers, or other secrets in email, GitHub
 issues, or attachments.
 
 CodexBar never prefills credentials, tokens, cookies, account labels or
-identifiers, email addresses, balances, usage history, raw provider responses
+identifiers, your email address, balances, usage history, raw provider responses
 or errors, widget selections, Watch snapshots, logs, files, or screenshots.
 Your email app supplies your sender address when you send. Screenshots and
 other attachments are additions you choose; redact private details before

@@ -53,8 +53,8 @@ can remove all optional technical details, copy the preview, cancel, open a
 private email draft, or explicitly open GitHub. If a safely prefilled GitHub URL
 would be too long, CodexBar copies the preview instead of opening it.
 
-CodexBar does not read or add provider credentials, account labels, email
-addresses, account or device identifiers, balances, usage history, raw errors
+CodexBar does not read or add provider credentials, account labels, your email
+address, account or device identifiers, balances, usage history, raw errors
 or provider responses, widget selections, or Apple Watch snapshots to the
 diagnostic, email draft, or GitHub link. It also does not add credentials,
 tokens, cookies, logs, screenshots, or attachments. **Suggest an Improvement**
