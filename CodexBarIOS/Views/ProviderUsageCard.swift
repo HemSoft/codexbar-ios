@@ -182,6 +182,7 @@ struct ProviderUsageCard: View {
     let isPerformingRecovery: Bool
     let recoveryStatusMessage: String?
     let recoveryErrorMessage: String?
+    let problemReportContext: PrivacySafeDiagnosticContext?
     let onShowHistory: () -> Void
     let onConfigureAccount: () -> Void
     let onRetry: () -> Void
@@ -213,6 +214,8 @@ struct ProviderUsageCard: View {
     @State private var isResetActionUnavailable = false
     @State private var isCustomizingMetrics = false
     @State private var isShowingMoreInformation = false
+    @State private var isRefreshErrorExpanded = false
+    @State private var isShowingProblemReport = false
     @State private var metricDetailPresentation: ProviderMetricTileDetailPresentation?
     @StateObject private var resetRedemptionController: CodexBankedResetRedemptionController
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -230,6 +233,7 @@ struct ProviderUsageCard: View {
         isPerformingRecovery: Bool = false,
         recoveryStatusMessage: String? = nil,
         recoveryErrorMessage: String? = nil,
+        problemReportContext: PrivacySafeDiagnosticContext? = nil,
         onShowHistory: @escaping () -> Void = {},
         onConfigureAccount: @escaping () -> Void = {},
         onRetry: @escaping () -> Void = {},
@@ -268,6 +272,7 @@ struct ProviderUsageCard: View {
         self.isPerformingRecovery = isPerformingRecovery
         self.recoveryStatusMessage = recoveryStatusMessage
         self.recoveryErrorMessage = recoveryErrorMessage
+        self.problemReportContext = problemReportContext
         self.onShowHistory = onShowHistory
         self.onConfigureAccount = onConfigureAccount
         self.onRetry = onRetry
@@ -423,6 +428,29 @@ struct ProviderUsageCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if let refreshErrorMessage {
+                DisclosureGroup("Refresh problem details", isExpanded: $isRefreshErrorExpanded) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(refreshErrorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if problemReportContext != nil {
+                            Button {
+                                isShowingProblemReport = true
+                            } label: {
+                                Label("Report This Problem", systemImage: "ladybug")
+                            }
+                            .font(.caption)
+                            .buttonStyle(.borderless)
+                            .accessibilityHint("Previews the privacy-safe diagnostic before opening GitHub")
+                        }
+                    }
+                }
+                .font(.caption)
+            }
+
             if !metricGridRows.isEmpty {
                 Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 10) {
                     ForEach(metricGridRows) { row in
@@ -540,6 +568,11 @@ struct ProviderUsageCard: View {
             ProviderCardInformationView(
                 sections: informationSections
             )
+        }
+        .sheet(isPresented: $isShowingProblemReport) {
+            if let problemReportContext {
+                DiagnosticReportView(context: problemReportContext)
+            }
         }
         .sheet(item: $metricDetailPresentation) { presentation in
             if let metric = Self.metric(withID: presentation.metricID, in: result) {
@@ -1338,7 +1371,11 @@ struct ProviderUsagePlaceholderCard: View {
     let isPerformingRecovery: Bool
     let recoveryStatusMessage: String?
     let recoveryErrorMessage: String?
+    let problemReportContext: PrivacySafeDiagnosticContext?
     let onRetry: () -> Void
+
+    @State private var isErrorExpanded = false
+    @State private var isShowingProblemReport = false
 
     init(
         configuration: ProviderAccountConfiguration,
@@ -1347,6 +1384,7 @@ struct ProviderUsagePlaceholderCard: View {
         isPerformingRecovery: Bool = false,
         recoveryStatusMessage: String? = nil,
         recoveryErrorMessage: String? = nil,
+        problemReportContext: PrivacySafeDiagnosticContext? = nil,
         onRetry: @escaping () -> Void
     ) {
         self.configuration = configuration
@@ -1355,6 +1393,7 @@ struct ProviderUsagePlaceholderCard: View {
         self.isPerformingRecovery = isPerformingRecovery
         self.recoveryStatusMessage = recoveryStatusMessage
         self.recoveryErrorMessage = recoveryErrorMessage
+        self.problemReportContext = problemReportContext
         self.onRetry = onRetry
     }
 
@@ -1374,10 +1413,26 @@ struct ProviderUsagePlaceholderCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.orange)
 
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                DisclosureGroup("Problem details", isExpanded: $isErrorExpanded) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if problemReportContext != nil {
+                            Button {
+                                isShowingProblemReport = true
+                            } label: {
+                                Label("Report This Problem", systemImage: "ladybug")
+                            }
+                            .font(.caption)
+                            .buttonStyle(.borderless)
+                            .accessibilityHint("Previews the privacy-safe diagnostic before opening GitHub")
+                        }
+                    }
+                }
+                .font(.caption)
 
                 if isPerformingRecovery {
                     ProgressView()
@@ -1432,6 +1487,11 @@ struct ProviderUsagePlaceholderCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color(.separator).opacity(0.22), lineWidth: 0.5)
+        }
+        .sheet(isPresented: $isShowingProblemReport) {
+            if let problemReportContext {
+                DiagnosticReportView(context: problemReportContext)
+            }
         }
     }
 

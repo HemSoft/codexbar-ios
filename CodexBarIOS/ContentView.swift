@@ -415,6 +415,7 @@ struct ContentView: View {
                 isPerformingRecovery: authenticationState.isSigningIn,
                 recoveryStatusMessage: authenticationState.statusMessage,
                 recoveryErrorMessage: authenticationState.errorMessage,
+                problemReportContext: problemReportContext(for: item),
                 onShowHistory: {
                     selectedHistoryResult = result
                 },
@@ -580,6 +581,7 @@ struct ContentView: View {
                 isPerformingRecovery: authenticationState.isSigningIn,
                 recoveryStatusMessage: authenticationState.statusMessage,
                 recoveryErrorMessage: authenticationState.errorMessage,
+                problemReportContext: problemReportContext(for: item),
                 onRetry: {
                     performRecovery(for: item)
                 }
@@ -596,6 +598,33 @@ struct ContentView: View {
         case .signIn, .reauthenticate:
             claudeAuthenticationController.startSignIn(for: item.configuration)
         }
+    }
+
+    private func problemReportContext(
+        for item: DashboardProviderCardItem
+    ) -> PrivacySafeDiagnosticContext? {
+        guard let errorMessage = item.errorMessage else {
+            return nil
+        }
+        let statusCode = DiagnosticFailureCategory.safeHTTPStatusCode(
+            userVisibleMessage: errorMessage
+        )
+        let failureCategory = statusCode.map(DiagnosticFailureCategory.normalized)
+            ?? DiagnosticFailureCategory.normalized(userVisibleMessage: errorMessage)
+        return PrivacySafeDiagnosticContext(
+            system: .current(installedVersion: appUpdateController.installedVersion),
+            surface: .dashboard,
+            providerID: item.configuration.providerID,
+            technicalDetails: DiagnosticTechnicalDetails(
+                authenticationMethod: DiagnosticAuthenticationMethod(item.configuration.authMethod),
+                isConfigured: item.configuration.isEnabled,
+                isSecretPresent: configurationStore.hasSecret(for: item.configuration),
+                failureCategory: failureCategory,
+                httpStatusCode: statusCode,
+                refreshKind: .unknown,
+                freshness: item.result == nil ? .noSuccessfulRefresh : .current
+            )
+        )
     }
 
     private var accountConfigurationPresentation:

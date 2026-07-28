@@ -759,6 +759,238 @@ final class AppAndWidgetTests: XCTestCase {
         }
     }
 
+    func testPrivacySafeDiagnosticBuilderIncludesEveryAllowlistedFieldDeterministically() {
+        let context = PrivacySafeDiagnosticContext(
+            system: FeedbackSupportContext(
+                appVersion: "1.2+beta",
+                buildNumber: "42+7",
+                operatingSystemName: "iPadOS",
+                operatingSystemVersion: "26.1 (23B12)",
+                deviceCategory: "iPad"
+            ),
+            surface: .dashboard,
+            providerID: .claude,
+            technicalDetails: DiagnosticTechnicalDetails(
+                authenticationMethod: .browserSession,
+                isConfigured: true,
+                isSecretPresent: false,
+                failureCategory: .rateLimited,
+                httpStatusCode: 429,
+                refreshKind: .automatic,
+                freshness: .stale,
+                widgetState: .current,
+                watchState: .phoneUnavailable
+            )
+        )
+
+        XCTAssertEqual(
+            PrivacySafeDiagnosticBuilder.summary(context: context),
+            """
+            CodexBar privacy-safe diagnostic
+            App: 1.2+beta (42+7)
+            Operating system: iPadOS 26.1 (23B12)
+            Device: iPad
+            Affected surface: Dashboard
+            Provider: Claude
+            Technical details:
+            - Authentication method: Browser session
+            - Configured: Yes
+            - Secret present: No
+            - Failure category: Rate limited
+            - HTTP status: 429
+            - Refresh: Automatic
+            - Freshness: Stale
+            - Widget state: Current
+            - Apple Watch state: iPhone unavailable
+            """
+        )
+
+        XCTAssertEqual(
+            PrivacySafeDiagnosticBuilder.summary(
+                context: context,
+                includeTechnicalDetails: false
+            ),
+            """
+            CodexBar privacy-safe diagnostic
+            App: 1.2+beta (42+7)
+            Operating system: iPadOS 26.1 (23B12)
+            Device: iPad
+            Affected surface: Dashboard
+            Provider: Claude
+            """
+        )
+    }
+
+    func testPrivacySafeDiagnosticNeverEmitsSensitiveSurroundingStateOrRawErrors() throws {
+        let configuration = ProviderAccountConfiguration(
+            id: "persistent-account-123",
+            providerID: .copilot,
+            accountLabel: "Franz franz@example.com",
+            authMethod: .browserSession,
+            oauthClientID: "oauth-client-secret",
+            githubOrganization: "private-organization-456"
+        )
+        let rawError = """
+        HTTP 401 Authorization: Bearer access-token refresh_token=refresh-secret
+        https://provider.example/callback?code=oauth-code Cookie=session-cookie
+        {"account_id":"account-123","balance":"$99.95","usage":87}
+        """
+        let sensitiveValues = [
+            configuration.id,
+            configuration.accountLabel,
+            configuration.oauthClientID!,
+            configuration.githubOrganization,
+            "access-token",
+            "refresh-secret",
+            "oauth-code",
+            "session-cookie",
+            "provider.example",
+            "account-123",
+            "$99.95",
+            "\"usage\":87",
+        ]
+        let statusCode = DiagnosticFailureCategory.safeHTTPStatusCode(
+            userVisibleMessage: rawError
+        )
+        let context = PrivacySafeDiagnosticContext(
+            system: FeedbackSupportContext(
+                appVersion: "1.2",
+                buildNumber: "42",
+                operatingSystemName: "iOS",
+                operatingSystemVersion: "26.0",
+                deviceCategory: "iPhone"
+            ),
+            surface: .authentication,
+            providerID: configuration.providerID,
+            technicalDetails: DiagnosticTechnicalDetails(
+                authenticationMethod: DiagnosticAuthenticationMethod(configuration.authMethod),
+                isConfigured: true,
+                isSecretPresent: true,
+                failureCategory: DiagnosticFailureCategory.normalized(
+                    httpStatusCode: try XCTUnwrap(statusCode)
+                ),
+                httpStatusCode: statusCode,
+                refreshKind: .manual,
+                freshness: .noSuccessfulRefresh
+            )
+        )
+
+        let summary = PrivacySafeDiagnosticBuilder.summary(context: context)
+        let launch = FeedbackSupportDestination.problemReportLaunch(
+            context: context,
+            includeTechnicalDetails: true
+        )
+        guard case .url(let url) = launch else {
+            return XCTFail("Expected the bounded diagnostic to fit the issue-form URL.")
+        }
+
+        XCTAssertTrue(summary.contains("HTTP status: 401"))
+        XCTAssertTrue(summary.contains("Failure category: Authentication"))
+        for sensitiveValue in sensitiveValues {
+            XCTAssertFalse(summary.contains(sensitiveValue))
+            XCTAssertFalse(url.absoluteString.contains(sensitiveValue))
+        }
+        let components = try XCTUnwrap(
+            URLComponents(url: url, resolvingAgainstBaseURL: false)
+        )
+        XCTAssertEqual(
+            components.queryItems?.first(where: { $0.name == "affected-surface" })?.value,
+            "Authentication"
+        )
+        XCTAssertEqual(
+            components.queryItems?.first(where: { $0.name == "affected-provider" })?.value,
+            "GitHub Copilot"
+        )
+        XCTAssertEqual(
+            components.queryItems?.first(where: { $0.name == "privacy-safe-diagnostics" })?.value,
+            summary
+        )
+        XCTAssertLessThanOrEqual(
+            url.absoluteString.utf8.count,
+            FeedbackSupportDestination.maximumPrefilledURLLength
+        )
+    }
+
+    func testPrivacySafeDiagnosticNormalizesFailuresWithoutPassingRawText() throws {
+        XCTAssertEqual(
+            DiagnosticFailureCategory.normalized(error: URLError(.timedOut)),
+            .timeout
+        )
+        XCTAssertEqual(
+            DiagnosticFailureCategory.normalized(error: URLError(.notConnectedToInternet)),
+            .connectivity
+        )
+        XCTAssertEqual(
+            DiagnosticFailureCategory.normalized(error: URLError(.cancelled)),
+            .cancelled
+        )
+        XCTAssertEqual(DiagnosticFailureCategory.normalized(httpStatusCode: 403), .authorization)
+        XCTAssertEqual(DiagnosticFailureCategory.normalized(httpStatusCode: 429), .rateLimited)
+        XCTAssertEqual(DiagnosticFailureCategory.normalized(httpStatusCode: 503), .server)
+        XCTAssertEqual(
+            DiagnosticFailureCategory.normalized(
+                userVisibleMessage: "Keychain failed: password=must-not-leak"
+            ),
+            .localStorage
+        )
+        XCTAssertEqual(
+            DiagnosticFailureCategory.safeHTTPStatusCode(
+                userVisibleMessage: "Provider returned HTTP 503: raw body must-not-leak"
+            ),
+            503
+        )
+        XCTAssertNil(
+            DiagnosticFailureCategory.safeHTTPStatusCode(
+                userVisibleMessage: "https://example.test/path/503"
+            )
+        )
+
+        do {
+            _ = try JSONDecoder().decode(Int.self, from: Data(#""not-an-int""#.utf8))
+            XCTFail("Expected decoding to fail.")
+        } catch {
+            XCTAssertEqual(DiagnosticFailureCategory.normalized(error: error), .invalidResponse)
+        }
+    }
+
+    func testPrivacySafeDiagnosticURLFallsBackToCopyWithoutExternalNavigation() {
+        let context = PrivacySafeDiagnosticContext(
+            system: FeedbackSupportContext(
+                appVersion: "1.2",
+                buildNumber: "42",
+                operatingSystemName: "iOS",
+                operatingSystemVersion: "26.0",
+                deviceCategory: "iPhone"
+            ),
+            surface: .widget,
+            providerID: nil,
+            technicalDetails: DiagnosticTechnicalDetails(widgetState: .noData)
+        )
+        let expected = PrivacySafeDiagnosticBuilder.summary(context: context)
+
+        XCTAssertEqual(
+            FeedbackSupportDestination.problemReportLaunch(
+                context: context,
+                includeTechnicalDetails: true,
+                maximumURLLength: 1
+            ),
+            .copyOnly(expected)
+        )
+        XCTAssertTrue(expected.contains("Affected surface: Widget"))
+        XCTAssertTrue(expected.contains("Widget state: No data"))
+
+        let watchContext = PrivacySafeDiagnosticContext(
+            system: context.system,
+            surface: .appleWatch,
+            providerID: nil,
+            technicalDetails: DiagnosticTechnicalDetails(watchState: .stale)
+        )
+        XCTAssertTrue(
+            PrivacySafeDiagnosticBuilder.summary(context: watchContext)
+                .contains("Apple Watch state: Stale")
+        )
+    }
+
     func testAppReviewPromptPolicyRequiresSustainedSuccessfulRefreshes() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

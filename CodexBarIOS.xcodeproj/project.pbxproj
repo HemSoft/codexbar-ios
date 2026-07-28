@@ -90,6 +90,7 @@
 		100000000000000000000039 /* DashboardUsageSorter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003A /* DashboardUsageSorter.swift */; };
 		10000000000000000000003A /* AppReviewPromptPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003B /* AppReviewPromptPolicy.swift */; };
 		F10000000000000000000001 /* FeedbackSupportDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* FeedbackSupportDestination.swift */; };
+		F10000000000000000000002 /* DiagnosticReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* DiagnosticReportView.swift */; };
 		10000000000000000000003B /* AppUpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003C /* AppUpdateService.swift */; };
 		10000000000000000000003C /* AppStoreScreenshotFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003D /* AppStoreScreenshotFixtures.swift */; };
 		10000000000000000000003D /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
@@ -240,6 +241,7 @@
 		20000000000000000000003A /* DashboardUsageSorter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardUsageSorter.swift; sourceTree = "<group>"; };
 		20000000000000000000003B /* AppReviewPromptPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewPromptPolicy.swift; sourceTree = "<group>"; };
 		F20000000000000000000001 /* FeedbackSupportDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackSupportDestination.swift; sourceTree = "<group>"; };
+		F20000000000000000000002 /* DiagnosticReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticReportView.swift; sourceTree = "<group>"; };
 		20000000000000000000003C /* AppUpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateService.swift; sourceTree = "<group>"; };
 		20000000000000000000003D /* AppStoreScreenshotFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotFixtures.swift; sourceTree = "<group>"; };
 		20000000000000000000003E /* UserFacingDateTimeFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserFacingDateTimeFormatter.swift; sourceTree = "<group>"; };
@@ -397,6 +399,7 @@
 		700000000000000000000005 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				F20000000000000000000002 /* DiagnosticReportView.swift */,
 				20000000000000000000000A /* ProviderUsageCard.swift */,
 				200000000000000000000012 /* SettingsView.swift */,
 				200000000000000000000038 /* WidgetBuilderView.swift */,
@@ -695,6 +698,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F10000000000000000000002 /* DiagnosticReportView.swift in Sources */,
 				100000000000000000000001 /* CodexBarIOSApp.swift in Sources */,
 				100000000000000000000002 /* ContentView.swift in Sources */,
 				100000000000000000000003 /* ProviderID.swift in Sources */,
