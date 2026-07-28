@@ -313,6 +313,10 @@ class TestURLProtocol: URLProtocol, @unchecked Sendable {
         set { handlerStore.handler = newValue }
     }
 
+    class func handler(for request: URLRequest) -> TestURLProtocolHandler? {
+        handler
+    }
+
     override class func canInit(with request: URLRequest) -> Bool {
         true
     }
@@ -322,7 +326,7 @@ class TestURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func startLoading() {
-        guard let handler = type(of: self).handler else {
+        guard let handler = type(of: self).handler(for: request) else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
@@ -365,11 +369,16 @@ final class DashboardAndSettingsMockURLProtocol: TestURLProtocol, @unchecked Sen
     override class var handlerStore: TestURLProtocolHandlerStore { store }
 }
 
-final class IsolatedTestURLProtocol: URLProtocol, @unchecked Sendable {
+final class IsolatedTestURLProtocol: TestURLProtocol, @unchecked Sendable {
     static let handlerIDHeader = "X-CodexBar-Test-Handler-ID"
 
     private static let lock = NSLock()
     private static var handlers: [String: TestURLProtocolHandler] = [:]
+    private static let unusedStore = TestURLProtocolHandlerStore()
+
+    override class var handlerStore: TestURLProtocolHandlerStore {
+        unusedStore
+    }
 
     static func register(_ handler: @escaping TestURLProtocolHandler, for handlerID: String) {
         lock.withLock {
@@ -378,7 +387,7 @@ final class IsolatedTestURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     static func unregister(handlerID: String) {
-        lock.withLock {
+        _ = lock.withLock {
             handlers.removeValue(forKey: handlerID)
         }
     }
@@ -387,30 +396,14 @@ final class IsolatedTestURLProtocol: URLProtocol, @unchecked Sendable {
         request.value(forHTTPHeaderField: handlerIDHeader) != nil
     }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
+    override class func handler(for request: URLRequest) -> TestURLProtocolHandler? {
         guard
-            let handlerID = request.value(forHTTPHeaderField: Self.handlerIDHeader),
-            let handler = Self.lock.withLock({ Self.handlers[handlerID] })
+            let handlerID = request.value(forHTTPHeaderField: handlerIDHeader)
         else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
+            return nil
         }
-
-        do {
-            let (response, data) = try handler(request)
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
-        } catch {
-            client?.urlProtocol(self, didFailWithError: error)
-        }
+        return lock.withLock { handlers[handlerID] }
     }
-
-    override func stopLoading() {}
 }
 
 final class IsolatedTestURLSession: @unchecked Sendable {
