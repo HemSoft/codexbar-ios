@@ -953,6 +953,38 @@ final class AppAndWidgetTests: XCTestCase {
         }
     }
 
+    func testProviderRefreshFailureDiagnosticsUseReadinessAndMarkRetainedResultsStale() {
+        let enabledButNotReady = ProviderAccountConfiguration(
+            providerID: .claude,
+            isEnabled: true,
+            authMethod: .browserSession
+        )
+        let staleDetails = DiagnosticTechnicalDetails.providerRefreshFailure(
+            configuration: enabledButNotReady,
+            isConfigured: false,
+            isSecretPresent: false,
+            userVisibleMessage: "Provider returned HTTP 401: raw body must-not-leak",
+            hasPreviousResult: true
+        )
+
+        XCTAssertTrue(enabledButNotReady.isEnabled)
+        XCTAssertEqual(staleDetails.isConfigured, false)
+        XCTAssertEqual(staleDetails.isSecretPresent, false)
+        XCTAssertEqual(staleDetails.failureCategory, .authentication)
+        XCTAssertEqual(staleDetails.httpStatusCode, 401)
+        XCTAssertEqual(staleDetails.freshness, .stale)
+
+        let noResultDetails = DiagnosticTechnicalDetails.providerRefreshFailure(
+            configuration: enabledButNotReady,
+            isConfigured: false,
+            isSecretPresent: false,
+            userVisibleMessage: "Network connection failed",
+            hasPreviousResult: false
+        )
+        XCTAssertEqual(noResultDetails.failureCategory, .connectivity)
+        XCTAssertEqual(noResultDetails.freshness, .noSuccessfulRefresh)
+    }
+
     func testPrivacySafeDiagnosticURLFallsBackToCopyWithoutExternalNavigation() {
         let context = PrivacySafeDiagnosticContext(
             system: FeedbackSupportContext(

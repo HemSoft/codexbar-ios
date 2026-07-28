@@ -606,23 +606,16 @@ struct ContentView: View {
         guard let errorMessage = item.errorMessage else {
             return nil
         }
-        let statusCode = DiagnosticFailureCategory.safeHTTPStatusCode(
-            userVisibleMessage: errorMessage
-        )
-        let failureCategory = statusCode.map(DiagnosticFailureCategory.normalized)
-            ?? DiagnosticFailureCategory.normalized(userVisibleMessage: errorMessage)
         return PrivacySafeDiagnosticContext(
             system: .current(installedVersion: appUpdateController.installedVersion),
             surface: .dashboard,
             providerID: item.configuration.providerID,
-            technicalDetails: DiagnosticTechnicalDetails(
-                authenticationMethod: DiagnosticAuthenticationMethod(item.configuration.authMethod),
-                isConfigured: item.configuration.isEnabled,
+            technicalDetails: .providerRefreshFailure(
+                configuration: item.configuration,
+                isConfigured: configurationStore.isConfigured(item.configuration),
                 isSecretPresent: configurationStore.hasSecret(for: item.configuration),
-                failureCategory: failureCategory,
-                httpStatusCode: statusCode,
-                refreshKind: .unknown,
-                freshness: item.result == nil ? .noSuccessfulRefresh : .current
+                userVisibleMessage: errorMessage,
+                hasPreviousResult: item.result != nil
             )
         )
     }

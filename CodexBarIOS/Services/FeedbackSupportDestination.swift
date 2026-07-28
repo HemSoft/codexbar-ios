@@ -316,6 +316,29 @@ struct DiagnosticTechnicalDetails: Equatable, Sendable {
         self.widgetState = widgetState
         self.watchState = watchState
     }
+
+    static func providerRefreshFailure(
+        configuration: ProviderAccountConfiguration,
+        isConfigured: Bool,
+        isSecretPresent: Bool,
+        userVisibleMessage: String,
+        hasPreviousResult: Bool
+    ) -> Self {
+        let statusCode = DiagnosticFailureCategory.safeHTTPStatusCode(
+            userVisibleMessage: userVisibleMessage
+        )
+        let failureCategory = statusCode.map(DiagnosticFailureCategory.normalized)
+            ?? DiagnosticFailureCategory.normalized(userVisibleMessage: userVisibleMessage)
+        return Self(
+            authenticationMethod: DiagnosticAuthenticationMethod(configuration.authMethod),
+            isConfigured: isConfigured,
+            isSecretPresent: isSecretPresent,
+            failureCategory: failureCategory,
+            httpStatusCode: statusCode,
+            refreshKind: .unknown,
+            freshness: hasPreviousResult ? .stale : .noSuccessfulRefresh
+        )
+    }
 }
 
 struct PrivacySafeDiagnosticContext: Equatable, Identifiable, Sendable {
