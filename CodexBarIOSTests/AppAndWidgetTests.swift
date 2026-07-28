@@ -678,7 +678,6 @@ final class AppAndWidgetTests: XCTestCase {
                 "Rate CodexBar",
             ]
         )
-        XCTAssertTrue(FeedbackSupportDestination.reportProblem.presentsDiagnosticPreview)
         XCTAssertEqual(
             FeedbackSupportDestination.allCases.map(\.presentation),
             [
@@ -690,11 +689,6 @@ final class AppAndWidgetTests: XCTestCase {
                 .external,
                 .external,
             ]
-        )
-        XCTAssertTrue(
-            FeedbackSupportDestination.allCases
-                .filter { $0 != .reportProblem }
-                .allSatisfy { !$0.presentsDiagnosticPreview }
         )
     }
 

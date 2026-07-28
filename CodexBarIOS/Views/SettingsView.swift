@@ -739,12 +739,16 @@ private struct FeedbackSupportView: View {
     }
 
     private func open(_ destination: FeedbackSupportDestination) {
-        switch destination.presentation {
-        case .diagnosticPreview:
+        switch destination {
+        case .reportProblem:
             presentProblemReport(surface: .other)
-        case .emailDetails:
+        case .suggestImprovement:
             emailDetailsDraft = improvementEmailDraft
-        case .external:
+        case .publicBugReport,
+             .publicImprovement,
+             .knownIssues,
+             .supportGuide,
+             .rateCodexBar:
             openURL(destination.url(context: context)) { accepted in
                 if !accepted {
                     failedDestination = destination
