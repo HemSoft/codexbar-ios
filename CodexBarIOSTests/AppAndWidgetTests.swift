@@ -425,10 +425,10 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(series.direction, .up)
     }
 
-    func testInstalledAppVersionFormatsBundleValues() {
+    func testInstalledAppVersionDisplaysOnlyMarketingVersion() {
         let version = InstalledAppVersion(marketingVersion: "1.1", buildNumber: "2")
 
-        XCTAssertEqual(version.displayText, "Version 1.1 (2)")
+        XCTAssertEqual(version.displayText, "Version 1.1")
     }
 
     func testAppVersionComparesDottedComponentsNumerically() throws {

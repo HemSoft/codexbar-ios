@@ -66,6 +66,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Simplified the Settings version label to show only the public app version
+  while retaining the internal build number for diagnostics and support.
+  ([#170](https://github.com/HemSoft/codexbar-ios/issues/170))
 - Replaced the single support link with a quiet Feedback & Support hub for
   reporting problems, suggesting improvements, viewing known issues, reading
   support guidance, and rating CodexBar, with clear public-report privacy
