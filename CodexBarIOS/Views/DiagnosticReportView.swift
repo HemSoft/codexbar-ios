@@ -22,7 +22,7 @@ struct DiagnosticReportView: View {
     @Environment(\.openURL) private var openURL
     @State private var includesTechnicalDetails = true
     @State private var notice: Notice?
-    @State private var emailFallbackDraft: FeedbackEmailDraft?
+    @State private var emailDetailsDraft: FeedbackEmailDraft?
 
     var body: some View {
         NavigationStack {
@@ -61,7 +61,7 @@ struct DiagnosticReportView: View {
                     }
 
                     Button {
-                        emailFallbackDraft = problemEmailDraft
+                        emailDetailsDraft = problemEmailDraft
                     } label: {
                         Label("Review or Copy Email Details", systemImage: "doc.on.doc")
                     }
@@ -93,8 +93,8 @@ struct DiagnosticReportView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
-            .sheet(item: $emailFallbackDraft) { draft in
-                FeedbackEmailFallbackView(draft: draft)
+            .sheet(item: $emailDetailsDraft) { draft in
+                FeedbackEmailDetailsView(draft: draft)
             }
         }
     }
@@ -147,7 +147,7 @@ private struct Notice: Identifiable {
     }
 }
 
-struct FeedbackEmailFallbackView: View {
+struct FeedbackEmailDetailsView: View {
     let draft: FeedbackEmailDraft
 
     @Environment(\.dismiss) private var dismiss

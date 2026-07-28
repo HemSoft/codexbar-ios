@@ -581,6 +581,12 @@ struct FeedbackEmailDraftField: Equatable, Identifiable, Sendable {
     }
 }
 
+enum FeedbackSupportPresentation: Equatable, Sendable {
+    case diagnosticPreview
+    case emailDetails
+    case external
+}
+
 enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
     case reportProblem
     case suggestImprovement
@@ -643,8 +649,23 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var presentation: FeedbackSupportPresentation {
+        switch self {
+        case .reportProblem:
+            .diagnosticPreview
+        case .suggestImprovement:
+            .emailDetails
+        case .publicBugReport,
+             .publicImprovement,
+             .knownIssues,
+             .supportGuide,
+             .rateCodexBar:
+            .external
+        }
+    }
+
     var presentsDiagnosticPreview: Bool {
-        self == .reportProblem
+        presentation == .diagnosticPreview
     }
 
     var systemImage: String {

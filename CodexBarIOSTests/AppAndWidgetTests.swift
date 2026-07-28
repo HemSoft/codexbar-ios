@@ -679,6 +679,18 @@ final class AppAndWidgetTests: XCTestCase {
             ]
         )
         XCTAssertTrue(FeedbackSupportDestination.reportProblem.presentsDiagnosticPreview)
+        XCTAssertEqual(
+            FeedbackSupportDestination.allCases.map(\.presentation),
+            [
+                .diagnosticPreview,
+                .emailDetails,
+                .external,
+                .external,
+                .external,
+                .external,
+                .external,
+            ]
+        )
         XCTAssertTrue(
             FeedbackSupportDestination.allCases
                 .filter { $0 != .reportProblem }

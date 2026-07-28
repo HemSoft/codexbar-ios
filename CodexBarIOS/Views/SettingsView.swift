@@ -624,7 +624,7 @@ private struct FeedbackSupportView: View {
     @Environment(\.openURL) private var openURL
     @State private var failedDestination: FeedbackSupportDestination?
     @State private var problemReportContext: PrivacySafeDiagnosticContext?
-    @State private var emailFallbackDraft: FeedbackEmailDraft?
+    @State private var emailDetailsDraft: FeedbackEmailDraft?
 
     var body: some View {
         List {
@@ -664,9 +664,7 @@ private struct FeedbackSupportView: View {
 
                             Spacer(minLength: 8)
 
-                            if destination != .reportProblem
-                                && destination != .suggestImprovement
-                            {
+                            if destination.presentation == .external {
                                 VStack(alignment: .trailing, spacing: 3) {
                                     Text(destination.serviceName)
                                         .font(.caption)
@@ -680,18 +678,12 @@ private struct FeedbackSupportView: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .accessibilityLabel(
-                        destination.presentsDiagnosticPreview
-                            ? "\(destination.title), opens a diagnostic preview"
-                            : destination == .suggestImprovement
-                                ? "\(destination.title), opens copyable email details"
-                                : "\(destination.title), opens \(destination.serviceName)"
-                    )
+                    .accessibilityLabel(accessibilityLabel(for: destination))
                     .accessibilityHint(destination.detail)
                 }
             } footer: {
                 Text(
-                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. CodexBar shows copyable recipient, subject, and message fields before offering to open Mail."
+                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. CodexBar shows copyable recipient, subject, and message fields before offering to open your mail app."
                 )
             }
 
@@ -726,8 +718,8 @@ private struct FeedbackSupportView: View {
         .sheet(item: $problemReportContext) { context in
             DiagnosticReportView(context: context)
         }
-        .sheet(item: $emailFallbackDraft) { draft in
-            FeedbackEmailFallbackView(draft: draft)
+        .sheet(item: $emailDetailsDraft) { draft in
+            FeedbackEmailDetailsView(draft: draft)
         }
         .alert(
             "Couldn’t Open \(failedDestination?.serviceName ?? "Link")",
@@ -747,18 +739,30 @@ private struct FeedbackSupportView: View {
     }
 
     private func open(_ destination: FeedbackSupportDestination) {
-        if destination == .reportProblem {
+        switch destination.presentation {
+        case .diagnosticPreview:
             presentProblemReport(surface: .other)
-            return
-        }
-        if destination == .suggestImprovement {
-            emailFallbackDraft = improvementEmailDraft
-            return
-        }
-        openURL(destination.url(context: context)) { accepted in
-            if !accepted {
-                failedDestination = destination
+        case .emailDetails:
+            emailDetailsDraft = improvementEmailDraft
+        case .external:
+            openURL(destination.url(context: context)) { accepted in
+                if !accepted {
+                    failedDestination = destination
+                }
             }
+        }
+    }
+
+    private func accessibilityLabel(
+        for destination: FeedbackSupportDestination
+    ) -> String {
+        switch destination.presentation {
+        case .diagnosticPreview:
+            "\(destination.title), opens a diagnostic preview"
+        case .emailDetails:
+            "\(destination.title), opens copyable email details"
+        case .external:
+            "\(destination.title), opens \(destination.serviceName)"
         }
     }
 
