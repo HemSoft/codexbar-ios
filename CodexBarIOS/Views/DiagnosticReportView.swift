@@ -22,13 +22,14 @@ struct DiagnosticReportView: View {
     @Environment(\.openURL) private var openURL
     @State private var includesTechnicalDetails = true
     @State private var notice: Notice?
+    @State private var emailFallbackDraft: FeedbackEmailDraft?
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Text(
-                        "Review exactly what CodexBar will copy or add to GitHub. GitHub issues and attachments are public."
+                        "Review the privacy-safe diagnostic below. Email is private and needs no GitHub account; opening the composer does not send anything. You review and explicitly send the message."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -60,13 +61,19 @@ struct DiagnosticReportView: View {
                     }
 
                     Button {
-                        openProblemReport()
+                        openProblemEmail()
                     } label: {
-                        Label("Open GitHub Bug Form", systemImage: "arrow.up.forward.app")
+                        Label("Open Email Draft", systemImage: "envelope")
+                    }
+
+                    Button {
+                        openGitHubProblemReport()
+                    } label: {
+                        Label("Open Public GitHub Bug Form", systemImage: "arrow.up.forward.app")
                     }
                 } footer: {
                     Text(
-                        "CodexBar never uploads logs, screenshots, provider responses, credentials, account labels, balances, usage history, widget selections, or Apple Watch snapshots."
+                        "GitHub is public and requires an account. CodexBar never includes logs, screenshots, provider responses, credentials, account labels or identifiers, balances, usage history, widget selections, or Apple Watch snapshots."
                     )
                 }
             }
@@ -86,6 +93,9 @@ struct DiagnosticReportView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
+            .sheet(item: $emailFallbackDraft) { draft in
+                FeedbackEmailFallbackView(draft: draft)
+            }
         }
     }
 
@@ -96,7 +106,19 @@ struct DiagnosticReportView: View {
         )
     }
 
-    private func openProblemReport() {
+    private func openProblemEmail() {
+        let draft = FeedbackEmailDraft.problemReport(
+            context: context,
+            includeTechnicalDetails: includesTechnicalDetails
+        )
+        openURL(draft.url) { accepted in
+            if !accepted {
+                emailFallbackDraft = draft
+            }
+        }
+    }
+
+    private func openGitHubProblemReport() {
         switch FeedbackSupportDestination.problemReportLaunch(
             context: context,
             includeTechnicalDetails: includesTechnicalDetails
@@ -125,6 +147,62 @@ struct DiagnosticReportView: View {
 
         var id: String {
             "\(title)-\(message)"
+        }
+    }
+}
+
+struct FeedbackEmailFallbackView: View {
+    let draft: FeedbackEmailDraft
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(
+                        "No configured email app could be opened. Copy these fields into any email service. Nothing has been sent."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+
+                Section("Recipient") {
+                    Text(FeedbackEmailDraft.recipient)
+                        .textSelection(.enabled)
+                    copyButton("Copy Recipient", value: FeedbackEmailDraft.recipient)
+                }
+
+                Section("Subject") {
+                    Text(draft.subject)
+                        .textSelection(.enabled)
+                    copyButton("Copy Subject", value: draft.subject)
+                }
+
+                Section("Message") {
+                    Text(draft.body)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                    copyButton("Copy Message", value: draft.body)
+                }
+            }
+            .navigationTitle("Copy Email Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func copyButton(_ title: String, value: String) -> some View {
+        Button {
+            UIPasteboard.general.string = value
+        } label: {
+            Label(title, systemImage: "doc.on.doc")
         }
     }
 }

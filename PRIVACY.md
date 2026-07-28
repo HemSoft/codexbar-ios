@@ -48,18 +48,32 @@ diagnostic built from a fixed list of non-secret categories: app version/build,
 operating-system version, general device category, affected surface, provider
 name when relevant, and optional booleans or categories for authentication
 method, configured/secret-present state, normalized failure or HTTP status,
-refresh/freshness, Widget freshness, or Apple Watch connection/freshness.
-You can remove all optional technical details, copy the preview, cancel, or
-explicitly open GitHub. If a safely prefilled URL would be too long, CodexBar
-copies the preview instead of opening it.
+refresh/freshness, Widget freshness, or Apple Watch connection/freshness. You
+can remove all optional technical details, copy the preview, cancel, open a
+private email draft, or explicitly open GitHub. If a safely prefilled GitHub URL
+would be too long, CodexBar copies the preview instead of opening it.
 
 CodexBar does not read or add provider credentials, account labels, email
 addresses, account or device identifiers, balances, usage history, raw errors
 or provider responses, widget selections, or Apple Watch snapshots to the
-diagnostic or link. No issue is submitted to GitHub until you explicitly submit
-the public bug form; opening the prefilled form transfers its query parameters
-to GitHub. **Suggest an Improvement** continues to prefill only general app and
-device details.
+diagnostic, email draft, or GitHub link. It also does not add credentials,
+tokens, cookies, logs, screenshots, or attachments. **Suggest an Improvement**
+prefills a structured editable message plus general app and device details.
+
+Private feedback drafts are addressed to `fphemmer@gmail.com` and use a subject
+beginning `[CodexBar Feedback]`. Opening the email composer does not send the
+message; you review and explicitly send it. Your configured email app and email
+provider process the draft, and Gmail processes a message you send to the
+recipient mailbox. Your email provider normally adds your sender address; that
+address is not read or prefilled by CodexBar. If no email app can open, CodexBar
+keeps the recipient, subject, and message available for you to copy.
+
+GitHub reports remain public and require a GitHub account. No issue is submitted
+to GitHub until you explicitly submit the public form; opening a prefilled form
+transfers its query parameters to GitHub. HemSoft may convert emailed feedback
+into a de-identified public GitHub issue, but will not publish the sender's
+email address, name, personal details, or other identifying content as part of
+that conversion.
 
 ## Sharing And Sale Of Data
 

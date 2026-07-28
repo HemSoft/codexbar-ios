@@ -624,13 +624,14 @@ private struct FeedbackSupportView: View {
     @Environment(\.openURL) private var openURL
     @State private var failedDestination: FeedbackSupportDestination?
     @State private var problemReportContext: PrivacySafeDiagnosticContext?
+    @State private var emailFallbackDraft: FeedbackEmailDraft?
 
     var body: some View {
         List {
             Section {
                 Label {
                     Text(
-                        "GitHub reports are public and require a GitHub account. Do not include credentials, tokens, cookies, account identifiers, email addresses, or other secrets."
+                        "Email feedback is private and does not require a GitHub account. Opening a draft does not send it; you review and explicitly send. GitHub forms remain public and require an account."
                     )
                 } icon: {
                     Image(systemName: "exclamationmark.shield")
@@ -686,7 +687,7 @@ private struct FeedbackSupportView: View {
                 }
             } footer: {
                 Text(
-                    "Reporting a problem previews an allowlisted diagnostic before opening a public GitHub bug report. You can remove optional technical details or cancel. The other links open directly."
+                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. If Mail is unavailable, CodexBar shows copyable recipient, subject, and message fields."
                 )
             }
 
@@ -721,6 +722,9 @@ private struct FeedbackSupportView: View {
         .sheet(item: $problemReportContext) { context in
             DiagnosticReportView(context: context)
         }
+        .sheet(item: $emailFallbackDraft) { draft in
+            FeedbackEmailFallbackView(draft: draft)
+        }
         .alert(
             "Couldn’t Open \(failedDestination?.serviceName ?? "Link")",
             isPresented: Binding(
@@ -741,6 +745,15 @@ private struct FeedbackSupportView: View {
     private func open(_ destination: FeedbackSupportDestination) {
         if destination == .reportProblem {
             presentProblemReport(surface: .other)
+            return
+        }
+        if destination == .suggestImprovement {
+            let draft = FeedbackEmailDraft.improvementSuggestion(context: context)
+            openURL(draft.url) { accepted in
+                if !accepted {
+                    emailFallbackDraft = draft
+                }
+            }
             return
         }
         openURL(destination.url(context: context)) { accepted in
