@@ -459,9 +459,147 @@ enum ProblemReportLaunch: Equatable, Sendable {
     case copyOnly(String)
 }
 
+enum FeedbackEmailKind: CaseIterable, Equatable, Sendable {
+    case problemReport
+    case improvementSuggestion
+
+    var subject: String {
+        switch self {
+        case .problemReport:
+            "[CodexBar Feedback] Problem Report"
+        case .improvementSuggestion:
+            "[CodexBar Feedback] Improvement Suggestion"
+        }
+    }
+}
+
+struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
+    static let recipient = "fphemmer@gmail.com"
+
+    let kind: FeedbackEmailKind
+    let body: String
+
+    var id: String {
+        kind.subject
+    }
+
+    var subject: String {
+        kind.subject
+    }
+
+    var url: URL {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = Self.recipient
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: subject),
+            URLQueryItem(name: "body", value: body),
+        ]
+        return components.url!
+    }
+
+    var copyableFields: [FeedbackEmailDraftField] {
+        [
+            FeedbackEmailDraftField(kind: .recipient, value: Self.recipient),
+            FeedbackEmailDraftField(kind: .subject, value: subject),
+            FeedbackEmailDraftField(kind: .message, value: body),
+        ]
+    }
+
+    static func problemReport(
+        context: PrivacySafeDiagnosticContext,
+        includeTechnicalDetails: Bool
+    ) -> Self {
+        let diagnostic = PrivacySafeDiagnosticBuilder.summary(
+            context: context,
+            includeTechnicalDetails: includeTechnicalDetails
+        )
+        return Self(
+            kind: .problemReport,
+            body: """
+            Please describe the problem below. Review and edit this message before sending; opening the email composer does not send it.
+
+            What happened?
+
+
+            What did you expect?
+
+
+            Steps to reproduce:
+
+
+            Privacy-safe diagnostic:
+            \(diagnostic)
+
+            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances, usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or screenshots.
+            """
+        )
+    }
+
+    static func improvementSuggestion(context: FeedbackSupportContext) -> Self {
+        Self(
+            kind: .improvementSuggestion,
+            body: """
+            Please describe your suggestion below. Review and edit this message before sending; opening the email composer does not send it.
+
+            What would you like CodexBar to improve?
+
+
+            How would this help?
+
+
+            Anything else we should know?
+
+
+            Privacy-safe app and device context:
+            \(context.systemDetails)
+
+            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances, usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or screenshots.
+            """
+        )
+    }
+}
+
+struct FeedbackEmailActionPlan: Equatable, Sendable {
+    let draft: FeedbackEmailDraft
+
+    var primaryURL: URL {
+        draft.url
+    }
+
+    var copyDetailsDraft: FeedbackEmailDraft {
+        draft
+    }
+
+    func fallbackDraft(openAccepted: Bool) -> FeedbackEmailDraft? {
+        openAccepted ? nil : draft
+    }
+}
+
+struct FeedbackEmailDraftField: Equatable, Identifiable, Sendable {
+    enum Kind: String, Equatable, Sendable {
+        case recipient
+        case subject
+        case message
+    }
+
+    let kind: Kind
+    let value: String
+
+    var id: Kind {
+        kind
+    }
+
+    var title: String {
+        kind.rawValue.capitalized
+    }
+}
+
 enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
     case reportProblem
     case suggestImprovement
+    case publicBugReport
+    case publicImprovement
     case knownIssues
     case supportGuide
     case rateCodexBar
@@ -476,6 +614,10 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
             "Report a Problem"
         case .suggestImprovement:
             "Suggest an Improvement"
+        case .publicBugReport:
+            "Public GitHub Bug Form"
+        case .publicImprovement:
+            "Public GitHub Improvement Form"
         case .knownIssues:
             "View Known Issues"
         case .supportGuide:
@@ -488,9 +630,13 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
     var detail: String {
         switch self {
         case .reportProblem:
-            "Open the structured public bug-report form."
+            "Open a private email draft with optional diagnostics."
         case .suggestImprovement:
-            "Open the structured public feature-request form."
+            "Open a private, structured email draft."
+        case .publicBugReport:
+            "Open the public bug form; a GitHub account is required."
+        case .publicImprovement:
+            "Open the public feature form; a GitHub account is required."
         case .knownIssues:
             "Search open reports and known limitations."
         case .supportGuide:
@@ -502,6 +648,8 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
 
     var serviceName: String {
         switch self {
+        case .reportProblem, .suggestImprovement:
+            "Mail"
         case .rateCodexBar:
             "App Store"
         default:
@@ -519,6 +667,10 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
             "ladybug"
         case .suggestImprovement:
             "lightbulb"
+        case .publicBugReport:
+            "ladybug.fill"
+        case .publicImprovement:
+            "lightbulb.fill"
         case .knownIssues:
             "list.bullet.rectangle"
         case .supportGuide:
@@ -531,11 +683,24 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
     func url(context: FeedbackSupportContext) -> URL {
         switch self {
         case .reportProblem:
+            let diagnosticContext = PrivacySafeDiagnosticContext(
+                system: context,
+                surface: .other,
+                providerID: nil,
+                technicalDetails: nil
+            )
+            return FeedbackEmailDraft.problemReport(
+                context: diagnosticContext,
+                includeTechnicalDetails: false
+            ).url
+        case .suggestImprovement:
+            return FeedbackEmailDraft.improvementSuggestion(context: context).url
+        case .publicBugReport:
             return Self.issueFormURL(
                 template: "bug_report.yml",
                 systemDetails: context.systemDetails
             )
-        case .suggestImprovement:
+        case .publicImprovement:
             return Self.issueFormURL(
                 template: "feature_request.yml",
                 systemDetails: context.systemDetails

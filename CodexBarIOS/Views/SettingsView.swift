@@ -624,13 +624,14 @@ private struct FeedbackSupportView: View {
     @Environment(\.openURL) private var openURL
     @State private var failedDestination: FeedbackSupportDestination?
     @State private var problemReportContext: PrivacySafeDiagnosticContext?
+    @State private var emailFallbackDraft: FeedbackEmailDraft?
 
     var body: some View {
         List {
             Section {
                 Label {
                     Text(
-                        "GitHub reports are public and require a GitHub account. Do not include credentials, tokens, cookies, account identifiers, email addresses, or other secrets."
+                        "Email feedback is private and does not require a GitHub account. Opening a draft does not send it; you review and explicitly send. Do not add credentials, tokens, cookies, account identifiers, or other secrets to either channel. GitHub forms remain public, require an account, and must not include email addresses."
                     )
                 } icon: {
                     Image(systemName: "exclamationmark.shield")
@@ -684,9 +685,16 @@ private struct FeedbackSupportView: View {
                     )
                     .accessibilityHint(destination.detail)
                 }
+
+                Button {
+                    emailFallbackDraft = improvementEmailPlan.copyDetailsDraft
+                } label: {
+                    Label("Copy Improvement Email Details", systemImage: "doc.on.doc")
+                }
+                .accessibilityHint("Shows copyable recipient, subject, and message fields")
             } footer: {
                 Text(
-                    "Reporting a problem previews an allowlisted diagnostic before opening a public GitHub bug report. You can remove optional technical details or cancel. The other links open directly."
+                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. If Mail is unavailable, CodexBar shows copyable recipient, subject, and message fields."
                 )
             }
 
@@ -721,6 +729,9 @@ private struct FeedbackSupportView: View {
         .sheet(item: $problemReportContext) { context in
             DiagnosticReportView(context: context)
         }
+        .sheet(item: $emailFallbackDraft) { draft in
+            FeedbackEmailFallbackView(draft: draft)
+        }
         .alert(
             "Couldn’t Open \(failedDestination?.serviceName ?? "Link")",
             isPresented: Binding(
@@ -743,6 +754,13 @@ private struct FeedbackSupportView: View {
             presentProblemReport(surface: .other)
             return
         }
+        if destination == .suggestImprovement {
+            let plan = improvementEmailPlan
+            openURL(plan.primaryURL) { accepted in
+                emailFallbackDraft = plan.fallbackDraft(openAccepted: accepted)
+            }
+            return
+        }
         openURL(destination.url(context: context)) { accepted in
             if !accepted {
                 failedDestination = destination
@@ -759,6 +777,12 @@ private struct FeedbackSupportView: View {
             surface: surface,
             providerID: nil,
             technicalDetails: technicalDetails
+        )
+    }
+
+    private var improvementEmailPlan: FeedbackEmailActionPlan {
+        FeedbackEmailActionPlan(
+            draft: FeedbackEmailDraft.improvementSuggestion(context: context)
         )
     }
 }

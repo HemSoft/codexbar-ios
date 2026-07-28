@@ -8,6 +8,11 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added private, account-free problem and improvement email drafts with
+  recognizable subjects, structured editable prompts, optional reviewed
+  diagnostics, and copyable fallback details when no email app is configured;
+  public GitHub forms remain available as an alternative.
+  ([#177](https://github.com/HemSoft/codexbar-ios/issues/177))
 - Added previewable, privacy-safe problem diagnostics for provider, widget, and
   Apple Watch failures, with optional technical categories, copy support, and
   bounded GitHub bug-form prefill that never includes account labels,

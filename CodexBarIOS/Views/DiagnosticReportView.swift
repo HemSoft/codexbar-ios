@@ -22,13 +22,14 @@ struct DiagnosticReportView: View {
     @Environment(\.openURL) private var openURL
     @State private var includesTechnicalDetails = true
     @State private var notice: Notice?
+    @State private var emailFallbackDraft: FeedbackEmailDraft?
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Text(
-                        "Review exactly what CodexBar will copy or add to GitHub. GitHub issues and attachments are public."
+                        "Review the privacy-safe diagnostic below. Email is private and needs no GitHub account; opening the composer does not send anything. You review and explicitly send the message."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -60,13 +61,25 @@ struct DiagnosticReportView: View {
                     }
 
                     Button {
-                        openProblemReport()
+                        openProblemEmail()
                     } label: {
-                        Label("Open GitHub Bug Form", systemImage: "arrow.up.forward.app")
+                        Label("Open Email Draft", systemImage: "envelope")
+                    }
+
+                    Button {
+                        emailFallbackDraft = problemEmailDraft
+                    } label: {
+                        Label("Review or Copy Email Details", systemImage: "doc.on.doc")
+                    }
+
+                    Button {
+                        openGitHubProblemReport()
+                    } label: {
+                        Label("Open Public GitHub Bug Form", systemImage: "arrow.up.forward.app")
                     }
                 } footer: {
                     Text(
-                        "CodexBar never uploads logs, screenshots, provider responses, credentials, account labels, balances, usage history, widget selections, or Apple Watch snapshots."
+                        "GitHub is public and requires an account. CodexBar never includes logs, screenshots, provider responses, credentials, account labels or identifiers, balances, usage history, widget selections, or Apple Watch snapshots."
                     )
                 }
             }
@@ -86,6 +99,9 @@ struct DiagnosticReportView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
+            .sheet(item: $emailFallbackDraft) { draft in
+                FeedbackEmailFallbackView(draft: draft)
+            }
         }
     }
 
@@ -96,7 +112,23 @@ struct DiagnosticReportView: View {
         )
     }
 
-    private func openProblemReport() {
+    private func openProblemEmail() {
+        let draft = problemEmailDraft
+        openURL(draft.url) { accepted in
+            if !accepted {
+                emailFallbackDraft = draft
+            }
+        }
+    }
+
+    private var problemEmailDraft: FeedbackEmailDraft {
+        FeedbackEmailDraft.problemReport(
+            context: context,
+            includeTechnicalDetails: includesTechnicalDetails
+        )
+    }
+
+    private func openGitHubProblemReport() {
         switch FeedbackSupportDestination.problemReportLaunch(
             context: context,
             includeTechnicalDetails: includesTechnicalDetails
@@ -119,12 +151,95 @@ struct DiagnosticReportView: View {
         }
     }
 
-    private struct Notice: Identifiable {
-        let title: String
-        let message: String
+}
 
-        var id: String {
-            "\(title)-\(message)"
+private struct Notice: Identifiable {
+    let title: String
+    let message: String
+
+    var id: String {
+        "\(title)-\(message)"
+    }
+}
+
+struct FeedbackEmailFallbackView: View {
+    let draft: FeedbackEmailDraft
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var notice: Notice?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(
+                        "Review or copy these fields for any email service. Opening an email draft does not send it."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Button {
+                        openEmailDraft()
+                    } label: {
+                        Label("Open Email Draft", systemImage: "envelope")
+                    }
+                }
+
+                ForEach(draft.copyableFields) { field in
+                    Section(field.title) {
+                        Text(field.value)
+                            .font(field.kind == .message ? .callout : .body)
+                            .textSelection(.enabled)
+                        copyButton(
+                            "Copy \(field.title)",
+                            fieldName: field.title,
+                            value: field.value
+                        )
+                    }
+                }
+            }
+            .navigationTitle("Copy Email Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .alert(item: $notice) { notice in
+                Alert(
+                    title: Text(notice.title),
+                    message: Text(notice.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+    }
+
+    private func openEmailDraft() {
+        openURL(draft.url) { accepted in
+            if !accepted {
+                notice = Notice(
+                    title: "Couldn’t Open Email",
+                    message: "Copy the recipient, subject, and message into another email service."
+                )
+            }
+        }
+    }
+
+    private func copyButton(_ title: String, fieldName: String, value: String) -> some View {
+        Button {
+            UIPasteboard.general.string = value
+            notice = Notice(
+                title: "\(fieldName) Copied",
+                message: "\(fieldName) copied to the clipboard."
+            )
+        } label: {
+            Label(title, systemImage: "doc.on.doc")
         }
     }
 }

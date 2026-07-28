@@ -659,6 +659,8 @@ final class AppAndWidgetTests: XCTestCase {
             [
                 .reportProblem,
                 .suggestImprovement,
+                .publicBugReport,
+                .publicImprovement,
                 .knownIssues,
                 .supportGuide,
                 .rateCodexBar,
@@ -669,6 +671,8 @@ final class AppAndWidgetTests: XCTestCase {
             [
                 "Report a Problem",
                 "Suggest an Improvement",
+                "Public GitHub Bug Form",
+                "Public GitHub Improvement Form",
                 "View Known Issues",
                 "Support Guide",
                 "Rate CodexBar",
@@ -682,7 +686,7 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
-    func testFeedbackSupportURLsTargetSpecificFormsAndEncodeSafeSystemDetails() throws {
+    func testFeedbackSupportURLsTargetEmailAndPublicGitHubForms() throws {
         let context = FeedbackSupportContext(
             appVersion: "1.2+beta",
             buildNumber: "42+7",
@@ -695,32 +699,80 @@ final class AppAndWidgetTests: XCTestCase {
         let problemComponents = try XCTUnwrap(
             URLComponents(url: problemURL, resolvingAgainstBaseURL: false)
         )
-        XCTAssertEqual(problemComponents.host, "github.com")
-        XCTAssertEqual(problemComponents.path, "/HemSoft/codexbar-ios/issues/new")
+        XCTAssertEqual(problemComponents.scheme, "mailto")
+        XCTAssertEqual(problemComponents.path, FeedbackEmailDraft.recipient)
         XCTAssertEqual(
-            problemComponents.queryItems?.first(where: { $0.name == "template" })?.value,
-            "bug_report.yml"
+            problemComponents.queryItems?.first(where: { $0.name == "subject" })?.value,
+            "[CodexBar Feedback] Problem Report"
         )
-        XCTAssertEqual(
-            problemComponents.queryItems?.first(where: { $0.name == "system-details" })?.value,
-            "CodexBar 1.2+beta (42+7), iPadOS 26.1 (23B 12), iPad"
+        XCTAssertTrue(
+            try XCTUnwrap(
+                problemComponents.queryItems?.first(where: { $0.name == "body" })?.value
+            ).contains("Privacy-safe diagnostic:")
         )
-        XCTAssertTrue(try XCTUnwrap(problemComponents.percentEncodedQuery).contains("%2B"))
-        XCTAssertFalse(try XCTUnwrap(problemComponents.percentEncodedQuery).contains("+"))
 
         let improvementURL = FeedbackSupportDestination.suggestImprovement.url(context: context)
         let improvementComponents = try XCTUnwrap(
             URLComponents(url: improvementURL, resolvingAgainstBaseURL: false)
         )
+        XCTAssertEqual(improvementComponents.scheme, "mailto")
+        XCTAssertEqual(improvementComponents.path, FeedbackEmailDraft.recipient)
         XCTAssertEqual(
-            improvementComponents.queryItems?.first(where: { $0.name == "template" })?.value,
+            improvementComponents.queryItems?.first(where: { $0.name == "subject" })?.value,
+            "[CodexBar Feedback] Improvement Suggestion"
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(
+                improvementComponents.queryItems?.first(where: { $0.name == "body" })?.value
+            ).contains(context.systemDetails)
+        )
+
+        let publicProblemURL = FeedbackSupportDestination.publicBugReport.url(context: context)
+        let publicProblemComponents = try XCTUnwrap(
+            URLComponents(url: publicProblemURL, resolvingAgainstBaseURL: false)
+        )
+        XCTAssertEqual(publicProblemComponents.host, "github.com")
+        XCTAssertEqual(publicProblemComponents.path, "/HemSoft/codexbar-ios/issues/new")
+        XCTAssertEqual(
+            publicProblemComponents.queryItems?.first(where: { $0.name == "template" })?.value,
+            "bug_report.yml"
+        )
+        XCTAssertEqual(
+            publicProblemComponents.queryItems?
+                .first(where: { $0.name == "system-details" })?.value,
+            "CodexBar 1.2+beta (42+7), iPadOS 26.1 (23B 12), iPad"
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(publicProblemComponents.percentEncodedQuery).contains("%2B")
+        )
+        XCTAssertFalse(
+            try XCTUnwrap(publicProblemComponents.percentEncodedQuery).contains("+")
+        )
+
+        let publicImprovementURL = FeedbackSupportDestination.publicImprovement.url(
+            context: context
+        )
+        let publicImprovementComponents = try XCTUnwrap(
+            URLComponents(url: publicImprovementURL, resolvingAgainstBaseURL: false)
+        )
+        XCTAssertEqual(publicImprovementComponents.host, "github.com")
+        XCTAssertEqual(
+            publicImprovementComponents.path,
+            "/HemSoft/codexbar-ios/issues/new"
+        )
+        XCTAssertEqual(
+            publicImprovementComponents.queryItems?
+                .first(where: { $0.name == "template" })?.value,
             "feature_request.yml"
         )
         XCTAssertEqual(
-            improvementComponents.queryItems?.first(where: { $0.name == "system-details" })?.value,
+            publicImprovementComponents.queryItems?
+                .first(where: { $0.name == "system-details" })?.value,
             context.systemDetails
         )
-        XCTAssertTrue(try XCTUnwrap(improvementComponents.percentEncodedQuery).contains("%2B"))
+        XCTAssertTrue(
+            try XCTUnwrap(publicImprovementComponents.percentEncodedQuery).contains("%2B")
+        )
 
         let knownIssuesURL = FeedbackSupportDestination.knownIssues.url(context: context)
         let knownIssuesComponents = try XCTUnwrap(
@@ -739,6 +791,144 @@ final class AppAndWidgetTests: XCTestCase {
             FeedbackSupportDestination.rateCodexBar.url(context: context),
             AppReviewLinks.writeReviewURL
         )
+    }
+
+    func testFeedbackEmailDraftsUseStableSubjectsAndStructuredEditableBodies() throws {
+        let system = FeedbackSupportContext(
+            appVersion: "1.2",
+            buildNumber: "42",
+            operatingSystemName: "iOS",
+            operatingSystemVersion: "26.0",
+            deviceCategory: "iPhone"
+        )
+        let diagnostic = PrivacySafeDiagnosticContext(
+            system: system,
+            surface: .authentication,
+            providerID: .claude,
+            technicalDetails: DiagnosticTechnicalDetails(
+                authenticationMethod: .browserSession,
+                isConfigured: true,
+                isSecretPresent: true,
+                failureCategory: .authentication,
+                httpStatusCode: 401
+            )
+        )
+        let problemDraft = FeedbackEmailDraft.problemReport(
+            context: diagnostic,
+            includeTechnicalDetails: true
+        )
+        let problemWithoutOptionalDetails = FeedbackEmailDraft.problemReport(
+            context: diagnostic,
+            includeTechnicalDetails: false
+        )
+        let improvementDraft = FeedbackEmailDraft.improvementSuggestion(context: system)
+
+        XCTAssertEqual(FeedbackEmailDraft.recipient, "fphemmer@gmail.com")
+        XCTAssertEqual(
+            FeedbackEmailKind.allCases.map(\.subject),
+            [
+                "[CodexBar Feedback] Problem Report",
+                "[CodexBar Feedback] Improvement Suggestion",
+            ]
+        )
+        XCTAssertTrue(FeedbackEmailKind.allCases.allSatisfy {
+            $0.subject.hasPrefix("[CodexBar Feedback]")
+        })
+        XCTAssertTrue(problemDraft.body.contains("What happened?"))
+        XCTAssertTrue(problemDraft.body.contains("What did you expect?"))
+        XCTAssertTrue(problemDraft.body.contains("Steps to reproduce:"))
+        XCTAssertTrue(problemDraft.body.contains("Authentication method: Browser session"))
+        XCTAssertTrue(problemDraft.body.contains("HTTP status: 401"))
+        XCTAssertFalse(problemWithoutOptionalDetails.body.contains("Technical details:"))
+        XCTAssertTrue(improvementDraft.body.contains("What would you like CodexBar to improve?"))
+        XCTAssertTrue(improvementDraft.body.contains("How would this help?"))
+        XCTAssertTrue(improvementDraft.body.contains(system.systemDetails))
+        XCTAssertEqual(
+            problemDraft.copyableFields.map(\.kind),
+            [.recipient, .subject, .message]
+        )
+        XCTAssertEqual(
+            problemDraft.copyableFields.map(\.value),
+            [FeedbackEmailDraft.recipient, problemDraft.subject, problemDraft.body]
+        )
+        XCTAssertEqual(
+            improvementDraft.copyableFields.map(\.value),
+            [FeedbackEmailDraft.recipient, improvementDraft.subject, improvementDraft.body]
+        )
+        let improvementActionPlan = FeedbackEmailActionPlan(draft: improvementDraft)
+        XCTAssertEqual(improvementActionPlan.primaryURL, improvementDraft.url)
+        XCTAssertEqual(improvementActionPlan.copyDetailsDraft, improvementDraft)
+        XCTAssertNil(improvementActionPlan.fallbackDraft(openAccepted: true))
+        XCTAssertEqual(
+            improvementActionPlan.fallbackDraft(openAccepted: false),
+            improvementDraft
+        )
+
+        for draft in [problemDraft, improvementDraft] {
+            XCTAssertTrue(draft.body.contains("opening the email composer does not send it"))
+            let components = try XCTUnwrap(
+                URLComponents(url: draft.url, resolvingAgainstBaseURL: false)
+            )
+            XCTAssertEqual(components.scheme, "mailto")
+            XCTAssertEqual(components.path, FeedbackEmailDraft.recipient)
+            XCTAssertEqual(
+                components.queryItems?.first(where: { $0.name == "subject" })?.value,
+                draft.subject
+            )
+            XCTAssertEqual(
+                components.queryItems?.first(where: { $0.name == "body" })?.value,
+                draft.body
+            )
+        }
+    }
+
+    func testFeedbackEmailDraftsExcludeSensitiveDataAndRawProviderState() {
+        let configuration = ProviderAccountConfiguration(
+            id: "account-identifier",
+            providerID: .copilot,
+            accountLabel: "Personal Account franz@example.com",
+            authMethod: .browserSession,
+            oauthClientID: "oauth-client-id",
+            githubOrganization: "private-org"
+        )
+        let diagnostic = PrivacySafeDiagnosticContext(
+            system: FeedbackSupportContext(
+                appVersion: "1.2",
+                buildNumber: "42",
+                operatingSystemName: "iOS",
+                operatingSystemVersion: "26.0",
+                deviceCategory: "iPhone"
+            ),
+            surface: .dashboard,
+            providerID: configuration.providerID,
+            technicalDetails: DiagnosticTechnicalDetails.providerRefreshFailure(
+                configuration: configuration,
+                isConfigured: true,
+                isSecretPresent: true,
+                userVisibleMessage: "HTTP 401 bearer-token raw-provider-response",
+                result: nil
+            )
+        )
+        let draft = FeedbackEmailDraft.problemReport(
+            context: diagnostic,
+            includeTechnicalDetails: true
+        )
+        let sensitiveValues = [
+            configuration.id,
+            configuration.accountLabel,
+            configuration.oauthClientID!,
+            configuration.githubOrganization,
+            "franz@example.com",
+            "bearer-token",
+            "raw-provider-response",
+        ]
+
+        XCTAssertTrue(draft.body.contains("Failure category: Authentication"))
+        XCTAssertTrue(draft.body.contains("HTTP status: 401"))
+        for sensitiveValue in sensitiveValues {
+            XCTAssertFalse(draft.body.contains(sensitiveValue))
+            XCTAssertFalse(draft.url.absoluteString.contains(sensitiveValue))
+        }
     }
 
     func testProblemReportProviderValuesMatchEveryIssueFormDropdownOption() {
