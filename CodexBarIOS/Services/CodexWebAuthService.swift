@@ -75,13 +75,16 @@ public final class CodexWebAuthService: Sendable {
     private static let originator = "codex_cli_rs"
     private let session: URLSession
     private let callbackTimeoutNanoseconds: UInt64
+    private let preferredCallbackPorts: [UInt16]
 
     public init(
         session: URLSession = .shared,
-        callbackTimeoutNanoseconds: UInt64 = 180_000_000_000
+        callbackTimeoutNanoseconds: UInt64 = 180_000_000_000,
+        preferredCallbackPorts: [UInt16] = [1455, 1457]
     ) {
         self.session = session
         self.callbackTimeoutNanoseconds = callbackTimeoutNanoseconds
+        self.preferredCallbackPorts = preferredCallbackPorts
     }
 
     @MainActor
@@ -89,7 +92,7 @@ public final class CodexWebAuthService: Sendable {
         let state = Self.randomBase64URL(byteCount: 32)
         let pkce = Self.makePKCEPair()
         let callbackServer = try await LoopbackOAuthCallbackServer<AuthError>.start(
-            preferredPorts: [1455, 1457],
+            preferredPorts: preferredCallbackPorts,
             expectedState: state,
             callbackPath: Self.callbackPath,
             bindHost: .localhost,

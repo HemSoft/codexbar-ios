@@ -175,6 +175,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Isolated browser-auth callback ports and network fixtures across parallel test
+  workers, and preserved iOS `.xcresult` diagnostics when CI tests fail.
+  ([#173](https://github.com/HemSoft/codexbar-ios/issues/173))
 - Required every code, documentation, configuration, build, and process change
   to start from a GitHub issue and a clean, synchronized `main`, use an
   issue-specific branch, and deliver the change through a linked pull request.

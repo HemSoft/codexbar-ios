@@ -162,7 +162,7 @@ enum LoopbackOAuthBindHost {
 }
 
 final class LoopbackOAuthCallbackServer<AuthError: LocalizedError & Sendable>: @unchecked Sendable {
-    let port: UInt16
+    private(set) var port: UInt16
 
     private let expectedState: String
     private let callbackPath: String
@@ -302,6 +302,9 @@ final class LoopbackOAuthCallbackServer<AuthError: LocalizedError & Sendable>: @
     private func handleListenerState(_ state: NWListener.State) {
         switch state {
         case .ready:
+            if let boundPort = listener.port?.rawValue {
+                port = boundPort
+            }
             finishReady(.success(()))
         case .failed(let error):
             finishReady(.failure(error))
