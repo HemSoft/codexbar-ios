@@ -950,6 +950,15 @@ final class AppAndWidgetTests: XCTestCase {
                 userVisibleMessage: "https://example.test/path/503"
             )
         )
+        XCTAssertNil(
+            DiagnosticFailureCategory.safeHTTPStatusCode(
+                userVisibleMessage: "Provider returned HTTP 5030"
+            )
+        )
+        XCTAssertEqual(
+            ProviderAuthMethod.allCases.map(DiagnosticAuthenticationMethod.init),
+            [.apiKey, .browserSession, .cliToken]
+        )
 
         do {
             _ = try JSONDecoder().decode(Int.self, from: Data(#""not-an-int""#.utf8))

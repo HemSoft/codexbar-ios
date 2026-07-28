@@ -53,7 +53,14 @@ enum DiagnosticAuthenticationMethod: String, Equatable, Sendable {
     case cliToken
 
     init(_ method: ProviderAuthMethod) {
-        self = Self(rawValue: method.rawValue) ?? .browserSession
+        switch method {
+        case .apiKey:
+            self = .apiKey
+        case .browserSession:
+            self = .browserSession
+        case .cliToken:
+            self = .cliToken
+        }
     }
 
     var displayName: String {
@@ -195,6 +202,7 @@ enum DiagnosticFailureCategory: String, CaseIterable, Equatable, Sendable {
         guard
             digits.count == 3,
             digits.allSatisfy(\.isNumber),
+            suffix.dropFirst(3).first?.isNumber != true,
             let code = Int(digits),
             (100...599).contains(code)
         else {
