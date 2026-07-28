@@ -105,12 +105,14 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
             return creditsRemaining
         }
 
-        if providerID == .cursor {
-            return bars.first(where: {
+        if providerID == .cursor,
+           let total = bars.first(where: {
                 $0.stableKey == "total"
                     || ($0.stableKey == nil
                         && $0.label.caseInsensitiveCompare("Total") == .orderedSame)
-            })?.fractionUsed
+           })
+        {
+            return total.fractionUsed
         }
 
         if let usage = bars.map(\.fractionUsed).max() {
@@ -456,11 +458,14 @@ public final class UsageHistoryStore: ObservableObject {
         snapshots: [UsageHistorySnapshot]
     ) -> UsageHistorySeries {
         if result.providerID == .cursor {
-            return usageSeries(
+            let totalSeries = usageSeries(
                 accountID: result.accountID,
                 snapshots: snapshots,
                 stableKey: "total"
             )
+            return totalSeries.points.isEmpty
+                ? aggregateUsageSeries(accountID: result.accountID, snapshots: snapshots)
+                : totalSeries
         }
 
         return aggregateUsageSeries(accountID: result.accountID, snapshots: snapshots)

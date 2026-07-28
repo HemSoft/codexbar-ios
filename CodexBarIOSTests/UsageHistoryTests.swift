@@ -195,6 +195,23 @@ final class UsageHistoryTests: XCTestCase {
             store.historySeriesOptions(for: reorderedAndRelabeledResult).map(\.id),
             options.map(\.id)
         )
+
+        let resultWithoutTotal = ProviderUsageResult(
+            accountID: "cursor.partial",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Current without Total",
+            bars: [
+                UsageBar(stableKey: "auto", label: "Auto", used: 29, limit: 100),
+                UsageBar(stableKey: "api", label: "API", used: 100, limit: 100),
+            ],
+            fetchedAt: fetchedAt
+        )
+        store.record(results: [resultWithoutTotal], now: fetchedAt)
+
+        let partialSnapshot = try XCTUnwrap(store.snapshots(for: resultWithoutTotal.accountID).first)
+        XCTAssertEqual(partialSnapshot.primaryValue, 1)
+        XCTAssertEqual(store.historySeries(for: resultWithoutTotal).points.map(\.value), [1])
     }
 
     @MainActor
