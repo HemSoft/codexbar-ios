@@ -52,14 +52,25 @@ jobs:
           echo "id=$device_id" >> "$GITHUB_OUTPUT"
 
       - name: Run iOS unit tests
+        id: ios-tests
         run: |
           set -o pipefail
           xcodebuild \
             -project CodexBarIOS.xcodeproj \
             -scheme CodexBarIOS \
             -destination "platform=iOS Simulator,id=${{ steps.ios-destination.outputs.id }}" \
+            -resultBundlePath "$RUNNER_TEMP/CodexBarIOSTests.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             test
+
+      - name: Preserve iOS test diagnostics
+        if: ${{ failure() && steps.ios-tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: CodexBarIOSTests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/CodexBarIOSTests.xcresult
+          if-no-files-found: warn
+          retention-days: 14
 
   watch-tests:
     name: watchOS tests

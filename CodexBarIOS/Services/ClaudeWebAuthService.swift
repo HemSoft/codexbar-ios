@@ -69,13 +69,16 @@ public final class ClaudeWebAuthService: Sendable {
     private static let requestedScope = "org:create_api_key user:profile user:inference user:sessions:claude_code"
     private let session: URLSession
     private let callbackTimeoutNanoseconds: UInt64
+    private let preferredCallbackPorts: [UInt16]
 
     public init(
         session: URLSession = .shared,
-        callbackTimeoutNanoseconds: UInt64 = 180_000_000_000
+        callbackTimeoutNanoseconds: UInt64 = 180_000_000_000,
+        preferredCallbackPorts: [UInt16] = [1461, 1462, 1463]
     ) {
         self.session = session
         self.callbackTimeoutNanoseconds = callbackTimeoutNanoseconds
+        self.preferredCallbackPorts = preferredCallbackPorts
     }
 
     @MainActor
@@ -89,7 +92,7 @@ public final class ClaudeWebAuthService: Sendable {
         let pkce = Self.makePKCEPair()
         reportStage("Starting local callback server...")
         let callbackServer = try await LoopbackOAuthCallbackServer<AuthError>.start(
-            preferredPorts: [1461, 1462, 1463],
+            preferredPorts: preferredCallbackPorts,
             expectedState: state,
             callbackPath: Self.callbackPath,
             bindHost: .localhost,

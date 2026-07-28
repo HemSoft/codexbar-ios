@@ -109,13 +109,16 @@ public final class CopilotWebAuthService: Sendable {
     private static let requestedScope = "repo read:org gist"
     private let session: URLSession
     private let callbackTimeoutNanoseconds: UInt64
+    private let preferredCallbackPorts: [UInt16]
 
     public init(
         session: URLSession = .shared,
-        callbackTimeoutNanoseconds: UInt64 = 180_000_000_000
+        callbackTimeoutNanoseconds: UInt64 = 180_000_000_000,
+        preferredCallbackPorts: [UInt16] = [1456, 1458, 1460]
     ) {
         self.session = session
         self.callbackTimeoutNanoseconds = callbackTimeoutNanoseconds
+        self.preferredCallbackPorts = preferredCallbackPorts
     }
 
     @MainActor
@@ -135,7 +138,7 @@ public final class CopilotWebAuthService: Sendable {
         let state = Self.randomBase64URL(byteCount: 32)
         let pkce = Self.makePKCEPair()
         let callbackServer = try await LoopbackOAuthCallbackServer<AuthError>.start(
-            preferredPorts: [1456, 1458, 1460],
+            preferredPorts: preferredCallbackPorts,
             expectedState: state,
             callbackPath: Self.callbackPath,
             bindHost: .ipv4,

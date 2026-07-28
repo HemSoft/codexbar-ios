@@ -803,16 +803,15 @@ final class ConfigurationAndAuthTests: XCTestCase {
         ).utf8)
         let splitOffsets = [1, 37, request.count - 1]
 
-        for (index, splitOffset) in splitOffsets.enumerated() {
-            let port = UInt16(35_187 + index)
-            let server = try await makeLoopbackCallbackServer(preferredPorts: [port])
+        for splitOffset in splitOffsets {
+            let server = try await makeLoopbackCallbackServer(preferredPorts: [0])
             defer { server.cancel() }
             let callbackTask = Task {
                 try await server.waitForCallback(timeoutNanoseconds: 2_000_000_000)
             }
 
             let response = try await sendRawHTTPRequest(
-                port: port,
+                port: server.port,
                 chunks: [Data(request[..<splitOffset]), Data(request[splitOffset...])]
             )
             let callbackURL = try await callbackTask.value
@@ -827,16 +826,29 @@ final class ConfigurationAndAuthTests: XCTestCase {
         }
     }
 
+    func testLoopbackOAuthCallbackServersAllocateDistinctEphemeralPorts() async throws {
+        async let firstServer = makeLoopbackCallbackServer(preferredPorts: [0])
+        async let secondServer = makeLoopbackCallbackServer(preferredPorts: [0])
+        let (first, second) = try await (firstServer, secondServer)
+        defer {
+            first.cancel()
+            second.cancel()
+        }
+
+        XCTAssertNotEqual(first.port, 0)
+        XCTAssertNotEqual(second.port, 0)
+        XCTAssertNotEqual(first.port, second.port)
+    }
+
     func testLoopbackOAuthCallbackServerRejectsOversizedRequest() async throws {
-        let port: UInt16 = 35_190
         let server = try await makeLoopbackCallbackServer(
-            preferredPorts: [port],
+            preferredPorts: [0],
             maximumRequestLength: 64
         )
         defer { server.cancel() }
 
         let response = try await sendRawHTTPRequest(
-            port: port,
+            port: server.port,
             chunks: [Data(("GET /callback?" + String(repeating: "x", count: 128)).utf8)]
         )
 
@@ -844,12 +856,11 @@ final class ConfigurationAndAuthTests: XCTestCase {
     }
 
     func testLoopbackOAuthCallbackServerRejectsPrematurelyClosedRequest() async throws {
-        let port: UInt16 = 35_191
-        let server = try await makeLoopbackCallbackServer(preferredPorts: [port])
+        let server = try await makeLoopbackCallbackServer(preferredPorts: [0])
         defer { server.cancel() }
 
         let response = try await sendRawHTTPRequest(
-            port: port,
+            port: server.port,
             chunks: [Data("GET /callback?code=authorization-code".utf8)],
             finishWriting: true
         )
@@ -877,7 +888,10 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
     @MainActor
     func testCodexBrowserSignInUsesLocalhostRedirectAndTimesOut() async throws {
-        let service = CodexWebAuthService(callbackTimeoutNanoseconds: 10_000_000)
+        let service = CodexWebAuthService(
+            callbackTimeoutNanoseconds: 10_000_000,
+            preferredCallbackPorts: [0]
+        )
         var presentedURL: URL?
 
         do {
@@ -1017,7 +1031,10 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
     @MainActor
     func testCopilotBrowserSignInUsesRegisteredLoopbackRedirectAndTimesOut() async throws {
-        let service = CopilotWebAuthService(callbackTimeoutNanoseconds: 10_000_000)
+        let service = CopilotWebAuthService(
+            callbackTimeoutNanoseconds: 10_000_000,
+            preferredCallbackPorts: [0]
+        )
         let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
         var presentedURL: URL?
 
@@ -1071,13 +1088,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
     @MainActor
     func testCopilotBrowserSignInSanitizesSuccessfulTokenErrorResponse() async throws {
-        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
-        urlSessionConfiguration.protocolClasses = [ConfigurationAndAuthMockURLProtocol.self]
-        let session = URLSession(configuration: urlSessionConfiguration)
-        let service = CopilotWebAuthService(session: session, callbackTimeoutNanoseconds: 1_000_000_000)
-        let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
-
-        ConfigurationAndAuthMockURLProtocol.handler = { request in
+        let sessionFixture = IsolatedTestURLSession { request in
             XCTAssertEqual(request.url?.absoluteString, "https://github.com/login/oauth/access_token")
             return (
                 HTTPURLResponse(
@@ -1091,9 +1102,13 @@ final class ConfigurationAndAuthTests: XCTestCase {
                 )
             )
         }
-        defer {
-            ConfigurationAndAuthMockURLProtocol.handler = nil
-        }
+        defer { sessionFixture.invalidate() }
+        let service = CopilotWebAuthService(
+            session: sessionFixture.session,
+            callbackTimeoutNanoseconds: 1_000_000_000,
+            preferredCallbackPorts: [0]
+        )
+        let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
 
         do {
             _ = try await service.signIn(configuration: configuration) { authorizationURL in
@@ -1155,7 +1170,10 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
     @MainActor
     func testClaudeBrowserSignInUsesLocalhostRedirectAndTimesOut() async throws {
-        let service = ClaudeWebAuthService(callbackTimeoutNanoseconds: 10_000_000)
+        let service = ClaudeWebAuthService(
+            callbackTimeoutNanoseconds: 10_000_000,
+            preferredCallbackPorts: [0]
+        )
         var presentedURL: URL?
 
         do {
@@ -1174,7 +1192,10 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
     @MainActor
     func testClaudeBrowserSignInCancellationThrowsCancellationError() async throws {
-        let service = ClaudeWebAuthService(callbackTimeoutNanoseconds: 30_000_000_000)
+        let service = ClaudeWebAuthService(
+            callbackTimeoutNanoseconds: 30_000_000_000,
+            preferredCallbackPorts: [0]
+        )
         var presentedURL: URL?
         let authorizationPresented = expectation(description: "Claude authorization URL presented")
         let signInTask = Task {
@@ -1252,12 +1273,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
     @MainActor
     func testClaudeBrowserSignInSanitizesTokenExchangeFailure() async throws {
-        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
-        urlSessionConfiguration.protocolClasses = [ConfigurationAndAuthMockURLProtocol.self]
-        let session = URLSession(configuration: urlSessionConfiguration)
-        let service = ClaudeWebAuthService(session: session, callbackTimeoutNanoseconds: 1_000_000_000)
-
-        ConfigurationAndAuthMockURLProtocol.handler = { request in
+        let sessionFixture = IsolatedTestURLSession { request in
             XCTAssertEqual(request.url?.absoluteString, "https://platform.claude.com/v1/oauth/token")
             return (
                 HTTPURLResponse(
@@ -1269,9 +1285,12 @@ final class ConfigurationAndAuthTests: XCTestCase {
                 Data(#"{"error":"invalid_grant","error_description":"code=secret-code client_id=secret-client"}"#.utf8)
             )
         }
-        defer {
-            ConfigurationAndAuthMockURLProtocol.handler = nil
-        }
+        defer { sessionFixture.invalidate() }
+        let service = ClaudeWebAuthService(
+            session: sessionFixture.session,
+            callbackTimeoutNanoseconds: 1_000_000_000,
+            preferredCallbackPorts: [0]
+        )
 
         do {
             _ = try await service.signIn { authorizationURL in
