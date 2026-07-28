@@ -5,7 +5,7 @@ struct InstalledAppVersion: Equatable, Sendable {
     let buildNumber: String
 
     var displayText: String {
-        "Version \(marketingVersion) (\(buildNumber))"
+        "Version \(marketingVersion)"
     }
 
     static func current(bundle: Bundle = .main) -> InstalledAppVersion {
