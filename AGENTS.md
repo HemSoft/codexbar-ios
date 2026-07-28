@@ -18,12 +18,31 @@ such and may be stale — re-verify before relying on them.
 
 ## Contents
 
+- [Required Issue-First Workflow](#required-issue-first-workflow)
 - [Changelog and Release History](#changelog-and-release-history)
 - [Build and Test](#build-and-test)
 - [Pull Request Reviewers](#pull-request-reviewers)
 - [Deploying to a Connected iPhone](#deploying-to-a-connected-iphone)
 - [Signing Recovery](#signing-recovery)
 - [Browser Auth Takeaways](#browser-auth-takeaways)
+
+## Required Issue-First Workflow
+
+Every repository change must begin with a GitHub issue. This requirement applies
+to code, documentation, configuration, build, and process changes, including
+changes to this `AGENTS.md` file.
+
+Before editing files:
+
+1. Create or identify the GitHub issue that defines the change. If a request
+   arrives without an existing issue, create one before making any edit.
+2. Keep the `main` worktree clean and synchronize `main` with `origin/main`.
+   Never make implementation changes directly on `main`, and never leave
+   uncommitted implementation work there.
+3. Create an issue-specific branch from the synchronized default branch and
+   reference the issue in the branch and pull-request workflow.
+4. Deliver the change through a pull request that links the issue and is the
+   only path for returning the work to `main`.
 
 ## Changelog and Release History
 
