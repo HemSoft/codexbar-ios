@@ -741,6 +741,25 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    func testProblemReportProviderValuesMatchEveryIssueFormDropdownOption() {
+        XCTAssertEqual(
+            Dictionary(
+                uniqueKeysWithValues: ProviderID.allCases.map {
+                    ($0, $0.problemReportFormValue)
+                }
+            ),
+            [
+                .codex: "ChatGPT / Codex",
+                .claude: "Claude",
+                .cursor: "Cursor",
+                .copilot: "GitHub Copilot",
+                .openRouter: "OpenRouter",
+                .openCodeZen: "OpenCode Go / Zen",
+                .moonshot: "Moonshot (Kimi)",
+            ]
+        )
+    }
+
     func testFeedbackSupportURLsCannotIncludeAccountConfigurationOrSecrets() {
         let context = FeedbackSupportContext(
             appVersion: "1.2",

@@ -360,6 +360,27 @@ struct PrivacySafeDiagnosticContext: Equatable, Identifiable, Sendable {
     }
 }
 
+extension ProviderID {
+    var problemReportFormValue: String {
+        switch self {
+        case .codex:
+            "ChatGPT / Codex"
+        case .copilot:
+            "GitHub Copilot"
+        case .claude:
+            "Claude"
+        case .openRouter:
+            "OpenRouter"
+        case .openCodeZen:
+            "OpenCode Go / Zen"
+        case .moonshot:
+            "Moonshot (Kimi)"
+        case .cursor:
+            "Cursor"
+        }
+    }
+}
+
 enum PrivacySafeDiagnosticBuilder {
     static func systemDetails(_ context: FeedbackSupportContext) -> String {
         "CodexBar \(safeSystemValue(context.appVersion)) (\(safeSystemValue(context.buildNumber))), \(safeSystemValue(context.operatingSystemName)) \(safeSystemValue(context.operatingSystemVersion)), \(safeSystemValue(context.deviceCategory))"
@@ -533,7 +554,8 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
                 URLQueryItem(name: "affected-surface", value: context.surface.displayName),
                 URLQueryItem(
                     name: "affected-provider",
-                    value: context.providerID?.displayName ?? "Not provider-specific"
+                    value: context.providerID?.problemReportFormValue
+                        ?? "Not provider-specific"
                 ),
                 URLQueryItem(name: "privacy-safe-diagnostics", value: summary),
             ]
