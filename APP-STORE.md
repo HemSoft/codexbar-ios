@@ -47,13 +47,19 @@ Reference links:
 
 ## Release Work
 
+Version 1.1 is already public. Checked items below record completed release
+history; unchecked items are follow-up for a future release and are not
+outstanding claims about the shipped 1.1 submission.
+
 ### 1. App Store Connect Setup
 
 - [x] Confirm Apple Developer Program membership and team ownership. Membership confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - [x] Create the App Store Connect app record. Created as `CodexBar Usage Monitor`, app ID `6787769891`, on 2026-07-05.
 - [x] Confirm bundle ID, SKU, primary language, category, and age rating. App Store Connect uses bundle ID `com.hemsoft.CodexBarIOS`, SKU `codexbar-ios`, primary language `English (U.S.)`, primary category `Developer Tools`, secondary category `Utilities`, and age rating `4+`.
 - [x] Decide initial availability: iPhone and iPad.
-- [ ] Decide pricing: likely free unless a paid distribution plan is introduced.
+- [ ] Revisit pricing before a future release if a paid distribution plan is
+  introduced; version 1.1 remains available under its current storefront
+  pricing.
 
 ### 2. Production Signing And Upload
 
@@ -207,33 +213,45 @@ to the App Store Connect version 1.1 submission on 2026-07-11:
    upload. The prepared subtitle required no adjustment, and 1.1 release notes
    were added from `fastlane/metadata/en-US/release_notes.txt`.
 
-### 4. Privacy And Data Handling
+### 4. Privacy And Data Handling Follow-Up
 
-- [ ] Inventory all network calls made by provider fetchers.
+- [ ] Re-audit all network calls made by provider fetchers before the next
+  release.
 - [x] Confirm credentials are stored locally in Keychain and are not sent to HemSoft servers.
 - [x] Confirm widget data is stored only in the app group container.
 - [x] Confirm analytics/crash reporting status. No analytics, advertising, or crash-reporting SDKs are present in the current release.
 - [x] Draft privacy policy covering local credentials, third-party provider API calls, billing/usage data, and data retention.
-- [ ] Complete App Store Connect privacy nutrition labels.
-- [ ] Review third-party packages and SDKs for privacy manifests or signature requirements.
+- [ ] Re-audit App Store Connect privacy nutrition labels before the next
+  submission.
+- [ ] Re-audit third-party packages and SDKs for privacy manifests or signature
+  requirements before the next submission.
 
-### 5. Brand And Legal Review
+### 5. Brand And Legal Follow-Up
 
-- [ ] Audit provider logos and names used in the app and widgets.
-- [ ] Confirm logo usage is allowed under each provider's brand guidelines.
-- [ ] Replace any risky brand asset with a permitted mark or neutral in-app icon.
-- [ ] Add disclaimers where needed that CodexBar is not affiliated with tracked providers.
-- [ ] Confirm any provider-name wording (Codex, Copilot, Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot (Kimi)) is accurate and not misleading.
+- [ ] Re-audit provider logos and names used in the app and widgets before the
+  next release.
+- [ ] Re-confirm logo usage under each provider's current brand guidelines.
+- [ ] Replace any newly identified risky brand asset with a permitted mark or
+  neutral in-app icon.
+- [ ] Re-check non-affiliation disclaimers before the next submission.
+- [ ] Re-confirm provider-name wording (Codex, Copilot, Claude, Cursor,
+  OpenRouter, OpenCode Go + Zen, Moonshot (Kimi)) before the next submission.
 
-### 6. App Review Readiness
+The completed content-rights declaration in Final Submission records the 1.1
+submission. These unchecked items are a broader future-release brand audit.
+
+### 6. App Review Readiness For A Future Release
 
 - [x] Write App Review notes explaining that CodexBar is a local companion dashboard for user-owned provider accounts.
 - [x] Explain that provider credentials remain on device in Keychain.
 - [x] Explain which features require user-owned third-party accounts and API keys.
-- [ ] Provide a reviewer path for seeing the dashboard without real paid accounts, if possible.
-- [ ] If no demo mode is appropriate, provide a concise demo video showing configured providers, widgets, and refresh behavior.
-- [ ] Verify all error states are helpful and do not strand the user.
-- [ ] Verify settings can add, edit, refresh, and remove each provider cleanly.
+- [ ] Provide a reviewer path for seeing the dashboard without real paid
+  accounts in a future submission, if possible.
+- [ ] If no demo mode is appropriate, provide a concise demo video for a future
+  submission showing configured providers, widgets, and refresh behavior.
+- [ ] Re-verify all error states before the next submission.
+- [ ] Re-verify settings can add, edit, refresh, and remove each provider before
+  the next submission.
 - [x] Provide a persistent Settings Feedback & Support destination for writing
   an App Store review and opening structured public support channels.
 - [x] Review diagnostic reporting against App Store privacy answers: reports
@@ -243,16 +261,19 @@ to the App Store Connect version 1.1 submission on 2026-07-11:
 - [x] Gate native rating requests behind sustained successful use, with no
   first-launch, onboarding, automatic-refresh, incentive, or sentiment gate.
 
-### 7. TestFlight
+### 7. TestFlight History And Future Verification
 
 - [x] Upload the first TestFlight build. Build `1.0 (1)` uploaded successfully from Xcode on 2026-07-05 and later reported `VALID` by App Store Connect.
 - [x] Install from TestFlight on iPhone.
 - [x] Install from TestFlight on iPad.
-- [ ] Verify widgets after TestFlight install.
-- [ ] Verify provider credentials survive app restarts.
-- [ ] Verify background/widget refresh behavior.
-- [ ] Verify accessibility basics: Dynamic Type, VoiceOver labels, contrast, and tappable target sizes.
-- [ ] Collect crash logs and fix any launch, widget, or auth issues.
+- [ ] Re-verify widgets in TestFlight before the next release.
+- [ ] Re-verify provider credentials survive app restarts before the next
+  release.
+- [ ] Re-verify background/widget refresh behavior before the next release.
+- [ ] Re-verify accessibility basics before the next release: Dynamic Type,
+  VoiceOver labels, contrast, and tappable target sizes.
+- [ ] Review TestFlight crash logs and fix any launch, widget, or auth issues
+  before the next release.
 
 Review-request test note: development-signed builds expose **Test Rating
 Prompt** in Settings and StoreKit displays the native request for UI testing.
