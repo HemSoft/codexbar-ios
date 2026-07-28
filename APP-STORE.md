@@ -2,7 +2,7 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-07-24
+Status last reviewed: 2026-07-28
 
 ## Current Status
 
@@ -13,9 +13,9 @@ Status last reviewed: 2026-07-24
 - Development signing is stable through the dedicated CodexBar keychain documented in `AGENTS.md`.
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
-- The expanded Issue #22 six-scene screenshot set was regenerated, reviewed at full size, and synced to the App Store Connect 1.1 draft for iPhone and iPad on 2026-07-11 using safe demo data.
-- App Store production distribution upload has succeeded for build `1.0 (1)`, and App Store Connect reports the build as valid and App Store eligible.
-- Build `1.0 (1)` is selected for the App Store version.
+- The expanded Issue #22 six-scene screenshot set was regenerated, reviewed
+  at full size, and synced to the App Store Connect version 1.1 submission for
+  iPhone and iPad on 2026-07-11 using safe demo data.
 - Product metadata, support URL, privacy policy URL, copyright, and App Review notes have been added in App Store Connect.
 - TestFlight install has been confirmed by the user on iPhone and iPad.
 - App Store Connect app information is set to primary category `Developer Tools`, secondary category `Utilities`, and age rating `4+`.
@@ -23,10 +23,10 @@ Status last reviewed: 2026-07-24
   both social-media capabilities set to `No`; the calculated rating remains
   `4+`.
 - Release archive `1.1 (1)` was uploaded to App Store Connect on 2026-07-15,
-  finished processing, and is selected in the version 1.1 draft submission.
-- Version 1.1 build `1.1 (1)` was submitted to App Review on 2026-07-16 and is
-  `Waiting for Review`. The obsolete review sign-in requirement and personal
-  credentials were removed because CodexBar opens without a CodexBar account.
+  finished processing, and was selected for the version 1.1 submission.
+- Version 1.1 build `1.1 (1)` is publicly available. Apple's public listing
+  reports a release date of 2026-07-16, re-verified on 2026-07-28. The
+  repository's 1.1.0 changelog snapshot remains dated 2026-07-15.
 
 ## Apple Requirements To Keep Current
 
@@ -47,21 +47,31 @@ Reference links:
 
 ## Release Work
 
+Version 1.1 is already public. Checked items below record completed release
+history; unchecked items are follow-up for a future release and are not
+outstanding claims about the shipped 1.1 submission.
+
 ### 1. App Store Connect Setup
 
 - [x] Confirm Apple Developer Program membership and team ownership. Membership confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - [x] Create the App Store Connect app record. Created as `CodexBar Usage Monitor`, app ID `6787769891`, on 2026-07-05.
 - [x] Confirm bundle ID, SKU, primary language, category, and age rating. App Store Connect uses bundle ID `com.hemsoft.CodexBarIOS`, SKU `codexbar-ios`, primary language `English (U.S.)`, primary category `Developer Tools`, secondary category `Utilities`, and age rating `4+`.
 - [x] Decide initial availability: iPhone and iPad.
-- [ ] Decide pricing: likely free unless a paid distribution plan is introduced.
+- [ ] Revisit pricing before a future release if a paid distribution plan is
+  introduced; version 1.1 remains available under its current storefront
+  pricing.
 
 ### 2. Production Signing And Upload
 
 - [x] Confirm the project has App Store distribution signing available for the app and widget extension.
-- [x] Archive a release build from Xcode or `xcodebuild`. Release archive created for version `1.0` build `1`.
+- [x] Archive a release build from Xcode or `xcodebuild`. Release archive
+  created for version `1.1` build `1` on 2026-07-15; version `1.0` build `1`
+  was the earlier initial-release archive.
 - [x] Validate the archive.
-- [x] Upload the build to App Store Connect. Build `1.0 (1)` uploaded successfully.
-- [x] Confirm TestFlight processing completes for both app and widget extension. App Store Connect reports uploaded build `1.0 (1)` as valid.
+- [x] Upload the build to App Store Connect. Build `1.1 (1)` uploaded
+  successfully on 2026-07-15.
+- [x] Confirm TestFlight processing completes for both app and widget
+  extension. App Store Connect finished processing build `1.1 (1)`.
 
 ### 3. Product Page Assets
 
@@ -69,19 +79,24 @@ Reference links:
 - [x] Prepare promotional text in `fastlane/metadata/en-US/promotional_text.txt`.
 - [x] Prepare the full app description in `fastlane/metadata/en-US/description.txt`.
 - [x] Prepare keywords in `fastlane/metadata/en-US/keywords.txt`.
-- [x] Sync the Issue #22 promotional text, description, and keywords to App Store Connect and verify their previews. The 1.1 draft was updated and verified on 2026-07-11.
+- [x] Sync the Issue #22 promotional text, description, and keywords to App
+  Store Connect and verify their previews. The version 1.1 submission was
+  updated and verified on 2026-07-11.
 - [x] Provide support URL and add it to App Store Connect. Public support page is `https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md`.
 - [ ] Provide marketing URL if desired.
 - [x] Provide privacy policy URL and add it to App Store Connect. Public privacy policy is `https://github.com/HemSoft/codexbar-ios/blob/main/PRIVACY.md`.
 - [x] Prepare screenshots for required iPhone sizes. Six deterministic iPhone 17 Pro Max images at `1320x2868` were generated and reviewed at full size on 2026-07-11.
 - [x] Prepare screenshots for required iPad sizes. Six deterministic iPad Pro 13-inch (M5) images at `2064x2752` were generated and reviewed at full size on 2026-07-11.
-- [x] Upload the Issue #22 iPhone and iPad screenshot sets to App Store Connect and verify their order and cropping. Both device sets contain six ordered screenshots in the 1.1 draft as of 2026-07-11.
+- [x] Upload the Issue #22 iPhone and iPad screenshot sets to App Store Connect
+  and verify their order and cropping. Both device sets contained six ordered
+  screenshots in the version 1.1 submission on 2026-07-11.
 - [ ] Verify Apple Watch screenshot handling for the next watch-enabled App
   Store submission. The embedded watchOS app target is present, but neither an
   Apple Watch screenshot requirement nor a completed watch screenshot set has
   been verified in App Store Connect as of 2026-07-24.
-- [ ] Consider an app preview video after the first TestFlight build is stable.
-- [ ] Verify the App Store icon renders correctly and has no transparency.
+- [ ] Consider an app preview video for a future release.
+- [ ] Verify the App Store icon renders correctly and has no transparency
+  before the next release submission.
 
 ### Product Claim Matrix
 
@@ -180,14 +195,14 @@ After regeneration, review the full-size PNGs before syncing:
 ### App Store Connect Sync And Preview
 
 Issue #22 metadata and screenshots were generated, locally verified, and synced
-to the App Store Connect 1.1 draft on 2026-07-11:
+to the App Store Connect version 1.1 submission on 2026-07-11:
 
 1. [x] Regenerate screenshots with the command above.
 2. [x] Run local validation for shell syntax, metadata limits, PNG dimensions,
    and full-size visual quality.
 3. [x] Sync `fastlane/metadata/en-US` and `fastlane/screenshots/en-US` to App Store
-   Connect. The metadata and twelve screenshots were added to the 1.1 draft in
-   Safari on 2026-07-11.
+   Connect. The metadata and twelve screenshots were added to the version 1.1
+   submission in Safari on 2026-07-11.
 4. [x] Preview the iPhone and iPad product pages in App Store Connect.
 5. [x] Verify the subtitle, promotional text, description, keywords, and ordered
    screenshots render correctly in the preview.
@@ -198,33 +213,45 @@ to the App Store Connect 1.1 draft on 2026-07-11:
    upload. The prepared subtitle required no adjustment, and 1.1 release notes
    were added from `fastlane/metadata/en-US/release_notes.txt`.
 
-### 4. Privacy And Data Handling
+### 4. Privacy And Data Handling Follow-Up
 
-- [ ] Inventory all network calls made by provider fetchers.
+- [ ] Re-audit all network calls made by provider fetchers before the next
+  release.
 - [x] Confirm credentials are stored locally in Keychain and are not sent to HemSoft servers.
 - [x] Confirm widget data is stored only in the app group container.
 - [x] Confirm analytics/crash reporting status. No analytics, advertising, or crash-reporting SDKs are present in the current release.
 - [x] Draft privacy policy covering local credentials, third-party provider API calls, billing/usage data, and data retention.
-- [ ] Complete App Store Connect privacy nutrition labels.
-- [ ] Review third-party packages and SDKs for privacy manifests or signature requirements.
+- [ ] Re-audit App Store Connect privacy nutrition labels before the next
+  submission.
+- [ ] Re-audit third-party packages and SDKs for privacy manifests or signature
+  requirements before the next submission.
 
-### 5. Brand And Legal Review
+### 5. Brand And Legal Follow-Up
 
-- [ ] Audit provider logos and names used in the app and widgets.
-- [ ] Confirm logo usage is allowed under each provider's brand guidelines.
-- [ ] Replace any risky brand asset with a permitted mark or neutral in-app icon.
-- [ ] Add disclaimers where needed that CodexBar is not affiliated with tracked providers.
-- [ ] Confirm any provider-name wording (Codex, Copilot, Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot (Kimi)) is accurate and not misleading.
+- [ ] Re-audit provider logos and names used in the app and widgets before the
+  next release.
+- [ ] Re-confirm logo usage under each provider's current brand guidelines.
+- [ ] Replace any newly identified risky brand asset with a permitted mark or
+  neutral in-app icon.
+- [ ] Re-check non-affiliation disclaimers before the next submission.
+- [ ] Re-confirm provider-name wording (Codex, Copilot, Claude, Cursor,
+  OpenRouter, OpenCode Go + Zen, Moonshot (Kimi)) before the next submission.
 
-### 6. App Review Readiness
+The completed content-rights declaration in Final Submission records the 1.1
+submission. These unchecked items are a broader future-release brand audit.
+
+### 6. App Review Readiness For A Future Release
 
 - [x] Write App Review notes explaining that CodexBar is a local companion dashboard for user-owned provider accounts.
 - [x] Explain that provider credentials remain on device in Keychain.
 - [x] Explain which features require user-owned third-party accounts and API keys.
-- [ ] Provide a reviewer path for seeing the dashboard without real paid accounts, if possible.
-- [ ] If no demo mode is appropriate, provide a concise demo video showing configured providers, widgets, and refresh behavior.
-- [ ] Verify all error states are helpful and do not strand the user.
-- [ ] Verify settings can add, edit, refresh, and remove each provider cleanly.
+- [ ] Provide a reviewer path for seeing the dashboard without real paid
+  accounts in a future submission, if possible.
+- [ ] If no demo mode is appropriate, provide a concise demo video for a future
+  submission showing configured providers, widgets, and refresh behavior.
+- [ ] Re-verify all error states before the next submission.
+- [ ] Re-verify settings can add, edit, refresh, and remove each provider before
+  the next submission.
 - [x] Provide a persistent Settings Feedback & Support destination for writing
   an App Store review and opening structured public support channels.
 - [x] Review diagnostic reporting against App Store privacy answers: reports
@@ -234,16 +261,19 @@ to the App Store Connect 1.1 draft on 2026-07-11:
 - [x] Gate native rating requests behind sustained successful use, with no
   first-launch, onboarding, automatic-refresh, incentive, or sentiment gate.
 
-### 7. TestFlight
+### 7. TestFlight History And Future Verification
 
 - [x] Upload the first TestFlight build. Build `1.0 (1)` uploaded successfully from Xcode on 2026-07-05 and later reported `VALID` by App Store Connect.
 - [x] Install from TestFlight on iPhone.
 - [x] Install from TestFlight on iPad.
-- [ ] Verify widgets after TestFlight install.
-- [ ] Verify provider credentials survive app restarts.
-- [ ] Verify background/widget refresh behavior.
-- [ ] Verify accessibility basics: Dynamic Type, VoiceOver labels, contrast, and tappable target sizes.
-- [ ] Collect crash logs and fix any launch, widget, or auth issues.
+- [ ] Re-verify widgets in TestFlight before the next release.
+- [ ] Re-verify provider credentials survive app restarts before the next
+  release.
+- [ ] Re-verify background/widget refresh behavior before the next release.
+- [ ] Re-verify accessibility basics before the next release: Dynamic Type,
+  VoiceOver labels, contrast, and tappable target sizes.
+- [ ] Review TestFlight crash logs and fix any launch, widget, or auth issues
+  before the next release.
 
 Review-request test note: development-signed builds expose **Test Rating
 Prompt** in Settings and StoreKit displays the native request for UI testing.
@@ -265,9 +295,10 @@ use the persistent **Rate CodexBar** link instead.
   account and that live provider cards require reviewer-owned provider
   credentials; the unnecessary review sign-in fields were removed.
 - [x] Submit for review. Version 1.1 build `1.1 (1)` was submitted on
-  2026-07-16 and is `Waiting for Review`; App Store Connect notes that review
-  can take up to 48 hours.
-- [ ] Track reviewer questions or rejections here until approved.
+  2026-07-16.
+- [x] Track the submission through approval and release. Apple's public
+  listing reports version 1.1 as released on 2026-07-16; the live status was
+  re-verified on 2026-07-28.
 
 ## CodexBar-Specific Risks
 
@@ -275,9 +306,9 @@ use the persistent **Rate CodexBar** link instead.
 - Some providers may block automation-like auth flows. Review notes should clarify that CodexBar uses user-supplied credentials/API keys to fetch the user's own account data.
 - Brand asset permissions need a careful pass before submission.
 - Widgets must continue to show useful stale/error states because iOS controls refresh timing.
-- The OpenCode Zen balance path is currently viable for this development environment because the needed values were recovered from an existing working setup. Before public release, confirm a clean setup path for new Mac-only or iPhone-only users.
+- The OpenCode Zen balance path is currently viable for this development environment because the needed values were recovered from an existing working setup. Before the next release, confirm a clean setup path for new Mac-only or iPhone-only users.
 
-## Nice-To-Have Before First Public Release
+## Nice-To-Have For A Future Release
 
 - [ ] In-app demo/sample mode for App Review and first-run exploration.
 - [ ] One-tap diagnostics export that redacts secrets.
