@@ -461,6 +461,10 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var presentsDiagnosticPreview: Bool {
+        self == .reportProblem
+    }
+
     var systemImage: String {
         switch self {
         case .reportProblem:

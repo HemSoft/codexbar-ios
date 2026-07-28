@@ -46,7 +46,6 @@ struct DiagnosticReportView: View {
                     Text(summary)
                         .font(.callout.monospaced())
                         .textSelection(.enabled)
-                        .accessibilityLabel("Privacy-safe diagnostic preview")
                 }
 
                 Section {

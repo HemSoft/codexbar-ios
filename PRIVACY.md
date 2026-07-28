@@ -56,9 +56,10 @@ copies the preview instead of opening it.
 CodexBar does not read or add provider credentials, account labels, email
 addresses, account or device identifiers, balances, usage history, raw errors
 or provider responses, widget selections, or Apple Watch snapshots to the
-diagnostic or link. Nothing is uploaded or sent to GitHub until you explicitly
-open the public bug form and submit it. **Suggest an Improvement** continues to
-prefill only general app and device details.
+diagnostic or link. No issue is submitted to GitHub until you explicitly submit
+the public bug form; opening the prefilled form transfers its query parameters
+to GitHub. **Suggest an Improvement** continues to prefill only general app and
+device details.
 
 ## Sharing And Sale Of Data
 

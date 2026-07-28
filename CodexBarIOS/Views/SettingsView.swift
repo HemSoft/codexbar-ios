@@ -663,24 +663,30 @@ private struct FeedbackSupportView: View {
 
                             Spacer(minLength: 8)
 
-                            VStack(alignment: .trailing, spacing: 3) {
-                                Text(destination.serviceName)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Image(systemName: "arrow.up.forward")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityHidden(true)
+                            if !destination.presentsDiagnosticPreview {
+                                VStack(alignment: .trailing, spacing: 3) {
+                                    Text(destination.serviceName)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Image(systemName: "arrow.up.forward")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .accessibilityHidden(true)
+                                }
                             }
                         }
                         .contentShape(Rectangle())
                     }
-                    .accessibilityLabel("\(destination.title), opens \(destination.serviceName)")
+                    .accessibilityLabel(
+                        destination.presentsDiagnosticPreview
+                            ? "\(destination.title), opens a diagnostic preview"
+                            : "\(destination.title), opens \(destination.serviceName)"
+                    )
                     .accessibilityHint(destination.detail)
                 }
             } footer: {
                 Text(
-                    "CodexBar previews an allowlisted diagnostic before opening a public GitHub bug report. You can remove optional technical details or cancel."
+                    "Reporting a problem previews an allowlisted diagnostic before opening a public GitHub bug report. You can remove optional technical details or cancel. The other links open directly."
                 )
             }
 

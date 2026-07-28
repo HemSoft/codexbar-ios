@@ -14,6 +14,45 @@ enum ProviderUsageCardMenuAction: Hashable {
     case customizeMetrics
 }
 
+private struct ProviderProblemReportDisclosure: View {
+    let title: String
+    let message: String
+    let context: PrivacySafeDiagnosticContext?
+
+    @State private var isExpanded = false
+    @State private var isShowingReport = false
+
+    var body: some View {
+        DisclosureGroup(title, isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if context != nil {
+                    Button {
+                        isShowingReport = true
+                    } label: {
+                        Label("Report This Problem", systemImage: "ladybug")
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+                    .accessibilityHint(
+                        "Previews the privacy-safe diagnostic before opening GitHub"
+                    )
+                }
+            }
+        }
+        .font(.caption)
+        .sheet(isPresented: $isShowingReport) {
+            if let context {
+                DiagnosticReportView(context: context)
+            }
+        }
+    }
+}
+
 struct MetricLayoutCopyDestination: Identifiable, Equatable {
     let id: String
     let title: String
@@ -214,8 +253,6 @@ struct ProviderUsageCard: View {
     @State private var isResetActionUnavailable = false
     @State private var isCustomizingMetrics = false
     @State private var isShowingMoreInformation = false
-    @State private var isRefreshErrorExpanded = false
-    @State private var isShowingProblemReport = false
     @State private var metricDetailPresentation: ProviderMetricTileDetailPresentation?
     @StateObject private var resetRedemptionController: CodexBankedResetRedemptionController
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -429,26 +466,11 @@ struct ProviderUsageCard: View {
             }
 
             if let refreshErrorMessage {
-                DisclosureGroup("Refresh problem details", isExpanded: $isRefreshErrorExpanded) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(refreshErrorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if problemReportContext != nil {
-                            Button {
-                                isShowingProblemReport = true
-                            } label: {
-                                Label("Report This Problem", systemImage: "ladybug")
-                            }
-                            .font(.caption)
-                            .buttonStyle(.borderless)
-                            .accessibilityHint("Previews the privacy-safe diagnostic before opening GitHub")
-                        }
-                    }
-                }
-                .font(.caption)
+                ProviderProblemReportDisclosure(
+                    title: "Refresh problem details",
+                    message: refreshErrorMessage,
+                    context: problemReportContext
+                )
             }
 
             if !metricGridRows.isEmpty {
@@ -568,11 +590,6 @@ struct ProviderUsageCard: View {
             ProviderCardInformationView(
                 sections: informationSections
             )
-        }
-        .sheet(isPresented: $isShowingProblemReport) {
-            if let problemReportContext {
-                DiagnosticReportView(context: problemReportContext)
-            }
         }
         .sheet(item: $metricDetailPresentation) { presentation in
             if let metric = Self.metric(withID: presentation.metricID, in: result) {
@@ -1374,8 +1391,6 @@ struct ProviderUsagePlaceholderCard: View {
     let problemReportContext: PrivacySafeDiagnosticContext?
     let onRetry: () -> Void
 
-    @State private var isErrorExpanded = false
-    @State private var isShowingProblemReport = false
 
     init(
         configuration: ProviderAccountConfiguration,
@@ -1413,26 +1428,11 @@ struct ProviderUsagePlaceholderCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.orange)
 
-                DisclosureGroup("Problem details", isExpanded: $isErrorExpanded) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if problemReportContext != nil {
-                            Button {
-                                isShowingProblemReport = true
-                            } label: {
-                                Label("Report This Problem", systemImage: "ladybug")
-                            }
-                            .font(.caption)
-                            .buttonStyle(.borderless)
-                            .accessibilityHint("Previews the privacy-safe diagnostic before opening GitHub")
-                        }
-                    }
-                }
-                .font(.caption)
+                ProviderProblemReportDisclosure(
+                    title: "Problem details",
+                    message: errorMessage,
+                    context: problemReportContext
+                )
 
                 if isPerformingRecovery {
                     ProgressView()
@@ -1487,11 +1487,6 @@ struct ProviderUsagePlaceholderCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color(.separator).opacity(0.22), lineWidth: 0.5)
-        }
-        .sheet(isPresented: $isShowingProblemReport) {
-            if let problemReportContext {
-                DiagnosticReportView(context: problemReportContext)
-            }
         }
     }
 

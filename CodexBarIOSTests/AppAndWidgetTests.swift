@@ -674,6 +674,12 @@ final class AppAndWidgetTests: XCTestCase {
                 "Rate CodexBar",
             ]
         )
+        XCTAssertTrue(FeedbackSupportDestination.reportProblem.presentsDiagnosticPreview)
+        XCTAssertTrue(
+            FeedbackSupportDestination.allCases
+                .filter { $0 != .reportProblem }
+                .allSatisfy { !$0.presentsDiagnosticPreview }
+        )
     }
 
     func testFeedbackSupportURLsTargetSpecificFormsAndEncodeSafeSystemDetails() throws {
