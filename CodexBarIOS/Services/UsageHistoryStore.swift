@@ -497,7 +497,12 @@ public final class UsageHistoryStore: ObservableObject {
                 let selectedBar = total
                     ?? snapshot.bars.max(by: { $0.fractionUsed < $1.fractionUsed })
                 return selectedBar.map {
-                    UsageHistoryPoint(snapshot: snapshot, value: $0.fractionUsed)
+                    UsageHistoryPoint(
+                        id: snapshot.id,
+                        capturedAt: snapshot.capturedAt,
+                        value: $0.fractionUsed,
+                        severity: UsageSeverity(fractionUsed: $0.fractionUsed)
+                    )
                 }
             },
             isBalance: false
@@ -516,7 +521,12 @@ public final class UsageHistoryStore: ObservableObject {
                     $0.stableKey == stableKey
                         || ($0.stableKey == nil && Self.matchesLegacyCursorBar($0, stableKey: stableKey))
                 }).map {
-                    UsageHistoryPoint(snapshot: snapshot, value: $0.fractionUsed)
+                    UsageHistoryPoint(
+                        id: snapshot.id,
+                        capturedAt: snapshot.capturedAt,
+                        value: $0.fractionUsed,
+                        severity: UsageSeverity(fractionUsed: $0.fractionUsed)
+                    )
                 }
             },
             isBalance: false

@@ -3028,6 +3028,20 @@ final class AppAndWidgetTests: XCTestCase {
             card.metricDetailHistorySeries(for: try XCTUnwrap(result.availableMetrics.first)),
             series
         )
+
+        let aggregateOnlyCard = ProviderUsageCard(
+            result: result,
+            statusText: result.subtitle,
+            history: series,
+            historySeriesOptions: {
+                [UsageHistorySeriesOption(id: "usage", label: "Usage", series: series)]
+            }
+        )
+        XCTAssertNil(
+            aggregateOnlyCard.metricDetailHistorySeries(
+                for: try XCTUnwrap(result.availableMetrics.first)
+            )
+        )
     }
 
     func testFailedCachedMetricComponentsAreLastKnownDespiteMatchingTimestamps() {

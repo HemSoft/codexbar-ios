@@ -172,6 +172,12 @@ final class UsageHistoryTests: XCTestCase {
             [1],
             [0],
         ])
+        XCTAssertEqual(options.map { $0.series.points.map(\.severity) }, [
+            [.normal],
+            [.normal],
+            [.critical],
+            [.normal],
+        ])
 
         let reorderedAndRelabeledResult = ProviderUsageResult(
             accountID: result.accountID,

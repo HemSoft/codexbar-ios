@@ -965,7 +965,9 @@ struct ProviderUsageCard: View {
                 // which is not accurate for one selected bar.
                 return nil
             }
-            preferredOptionID = "usage.\(stableKey)"
+            return historySeriesOptionsProvider()
+                .first(where: { $0.id == "usage.\(stableKey)" })?
+                .series
         case .creditsRemaining:
             preferredOptionID = "balance"
         case let .monetary(index):
