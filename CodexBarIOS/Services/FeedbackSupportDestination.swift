@@ -560,6 +560,22 @@ struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
     }
 }
 
+struct FeedbackEmailActionPlan: Equatable, Sendable {
+    let draft: FeedbackEmailDraft
+
+    var primaryURL: URL {
+        draft.url
+    }
+
+    var copyDetailsDraft: FeedbackEmailDraft {
+        draft
+    }
+
+    func fallbackDraft(openAccepted: Bool) -> FeedbackEmailDraft? {
+        openAccepted ? nil : draft
+    }
+}
+
 struct FeedbackEmailDraftField: Equatable, Identifiable, Sendable {
     enum Kind: String, Equatable, Sendable {
         case recipient

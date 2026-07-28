@@ -855,6 +855,14 @@ final class AppAndWidgetTests: XCTestCase {
             improvementDraft.copyableFields.map(\.value),
             [FeedbackEmailDraft.recipient, improvementDraft.subject, improvementDraft.body]
         )
+        let improvementActionPlan = FeedbackEmailActionPlan(draft: improvementDraft)
+        XCTAssertEqual(improvementActionPlan.primaryURL, improvementDraft.url)
+        XCTAssertEqual(improvementActionPlan.copyDetailsDraft, improvementDraft)
+        XCTAssertNil(improvementActionPlan.fallbackDraft(openAccepted: true))
+        XCTAssertEqual(
+            improvementActionPlan.fallbackDraft(openAccepted: false),
+            improvementDraft
+        )
 
         for draft in [problemDraft, improvementDraft] {
             XCTAssertTrue(draft.body.contains("opening the email composer does not send it"))

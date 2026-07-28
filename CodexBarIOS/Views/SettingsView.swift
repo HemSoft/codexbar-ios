@@ -685,6 +685,13 @@ private struct FeedbackSupportView: View {
                     )
                     .accessibilityHint(destination.detail)
                 }
+
+                Button {
+                    emailFallbackDraft = improvementEmailPlan.copyDetailsDraft
+                } label: {
+                    Label("Copy Improvement Email Details", systemImage: "doc.on.doc")
+                }
+                .accessibilityHint("Shows copyable recipient, subject, and message fields")
             } footer: {
                 Text(
                     "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. If Mail is unavailable, CodexBar shows copyable recipient, subject, and message fields."
@@ -748,7 +755,10 @@ private struct FeedbackSupportView: View {
             return
         }
         if destination == .suggestImprovement {
-            emailFallbackDraft = FeedbackEmailDraft.improvementSuggestion(context: context)
+            let plan = improvementEmailPlan
+            openURL(plan.primaryURL) { accepted in
+                emailFallbackDraft = plan.fallbackDraft(openAccepted: accepted)
+            }
             return
         }
         openURL(destination.url(context: context)) { accepted in
@@ -767,6 +777,12 @@ private struct FeedbackSupportView: View {
             surface: surface,
             providerID: nil,
             technicalDetails: technicalDetails
+        )
+    }
+
+    private var improvementEmailPlan: FeedbackEmailActionPlan {
+        FeedbackEmailActionPlan(
+            draft: FeedbackEmailDraft.improvementSuggestion(context: context)
         )
     }
 }
