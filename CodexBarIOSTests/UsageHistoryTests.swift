@@ -216,6 +216,32 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(partialOptions.map(\.id), ["usage", "usage.auto", "usage.api"])
         XCTAssertEqual(partialOptions.map(\.label), ["Highest usage", "Auto", "API"])
         XCTAssertEqual(partialOptions.first?.series.points.map(\.value), [1])
+
+        let laterResultWithoutTotal = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Current without Total",
+            bars: [
+                UsageBar(stableKey: "auto", label: "Auto", used: 45, limit: 100),
+                UsageBar(stableKey: "api", label: "API", used: 90, limit: 100),
+            ],
+            fetchedAt: fetchedAt.addingTimeInterval(120)
+        )
+        store.record(results: [laterResultWithoutTotal], now: laterResultWithoutTotal.fetchedAt)
+
+        XCTAssertEqual(store.historySeries(for: laterResultWithoutTotal).points.map(\.value), [
+            0.38,
+            0.9,
+        ])
+        let mixedOptions = store.historySeriesOptions(for: laterResultWithoutTotal)
+        XCTAssertEqual(mixedOptions.first?.id, "usage")
+        XCTAssertEqual(mixedOptions.first?.label, "Total / highest available")
+        XCTAssertEqual(mixedOptions.first?.series.points.map(\.value), [0.38, 0.9])
+        XCTAssertEqual(
+            mixedOptions.first(where: { $0.id == "usage.total" })?.series.points.map(\.value),
+            [0.38]
+        )
     }
 
     @MainActor

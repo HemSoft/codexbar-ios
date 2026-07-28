@@ -458,14 +458,10 @@ public final class UsageHistoryStore: ObservableObject {
         snapshots: [UsageHistorySnapshot]
     ) -> UsageHistorySeries {
         if result.providerID == .cursor {
-            let totalSeries = usageSeries(
+            return cursorPrimaryUsageSeries(
                 accountID: result.accountID,
-                snapshots: snapshots,
-                stableKey: "total"
+                snapshots: snapshots
             )
-            return totalSeries.points.isEmpty
-                ? aggregateUsageSeries(accountID: result.accountID, snapshots: snapshots)
-                : totalSeries
         }
 
         return aggregateUsageSeries(accountID: result.accountID, snapshots: snapshots)
@@ -480,6 +476,28 @@ public final class UsageHistoryStore: ObservableObject {
             points: snapshots.compactMap { snapshot in
                 snapshot.bars.map(\.fractionUsed).max().map {
                     UsageHistoryPoint(snapshot: snapshot, value: $0)
+                }
+            },
+            isBalance: false
+        )
+    }
+
+    private func cursorPrimaryUsageSeries(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot]
+    ) -> UsageHistorySeries {
+        UsageHistorySeries(
+            accountID: accountID,
+            points: snapshots.compactMap { snapshot in
+                let total = snapshot.bars.first(where: {
+                    $0.stableKey == "total"
+                        || ($0.stableKey == nil
+                            && Self.matchesLegacyCursorBar($0, stableKey: "total"))
+                })
+                let selectedBar = total
+                    ?? snapshot.bars.max(by: { $0.fractionUsed < $1.fractionUsed })
+                return selectedBar.map {
+                    UsageHistoryPoint(snapshot: snapshot, value: $0.fractionUsed)
                 }
             },
             isBalance: false
@@ -559,7 +577,28 @@ public final class UsageHistoryStore: ObservableObject {
         }
 
         guard !metricOptions.contains(where: { $0.id == "usage.total" }) else {
-            return metricOptions
+            let hasFallbackSamples = snapshots.contains(where: { snapshot in
+                !snapshot.bars.isEmpty
+                    && !snapshot.bars.contains(where: {
+                        $0.stableKey == "total"
+                            || ($0.stableKey == nil
+                                && Self.matchesLegacyCursorBar($0, stableKey: "total"))
+                    })
+            })
+            guard hasFallbackSamples else {
+                return metricOptions
+            }
+
+            return [
+                UsageHistorySeriesOption(
+                    id: "usage",
+                    label: "Total / highest available",
+                    series: cursorPrimaryUsageSeries(
+                        accountID: accountID,
+                        snapshots: snapshots
+                    )
+                ),
+            ] + metricOptions
         }
 
         return [
