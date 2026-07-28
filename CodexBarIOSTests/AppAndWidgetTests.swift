@@ -678,11 +678,17 @@ final class AppAndWidgetTests: XCTestCase {
                 "Rate CodexBar",
             ]
         )
-        XCTAssertTrue(FeedbackSupportDestination.reportProblem.presentsDiagnosticPreview)
-        XCTAssertTrue(
-            FeedbackSupportDestination.allCases
-                .filter { $0 != .reportProblem }
-                .allSatisfy { !$0.presentsDiagnosticPreview }
+        XCTAssertEqual(
+            FeedbackSupportDestination.allCases.map(\.presentation),
+            [
+                .diagnosticPreview,
+                .emailDetails,
+                .external,
+                .external,
+                .external,
+                .external,
+                .external,
+            ]
         )
     }
 
@@ -855,13 +861,9 @@ final class AppAndWidgetTests: XCTestCase {
             improvementDraft.copyableFields.map(\.value),
             [FeedbackEmailDraft.recipient, improvementDraft.subject, improvementDraft.body]
         )
-        let improvementActionPlan = FeedbackEmailActionPlan(draft: improvementDraft)
-        XCTAssertEqual(improvementActionPlan.primaryURL, improvementDraft.url)
-        XCTAssertEqual(improvementActionPlan.copyDetailsDraft, improvementDraft)
-        XCTAssertNil(improvementActionPlan.fallbackDraft(openAccepted: true))
         XCTAssertEqual(
-            improvementActionPlan.fallbackDraft(openAccepted: false),
-            improvementDraft
+            FeedbackEmailDraft.externalComposerPrivacyNotice,
+            "Your mail app may display and use its currently selected sending account. Copy the fields below to avoid opening the mail app."
         )
 
         for draft in [problemDraft, improvementDraft] {
@@ -871,6 +873,16 @@ final class AppAndWidgetTests: XCTestCase {
             )
             XCTAssertEqual(components.scheme, "mailto")
             XCTAssertEqual(components.path, FeedbackEmailDraft.recipient)
+            XCTAssertNil(components.user)
+            XCTAssertNil(components.password)
+            XCTAssertNil(components.host)
+            XCTAssertNil(components.port)
+            XCTAssertNil(components.fragment)
+            XCTAssertEqual(
+                components.queryItems?.map(\.name),
+                ["subject", "body"],
+                "mailto query fields must match the exact privacy allowlist"
+            )
             XCTAssertEqual(
                 components.queryItems?.first(where: { $0.name == "subject" })?.value,
                 draft.subject
@@ -879,6 +891,17 @@ final class AppAndWidgetTests: XCTestCase {
                 components.queryItems?.first(where: { $0.name == "body" })?.value,
                 draft.body
             )
+            let forbiddenQueryFields = ["cc", "bcc", "from", "sender", "sender-account"]
+            let generatedQueryFields = Set(
+                components.queryItems?.map { $0.name.lowercased() } ?? []
+            )
+            XCTAssertTrue(generatedQueryFields.isDisjoint(with: forbiddenQueryFields))
+            XCTAssertFalse(
+                components.queryItems?
+                    .compactMap(\.value)
+                    .contains { $0.contains("selected-sender@example.invalid") }
+                    ?? false
+            )
         }
     }
 
@@ -886,7 +909,7 @@ final class AppAndWidgetTests: XCTestCase {
         let configuration = ProviderAccountConfiguration(
             id: "account-identifier",
             providerID: .copilot,
-            accountLabel: "Personal Account franz@example.com",
+            accountLabel: "Personal Account selected-sender@example.invalid",
             authMethod: .browserSession,
             oauthClientID: "oauth-client-id",
             githubOrganization: "private-org"
@@ -918,7 +941,7 @@ final class AppAndWidgetTests: XCTestCase {
             configuration.accountLabel,
             configuration.oauthClientID!,
             configuration.githubOrganization,
-            "franz@example.com",
+            "selected-sender@example.invalid",
             "bearer-token",
             "raw-provider-response",
         ]
@@ -961,7 +984,7 @@ final class AppAndWidgetTests: XCTestCase {
         let seededSensitiveValues = [
             "sk-secret-api-key",
             "bearer-token",
-            "franz@example.com",
+            "selected-sender@example.invalid",
             "Personal Claude Account",
             "account-123",
         ]
@@ -1040,7 +1063,7 @@ final class AppAndWidgetTests: XCTestCase {
         let configuration = ProviderAccountConfiguration(
             id: "persistent-account-123",
             providerID: .copilot,
-            accountLabel: "Franz franz@example.com",
+            accountLabel: "Personal selected-sender@example.invalid",
             authMethod: .browserSession,
             oauthClientID: "oauth-client-secret",
             githubOrganization: "private-organization-456"

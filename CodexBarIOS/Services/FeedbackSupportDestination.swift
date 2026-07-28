@@ -475,6 +475,8 @@ enum FeedbackEmailKind: CaseIterable, Equatable, Sendable {
 
 struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
     static let recipient = "fphemmer@gmail.com"
+    static let externalComposerPrivacyNotice =
+        "Your mail app may display and use its currently selected sending account. Copy the fields below to avoid opening the mail app."
 
     let kind: FeedbackEmailKind
     let body: String
@@ -560,22 +562,6 @@ struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
     }
 }
 
-struct FeedbackEmailActionPlan: Equatable, Sendable {
-    let draft: FeedbackEmailDraft
-
-    var primaryURL: URL {
-        draft.url
-    }
-
-    var copyDetailsDraft: FeedbackEmailDraft {
-        draft
-    }
-
-    func fallbackDraft(openAccepted: Bool) -> FeedbackEmailDraft? {
-        openAccepted ? nil : draft
-    }
-}
-
 struct FeedbackEmailDraftField: Equatable, Identifiable, Sendable {
     enum Kind: String, Equatable, Sendable {
         case recipient
@@ -593,6 +579,12 @@ struct FeedbackEmailDraftField: Equatable, Identifiable, Sendable {
     var title: String {
         kind.rawValue.capitalized
     }
+}
+
+enum FeedbackSupportPresentation: Equatable, Sendable {
+    case diagnosticPreview
+    case emailDetails
+    case external
 }
 
 enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
@@ -630,9 +622,9 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
     var detail: String {
         switch self {
         case .reportProblem:
-            "Open a private email draft with optional diagnostics."
+            "Review privacy-safe email details with optional diagnostics."
         case .suggestImprovement:
-            "Open a private, structured email draft."
+            "Review or copy a private, structured email message."
         case .publicBugReport:
             "Open the public bug form; a GitHub account is required."
         case .publicImprovement:
@@ -657,8 +649,19 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var presentsDiagnosticPreview: Bool {
-        self == .reportProblem
+    var presentation: FeedbackSupportPresentation {
+        switch self {
+        case .reportProblem:
+            .diagnosticPreview
+        case .suggestImprovement:
+            .emailDetails
+        case .publicBugReport,
+             .publicImprovement,
+             .knownIssues,
+             .supportGuide,
+             .rateCodexBar:
+            .external
+        }
     }
 
     var systemImage: String {

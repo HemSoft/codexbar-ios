@@ -13,20 +13,30 @@ Use the destination that best matches what you need:
 
 The iPhone and iPad app exposes these destinations together under
 **Settings > Feedback & Support**, alongside the support guide and App Store
-rating link. The private email actions open a pre-addressed, editable draft
-with a subject beginning exactly `[CodexBar Feedback]`; problem reports and
-improvement suggestions use distinct subjects. Opening the email composer does
-not send a message. You must review the draft and explicitly send it.
+rating link. The private email actions first show individually copyable
+recipient, subject, and message fields; problem reports and improvement
+suggestions use distinct subjects beginning exactly `[CodexBar Feedback]`.
 
 Choosing **Report a Problem** first shows an on-device preview. It contains
 general app/device details and an affected surface/provider, plus optional fixed
 categories for configuration, authentication, failure, refresh, Widget
 freshness, or Apple Watch connection state. You can remove the optional
-technical details, copy the diagnostic, cancel, open the private email draft,
-or use the public GitHub form. **Suggest an Improvement** opens a structured
-email draft with general app and device details. If no configured email app can
-open the draft, CodexBar shows the recipient, subject, and message as
-individually copyable fields for use in another email service.
+technical details, copy the diagnostic, cancel, review or copy the private
+email fields, or use the public GitHub form. **Suggest an Improvement** shows a
+structured message with general app and device details in the same copy-first
+view.
+
+If you choose **Open Email Draft** after reviewing those fields, CodexBar warns
+that the external mail app may display and use its currently selected sending
+account. Opening the composer does not send a message; review the selected
+account and explicitly send. iOS does not provide an app with a supported way
+to hide another mail app's system-managed sender row. CodexBar never reads,
+stores, logs, or prefills that address, and generates `mailto:` URLs with only
+the recipient, subject, and message. Apple's relevant platform documentation is
+available for
+[`UIApplication.open`](https://developer.apple.com/documentation/uikit/uiapplication/open(_:options:completionhandler:))
+and
+[`MFMailComposeViewController`](https://developer.apple.com/documentation/messageui/mfmailcomposeviewcontroller).
 
 Provider-card report actions appear only after you expand a visible problem.
 Widget and Apple Watch report entries are available under **Feedback &

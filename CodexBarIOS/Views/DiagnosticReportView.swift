@@ -22,7 +22,7 @@ struct DiagnosticReportView: View {
     @Environment(\.openURL) private var openURL
     @State private var includesTechnicalDetails = true
     @State private var notice: Notice?
-    @State private var emailFallbackDraft: FeedbackEmailDraft?
+    @State private var emailDetailsDraft: FeedbackEmailDraft?
 
     var body: some View {
         NavigationStack {
@@ -61,13 +61,7 @@ struct DiagnosticReportView: View {
                     }
 
                     Button {
-                        openProblemEmail()
-                    } label: {
-                        Label("Open Email Draft", systemImage: "envelope")
-                    }
-
-                    Button {
-                        emailFallbackDraft = problemEmailDraft
+                        emailDetailsDraft = problemEmailDraft
                     } label: {
                         Label("Review or Copy Email Details", systemImage: "doc.on.doc")
                     }
@@ -99,8 +93,8 @@ struct DiagnosticReportView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
-            .sheet(item: $emailFallbackDraft) { draft in
-                FeedbackEmailFallbackView(draft: draft)
+            .sheet(item: $emailDetailsDraft) { draft in
+                FeedbackEmailDetailsView(draft: draft)
             }
         }
     }
@@ -110,15 +104,6 @@ struct DiagnosticReportView: View {
             context: context,
             includeTechnicalDetails: includesTechnicalDetails
         )
-    }
-
-    private func openProblemEmail() {
-        let draft = problemEmailDraft
-        openURL(draft.url) { accepted in
-            if !accepted {
-                emailFallbackDraft = draft
-            }
-        }
     }
 
     private var problemEmailDraft: FeedbackEmailDraft {
@@ -162,7 +147,7 @@ private struct Notice: Identifiable {
     }
 }
 
-struct FeedbackEmailFallbackView: View {
+struct FeedbackEmailDetailsView: View {
     let draft: FeedbackEmailDraft
 
     @Environment(\.dismiss) private var dismiss
@@ -174,18 +159,10 @@ struct FeedbackEmailFallbackView: View {
             Form {
                 Section {
                     Text(
-                        "Review or copy these fields for any email service. Opening an email draft does not send it."
+                        FeedbackEmailDraft.externalComposerPrivacyNotice
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                }
-
-                Section {
-                    Button {
-                        openEmailDraft()
-                    } label: {
-                        Label("Open Email Draft", systemImage: "envelope")
-                    }
                 }
 
                 ForEach(draft.copyableFields) { field in
@@ -199,6 +176,18 @@ struct FeedbackEmailFallbackView: View {
                             value: field.value
                         )
                     }
+                }
+
+                Section {
+                    Button {
+                        openEmailDraft()
+                    } label: {
+                        Label("Open Email Draft", systemImage: "envelope")
+                    }
+                } footer: {
+                    Text(
+                        "Opening the external composer does not send anything. Review the selected sending account before you send."
+                    )
                 }
             }
             .navigationTitle("Copy Email Details")

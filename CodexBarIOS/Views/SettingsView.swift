@@ -624,7 +624,7 @@ private struct FeedbackSupportView: View {
     @Environment(\.openURL) private var openURL
     @State private var failedDestination: FeedbackSupportDestination?
     @State private var problemReportContext: PrivacySafeDiagnosticContext?
-    @State private var emailFallbackDraft: FeedbackEmailDraft?
+    @State private var emailDetailsDraft: FeedbackEmailDraft?
 
     var body: some View {
         List {
@@ -664,7 +664,7 @@ private struct FeedbackSupportView: View {
 
                             Spacer(minLength: 8)
 
-                            if !destination.presentsDiagnosticPreview {
+                            if destination.presentation == .external {
                                 VStack(alignment: .trailing, spacing: 3) {
                                     Text(destination.serviceName)
                                         .font(.caption)
@@ -678,23 +678,12 @@ private struct FeedbackSupportView: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .accessibilityLabel(
-                        destination.presentsDiagnosticPreview
-                            ? "\(destination.title), opens a diagnostic preview"
-                            : "\(destination.title), opens \(destination.serviceName)"
-                    )
+                    .accessibilityLabel(accessibilityLabel(for: destination))
                     .accessibilityHint(destination.detail)
                 }
-
-                Button {
-                    emailFallbackDraft = improvementEmailPlan.copyDetailsDraft
-                } label: {
-                    Label("Copy Improvement Email Details", systemImage: "doc.on.doc")
-                }
-                .accessibilityHint("Shows copyable recipient, subject, and message fields")
             } footer: {
                 Text(
-                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. If Mail is unavailable, CodexBar shows copyable recipient, subject, and message fields."
+                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. CodexBar shows copyable recipient, subject, and message fields before offering to open your mail app."
                 )
             }
 
@@ -729,8 +718,8 @@ private struct FeedbackSupportView: View {
         .sheet(item: $problemReportContext) { context in
             DiagnosticReportView(context: context)
         }
-        .sheet(item: $emailFallbackDraft) { draft in
-            FeedbackEmailFallbackView(draft: draft)
+        .sheet(item: $emailDetailsDraft) { draft in
+            FeedbackEmailDetailsView(draft: draft)
         }
         .alert(
             "Couldn’t Open \(failedDestination?.serviceName ?? "Link")",
@@ -750,21 +739,34 @@ private struct FeedbackSupportView: View {
     }
 
     private func open(_ destination: FeedbackSupportDestination) {
-        if destination == .reportProblem {
+        switch destination {
+        case .reportProblem:
             presentProblemReport(surface: .other)
-            return
-        }
-        if destination == .suggestImprovement {
-            let plan = improvementEmailPlan
-            openURL(plan.primaryURL) { accepted in
-                emailFallbackDraft = plan.fallbackDraft(openAccepted: accepted)
+        case .suggestImprovement:
+            emailDetailsDraft = improvementEmailDraft
+        case .publicBugReport,
+             .publicImprovement,
+             .knownIssues,
+             .supportGuide,
+             .rateCodexBar:
+            openURL(destination.url(context: context)) { accepted in
+                if !accepted {
+                    failedDestination = destination
+                }
             }
-            return
         }
-        openURL(destination.url(context: context)) { accepted in
-            if !accepted {
-                failedDestination = destination
-            }
+    }
+
+    private func accessibilityLabel(
+        for destination: FeedbackSupportDestination
+    ) -> String {
+        switch destination.presentation {
+        case .diagnosticPreview:
+            "\(destination.title), opens a diagnostic preview"
+        case .emailDetails:
+            "\(destination.title), opens copyable email details"
+        case .external:
+            "\(destination.title), opens \(destination.serviceName)"
         }
     }
 
@@ -780,9 +782,7 @@ private struct FeedbackSupportView: View {
         )
     }
 
-    private var improvementEmailPlan: FeedbackEmailActionPlan {
-        FeedbackEmailActionPlan(
-            draft: FeedbackEmailDraft.improvementSuggestion(context: context)
-        )
+    private var improvementEmailDraft: FeedbackEmailDraft {
+        FeedbackEmailDraft.improvementSuggestion(context: context)
     }
 }
