@@ -87,6 +87,9 @@ enum WatchSnapshotPublisher {
                             : .normal,
                         resetText: localizedResetText
                             ?? (result.hasFreshBars ? bar.projectionDescriptionOverride : nil),
+                        resetsAt: bar.resetsAt,
+                        resetDisplayStyle: bar.resetDisplayStyle,
+                        fetchedAt: result.barsFetchedAt ?? result.fetchedAt,
                         visualizationStyle: WatchMetricVisualizationStyle(
                             configurationStore.visualizationStyle(
                                 accountID: result.accountID,
@@ -104,6 +107,7 @@ enum WatchSnapshotPublisher {
                         label: metric.label,
                         exactValue: metric.formattedAmount(),
                         severity: result.hasReachedSpendLimit ? .critical : .normal,
+                        fetchedAt: result.fetchedAt,
                         visualizationStyle: .largeNumeric
                     )
                 }
@@ -118,6 +122,7 @@ enum WatchSnapshotPublisher {
                             exactValue: creditsRemaining.formatted(
                                 .number.precision(.fractionLength(0...2))
                             ),
+                            fetchedAt: result.fetchedAt,
                             visualizationStyle: .largeNumeric
                         )
                     )

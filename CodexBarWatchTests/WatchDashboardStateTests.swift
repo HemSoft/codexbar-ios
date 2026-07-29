@@ -210,6 +210,9 @@ final class WatchDashboardStateTests: XCTestCase {
         let decoded = try WatchDashboardSnapshot.decode(Data(partialJSON.utf8))
         XCTAssertEqual(decoded.accounts[0].metrics.map(\.id), ["valid"])
         XCTAssertEqual(decoded.accounts[0].metrics[0].visualizationStyle, .automatic)
+        XCTAssertNil(decoded.accounts[0].metrics[0].fetchedAt)
+        XCTAssertNil(decoded.accounts[0].metrics[0].resetsAt)
+        XCTAssertNil(decoded.accounts[0].metrics[0].resetDisplayStyle)
     }
 
     func testStaleAndDisconnectedStatesKeepLastSnapshotVisible() {
@@ -567,6 +570,7 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertEqual(configured.providerName, "Copilot")
         XCTAssertEqual(configured.exactValue, "80%")
         XCTAssertEqual(missing, .unavailable)
+        XCTAssertEqual(missing.cornerContextLabel, "Selection unavailable")
         XCTAssertNil(missing.stateLabel)
         XCTAssertFalse(missing.accessibilityLabel.contains("Warning"))
     }
@@ -752,6 +756,108 @@ final class WatchDashboardStateTests: XCTestCase {
             ),
             now.addingTimeInterval(601)
         )
+    }
+
+    func testComplicationFreshnessTracksSelectedMetric() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let staleFetchedAt = now.addingTimeInterval(-3_600)
+        let account = WatchAccountSnapshot(
+            id: "claude",
+            providerName: "Claude",
+            accountLabel: "Primary",
+            fetchedAt: staleFetchedAt,
+            metrics: [
+                WatchMetricSnapshot(
+                    id: "usage",
+                    label: "Usage",
+                    usedFraction: 0.5,
+                    exactValue: "50%",
+                    fetchedAt: staleFetchedAt
+                ),
+                WatchMetricSnapshot(
+                    id: "balance",
+                    label: "Balance",
+                    exactValue: "$20.00",
+                    fetchedAt: now,
+                    visualizationStyle: .largeNumeric
+                ),
+            ]
+        )
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [account]
+        )
+        let resolver = WatchComplicationResolver()
+        let usage = resolver.resolve(
+            snapshot: snapshot,
+            selection: WatchComplicationSelection(accountID: "claude", metricID: "usage"),
+            at: now
+        )
+        let balanceSelection = WatchComplicationSelection(
+            accountID: "claude",
+            metricID: "balance"
+        )
+        let balance = resolver.resolve(
+            snapshot: snapshot,
+            selection: balanceSelection,
+            at: now
+        )
+
+        XCTAssertTrue(usage.isStale)
+        XCTAssertEqual(usage.freshnessText, "Updated 1h ago")
+        XCTAssertFalse(balance.isStale)
+        XCTAssertEqual(balance.freshnessText, "Updated now")
+        XCTAssertEqual(
+            resolver.nextReloadDate(
+                snapshot: snapshot,
+                selection: balanceSelection,
+                now: now
+            ),
+            now.addingTimeInterval(901)
+        )
+    }
+
+    func testComplicationResetTextRecomputesForTimelineDate() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let metric = WatchMetricSnapshot(
+            id: "usage",
+            label: "Usage",
+            usedFraction: 0.5,
+            exactValue: "50%",
+            resetText: "Original reset text",
+            resetsAt: now.addingTimeInterval(60 * 60),
+            resetDisplayStyle: .relativeWithLocalTime,
+            fetchedAt: now
+        )
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "codex",
+                    providerName: "Codex",
+                    accountLabel: "Primary",
+                    fetchedAt: now,
+                    metrics: [metric]
+                ),
+            ]
+        )
+        let resolver = WatchComplicationResolver()
+        let initial = try XCTUnwrap(
+            resolver.resolve(snapshot: snapshot, selection: .automatic, at: now).resetText
+        )
+        let later = try XCTUnwrap(
+            resolver.resolve(
+                snapshot: snapshot,
+                selection: .automatic,
+                at: now.addingTimeInterval(30 * 60)
+            ).resetText
+        )
+
+        XCTAssertTrue(initial.hasPrefix("Resets 1h 0m"))
+        XCTAssertTrue(later.hasPrefix("Resets 30m"))
+        XCTAssertNotEqual(initial, later)
     }
 
     func testAllWatchComplicationFamiliesHavePurposefulLayouts() {

@@ -179,10 +179,14 @@ struct WatchComplicationSample: Equatable, Sendable {
     }
 
     var cornerContextLabel: String {
-        guard availability == .value else {
+        switch availability {
+        case .empty:
             return "CodexBar"
+        case .unavailable:
+            return "Selection unavailable"
+        case .value:
+            return isStale ? "Stale • \(metricLabel)" : metricLabel
         }
-        return isStale ? "Stale • \(metricLabel)" : metricLabel
     }
 
     var accountContextLabel: String {
@@ -237,19 +241,12 @@ struct WatchComplicationResolver {
             return .empty
         }
 
-        guard let account = displayedAccount(in: accounts, selection: selection) else {
+        guard let displayed = displayedMetric(in: accounts, selection: selection) else {
             return .unavailable
         }
-
-        let metric: WatchMetricSnapshot
-        if let metricID = selection.metricID {
-            guard let selected = account.metrics.first(where: { $0.id == metricID }) else {
-                return .unavailable
-            }
-            metric = selected
-        } else {
-            metric = account.metrics[0]
-        }
+        let account = displayed.account
+        let metric = displayed.metric
+        let fetchedAt = metric.fetchedAt ?? account.fetchedAt
 
         return WatchComplicationSample(
             availability: .value,
@@ -259,9 +256,14 @@ struct WatchComplicationResolver {
             exactValue: metric.exactValue,
             usedFraction: metric.usedFraction,
             severity: metric.severity,
-            resetText: metric.resetText,
-            freshnessText: Self.freshnessText(account.fetchedAt, now: date),
-            isStale: snapshot.isStale(dataDate: account.fetchedAt, at: date)
+            resetText: UserFacingDateTimeFormatter.current.resetDescription(
+                resetAt: metric.resetsAt,
+                now: date,
+                style: metric.resetDisplayStyle ?? .verbatim,
+                fallback: metric.resetText
+            ),
+            freshnessText: Self.freshnessText(fetchedAt, now: date),
+            isStale: snapshot.isStale(dataDate: fetchedAt, at: date)
         )
     }
 
@@ -275,16 +277,15 @@ struct WatchComplicationResolver {
         }
 
         let accounts = snapshot.accounts.filter { !$0.metrics.isEmpty }
-        let account = displayedAccount(in: accounts, selection: selection)
-
-        guard let account else {
+        guard let displayed = displayedMetric(in: accounts, selection: selection) else {
             return now.addingTimeInterval(30 * 60)
         }
+        let fetchedAt = displayed.metric.fetchedAt ?? displayed.account.fetchedAt
 
         let staleWindow = snapshot.refreshIntervalSeconds.map {
             max($0 * 2, 15 * 60)
         } ?? 60 * 60
-        let staleDate = account.fetchedAt.addingTimeInterval(staleWindow + 1)
+        let staleDate = fetchedAt.addingTimeInterval(staleWindow + 1)
         if staleDate > now {
             return max(staleDate, now.addingTimeInterval(60))
         }
@@ -303,19 +304,20 @@ struct WatchComplicationResolver {
         }
 
         let accounts = snapshot.accounts.filter { !$0.metrics.isEmpty }
-        guard let account = displayedAccount(in: accounts, selection: selection) else {
+        guard let displayed = displayedMetric(in: accounts, selection: selection) else {
             return [now]
         }
+        let fetchedAt = displayed.metric.fetchedAt ?? displayed.account.fetchedAt
 
         let staleDate = nextReloadDate(snapshot: snapshot, selection: selection, now: now)
-        guard !snapshot.isStale(dataDate: account.fetchedAt, at: now), staleDate > now else {
+        guard !snapshot.isStale(dataDate: fetchedAt, at: now), staleDate > now else {
             return [now]
         }
 
         var dates = [now]
-        let elapsedMinutes = floor(max(0, now.timeIntervalSince(account.fetchedAt)) / 60)
-        var transition = account.fetchedAt.addingTimeInterval((elapsedMinutes + 1) * 60)
-        let firstHourEnd = account.fetchedAt.addingTimeInterval(60 * 60)
+        let elapsedMinutes = floor(max(0, now.timeIntervalSince(fetchedAt)) / 60)
+        var transition = fetchedAt.addingTimeInterval((elapsedMinutes + 1) * 60)
+        let firstHourEnd = fetchedAt.addingTimeInterval(60 * 60)
 
         while transition < staleDate, transition <= firstHourEnd {
             dates.append(transition)
@@ -323,8 +325,8 @@ struct WatchComplicationResolver {
         }
 
         if transition < staleDate {
-            let elapsedHours = floor(max(1, now.timeIntervalSince(account.fetchedAt) / (60 * 60)))
-            transition = account.fetchedAt.addingTimeInterval((elapsedHours + 1) * 60 * 60)
+            let elapsedHours = floor(max(1, now.timeIntervalSince(fetchedAt) / (60 * 60)))
+            transition = fetchedAt.addingTimeInterval((elapsedHours + 1) * 60 * 60)
             while transition < staleDate {
                 dates.append(transition)
                 transition = transition.addingTimeInterval(60 * 60)
@@ -335,14 +337,27 @@ struct WatchComplicationResolver {
         return Array(Set(dates)).sorted()
     }
 
-    private func displayedAccount(
+    private func displayedMetric(
         in accounts: [WatchAccountSnapshot],
         selection: WatchComplicationSelection
-    ) -> WatchAccountSnapshot? {
+    ) -> (account: WatchAccountSnapshot, metric: WatchMetricSnapshot)? {
+        let account: WatchAccountSnapshot?
         if let accountID = selection.accountID {
-            return accounts.first { $0.id == accountID }
+            account = accounts.first { $0.id == accountID }
+        } else {
+            account = accounts.first
         }
-        return accounts.first
+        guard let account else {
+            return nil
+        }
+
+        if let metricID = selection.metricID {
+            guard let metric = account.metrics.first(where: { $0.id == metricID }) else {
+                return nil
+            }
+            return (account, metric)
+        }
+        return (account, account.metrics[0])
     }
 
     private static func freshnessText(_ fetchedAt: Date, now: Date) -> String {

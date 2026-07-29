@@ -1309,7 +1309,16 @@ final class DashboardAndSettingsTests: XCTestCase {
             now: refreshedAt
         )
 
-        XCTAssertEqual(try XCTUnwrap(snapshot.accounts.first).fetchedAt, barsFetchedAt)
+        let account = try XCTUnwrap(snapshot.accounts.first)
+        XCTAssertEqual(account.fetchedAt, barsFetchedAt)
+        XCTAssertEqual(
+            try XCTUnwrap(account.metrics.first { $0.label == "Usage" }).fetchedAt,
+            barsFetchedAt
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(account.metrics.first { $0.label == "Balance" }).fetchedAt,
+            refreshedAt
+        )
     }
 
     @MainActor
@@ -1375,8 +1384,12 @@ final class DashboardAndSettingsTests: XCTestCase {
             configurationStore: store,
             now: fetchedAt
         )
-        let resetText = try XCTUnwrap(resetSnapshot.accounts.first?.metrics.first?.resetText)
+        let resetMetric = try XCTUnwrap(resetSnapshot.accounts.first?.metrics.first)
+        let resetText = try XCTUnwrap(resetMetric.resetText)
         XCTAssertNotEqual(resetText, "Projected text")
+        XCTAssertEqual(resetMetric.resetsAt, fetchedAt.addingTimeInterval(60 * 60))
+        XCTAssertEqual(resetMetric.resetDisplayStyle, .relativeWithLocalTime)
+        XCTAssertEqual(resetMetric.fetchedAt, fetchedAt)
 
         let staleResult = ProviderUsageResult(
             accountID: configuration.id,

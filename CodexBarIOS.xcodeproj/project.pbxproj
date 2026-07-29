@@ -95,6 +95,8 @@
 		10000000000000000000003C /* AppStoreScreenshotFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003D /* AppStoreScreenshotFixtures.swift */; };
 		10000000000000000000003D /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
 		10000000000000000000003E /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
+		F31000000000000000000009 /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
+		F3100000000000000000000A /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
 		D10000000000000000000001 /* CodexBarWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001 /* CodexBarWatchApp.swift */; };
 		D10000000000000000000002 /* WatchDashboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000002 /* WatchDashboardState.swift */; };
 		D10000000000000000000003 /* WatchDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000003 /* WatchDashboardView.swift */; };
@@ -898,6 +900,7 @@
 				E10000000000000000000002 /* WatchDashboardSnapshot.swift in Sources */,
 				E10000000000000000000004 /* WatchConnectivityStore.swift in Sources */,
 				F31000000000000000000001 /* WatchComplicationSupport.swift in Sources */,
+				F31000000000000000000009 /* UserFacingDateTimeFormatter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -918,6 +921,7 @@
 				F31000000000000000000005 /* WatchComplicationViews.swift in Sources */,
 				F31000000000000000000006 /* WatchDashboardSnapshot.swift in Sources */,
 				F31000000000000000000002 /* WatchComplicationSupport.swift in Sources */,
+				F3100000000000000000000A /* UserFacingDateTimeFormatter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
