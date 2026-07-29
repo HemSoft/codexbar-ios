@@ -860,6 +860,64 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertNotEqual(initial, later)
     }
 
+    func testComplicationExpiresAtKnownMetricResetBoundary() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let resetsAt = now.addingTimeInterval(5 * 60)
+        let metric = WatchMetricSnapshot(
+            id: "usage",
+            label: "Usage",
+            usedFraction: 0.5,
+            exactValue: "50%",
+            resetText: "Resets 5m",
+            resetsAt: resetsAt,
+            resetDisplayStyle: .relativeWithLocalTime,
+            fetchedAt: now
+        )
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 3_600,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "codex",
+                    providerName: "Codex",
+                    accountLabel: "Primary",
+                    fetchedAt: now,
+                    metrics: [metric]
+                ),
+            ]
+        )
+        let resolver = WatchComplicationResolver()
+
+        XCTAssertEqual(
+            resolver.nextReloadDate(snapshot: snapshot, selection: .automatic, now: now),
+            resetsAt
+        )
+        XCTAssertEqual(
+            resolver.timelineEntryDates(
+                snapshot: snapshot,
+                selection: .automatic,
+                now: now
+            ),
+            [now] + (1...5).map {
+                now.addingTimeInterval(TimeInterval($0 * 60))
+            }
+        )
+        XCTAssertFalse(
+            resolver.resolve(
+                snapshot: snapshot,
+                selection: .automatic,
+                at: resetsAt.addingTimeInterval(-1)
+            ).isStale
+        )
+        XCTAssertTrue(
+            resolver.resolve(
+                snapshot: snapshot,
+                selection: .automatic,
+                at: resetsAt
+            ).isStale
+        )
+    }
+
     func testAllWatchComplicationFamiliesHavePurposefulLayouts() {
         XCTAssertEqual(Set(WatchComplicationFamilyLayout.allCases), [
             .inline,

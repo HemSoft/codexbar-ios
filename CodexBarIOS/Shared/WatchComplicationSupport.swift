@@ -247,6 +247,12 @@ struct WatchComplicationResolver {
         let account = displayed.account
         let metric = displayed.metric
         let fetchedAt = metric.fetchedAt ?? account.fetchedAt
+        let isStale = Self.isStale(
+            snapshot: snapshot,
+            metric: metric,
+            fetchedAt: fetchedAt,
+            at: date
+        )
 
         return WatchComplicationSample(
             availability: .value,
@@ -263,7 +269,7 @@ struct WatchComplicationResolver {
                 fallback: metric.resetText
             ),
             freshnessText: Self.freshnessText(fetchedAt, now: date),
-            isStale: snapshot.isStale(dataDate: fetchedAt, at: date)
+            isStale: isStale
         )
     }
 
@@ -286,11 +292,19 @@ struct WatchComplicationResolver {
             max($0 * 2, 15 * 60)
         } ?? 60 * 60
         let staleDate = fetchedAt.addingTimeInterval(staleWindow + 1)
+        let retryInterval = max(snapshot.refreshIntervalSeconds ?? 60 * 60, 15 * 60)
+        if let resetsAt = displayed.metric.resetsAt {
+            if resetsAt <= now {
+                return now.addingTimeInterval(retryInterval)
+            }
+            if resetsAt < staleDate {
+                return resetsAt
+            }
+        }
         if staleDate > now {
             return max(staleDate, now.addingTimeInterval(60))
         }
 
-        let retryInterval = max(snapshot.refreshIntervalSeconds ?? 60 * 60, 15 * 60)
         return now.addingTimeInterval(retryInterval)
     }
 
@@ -310,7 +324,12 @@ struct WatchComplicationResolver {
         let fetchedAt = displayed.metric.fetchedAt ?? displayed.account.fetchedAt
 
         let staleDate = nextReloadDate(snapshot: snapshot, selection: selection, now: now)
-        guard !snapshot.isStale(dataDate: fetchedAt, at: now), staleDate > now else {
+        guard !Self.isStale(
+            snapshot: snapshot,
+            metric: displayed.metric,
+            fetchedAt: fetchedAt,
+            at: now
+        ), staleDate > now else {
             return [now]
         }
 
@@ -358,6 +377,16 @@ struct WatchComplicationResolver {
             return (account, metric)
         }
         return (account, account.metrics[0])
+    }
+
+    private static func isStale(
+        snapshot: WatchDashboardSnapshot,
+        metric: WatchMetricSnapshot,
+        fetchedAt: Date,
+        at date: Date
+    ) -> Bool {
+        snapshot.isStale(dataDate: fetchedAt, at: date)
+            || metric.resetsAt.map { $0 <= date } == true
     }
 
     private static func freshnessText(_ fetchedAt: Date, now: Date) -> String {
