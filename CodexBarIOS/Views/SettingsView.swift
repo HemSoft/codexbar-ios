@@ -232,6 +232,7 @@ struct SettingsView: View {
                         } label: {
                             Label("Add Another ChatGPT / Codex Account", systemImage: "person.badge.plus")
                         }
+                        .disabled(configurationStore.isPersistenceRecoveryRequired)
                     }
 
                     Menu {
