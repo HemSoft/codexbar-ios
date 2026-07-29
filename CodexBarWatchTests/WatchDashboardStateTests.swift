@@ -27,7 +27,7 @@ final class WatchDashboardStateTests: XCTestCase {
         )
         XCTAssertEqual(
             Set(defaultsEntry["NSPrivacyAccessedAPITypeReasons"] as? [String] ?? []),
-            ["CA92.1"]
+            ["1C8F.1", "CA92.1"]
         )
         XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false)
         XCTAssertTrue((manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]])?.isEmpty == true)
@@ -348,7 +348,12 @@ final class WatchDashboardStateTests: XCTestCase {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
-        let store = WatchDashboardStore(defaults: defaults, session: nil)
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil
+        )
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let snapshot = WatchDashboardSnapshot(
             generatedAt: now,
@@ -373,6 +378,41 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertEqual(store.snapshot, snapshot)
         XCTAssertFalse(store.isPhoneReachable)
         XCTAssertNil(store.decodingError)
+    }
+
+    @MainActor
+    func testLegacySnapshotMigrationReloadsComplicationTimeline() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let complicationStore = WatchComplicationSnapshotStore(defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                account(
+                    id: "codex",
+                    provider: "Codex",
+                    metricID: "window",
+                    fraction: 0.5,
+                    generatedAt: now
+                ),
+            ]
+        )
+        defaults.set(try snapshot.encoded(), forKey: "watch.dashboard.last-good-snapshot")
+        var reloadCount = 0
+
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: complicationStore,
+            reloadComplications: { reloadCount += 1 },
+            session: nil
+        )
+
+        XCTAssertEqual(store.snapshot, snapshot)
+        XCTAssertEqual(complicationStore.load(), snapshot)
+        XCTAssertEqual(reloadCount, 1)
     }
 
     @MainActor
@@ -624,6 +664,26 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertTrue(WatchComplicationFamilyLayout.circular.usesGauge)
         XCTAssertTrue(WatchComplicationFamilyLayout.corner.usesGauge)
         XCTAssertFalse(WatchComplicationFamilyLayout.inline.usesGauge)
+    }
+
+    func testFractionlessMetricsUseNumericComplicationLayouts() {
+        let sample = WatchComplicationSample(
+            availability: .value,
+            providerName: "Codex",
+            accountLabel: "Primary",
+            metricLabel: "Credits",
+            exactValue: "$12.34",
+            usedFraction: nil,
+            severity: .normal,
+            resetText: nil,
+            freshnessText: "Updated now",
+            isStale: false
+        )
+
+        XCTAssertFalse(sample.supportsGauge)
+        XCTAssertFalse(WatchComplicationFamilyLayout.circular.usesGauge(for: sample))
+        XCTAssertFalse(WatchComplicationFamilyLayout.corner.usesGauge(for: sample))
+        XCTAssertEqual(sample.exactValue, "$12.34")
     }
 
     private func account(

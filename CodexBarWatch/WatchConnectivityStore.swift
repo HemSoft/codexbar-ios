@@ -28,15 +28,21 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         self.complicationStore = complicationStore
         self.reloadComplications = reloadComplications
         self.session = session
+        var migratedSnapshotNeedsReload = false
         if let data = defaults.data(forKey: Self.persistedSnapshotKey),
            let restoredSnapshot = try? WatchDashboardSnapshot.decode(data)
         {
             snapshot = restoredSnapshot
-            _ = try? complicationStore.saveIfChanged(restoredSnapshot)
+            migratedSnapshotNeedsReload =
+                (try? complicationStore.saveIfChanged(restoredSnapshot)) == true
         } else {
             snapshot = complicationStore.load()
         }
         super.init()
+
+        if migratedSnapshotNeedsReload {
+            reloadComplications()
+        }
 
         guard let session else { return }
         session.delegate = self

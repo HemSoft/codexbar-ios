@@ -76,6 +76,10 @@ struct WatchComplicationSample: Equatable, Sendable {
         min(max(usedFraction ?? 0, 0), 1)
     }
 
+    var supportsGauge: Bool {
+        availability == .value && usedFraction != nil
+    }
+
     var stateLabel: String? {
         let freshnessState = isStale ? "Stale" : nil
         let severityState: String?
@@ -286,5 +290,9 @@ enum WatchComplicationFamilyLayout: CaseIterable, Hashable, Sendable {
 
     var usesGauge: Bool {
         self == .circular || self == .corner
+    }
+
+    func usesGauge(for sample: WatchComplicationSample) -> Bool {
+        usesGauge && sample.supportsGauge
     }
 }

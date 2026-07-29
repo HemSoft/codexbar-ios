@@ -22,7 +22,6 @@ struct WatchComplicationView: View {
             }
         }
         .containerBackground(.fill.tertiary, for: .widget)
-        .widgetURL(URL(string: "codexbar://watch"))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(entry.sample.accessibilityLabel)
     }
@@ -75,7 +74,7 @@ private struct WatchCircularComplication: View {
     let sample: WatchComplicationSample
 
     var body: some View {
-        if sample.availability == .value {
+        if sample.supportsGauge {
             Gauge(value: sample.clampedUsedFraction) {
                 Image(systemName: sample.isStale ? "clock.badge.exclamationmark" : "gauge")
             } currentValueLabel: {
@@ -85,6 +84,15 @@ private struct WatchCircularComplication: View {
             }
             .gaugeStyle(.accessoryCircularCapacity)
             .tint(tint)
+            .widgetAccentable()
+        } else if sample.availability == .value {
+            VStack(spacing: 1) {
+                Image(systemName: sample.isStale ? "clock.badge.exclamationmark" : "number")
+                Text(sample.exactValue)
+                    .font(.system(size: 10, weight: .semibold))
+                    .minimumScaleFactor(0.55)
+                    .lineLimit(1)
+            }
             .widgetAccentable()
         } else {
             VStack(spacing: 1) {
@@ -162,17 +170,29 @@ private struct WatchRectangularComplication: View {
 private struct WatchCornerComplication: View {
     let sample: WatchComplicationSample
 
+    @ViewBuilder
     var body: some View {
+        if sample.supportsGauge {
+            valueText
+                .widgetLabel {
+                    Gauge(value: sample.clampedUsedFraction) {
+                        Text(sample.providerName)
+                    }
+                    .gaugeStyle(.accessoryLinearCapacity)
+                    .tint(tint)
+                    .widgetAccentable()
+                }
+        } else {
+            valueText
+                .widgetLabel {
+                    Text(sample.availability == .value ? sample.metricLabel : "CodexBar")
+                }
+        }
+    }
+
+    private var valueText: some View {
         Text(sample.availability == .value ? sample.exactValue : "--")
             .font(.caption.monospacedDigit().weight(.semibold))
-            .widgetLabel {
-                Gauge(value: sample.clampedUsedFraction) {
-                    Text(sample.providerName)
-                }
-                .gaugeStyle(.accessoryLinearCapacity)
-                .tint(tint)
-                .widgetAccentable()
-            }
     }
 
     private var tint: Color {
