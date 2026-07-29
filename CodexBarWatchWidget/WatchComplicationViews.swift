@@ -185,7 +185,7 @@ private struct WatchCornerComplication: View {
         } else {
             valueText
                 .widgetLabel {
-                    Text(sample.availability == .value ? sample.metricLabel : "CodexBar")
+                    Text(sample.cornerContextLabel)
                 }
         }
     }

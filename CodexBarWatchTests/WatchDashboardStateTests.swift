@@ -723,13 +723,14 @@ final class WatchDashboardStateTests: XCTestCase {
             severity: .normal,
             resetText: nil,
             freshnessText: "Updated now",
-            isStale: false
+            isStale: true
         )
 
         XCTAssertFalse(sample.supportsGauge)
         XCTAssertFalse(WatchComplicationFamilyLayout.circular.usesGauge(for: sample))
         XCTAssertFalse(WatchComplicationFamilyLayout.corner.usesGauge(for: sample))
         XCTAssertEqual(sample.exactValue, "$12.34")
+        XCTAssertEqual(sample.cornerContextLabel, "Stale • Credits")
     }
 
     private func account(

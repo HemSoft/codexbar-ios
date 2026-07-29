@@ -178,6 +178,13 @@ struct WatchComplicationSample: Equatable, Sendable {
         availability == .value && usedFraction != nil
     }
 
+    var cornerContextLabel: String {
+        guard availability == .value else {
+            return "CodexBar"
+        }
+        return isStale ? "Stale • \(metricLabel)" : metricLabel
+    }
+
     var stateLabel: String? {
         let freshnessState = isStale ? "Stale" : nil
         let severityState: String?
