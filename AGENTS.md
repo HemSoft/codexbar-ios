@@ -4,8 +4,9 @@ CodexBar for iOS is a native SwiftUI companion app (bundle ID
 `com.hemsoft.CodexBarIOS`, scheme `CodexBarIOS`, Xcode project
 `CodexBarIOS.xcodeproj`). Xcode targets: `CodexBarIOS` (app),
 `CodexBarIOSWidget` (widget), `CodexBarIOSTests` (unit tests),
-`CodexBarWatch` (embedded watchOS 10 companion), and `CodexBarWatchTests`
-(watchOS unit tests). Shared schemes are `CodexBarIOS`, `CodexBarWatch`, and
+`CodexBarWatch` (embedded watchOS 10 companion), `CodexBarWatchWidget`
+(WidgetKit complication extension), and `CodexBarWatchTests` (watchOS unit
+tests). Shared schemes are `CodexBarIOS`, `CodexBarWatch`, and
 `CodexBarWatchTests`. `Package.swift` also exposes the
 `CodexBarIOSSmokeTests` executable smoke harness. See
 `README.md` for scope and the Windows reference repo, `APP-STORE.md` for store
