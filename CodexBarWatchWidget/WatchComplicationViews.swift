@@ -122,7 +122,7 @@ private struct WatchRectangularComplication: View {
         if sample.availability == .value {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 3) {
-                    Text(sample.providerName)
+                    Text(sample.accountContextLabel)
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                     Spacer(minLength: 2)
@@ -176,7 +176,7 @@ private struct WatchCornerComplication: View {
             valueText
                 .widgetLabel {
                     Gauge(value: sample.clampedUsedFraction) {
-                        Text(sample.providerName)
+                        Text(sample.cornerContextLabel)
                     }
                     .gaugeStyle(.accessoryLinearCapacity)
                     .tint(tint)

@@ -416,6 +416,60 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
+    func testNewerSharedSnapshotIsNotRolledBackByLegacyDefaults() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let complicationStore = WatchComplicationSnapshotStore(defaults: defaults)
+        let oldDate = Date(timeIntervalSince1970: 2_000_000_000)
+        let oldSnapshot = WatchDashboardSnapshot(
+            generatedAt: oldDate,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                account(
+                    id: "codex",
+                    provider: "Codex",
+                    metricID: "window",
+                    fraction: 0.25,
+                    generatedAt: oldDate
+                ),
+            ]
+        )
+        let newDate = oldDate.addingTimeInterval(60)
+        let newSnapshot = WatchDashboardSnapshot(
+            generatedAt: newDate,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                account(
+                    id: "codex",
+                    provider: "Codex",
+                    metricID: "window",
+                    fraction: 0.75,
+                    generatedAt: newDate
+                ),
+            ]
+        )
+        defaults.set(try oldSnapshot.encoded(), forKey: "watch.dashboard.last-good-snapshot")
+        try complicationStore.saveIfChanged(newSnapshot)
+        var reloadCount = 0
+
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: complicationStore,
+            reloadComplications: { reloadCount += 1 },
+            session: nil
+        )
+
+        XCTAssertEqual(store.snapshot, newSnapshot)
+        XCTAssertEqual(complicationStore.load(), newSnapshot)
+        XCTAssertEqual(reloadCount, 0)
+        let reconciledData = try XCTUnwrap(
+            defaults.data(forKey: "watch.dashboard.last-good-snapshot")
+        )
+        XCTAssertEqual(try WatchDashboardSnapshot.decode(reconciledData), newSnapshot)
+    }
+
+    @MainActor
     func testChangedConnectivityPayloadPersistsForComplicationAndReloadsOnce() throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -513,6 +567,8 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertEqual(configured.providerName, "Copilot")
         XCTAssertEqual(configured.exactValue, "80%")
         XCTAssertEqual(missing, .unavailable)
+        XCTAssertNil(missing.stateLabel)
+        XCTAssertFalse(missing.accessibilityLabel.contains("Warning"))
     }
 
     func testMetricOnlyComplicationConfigurationPreservesItsAccount() {
@@ -731,6 +787,7 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertFalse(WatchComplicationFamilyLayout.corner.usesGauge(for: sample))
         XCTAssertEqual(sample.exactValue, "$12.34")
         XCTAssertEqual(sample.cornerContextLabel, "Stale • Credits")
+        XCTAssertEqual(sample.accountContextLabel, "Codex • Primary")
     }
 
     private func account(

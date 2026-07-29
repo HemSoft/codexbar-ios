@@ -164,7 +164,7 @@ struct WatchComplicationSample: Equatable, Sendable {
         metricLabel: "Selection unavailable",
         exactValue: "--",
         usedFraction: nil,
-        severity: .warning,
+        severity: .normal,
         resetText: nil,
         freshnessText: "Open iPhone app",
         isStale: false
@@ -183,6 +183,12 @@ struct WatchComplicationSample: Equatable, Sendable {
             return "CodexBar"
         }
         return isStale ? "Stale • \(metricLabel)" : metricLabel
+    }
+
+    var accountContextLabel: String {
+        [providerName, accountLabel]
+            .filter { !$0.isEmpty }
+            .joined(separator: " • ")
     }
 
     var stateLabel: String? {
@@ -373,8 +379,11 @@ struct WatchComplicationSnapshotStore {
     }
 
     @discardableResult
-    func saveIfChanged(_ snapshot: WatchDashboardSnapshot) throws -> Bool {
-        let data = try snapshot.encoded()
+    func saveIfChanged(
+        _ snapshot: WatchDashboardSnapshot,
+        encodedData: Data? = nil
+    ) throws -> Bool {
+        let data = try encodedData ?? snapshot.encoded()
         guard defaults.data(forKey: WatchComplicationConstants.snapshotDefaultsKey) != data else {
             return false
         }

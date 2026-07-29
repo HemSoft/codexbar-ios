@@ -29,14 +29,30 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         self.reloadComplications = reloadComplications
         self.session = session
         var migratedSnapshotNeedsReload = false
-        if let data = defaults.data(forKey: Self.persistedSnapshotKey),
-           let restoredSnapshot = try? WatchDashboardSnapshot.decode(data)
+        let legacyData = defaults.data(forKey: Self.persistedSnapshotKey)
+        let legacySnapshot = legacyData.flatMap { try? WatchDashboardSnapshot.decode($0) }
+        let sharedSnapshot = complicationStore.load()
+        if let legacySnapshot,
+           sharedSnapshot == nil
+                || legacySnapshot.generatedAt
+                    > (sharedSnapshot?.generatedAt ?? .distantPast)
         {
-            snapshot = restoredSnapshot
-            migratedSnapshotNeedsReload =
-                (try? complicationStore.saveIfChanged(restoredSnapshot)) == true
+            snapshot = legacySnapshot
+            migratedSnapshotNeedsReload = (
+                try? complicationStore.saveIfChanged(
+                    legacySnapshot,
+                    encodedData: legacyData
+                )
+            ) == true
+        } else if let sharedSnapshot {
+            snapshot = sharedSnapshot
+            if legacySnapshot != sharedSnapshot,
+               let sharedData = try? sharedSnapshot.encoded()
+            {
+                defaults.set(sharedData, forKey: Self.persistedSnapshotKey)
+            }
         } else {
-            snapshot = complicationStore.load()
+            snapshot = nil
         }
         super.init()
 
@@ -66,7 +82,10 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         do {
             let decoded = try WatchDashboardSnapshot.decodeApplicationContext(applicationContext)
             let encoded = try decoded.encoded()
-            let shouldReloadComplications = try complicationStore.saveIfChanged(decoded)
+            let shouldReloadComplications = try complicationStore.saveIfChanged(
+                decoded,
+                encodedData: encoded
+            )
             defaults.set(encoded, forKey: Self.persistedSnapshotKey)
             snapshot = decoded
             decodingError = nil
