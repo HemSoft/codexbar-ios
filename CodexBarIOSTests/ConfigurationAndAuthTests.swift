@@ -840,6 +840,24 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertNotEqual(first.port, second.port)
     }
 
+    func testLoopbackOAuthCallbackWaitFinishesImmediatelyWhenCanceled() async throws {
+        let server = try await makeLoopbackCallbackServer(preferredPorts: [0])
+        defer { server.cancel() }
+        let callbackTask = Task {
+            try await server.waitForCallback(timeoutNanoseconds: 30_000_000_000)
+        }
+        await Task.yield()
+
+        callbackTask.cancel()
+
+        do {
+            _ = try await callbackTask.value
+            XCTFail("Expected the callback wait to be canceled.")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+    }
+
     func testLoopbackOAuthCallbackServerRejectsOversizedRequest() async throws {
         let server = try await makeLoopbackCallbackServer(
             preferredPorts: [0],
@@ -923,6 +941,31 @@ final class ConfigurationAndAuthTests: XCTestCase {
             XCTFail("Expected ChatGPT sign-in to reject a failed browser session.")
         } catch {
             XCTAssertEqual(error as? CodexWebAuthService.AuthError, .couldNotStartBrowserSession)
+        }
+    }
+
+    @MainActor
+    func testCodexBrowserSignInCancellationStopsCallbackWait() async throws {
+        let service = CodexWebAuthService(
+            callbackTimeoutNanoseconds: 30_000_000_000,
+            preferredCallbackPorts: [0]
+        )
+        let authorizationPresented = expectation(description: "ChatGPT authorization URL presented")
+        let signInTask = Task {
+            try await service.signIn { _ in
+                authorizationPresented.fulfill()
+                return true
+            }
+        }
+        await fulfillment(of: [authorizationPresented], timeout: 2)
+
+        signInTask.cancel()
+
+        do {
+            _ = try await signInTask.value
+            XCTFail("Expected ChatGPT browser sign-in cancellation.")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
         }
     }
 
