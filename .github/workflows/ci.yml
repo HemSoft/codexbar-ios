@@ -62,6 +62,7 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/CodexBarIOSTests.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             test
+          false # Temporary validation: exercise the failure-only artifact upload.
 
       - name: Preserve iOS test diagnostics
         if: ${{ failure() && steps.ios-tests.outcome == 'failure' }}
