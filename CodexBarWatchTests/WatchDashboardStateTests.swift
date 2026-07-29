@@ -475,6 +475,25 @@ final class WatchDashboardStateTests: XCTestCase {
         XCTAssertEqual(missing, .unavailable)
     }
 
+    func testMetricOnlyComplicationConfigurationPreservesItsAccount() {
+        XCTAssertEqual(
+            WatchComplicationSelection.resolving(
+                accountID: nil,
+                metricAccountID: "copilot",
+                metricID: "requests"
+            ),
+            WatchComplicationSelection(accountID: "copilot", metricID: "requests")
+        )
+        XCTAssertEqual(
+            WatchComplicationSelection.resolving(
+                accountID: "codex",
+                metricAccountID: "copilot",
+                metricID: "requests"
+            ),
+            WatchComplicationSelection(accountID: "codex", metricID: nil)
+        )
+    }
+
     func testComplicationResolutionDistinguishesEmptyStaleWarningAndCriticalStates() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let resolver = WatchComplicationResolver()
@@ -540,12 +559,56 @@ final class WatchDashboardStateTests: XCTestCase {
             now.addingTimeInterval(901)
         )
         XCTAssertEqual(
+            resolver.timelineEntryDates(
+                snapshot: snapshot,
+                selection: .automatic,
+                now: now
+            ),
+            [now]
+                + (1...15).map { now.addingTimeInterval(TimeInterval($0 * 60)) }
+                + [now.addingTimeInterval(901)]
+        )
+        XCTAssertEqual(
             resolver.nextReloadDate(
                 snapshot: snapshot,
                 selection: .automatic,
                 now: now.addingTimeInterval(902)
             ),
             now.addingTimeInterval(1_802)
+        )
+    }
+
+    func testComplicationTimelineUsesDisplayedNonemptyAccount() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let populatedFetchedAt = now.addingTimeInterval(-300)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "empty",
+                    providerName: "Empty",
+                    accountLabel: "Primary",
+                    fetchedAt: now,
+                    metrics: []
+                ),
+                account(
+                    id: "codex",
+                    provider: "Codex",
+                    metricID: "window",
+                    fraction: 0.5,
+                    generatedAt: populatedFetchedAt
+                ),
+            ]
+        )
+
+        XCTAssertEqual(
+            WatchComplicationResolver().nextReloadDate(
+                snapshot: snapshot,
+                selection: .automatic,
+                now: now
+            ),
+            now.addingTimeInterval(601)
         )
     }
 

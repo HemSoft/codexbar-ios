@@ -11,6 +11,21 @@ struct WatchComplicationSelection: Equatable, Sendable {
     let metricID: String?
 
     static let automatic = WatchComplicationSelection(accountID: nil, metricID: nil)
+
+    static func resolving(
+        accountID: String?,
+        metricAccountID: String?,
+        metricID: String?
+    ) -> WatchComplicationSelection {
+        let resolvedAccountID = accountID ?? metricAccountID
+        let resolvedMetricID = metricAccountID == nil || metricAccountID == resolvedAccountID
+            ? metricID
+            : nil
+        return WatchComplicationSelection(
+            accountID: resolvedAccountID,
+            metricID: resolvedMetricID
+        )
+    }
 }
 
 enum WatchComplicationAvailability: Equatable, Sendable {
@@ -107,14 +122,8 @@ struct WatchComplicationResolver {
             return .empty
         }
 
-        let account: WatchAccountSnapshot
-        if let accountID = selection.accountID {
-            guard let selected = accounts.first(where: { $0.id == accountID }) else {
-                return .unavailable
-            }
-            account = selected
-        } else {
-            account = accounts[0]
+        guard let account = displayedAccount(in: accounts, selection: selection) else {
+            return .unavailable
         }
 
         let metric: WatchMetricSnapshot
@@ -150,9 +159,8 @@ struct WatchComplicationResolver {
             return now.addingTimeInterval(30 * 60)
         }
 
-        let account = selection.accountID.flatMap { accountID in
-            snapshot.accounts.first { $0.id == accountID }
-        } ?? snapshot.accounts.first
+        let accounts = snapshot.accounts.filter { !$0.metrics.isEmpty }
+        let account = displayedAccount(in: accounts, selection: selection)
 
         guard let account else {
             return now.addingTimeInterval(30 * 60)
@@ -168,6 +176,58 @@ struct WatchComplicationResolver {
 
         let retryInterval = max(snapshot.refreshIntervalSeconds ?? 60 * 60, 15 * 60)
         return now.addingTimeInterval(retryInterval)
+    }
+
+    func timelineEntryDates(
+        snapshot: WatchDashboardSnapshot?,
+        selection: WatchComplicationSelection,
+        now: Date
+    ) -> [Date] {
+        guard let snapshot else {
+            return [now]
+        }
+
+        let accounts = snapshot.accounts.filter { !$0.metrics.isEmpty }
+        guard let account = displayedAccount(in: accounts, selection: selection) else {
+            return [now]
+        }
+
+        let staleDate = nextReloadDate(snapshot: snapshot, selection: selection, now: now)
+        guard !snapshot.isStale(dataDate: account.fetchedAt, at: now), staleDate > now else {
+            return [now]
+        }
+
+        var dates = [now]
+        let elapsedMinutes = floor(max(0, now.timeIntervalSince(account.fetchedAt)) / 60)
+        var transition = account.fetchedAt.addingTimeInterval((elapsedMinutes + 1) * 60)
+        let firstHourEnd = account.fetchedAt.addingTimeInterval(60 * 60)
+
+        while transition < staleDate, transition <= firstHourEnd {
+            dates.append(transition)
+            transition = transition.addingTimeInterval(60)
+        }
+
+        if transition < staleDate {
+            let elapsedHours = floor(max(1, now.timeIntervalSince(account.fetchedAt) / (60 * 60)))
+            transition = account.fetchedAt.addingTimeInterval((elapsedHours + 1) * 60 * 60)
+            while transition < staleDate {
+                dates.append(transition)
+                transition = transition.addingTimeInterval(60 * 60)
+            }
+        }
+
+        dates.append(staleDate)
+        return Array(Set(dates)).sorted()
+    }
+
+    private func displayedAccount(
+        in accounts: [WatchAccountSnapshot],
+        selection: WatchComplicationSelection
+    ) -> WatchAccountSnapshot? {
+        if let accountID = selection.accountID {
+            return accounts.first { $0.id == accountID }
+        }
+        return accounts.first
     }
 
     private static func freshnessText(_ fetchedAt: Date, now: Date) -> String {

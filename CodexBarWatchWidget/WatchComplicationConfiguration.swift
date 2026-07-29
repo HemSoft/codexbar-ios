@@ -46,21 +46,27 @@ struct WatchComplicationTimelineLoader {
     ) -> Timeline<WatchComplicationEntry> {
         let date = now()
         let snapshot = loadSnapshot()
-        let entry = WatchComplicationEntry(
-            date: date,
-            sample: resolver.resolve(
-                snapshot: snapshot,
-                selection: configuration.selection,
-                at: date
-            ),
-            configuration: configuration
-        )
+        let entries = resolver.timelineEntryDates(
+            snapshot: snapshot,
+            selection: configuration.selection,
+            now: date
+        ).map { entryDate in
+            WatchComplicationEntry(
+                date: entryDate,
+                sample: resolver.resolve(
+                    snapshot: snapshot,
+                    selection: configuration.selection,
+                    at: entryDate
+                ),
+                configuration: configuration
+            )
+        }
         let nextReload = resolver.nextReloadDate(
             snapshot: snapshot,
             selection: configuration.selection,
             now: date
         )
-        return Timeline(entries: [entry], policy: .after(nextReload))
+        return Timeline(entries: entries, policy: .after(nextReload))
     }
 }
 
@@ -114,13 +120,10 @@ struct WatchComplicationConfigurationIntent: WidgetConfigurationIntent {
     var metric: WatchComplicationMetricEntity?
 
     var selection: WatchComplicationSelection {
-        WatchComplicationSelection(
+        WatchComplicationSelection.resolving(
             accountID: account?.id,
-            metricID: metric.flatMap { selectedMetric in
-                selectedMetric.accountID == account?.id || account == nil
-                    ? selectedMetric.metricID
-                    : nil
-            }
+            metricAccountID: metric?.accountID,
+            metricID: metric?.metricID
         )
     }
 }
