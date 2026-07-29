@@ -40,13 +40,15 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let accountID: String
     private let onCredentialsChanged: @MainActor () -> Void
     private let onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
-    private let codexAuthService: CodexWebAuthService
+    private let codexAuthService: any CodexWebAuthenticating
     private let copilotAuthService: CopilotWebAuthService
     private let claudeAuthService: ClaudeWebAuthService
     private let cursorAuthService: CursorWebAuthService
     private let copilotUsageProvider: CopilotUsageProvider
+    private var codexSignInTask: Task<Void, Never>?
+    private var codexAuthPresenter = PrivateWebAuthenticationPresenter()
     private var cursorSignInTask: Task<Void, Never>?
-    private var cursorAuthPresenter = CursorWebAuthenticationPresenter()
+    private var cursorAuthPresenter = PrivateWebAuthenticationPresenter()
     private var debugAutostartedCopilotAuth = false
     private var pendingPersistenceTask: Task<Void, Never>?
     private var pendingConfiguration: ProviderAccountConfiguration?
@@ -56,7 +58,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         accountID: String,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
-        codexAuthService: CodexWebAuthService = CodexWebAuthService(),
+        codexAuthService: any CodexWebAuthenticating = CodexWebAuthService(),
         copilotAuthService: CopilotWebAuthService = CopilotWebAuthService(),
         claudeAuthService: ClaudeWebAuthService = ClaudeWebAuthService(),
         cursorAuthService: CursorWebAuthService = CursorWebAuthService(),
@@ -143,6 +145,19 @@ final class ProviderSettingsViewModel: ObservableObject {
         )
     }
 
+    var hasOtherCodexAccounts: Bool {
+        configurationStore.configurations(for: .codex).contains { $0.id != configuration.id }
+    }
+
+    var codexSignInButtonTitle: String {
+        if configurationStore.hasSecret(for: configuration) {
+            return "Sign in Again"
+        }
+        return hasOtherCodexAccounts
+            ? "Connect a Different ChatGPT Account"
+            : "Sign in with ChatGPT"
+    }
+
     func prepare() async {
         let stored = configurationStore.configuration(accountID: accountID) ?? configuration
         let normalized = normalizedConfiguration(stored)
@@ -156,6 +171,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func cancelAuthentication() {
+        codexSignInTask?.cancel()
+        codexAuthPresenter.finish()
         cursorSignInTask?.cancel()
         cursorAuthPresenter.finish()
     }
@@ -192,33 +209,55 @@ final class ProviderSettingsViewModel: ObservableObject {
         onCredentialsChanged()
     }
 
+    func startCodexSignIn() {
+        guard codexSignInTask == nil else { return }
+        codexSignInTask = Task { @MainActor in
+            await self.signInWithCodex()
+        }
+    }
+
     func signInWithCodex() async {
         isSigningInWithCodex = true
         credentialError = nil
         codexAuthError = nil
-        defer { isSigningInWithCodex = false }
+        defer {
+            codexAuthPresenter.finish()
+            codexSignInTask = nil
+            isSigningInWithCodex = false
+        }
 
         do {
             let result = try await codexAuthService.signIn { url in
-                self.authURL = PresentedAuthURL(url: url)
+                self.codexAuthPresenter.present(url: url) {
+                    self.codexSignInTask?.cancel()
+                }
             }
-            var updated = configuration
-            updated.authMethod = .browserSession
-            guard persist(updated) else {
-                codexAuthError = configurationStore.lastError
-                authURL = nil
+
+            switch configurationStore.validateCodexAccountIdentity(
+                result.accountID,
+                for: configuration
+            ) {
+            case .available:
+                break
+            case .duplicate(let accountName):
+                codexAuthError = "That ChatGPT account is already connected as “\(accountName)”. No saved account was changed. Cancel or try again with a different identity."
+                return
+            case .unableToVerify:
+                codexAuthError = "ChatGPT sign-in completed, but CodexBar could not safely verify it against the other saved ChatGPT accounts. No saved account was changed. Try again."
                 return
             }
-            guard persistSecret(result.storedCredential) else {
+
+            var updated = configuration
+            updated.authMethod = .browserSession
+            guard persistCredential(result.storedCredential, with: updated) else {
                 codexAuthError = configurationStore.lastError
-                authURL = nil
                 return
             }
             onCredentialsChanged()
-            authURL = nil
         } catch {
-            codexAuthError = error.localizedDescription
-            authURL = nil
+            codexAuthError = error is CancellationError || Task.isCancelled
+                ? "ChatGPT sign-in canceled. Saved accounts were not changed."
+                : error.localizedDescription
         }
     }
 

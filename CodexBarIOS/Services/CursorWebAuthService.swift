@@ -204,9 +204,9 @@ public final class CursorWebAuthService: Sendable {
 
 #if canImport(AuthenticationServices) && canImport(UIKit)
 @MainActor
-final class CursorWebAuthenticationPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
+final class PrivateWebAuthenticationPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
     private var session: ASWebAuthenticationSession?
-    private var sessionGeneration = CursorWebAuthenticationSessionGeneration()
+    private var sessionGeneration = WebAuthenticationSessionGeneration()
     private var cancellationHandler: (() -> Void)?
 
     func present(url: URL, onCancel: @escaping () -> Void) -> Bool {
@@ -270,7 +270,7 @@ final class CursorWebAuthenticationPresenter: NSObject, ASWebAuthenticationPrese
 }
 #endif
 
-struct CursorWebAuthenticationSessionGeneration {
+struct WebAuthenticationSessionGeneration {
     private var activeSessionID: UUID?
 
     mutating func start() -> UUID {

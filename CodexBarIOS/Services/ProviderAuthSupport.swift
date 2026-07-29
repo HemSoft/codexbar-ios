@@ -276,16 +276,21 @@ final class LoopbackOAuthCallbackServer<AuthError: LocalizedError & Sendable>: @
         )
         defer { timeoutWorkItem.cancel() }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            if let pendingCallbackResult {
-                self.pendingCallbackResult = nil
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                lock.lock()
+                if let pendingCallbackResult {
+                    self.pendingCallbackResult = nil
+                    lock.unlock()
+                    continuation.resume(with: pendingCallbackResult)
+                    return
+                }
+                callbackContinuation = continuation
                 lock.unlock()
-                continuation.resume(with: pendingCallbackResult)
-                return
             }
-            callbackContinuation = continuation
-            lock.unlock()
+        } onCancel: {
+            self.finishCallback(.failure(CancellationError()))
         }
     }
 

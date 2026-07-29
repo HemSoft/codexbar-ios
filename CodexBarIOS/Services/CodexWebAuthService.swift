@@ -25,9 +25,17 @@ public struct CodexPKCEPair: Equatable, Sendable {
     public let codeChallenge: String
 }
 
+@MainActor
+protocol CodexWebAuthenticating {
+    func signIn(
+        presentAuthorizationURL: @escaping @MainActor (URL) -> Bool
+    ) async throws -> CodexWebAuthResult
+}
+
 public final class CodexWebAuthService: Sendable {
     public enum AuthError: LocalizedError, Equatable, Sendable {
         case couldNotStartCallbackServer
+        case couldNotStartBrowserSession
         case missingAuthorizationCode
         case stateMismatch
         case callbackTimedOut
@@ -38,6 +46,8 @@ public final class CodexWebAuthService: Sendable {
             switch self {
             case .couldNotStartCallbackServer:
                 "Could not start the local login callback server."
+            case .couldNotStartBrowserSession:
+                "Could not open a private ChatGPT sign-in session."
             case .missingAuthorizationCode:
                 "ChatGPT sign-in did not return an authorization code."
             case .stateMismatch:
@@ -88,7 +98,9 @@ public final class CodexWebAuthService: Sendable {
     }
 
     @MainActor
-    public func signIn(presentAuthorizationURL: @escaping @MainActor (URL) -> Void) async throws -> CodexWebAuthResult {
+    public func signIn(
+        presentAuthorizationURL: @escaping @MainActor (URL) -> Bool
+    ) async throws -> CodexWebAuthResult {
         let state = Self.randomBase64URL(byteCount: 32)
         let pkce = Self.makePKCEPair()
         let callbackServer = try await LoopbackOAuthCallbackServer<AuthError>.start(
@@ -115,7 +127,9 @@ public final class CodexWebAuthService: Sendable {
             codeChallenge: pkce.codeChallenge
         )
 
-        presentAuthorizationURL(authorizationURL)
+        guard presentAuthorizationURL(authorizationURL) else {
+            throw AuthError.couldNotStartBrowserSession
+        }
 
         let callbackURL = try await callbackServer.waitForCallback(
             timeoutNanoseconds: callbackTimeoutNanoseconds
@@ -253,6 +267,8 @@ public final class CodexWebAuthService: Sendable {
     }
 
 }
+
+extension CodexWebAuthService: CodexWebAuthenticating {}
 
 private extension URLComponents {
     func queryItemValue(named name: String) -> String? {
