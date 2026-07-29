@@ -93,6 +93,7 @@ private struct WatchCircularComplication: View {
                     .minimumScaleFactor(0.55)
                     .lineLimit(1)
             }
+            .foregroundStyle(tint)
             .widgetAccentable()
         } else {
             VStack(spacing: 1) {
@@ -184,8 +185,12 @@ private struct WatchCornerComplication: View {
                 }
         } else {
             valueText
+                .foregroundStyle(tint)
+                .widgetAccentable()
                 .widgetLabel {
                     Text(sample.cornerContextLabel)
+                        .foregroundStyle(tint)
+                        .widgetAccentable()
                 }
         }
     }
