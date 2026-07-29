@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import WatchConnectivity
+import WidgetKit
 
 @MainActor
 final class WatchDashboardStore: NSObject, ObservableObject {
@@ -11,16 +12,29 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private static let persistedSnapshotKey = "watch.dashboard.last-good-snapshot"
 
     private let defaults: UserDefaults
+    private let complicationStore: WatchComplicationSnapshotStore
+    private let reloadComplications: () -> Void
     private let session: WCSession?
 
     init(
         defaults: UserDefaults = .standard,
+        complicationStore: WatchComplicationSnapshotStore = WatchComplicationSnapshotStore(),
+        reloadComplications: @escaping () -> Void = {
+            WidgetCenter.shared.reloadTimelines(ofKind: WatchComplicationConstants.widgetKind)
+        },
         session: WCSession? = WCSession.isSupported() ? .default : nil
     ) {
         self.defaults = defaults
+        self.complicationStore = complicationStore
+        self.reloadComplications = reloadComplications
         self.session = session
-        if let data = defaults.data(forKey: Self.persistedSnapshotKey) {
-            snapshot = try? WatchDashboardSnapshot.decode(data)
+        if let data = defaults.data(forKey: Self.persistedSnapshotKey),
+           let restoredSnapshot = try? WatchDashboardSnapshot.decode(data)
+        {
+            snapshot = restoredSnapshot
+            _ = try? complicationStore.saveIfChanged(restoredSnapshot)
+        } else {
+            snapshot = complicationStore.load()
         }
         super.init()
 
@@ -46,9 +60,13 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         do {
             let decoded = try WatchDashboardSnapshot.decodeApplicationContext(applicationContext)
             let encoded = try decoded.encoded()
+            let shouldReloadComplications = try complicationStore.saveIfChanged(decoded)
             defaults.set(encoded, forKey: Self.persistedSnapshotKey)
             snapshot = decoded
             decodingError = nil
+            if shouldReloadComplications {
+                reloadComplications()
+            }
         } catch {
             decodingError = "Couldn’t read the latest iPhone update"
         }

@@ -8,6 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added configurable Apple Watch complications for inline, circular,
+  rectangular, and corner placements, with cached provider usage, honest
+  freshness and stale states, and warning or critical context at a glance.
+  ([#190](https://github.com/HemSoft/codexbar-ios/issues/190))
 - Added a clear path for connecting additional ChatGPT / Codex accounts with
   private browser sign-in, duplicate-account protection, and independently
   preserved credentials and settings for each identity.
