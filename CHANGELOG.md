@@ -187,6 +187,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Upgraded the pinned CI checkout and failed-test diagnostic upload actions to
+  their current v7.0.1 releases while preserving least-privilege access and
+  failure-only `.xcresult` retention.
+  ([#183](https://github.com/HemSoft/codexbar-ios/issues/183))
 - Isolated browser-auth callback ports and network fixtures across parallel test
   workers, and preserved iOS `.xcresult` diagnostics when CI tests fail.
   ([#173](https://github.com/HemSoft/codexbar-ios/issues/173))
