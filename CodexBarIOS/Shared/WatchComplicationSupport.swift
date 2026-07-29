@@ -28,6 +28,104 @@ struct WatchComplicationSelection: Equatable, Sendable {
     }
 }
 
+struct WatchComplicationAccountChoice: Equatable, Sendable {
+    let id: String
+    let providerName: String
+    let accountLabel: String
+}
+
+struct WatchComplicationMetricChoice: Equatable, Sendable {
+    let id: String
+    let accountID: String
+    let metricID: String
+    let providerName: String
+    let accountLabel: String
+    let metricLabel: String
+
+    var subtitle: String {
+        [providerName, accountLabel]
+            .filter { !$0.isEmpty }
+            .joined(separator: " • ")
+    }
+}
+
+struct WatchComplicationChoiceCatalog {
+    private let snapshot: WatchDashboardSnapshot?
+
+    init(snapshot: WatchDashboardSnapshot?) {
+        self.snapshot = snapshot
+    }
+
+    var accounts: [WatchComplicationAccountChoice] {
+        (snapshot?.accounts ?? [])
+            .filter { !$0.metrics.isEmpty }
+            .map {
+                WatchComplicationAccountChoice(
+                    id: $0.id,
+                    providerName: $0.providerName,
+                    accountLabel: $0.accountLabel
+                )
+            }
+    }
+
+    var metrics: [WatchComplicationMetricChoice] {
+        (snapshot?.accounts ?? []).flatMap { account in
+            account.metrics.map { metric in
+                WatchComplicationMetricChoice(
+                    id: Self.metricChoiceID(accountID: account.id, metricID: metric.id),
+                    accountID: account.id,
+                    metricID: metric.id,
+                    providerName: account.providerName,
+                    accountLabel: account.accountLabel,
+                    metricLabel: metric.label
+                )
+            }
+        }
+    }
+
+    func accounts(for identifiers: [String]) -> [WatchComplicationAccountChoice] {
+        let choicesByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
+        return identifiers.map { identifier in
+            choicesByID[identifier] ?? WatchComplicationAccountChoice(
+                id: identifier,
+                providerName: "Saved Account",
+                accountLabel: "Open CodexBar to refresh"
+            )
+        }
+    }
+
+    func metrics(for identifiers: [String]) -> [WatchComplicationMetricChoice] {
+        let choicesByID = Dictionary(uniqueKeysWithValues: metrics.map { ($0.id, $0) })
+        return identifiers.map { identifier in
+            choicesByID[identifier] ?? Self.savedMetricChoice(identifier: identifier)
+        }
+    }
+
+    static func metricChoiceID(accountID: String, metricID: String) -> String {
+        "\(accountID)::\(metricID)"
+    }
+
+    private static func savedMetricChoice(identifier: String) -> WatchComplicationMetricChoice {
+        let accountID: String
+        let metricID: String
+        if let separator = identifier.range(of: "::") {
+            accountID = String(identifier[..<separator.lowerBound])
+            metricID = String(identifier[separator.upperBound...])
+        } else {
+            accountID = identifier
+            metricID = "__saved-metric"
+        }
+        return WatchComplicationMetricChoice(
+            id: identifier,
+            accountID: accountID,
+            metricID: metricID,
+            providerName: "Saved Account",
+            accountLabel: "Open CodexBar to refresh",
+            metricLabel: "Saved Metric"
+        )
+    }
+}
+
 enum WatchComplicationAvailability: Equatable, Sendable {
     case empty
     case unavailable

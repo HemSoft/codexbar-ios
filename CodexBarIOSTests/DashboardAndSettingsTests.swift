@@ -949,7 +949,15 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.refreshIntervalSeconds, 300)
-        XCTAssertEqual(snapshot.accounts.map(\.id), ["codex.0"])
+        XCTAssertEqual(
+            snapshot.accounts.map(\.id),
+            [
+                WatchSnapshotPublisher.snapshotAccountID(
+                    providerID: .codex,
+                    configurationID: configuration.id
+                ),
+            ]
+        )
         XCTAssertEqual(snapshot.accounts[0].providerName, ProviderID.codex.displayName)
         XCTAssertEqual(snapshot.accounts[0].accountLabel, configuration.accountLabel)
         XCTAssertEqual(snapshot.accounts[0].planIdentifier, "codex.pro")
@@ -974,6 +982,67 @@ final class DashboardAndSettingsTests: XCTestCase {
             now: result.fetchedAt
         )
         XCTAssertTrue(afterRemoval.accounts.isEmpty)
+    }
+
+    @MainActor
+    func testWatchSnapshotAccountIDsRemainStableAcrossDashboardReordering() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let first = store.addAccount(for: .codex)
+        let second = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("first-token", for: first))
+        XCTAssertTrue(store.saveSecret("second-token", for: second))
+        store.updateDashboardOrderingMode(.manual)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let results = [first, second].enumerated().map { index, configuration in
+            ProviderUsageResult(
+                accountID: configuration.id,
+                providerID: .codex,
+                title: "Codex",
+                subtitle: "Pro",
+                bars: [
+                    UsageBar(
+                        stableKey: "window",
+                        label: "Usage",
+                        used: Double(index + 1),
+                        limit: 10
+                    ),
+                ],
+                fetchedAt: now
+            )
+        }
+        let firstID = WatchSnapshotPublisher.snapshotAccountID(
+            providerID: .codex,
+            configurationID: first.id
+        )
+        let secondID = WatchSnapshotPublisher.snapshotAccountID(
+            providerID: .codex,
+            configurationID: second.id
+        )
+
+        store.updateDashboardCardOrder([first.id, second.id])
+        let original = WatchSnapshotPublisher.makeSnapshot(
+            results: results,
+            configurationStore: store,
+            now: now
+        )
+        store.updateDashboardCardOrder([second.id, first.id])
+        let reordered = WatchSnapshotPublisher.makeSnapshot(
+            results: results,
+            configurationStore: store,
+            now: now
+        )
+
+        XCTAssertEqual(original.accounts.map(\.id), [firstID, secondID])
+        XCTAssertEqual(reordered.accounts.map(\.id), [secondID, firstID])
+        let encodedText = try XCTUnwrap(String(data: original.encoded(), encoding: .utf8))
+        XCTAssertFalse(encodedText.contains(first.id))
+        XCTAssertFalse(encodedText.contains(second.id))
     }
 
     @MainActor

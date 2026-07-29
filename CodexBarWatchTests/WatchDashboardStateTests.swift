@@ -534,6 +534,52 @@ final class WatchDashboardStateTests: XCTestCase {
         )
     }
 
+    func testSavedComplicationChoicesSurviveTransientSnapshotChanges() {
+        let accountID = "codex.stable"
+        let metricID = "codex.window"
+        let savedMetricID = WatchComplicationChoiceCatalog.metricChoiceID(
+            accountID: accountID,
+            metricID: metricID
+        )
+        let emptyCatalog = WatchComplicationChoiceCatalog(snapshot: nil)
+
+        let savedAccount = emptyCatalog.accounts(for: [accountID])[0]
+        let savedMetric = emptyCatalog.metrics(for: [savedMetricID])[0]
+
+        XCTAssertEqual(savedAccount.id, accountID)
+        XCTAssertEqual(savedMetric.id, savedMetricID)
+        XCTAssertEqual(savedMetric.accountID, accountID)
+        XCTAssertEqual(savedMetric.metricID, metricID)
+    }
+
+    func testMetricChoicesIncludeAccountContext() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "codex.work",
+                    providerName: "ChatGPT / Codex",
+                    accountLabel: "Work",
+                    fetchedAt: now,
+                    metrics: [
+                        WatchMetricSnapshot(
+                            id: "window",
+                            label: "5-hour limit",
+                            usedFraction: 0.5,
+                            exactValue: "50%"
+                        ),
+                    ]
+                ),
+            ]
+        )
+
+        let choice = WatchComplicationChoiceCatalog(snapshot: snapshot).metrics[0]
+
+        XCTAssertEqual(choice.subtitle, "ChatGPT / Codex • Work")
+    }
+
     func testComplicationResolutionDistinguishesEmptyStaleWarningAndCriticalStates() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let resolver = WatchComplicationResolver()

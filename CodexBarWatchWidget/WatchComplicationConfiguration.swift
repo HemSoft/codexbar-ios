@@ -146,7 +146,9 @@ struct WatchComplicationAccountEntity: AppEntity {
 
 struct WatchComplicationAccountQuery: EntityQuery {
     func entities(for identifiers: [String]) async throws -> [WatchComplicationAccountEntity] {
-        accountEntities().filter { identifiers.contains($0.id) }
+        accountCatalog()
+            .accounts(for: identifiers)
+            .map(WatchComplicationAccountEntity.init)
     }
 
     func suggestedEntities() async throws -> [WatchComplicationAccountEntity] {
@@ -154,15 +156,21 @@ struct WatchComplicationAccountQuery: EntityQuery {
     }
 
     private func accountEntities() -> [WatchComplicationAccountEntity] {
-        (WatchComplicationSnapshotStore().load()?.accounts ?? [])
-            .filter { !$0.metrics.isEmpty }
-            .map {
-                WatchComplicationAccountEntity(
-                    id: $0.id,
-                    providerName: $0.providerName,
-                    accountLabel: $0.accountLabel
-                )
-            }
+        accountCatalog().accounts.map(WatchComplicationAccountEntity.init)
+    }
+
+    private func accountCatalog() -> WatchComplicationChoiceCatalog {
+        WatchComplicationChoiceCatalog(snapshot: WatchComplicationSnapshotStore().load())
+    }
+}
+
+private extension WatchComplicationAccountEntity {
+    init(_ choice: WatchComplicationAccountChoice) {
+        self.init(
+            id: choice.id,
+            providerName: choice.providerName,
+            accountLabel: choice.accountLabel
+        )
     }
 }
 
@@ -173,20 +181,22 @@ struct WatchComplicationMetricEntity: AppEntity {
     let id: String
     let accountID: String
     let metricID: String
-    let providerName: String
     let metricLabel: String
+    let accountContext: String
 
     var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(
             title: "\(metricLabel)",
-            subtitle: "\(providerName)"
+            subtitle: "\(accountContext)"
         )
     }
 }
 
 struct WatchComplicationMetricQuery: EntityQuery {
     func entities(for identifiers: [String]) async throws -> [WatchComplicationMetricEntity] {
-        metricEntities().filter { identifiers.contains($0.id) }
+        metricCatalog()
+            .metrics(for: identifiers)
+            .map(WatchComplicationMetricEntity.init)
     }
 
     func suggestedEntities() async throws -> [WatchComplicationMetricEntity] {
@@ -194,17 +204,23 @@ struct WatchComplicationMetricQuery: EntityQuery {
     }
 
     private func metricEntities() -> [WatchComplicationMetricEntity] {
-        (WatchComplicationSnapshotStore().load()?.accounts ?? []).flatMap { account in
-            account.metrics.map { metric in
-                WatchComplicationMetricEntity(
-                    id: "\(account.id)::\(metric.id)",
-                    accountID: account.id,
-                    metricID: metric.id,
-                    providerName: account.providerName,
-                    metricLabel: metric.label
-                )
-            }
-        }
+        metricCatalog().metrics.map(WatchComplicationMetricEntity.init)
+    }
+
+    private func metricCatalog() -> WatchComplicationChoiceCatalog {
+        WatchComplicationChoiceCatalog(snapshot: WatchComplicationSnapshotStore().load())
+    }
+}
+
+private extension WatchComplicationMetricEntity {
+    init(_ choice: WatchComplicationMetricChoice) {
+        self.init(
+            id: choice.id,
+            accountID: choice.accountID,
+            metricID: choice.metricID,
+            metricLabel: choice.metricLabel,
+            accountContext: choice.subtitle
+        )
     }
 }
 
