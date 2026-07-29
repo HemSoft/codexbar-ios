@@ -238,7 +238,9 @@ struct WatchComplicationResolver {
 
         let accounts = snapshot.accounts.filter { !$0.metrics.isEmpty }
         guard !accounts.isEmpty else {
-            return .empty
+            return selection.accountID == nil && selection.metricID == nil
+                ? .empty
+                : .unavailable
         }
 
         guard let displayed = displayedMetric(in: accounts, selection: selection) else {
@@ -349,6 +351,20 @@ struct WatchComplicationResolver {
             while transition < staleDate {
                 dates.append(transition)
                 transition = transition.addingTimeInterval(60 * 60)
+            }
+        }
+
+        if let resetsAt = displayed.metric.resetsAt,
+           resetsAt > now,
+           resetsAt <= staleDate
+        {
+            for minutesBeforeReset in stride(from: 60, through: 0, by: -1) {
+                let countdownDate = resetsAt.addingTimeInterval(
+                    -TimeInterval(minutesBeforeReset * 60)
+                )
+                if countdownDate > now {
+                    dates.append(countdownDate)
+                }
             }
         }
 

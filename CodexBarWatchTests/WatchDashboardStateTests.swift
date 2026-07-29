@@ -683,6 +683,40 @@ final class WatchDashboardStateTests: XCTestCase {
         }
     }
 
+    func testExplicitSelectionRemainsUnavailableWhenAllAccountsAreEmpty() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "codex",
+                    providerName: "Codex",
+                    accountLabel: "Primary",
+                    fetchedAt: now,
+                    metrics: []
+                ),
+            ]
+        )
+        let resolver = WatchComplicationResolver()
+
+        XCTAssertEqual(
+            resolver.resolve(snapshot: snapshot, selection: .automatic, at: now),
+            .empty
+        )
+        XCTAssertEqual(
+            resolver.resolve(
+                snapshot: snapshot,
+                selection: WatchComplicationSelection(
+                    accountID: "codex",
+                    metricID: "usage"
+                ),
+                at: now
+            ),
+            .unavailable
+        )
+    }
+
     func testComplicationTimelineRefreshesAtStaleBoundaryThenConservatively() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let snapshot = WatchDashboardSnapshot(
@@ -916,6 +950,48 @@ final class WatchDashboardStateTests: XCTestCase {
                 at: resetsAt
             ).isStale
         )
+    }
+
+    func testComplicationTimelineRefreshesEachMinuteDuringFinalResetHour() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let resetsAt = now.addingTimeInterval(3 * 60 * 60)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 2 * 60 * 60,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "codex",
+                    providerName: "Codex",
+                    accountLabel: "Primary",
+                    fetchedAt: now,
+                    metrics: [
+                        WatchMetricSnapshot(
+                            id: "usage",
+                            label: "Usage",
+                            usedFraction: 0.5,
+                            exactValue: "50%",
+                            resetText: "Resets 3h 0m",
+                            resetsAt: resetsAt,
+                            resetDisplayStyle: .relativeWithLocalTime,
+                            fetchedAt: now
+                        ),
+                    ]
+                ),
+            ]
+        )
+        let dates = WatchComplicationResolver().timelineEntryDates(
+            snapshot: snapshot,
+            selection: .automatic,
+            now: now
+        )
+
+        for minutesBeforeReset in 0...60 {
+            XCTAssertTrue(
+                dates.contains(
+                    resetsAt.addingTimeInterval(-TimeInterval(minutesBeforeReset * 60))
+                )
+            )
+        }
     }
 
     func testAllWatchComplicationFamiliesHavePurposefulLayouts() {
