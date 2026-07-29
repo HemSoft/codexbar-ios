@@ -1,0 +1,4 @@
+interface:
+  display_name: "Perfection"
+  short_description: "Run every CodexBar iOS quality gate"
+  default_prompt: "Use $perfection to audit every supported CodexBar iOS quality gate and report the consolidated result."

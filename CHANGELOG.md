@@ -191,6 +191,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added a repository-local Perfection skill that discovers available simulators,
+  runs every supported iOS, SwiftPM, and watchOS build and test gate, treats
+  compiler warnings as errors, and preserves consolidated audit diagnostics.
+  ([#189](https://github.com/HemSoft/codexbar-ios/issues/189))
 - Added deterministic T3 Code project branding using the canonical CodexBar
   iOS app icon. ([#187](https://github.com/HemSoft/codexbar-ios/issues/187))
 - Upgraded the pinned CI checkout and failed-test diagnostic upload actions to

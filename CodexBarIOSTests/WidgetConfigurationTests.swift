@@ -251,7 +251,7 @@ final class WidgetConfigurationTests: XCTestCase {
             },
             loadRefreshInterval: { .threeHours }
         )
-        var configuration = CodexBarWidgetConfigurationIntent()
+        let configuration = CodexBarWidgetConfigurationIntent()
         configuration.refreshPolicy = .thirtyMinutes
 
         let preview = loader.snapshot(configuration: configuration, isPreview: true)
