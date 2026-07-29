@@ -895,7 +895,10 @@ final class ConfigurationAndAuthTests: XCTestCase {
         var presentedURL: URL?
 
         do {
-            _ = try await service.signIn { presentedURL = $0 }
+            _ = try await service.signIn {
+                presentedURL = $0
+                return true
+            }
             XCTFail("Expected ChatGPT browser sign-in to time out without a callback.")
         } catch {
             XCTAssertEqual(error as? CodexWebAuthService.AuthError, .callbackTimedOut)
@@ -906,6 +909,21 @@ final class ConfigurationAndAuthTests: XCTestCase {
         )
         let redirectURI = try XCTUnwrap(authorizationComponents.queryItemValue(named: "redirect_uri"))
         XCTAssertEqual(URL(string: redirectURI)?.host, "localhost")
+    }
+
+    @MainActor
+    func testCodexBrowserSignInStopsWhenPrivateBrowserCannotStart() async {
+        let service = CodexWebAuthService(
+            callbackTimeoutNanoseconds: 30_000_000_000,
+            preferredCallbackPorts: [0]
+        )
+
+        do {
+            _ = try await service.signIn { _ in false }
+            XCTFail("Expected ChatGPT sign-in to reject a failed browser session.")
+        } catch {
+            XCTAssertEqual(error as? CodexWebAuthService.AuthError, .couldNotStartBrowserSession)
+        }
     }
 
     func testCodexTokenRequestBodyUsesPKCECodeExchange() {
@@ -1466,7 +1484,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
 #if canImport(AuthenticationServices) && canImport(UIKit)
     @MainActor
     func testCursorBrowserSessionUsesEphemeralStorage() {
-        let session = CursorWebAuthenticationPresenter.makeSession(
+        let session = PrivateWebAuthenticationPresenter.makeSession(
             url: URL(string: "https://cursor.com/loginDeepControl")!
         ) { _ in }
 
@@ -1475,7 +1493,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
 #endif
 
     func testCursorBrowserSessionIgnoresStaleCompletionAfterRetry() {
-        var generation = CursorWebAuthenticationSessionGeneration()
+        var generation = WebAuthenticationSessionGeneration()
         let firstSessionID = generation.start()
         let retrySessionID = generation.start()
 

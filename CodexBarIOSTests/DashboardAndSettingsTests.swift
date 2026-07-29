@@ -2000,6 +2000,205 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testCodexSignInConnectsDistinctAccountsWithIsolatedCredentials() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let first = store.addAccount(for: .codex)
+        let second = store.addAccount(for: .codex)
+        XCTAssertTrue(
+            store.saveSecret(
+                CodexCredentialsParser.storedCredential(
+                    from: CodexCredentials(accessToken: "first-token", accountID: "chatgpt-first")
+                ),
+                for: first
+            )
+        )
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: second.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 },
+            codexAuthService: StubCodexAuthService(
+                result: .success(
+                    CodexWebAuthResult(
+                        accessToken: "second-token",
+                        refreshToken: "second-refresh",
+                        idToken: nil,
+                        accountID: "chatgpt-second",
+                        expiresAt: 2_000_000_000
+                    )
+                )
+            )
+        )
+
+        await viewModel.signInWithCodex()
+
+        let firstCredentials = try XCTUnwrap(
+            CodexCredentialsParser.parse(
+                try XCTUnwrap(
+                    secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: first))
+                )
+            )
+        )
+        let secondCredentials = try XCTUnwrap(
+            CodexCredentialsParser.parse(
+                try XCTUnwrap(
+                    secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: second))
+                )
+            )
+        )
+        XCTAssertEqual(firstCredentials.accountID, "chatgpt-first")
+        XCTAssertEqual(firstCredentials.accessToken, "first-token")
+        XCTAssertEqual(secondCredentials.accountID, "chatgpt-second")
+        XCTAssertEqual(secondCredentials.accessToken, "second-token")
+        XCTAssertNil(viewModel.codexAuthError)
+        XCTAssertEqual(credentialsChangedCount, 1)
+    }
+
+    @MainActor
+    func testSingleCodexAccountStillAcceptsCredentialWithoutIdentityClaim() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let configuration = store.addAccount(for: .codex)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            codexAuthService: StubCodexAuthService(
+                result: .success(
+                    CodexWebAuthResult(
+                        accessToken: "legacy-compatible-token",
+                        refreshToken: nil,
+                        idToken: nil,
+                        accountID: nil,
+                        expiresAt: nil
+                    )
+                )
+            )
+        )
+
+        await viewModel.signInWithCodex()
+
+        let savedCredential = try XCTUnwrap(
+            secretStore.readSecret(
+                account: ProviderConfigurationStore.keychainAccount(for: configuration)
+            )
+        )
+        XCTAssertEqual(
+            CodexCredentialsParser.parse(savedCredential)?.accessToken,
+            "legacy-compatible-token"
+        )
+        XCTAssertNil(viewModel.codexAuthError)
+    }
+
+    @MainActor
+    func testCodexDuplicateIdentityLeavesBothSavedAccountsUnchanged() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        var first = store.addAccount(for: .codex)
+        first.accountLabel = "Personal Codex"
+        XCTAssertTrue(store.update(first))
+        let second = store.addAccount(for: .codex)
+        let firstCredential = CodexCredentialsParser.storedCredential(
+            from: CodexCredentials(accessToken: "first-token", accountID: "private-provider-id")
+        )
+        let secondCredential = CodexCredentialsParser.storedCredential(
+            from: CodexCredentials(accessToken: "second-token", accountID: "second-provider-id")
+        )
+        XCTAssertTrue(store.saveSecret(firstCredential, for: first))
+        XCTAssertTrue(store.saveSecret(secondCredential, for: second))
+        var credentialsChangedCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: second.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 },
+            codexAuthService: StubCodexAuthService(
+                result: .success(
+                    CodexWebAuthResult(
+                        accessToken: "replacement-token",
+                        refreshToken: nil,
+                        idToken: nil,
+                        accountID: "private-provider-id",
+                        expiresAt: nil
+                    )
+                )
+            )
+        )
+
+        await viewModel.signInWithCodex()
+
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: first)),
+            firstCredential
+        )
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: second)),
+            secondCredential
+        )
+        XCTAssertTrue(viewModel.codexAuthError?.contains("already connected as “Personal Codex”") == true)
+        XCTAssertFalse(viewModel.codexAuthError?.contains("private-provider-id") == true)
+        XCTAssertEqual(credentialsChangedCount, 0)
+    }
+
+    @MainActor
+    func testCodexCanceledSignInPreservesExistingCredential() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let configuration = store.addAccount(for: .codex)
+        let originalCredential = CodexCredentialsParser.storedCredential(
+            from: CodexCredentials(accessToken: "original-token", accountID: "original-account")
+        )
+        XCTAssertTrue(store.saveSecret(originalCredential, for: configuration))
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            codexAuthService: StubCodexAuthService(result: .failure(CancellationError()))
+        )
+
+        await viewModel.signInWithCodex()
+
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
+            originalCredential
+        )
+        XCTAssertEqual(
+            viewModel.codexAuthError,
+            "ChatGPT sign-in canceled. Saved accounts were not changed."
+        )
+    }
+
+    @MainActor
+    func testRemovingOneCodexAccountKeepsTheOtherAccountAndCredential() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let secretStore = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let first = store.addAccount(for: .codex)
+        let second = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("first-credential", for: first))
+        XCTAssertTrue(store.saveSecret("second-credential", for: second))
+
+        XCTAssertTrue(store.removeAccount(first))
+
+        XCTAssertNil(store.configuration(accountID: first.id))
+        XCTAssertNotNil(store.configuration(accountID: second.id))
+        XCTAssertNil(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: first))
+        )
+        XCTAssertEqual(
+            try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: second)),
+            "second-credential"
+        )
+    }
+
+    @MainActor
     func testProviderSettingsViewModelCompletesSuccessfulSaveDespiteUnrelatedReadFailure() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
@@ -2222,6 +2421,21 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Refresh failed")
     }
 
+}
+
+@MainActor
+private final class StubCodexAuthService: CodexWebAuthenticating {
+    let result: Result<CodexWebAuthResult, Error>
+
+    init(result: Result<CodexWebAuthResult, Error>) {
+        self.result = result
+    }
+
+    func signIn(
+        presentAuthorizationURL: @escaping @MainActor (URL) -> Bool
+    ) async throws -> CodexWebAuthResult {
+        try result.get()
+    }
 }
 
 @MainActor

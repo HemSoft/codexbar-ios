@@ -94,17 +94,23 @@ struct ProviderSettingsView: View {
             Section {
                 if providerID == .codex {
                     Button {
-                        Task {
-                            await viewModel.signInWithCodex()
-                        }
+                        viewModel.startCodexSignIn()
                     } label: {
                         if viewModel.isSigningInWithCodex {
                             ProgressView()
                         } else {
-                            Text(configurationStore.hasSecret(for: configuration) ? "Sign in Again" : "Sign in with ChatGPT")
+                            Text(viewModel.codexSignInButtonTitle)
                         }
                     }
                     .disabled(viewModel.isSigningInWithCodex)
+
+                    Text(
+                        viewModel.hasOtherCodexAccounts
+                            ? "A private sign-in session keeps the active Safari account from being reused. Choose the distinct ChatGPT identity you want this Codex entry to track."
+                            : "ChatGPT sign-in opens in a private browser session so you can choose the intended identity."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Sign Out", role: .destructive) {

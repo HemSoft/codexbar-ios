@@ -226,6 +226,14 @@ struct SettingsView: View {
                     }
                     .onDelete(perform: deleteAccounts)
 
+                    if !configurationStore.configurations(for: .codex).isEmpty {
+                        Button {
+                            _ = configurationStore.addAccount(for: .codex)
+                        } label: {
+                            Label("Add Another ChatGPT / Codex Account", systemImage: "person.badge.plus")
+                        }
+                    }
+
                     Menu {
                         ForEach(ProviderID.allCases) { providerID in
                             Button {

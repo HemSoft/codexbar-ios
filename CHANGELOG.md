@@ -8,6 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added a clear path for connecting additional ChatGPT / Codex accounts with
+  private browser sign-in, duplicate-account protection, and independently
+  preserved credentials and settings for each identity.
+  ([#185](https://github.com/HemSoft/codexbar-ios/issues/185))
 - Added private, account-free problem and improvement email drafts with
   recognizable subjects, structured editable prompts, optional reviewed
   diagnostics, and copyable fallback details when no email app is configured;
