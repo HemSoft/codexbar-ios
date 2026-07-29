@@ -191,6 +191,8 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added deterministic T3 Code project branding using the canonical CodexBar
+  iOS app icon. ([#187](https://github.com/HemSoft/codexbar-ios/issues/187))
 - Upgraded the pinned CI checkout and failed-test diagnostic upload actions to
   their current v7.0.1 releases while preserving least-privilege access and
   failure-only `.xcresult` retention.
