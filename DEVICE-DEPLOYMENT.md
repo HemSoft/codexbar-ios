@@ -102,7 +102,8 @@ list:
 security list-keychains -d user
 security default-keychain
 security find-identity -v -p codesigning \
-  "$HOME/Library/Keychains/codexbar-dev.keychain-db"
+  "$HOME/Library/Keychains/codexbar-dev.keychain-db" |
+  rg '"Apple Development:'
 ```
 
 The live output, not a fingerprint copied from an earlier run, determines the
@@ -110,9 +111,10 @@ current signing identity. The expected state is:
 
 - `codexbar-dev.keychain-db` is absent from the normal search list.
 - `login.keychain-db` is the default.
-- The dedicated keychain reports at least one valid code-signing identity.
-  Select the identity from this live output; multiple valid identities alone do
-  not require deletion or a keychain reset.
+- The dedicated keychain reports at least one live Apple Development identity
+  for automatic device signing. Select the identity from this live output;
+  multiple valid development identities alone do not require deletion or a
+  keychain reset.
 
 All device builds must run through `scripts/with-codexbar-keychain.sh`. It adds
 the dedicated keychain to the search list only for the wrapped command and
