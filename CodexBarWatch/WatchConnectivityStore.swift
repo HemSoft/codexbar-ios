@@ -176,15 +176,15 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     func activationCompleted(
         applicationContext: WatchDashboardApplicationContext,
         isPhoneReachable: Bool,
-        error: Error?
+        hadError: Bool
     ) {
         self.isPhoneReachable = isPhoneReachable
         if !applicationContext.isEmpty {
             receive(applicationContext)
-        } else if error != nil, snapshot == nil {
+        } else if hadError, snapshot == nil {
             decodingError = "Couldn’t connect to iPhone"
         }
-        if error == nil {
+        if !hadError {
             scheduleCurrentSnapshotRequest()
         }
     }
@@ -201,7 +201,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
                 activationCompleted(
                     applicationContext: applicationContext,
                     isPhoneReachable: isPhoneReachable,
-                    error: hadError ? WatchConnectivityHandoffError.activation : nil
+                    hadError: hadError
                 )
             case let .applicationContext(_, applicationContext):
                 receive(applicationContext)
@@ -286,8 +286,4 @@ extension WatchDashboardStore: WCSessionDelegate {
             self?.receiveDelegateEvent(event)
         }
     }
-}
-
-private enum WatchConnectivityHandoffError: Error {
-    case activation
 }

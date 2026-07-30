@@ -382,7 +382,7 @@ final class WatchDashboardStateTests: XCTestCase {
                 try snapshot.applicationContext()
             ),
             isPhoneReachable: false,
-            error: nil
+            hadError: false
         )
 
         XCTAssertEqual(store.snapshot, snapshot)
@@ -410,7 +410,7 @@ final class WatchDashboardStateTests: XCTestCase {
         store.activationCompleted(
             applicationContext: .empty,
             isPhoneReachable: false,
-            error: nil
+            hadError: false
         )
         store.updateReachability(true)
         store.updateReachability(true)
@@ -496,7 +496,7 @@ final class WatchDashboardStateTests: XCTestCase {
         store.activationCompleted(
             applicationContext: .empty,
             isPhoneReachable: true,
-            error: nil
+            hadError: false
         )
         try await Task.sleep(for: .milliseconds(20))
         XCTAssertEqual(requestCount, 1)
