@@ -103,7 +103,7 @@ security list-keychains -d user
 security default-keychain
 security find-identity -v -p codesigning \
   "$HOME/Library/Keychains/codexbar-dev.keychain-db" |
-  rg '"Apple Development:'
+  grep -F '"Apple Development:'
 ```
 
 The live output, not a fingerprint copied from an earlier run, determines the
