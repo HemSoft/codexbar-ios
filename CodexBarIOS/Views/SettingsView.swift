@@ -21,6 +21,7 @@ struct SettingsView: View {
     @State private var isConfirmingGroupReplacement = false
     @State private var alertPermissionMessage: String?
     @State private var addAccountFlowRequest: AddAccountFlowRequest?
+    @State private var addedAccountIDAwaitingRefresh: String?
     @State private var newGroupName = ""
     @State private var groupNameDrafts: [String: String] = [:]
     @FocusState private var focusedGroupID: String?
@@ -29,14 +30,44 @@ struct SettingsView: View {
         NavigationStack {
             settingsList
         }
-        .sheet(item: $addAccountFlowRequest) { request in
+        .sheet(
+            item: $addAccountFlowRequest,
+            onDismiss: {
+                guard let accountID = addedAccountIDAwaitingRefresh else {
+                    return
+                }
+                addedAccountIDAwaitingRefresh = nil
+                Task {
+                    await refreshAddedAccount(accountID: accountID)
+                }
+            }
+        ) { request in
             AddAccountSetupFlow(
                 configurationStore: configurationStore,
                 initialProviderID: request.initialProviderID,
-                onCredentialsChanged: onAccountsChanged,
+                onAccountCreated: { accountID in
+                    addedAccountIDAwaitingRefresh = accountID
+                },
+                onCredentialsChanged: {
+                    guard let accountID = addedAccountIDAwaitingRefresh else {
+                        return
+                    }
+                    addedAccountIDAwaitingRefresh = nil
+                    Task {
+                        await refreshAddedAccount(accountID: accountID)
+                    }
+                },
                 onAccountRefresh: onAccountRefresh
             )
         }
+    }
+
+    @MainActor
+    private func refreshAddedAccount(accountID: String) async {
+        guard let configuration = configurationStore.configuration(accountID: accountID) else {
+            return
+        }
+        _ = await onAccountRefresh(configuration)
     }
 
     private var settingsList: some View {

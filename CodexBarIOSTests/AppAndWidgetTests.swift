@@ -182,6 +182,19 @@ final class AppAndWidgetTests: XCTestCase {
         )
         XCTAssertEqual(
             DashboardEmptyState.resolve(
+                hasAccounts: false,
+                hasEnabledAccounts: false,
+                needsSetupAccountID: nil,
+                cardsAreEmpty: true,
+                hasCompletedInitialRefresh: true,
+                performsLifecycleWork: true,
+                isPersistenceRecoveryRequired: false,
+                hasIncompleteAccountReset: true
+            ),
+            .accountResetRecovery
+        )
+        XCTAssertEqual(
+            DashboardEmptyState.resolve(
                 hasAccounts: true,
                 hasEnabledAccounts: true,
                 needsSetupAccountID: "openRouter.personal",

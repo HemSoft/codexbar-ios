@@ -77,7 +77,8 @@ struct ContentView: View {
             cardsAreEmpty: cardItems.isEmpty,
             hasCompletedInitialRefresh: hasCompletedInitialRefresh,
             performsLifecycleWork: performsLifecycleWork,
-            isPersistenceRecoveryRequired: configurationStore.isPersistenceRecoveryRequired
+            isPersistenceRecoveryRequired: configurationStore.isPersistenceRecoveryRequired,
+            hasIncompleteAccountReset: configurationStore.hasIncompleteAccountReset
         )
 
         NavigationStack {
@@ -451,13 +452,25 @@ struct ContentView: View {
             ContentUnavailableView {
                 Label("Account Data Needs Attention", systemImage: "exclamationmark.triangle")
             } description: {
-                Text("Open Settings to recover your saved account list.")
+                Text("Open Settings to recover your saved account or group data.")
             } actions: {
                 Button("Open Settings") {
                     isShowingSettings = true
                 }
                 .buttonStyle(.borderedProminent)
                 .accessibilityHint("Opens account data recovery options.")
+            }
+        case .accountResetRecovery:
+            ContentUnavailableView {
+                Label("Account Reset Needs Attention", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text("Open Settings to retry credential cleanup before adding another account.")
+            } actions: {
+                Button("Open Settings") {
+                    isShowingSettings = true
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityHint("Opens account reset recovery options.")
             }
         case .firstAccount:
             ContentUnavailableView {
@@ -907,6 +920,7 @@ enum DashboardEmptyState: Equatable {
     case hidden
     case loading
     case recovery
+    case accountResetRecovery
     case firstAccount
     case needsSetup(accountID: String)
     case accountsDisabled
@@ -919,7 +933,8 @@ enum DashboardEmptyState: Equatable {
         cardsAreEmpty: Bool,
         hasCompletedInitialRefresh: Bool,
         performsLifecycleWork: Bool,
-        isPersistenceRecoveryRequired: Bool
+        isPersistenceRecoveryRequired: Bool,
+        hasIncompleteAccountReset: Bool = false
     ) -> DashboardEmptyState {
         guard cardsAreEmpty else {
             return .hidden
@@ -929,6 +944,9 @@ enum DashboardEmptyState: Equatable {
         }
         if isPersistenceRecoveryRequired {
             return .recovery
+        }
+        if hasIncompleteAccountReset {
+            return .accountResetRecovery
         }
         if !hasAccounts {
             return .firstAccount
