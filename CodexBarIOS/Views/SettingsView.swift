@@ -144,6 +144,20 @@ struct SettingsPendingGroupChanges: Equatable {
     }
 }
 
+enum SettingsNavigationGuard {
+    @discardableResult
+    static func perform(
+        commitPendingChanges: () -> Bool,
+        navigate: () -> Void
+    ) -> Bool {
+        guard commitPendingChanges() else {
+            return false
+        }
+        navigate()
+        return true
+    }
+}
+
 enum SettingsCategorySummary {
     static func accounts(accountCount: Int, groupCount: Int) -> String {
         "\(count(accountCount, singular: "account")) · \(count(groupCount, singular: "group"))"
@@ -194,6 +208,7 @@ struct SettingsView: View {
     @State private var newGroupName = ""
     @State private var groupNameDrafts: [String: String] = [:]
     @State private var groupValidationState = SettingsGroupValidationState()
+    @State private var selectedAccountID: String?
     @State private var selectedDestination: SettingsDestination?
     @FocusState private var focusedGroupID: String?
 
@@ -219,6 +234,14 @@ struct SettingsView: View {
         } detail: {
             NavigationStack {
                 selectedSettingsDestination
+            }
+            .navigationDestination(item: $selectedAccountID) { accountID in
+                ProviderSettingsView(
+                    configurationStore: configurationStore,
+                    accountID: accountID,
+                    onCredentialsChanged: onAccountsChanged,
+                    onAccountRefresh: onAccountRefresh
+                )
             }
         }
         .toolbar {
@@ -472,22 +495,31 @@ struct SettingsView: View {
                         if let configuration = configurationStore.configuration(
                             accountID: accountID
                         ) {
-                            NavigationLink {
-                                ProviderSettingsView(
-                                    configurationStore: configurationStore,
-                                    accountID: configuration.id,
-                                    onCredentialsChanged: onAccountsChanged,
-                                    onAccountRefresh: onAccountRefresh
+                            Button {
+                                SettingsNavigationGuard.perform(
+                                    commitPendingChanges: commitPendingGroupChanges,
+                                    navigate: {
+                                        selectedAccountID = configuration.id
+                                    }
                                 )
                             } label: {
-                                ProviderSettingsRow(
-                                    configuration: configuration,
-                                    isConfigured: configurationStore.isConfigured(configuration),
-                                    groupName: configurationStore.group(
-                                        for: configuration.groupID
-                                    )?.name
-                                )
+                                HStack {
+                                    ProviderSettingsRow(
+                                        configuration: configuration,
+                                        isConfigured: configurationStore.isConfigured(configuration),
+                                        groupName: configurationStore.group(
+                                            for: configuration.groupID
+                                        )?.name
+                                    )
+                                    Spacer()
+                                    Image(systemName: "chevron.forward")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                        .accessibilityHidden(true)
+                                }
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Opens account settings.")
                         }
                     }
                 }

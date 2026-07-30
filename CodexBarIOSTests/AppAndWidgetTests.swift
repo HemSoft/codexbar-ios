@@ -418,6 +418,26 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertFalse(changes.hasChanges)
     }
 
+    func testSettingsNavigationGuardBlocksAccountDetailUntilPendingChangesCommit() {
+        var navigationCount = 0
+
+        XCTAssertFalse(
+            SettingsNavigationGuard.perform(
+                commitPendingChanges: { false },
+                navigate: { navigationCount += 1 }
+            )
+        )
+        XCTAssertEqual(navigationCount, 0)
+
+        XCTAssertTrue(
+            SettingsNavigationGuard.perform(
+                commitPendingChanges: { true },
+                navigate: { navigationCount += 1 }
+            )
+        )
+        XCTAssertEqual(navigationCount, 1)
+    }
+
     func testSettingsCategorySummariesExposeStateWithoutAccountIdentifiers() {
         XCTAssertEqual(
             SettingsCategorySummary.accounts(accountCount: 1, groupCount: 2),
