@@ -338,6 +338,7 @@ struct ContentView: View {
                     guard let accountID = addedAccountIDAwaitingRefresh else {
                         return
                     }
+                    addedAccountIDAwaitingRefresh = nil
                     Task {
                         await refreshAccount(accountID: accountID)
                     }

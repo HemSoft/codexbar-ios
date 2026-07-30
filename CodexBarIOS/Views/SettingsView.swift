@@ -33,9 +33,6 @@ struct SettingsView: View {
             AddAccountSetupFlow(
                 configurationStore: configurationStore,
                 initialProviderID: request.initialProviderID,
-                onAccountCreated: { _ in
-                    onAccountsChanged()
-                },
                 onCredentialsChanged: onAccountsChanged,
                 onAccountRefresh: onAccountRefresh
             )

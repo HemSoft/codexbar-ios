@@ -150,6 +150,18 @@ final class AppAndWidgetTests: XCTestCase {
                 hasEnabledAccounts: false,
                 needsSetupAccountID: nil,
                 cardsAreEmpty: true,
+                hasCompletedInitialRefresh: false,
+                performsLifecycleWork: false,
+                isPersistenceRecoveryRequired: false
+            ),
+            .firstAccount
+        )
+        XCTAssertEqual(
+            DashboardEmptyState.resolve(
+                hasAccounts: false,
+                hasEnabledAccounts: false,
+                needsSetupAccountID: nil,
+                cardsAreEmpty: true,
                 hasCompletedInitialRefresh: true,
                 performsLifecycleWork: true,
                 isPersistenceRecoveryRequired: false
