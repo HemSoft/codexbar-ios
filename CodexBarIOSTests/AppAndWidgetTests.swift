@@ -337,38 +337,85 @@ final class AppAndWidgetTests: XCTestCase {
         var state = SettingsGroupValidationState()
         XCTAssertNil(state.message)
 
-        state.recordFailure(storeError: "Group names must be unique.")
+        state.recordFailure(
+            storeError: "Group names must be unique.",
+            target: .existingGroup("work")
+        )
         XCTAssertEqual(state.message, "Group names must be unique.")
+        XCTAssertEqual(state.target, .existingGroup("work"))
 
         state.clear()
         XCTAssertNil(state.message)
+        XCTAssertNil(state.target)
 
-        state.recordFailure(storeError: nil)
+        state.recordFailure(storeError: nil, target: .newGroup)
         XCTAssertEqual(state.message, "Could not save the group name.")
+        XCTAssertEqual(state.target, .newGroup)
     }
 
-    func testSettingsGroupDraftCommitterValidatesEveryPendingDraftUntilFailure() {
+    func testSettingsPendingGroupChangesCommitDraftsAndNewGroupWithoutDiscardingInput() {
         var attemptedGroupIDs: [String] = []
+        var newGroupCommitCount = 0
+        var changes = SettingsPendingGroupChanges(
+            draftGroupIDs: ["first", "second", "third"],
+            newGroupName: "New Team"
+        )
+        XCTAssertTrue(changes.hasChanges)
         XCTAssertFalse(
-            SettingsGroupDraftCommitter.commitAll(
-                groupIDs: ["first", "second", "third"]
-            ) { groupID in
-                attemptedGroupIDs.append(groupID)
-                return groupID != "second"
-            }
+            changes.commitAll(
+                commitDraft: { groupID in
+                    attemptedGroupIDs.append(groupID)
+                    return groupID != "second"
+                },
+                commitNewGroup: {
+                    newGroupCommitCount += 1
+                    return true
+                }
+            )
         )
         XCTAssertEqual(attemptedGroupIDs, ["first", "second"])
+        XCTAssertEqual(newGroupCommitCount, 0)
 
         attemptedGroupIDs = []
+        changes = SettingsPendingGroupChanges(
+            draftGroupIDs: ["first", "second"],
+            newGroupName: " New Team "
+        )
         XCTAssertTrue(
-            SettingsGroupDraftCommitter.commitAll(
-                groupIDs: ["first", "second"]
-            ) { groupID in
-                attemptedGroupIDs.append(groupID)
-                return true
-            }
+            changes.commitAll(
+                commitDraft: { groupID in
+                    attemptedGroupIDs.append(groupID)
+                    return true
+                },
+                commitNewGroup: {
+                    newGroupCommitCount += 1
+                    return true
+                }
+            )
         )
         XCTAssertEqual(attemptedGroupIDs, ["first", "second"])
+        XCTAssertEqual(newGroupCommitCount, 1)
+
+        changes = SettingsPendingGroupChanges(
+            draftGroupIDs: [],
+            newGroupName: "Duplicate"
+        )
+        XCTAssertFalse(
+            changes.commitAll(
+                commitDraft: { _ in true },
+                commitNewGroup: {
+                    newGroupCommitCount += 1
+                    return false
+                }
+            )
+        )
+        XCTAssertEqual(newGroupCommitCount, 2)
+
+        changes = SettingsPendingGroupChanges(
+            draftGroupIDs: [],
+            newGroupName: "   "
+        )
+        XCTAssertFalse(changes.hasChanges)
     }
 
     func testSettingsCategorySummariesExposeStateWithoutAccountIdentifiers() {
@@ -2918,6 +2965,12 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertNotNil(store.addGroup(named: "Engineering"))
         XCTAssertNil(store.addGroup(named: " engineering "))
         XCTAssertEqual(store.lastError, "Group names must be unique.")
+
+        store.clearLastError(ifMatching: "A different error")
+        XCTAssertEqual(store.lastError, "Group names must be unique.")
+
+        store.clearLastError(ifMatching: "Group names must be unique.")
+        XCTAssertNil(store.lastError)
     }
 
     @MainActor

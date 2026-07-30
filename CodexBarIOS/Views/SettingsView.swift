@@ -98,27 +98,49 @@ struct SettingsRecoveryState: Equatable {
     }
 }
 
+enum SettingsGroupValidationTarget: Equatable {
+    case existingGroup(String)
+    case newGroup
+}
+
 struct SettingsGroupValidationState: Equatable {
     private(set) var message: String?
+    private(set) var target: SettingsGroupValidationTarget?
 
-    mutating func recordFailure(storeError: String?) {
+    mutating func recordFailure(
+        storeError: String?,
+        target: SettingsGroupValidationTarget
+    ) {
         message = storeError ?? "Could not save the group name."
+        self.target = target
     }
 
     mutating func clear() {
         message = nil
+        target = nil
     }
 }
 
-enum SettingsGroupDraftCommitter {
-    static func commitAll(
-        groupIDs: [String],
-        commit: (String) -> Bool
+struct SettingsPendingGroupChanges: Equatable {
+    let draftGroupIDs: [String]
+    let newGroupName: String
+
+    var hasChanges: Bool {
+        !draftGroupIDs.isEmpty || !normalizedNewGroupName.isEmpty
+    }
+
+    func commitAll(
+        commitDraft: (String) -> Bool,
+        commitNewGroup: () -> Bool
     ) -> Bool {
-        for groupID in groupIDs where !commit(groupID) {
+        for groupID in draftGroupIDs where !commitDraft(groupID) {
             return false
         }
-        return true
+        return normalizedNewGroupName.isEmpty || commitNewGroup()
+    }
+
+    private var normalizedNewGroupName: String {
+        newGroupName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -193,9 +215,7 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView {
-            NavigationStack {
-                settingsHome
-            }
+            settingsHome
         } detail: {
             NavigationStack {
                 selectedSettingsDestination
@@ -282,15 +302,17 @@ struct SettingsView: View {
                 "This replaces the damaged group list with an empty list and deliberately ungroups every saved account. Saved accounts and Keychain credentials are not deleted."
             )
         }
-        .interactiveDismissDisabled(!groupNameDrafts.isEmpty)
+        .interactiveDismissDisabled(pendingGroupChanges.hasChanges)
         .onChange(of: focusedGroupID) { oldValue, newValue in
             if let oldValue, oldValue != newValue {
-                commitGroupName(for: oldValue)
+                if !commitGroupName(for: oldValue) {
+                    focusedGroupID = oldValue
+                }
             }
         }
         .onChange(of: selectedDestination) { oldValue, newValue in
             if oldValue == .accountsAndGroups, newValue != oldValue {
-                if !commitPendingGroupNames() {
+                if !commitPendingGroupChanges() {
                     selectedDestination = oldValue
                 }
             }
@@ -342,7 +364,7 @@ struct SettingsView: View {
     private var doneToolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button("Done") {
-                if commitPendingGroupNames() {
+                if commitPendingGroupChanges() {
                     dismiss()
                 }
             }
@@ -479,26 +501,34 @@ struct SettingsView: View {
                 }
 
                 ForEach(configurationStore.groups) { group in
-                    TextField(
-                        "Group name",
-                        text: groupNameBinding(for: group)
-                    )
-                    .textInputAutocapitalization(.words)
-                    .focused($focusedGroupID, equals: group.id)
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField(
+                            "Group name",
+                            text: groupNameBinding(for: group)
+                        )
+                        .textInputAutocapitalization(.words)
+                        .focused($focusedGroupID, equals: group.id)
+                        .onSubmit {
+                            commitGroupName(for: group.id)
+                        }
+
+                        groupValidationMessage(for: .existingGroup(group.id))
+                    }
                     .disabled(configurationStore.isPersistenceRecoveryRequired)
                     .deleteDisabled(configurationStore.isPersistenceRecoveryRequired)
-                    .onSubmit {
-                        commitGroupName(for: group.id)
-                    }
                 }
                 .onDelete(perform: deleteGroups)
 
                 HStack {
-                    TextField("New group", text: $newGroupName)
-                        .textInputAutocapitalization(.words)
-                        .onSubmit {
-                            addGroup()
-                        }
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("New group", text: newGroupNameBinding)
+                            .textInputAutocapitalization(.words)
+                            .onSubmit {
+                                addGroup()
+                            }
+
+                        groupValidationMessage(for: .newGroup)
+                    }
 
                     Button {
                         addGroup()
@@ -510,16 +540,23 @@ struct SettingsView: View {
                 }
                 .disabled(configurationStore.isPersistenceRecoveryRequired)
             }
-
-            if let message = groupValidationState.message {
-                Section("Group Error") {
-                    Text(message)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("settings-group-validation-error")
-                }
-            }
         }
         .navigationTitle(SettingsDestination.accountsAndGroups.title)
+    }
+
+    @ViewBuilder
+    private func groupValidationMessage(
+        for target: SettingsGroupValidationTarget
+    ) -> some View {
+        if groupValidationState.target == target,
+           let message = groupValidationState.message
+        {
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .accessibilityLabel("Group validation error: \(message)")
+                .accessibilityIdentifier("settings-group-validation-error")
+        }
     }
 
     private var dashboardSettings: some View {
@@ -845,14 +882,19 @@ struct SettingsView: View {
         }
     }
 
-    private func addGroup() {
+    @discardableResult
+    private func addGroup() -> Bool {
         guard configurationStore.addGroup(named: newGroupName) != nil else {
-            groupValidationState.recordFailure(storeError: configurationStore.lastError)
-            return
+            groupValidationState.recordFailure(
+                storeError: configurationStore.lastError,
+                target: .newGroup
+            )
+            return false
         }
 
         newGroupName = ""
-        groupValidationState.clear()
+        clearGroupValidation()
+        return true
     }
 
     private func deleteGroups(at offsets: IndexSet) {
@@ -872,21 +914,72 @@ struct SettingsView: View {
             },
             set: { name in
                 groupNameDrafts[group.id] = name
-                groupValidationState.clear()
+                clearGroupValidation()
             }
         )
     }
 
-    private func commitPendingGroupNames() -> Bool {
-        SettingsGroupDraftCommitter.commitAll(
-            groupIDs: groupNameDrafts.keys.sorted()
-        ) { groupID in
-            let committed = commitGroupName(for: groupID)
-            if !committed {
-                focusedGroupID = groupID
+    private var newGroupNameBinding: Binding<String> {
+        Binding(
+            get: { newGroupName },
+            set: { name in
+                newGroupName = name
+                clearGroupValidation()
             }
-            return committed
+        )
+    }
+
+    private var pendingGroupChanges: SettingsPendingGroupChanges {
+        SettingsPendingGroupChanges(
+            draftGroupIDs: groupNameDrafts.keys.sorted(),
+            newGroupName: newGroupName
+        )
+    }
+
+    private func commitPendingGroupChanges() -> Bool {
+        pendingGroupChanges.commitAll(
+            commitDraft: { groupID in
+                let committed = commitGroupName(for: groupID)
+                if !committed {
+                    focusedGroupID = groupID
+                }
+                return committed
+            },
+            commitNewGroup: {
+                addGroup()
+            }
+        )
+    }
+
+    private func clearGroupValidation() {
+        configurationStore.clearLastError(ifMatching: groupValidationState.message)
+        groupValidationState.clear()
+    }
+
+    private func recordGroupValidationFailure(
+        for groupID: String
+    ) {
+        groupValidationState.recordFailure(
+            storeError: configurationStore.lastError,
+            target: .existingGroup(groupID)
+        )
+    }
+
+    private func clearGroupDraft(for groupID: String) {
+        groupNameDrafts[groupID] = nil
+        clearGroupValidation()
+    }
+
+    private func commitGroupNameChange(
+        _ updated: ProviderAccountGroup,
+        groupID: String
+    ) -> Bool {
+        if configurationStore.updateGroup(updated) {
+            clearGroupDraft(for: groupID)
+            return true
         }
+        recordGroupValidationFailure(for: groupID)
+        return false
     }
 
     @discardableResult
@@ -900,21 +993,13 @@ struct SettingsView: View {
 
         let normalizedName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalizedName != group.name else {
-            groupNameDrafts[groupID] = nil
-            groupValidationState.clear()
+            clearGroupDraft(for: groupID)
             return true
         }
 
         var updated = group
         updated.name = draftName
-        if configurationStore.updateGroup(updated) {
-            groupNameDrafts[groupID] = nil
-            groupValidationState.clear()
-            return true
-        }
-
-        groupValidationState.recordFailure(storeError: configurationStore.lastError)
-        return false
+        return commitGroupNameChange(updated, groupID: groupID)
     }
 }
 
