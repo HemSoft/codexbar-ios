@@ -322,6 +322,18 @@ public final class ProviderConfigurationStore: ObservableObject {
         group(for: groupID)?.name ?? ProviderAccountGroup.ungroupedDisplayName
     }
 
+    public func clearLastError(ifMatching message: String?) {
+        guard
+            let message,
+            lastError == message,
+            !isConfigurationRecoveryRequired,
+            !isGroupRecoveryRequired
+        else {
+            return
+        }
+        lastError = nil
+    }
+
     @discardableResult
     public func addGroup(named name: String) -> ProviderAccountGroup? {
         guard allowConfigurationMutation() else {

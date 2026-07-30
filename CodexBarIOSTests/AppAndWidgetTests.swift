@@ -299,6 +299,316 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    func testSettingsHierarchyUsesSixDistinctDestinationsWithAccountsFirst() {
+        XCTAssertEqual(
+            SettingsDestination.allCases,
+            [
+                .accountsAndGroups,
+                .dashboard,
+                .alerts,
+                .widgets,
+                .helpAndAbout,
+                .dataAndRecovery,
+            ]
+        )
+        XCTAssertEqual(SettingsInitialRoute.accounts.destination, .accountsAndGroups)
+        XCTAssertEqual(
+            Set(SettingsDestination.allCases.map(\.title)).count,
+            SettingsDestination.allCases.count
+        )
+        XCTAssertTrue(SettingsDestination.allCases.allSatisfy { !$0.systemImage.isEmpty })
+    }
+
+    func testSettingsHomeRoutesAttentionToRecoveryWithoutDuplicatingDestination() {
+        let routineLayout = SettingsHomeLayout(requiresAttention: false)
+        XCTAssertNil(routineLayout.attentionDestination)
+        XCTAssertEqual(routineLayout.routineDestinations, SettingsDestination.allCases)
+
+        let attentionLayout = SettingsHomeLayout(requiresAttention: true)
+        XCTAssertEqual(attentionLayout.attentionDestination, .dataAndRecovery)
+        XCTAssertFalse(attentionLayout.routineDestinations.contains(.dataAndRecovery))
+        XCTAssertEqual(
+            attentionLayout.routineDestinations.count + 1,
+            SettingsDestination.allCases.count
+        )
+    }
+
+    func testSettingsGroupValidationStateSurfacesAndClearsFailures() {
+        var state = SettingsGroupValidationState()
+        XCTAssertNil(state.message)
+
+        state.recordFailure(
+            storeError: "Group names must be unique.",
+            target: .existingGroup("work")
+        )
+        XCTAssertEqual(state.message, "Group names must be unique.")
+        XCTAssertEqual(state.target, .existingGroup("work"))
+
+        state.clear()
+        XCTAssertNil(state.message)
+        XCTAssertNil(state.target)
+
+        state.recordFailure(storeError: nil, target: .newGroup)
+        XCTAssertEqual(state.message, "Could not save the group name.")
+        XCTAssertEqual(state.target, .newGroup)
+    }
+
+    func testSettingsPendingGroupChangesCommitDraftsAndNewGroupWithoutDiscardingInput() {
+        var attemptedGroupIDs: [String] = []
+        var newGroupCommitCount = 0
+        var changes = SettingsPendingGroupChanges(
+            draftGroupIDs: ["first", "second", "third"],
+            newGroupName: "New Team"
+        )
+        XCTAssertTrue(changes.hasChanges)
+        XCTAssertFalse(
+            changes.commitAll(
+                commitDraft: { groupID in
+                    attemptedGroupIDs.append(groupID)
+                    return groupID != "second"
+                },
+                commitNewGroup: {
+                    newGroupCommitCount += 1
+                    return true
+                }
+            )
+        )
+        XCTAssertEqual(attemptedGroupIDs, ["first", "second"])
+        XCTAssertEqual(newGroupCommitCount, 0)
+
+        attemptedGroupIDs = []
+        changes = SettingsPendingGroupChanges(
+            draftGroupIDs: ["first", "second"],
+            newGroupName: " New Team "
+        )
+        XCTAssertTrue(
+            changes.commitAll(
+                commitDraft: { groupID in
+                    attemptedGroupIDs.append(groupID)
+                    return true
+                },
+                commitNewGroup: {
+                    newGroupCommitCount += 1
+                    return true
+                }
+            )
+        )
+        XCTAssertEqual(attemptedGroupIDs, ["first", "second"])
+        XCTAssertEqual(newGroupCommitCount, 1)
+
+        changes = SettingsPendingGroupChanges(
+            draftGroupIDs: [],
+            newGroupName: "Duplicate"
+        )
+        XCTAssertFalse(
+            changes.commitAll(
+                commitDraft: { _ in true },
+                commitNewGroup: {
+                    newGroupCommitCount += 1
+                    return false
+                }
+            )
+        )
+        XCTAssertEqual(newGroupCommitCount, 2)
+
+        changes = SettingsPendingGroupChanges(
+            draftGroupIDs: [],
+            newGroupName: "   "
+        )
+        XCTAssertFalse(changes.hasChanges)
+    }
+
+    func testSettingsPendingGroupChangesExcludeRevertedAndMissingDrafts() {
+        let changedDraftGroupIDs = SettingsPendingGroupChanges.changedDraftGroupIDs(
+            draftNames: [
+                "changed": "Renamed",
+                "missing": "Removed",
+                "reverted": "  Original  "
+            ],
+            persistedName: { groupID in
+                [
+                    "changed": "Original",
+                    "reverted": "Original"
+                ][groupID]
+            }
+        )
+
+        XCTAssertEqual(changedDraftGroupIDs, ["changed"])
+        XCTAssertFalse(
+            SettingsPendingGroupChanges(
+                draftGroupIDs: SettingsPendingGroupChanges.changedDraftGroupIDs(
+                    draftNames: ["reverted": "Original"],
+                    persistedName: { _ in "Original" }
+                ),
+                newGroupName: ""
+            ).hasChanges
+        )
+    }
+
+    func testSettingsNavigationGuardBlocksAccountDetailUntilPendingChangesCommit() {
+        var navigationCount = 0
+
+        XCTAssertFalse(
+            SettingsNavigationGuard.perform(
+                commitPendingChanges: { false },
+                navigate: { navigationCount += 1 }
+            )
+        )
+        XCTAssertEqual(navigationCount, 0)
+
+        XCTAssertTrue(
+            SettingsNavigationGuard.perform(
+                commitPendingChanges: { true },
+                navigate: { navigationCount += 1 }
+            )
+        )
+        XCTAssertEqual(navigationCount, 1)
+    }
+
+    func testSettingsNavigationGuardClearsAccountDetailOnlyAfterCategoryChangeCommits() {
+        var commitCount = 0
+        var clearNestedRouteCount = 0
+
+        XCTAssertFalse(
+            SettingsNavigationGuard.performCategoryChange(
+                from: .accountsAndGroups,
+                to: .dashboard,
+                commitPendingChanges: {
+                    commitCount += 1
+                    return false
+                },
+                clearNestedRoute: {
+                    clearNestedRouteCount += 1
+                }
+            )
+        )
+        XCTAssertEqual(commitCount, 1)
+        XCTAssertEqual(clearNestedRouteCount, 0)
+
+        XCTAssertTrue(
+            SettingsNavigationGuard.performCategoryChange(
+                from: .accountsAndGroups,
+                to: .dashboard,
+                commitPendingChanges: {
+                    commitCount += 1
+                    return true
+                },
+                clearNestedRoute: {
+                    clearNestedRouteCount += 1
+                }
+            )
+        )
+        XCTAssertEqual(commitCount, 2)
+        XCTAssertEqual(clearNestedRouteCount, 1)
+
+        XCTAssertTrue(
+            SettingsNavigationGuard.performCategoryChange(
+                from: .dashboard,
+                to: .alerts,
+                commitPendingChanges: {
+                    XCTFail("Non-account category changes should not commit group drafts.")
+                    return false
+                },
+                clearNestedRoute: {
+                    clearNestedRouteCount += 1
+                }
+            )
+        )
+        XCTAssertEqual(clearNestedRouteCount, 2)
+    }
+
+    func testSettingsCategorySummariesExposeStateWithoutAccountIdentifiers() {
+        XCTAssertEqual(
+            SettingsCategorySummary.accounts(accountCount: 1, groupCount: 2),
+            "1 account · 2 groups"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.accounts(accountCount: 0, groupCount: 1),
+            "0 accounts · 1 group"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.dashboard(
+                appearance: .dark,
+                ordering: .smart,
+                refreshInterval: .fifteenMinutes
+            ),
+            "Dark · Smart · 15 min"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.alerts(isEnabled: true, usageThreshold: 0.85),
+            "On · Usage at 85%"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.alerts(isEnabled: false, usageThreshold: 0.85),
+            "Off"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.help(
+                installedVersion: "Version 1.2",
+                availableVersion: "1.3"
+            ),
+            "Version 1.3 available"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.help(
+                installedVersion: "Version 1.2",
+                availableVersion: nil
+            ),
+            "Version 1.2"
+        )
+    }
+
+    func testSettingsRecoveryStateKeepsDestructiveSafeguardsAndProminentRouting() {
+        let emptyState = SettingsRecoveryState(
+            hasError: false,
+            isPersistenceRecoveryRequired: false,
+            accountCount: 0,
+            hasIncompleteAccountReset: false
+        )
+        XCTAssertFalse(emptyState.requiresAttention)
+        XCTAssertTrue(emptyState.resetAccountsDisabled)
+        XCTAssertEqual(emptyState.summary, "No account data")
+
+        let recoveryState = SettingsRecoveryState(
+            hasError: true,
+            isPersistenceRecoveryRequired: true,
+            accountCount: 2,
+            hasIncompleteAccountReset: true
+        )
+        XCTAssertTrue(recoveryState.requiresAttention)
+        XCTAssertTrue(recoveryState.resetAccountsDisabled)
+        XCTAssertEqual(recoveryState.summary, "Action required")
+
+        let incompleteResetState = SettingsRecoveryState(
+            hasError: false,
+            isPersistenceRecoveryRequired: false,
+            accountCount: 0,
+            hasIncompleteAccountReset: true
+        )
+        XCTAssertTrue(incompleteResetState.requiresAttention)
+        XCTAssertFalse(incompleteResetState.resetAccountsDisabled)
+        XCTAssertEqual(incompleteResetState.summary, "Action required")
+
+        let errorState = SettingsRecoveryState(
+            hasError: true,
+            isPersistenceRecoveryRequired: false,
+            accountCount: 0,
+            hasIncompleteAccountReset: false
+        )
+        XCTAssertTrue(errorState.requiresAttention)
+        XCTAssertEqual(errorState.summary, "Review settings error")
+
+        let populatedState = SettingsRecoveryState(
+            hasError: false,
+            isPersistenceRecoveryRequired: false,
+            accountCount: 2,
+            hasIncompleteAccountReset: false
+        )
+        XCTAssertFalse(populatedState.requiresAttention)
+        XCTAssertFalse(populatedState.resetAccountsDisabled)
+        XCTAssertEqual(populatedState.summary, "Reset and recovery options")
+    }
+
     @MainActor
     func testRepeatedCodexSelectionCreatesExactlyOneAdditionalAccount() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
@@ -2754,6 +3064,12 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertNotNil(store.addGroup(named: "Engineering"))
         XCTAssertNil(store.addGroup(named: " engineering "))
         XCTAssertEqual(store.lastError, "Group names must be unique.")
+
+        store.clearLastError(ifMatching: "A different error")
+        XCTAssertEqual(store.lastError, "Group names must be unique.")
+
+        store.clearLastError(ifMatching: "Group names must be unique.")
+        XCTAssertNil(store.lastError)
     }
 
     @MainActor
