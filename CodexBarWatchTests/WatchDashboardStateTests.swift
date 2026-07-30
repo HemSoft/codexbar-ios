@@ -994,6 +994,46 @@ final class WatchDashboardStateTests: XCTestCase {
         }
     }
 
+    func testNonRelativeResetStylesAvoidFinalHourCountdownEntries() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let resetsAt = now.addingTimeInterval(3 * 60 * 60)
+
+        for style in [UsageResetDisplayStyle.verbatim, .shortLocalDate] {
+            let snapshot = WatchDashboardSnapshot(
+                generatedAt: now,
+                refreshIntervalSeconds: 2 * 60 * 60,
+                accounts: [
+                    WatchAccountSnapshot(
+                        id: "codex",
+                        providerName: "Codex",
+                        accountLabel: "Primary",
+                        fetchedAt: now,
+                        metrics: [
+                            WatchMetricSnapshot(
+                                id: "usage",
+                                label: "Usage",
+                                usedFraction: 0.5,
+                                exactValue: "50%",
+                                resetText: "Resets later",
+                                resetsAt: resetsAt,
+                                resetDisplayStyle: style,
+                                fetchedAt: now
+                            ),
+                        ]
+                    ),
+                ]
+            )
+            let dates = WatchComplicationResolver().timelineEntryDates(
+                snapshot: snapshot,
+                selection: .automatic,
+                now: now
+            )
+
+            XCTAssertTrue(dates.contains(resetsAt))
+            XCTAssertFalse(dates.contains(resetsAt.addingTimeInterval(-30 * 60)))
+        }
+    }
+
     func testAllWatchComplicationFamiliesHavePurposefulLayouts() {
         XCTAssertEqual(Set(WatchComplicationFamilyLayout.allCases), [
             .inline,

@@ -354,7 +354,8 @@ struct WatchComplicationResolver {
             }
         }
 
-        if let resetsAt = displayed.metric.resetsAt,
+        if displayed.metric.resetDisplayStyle == .relativeWithLocalTime,
+           let resetsAt = displayed.metric.resetsAt,
            resetsAt > now,
            resetsAt <= staleDate
         {
