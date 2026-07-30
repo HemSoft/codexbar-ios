@@ -17,6 +17,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private let complicationStore: WatchComplicationSnapshotStore
     private let reloadComplications: () -> Void
     private let session: WCSession?
+    private let currentSessionState: @MainActor () -> WatchConnectivitySessionState?
     private let requestSnapshot: SnapshotRequester?
     private let requestCoalescingDelay: Duration
     private var snapshotRequestTask: Task<Void, Never>?
@@ -28,6 +29,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
             WidgetCenter.shared.reloadTimelines(ofKind: WatchComplicationConstants.widgetKind)
         },
         session: WCSession? = WCSession.isSupported() ? .default : nil,
+        currentSessionState: (@MainActor () -> WatchConnectivitySessionState?)? = nil,
         requestSnapshot: SnapshotRequester? = nil,
         requestCoalescingDelay: Duration = .milliseconds(100)
     ) {
@@ -36,6 +38,20 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         self.reloadComplications = reloadComplications
         self.session = session
         self.requestCoalescingDelay = requestCoalescingDelay
+        if let currentSessionState {
+            self.currentSessionState = currentSessionState
+        } else if let session {
+            self.currentSessionState = {
+                WatchConnectivitySessionState(
+                    applicationContext: WatchDashboardApplicationContext(
+                        session.receivedApplicationContext
+                    ),
+                    isReachable: session.isReachable
+                )
+            }
+        } else {
+            self.currentSessionState = { nil }
+        }
         if let requestSnapshot {
             self.requestSnapshot = requestSnapshot
         } else if let session {
@@ -146,6 +162,25 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         }
     }
 
+    func activationCompletedFromCurrentSession(error: Error?) {
+        guard let state = currentSessionState() else { return }
+        activationCompleted(
+            applicationContext: state.applicationContext,
+            isPhoneReachable: state.isReachable,
+            error: error
+        )
+    }
+
+    func receiveCurrentApplicationContext() {
+        guard let state = currentSessionState() else { return }
+        receive(state.applicationContext)
+    }
+
+    func updateCurrentReachability() {
+        guard let state = currentSessionState() else { return }
+        updateReachability(state.isReachable)
+    }
+
     func scheduleCurrentSnapshotRequest() {
         snapshotRequestTask?.cancel()
         let delay = requestCoalescingDelay
@@ -180,33 +215,23 @@ extension WatchDashboardStore: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
-        let applicationContext = WatchDashboardApplicationContext(
-            session.receivedApplicationContext
-        )
-        let isPhoneReachable = session.isReachable
         Task { @MainActor [weak self] in
-            self?.activationCompleted(
-                applicationContext: applicationContext,
-                isPhoneReachable: isPhoneReachable,
-                error: error
-            )
+            self?.activationCompletedFromCurrentSession(error: error)
         }
     }
 
     nonisolated func session(
         _ session: WCSession,
-        didReceiveApplicationContext applicationContext: [String: Any]
+        didReceiveApplicationContext _: [String: Any]
     ) {
-        let applicationContext = WatchDashboardApplicationContext(applicationContext)
         Task { @MainActor [weak self] in
-            self?.receive(applicationContext)
+            self?.receiveCurrentApplicationContext()
         }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
-        let isPhoneReachable = session.isReachable
         Task { @MainActor [weak self] in
-            self?.updateReachability(isPhoneReachable)
+            self?.updateCurrentReachability()
         }
     }
 }

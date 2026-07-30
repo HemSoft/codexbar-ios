@@ -33,6 +33,11 @@ enum WatchDashboardApplicationContext: Equatable, Sendable {
     }
 }
 
+struct WatchConnectivitySessionState: Equatable, Sendable {
+    let applicationContext: WatchDashboardApplicationContext
+    let isReachable: Bool
+}
+
 public enum WatchMetricVisualizationStyle: String, CaseIterable, Equatable, Sendable {
     case automatic
     case linearBar

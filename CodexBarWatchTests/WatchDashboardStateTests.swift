@@ -443,6 +443,49 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
+    func testDelayedDelegateHandoffsConsumeLatestSessionState() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let olderSnapshot = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_900_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        let latestSnapshot = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var currentState = WatchConnectivitySessionState(
+            applicationContext: WatchDashboardApplicationContext(
+                try olderSnapshot.applicationContext()
+            ),
+            isReachable: false
+        )
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            currentSessionState: { currentState }
+        )
+
+        currentState = WatchConnectivitySessionState(
+            applicationContext: WatchDashboardApplicationContext(
+                try latestSnapshot.applicationContext()
+            ),
+            isReachable: true
+        )
+        store.activationCompletedFromCurrentSession(error: nil)
+        store.receiveCurrentApplicationContext()
+        store.updateCurrentReachability()
+
+        XCTAssertEqual(store.snapshot, latestSnapshot)
+        XCTAssertTrue(store.isPhoneReachable)
+    }
+
+    @MainActor
     func testPendingSnapshotRequestDoesNotRetainReleasedStore() async throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
