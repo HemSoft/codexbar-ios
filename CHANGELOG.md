@@ -203,6 +203,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Condensed the standing agent guide and moved connected-device deployment and
+  signing recovery into a focused runbook with live identifier discovery and
+  explicit dedicated-keychain safeguards.
+  ([#197](https://github.com/HemSoft/codexbar-ios/issues/197))
 - Added a repository-local Perfection skill that discovers available simulators,
   runs every supported iOS, SwiftPM, and watchOS build and test gate, treats
   compiler warnings as errors, and preserves consolidated audit diagnostics.
