@@ -3,6 +3,43 @@ import Foundation
 import WatchConnectivity
 import WidgetKit
 
+enum WatchConnectivityDelegateEvent: Sendable {
+    case activation(
+        sequence: UInt64,
+        applicationContext: WatchDashboardApplicationContext,
+        isPhoneReachable: Bool,
+        hadError: Bool
+    )
+    case applicationContext(
+        sequence: UInt64,
+        applicationContext: WatchDashboardApplicationContext
+    )
+    case reachability(sequence: UInt64, isPhoneReachable: Bool)
+
+    var sequence: UInt64 {
+        switch self {
+        case let .activation(sequence, _, _, _),
+             let .applicationContext(sequence, _),
+             let .reachability(sequence, _):
+            sequence
+        }
+    }
+}
+
+private final class WatchConnectivityEventSequencer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var nextSequence: UInt64 = 0
+
+    func nextEvent(
+        _ makeEvent: (UInt64) -> WatchConnectivityDelegateEvent
+    ) -> WatchConnectivityDelegateEvent {
+        lock.lock()
+        defer { lock.unlock() }
+        defer { nextSequence &+= 1 }
+        return makeEvent(nextSequence)
+    }
+}
+
 @MainActor
 final class WatchDashboardStore: NSObject, ObservableObject {
     typealias SnapshotRequester = (@escaping (Error) -> Void) -> Void
@@ -17,9 +54,11 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private let complicationStore: WatchComplicationSnapshotStore
     private let reloadComplications: () -> Void
     private let session: WCSession?
-    private let currentSessionState: @MainActor () -> WatchConnectivitySessionState?
     private let requestSnapshot: SnapshotRequester?
     private let requestCoalescingDelay: Duration
+    nonisolated private let delegateEventSequencer = WatchConnectivityEventSequencer()
+    private var nextDelegateEventSequence: UInt64 = 0
+    private var pendingDelegateEvents: [UInt64: WatchConnectivityDelegateEvent] = [:]
     private var snapshotRequestTask: Task<Void, Never>?
 
     init(
@@ -29,7 +68,6 @@ final class WatchDashboardStore: NSObject, ObservableObject {
             WidgetCenter.shared.reloadTimelines(ofKind: WatchComplicationConstants.widgetKind)
         },
         session: WCSession? = WCSession.isSupported() ? .default : nil,
-        currentSessionState: (@MainActor () -> WatchConnectivitySessionState?)? = nil,
         requestSnapshot: SnapshotRequester? = nil,
         requestCoalescingDelay: Duration = .milliseconds(100)
     ) {
@@ -38,20 +76,6 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         self.reloadComplications = reloadComplications
         self.session = session
         self.requestCoalescingDelay = requestCoalescingDelay
-        if let currentSessionState {
-            self.currentSessionState = currentSessionState
-        } else if let session {
-            self.currentSessionState = {
-                WatchConnectivitySessionState(
-                    applicationContext: WatchDashboardApplicationContext(
-                        session.receivedApplicationContext
-                    ),
-                    isReachable: session.isReachable
-                )
-            }
-        } else {
-            self.currentSessionState = { nil }
-        }
         if let requestSnapshot {
             self.requestSnapshot = requestSnapshot
         } else if let session {
@@ -162,23 +186,26 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         }
     }
 
-    func activationCompletedFromCurrentSession(error: Error?) {
-        guard let state = currentSessionState() else { return }
-        activationCompleted(
-            applicationContext: state.applicationContext,
-            isPhoneReachable: state.isReachable,
-            error: error
-        )
-    }
-
-    func receiveCurrentApplicationContext() {
-        guard let state = currentSessionState() else { return }
-        receive(state.applicationContext)
-    }
-
-    func updateCurrentReachability() {
-        guard let state = currentSessionState() else { return }
-        updateReachability(state.isReachable)
+    func receiveDelegateEvent(_ event: WatchConnectivityDelegateEvent) {
+        guard event.sequence >= nextDelegateEventSequence else { return }
+        pendingDelegateEvents[event.sequence] = event
+        while let nextEvent = pendingDelegateEvents.removeValue(
+            forKey: nextDelegateEventSequence
+        ) {
+            nextDelegateEventSequence &+= 1
+            switch nextEvent {
+            case let .activation(_, applicationContext, isPhoneReachable, hadError):
+                activationCompleted(
+                    applicationContext: applicationContext,
+                    isPhoneReachable: isPhoneReachable,
+                    error: hadError ? WatchConnectivityHandoffError.activation : nil
+                )
+            case let .applicationContext(_, applicationContext):
+                receive(applicationContext)
+            case let .reachability(_, isPhoneReachable):
+                updateReachability(isPhoneReachable)
+            }
+        }
     }
 
     func scheduleCurrentSnapshotRequest() {
@@ -215,23 +242,49 @@ extension WatchDashboardStore: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
+        let event = delegateEventSequencer.nextEvent { sequence in
+            WatchConnectivityDelegateEvent.activation(
+                sequence: sequence,
+                applicationContext: WatchDashboardApplicationContext(
+                    session.receivedApplicationContext
+                ),
+                isPhoneReachable: session.isReachable,
+                hadError: error != nil
+            )
+        }
         Task { @MainActor [weak self] in
-            self?.activationCompletedFromCurrentSession(error: error)
+            self?.receiveDelegateEvent(event)
         }
     }
 
     nonisolated func session(
         _ session: WCSession,
-        didReceiveApplicationContext _: [String: Any]
+        didReceiveApplicationContext applicationContext: [String: Any]
     ) {
+        let event = delegateEventSequencer.nextEvent { sequence in
+            WatchConnectivityDelegateEvent.applicationContext(
+                sequence: sequence,
+                applicationContext: WatchDashboardApplicationContext(applicationContext)
+            )
+        }
         Task { @MainActor [weak self] in
-            self?.receiveCurrentApplicationContext()
+            self?.receiveDelegateEvent(event)
         }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        let event = delegateEventSequencer.nextEvent { sequence in
+            WatchConnectivityDelegateEvent.reachability(
+                sequence: sequence,
+                isPhoneReachable: session.isReachable
+            )
+        }
         Task { @MainActor [weak self] in
-            self?.updateCurrentReachability()
+            self?.receiveDelegateEvent(event)
         }
     }
+}
+
+private enum WatchConnectivityHandoffError: Error {
+    case activation
 }

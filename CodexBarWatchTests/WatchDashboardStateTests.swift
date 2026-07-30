@@ -444,32 +444,20 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
-    func testDelayedDelegateHandoffsConsumeLatestSessionState() async throws {
+    func testDelegateCallbacksEnqueueTypedApplicationContext() async throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
-        let olderSnapshot = WatchDashboardSnapshot(
-            generatedAt: Date(timeIntervalSince1970: 1_900_000_000),
-            refreshIntervalSeconds: 300,
-            accounts: []
-        )
         let latestSnapshot = WatchDashboardSnapshot(
             generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
             refreshIntervalSeconds: 300,
             accounts: []
         )
-        var currentState = WatchConnectivitySessionState(
-            applicationContext: WatchDashboardApplicationContext(
-                try olderSnapshot.applicationContext()
-            ),
-            isReachable: false
-        )
         let store = WatchDashboardStore(
             defaults: defaults,
             complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
             reloadComplications: {},
-            session: nil,
-            currentSessionState: { currentState }
+            session: nil
         )
 
         let callbackSession = WCSession.default
@@ -478,19 +466,48 @@ final class WatchDashboardStateTests: XCTestCase {
             activationDidCompleteWith: .activated,
             error: nil
         )
-        store.session(callbackSession, didReceiveApplicationContext: [:])
-        store.sessionReachabilityDidChange(callbackSession)
-
-        currentState = WatchConnectivitySessionState(
-            applicationContext: WatchDashboardApplicationContext(
-                try latestSnapshot.applicationContext()
-            ),
-            isReachable: true
+        store.session(
+            callbackSession,
+            didReceiveApplicationContext: try latestSnapshot.applicationContext()
         )
+        store.sessionReachabilityDidChange(callbackSession)
         await Task.yield()
 
         XCTAssertEqual(store.snapshot, latestSnapshot)
+        XCTAssertEqual(store.isPhoneReachable, callbackSession.isReachable)
+    }
+
+    @MainActor
+    func testOutOfOrderHandoffsPreserveRapidReconnectTransition() async throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var requestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _ in
+                requestCount += 1
+            },
+            requestCoalescingDelay: .milliseconds(5)
+        )
+        store.activationCompleted(
+            applicationContext: .empty,
+            isPhoneReachable: true,
+            error: nil
+        )
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(requestCount, 1)
+
+        store.receiveDelegateEvent(.reachability(sequence: 1, isPhoneReachable: true))
         XCTAssertTrue(store.isPhoneReachable)
+        store.receiveDelegateEvent(.reachability(sequence: 0, isPhoneReachable: false))
+        try await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertTrue(store.isPhoneReachable)
+        XCTAssertEqual(requestCount, 2)
     }
 
     @MainActor
