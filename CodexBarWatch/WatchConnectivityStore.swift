@@ -18,6 +18,8 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private let reloadComplications: () -> Void
     private let session: WCSession?
     private let requestSnapshot: SnapshotRequester?
+    private let requestCoalescingDelay: Duration
+    private var snapshotRequestTask: Task<Void, Never>?
 
     init(
         defaults: UserDefaults = .standard,
@@ -26,12 +28,14 @@ final class WatchDashboardStore: NSObject, ObservableObject {
             WidgetCenter.shared.reloadTimelines(ofKind: WatchComplicationConstants.widgetKind)
         },
         session: WCSession? = WCSession.isSupported() ? .default : nil,
-        requestSnapshot: SnapshotRequester? = nil
+        requestSnapshot: SnapshotRequester? = nil,
+        requestCoalescingDelay: Duration = .milliseconds(100)
     ) {
         self.defaults = defaults
         self.complicationStore = complicationStore
         self.reloadComplications = reloadComplications
         self.session = session
+        self.requestCoalescingDelay = requestCoalescingDelay
         if let requestSnapshot {
             self.requestSnapshot = requestSnapshot
         } else if let session {
@@ -118,7 +122,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         let becameReachable = !isPhoneReachable && isReachable
         isPhoneReachable = isReachable
         if becameReachable {
-            requestCurrentSnapshot()
+            scheduleCurrentSnapshotRequest()
         }
     }
 
@@ -134,7 +138,21 @@ final class WatchDashboardStore: NSObject, ObservableObject {
             decodingError = "Couldn’t connect to iPhone"
         }
         if error == nil {
-            requestCurrentSnapshot()
+            scheduleCurrentSnapshotRequest()
+        }
+    }
+
+    func scheduleCurrentSnapshotRequest() {
+        snapshotRequestTask?.cancel()
+        snapshotRequestTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(for: self.requestCoalescingDelay)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            self.requestCurrentSnapshot()
         }
     }
 
@@ -145,6 +163,10 @@ final class WatchDashboardStore: NSObject, ObservableObject {
                 self.decodingError = "Couldn’t request the latest update from iPhone"
             }
         }
+    }
+
+    deinit {
+        snapshotRequestTask?.cancel()
     }
 }
 

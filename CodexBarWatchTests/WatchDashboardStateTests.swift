@@ -388,7 +388,7 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
-    func testActivationAndNewReachabilityRequestCurrentIPhoneSnapshot() throws {
+    func testActivationAndNewReachabilityCoalesceCurrentIPhoneSnapshotRequests() async throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
@@ -400,7 +400,8 @@ final class WatchDashboardStateTests: XCTestCase {
             session: nil,
             requestSnapshot: { _ in
                 requestCount += 1
-            }
+            },
+            requestCoalescingDelay: .milliseconds(5)
         )
 
         store.activationCompleted(
@@ -408,15 +409,14 @@ final class WatchDashboardStateTests: XCTestCase {
             isPhoneReachable: false,
             error: nil
         )
+        store.updateReachability(true)
+        store.updateReachability(true)
+        try await Task.sleep(for: .milliseconds(20))
         XCTAssertEqual(requestCount, 1)
 
         store.updateReachability(false)
-        XCTAssertEqual(requestCount, 1)
-
         store.updateReachability(true)
-        XCTAssertEqual(requestCount, 2)
-
-        store.updateReachability(true)
+        try await Task.sleep(for: .milliseconds(20))
         XCTAssertEqual(requestCount, 2)
     }
 
