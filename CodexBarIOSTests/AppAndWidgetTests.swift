@@ -347,6 +347,30 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(state.message, "Could not save the group name.")
     }
 
+    func testSettingsGroupDraftCommitterValidatesEveryPendingDraftUntilFailure() {
+        var attemptedGroupIDs: [String] = []
+        XCTAssertFalse(
+            SettingsGroupDraftCommitter.commitAll(
+                groupIDs: ["first", "second", "third"]
+            ) { groupID in
+                attemptedGroupIDs.append(groupID)
+                return groupID != "second"
+            }
+        )
+        XCTAssertEqual(attemptedGroupIDs, ["first", "second"])
+
+        attemptedGroupIDs = []
+        XCTAssertTrue(
+            SettingsGroupDraftCommitter.commitAll(
+                groupIDs: ["first", "second"]
+            ) { groupID in
+                attemptedGroupIDs.append(groupID)
+                return true
+            }
+        )
+        XCTAssertEqual(attemptedGroupIDs, ["first", "second"])
+    }
+
     func testSettingsCategorySummariesExposeStateWithoutAccountIdentifiers() {
         XCTAssertEqual(
             SettingsCategorySummary.accounts(accountCount: 1, groupCount: 2),

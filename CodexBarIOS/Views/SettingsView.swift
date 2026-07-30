@@ -110,6 +110,18 @@ struct SettingsGroupValidationState: Equatable {
     }
 }
 
+enum SettingsGroupDraftCommitter {
+    static func commitAll(
+        groupIDs: [String],
+        commit: (String) -> Bool
+    ) -> Bool {
+        for groupID in groupIDs where !commit(groupID) {
+            return false
+        }
+        return true
+    }
+}
+
 enum SettingsCategorySummary {
     static func accounts(accountCount: Int, groupCount: Int) -> String {
         "\(count(accountCount, singular: "account")) · \(count(groupCount, singular: "group"))"
@@ -278,7 +290,7 @@ struct SettingsView: View {
         }
         .onChange(of: selectedDestination) { oldValue, newValue in
             if oldValue == .accountsAndGroups, newValue != oldValue {
-                if !commitFocusedGroupName() {
+                if !commitPendingGroupNames() {
                     selectedDestination = oldValue
                 }
             }
@@ -330,7 +342,7 @@ struct SettingsView: View {
     private var doneToolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button("Done") {
-                if commitFocusedGroupName() {
+                if commitPendingGroupNames() {
                     dismiss()
                 }
             }
@@ -865,12 +877,16 @@ struct SettingsView: View {
         )
     }
 
-    private func commitFocusedGroupName() -> Bool {
-        guard let focusedGroupID else {
-            return true
+    private func commitPendingGroupNames() -> Bool {
+        SettingsGroupDraftCommitter.commitAll(
+            groupIDs: groupNameDrafts.keys.sorted()
+        ) { groupID in
+            let committed = commitGroupName(for: groupID)
+            if !committed {
+                focusedGroupID = groupID
+            }
+            return committed
         }
-
-        return commitGroupName(for: focusedGroupID)
     }
 
     @discardableResult
