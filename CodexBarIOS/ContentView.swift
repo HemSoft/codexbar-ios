@@ -17,6 +17,8 @@ struct ContentView: View {
     @Environment(\.requestReview) private var requestReview
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isShowingSettings = false
+    @State private var addAccountFlowRequest: AddAccountFlowRequest?
+    @State private var addAccountRefreshState = AddAccountRefreshState()
     @State private var selectedHistoryResult: ProviderUsageResult?
     @State private var accountConfigurationNavigation =
         DashboardAccountConfigurationNavigationState()
@@ -66,6 +68,18 @@ struct ContentView: View {
         let sections = orchestrator.dashboardSections
         let showGroupHeaders = orchestrator.shouldShowGroupHeaders(for: sections)
         let usageAlertsByAccountID = orchestrator.currentUsageAlertsByAccountID
+        let emptyState = DashboardEmptyState.resolve(
+            hasAccounts: !configurationStore.configurations.isEmpty,
+            hasEnabledAccounts: configurationStore.configurations.contains(where: \.isEnabled),
+            needsSetupAccountID: configurationStore.configurations.first(where: {
+                $0.isEnabled && !configurationStore.isConfigured($0)
+            })?.id,
+            cardsAreEmpty: cardItems.isEmpty,
+            hasCompletedInitialRefresh: hasCompletedInitialRefresh,
+            performsLifecycleWork: performsLifecycleWork,
+            isPersistenceRecoveryRequired: configurationStore.isPersistenceRecoveryRequired,
+            hasIncompleteAccountReset: configurationStore.hasIncompleteAccountReset
+        )
 
         NavigationStack {
             GeometryReader { geometry in
@@ -267,7 +281,7 @@ struct ContentView: View {
                 }
             }
             .overlay {
-                if cardItems.isEmpty {
+                if emptyState != .hidden {
                     VStack(spacing: 16) {
                         if let release = appUpdateController.dashboardRelease {
                             AppUpdateNotice(
@@ -276,11 +290,7 @@ struct ContentView: View {
                             )
                         }
 
-                        ContentUnavailableView(
-                            "No Usage Data",
-                            systemImage: "gauge.with.dots.needle.50percent",
-                            description: Text("Configure providers in Settings to start tracking live usage.")
-                        )
+                        dashboardEmptyStateView(emptyState)
                     }
                     .padding()
                 }
@@ -305,6 +315,35 @@ struct ContentView: View {
                 },
                 onAlertAuthorizationRequest: {
                     await orchestrator.requestAlertAuthorization()
+                }
+            )
+        }
+        .sheet(
+            item: $addAccountFlowRequest,
+            onDismiss: {
+                guard let accountID = addAccountRefreshState.finishDismissal() else {
+                    return
+                }
+                Task {
+                    await refreshAccount(accountID: accountID)
+                }
+            }
+        ) { _ in
+            AddAccountSetupFlow(
+                configurationStore: configurationStore,
+                onAccountCreated: { accountID in
+                    addAccountRefreshState.accountCreated(accountID)
+                },
+                onCredentialsChanged: {
+                    guard let accountID = addAccountRefreshState.credentialsChanged() else {
+                        return
+                    }
+                    Task {
+                        await refreshAccount(accountID: accountID)
+                    }
+                },
+                onAccountRefresh: { configuration in
+                    await orchestrator.refreshAccount(configuration)
                 }
             )
         }
@@ -396,6 +435,86 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
             guard performsLifecycleWork else { return }
             Task { await orchestrator.handleSystemDateTimeChange() }
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardEmptyStateView(_ state: DashboardEmptyState) -> some View {
+        switch state {
+        case .hidden:
+            EmptyView()
+        case .loading:
+            ProgressView("Loading accounts…")
+                .accessibilityIdentifier("dashboard-account-loading")
+        case .recovery:
+            ContentUnavailableView {
+                Label("Account Data Needs Attention", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text("Open Settings to recover your saved account or group data.")
+            } actions: {
+                Button("Open Settings") {
+                    isShowingSettings = true
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityHint("Opens account data recovery options.")
+            }
+        case .accountResetRecovery:
+            ContentUnavailableView {
+                Label("Account Reset Needs Attention", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text("Open Settings to retry credential cleanup before adding another account.")
+            } actions: {
+                Button("Open Settings") {
+                    isShowingSettings = true
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityHint("Opens account reset recovery options.")
+            }
+        case .firstAccount:
+            ContentUnavailableView {
+                Label("Connect your first account", systemImage: "person.crop.circle.badge.plus")
+            } description: {
+                Text("Add an AI provider to see usage, reset times, and balances in one place.")
+            } actions: {
+                Button {
+                    addAccountFlowRequest = AddAccountFlowRequest()
+                } label: {
+                    Label("Add Account", systemImage: "plus.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityHint("Opens the list of supported AI providers.")
+                .accessibilityIdentifier("dashboard-add-account")
+            }
+        case let .needsSetup(accountID):
+            ContentUnavailableView {
+                Label("Account Needs Setup", systemImage: "person.crop.circle.badge.exclamationmark")
+            } description: {
+                Text("Finish connecting your account to start seeing live usage.")
+            } actions: {
+                Button("Continue Setup") {
+                    accountConfigurationNavigation.present(accountID: accountID)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityHint("Opens setup for the account that needs attention.")
+            }
+        case .accountsDisabled:
+            ContentUnavailableView {
+                Label("Accounts Are Disabled", systemImage: "pause.circle")
+            } description: {
+                Text("Enable an account in Settings to resume usage tracking.")
+            } actions: {
+                Button("Open Settings") {
+                    isShowingSettings = true
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityHint("Opens Settings where accounts can be enabled.")
+            }
+        case .noUsageData:
+            ContentUnavailableView(
+                "No Usage Data",
+                systemImage: "gauge.with.dots.needle.50percent",
+                description: Text("Refresh your accounts to load current usage.")
+            )
         }
     }
 
@@ -792,6 +911,51 @@ struct DashboardAccountConfigurationNavigationState: Equatable {
             accountIDAwaitingDismissalRefresh = nil
         }
         return accountIDAwaitingDismissalRefresh
+    }
+}
+
+enum DashboardEmptyState: Equatable {
+    case hidden
+    case loading
+    case recovery
+    case accountResetRecovery
+    case firstAccount
+    case needsSetup(accountID: String)
+    case accountsDisabled
+    case noUsageData
+
+    static func resolve(
+        hasAccounts: Bool,
+        hasEnabledAccounts: Bool,
+        needsSetupAccountID: String?,
+        cardsAreEmpty: Bool,
+        hasCompletedInitialRefresh: Bool,
+        performsLifecycleWork: Bool,
+        isPersistenceRecoveryRequired: Bool,
+        hasIncompleteAccountReset: Bool = false
+    ) -> DashboardEmptyState {
+        guard cardsAreEmpty else {
+            return .hidden
+        }
+        guard hasCompletedInitialRefresh || !performsLifecycleWork else {
+            return .loading
+        }
+        if isPersistenceRecoveryRequired {
+            return .recovery
+        }
+        if hasIncompleteAccountReset {
+            return .accountResetRecovery
+        }
+        if !hasAccounts {
+            return .firstAccount
+        }
+        if !hasEnabledAccounts {
+            return .accountsDisabled
+        }
+        if let accountID = needsSetupAccountID {
+            return .needsSetup(accountID: accountID)
+        }
+        return .noUsageData
     }
 }
 

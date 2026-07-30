@@ -20,6 +20,8 @@ struct SettingsView: View {
     @State private var isConfirmingConfigurationReplacement = false
     @State private var isConfirmingGroupReplacement = false
     @State private var alertPermissionMessage: String?
+    @State private var addAccountFlowRequest: AddAccountFlowRequest?
+    @State private var addAccountRefreshState = AddAccountRefreshState()
     @State private var newGroupName = ""
     @State private var groupNameDrafts: [String: String] = [:]
     @FocusState private var focusedGroupID: String?
@@ -28,6 +30,42 @@ struct SettingsView: View {
         NavigationStack {
             settingsList
         }
+        .sheet(
+            item: $addAccountFlowRequest,
+            onDismiss: {
+                guard let accountID = addAccountRefreshState.finishDismissal() else {
+                    return
+                }
+                Task {
+                    await refreshAddedAccount(accountID: accountID)
+                }
+            }
+        ) { request in
+            AddAccountSetupFlow(
+                configurationStore: configurationStore,
+                initialProviderID: request.initialProviderID,
+                onAccountCreated: { accountID in
+                    addAccountRefreshState.accountCreated(accountID)
+                },
+                onCredentialsChanged: {
+                    guard let accountID = addAccountRefreshState.credentialsChanged() else {
+                        return
+                    }
+                    Task {
+                        await refreshAddedAccount(accountID: accountID)
+                    }
+                },
+                onAccountRefresh: onAccountRefresh
+            )
+        }
+    }
+
+    @MainActor
+    private func refreshAddedAccount(accountID: String) async {
+        guard let configuration = configurationStore.configuration(accountID: accountID) else {
+            return
+        }
+        _ = await onAccountRefresh(configuration)
     }
 
     private var settingsList: some View {
@@ -228,25 +266,21 @@ struct SettingsView: View {
 
                     if !configurationStore.configurations(for: .codex).isEmpty {
                         Button {
-                            _ = configurationStore.addAccount(for: .codex)
+                            addAccountFlowRequest = AddAccountFlowRequest(
+                                initialProviderID: .codex
+                            )
                         } label: {
                             Label("Add Another ChatGPT / Codex Account", systemImage: "person.badge.plus")
                         }
-                        .disabled(configurationStore.isPersistenceRecoveryRequired)
+                        .disabled(configurationStore.isAccountCreationBlocked)
                     }
 
-                    Menu {
-                        ForEach(ProviderID.allCases) { providerID in
-                            Button {
-                                _ = configurationStore.addAccount(for: providerID)
-                            } label: {
-                                Label(providerID.displayName, systemImage: providerID.addAccountIconName)
-                            }
-                        }
+                    Button {
+                        addAccountFlowRequest = AddAccountFlowRequest()
                     } label: {
                         Label("Add Account", systemImage: "plus.circle")
                     }
-                    .disabled(configurationStore.isPersistenceRecoveryRequired)
+                    .disabled(configurationStore.isAccountCreationBlocked)
                 } header: {
                     Text("Accounts")
                 }
@@ -599,7 +633,154 @@ private struct ProviderSettingsRow: View {
     }
 }
 
-private extension ProviderID {
+struct AddAccountFlowRequest: Identifiable, Equatable {
+    let id = UUID()
+    let initialProviderID: ProviderID?
+
+    init(initialProviderID: ProviderID? = nil) {
+        self.initialProviderID = initialProviderID
+    }
+}
+
+struct AddAccountRefreshState: Equatable {
+    private(set) var accountID: String?
+    private var shouldRefreshOnDismiss = false
+
+    mutating func accountCreated(_ accountID: String) {
+        self.accountID = accountID
+        shouldRefreshOnDismiss = true
+    }
+
+    mutating func credentialsChanged() -> String? {
+        guard let accountID else {
+            return nil
+        }
+        shouldRefreshOnDismiss = false
+        return accountID
+    }
+
+    mutating func finishDismissal() -> String? {
+        defer {
+            accountID = nil
+            shouldRefreshOnDismiss = false
+        }
+        return shouldRefreshOnDismiss ? accountID : nil
+    }
+}
+
+struct AddAccountFlowState: Equatable {
+    static let providerOptions = ProviderID.allCases
+
+    private(set) var accountID: String?
+
+    @discardableResult
+    @MainActor
+    mutating func select(
+        _ providerID: ProviderID,
+        configurationStore: ProviderConfigurationStore
+    ) -> String? {
+        if let accountID {
+            return accountID
+        }
+        guard !configurationStore.isAccountCreationBlocked else {
+            return nil
+        }
+
+        let configuration = configurationStore.addAccount(for: providerID)
+        guard configurationStore.configuration(accountID: configuration.id) != nil else {
+            return nil
+        }
+        accountID = configuration.id
+        return configuration.id
+    }
+}
+
+struct AddAccountSetupFlow: View {
+    @ObservedObject var configurationStore: ProviderConfigurationStore
+    let initialProviderID: ProviderID?
+    var onAccountCreated: @MainActor (String) -> Void
+    var onCredentialsChanged: @MainActor () -> Void
+    var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var flowState = AddAccountFlowState()
+
+    init(
+        configurationStore: ProviderConfigurationStore,
+        initialProviderID: ProviderID? = nil,
+        onAccountCreated: @escaping @MainActor (String) -> Void = { _ in },
+        onCredentialsChanged: @escaping @MainActor () -> Void = {},
+        onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
+    ) {
+        self.configurationStore = configurationStore
+        self.initialProviderID = initialProviderID
+        self.onAccountCreated = onAccountCreated
+        self.onCredentialsChanged = onCredentialsChanged
+        self.onAccountRefresh = onAccountRefresh
+    }
+
+    var body: some View {
+        NavigationStack {
+            if let accountID = flowState.accountID {
+                ProviderSettingsView(
+                    configurationStore: configurationStore,
+                    accountID: accountID,
+                    onCredentialsChanged: onCredentialsChanged,
+                    onAccountRefresh: onAccountRefresh
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                }
+            } else {
+                List(AddAccountFlowState.providerOptions) { providerID in
+                    Button {
+                        select(providerID)
+                    } label: {
+                        Label(
+                            providerID.displayName,
+                            systemImage: providerID.addAccountIconName
+                        )
+                    }
+                    .accessibilityHint("Creates this account and opens its setup screen.")
+                }
+                .navigationTitle("Choose a Provider")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+        }
+        .task {
+            guard let initialProviderID, flowState.accountID == nil else {
+                return
+            }
+            select(initialProviderID)
+        }
+    }
+
+    private func select(_ providerID: ProviderID) {
+        let previousAccountID = flowState.accountID
+        guard let accountID = flowState.select(
+            providerID,
+            configurationStore: configurationStore
+        ) else {
+            return
+        }
+        if previousAccountID == nil {
+            onAccountCreated(accountID)
+        }
+    }
+}
+
+extension ProviderID {
     var addAccountIconName: String {
         switch self {
         case .codex:

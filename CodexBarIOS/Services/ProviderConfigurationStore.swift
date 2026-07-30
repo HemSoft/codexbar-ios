@@ -293,6 +293,10 @@ public final class ProviderConfigurationStore: ObservableObject {
         isConfigurationRecoveryRequired || isGroupRecoveryRequired
     }
 
+    public var isAccountCreationBlocked: Bool {
+        isPersistenceRecoveryRequired || hasIncompleteAccountReset
+    }
+
     public func configuration(for providerID: ProviderID) -> ProviderAccountConfiguration {
         configurations.first { $0.providerID == providerID }
             ?? .defaultConfiguration(for: providerID)

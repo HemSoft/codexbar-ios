@@ -781,6 +781,10 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
         XCTAssertTrue(store.configurations.isEmpty)
         XCTAssertTrue(store.hasIncompleteAccountReset)
+        XCTAssertTrue(store.isAccountCreationBlocked)
+        var addAccountFlow = AddAccountFlowState()
+        XCTAssertNil(addAccountFlow.select(.openRouter, configurationStore: store))
+        XCTAssertTrue(store.configurations.isEmpty)
         XCTAssertEqual(try secretStore.readSecret(account: legacyAccount), "legacy-token")
         XCTAssertNotNil(store.lastError)
 
@@ -792,6 +796,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertTrue(reloadedStore.resetAccounts())
 
         XCTAssertFalse(reloadedStore.hasIncompleteAccountReset)
+        XCTAssertFalse(reloadedStore.isAccountCreationBlocked)
         XCTAssertNil(try secretStore.readSecret(account: legacyAccount))
         XCTAssertNil(reloadedStore.lastError)
     }

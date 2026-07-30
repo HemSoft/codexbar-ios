@@ -8,6 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added a welcoming first-run dashboard with a prominent Add Account action
+  that guides people through provider selection and directly into setup, with
+  the same flow available from Settings.
+  ([#195](https://github.com/HemSoft/codexbar-ios/issues/195))
 - Added configurable Apple Watch complications for inline, circular,
   rectangular, and corner placements, with cached provider usage, honest
   freshness and stale states, and warning or critical context at a glance.
