@@ -10,6 +10,7 @@ struct CodexBarWidgetTile: Identifiable {
     let bar: CodexBarWidgetUsageBarSnapshot?
     let creditsRemaining: Double?
     let monetaryMetric: CodexBarWidgetMonetaryMetricSnapshot?
+    let fetchedAt: Date?
     let severity: CodexBarWidgetSeverity
 
     var choiceTitle: String {
@@ -47,6 +48,7 @@ struct CodexBarWidgetTile: Identifiable {
             bar: nil,
             creditsRemaining: nil,
             monetaryMetric: nil,
+            fetchedAt: nil,
             severity: .warning
         )
     }
@@ -91,6 +93,12 @@ struct CodexBarWidgetRenderedTile: Identifiable {
 
     var id: String {
         "\(tile.id).\(displayMode.rawValue)"
+    }
+}
+
+extension Collection where Element == CodexBarWidgetRenderedTile {
+    func freshnessDate(fallback: Date) -> Date {
+        compactMap(\.tile.fetchedAt).min() ?? fallback
     }
 }
 
@@ -180,8 +188,22 @@ extension CodexBarWidgetProviderSnapshot {
             bar: representativeBar,
             creditsRemaining: creditsRemaining,
             monetaryMetric: summaryMetric,
+            fetchedAt: summaryFetchedAt,
             severity: severity
         )
+    }
+
+    private var summaryFetchedAt: Date {
+        if summaryMonetaryMetric != nil {
+            return monetaryMetricsFetchedAt ?? fetchedAt
+        }
+        if creditsRemaining != nil {
+            return creditsFetchedAt ?? fetchedAt
+        }
+        if representativeBar != nil {
+            return barsFetchedAt ?? fetchedAt
+        }
+        return fetchedAt
     }
 
     private var representativeBar: CodexBarWidgetUsageBarSnapshot? {
@@ -205,6 +227,7 @@ extension CodexBarWidgetProviderSnapshot {
             bar: bar,
             creditsRemaining: nil,
             monetaryMetric: nil,
+            fetchedAt: barsFetchedAt ?? fetchedAt,
             severity: bar.effectiveSeverity
         )
     }
@@ -220,6 +243,7 @@ extension CodexBarWidgetProviderSnapshot {
             bar: nil,
             creditsRemaining: nil,
             monetaryMetric: metric,
+            fetchedAt: monetaryMetricsFetchedAt ?? fetchedAt,
             severity: severity
         )
     }

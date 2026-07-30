@@ -83,6 +83,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Corrected widget freshness labels so medium, large, and extra-large widgets
+  report the age of the oldest usage data they actually display, including
+  cached and partially refreshed values. ([#202](https://github.com/HemSoft/codexbar-ios/issues/202))
 - Organized Settings into a compact, adaptive category list with focused
   destinations for accounts, dashboard preferences, alerts, widgets, support,
   and recovery while keeping urgent data-recovery needs prominent.

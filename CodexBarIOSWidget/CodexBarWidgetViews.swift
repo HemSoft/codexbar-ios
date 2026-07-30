@@ -283,7 +283,7 @@ struct TileWidget: View {
                     }
 
                     if family != .systemSmall {
-                        Text("Updated \(generatedAt, style: .relative) ago")
+                        Text("Updated \(freshnessDate, style: .relative) ago")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -302,6 +302,10 @@ struct TileWidget: View {
         default:
             false
         }
+    }
+
+    private var freshnessDate: Date {
+        tiles.freshnessDate(fallback: generatedAt)
     }
 
     private var columns: [GridItem] {
@@ -324,7 +328,7 @@ struct DenseTileWidget: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("Updated \(generatedAt, style: .relative) ago")
+                Text("Updated \(freshnessDate, style: .relative) ago")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -350,6 +354,10 @@ struct DenseTileWidget: View {
         default:
             Array(tiles.prefix(4))
         }
+    }
+
+    private var freshnessDate: Date {
+        displayedTiles.freshnessDate(fallback: generatedAt)
     }
 
     private var columns: [GridItem] {

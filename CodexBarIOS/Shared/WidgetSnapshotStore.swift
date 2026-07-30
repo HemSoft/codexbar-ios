@@ -185,6 +185,9 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
     public let creditsRemaining: Double?
     public let monetaryMetrics: [CodexBarWidgetMonetaryMetricSnapshot]?
     public let usageMessages: [String]?
+    public let barsFetchedAt: Date?
+    public let creditsFetchedAt: Date?
+    public let monetaryMetricsFetchedAt: Date?
     public let fetchedAt: Date
     public let severity: CodexBarWidgetSeverity
 
@@ -202,6 +205,9 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
         creditsRemaining: Double?,
         monetaryMetrics: [CodexBarWidgetMonetaryMetricSnapshot] = [],
         usageMessages: [String] = [],
+        barsFetchedAt: Date? = nil,
+        creditsFetchedAt: Date? = nil,
+        monetaryMetricsFetchedAt: Date? = nil,
         fetchedAt: Date,
         severity: CodexBarWidgetSeverity
     ) {
@@ -218,6 +224,11 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
         self.creditsRemaining = creditsRemaining
         self.monetaryMetrics = monetaryMetrics
         self.usageMessages = usageMessages
+        self.barsFetchedAt = bars.isEmpty ? nil : (barsFetchedAt ?? fetchedAt)
+        self.creditsFetchedAt = creditsRemaining == nil ? nil : (creditsFetchedAt ?? fetchedAt)
+        self.monetaryMetricsFetchedAt = monetaryMetrics.isEmpty
+            ? nil
+            : (monetaryMetricsFetchedAt ?? fetchedAt)
         self.fetchedAt = fetchedAt
         self.severity = severity
     }

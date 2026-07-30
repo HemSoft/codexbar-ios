@@ -1999,6 +1999,8 @@ final class AppAndWidgetTests: XCTestCase {
                         ),
                     ],
                     creditsRemaining: 42.25,
+                    barsFetchedAt: generatedAt.addingTimeInterval(-120),
+                    creditsFetchedAt: generatedAt.addingTimeInterval(-60),
                     fetchedAt: generatedAt,
                     severity: .critical
                 ),
@@ -2011,6 +2013,14 @@ final class AppAndWidgetTests: XCTestCase {
         let loadedSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
         XCTAssertEqual(loadedSnapshot, snapshot)
         XCTAssertNil(loadedSnapshot.results.first?.planIdentifier)
+        XCTAssertEqual(
+            loadedSnapshot.results.first?.barsFetchedAt,
+            generatedAt.addingTimeInterval(-120)
+        )
+        XCTAssertEqual(
+            loadedSnapshot.results.first?.creditsFetchedAt,
+            generatedAt.addingTimeInterval(-60)
+        )
         XCTAssertEqual(WidgetSnapshotStore.loadRefreshInterval(defaults: defaults), .threeHours)
     }
 
@@ -2404,6 +2414,8 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(bar.severity, .normal)
         XCTAssertNil(bar.projectedFraction)
         XCTAssertNil(bar.projectedSeverity)
+        XCTAssertEqual(provider.barsFetchedAt, fetchedAt.addingTimeInterval(-60))
+        XCTAssertEqual(provider.fetchedAt, fetchedAt)
     }
 
     @MainActor
@@ -2512,6 +2524,8 @@ final class AppAndWidgetTests: XCTestCase {
 
         let provider = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first)
         XCTAssertNil(provider.creditsRemaining)
+        XCTAssertNil(provider.creditsFetchedAt)
+        XCTAssertEqual(provider.barsFetchedAt, fetchedAt)
         XCTAssertEqual(provider.bars.map(\.usageText), ["40%"])
     }
 
@@ -2604,6 +2618,9 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(bar.effectiveFractionUsed, 0.25)
         XCTAssertNil(snapshot.results.first?.monetaryMetrics)
         XCTAssertNil(snapshot.results.first?.usageMessages)
+        XCTAssertNil(snapshot.results.first?.barsFetchedAt)
+        XCTAssertNil(snapshot.results.first?.creditsFetchedAt)
+        XCTAssertNil(snapshot.results.first?.monetaryMetricsFetchedAt)
     }
 
     @MainActor

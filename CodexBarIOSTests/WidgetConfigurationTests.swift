@@ -187,6 +187,7 @@ final class WidgetConfigurationTests: XCTestCase {
             bar: criticalProjection,
             creditsRemaining: nil,
             monetaryMetric: nil,
+            fetchedAt: Date(timeIntervalSince1970: 1_000_000),
             severity: .critical
         )
 
@@ -235,6 +236,116 @@ final class WidgetConfigurationTests: XCTestCase {
         let deepLink = try XCTUnwrap(codex.summaryTile.deepLinkURL)
         XCTAssertEqual(CodexBarDeepLink.providerAccountID(from: deepLink), "codex.work")
         XCTAssertNil(unavailable.deepLinkURL)
+    }
+
+    func testWidgetTilesUseComponentFreshnessAndOldestVisibleDate() throws {
+        let publicationDate = Date(timeIntervalSince1970: 1_000_000)
+        let barsDate = publicationDate.addingTimeInterval(-180)
+        let creditsDate = publicationDate.addingTimeInterval(-60)
+        let monetaryDate = publicationDate.addingTimeInterval(-30)
+        let bar = CodexBarWidgetUsageBarSnapshot(
+            id: "codex.work.weekly",
+            label: "Weekly",
+            fractionUsed: 0.5,
+            usageText: "50%",
+            resetDescription: nil,
+            severity: .normal
+        )
+        let monetaryMetric = CodexBarWidgetMonetaryMetricSnapshot(
+            kind: "spent",
+            label: "Spend",
+            minorUnits: 500,
+            currencyCode: "USD",
+            decimalPlaces: 2,
+            detail: nil
+        )
+        let usageProvider = CodexBarWidgetProviderSnapshot(
+            accountID: "codex.work",
+            providerID: "codex",
+            title: "Codex",
+            subtitle: "Work",
+            bars: [bar],
+            creditsRemaining: nil,
+            monetaryMetrics: [monetaryMetric],
+            barsFetchedAt: barsDate,
+            monetaryMetricsFetchedAt: monetaryDate,
+            fetchedAt: publicationDate,
+            severity: .normal
+        )
+        let balanceProvider = CodexBarWidgetProviderSnapshot(
+            accountID: "openrouter.work",
+            providerID: "openRouter",
+            title: "OpenRouter",
+            subtitle: "Work",
+            bars: [],
+            creditsRemaining: 10,
+            creditsFetchedAt: creditsDate,
+            fetchedAt: publicationDate,
+            severity: .normal
+        )
+        let renderedTiles = [
+            CodexBarWidgetRenderedTile(
+                tile: usageProvider.barTile(bar),
+                displayMode: .automatic
+            ),
+            CodexBarWidgetRenderedTile(
+                tile: usageProvider.monetaryTile(monetaryMetric),
+                displayMode: .automatic
+            ),
+            CodexBarWidgetRenderedTile(
+                tile: balanceProvider.summaryTile,
+                displayMode: .automatic
+            ),
+        ]
+
+        XCTAssertEqual(usageProvider.summaryTile.fetchedAt, barsDate)
+        XCTAssertEqual(renderedTiles[0].tile.fetchedAt, barsDate)
+        XCTAssertEqual(renderedTiles[1].tile.fetchedAt, monetaryDate)
+        XCTAssertEqual(renderedTiles[2].tile.fetchedAt, creditsDate)
+        XCTAssertEqual(renderedTiles.freshnessDate(fallback: publicationDate), barsDate)
+        XCTAssertEqual(
+            [CodexBarWidgetRenderedTile]().freshnessDate(fallback: publicationDate),
+            publicationDate
+        )
+    }
+
+    func testLegacyWidgetSnapshotFallsBackToProviderFreshness() throws {
+        let json = """
+        {
+          "generatedAt": 1000000,
+          "results": [
+            {
+              "accountID": "codex.work",
+              "providerID": "codex",
+              "title": "Codex",
+              "subtitle": "Work",
+              "bars": [
+                {
+                  "id": "codex.work.weekly",
+                  "label": "Weekly",
+                  "fractionUsed": 0.5,
+                  "usageText": "50%",
+                  "resetDescription": null,
+                  "severity": "normal"
+                }
+              ],
+              "creditsRemaining": null,
+              "fetchedAt": 999900,
+              "severity": "normal"
+            }
+          ]
+        }
+        """
+        let snapshot = try JSONDecoder().decode(
+            CodexBarWidgetSnapshot.self,
+            from: Data(json.utf8)
+        )
+        let provider = try XCTUnwrap(snapshot.results.first)
+        let bar = try XCTUnwrap(provider.bars.first)
+
+        XCTAssertNil(provider.barsFetchedAt)
+        XCTAssertEqual(provider.barTile(bar).fetchedAt, provider.fetchedAt)
+        XCTAssertEqual(provider.summaryTile.fetchedAt, provider.fetchedAt)
     }
 
     func testTimelineLoaderUsesInjectedClockSnapshotsAndRefreshInterval() {
