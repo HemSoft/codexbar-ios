@@ -418,6 +418,33 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertFalse(changes.hasChanges)
     }
 
+    func testSettingsPendingGroupChangesExcludeRevertedAndMissingDrafts() {
+        let changedDraftGroupIDs = SettingsPendingGroupChanges.changedDraftGroupIDs(
+            draftNames: [
+                "changed": "Renamed",
+                "missing": "Removed",
+                "reverted": "  Original  "
+            ],
+            persistedName: { groupID in
+                [
+                    "changed": "Original",
+                    "reverted": "Original"
+                ][groupID]
+            }
+        )
+
+        XCTAssertEqual(changedDraftGroupIDs, ["changed"])
+        XCTAssertFalse(
+            SettingsPendingGroupChanges(
+                draftGroupIDs: SettingsPendingGroupChanges.changedDraftGroupIDs(
+                    draftNames: ["reverted": "Original"],
+                    persistedName: { _ in "Original" }
+                ),
+                newGroupName: ""
+            ).hasChanges
+        )
+    }
+
     func testSettingsNavigationGuardBlocksAccountDetailUntilPendingChangesCommit() {
         var navigationCount = 0
 

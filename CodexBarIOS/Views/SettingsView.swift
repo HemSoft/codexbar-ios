@@ -125,6 +125,21 @@ struct SettingsPendingGroupChanges: Equatable {
     let draftGroupIDs: [String]
     let newGroupName: String
 
+    static func changedDraftGroupIDs(
+        draftNames: [String: String],
+        persistedName: (String) -> String?
+    ) -> [String] {
+        draftNames.compactMap { groupID, draftName in
+            guard let savedName = persistedName(groupID) else {
+                return nil
+            }
+            return draftName.trimmingCharacters(in: .whitespacesAndNewlines) == savedName
+                ? nil
+                : groupID
+        }
+        .sorted()
+    }
+
     var hasChanges: Bool {
         !draftGroupIDs.isEmpty || !normalizedNewGroupName.isEmpty
     }
@@ -251,14 +266,14 @@ struct SettingsView: View {
         } detail: {
             NavigationStack {
                 selectedSettingsDestination
-            }
-            .navigationDestination(item: $selectedAccountID) { accountID in
-                ProviderSettingsView(
-                    configurationStore: configurationStore,
-                    accountID: accountID,
-                    onCredentialsChanged: onAccountsChanged,
-                    onAccountRefresh: onAccountRefresh
-                )
+                    .navigationDestination(item: $selectedAccountID) { accountID in
+                        ProviderSettingsView(
+                            configurationStore: configurationStore,
+                            accountID: accountID,
+                            onCredentialsChanged: onAccountsChanged,
+                            onAccountRefresh: onAccountRefresh
+                        )
+                    }
             }
         }
         .toolbar {
@@ -985,7 +1000,12 @@ struct SettingsView: View {
 
     private var pendingGroupChanges: SettingsPendingGroupChanges {
         SettingsPendingGroupChanges(
-            draftGroupIDs: groupNameDrafts.keys.sorted(),
+            draftGroupIDs: SettingsPendingGroupChanges.changedDraftGroupIDs(
+                draftNames: groupNameDrafts,
+                persistedName: { groupID in
+                    configurationStore.group(for: groupID)?.name
+                }
+            ),
             newGroupName: newGroupName
         )
     }
