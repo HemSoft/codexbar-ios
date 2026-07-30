@@ -33,6 +33,11 @@ Every repository change must begin with a GitHub issue. This requirement applies
 to code, documentation, configuration, build, and process changes, including
 changes to this `AGENTS.md` file.
 
+On intake of a repository-change request, create or identify its defining issue.
+Unless the user explicitly requests same-turn implementation, end the turn after
+that issue step; do not create a branch, edit files, run implementation tests,
+open a pull request, or begin implementation in that same turn.
+
 Before editing files:
 
 1. Create or identify the GitHub issue that defines the change. If a request
