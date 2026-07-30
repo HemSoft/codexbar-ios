@@ -23,8 +23,7 @@ such and may be stale — re-verify before relying on them.
 - [Changelog and Release History](#changelog-and-release-history)
 - [Build and Test](#build-and-test)
 - [Pull Request Reviewers](#pull-request-reviewers)
-- [Deploying to a Connected iPhone](#deploying-to-a-connected-iphone)
-- [Signing Recovery](#signing-recovery)
+- [Connected iPhone and Signing](#connected-iphone-and-signing)
 - [Browser Auth Takeaways](#browser-auth-takeaways)
 
 ## Required Issue-First Workflow
@@ -179,218 +178,29 @@ Example manual review requests on a PR:
 cursor review
 ```
 
-## Deploying to a Connected iPhone
+## Connected iPhone and Signing
 
-Use Xcode explicitly; the active `xcode-select` path may point at Command Line Tools.
+Use [DEVICE-DEPLOYMENT.md](DEVICE-DEPLOYMENT.md) for the complete connected
+iPhone build, install, launch, verification, and signing-recovery runbook.
+Always discover the current device ID and build-products path; do not reuse
+recorded snapshot identifiers.
 
-1. Find the connected device if needed:
+Signing safety rules:
 
-   ```sh
-   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl list devices
-   ```
-
-   The device id below is a snapshot and may be stale; always re-list devices
-   to get the current id for the connected phone.
-
-2. Build for the phone with automatic provisioning enabled:
-
-   ```sh
-   ./scripts/with-codexbar-keychain.sh env \
-     DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-     xcodebuild \
-       -allowProvisioningUpdates \
-       -allowProvisioningDeviceRegistration \
-       -project CodexBarIOS.xcodeproj \
-       -scheme CodexBarIOS \
-       -destination 'id=<DEVICE_ID>' \
-       build
-   ```
-
-3. Install the built app. The `DerivedData` folder name below is a snapshot
-   from 2026-07-10 and can change when Xcode regenerates DerivedData; resolve
-   the current build products dir with `xcodebuild -showBuildSettings |
-   awk -F'= ' '/BUILT_PRODUCTS_DIR/ {print $2; exit}'` if this path is missing:
-
-   ```sh
-   APP="$HOME/Library/Developer/Xcode/DerivedData/CodexBarIOS-dyhhtrkbrowzvbhasoojmaczkxuz/Build/Products/Debug-iphoneos/CodexBarIOS.app"
-   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device install app \
-     --device <DEVICE_ID> \
-     "$APP"
-   ```
-
-4. Launch it:
-
-   ```sh
-   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device process launch \
-     --device <DEVICE_ID> \
-     com.hemsoft.CodexBarIOS
-   ```
-
-5. Verify it is running. (Step 5 uses `rg` from ripgrep, which must be
-   installed; substitute `grep` if it is not available.)
-
-   ```sh
-   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device info processes \
-     --device <DEVICE_ID> | rg -n 'CodexBar|com\.hemsoft' -C 2
-   ```
-
-Snapshot phone id from the successful deploy on 2026-07-10 (re-verify before
-use):
-
-```text
-B80ABFAB-DB0A-50CB-BA19-A21AA136BB3A
-```
-
-If remote launch fails because the phone is locked, the install may still have succeeded. Ask the user to unlock the phone or open the app manually.
-
-## Signing Recovery
-
-This section is split into the current steady-state operating procedure and a
-historical incident record. Follow the steady-state procedure first; the
-historical notes explain why those rules exist and what to do if the dedicated
-keychain is unavailable.
-
-### Steady-state operating procedure
-
-As of 2026-07-10:
-
-- Use the dedicated CodexBar signing keychain, not the crowded login keychain, for iPhone deploy signing.
-- Keychain path:
-
-  ```text
-  ~/Library/Keychains/codexbar-dev.keychain-db
-  ```
-
-- Stable Apple Development identity currently used by successful phone builds
-  (snapshot fingerprint; re-verify with `security find-identity` before use):
-
-  ```text
-  9E66931E7240D215D3210DF222DD75E47A379078
-  ```
-
-- The user set a known password for this keychain through a hidden macOS prompt. Do not ask for or store that password in chat or repo files.
-- The password is saved outside the macOS login keychain in an owner-only local file:
-
-  ```text
-  ~/Library/Application Support/CodexBar/signing-keychain-password
-  mode: 600
-  ```
-
-- Do not move this password back into a login-keychain generic password item. Updating the old `codexbar-dev-keychain-password` item triggers an ACL prompt for the unknown legacy login-keychain password.
-
-- To unlock and verify the dedicated signing keychain without adding it to the global search list, run:
-
-  ```sh
-  ./scripts/unlock-codexbar-keychain.sh
-  ```
-
-- The normal keychain search list must not contain `codexbar-dev.keychain-db`. It locks on sleep, and unrelated system services otherwise prompt for its password while searching the global list.
-- The default keychain should remain `login.keychain-db` so normal app/password storage still behaves normally.
-- Run Xcode signing commands through the temporary-search-list wrapper. It adds `codexbar-dev.keychain-db` for the duration of the command and restores the normal list on success, failure, or interruption:
-
-  ```sh
-  ./scripts/with-codexbar-keychain.sh env \
-    DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-    xcodebuild \
-      -allowProvisioningUpdates \
-      -allowProvisioningDeviceRegistration \
-      -project CodexBarIOS.xcodeproj \
-      -scheme CodexBarIOS \
-      -destination 'id=<DEVICE_ID>' \
-      build
-  ```
-
-Verify the signing state before changing certificates:
-
-```sh
-security list-keychains -d user
-security default-keychain
-security find-identity -v -p codesigning ~/Library/Keychains/codexbar-dev.keychain-db
-```
-
-Expected shape (note: `login.keychain-db` can appear more than once if the user
-search list still references it; what matters is that `codexbar-dev.keychain-db`
-is **not** in the list and `login.keychain-db` is the default):
-
-```text
-"/Users/home/Library/Keychains/login.keychain-db"
-"/Library/Keychains/System.keychain"
-"/Users/home/Library/Keychains/login.keychain-db"
-1 valid identity found in codexbar-dev.keychain-db
-```
-
-If the dedicated keychain is locked after reboot, first try the helper script:
-
-```sh
-./scripts/unlock-codexbar-keychain.sh
-```
-
-If the dedicated keychain or owner-only password file is missing or unusable, run the reset helper. It asks for a new password twice through hidden local dialogs and backs up the previous signing keychain before recreating it:
-
-```sh
-./scripts/reset-codexbar-keychain.sh
-```
-
-After a reset, the dedicated keychain has no signing identity. If Xcode says an existing development certificate has no private key, revoke only the stale Apple Development certificate in the developer portal. Then temporarily make the dedicated keychain the default and isolate the search list while running `xcodebuild -allowProvisioningUpdates`; this forces the replacement certificate and private key into the dedicated keychain. Restore `login.keychain-db` as the default afterward.
-
-If `codexbar-dev.keychain-db` is ever left in the global search list, restore the normal state by running the unlock helper or these commands:
-
-```sh
-security list-keychains -d user -s \
-  "$HOME/Library/Keychains/login.keychain-db" \
-  /Library/Keychains/System.keychain
-security default-keychain -d user -s "$HOME/Library/Keychains/login.keychain-db"
-```
-
-Do not keep deleting failing login-keychain identities or generating new certificates unless the dedicated keychain is missing or unusable. The old login keychain had dozens of duplicate `Apple Development: Franz Hemmer (ZBX7LBML7H)` identities, which caused nondeterministic Xcode signing selection and repeated `CodeSign` hangs.
-
-### Legacy Recovery
-
-Use the legacy path **only** if the dedicated `codexbar-dev.keychain-db` steady-state path above is unavailable. It applies when the phone build stalls at `CodeSign` and then fails with `errSecInternalComponent`, meaning Xcode likely generated or selected a development signing identity whose private key is not usable from the current session.
-
-1. Check available signing identities:
-
-   ```sh
-   security find-identity -v -p codesigning ~/Library/Keychains/login.keychain-db
-   ```
-
-2. Move the active generated provisioning profile out of Xcode's active profile folder, keeping a backup:
-
-   ```sh
-   BACKUP="$HOME/Library/Developer/Xcode/UserData/CodexBarSigningBackups/CodexBar-backup-$(date +%Y%m%d-%H%M%S)"
-   mkdir -p "$BACKUP/Provisioning Profiles"
-   mv "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/<PROFILE_UUID>.mobileprovision" \
-     "$BACKUP/Provisioning Profiles/"
-   ```
-
-3. Remove only the failing identity fingerprint reported in the failed `codesign --sign <FINGERPRINT>` line:
-
-   ```sh
-   security delete-certificate -Z <FAILING_CERT_SHA1> ~/Library/Keychains/login.keychain-db
-   ```
-
-4. Re-run the phone build command from the [Deploying to a Connected iPhone](#deploying-to-a-connected-iphone) section. Xcode should regenerate/select a usable profile and sign successfully.
-
-### Historical incidents
-
-These records explain why the steady-state rules exist. Do not treat the
-fingerprints or UUIDs below as current; they are preserved for context only.
-
-- **2026-07-02 login-keychain identity churn**: build succeeded after removing
-  the failing identity `100D8E7C0C525C2EECEF657744D259F3D1FD2E2B`; the next
-  build signed with `80BBD65F3B7634FEF75DBCA7B0F65A6C6E9AF420`. This churn is
-  what motivated the dedicated keychain.
-- **2026-07-10 wake-from-sleep prompt flood**: caused by leaving the
-  lock-on-sleep `codexbar-dev.keychain-db` first in the global search list.
-  Prompts from `sharingd`, `com.apple.iCloudHelper`, and other services named
-  the CodexBar keychain because those services searched every configured
-  keychain. Keep it out of the normal list and expose it only through
-  `with-codexbar-keychain.sh`. A prompt that explicitly names `login` instead is
-  a separate login-keychain issue.
-- **2026-07-10 recovery succeeded end to end**: Xcode created identity
-  `9E66931E7240D215D3210DF222DD75E47A379078` in `codexbar-dev.keychain-db`, the
-  device build succeeded, and `devicectl` installed and launched
-  `com.hemsoft.CodexBarIOS` on the phone.
+- Use `~/Library/Keychains/codexbar-dev.keychain-db`, never the crowded login
+  keychain, for device-build signing.
+- Never ask for, print, or store the signing-keychain password in chat or
+  repository files. Its owner-only local password file must stay outside the
+  login keychain.
+- Keep `codexbar-dev.keychain-db` out of the normal keychain search list and
+  keep `login.keychain-db` as the default keychain.
+- Run signing commands through `./scripts/with-codexbar-keychain.sh`; first try
+  `./scripts/unlock-codexbar-keychain.sh` after a reboot.
+- Verify the live identity with `security find-identity` before acting. Do not
+  treat a recorded certificate fingerprint as current, delete identities
+  repeatedly, or reset the keychain unless the dedicated keychain is unusable.
+- Use `./scripts/reset-codexbar-keychain.sh` only for the recovery case described
+  in the runbook. It backs up the old keychain before recreating it.
 
 ## Browser Auth Takeaways
 
