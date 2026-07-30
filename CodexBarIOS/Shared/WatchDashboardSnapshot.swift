@@ -228,6 +228,7 @@ public struct WatchDashboardSnapshot: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 1
     public static let applicationContextDataKey = "codexbar.dashboard.snapshot"
     public static let applicationContextVersionKey = "codexbar.dashboard.schema"
+    public static let snapshotRequestKey = "codexbar.dashboard.request"
 
     public let schemaVersion: Int
     public let generatedAt: Date
@@ -304,6 +305,14 @@ public struct WatchDashboardSnapshot: Codable, Equatable, Sendable {
             Self.applicationContextVersionKey: schemaVersion,
             Self.applicationContextDataKey: try encoded(),
         ]
+    }
+
+    public static var snapshotRequestMessage: [String: Any] {
+        [snapshotRequestKey: true]
+    }
+
+    public static func isSnapshotRequest(_ message: [String: Any]) -> Bool {
+        message[snapshotRequestKey] as? Bool == true
     }
 
     public func semanticData() throws -> Data {

@@ -1588,6 +1588,24 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testPhoneWatchConnectivityCoordinatorHandlesSnapshotRequestsAndWatchStateChanges() {
+        let sender = PhoneWatchConnectivityCoordinator(session: nil)
+        var snapshotNeededCount = 0
+        sender.activate {
+            snapshotNeededCount += 1
+        }
+
+        XCTAssertFalse(sender.handleMessage(["unrelated": true]))
+        XCTAssertEqual(snapshotNeededCount, 0)
+
+        XCTAssertTrue(sender.handleMessage(WatchDashboardSnapshot.snapshotRequestMessage))
+        XCTAssertEqual(snapshotNeededCount, 1)
+
+        sender.watchStateDidChange()
+        XCTAssertEqual(snapshotNeededCount, 2)
+    }
+
+    @MainActor
     func testProviderSettingsViewModelDebouncesTextChangesAndFlushesOnDismissal() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
@@ -2577,9 +2595,9 @@ private final class RecordingWatchSnapshotSender: WatchSnapshotSending {
     private(set) var publishedForces: [Bool] = []
     var onPublish: (() -> Void)?
 
-    func activate(onActivated: @escaping @MainActor () -> Void) {
+    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void) {
         activationCount += 1
-        activationHandler = onActivated
+        activationHandler = onSnapshotNeeded
     }
 
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool {

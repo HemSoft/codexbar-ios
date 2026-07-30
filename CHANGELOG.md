@@ -104,6 +104,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Ensured a newly installed Apple Watch companion requests and receives the
+  current dashboard without waiting for an unrelated iPhone data change, while
+  preserving the last good snapshot whenever the phone is unavailable.
+  ([#191](https://github.com/HemSoft/codexbar-ios/issues/191))
 - Made private feedback copy-first and warned before opening an external mail
   composer that it may display and use the currently selected sending account.
   ([#181](https://github.com/HemSoft/codexbar-ios/issues/181))

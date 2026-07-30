@@ -5,6 +5,8 @@ import WidgetKit
 
 @MainActor
 final class WatchDashboardStore: NSObject, ObservableObject {
+    typealias SnapshotRequester = (@escaping (Error) -> Void) -> Void
+
     @Published private(set) var snapshot: WatchDashboardSnapshot?
     @Published private(set) var isPhoneReachable = false
     @Published private(set) var decodingError: String?
@@ -15,6 +17,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private let complicationStore: WatchComplicationSnapshotStore
     private let reloadComplications: () -> Void
     private let session: WCSession?
+    private let requestSnapshot: SnapshotRequester?
 
     init(
         defaults: UserDefaults = .standard,
@@ -22,12 +25,26 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         reloadComplications: @escaping () -> Void = {
             WidgetCenter.shared.reloadTimelines(ofKind: WatchComplicationConstants.widgetKind)
         },
-        session: WCSession? = WCSession.isSupported() ? .default : nil
+        session: WCSession? = WCSession.isSupported() ? .default : nil,
+        requestSnapshot: SnapshotRequester? = nil
     ) {
         self.defaults = defaults
         self.complicationStore = complicationStore
         self.reloadComplications = reloadComplications
         self.session = session
+        if let requestSnapshot {
+            self.requestSnapshot = requestSnapshot
+        } else if let session {
+            self.requestSnapshot = { errorHandler in
+                session.sendMessage(
+                    WatchDashboardSnapshot.snapshotRequestMessage,
+                    replyHandler: nil,
+                    errorHandler: errorHandler
+                )
+            }
+        } else {
+            self.requestSnapshot = nil
+        }
         var migratedSnapshotNeedsReload = false
         let legacyData = defaults.data(forKey: Self.persistedSnapshotKey)
         let legacySnapshot = legacyData.flatMap { try? WatchDashboardSnapshot.decode($0) }
@@ -98,7 +115,11 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     }
 
     func updateReachability(_ isReachable: Bool) {
+        let becameReachable = !isPhoneReachable && isReachable
         isPhoneReachable = isReachable
+        if becameReachable {
+            requestCurrentSnapshot()
+        }
     }
 
     func activationCompleted(
@@ -106,11 +127,23 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         isPhoneReachable: Bool,
         error: Error?
     ) {
-        updateReachability(isPhoneReachable)
+        self.isPhoneReachable = isPhoneReachable
         if !applicationContext.isEmpty {
             receive(applicationContext)
         } else if error != nil, snapshot == nil {
             decodingError = "Couldn’t connect to iPhone"
+        }
+        if error == nil {
+            requestCurrentSnapshot()
+        }
+    }
+
+    func requestCurrentSnapshot() {
+        requestSnapshot? { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.snapshot == nil else { return }
+                self.decodingError = "Couldn’t request the latest update from iPhone"
+            }
         }
     }
 }
