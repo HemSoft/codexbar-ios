@@ -278,6 +278,50 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertTrue(options.allSatisfy { !$0.addAccountIconName.isEmpty })
     }
 
+    func testSettingsAccountsRowsPutOneAddActionBeforeEmptyAndConfiguredStates() {
+        XCTAssertEqual(
+            SettingsAccountsSectionRow.rows(accountIDs: []),
+            [.addAccount, .emptyState]
+        )
+        XCTAssertEqual(
+            SettingsAccountsSectionRow.rows(accountIDs: ["codex.personal"]),
+            [.addAccount, .account("codex.personal")]
+        )
+        XCTAssertEqual(
+            SettingsAccountsSectionRow.rows(
+                accountIDs: ["codex.personal", "claude.work"]
+            ),
+            [
+                .addAccount,
+                .account("codex.personal"),
+                .account("claude.work"),
+            ]
+        )
+    }
+
+    @MainActor
+    func testRepeatedCodexSelectionCreatesExactlyOneAdditionalAccount() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let existingAccount = store.addAccount(for: .codex)
+        var flow = AddAccountFlowState()
+
+        let addedAccountID = try XCTUnwrap(
+            flow.select(.codex, configurationStore: store)
+        )
+        let repeatedSelectionID = flow.select(.codex, configurationStore: store)
+
+        XCTAssertNotEqual(addedAccountID, existingAccount.id)
+        XCTAssertEqual(repeatedSelectionID, addedAccountID)
+        XCTAssertEqual(store.configurations(for: .codex).count, 2)
+    }
+
     func testAddAccountRefreshStateKeepsExactTargetForLaterCredentialChanges() {
         var state = AddAccountRefreshState()
 

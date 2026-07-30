@@ -241,46 +241,46 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    if configurationStore.configurations.isEmpty {
-                        Text("No accounts")
-                            .foregroundStyle(.secondary)
-                    }
+                    ForEach(accountsSectionRows) { row in
+                        switch row {
+                        case .addAccount:
+                            Button {
+                                addAccountFlowRequest = AddAccountFlowRequest()
+                            } label: {
+                                Label("Add Account", systemImage: "plus.circle")
+                            }
+                            .disabled(configurationStore.isAccountCreationBlocked)
+                            .deleteDisabled(true)
 
-                    ForEach(configurationStore.configurations) { configuration in
-                        NavigationLink {
-                            ProviderSettingsView(
-                                configurationStore: configurationStore,
-                                accountID: configuration.id,
-                                onCredentialsChanged: onAccountsChanged,
-                                onAccountRefresh: onAccountRefresh
-                            )
-                        } label: {
-                            ProviderSettingsRow(
-                                configuration: configuration,
-                                isConfigured: configurationStore.isConfigured(configuration),
-                                groupName: configurationStore.group(for: configuration.groupID)?.name
-                            )
+                        case .emptyState:
+                            Text("No accounts")
+                                .foregroundStyle(.secondary)
+                                .deleteDisabled(true)
+
+                        case let .account(accountID):
+                            if let configuration = configurationStore.configuration(
+                                accountID: accountID
+                            ) {
+                                NavigationLink {
+                                    ProviderSettingsView(
+                                        configurationStore: configurationStore,
+                                        accountID: configuration.id,
+                                        onCredentialsChanged: onAccountsChanged,
+                                        onAccountRefresh: onAccountRefresh
+                                    )
+                                } label: {
+                                    ProviderSettingsRow(
+                                        configuration: configuration,
+                                        isConfigured: configurationStore.isConfigured(configuration),
+                                        groupName: configurationStore.group(
+                                            for: configuration.groupID
+                                        )?.name
+                                    )
+                                }
+                            }
                         }
                     }
-                    .onDelete(perform: deleteAccounts)
-
-                    if !configurationStore.configurations(for: .codex).isEmpty {
-                        Button {
-                            addAccountFlowRequest = AddAccountFlowRequest(
-                                initialProviderID: .codex
-                            )
-                        } label: {
-                            Label("Add Another ChatGPT / Codex Account", systemImage: "person.badge.plus")
-                        }
-                        .disabled(configurationStore.isAccountCreationBlocked)
-                    }
-
-                    Button {
-                        addAccountFlowRequest = AddAccountFlowRequest()
-                    } label: {
-                        Label("Add Account", systemImage: "plus.circle")
-                    }
-                    .disabled(configurationStore.isAccountCreationBlocked)
+                    .onDelete(perform: deleteAccountRows)
                 } header: {
                     Text("Accounts")
                 }
@@ -511,9 +511,24 @@ struct SettingsView: View {
         return formatter
     }()
 
-    private func deleteAccounts(at offsets: IndexSet) {
-        let accounts = configurationStore.configurations
-        let accountsToRemove = offsets.map { accounts[$0] }
+    private var accountsSectionRows: [SettingsAccountsSectionRow] {
+        SettingsAccountsSectionRow.rows(
+            accountIDs: configurationStore.configurations.map(\.id)
+        )
+    }
+
+    private func deleteAccountRows(at offsets: IndexSet) {
+        let accountsToRemove: [ProviderAccountConfiguration] = offsets.compactMap { index in
+            guard accountsSectionRows.indices.contains(index),
+                  case let .account(accountID) = accountsSectionRows[index]
+            else {
+                return nil
+            }
+            return configurationStore.configuration(accountID: accountID)
+        }
+        guard !accountsToRemove.isEmpty else {
+            return
+        }
         if configurationStore.removeAccounts(accountsToRemove) {
             onAccountsChanged()
         }
@@ -665,6 +680,30 @@ struct AddAccountRefreshState: Equatable {
             shouldRefreshOnDismiss = false
         }
         return shouldRefreshOnDismiss ? accountID : nil
+    }
+}
+
+enum SettingsAccountsSectionRow: Identifiable, Equatable {
+    case addAccount
+    case emptyState
+    case account(String)
+
+    var id: String {
+        switch self {
+        case .addAccount:
+            "action.add-account"
+        case .emptyState:
+            "state.empty"
+        case let .account(accountID):
+            "account.\(accountID)"
+        }
+    }
+
+    static func rows(accountIDs: [String]) -> [Self] {
+        if accountIDs.isEmpty {
+            return [.addAccount, .emptyState]
+        }
+        return [.addAccount] + accountIDs.map(Self.account)
     }
 }
 
