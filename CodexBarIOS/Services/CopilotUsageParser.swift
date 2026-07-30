@@ -58,7 +58,8 @@ public enum CopilotUsageParser {
                 used: 0,
                 limit: 0,
                 resetDescription: reset.description,
-                resetsAt: reset.date
+                resetsAt: reset.date,
+                resetDisplayStyle: .relativeWithLocalTime
             )
         }
 
@@ -72,6 +73,7 @@ public enum CopilotUsageParser {
             limit: Double(snapshot.entitlement),
             resetDescription: reset.description ?? formatMonthlyReset(projectionPeriod.end, fetchedAt: fetchedAt),
             resetsAt: projectionPeriod.end,
+            resetDisplayStyle: .relativeWithLocalTime,
             projectionCurrent: Double(used),
             projectionLimit: Double(snapshot.entitlement),
             projectionPeriodStart: projectionPeriod.start,
@@ -275,6 +277,7 @@ public enum CopilotBillingUsageParser {
                     limit: 0,
                     resetDescription: resetDescription,
                     resetsAt: periodEnd,
+                    resetDisplayStyle: .relativeWithLocalTime,
                     projectionCurrent: consumed,
                     projectionPeriodStart: periodStart,
                     projectionPeriodEnd: periodEnd,
@@ -291,6 +294,7 @@ public enum CopilotBillingUsageParser {
                 limit: total,
                 resetDescription: resetDescription,
                 resetsAt: periodEnd,
+                resetDisplayStyle: .relativeWithLocalTime,
                 projectionCurrent: consumed,
                 projectionLimit: total,
                 projectionPeriodStart: periodStart,

@@ -1735,12 +1735,42 @@ final class ConfigurationAndAuthTests: XCTestCase {
         )
         XCTAssertEqual(result.bars.map(\.label), ["Premium interactions (1,500 / 2,000)", "Chat (88 / 100)"])
         XCTAssertEqual(result.bars.map(\.usageText), ["75%", "88%"])
+        XCTAssertEqual(
+            result.bars.map(\.resetDisplayStyle),
+            [.relativeWithLocalTime, .relativeWithLocalTime]
+        )
         XCTAssertEqual(result.subtitle, "Resets in 3d")
         XCTAssertEqual(result.bars.first?.projectionCurrent, 1500)
         XCTAssertEqual(result.bars.first?.projectionLimit, 2000)
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_890_950_400))
         XCTAssertEqual(result.bars.first?.projectionPeriodEnd, Date(timeIntervalSince1970: 1_893_628_800))
         XCTAssertEqual(result.bars.first?.showProjectionOnCurrentBar, true)
+    }
+
+    func testCopilotUsageParserResetCountdownRecomputesAfterSnapshotTime() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
+        let payload = """
+        {
+          "quota_reset_date_utc": "2030-01-03T00:00:00Z",
+          "quota_snapshots": {
+            "premium_interactions": {
+              "entitlement": 2000,
+              "remaining": 500,
+              "unlimited": false
+            }
+          }
+        }
+        """
+        let bar = try XCTUnwrap(
+            CopilotUsageParser.parse(Data(payload.utf8), fetchedAt: fetchedAt)?.bars.first
+        )
+        let initial = try XCTUnwrap(bar.localizedResetDescription(at: fetchedAt))
+        let later = try XCTUnwrap(
+            bar.localizedResetDescription(at: fetchedAt.addingTimeInterval(24 * 60 * 60))
+        )
+
+        XCTAssertEqual(bar.resetDisplayStyle, .relativeWithLocalTime)
+        XCTAssertNotEqual(initial, later)
     }
 
     func testCopilotUsageParserNormalizesOnlyObservedPlanValues() throws {
@@ -1902,6 +1932,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
             "Current AI credits (1,500 / 350,000)",
         ])
         XCTAssertEqual(result.bars.map(\.usageText), ["0%"])
+        XCTAssertEqual(result.bars.first?.resetDisplayStyle, .relativeWithLocalTime)
         XCTAssertEqual(result.bars.first?.projectionCurrent, 1500)
         XCTAssertEqual(result.bars.first?.projectionLimit, 350000)
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_782_864_000))
