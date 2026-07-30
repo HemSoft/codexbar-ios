@@ -70,6 +70,7 @@ struct ContentView: View {
         let usageAlertsByAccountID = orchestrator.currentUsageAlertsByAccountID
         let emptyState = DashboardEmptyState.resolve(
             hasAccounts: !configurationStore.configurations.isEmpty,
+            hasEnabledAccounts: configurationStore.configurations.contains(where: \.isEnabled),
             needsSetupAccountID: configurationStore.configurations.first(where: {
                 $0.isEnabled && !configurationStore.isConfigured($0)
             })?.id,
@@ -484,6 +485,18 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .accessibilityHint("Opens setup for the account that needs attention.")
             }
+        case .accountsDisabled:
+            ContentUnavailableView {
+                Label("Accounts Are Disabled", systemImage: "pause.circle")
+            } description: {
+                Text("Enable an account in Settings to resume usage tracking.")
+            } actions: {
+                Button("Open Settings") {
+                    isShowingSettings = true
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityHint("Opens Settings where accounts can be enabled.")
+            }
         case .noUsageData:
             ContentUnavailableView(
                 "No Usage Data",
@@ -895,10 +908,12 @@ enum DashboardEmptyState: Equatable {
     case recovery
     case firstAccount
     case needsSetup(accountID: String)
+    case accountsDisabled
     case noUsageData
 
     static func resolve(
         hasAccounts: Bool,
+        hasEnabledAccounts: Bool,
         needsSetupAccountID: String?,
         cardsAreEmpty: Bool,
         hasCompletedInitialRefresh: Bool,
@@ -916,6 +931,9 @@ enum DashboardEmptyState: Equatable {
         }
         if !hasAccounts {
             return .firstAccount
+        }
+        if !hasEnabledAccounts {
+            return .accountsDisabled
         }
         if let accountID = needsSetupAccountID {
             return .needsSetup(accountID: accountID)

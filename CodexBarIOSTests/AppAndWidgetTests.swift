@@ -135,6 +135,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             DashboardEmptyState.resolve(
                 hasAccounts: false,
+                hasEnabledAccounts: false,
                 needsSetupAccountID: nil,
                 cardsAreEmpty: true,
                 hasCompletedInitialRefresh: false,
@@ -146,6 +147,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             DashboardEmptyState.resolve(
                 hasAccounts: false,
+                hasEnabledAccounts: false,
                 needsSetupAccountID: nil,
                 cardsAreEmpty: true,
                 hasCompletedInitialRefresh: true,
@@ -157,6 +159,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             DashboardEmptyState.resolve(
                 hasAccounts: false,
+                hasEnabledAccounts: false,
                 needsSetupAccountID: nil,
                 cardsAreEmpty: true,
                 hasCompletedInitialRefresh: true,
@@ -168,6 +171,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             DashboardEmptyState.resolve(
                 hasAccounts: true,
+                hasEnabledAccounts: true,
                 needsSetupAccountID: "openRouter.personal",
                 cardsAreEmpty: true,
                 hasCompletedInitialRefresh: true,
@@ -179,6 +183,19 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             DashboardEmptyState.resolve(
                 hasAccounts: true,
+                hasEnabledAccounts: false,
+                needsSetupAccountID: nil,
+                cardsAreEmpty: true,
+                hasCompletedInitialRefresh: true,
+                performsLifecycleWork: true,
+                isPersistenceRecoveryRequired: false
+            ),
+            .accountsDisabled
+        )
+        XCTAssertEqual(
+            DashboardEmptyState.resolve(
+                hasAccounts: true,
+                hasEnabledAccounts: true,
                 needsSetupAccountID: nil,
                 cardsAreEmpty: true,
                 hasCompletedInitialRefresh: true,
@@ -190,6 +207,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             DashboardEmptyState.resolve(
                 hasAccounts: true,
+                hasEnabledAccounts: true,
                 needsSetupAccountID: nil,
                 cardsAreEmpty: false,
                 hasCompletedInitialRefresh: true,
