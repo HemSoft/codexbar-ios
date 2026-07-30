@@ -1,4 +1,5 @@
 import XCTest
+import WatchConnectivity
 @testable import CodexBarWatch
 
 private enum SnapshotRequestTestError: Error {
@@ -443,7 +444,7 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
-    func testDelayedDelegateHandoffsConsumeLatestSessionState() throws {
+    func testDelayedDelegateHandoffsConsumeLatestSessionState() async throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
@@ -471,15 +472,22 @@ final class WatchDashboardStateTests: XCTestCase {
             currentSessionState: { currentState }
         )
 
+        let callbackSession = WCSession.default
+        store.session(
+            callbackSession,
+            activationDidCompleteWith: .activated,
+            error: nil
+        )
+        store.session(callbackSession, didReceiveApplicationContext: [:])
+        store.sessionReachabilityDidChange(callbackSession)
+
         currentState = WatchConnectivitySessionState(
             applicationContext: WatchDashboardApplicationContext(
                 try latestSnapshot.applicationContext()
             ),
             isReachable: true
         )
-        store.activationCompletedFromCurrentSession(error: nil)
-        store.receiveCurrentApplicationContext()
-        store.updateCurrentReachability()
+        await Task.yield()
 
         XCTAssertEqual(store.snapshot, latestSnapshot)
         XCTAssertTrue(store.isPhoneReachable)
