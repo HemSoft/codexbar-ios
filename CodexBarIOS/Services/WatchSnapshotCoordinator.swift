@@ -300,10 +300,12 @@ final class WatchSnapshotCoordinator {
 
     private let refreshService: UsageRefreshService
     private let configurationStore: ProviderConfigurationStore
+    private let sender: any WatchSnapshotSending
     private let publishSnapshot: SnapshotPublisher
     private let coalescingDelay: Duration
     private var cancellables: Set<AnyCancellable> = []
     private var snapshotPublishTask: Task<Void, Never>?
+    private var hasStarted = false
 
     init(
         refreshService: UsageRefreshService,
@@ -315,6 +317,7 @@ final class WatchSnapshotCoordinator {
         let resolvedSender = sender ?? PhoneWatchConnectivityCoordinator.shared
         self.refreshService = refreshService
         self.configurationStore = configurationStore
+        self.sender = resolvedSender
         self.coalescingDelay = coalescingDelay
         self.publishSnapshot = publishSnapshot ?? { results, store, force in
             WatchSnapshotPublisher.publish(
@@ -344,7 +347,12 @@ final class WatchSnapshotCoordinator {
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
 
-        resolvedSender.activate { [weak self] in
+    }
+
+    func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        sender.activate { [weak self] in
             self?.publishCurrentSnapshot(force: true)
         }
     }
