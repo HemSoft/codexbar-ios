@@ -110,7 +110,9 @@ current signing identity. The expected state is:
 
 - `codexbar-dev.keychain-db` is absent from the normal search list.
 - `login.keychain-db` is the default.
-- The dedicated keychain reports one valid code-signing identity.
+- The dedicated keychain reports at least one valid code-signing identity.
+  Select the identity from this live output; multiple valid identities alone do
+  not require deletion or a keychain reset.
 
 All device builds must run through `scripts/with-codexbar-keychain.sh`. It adds
 the dedicated keychain to the search list only for the wrapped command and
@@ -137,11 +139,36 @@ keychain has no signing identity.
 
 If Xcode then reports that an existing development certificate has no private
 key, revoke only that stale Apple Development certificate in the developer
-portal. Temporarily isolate the search list and make the dedicated keychain the
-default while running `xcodebuild -allowProvisioningUpdates`, so Xcode places
-the replacement certificate and private key in that keychain. Restore
-`login.keychain-db` as the default immediately afterward. Do not keep deleting
-identities or generating certificates.
+portal. Run this trap-protected recovery build to make the dedicated keychain
+the default only while Xcode provisions its replacement identity:
+
+```sh
+./scripts/with-codexbar-keychain.sh /bin/bash -c '
+  set -euo pipefail
+  LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+  SIGNING_KEYCHAIN="$HOME/Library/Keychains/codexbar-dev.keychain-db"
+  restore_default() {
+    security default-keychain -d user -s "$LOGIN_KEYCHAIN"
+  }
+  trap restore_default EXIT
+  trap "exit 129" HUP
+  trap "exit 130" INT
+  trap "exit 143" TERM
+  security default-keychain -d user -s "$SIGNING_KEYCHAIN"
+  env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+    xcodebuild \
+      -allowProvisioningUpdates \
+      -allowProvisioningDeviceRegistration \
+      -project CodexBarIOS.xcodeproj \
+      -scheme CodexBarIOS \
+      -destination "id=<DEVICE_ID>" \
+      build
+'
+```
+
+The inner trap and outer wrapper both restore `login.keychain-db` as the default
+after success, failure, or interruption. Do not keep deleting identities or
+generating certificates.
 
 If the dedicated keychain is ever left in the global search list, restore the
 normal state:
