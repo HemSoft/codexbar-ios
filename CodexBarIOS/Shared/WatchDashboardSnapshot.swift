@@ -4,6 +4,35 @@ public enum WatchDashboardPayloadError: Error, Equatable {
     case unsupportedSchemaVersion(Int)
 }
 
+enum WatchDashboardApplicationContext: Equatable, Sendable {
+    case empty
+    case snapshot(Data)
+    case malformed
+
+    init(_ applicationContext: [String: Any]) {
+        if applicationContext.isEmpty {
+            self = .empty
+        } else if let data = applicationContext[WatchDashboardSnapshot.applicationContextDataKey]
+            as? Data
+        {
+            self = .snapshot(data)
+        } else {
+            self = .malformed
+        }
+    }
+
+    var isEmpty: Bool {
+        self == .empty
+    }
+
+    func decode() throws -> WatchDashboardSnapshot {
+        guard case let .snapshot(data) = self else {
+            throw CocoaError(.coderReadCorrupt)
+        }
+        return try WatchDashboardSnapshot.decode(data)
+    }
+}
+
 public enum WatchMetricVisualizationStyle: String, CaseIterable, Equatable, Sendable {
     case automatic
     case linearBar
@@ -294,10 +323,7 @@ public struct WatchDashboardSnapshot: Codable, Equatable, Sendable {
     public static func decodeApplicationContext(
         _ applicationContext: [String: Any]
     ) throws -> WatchDashboardSnapshot {
-        guard let data = applicationContext[applicationContextDataKey] as? Data else {
-            throw CocoaError(.coderReadCorrupt)
-        }
-        return try decode(data)
+        try WatchDashboardApplicationContext(applicationContext).decode()
     }
 
     public func applicationContext() throws -> [String: Any] {

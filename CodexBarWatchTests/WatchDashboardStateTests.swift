@@ -1,4 +1,5 @@
 import XCTest
+import WatchConnectivity
 @testable import CodexBarWatch
 
 private enum SnapshotRequestTestError: Error {
@@ -377,9 +378,11 @@ final class WatchDashboardStateTests: XCTestCase {
         )
 
         store.activationCompleted(
-            applicationContext: try snapshot.applicationContext(),
+            applicationContext: WatchDashboardApplicationContext(
+                try snapshot.applicationContext()
+            ),
             isPhoneReachable: false,
-            error: nil
+            hadError: false
         )
 
         XCTAssertEqual(store.snapshot, snapshot)
@@ -405,9 +408,9 @@ final class WatchDashboardStateTests: XCTestCase {
         )
 
         store.activationCompleted(
-            applicationContext: [:],
+            applicationContext: .empty,
             isPhoneReachable: false,
-            error: nil
+            hadError: false
         )
         store.updateReachability(true)
         store.updateReachability(true)
@@ -417,6 +420,93 @@ final class WatchDashboardStateTests: XCTestCase {
         store.updateReachability(false)
         store.updateReachability(true)
         try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(requestCount, 2)
+    }
+
+    func testApplicationContextHandoffCopiesOnlySendableSnapshotData() throws {
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+
+        let valid = WatchDashboardApplicationContext(try snapshot.applicationContext())
+        XCTAssertEqual(try valid.decode(), snapshot)
+        XCTAssertFalse(valid.isEmpty)
+
+        let malformed = WatchDashboardApplicationContext(["unexpected": NSObject()])
+        XCTAssertThrowsError(try malformed.decode())
+        XCTAssertFalse(malformed.isEmpty)
+
+        let empty = WatchDashboardApplicationContext([:])
+        XCTAssertThrowsError(try empty.decode())
+        XCTAssertTrue(empty.isEmpty)
+    }
+
+    @MainActor
+    func testDelegateCallbacksEnqueueTypedApplicationContext() async throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let latestSnapshot = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil
+        )
+
+        let callbackSession = WCSession.default
+        store.session(
+            callbackSession,
+            activationDidCompleteWith: .activated,
+            error: nil
+        )
+        store.session(
+            callbackSession,
+            didReceiveApplicationContext: try latestSnapshot.applicationContext()
+        )
+        store.sessionReachabilityDidChange(callbackSession)
+        await Task.yield()
+
+        XCTAssertEqual(store.snapshot, latestSnapshot)
+        XCTAssertEqual(store.isPhoneReachable, callbackSession.isReachable)
+    }
+
+    @MainActor
+    func testOutOfOrderHandoffsPreserveRapidReconnectTransition() async throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var requestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _ in
+                requestCount += 1
+            },
+            requestCoalescingDelay: .milliseconds(5)
+        )
+        store.activationCompleted(
+            applicationContext: .empty,
+            isPhoneReachable: true,
+            hadError: false
+        )
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(requestCount, 1)
+
+        store.receiveDelegateEvent(.reachability(sequence: 1, isPhoneReachable: true))
+        XCTAssertTrue(store.isPhoneReachable)
+        store.receiveDelegateEvent(.reachability(sequence: 0, isPhoneReachable: false))
+        try await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertTrue(store.isPhoneReachable)
         XCTAssertEqual(requestCount, 2)
     }
 

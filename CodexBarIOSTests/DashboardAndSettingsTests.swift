@@ -1643,6 +1643,13 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertFalse(sender.handleMessage(["unrelated": true]))
         XCTAssertEqual(snapshotNeededCount, 0)
 
+        XCTAssertFalse(
+            sender.handleMessage([
+                WatchDashboardSnapshot.snapshotRequestKey: "not-a-boolean",
+            ])
+        )
+        XCTAssertEqual(snapshotNeededCount, 0)
+
         XCTAssertTrue(sender.handleMessage(WatchDashboardSnapshot.snapshotRequestMessage))
         XCTAssertEqual(snapshotNeededCount, 1)
 
