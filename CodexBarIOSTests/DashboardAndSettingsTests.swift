@@ -949,7 +949,15 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.refreshIntervalSeconds, 300)
-        XCTAssertEqual(snapshot.accounts.map(\.id), ["codex.0"])
+        XCTAssertEqual(
+            snapshot.accounts.map(\.id),
+            [
+                WatchSnapshotPublisher.snapshotAccountID(
+                    providerID: .codex,
+                    configurationID: configuration.id
+                ),
+            ]
+        )
         XCTAssertEqual(snapshot.accounts[0].providerName, ProviderID.codex.displayName)
         XCTAssertEqual(snapshot.accounts[0].accountLabel, configuration.accountLabel)
         XCTAssertEqual(snapshot.accounts[0].planIdentifier, "codex.pro")
@@ -974,6 +982,116 @@ final class DashboardAndSettingsTests: XCTestCase {
             now: result.fetchedAt
         )
         XCTAssertTrue(afterRemoval.accounts.isEmpty)
+    }
+
+    @MainActor
+    func testWatchSnapshotPublishesZeroLimitBarsAsFractionlessValues() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .copilot)
+        XCTAssertTrue(store.saveSecret("secret", for: configuration))
+        let fetchedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .copilot,
+            title: "GitHub Copilot",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(
+                    stableKey: "ai-credits",
+                    label: "AI credits used (1,500)",
+                    used: 1_500,
+                    limit: 0,
+                    fractionlessUsageText: "1,500"
+                ),
+                UsageBar(
+                    stableKey: "premium-interactions",
+                    label: "Premium interactions - unlimited",
+                    used: 0,
+                    limit: 0,
+                    fractionlessUsageText: "Unlimited"
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+
+        let metrics = try XCTUnwrap(
+            WatchSnapshotPublisher.makeSnapshot(
+                results: [result],
+                configurationStore: store,
+                now: fetchedAt
+            ).accounts.first?.metrics
+        )
+
+        XCTAssertEqual(metrics.map(\.exactValue), ["1,500", "Unlimited"])
+        XCTAssertEqual(metrics.map(\.usedFraction), [nil, nil])
+        XCTAssertEqual(metrics.map(\.remainingFraction), [nil, nil])
+    }
+
+    @MainActor
+    func testWatchSnapshotAccountIDsRemainStableAcrossDashboardReordering() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let first = store.addAccount(for: .codex)
+        let second = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("first-token", for: first))
+        XCTAssertTrue(store.saveSecret("second-token", for: second))
+        store.updateDashboardOrderingMode(.manual)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let results = [first, second].enumerated().map { index, configuration in
+            ProviderUsageResult(
+                accountID: configuration.id,
+                providerID: .codex,
+                title: "Codex",
+                subtitle: "Pro",
+                bars: [
+                    UsageBar(
+                        stableKey: "window",
+                        label: "Usage",
+                        used: Double(index + 1),
+                        limit: 10
+                    ),
+                ],
+                fetchedAt: now
+            )
+        }
+        let firstID = WatchSnapshotPublisher.snapshotAccountID(
+            providerID: .codex,
+            configurationID: first.id
+        )
+        let secondID = WatchSnapshotPublisher.snapshotAccountID(
+            providerID: .codex,
+            configurationID: second.id
+        )
+
+        store.updateDashboardCardOrder([first.id, second.id])
+        let original = WatchSnapshotPublisher.makeSnapshot(
+            results: results,
+            configurationStore: store,
+            now: now
+        )
+        store.updateDashboardCardOrder([second.id, first.id])
+        let reordered = WatchSnapshotPublisher.makeSnapshot(
+            results: results,
+            configurationStore: store,
+            now: now
+        )
+
+        XCTAssertEqual(original.accounts.map(\.id), [firstID, secondID])
+        XCTAssertEqual(reordered.accounts.map(\.id), [secondID, firstID])
+        let encodedText = try XCTUnwrap(String(data: original.encoded(), encoding: .utf8))
+        XCTAssertFalse(encodedText.contains(first.id))
+        XCTAssertFalse(encodedText.contains(second.id))
     }
 
     @MainActor
@@ -1240,7 +1358,16 @@ final class DashboardAndSettingsTests: XCTestCase {
             now: refreshedAt
         )
 
-        XCTAssertEqual(try XCTUnwrap(snapshot.accounts.first).fetchedAt, barsFetchedAt)
+        let account = try XCTUnwrap(snapshot.accounts.first)
+        XCTAssertEqual(account.fetchedAt, barsFetchedAt)
+        XCTAssertEqual(
+            try XCTUnwrap(account.metrics.first { $0.label == "Usage" }).fetchedAt,
+            barsFetchedAt
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(account.metrics.first { $0.label == "Balance" }).fetchedAt,
+            refreshedAt
+        )
     }
 
     @MainActor
@@ -1306,8 +1433,12 @@ final class DashboardAndSettingsTests: XCTestCase {
             configurationStore: store,
             now: fetchedAt
         )
-        let resetText = try XCTUnwrap(resetSnapshot.accounts.first?.metrics.first?.resetText)
+        let resetMetric = try XCTUnwrap(resetSnapshot.accounts.first?.metrics.first)
+        let resetText = try XCTUnwrap(resetMetric.resetText)
         XCTAssertNotEqual(resetText, "Projected text")
+        XCTAssertEqual(resetMetric.resetsAt, fetchedAt.addingTimeInterval(60 * 60))
+        XCTAssertEqual(resetMetric.resetDisplayStyle, .relativeWithLocalTime)
+        XCTAssertEqual(resetMetric.fetchedAt, fetchedAt)
 
         let staleResult = ProviderUsageResult(
             accountID: configuration.id,

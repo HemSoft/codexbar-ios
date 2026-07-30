@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 #if os(iOS)
@@ -61,8 +62,8 @@ enum WatchSnapshotPublisher {
         return WatchDashboardSnapshot(
             generatedAt: now,
             refreshIntervalSeconds: configurationStore.autoRefreshInterval.seconds,
-            accounts: orderedResults.enumerated().compactMap {
-                displayIndex, result -> WatchAccountSnapshot? in
+            accounts: orderedResults.compactMap {
+                result -> WatchAccountSnapshot? in
                 guard let configuration = configurationStore.configuration(accountID: result.accountID) else {
                     return nil
                 }
@@ -71,6 +72,7 @@ enum WatchSnapshotPublisher {
                     index, bar in
                     let metricID = bar.metricIdentifier(providerID: result.providerID, index: index)
                     let fraction = bar.fractionUsed
+                    let hasKnownLimit = bar.limit > 0
                     let localizedResetText = bar.localizedResetDescription(
                         at: now,
                         dateTimeFormatter: dateTimeFormatter
@@ -78,14 +80,19 @@ enum WatchSnapshotPublisher {
                     return WatchMetricSnapshot(
                         id: metricID,
                         label: bar.label,
-                        usedFraction: fraction,
-                        remainingFraction: 1 - fraction,
-                        exactValue: bar.usageText,
+                        usedFraction: hasKnownLimit ? fraction : nil,
+                        remainingFraction: hasKnownLimit ? 1 - fraction : nil,
+                        exactValue: hasKnownLimit
+                            ? bar.usageText
+                            : (bar.fractionlessUsageText ?? bar.used.formatted()),
                         severity: result.hasFreshBars
                             ? WatchMetricSeverity(bar.effectiveSeverity(at: now))
                             : .normal,
                         resetText: localizedResetText
                             ?? (result.hasFreshBars ? bar.projectionDescriptionOverride : nil),
+                        resetsAt: bar.resetsAt,
+                        resetDisplayStyle: bar.resetDisplayStyle,
+                        fetchedAt: result.barsFetchedAt ?? result.fetchedAt,
                         visualizationStyle: WatchMetricVisualizationStyle(
                             configurationStore.visualizationStyle(
                                 accountID: result.accountID,
@@ -103,6 +110,7 @@ enum WatchSnapshotPublisher {
                         label: metric.label,
                         exactValue: metric.formattedAmount(),
                         severity: result.hasReachedSpendLimit ? .critical : .normal,
+                        fetchedAt: result.fetchedAt,
                         visualizationStyle: .largeNumeric
                     )
                 }
@@ -117,6 +125,7 @@ enum WatchSnapshotPublisher {
                             exactValue: creditsRemaining.formatted(
                                 .number.precision(.fractionLength(0...2))
                             ),
+                            fetchedAt: result.fetchedAt,
                             visualizationStyle: .largeNumeric
                         )
                     )
@@ -138,7 +147,10 @@ enum WatchSnapshotPublisher {
                 let plan = result.providerID.supportsPlanBadge ? result.plan : nil
 
                 return WatchAccountSnapshot(
-                    id: "\(result.providerID.rawValue).\(displayIndex)",
+                    id: snapshotAccountID(
+                        providerID: result.providerID,
+                        configurationID: configuration.id
+                    ),
                     providerName: result.providerID == .openCodeZen
                         ? result.title
                         : configuration.providerID.displayName,
@@ -158,6 +170,15 @@ enum WatchSnapshotPublisher {
                 )
             }
         )
+    }
+
+    static func snapshotAccountID(
+        providerID: ProviderID,
+        configurationID: String
+    ) -> String {
+        let digest = SHA256.hash(data: Data(configurationID.utf8))
+        let opaqueID = digest.prefix(16).map { String(format: "%02x", $0) }.joined()
+        return "\(providerID.rawValue).\(opaqueID)"
     }
 
     @discardableResult

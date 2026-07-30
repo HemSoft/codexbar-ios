@@ -73,6 +73,9 @@ public struct WatchMetricSnapshot: Codable, Equatable, Identifiable, Sendable {
     public let exactValue: String
     public let severity: WatchMetricSeverity
     public let resetText: String?
+    public let resetsAt: Date?
+    public let resetDisplayStyle: UsageResetDisplayStyle?
+    public let fetchedAt: Date?
     public let visualizationStyle: WatchMetricVisualizationStyle
 
     public init(
@@ -84,6 +87,9 @@ public struct WatchMetricSnapshot: Codable, Equatable, Identifiable, Sendable {
         exactValue: String,
         severity: WatchMetricSeverity = .normal,
         resetText: String? = nil,
+        resetsAt: Date? = nil,
+        resetDisplayStyle: UsageResetDisplayStyle? = nil,
+        fetchedAt: Date? = nil,
         visualizationStyle: WatchMetricVisualizationStyle = .automatic
     ) {
         self.id = id
@@ -94,6 +100,9 @@ public struct WatchMetricSnapshot: Codable, Equatable, Identifiable, Sendable {
         self.exactValue = exactValue
         self.severity = severity
         self.resetText = resetText
+        self.resetsAt = resetsAt
+        self.resetDisplayStyle = resetDisplayStyle
+        self.fetchedAt = fetchedAt
         self.visualizationStyle = visualizationStyle
     }
 
@@ -106,6 +115,9 @@ public struct WatchMetricSnapshot: Codable, Equatable, Identifiable, Sendable {
         case exactValue
         case severity
         case resetText
+        case resetsAt
+        case resetDisplayStyle
+        case fetchedAt
         case visualizationStyle
     }
 
@@ -120,6 +132,12 @@ public struct WatchMetricSnapshot: Codable, Equatable, Identifiable, Sendable {
             exactValue: try container.decode(String.self, forKey: .exactValue),
             severity: try container.decodeIfPresent(WatchMetricSeverity.self, forKey: .severity) ?? .normal,
             resetText: try container.decodeIfPresent(String.self, forKey: .resetText),
+            resetsAt: try container.decodeIfPresent(Date.self, forKey: .resetsAt),
+            resetDisplayStyle: try container.decodeIfPresent(
+                UsageResetDisplayStyle.self,
+                forKey: .resetDisplayStyle
+            ),
+            fetchedAt: try container.decodeIfPresent(Date.self, forKey: .fetchedAt),
             visualizationStyle: try container.decodeIfPresent(
                 WatchMetricVisualizationStyle.self,
                 forKey: .visualizationStyle

@@ -95,6 +95,8 @@
 		10000000000000000000003C /* AppStoreScreenshotFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003D /* AppStoreScreenshotFixtures.swift */; };
 		10000000000000000000003D /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
 		10000000000000000000003E /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
+		F31000000000000000000009 /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
+		F3100000000000000000000A /* UserFacingDateTimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003E /* UserFacingDateTimeFormatter.swift */; };
 		D10000000000000000000001 /* CodexBarWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001 /* CodexBarWatchApp.swift */; };
 		D10000000000000000000002 /* WatchDashboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000002 /* WatchDashboardState.swift */; };
 		D10000000000000000000003 /* WatchDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000003 /* WatchDashboardView.swift */; };
@@ -106,6 +108,14 @@
 		E10000000000000000000002 /* WatchDashboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* WatchDashboardSnapshot.swift */; };
 		E10000000000000000000003 /* WatchSnapshotCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000002 /* WatchSnapshotCoordinator.swift */; };
 		E10000000000000000000004 /* WatchConnectivityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000003 /* WatchConnectivityStore.swift */; };
+		F31000000000000000000001 /* WatchComplicationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32000000000000000000001 /* WatchComplicationSupport.swift */; };
+		F31000000000000000000002 /* WatchComplicationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32000000000000000000001 /* WatchComplicationSupport.swift */; };
+		F31000000000000000000003 /* CodexBarWatchWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32000000000000000000002 /* CodexBarWatchWidgetBundle.swift */; };
+		F31000000000000000000004 /* WatchComplicationConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32000000000000000000003 /* WatchComplicationConfiguration.swift */; };
+		F31000000000000000000005 /* WatchComplicationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32000000000000000000004 /* WatchComplicationViews.swift */; };
+		F31000000000000000000006 /* WatchDashboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* WatchDashboardSnapshot.swift */; };
+		F31000000000000000000007 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F32000000000000000000006 /* PrivacyInfo.xcprivacy */; };
+		F31000000000000000000008 /* CodexBarWatchWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F32000000000000000000008 /* CodexBarWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -137,6 +147,13 @@
 			remoteGlobalIDString = D50000000000000000000001;
 			remoteInfo = CodexBarWatch;
 		};
+		F33000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 400000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F35000000000000000000001;
+			remoteInfo = CodexBarWatchWidget;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -160,6 +177,17 @@
 				D10000000000000000000007 /* CodexBarWatch.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F39000000000000000000005 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F31000000000000000000008 /* CodexBarWatchWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -263,6 +291,14 @@
 		E20000000000000000000001 /* WatchDashboardSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardSnapshot.swift; sourceTree = "<group>"; };
 		E20000000000000000000002 /* WatchSnapshotCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSnapshotCoordinator.swift; sourceTree = "<group>"; };
 		E20000000000000000000003 /* WatchConnectivityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityStore.swift; sourceTree = "<group>"; };
+		F32000000000000000000001 /* WatchComplicationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchComplicationSupport.swift; sourceTree = "<group>"; };
+		F32000000000000000000002 /* CodexBarWatchWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarWatchWidgetBundle.swift; sourceTree = "<group>"; };
+		F32000000000000000000003 /* WatchComplicationConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchComplicationConfiguration.swift; sourceTree = "<group>"; };
+		F32000000000000000000004 /* WatchComplicationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchComplicationViews.swift; sourceTree = "<group>"; };
+		F32000000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F32000000000000000000006 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F32000000000000000000007 /* CodexBarWatchWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodexBarWatchWidget.entitlements; sourceTree = "<group>"; };
+		F32000000000000000000008 /* CodexBarWatchWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CodexBarWatchWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -301,6 +337,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F36000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -310,6 +353,7 @@
 				700000000000000000000002 /* CodexBarIOS */,
 				700000000000000000000009 /* CodexBarIOSWidget */,
 				D70000000000000000000001 /* CodexBarWatch */,
+				F37000000000000000000001 /* CodexBarWatchWidget */,
 				700000000000000000000007 /* CodexBarIOSTests */,
 				D70000000000000000000003 /* CodexBarWatchTests */,
 				700000000000000000000008 /* Products */,
@@ -440,6 +484,7 @@
 				20000000000000000000000D /* CodexBarIOSTests.xctest */,
 				200000000000000000000031 /* CodexBarIOSWidget.appex */,
 				D20000000000000000000008 /* CodexBarWatch.app */,
+				F32000000000000000000008 /* CodexBarWatchWidget.appex */,
 				D2000000000000000000000A /* CodexBarWatchTests.xctest */,
 			);
 			name = Products;
@@ -469,6 +514,7 @@
 				200000000000000000000037 /* WidgetBuilderConfiguration.swift */,
 				200000000000000000000044 /* WidgetRenderingSupport.swift */,
 				E20000000000000000000001 /* WatchDashboardSnapshot.swift */,
+				F32000000000000000000001 /* WatchComplicationSupport.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -502,6 +548,19 @@
 				D20000000000000000000009 /* WatchDashboardStateTests.swift */,
 			);
 			path = CodexBarWatchTests;
+			sourceTree = "<group>";
+		};
+		F37000000000000000000001 /* CodexBarWatchWidget */ = {
+			isa = PBXGroup;
+			children = (
+				F32000000000000000000002 /* CodexBarWatchWidgetBundle.swift */,
+				F32000000000000000000003 /* WatchComplicationConfiguration.swift */,
+				F32000000000000000000004 /* WatchComplicationViews.swift */,
+				F32000000000000000000005 /* Info.plist */,
+				F32000000000000000000006 /* PrivacyInfo.xcprivacy */,
+				F32000000000000000000007 /* CodexBarWatchWidget.entitlements */,
+			);
+			path = CodexBarWatchWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -570,10 +629,12 @@
 				D90000000000000000000001 /* Sources */,
 				D60000000000000000000001 /* Frameworks */,
 				D90000000000000000000002 /* Resources */,
+				F39000000000000000000005 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F3A000000000000000000001 /* PBXTargetDependency */,
 			);
 			name = CodexBarWatch;
 			productName = CodexBarWatch;
@@ -597,6 +658,23 @@
 			productName = CodexBarWatchTests;
 			productReference = D2000000000000000000000A /* CodexBarWatchTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		F35000000000000000000001 /* CodexBarWatchWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F38000000000000000000001 /* Build configuration list for PBXNativeTarget "CodexBarWatchWidget" */;
+			buildPhases = (
+				F39000000000000000000001 /* Sources */,
+				F36000000000000000000001 /* Frameworks */,
+				F39000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CodexBarWatchWidget;
+			productName = CodexBarWatchWidget;
+			productReference = F32000000000000000000008 /* CodexBarWatchWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -625,6 +703,9 @@
 						CreatedOnToolsVersion = 26.0;
 						TestTargetID = D50000000000000000000001;
 					};
+					F35000000000000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
 				};
 			};
 			buildConfigurationList = 800000000000000000000001 /* Build configuration list for PBXProject "CodexBarIOS" */;
@@ -645,6 +726,7 @@
 				500000000000000000000003 /* CodexBarIOSWidget */,
 				D50000000000000000000001 /* CodexBarWatch */,
 				D50000000000000000000002 /* CodexBarWatchTests */,
+				F35000000000000000000001 /* CodexBarWatchWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -688,6 +770,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F39000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F31000000000000000000007 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -809,6 +899,8 @@
 				D10000000000000000000003 /* WatchDashboardView.swift in Sources */,
 				E10000000000000000000002 /* WatchDashboardSnapshot.swift in Sources */,
 				E10000000000000000000004 /* WatchConnectivityStore.swift in Sources */,
+				F31000000000000000000001 /* WatchComplicationSupport.swift in Sources */,
+				F31000000000000000000009 /* UserFacingDateTimeFormatter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -817,6 +909,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				D10000000000000000000006 /* WatchDashboardStateTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F39000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F31000000000000000000003 /* CodexBarWatchWidgetBundle.swift in Sources */,
+				F31000000000000000000004 /* WatchComplicationConfiguration.swift in Sources */,
+				F31000000000000000000005 /* WatchComplicationViews.swift in Sources */,
+				F31000000000000000000006 /* WatchDashboardSnapshot.swift in Sources */,
+				F31000000000000000000002 /* WatchComplicationSupport.swift in Sources */,
+				F3100000000000000000000A /* UserFacingDateTimeFormatter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -842,6 +947,11 @@
 			isa = PBXTargetDependency;
 			target = D50000000000000000000001 /* CodexBarWatch */;
 			targetProxy = D30000000000000000000002 /* PBXContainerItemProxy */;
+		};
+		F3A000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F35000000000000000000001 /* CodexBarWatchWidget */;
+			targetProxy = F33000000000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1222,6 +1332,64 @@
 			};
 			name = Release;
 		};
+		F3B000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = CodexBarWatchWidget/CodexBarWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W2A23PX5BP;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = CodexBarWatchWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOS.watchkitapp.CodexBarWatchWidget;
+				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WRAPPER_EXTENSION = appex;
+			};
+			name = Debug;
+		};
+		F3B000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = CodexBarWatchWidget/CodexBarWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W2A23PX5BP;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = CodexBarWatchWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOS.watchkitapp.CodexBarWatchWidget;
+				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WRAPPER_EXTENSION = appex;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1275,6 +1443,15 @@
 			buildConfigurations = (
 				DB0000000000000000000003 /* Debug */,
 				DB0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F38000000000000000000001 /* Build configuration list for PBXNativeTarget "CodexBarWatchWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F3B000000000000000000001 /* Debug */,
+				F3B000000000000000000002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

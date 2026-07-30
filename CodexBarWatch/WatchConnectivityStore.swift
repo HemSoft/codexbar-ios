@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import WatchConnectivity
+import WidgetKit
 
 @MainActor
 final class WatchDashboardStore: NSObject, ObservableObject {
@@ -11,18 +12,53 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private static let persistedSnapshotKey = "watch.dashboard.last-good-snapshot"
 
     private let defaults: UserDefaults
+    private let complicationStore: WatchComplicationSnapshotStore
+    private let reloadComplications: () -> Void
     private let session: WCSession?
 
     init(
         defaults: UserDefaults = .standard,
+        complicationStore: WatchComplicationSnapshotStore = WatchComplicationSnapshotStore(),
+        reloadComplications: @escaping () -> Void = {
+            WidgetCenter.shared.reloadTimelines(ofKind: WatchComplicationConstants.widgetKind)
+        },
         session: WCSession? = WCSession.isSupported() ? .default : nil
     ) {
         self.defaults = defaults
+        self.complicationStore = complicationStore
+        self.reloadComplications = reloadComplications
         self.session = session
-        if let data = defaults.data(forKey: Self.persistedSnapshotKey) {
-            snapshot = try? WatchDashboardSnapshot.decode(data)
+        var migratedSnapshotNeedsReload = false
+        let legacyData = defaults.data(forKey: Self.persistedSnapshotKey)
+        let legacySnapshot = legacyData.flatMap { try? WatchDashboardSnapshot.decode($0) }
+        let sharedSnapshot = complicationStore.load()
+        if let legacySnapshot,
+           sharedSnapshot == nil
+                || legacySnapshot.generatedAt
+                    > (sharedSnapshot?.generatedAt ?? .distantPast)
+        {
+            snapshot = legacySnapshot
+            migratedSnapshotNeedsReload = (
+                try? complicationStore.saveIfChanged(
+                    legacySnapshot,
+                    encodedData: legacyData
+                )
+            ) == true
+        } else if let sharedSnapshot {
+            snapshot = sharedSnapshot
+            if legacySnapshot != sharedSnapshot,
+               let sharedData = try? sharedSnapshot.encoded()
+            {
+                defaults.set(sharedData, forKey: Self.persistedSnapshotKey)
+            }
+        } else {
+            snapshot = nil
         }
         super.init()
+
+        if migratedSnapshotNeedsReload {
+            reloadComplications()
+        }
 
         guard let session else { return }
         session.delegate = self
@@ -46,9 +82,16 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         do {
             let decoded = try WatchDashboardSnapshot.decodeApplicationContext(applicationContext)
             let encoded = try decoded.encoded()
+            let shouldReloadComplications = try complicationStore.saveIfChanged(
+                decoded,
+                encodedData: encoded
+            )
             defaults.set(encoded, forKey: Self.persistedSnapshotKey)
             snapshot = decoded
             decodingError = nil
+            if shouldReloadComplications {
+                reloadComplications()
+            }
         } catch {
             decodingError = "Couldn’t read the latest iPhone update"
         }

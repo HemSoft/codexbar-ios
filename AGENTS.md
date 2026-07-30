@@ -4,8 +4,9 @@ CodexBar for iOS is a native SwiftUI companion app (bundle ID
 `com.hemsoft.CodexBarIOS`, scheme `CodexBarIOS`, Xcode project
 `CodexBarIOS.xcodeproj`). Xcode targets: `CodexBarIOS` (app),
 `CodexBarIOSWidget` (widget), `CodexBarIOSTests` (unit tests),
-`CodexBarWatch` (embedded watchOS 10 companion), and `CodexBarWatchTests`
-(watchOS unit tests). Shared schemes are `CodexBarIOS`, `CodexBarWatch`, and
+`CodexBarWatch` (embedded watchOS 10 companion), `CodexBarWatchWidget`
+(WidgetKit complication extension), and `CodexBarWatchTests` (watchOS unit
+tests). Shared schemes are `CodexBarIOS`, `CodexBarWatch`, and
 `CodexBarWatchTests`. `Package.swift` also exposes the
 `CodexBarIOSSmokeTests` executable smoke harness. See
 `README.md` for scope and the Windows reference repo, `APP-STORE.md` for store
@@ -129,9 +130,9 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
 If that watch name is not installed, use
 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl list devices available`
 to select another available watchOS simulator. The watch app is a dependent
-companion embedded in `CodexBarIOS`; this foundation does not enable independent
-installation or add Watch Connectivity, credentials, provider networking,
-widgets, or complications.
+companion embedded in `CodexBarIOS` and includes a WidgetKit complication
+extension driven by usage snapshots from the iPhone. It does not enable
+independent installation, credentials, or provider networking.
 
 There is no separate lint/typecheck tool configured for this repo beyond
 Xcode/Swift compiler warnings and the test targets above.

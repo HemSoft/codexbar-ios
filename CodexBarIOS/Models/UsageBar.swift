@@ -41,6 +41,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
     public let resetDescription: String?
     public let resetsAt: Date?
     public let resetDisplayStyle: UsageResetDisplayStyle
+    public let fractionlessUsageText: String?
     public let projectionCurrent: Double?
     public let projectionLimit: Double?
     public let projectionPeriodStart: Date?
@@ -58,6 +59,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         resetDescription: String? = nil,
         resetsAt: Date? = nil,
         resetDisplayStyle: UsageResetDisplayStyle = .verbatim,
+        fractionlessUsageText: String? = nil,
         projectionCurrent: Double? = nil,
         projectionLimit: Double? = nil,
         projectionPeriodStart: Date? = nil,
@@ -74,6 +76,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         self.resetDescription = resetDescription
         self.resetsAt = resetsAt
         self.resetDisplayStyle = resetDisplayStyle
+        self.fractionlessUsageText = fractionlessUsageText
         self.projectionCurrent = projectionCurrent
         self.projectionLimit = projectionLimit
         self.projectionPeriodStart = projectionPeriodStart
