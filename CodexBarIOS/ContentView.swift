@@ -18,7 +18,7 @@ struct ContentView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isShowingSettings = false
     @State private var addAccountFlowRequest: AddAccountFlowRequest?
-    @State private var addedAccountIDAwaitingRefresh: String?
+    @State private var addAccountRefreshState = AddAccountRefreshState()
     @State private var selectedHistoryResult: ProviderUsageResult?
     @State private var accountConfigurationNavigation =
         DashboardAccountConfigurationNavigationState()
@@ -321,10 +321,9 @@ struct ContentView: View {
         .sheet(
             item: $addAccountFlowRequest,
             onDismiss: {
-                guard let accountID = addedAccountIDAwaitingRefresh else {
+                guard let accountID = addAccountRefreshState.finishDismissal() else {
                     return
                 }
-                addedAccountIDAwaitingRefresh = nil
                 Task {
                     await refreshAccount(accountID: accountID)
                 }
@@ -333,13 +332,12 @@ struct ContentView: View {
             AddAccountSetupFlow(
                 configurationStore: configurationStore,
                 onAccountCreated: { accountID in
-                    addedAccountIDAwaitingRefresh = accountID
+                    addAccountRefreshState.accountCreated(accountID)
                 },
                 onCredentialsChanged: {
-                    guard let accountID = addedAccountIDAwaitingRefresh else {
+                    guard let accountID = addAccountRefreshState.credentialsChanged() else {
                         return
                     }
-                    addedAccountIDAwaitingRefresh = nil
                     Task {
                         await refreshAccount(accountID: accountID)
                     }

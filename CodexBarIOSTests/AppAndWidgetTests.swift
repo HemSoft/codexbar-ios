@@ -278,6 +278,23 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertTrue(options.allSatisfy { !$0.addAccountIconName.isEmpty })
     }
 
+    func testAddAccountRefreshStateKeepsExactTargetForLaterCredentialChanges() {
+        var state = AddAccountRefreshState()
+
+        XCTAssertNil(state.credentialsChanged())
+        XCTAssertNil(state.finishDismissal())
+
+        state.accountCreated("claude.personal")
+        XCTAssertEqual(state.credentialsChanged(), "claude.personal")
+        XCTAssertEqual(state.credentialsChanged(), "claude.personal")
+        XCTAssertNil(state.finishDismissal())
+        XCTAssertNil(state.accountID)
+
+        state.accountCreated("openRouter.work")
+        XCTAssertEqual(state.finishDismissal(), "openRouter.work")
+        XCTAssertNil(state.finishDismissal())
+    }
+
     func testDashboardCardMenuKeepsAccountConfigurationOnBalanceOnlyCards() {
         let balanceOnlyResult = ProviderUsageResult(
             accountID: "moonshot.balance",

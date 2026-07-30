@@ -21,7 +21,7 @@ struct SettingsView: View {
     @State private var isConfirmingGroupReplacement = false
     @State private var alertPermissionMessage: String?
     @State private var addAccountFlowRequest: AddAccountFlowRequest?
-    @State private var addedAccountIDAwaitingRefresh: String?
+    @State private var addAccountRefreshState = AddAccountRefreshState()
     @State private var newGroupName = ""
     @State private var groupNameDrafts: [String: String] = [:]
     @FocusState private var focusedGroupID: String?
@@ -33,10 +33,9 @@ struct SettingsView: View {
         .sheet(
             item: $addAccountFlowRequest,
             onDismiss: {
-                guard let accountID = addedAccountIDAwaitingRefresh else {
+                guard let accountID = addAccountRefreshState.finishDismissal() else {
                     return
                 }
-                addedAccountIDAwaitingRefresh = nil
                 Task {
                     await refreshAddedAccount(accountID: accountID)
                 }
@@ -46,13 +45,12 @@ struct SettingsView: View {
                 configurationStore: configurationStore,
                 initialProviderID: request.initialProviderID,
                 onAccountCreated: { accountID in
-                    addedAccountIDAwaitingRefresh = accountID
+                    addAccountRefreshState.accountCreated(accountID)
                 },
                 onCredentialsChanged: {
-                    guard let accountID = addedAccountIDAwaitingRefresh else {
+                    guard let accountID = addAccountRefreshState.credentialsChanged() else {
                         return
                     }
-                    addedAccountIDAwaitingRefresh = nil
                     Task {
                         await refreshAddedAccount(accountID: accountID)
                     }
@@ -641,6 +639,32 @@ struct AddAccountFlowRequest: Identifiable, Equatable {
 
     init(initialProviderID: ProviderID? = nil) {
         self.initialProviderID = initialProviderID
+    }
+}
+
+struct AddAccountRefreshState: Equatable {
+    private(set) var accountID: String?
+    private var shouldRefreshOnDismiss = false
+
+    mutating func accountCreated(_ accountID: String) {
+        self.accountID = accountID
+        shouldRefreshOnDismiss = true
+    }
+
+    mutating func credentialsChanged() -> String? {
+        guard let accountID else {
+            return nil
+        }
+        shouldRefreshOnDismiss = false
+        return accountID
+    }
+
+    mutating func finishDismissal() -> String? {
+        defer {
+            accountID = nil
+            shouldRefreshOnDismiss = false
+        }
+        return shouldRefreshOnDismiss ? accountID : nil
     }
 }
 
