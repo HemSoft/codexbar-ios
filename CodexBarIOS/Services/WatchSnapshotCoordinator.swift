@@ -417,8 +417,12 @@ final class PhoneWatchConnectivityCoordinator: NSObject, WatchSnapshotSending {
         guard WatchDashboardSnapshot.isSnapshotRequest(message) else {
             return false
         }
-        snapshotNeededHandler?()
+        handleSnapshotRequest()
         return true
+    }
+
+    private func handleSnapshotRequest() {
+        snapshotNeededHandler?()
     }
 
     func watchStateDidChange() {
@@ -457,8 +461,9 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
         _ session: WCSession,
         didReceiveMessage message: [String: Any]
     ) {
+        guard WatchDashboardSnapshot.isSnapshotRequest(message) else { return }
         Task { @MainActor [weak self] in
-            _ = self?.handleMessage(message)
+            self?.handleSnapshotRequest()
         }
     }
 

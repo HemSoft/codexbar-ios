@@ -100,8 +100,12 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     }
 
     func receive(_ applicationContext: [String: Any]) {
+        receive(WatchDashboardApplicationContext(applicationContext))
+    }
+
+    func receive(_ applicationContext: WatchDashboardApplicationContext) {
         do {
-            let decoded = try WatchDashboardSnapshot.decodeApplicationContext(applicationContext)
+            let decoded = try applicationContext.decode()
             let encoded = try decoded.encoded()
             let shouldReloadComplications = try complicationStore.saveIfChanged(
                 decoded,
@@ -127,7 +131,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     }
 
     func activationCompleted(
-        applicationContext: [String: Any],
+        applicationContext: WatchDashboardApplicationContext,
         isPhoneReachable: Bool,
         error: Error?
     ) {
@@ -176,10 +180,14 @@ extension WatchDashboardStore: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
+        let applicationContext = WatchDashboardApplicationContext(
+            session.receivedApplicationContext
+        )
+        let isPhoneReachable = session.isReachable
         Task { @MainActor [weak self] in
             self?.activationCompleted(
-                applicationContext: session.receivedApplicationContext,
-                isPhoneReachable: session.isReachable,
+                applicationContext: applicationContext,
+                isPhoneReachable: isPhoneReachable,
                 error: error
             )
         }
@@ -189,14 +197,16 @@ extension WatchDashboardStore: WCSessionDelegate {
         _ session: WCSession,
         didReceiveApplicationContext applicationContext: [String: Any]
     ) {
+        let applicationContext = WatchDashboardApplicationContext(applicationContext)
         Task { @MainActor [weak self] in
             self?.receive(applicationContext)
         }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        let isPhoneReachable = session.isReachable
         Task { @MainActor [weak self] in
-            self?.updateReachability(session.isReachable)
+            self?.updateReachability(isPhoneReachable)
         }
     }
 }

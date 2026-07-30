@@ -213,6 +213,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Made iPhone and Apple Watch connectivity delegate handoffs safe under complete
+  Swift concurrency checking, with a repeatable warnings-as-errors build gate.
+  ([#203](https://github.com/HemSoft/codexbar-ios/issues/203))
 - Condensed the standing agent guide and moved connected-device deployment and
   signing recovery into a focused runbook with live identifier discovery and
   explicit dedicated-keychain safeguards.

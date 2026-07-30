@@ -377,7 +377,9 @@ final class WatchDashboardStateTests: XCTestCase {
         )
 
         store.activationCompleted(
-            applicationContext: try snapshot.applicationContext(),
+            applicationContext: WatchDashboardApplicationContext(
+                try snapshot.applicationContext()
+            ),
             isPhoneReachable: false,
             error: nil
         )
@@ -405,7 +407,7 @@ final class WatchDashboardStateTests: XCTestCase {
         )
 
         store.activationCompleted(
-            applicationContext: [:],
+            applicationContext: .empty,
             isPhoneReachable: false,
             error: nil
         )
@@ -418,6 +420,26 @@ final class WatchDashboardStateTests: XCTestCase {
         store.updateReachability(true)
         try await Task.sleep(for: .milliseconds(20))
         XCTAssertEqual(requestCount, 2)
+    }
+
+    func testApplicationContextHandoffCopiesOnlySendableSnapshotData() throws {
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+
+        let valid = WatchDashboardApplicationContext(try snapshot.applicationContext())
+        XCTAssertEqual(try valid.decode(), snapshot)
+        XCTAssertFalse(valid.isEmpty)
+
+        let malformed = WatchDashboardApplicationContext(["unexpected": NSObject()])
+        XCTAssertThrowsError(try malformed.decode())
+        XCTAssertFalse(malformed.isEmpty)
+
+        let empty = WatchDashboardApplicationContext([:])
+        XCTAssertThrowsError(try empty.decode())
+        XCTAssertTrue(empty.isEmpty)
     }
 
     @MainActor
