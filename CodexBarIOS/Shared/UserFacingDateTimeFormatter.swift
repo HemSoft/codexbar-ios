@@ -55,7 +55,8 @@ public struct UserFacingDateTimeFormatter {
         resetAt: Date?,
         now: Date,
         style: UsageResetDisplayStyle,
-        fallback: String?
+        fallback: String?,
+        includesMinutesBeyondFinalHour: Bool = true
     ) -> String? {
         guard let resetAt else {
             return fallback
@@ -69,7 +70,11 @@ public struct UserFacingDateTimeFormatter {
         case .relativeWithLocalTime:
             let remaining = resetAt.timeIntervalSince(now)
             let localTime = timeWithZone(resetAt, includesWeekday: remaining >= 86_400)
-            return "\(relativeResetDescription(remaining: remaining)) (\(localTime))"
+            let relativeDescription = relativeResetDescription(
+                remaining: remaining,
+                includesMinutesBeyondFinalHour: includesMinutesBeyondFinalHour
+            )
+            return "\(relativeDescription) (\(localTime))"
         }
     }
 
@@ -96,7 +101,10 @@ public struct UserFacingDateTimeFormatter {
             : String(format: "GMT%@%d:%02d", sign, hours, minutes)
     }
 
-    private func relativeResetDescription(remaining: TimeInterval) -> String {
+    private func relativeResetDescription(
+        remaining: TimeInterval,
+        includesMinutesBeyondFinalHour: Bool
+    ) -> String {
         if remaining <= 0 {
             return "Resets now"
         }
@@ -108,6 +116,9 @@ public struct UserFacingDateTimeFormatter {
         }
 
         if remaining >= 3_600 {
+            if !includesMinutesBeyondFinalHour {
+                return "Resets \(Int(ceil(remaining / 3_600)))h"
+            }
             let hours = Int(remaining / 3_600)
             let minutes = Int(remaining.truncatingRemainder(dividingBy: 3_600) / 60)
             return "Resets \(hours)h \(minutes)m"

@@ -889,7 +889,7 @@ final class WatchDashboardStateTests: XCTestCase {
             ).resetText
         )
 
-        XCTAssertTrue(initial.hasPrefix("Resets 1h 0m"))
+        XCTAssertTrue(initial.hasPrefix("Resets 1h"))
         XCTAssertTrue(later.hasPrefix("Resets 30m"))
         XCTAssertNotEqual(initial, later)
     }
@@ -992,6 +992,75 @@ final class WatchDashboardStateTests: XCTestCase {
                 )
             )
         }
+    }
+
+    func testRelativeResetTimelineAlignsHourlyAndFinalMinutePrecision() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let resetsAt = now.addingTimeInterval(3.5 * 60 * 60)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 2 * 60 * 60,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "codex",
+                    providerName: "Codex",
+                    accountLabel: "Primary",
+                    fetchedAt: now,
+                    metrics: [
+                        WatchMetricSnapshot(
+                            id: "usage",
+                            label: "Usage",
+                            usedFraction: 0.5,
+                            exactValue: "50%",
+                            resetText: "Resets later",
+                            resetsAt: resetsAt,
+                            resetDisplayStyle: .relativeWithLocalTime,
+                            fetchedAt: now
+                        ),
+                    ]
+                ),
+            ]
+        )
+        let resolver = WatchComplicationResolver()
+        let dates = resolver.timelineEntryDates(
+            snapshot: snapshot,
+            selection: .automatic,
+            now: now
+        )
+
+        for hoursBeforeReset in 1...3 {
+            XCTAssertTrue(
+                dates.contains(
+                    resetsAt.addingTimeInterval(-TimeInterval(hoursBeforeReset * 60 * 60))
+                )
+            )
+        }
+        XCTAssertFalse(
+            dates.contains(resetsAt.addingTimeInterval(-(2 * 60 * 60) + 60))
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(
+                resolver.resolve(snapshot: snapshot, selection: .automatic, at: now).resetText
+            ).hasPrefix("Resets 4h")
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(
+                resolver.resolve(
+                    snapshot: snapshot,
+                    selection: .automatic,
+                    at: resetsAt.addingTimeInterval(-3 * 60 * 60)
+                ).resetText
+            ).hasPrefix("Resets 3h")
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(
+                resolver.resolve(
+                    snapshot: snapshot,
+                    selection: .automatic,
+                    at: resetsAt.addingTimeInterval(-59 * 60)
+                ).resetText
+            ).hasPrefix("Resets 59m")
+        )
     }
 
     func testNonRelativeResetStylesAvoidFinalHourCountdownEntries() {

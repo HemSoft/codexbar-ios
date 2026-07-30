@@ -268,7 +268,8 @@ struct WatchComplicationResolver {
                 resetAt: metric.resetsAt,
                 now: date,
                 style: metric.resetDisplayStyle ?? .verbatim,
-                fallback: metric.resetText
+                fallback: metric.resetText,
+                includesMinutesBeyondFinalHour: false
             ),
             freshnessText: Self.freshnessText(fetchedAt, now: date),
             isStale: isStale
@@ -356,15 +357,32 @@ struct WatchComplicationResolver {
 
         if displayed.metric.resetDisplayStyle == .relativeWithLocalTime,
            let resetsAt = displayed.metric.resetsAt,
-           resetsAt > now,
-           resetsAt <= staleDate
+           resetsAt > now
         {
-            for minutesBeforeReset in stride(from: 60, through: 0, by: -1) {
-                let countdownDate = resetsAt.addingTimeInterval(
-                    -TimeInterval(minutesBeforeReset * 60)
+            let countdownEnd = min(resetsAt, staleDate)
+            let wholeHoursRemaining = Int(
+                floor(resetsAt.timeIntervalSince(now) / (60 * 60))
+            )
+            if wholeHoursRemaining > 0 {
+                var countdownDate = resetsAt.addingTimeInterval(
+                    -TimeInterval(wholeHoursRemaining * 60 * 60)
                 )
-                if countdownDate > now {
-                    dates.append(countdownDate)
+                while countdownDate < countdownEnd {
+                    if countdownDate > now {
+                        dates.append(countdownDate)
+                    }
+                    countdownDate = countdownDate.addingTimeInterval(60 * 60)
+                }
+            }
+
+            if resetsAt <= staleDate {
+                for minutesBeforeReset in stride(from: 60, through: 0, by: -1) {
+                    let countdownDate = resetsAt.addingTimeInterval(
+                        -TimeInterval(minutesBeforeReset * 60)
+                    )
+                    if countdownDate > now {
+                        dates.append(countdownDate)
+                    }
                 }
             }
         }
