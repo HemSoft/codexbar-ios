@@ -83,6 +83,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Consolidated Settings account creation into one provider-neutral Add Account
+  action at the top of the Accounts section, including for additional ChatGPT /
+  Codex accounts. ([#198](https://github.com/HemSoft/codexbar-ios/issues/198))
 - Simplified the Settings version label to show only the public app version
   while retaining the internal build number for diagnostics and support.
   ([#170](https://github.com/HemSoft/codexbar-ios/issues/170))
