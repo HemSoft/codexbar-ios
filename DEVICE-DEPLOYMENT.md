@@ -154,45 +154,12 @@ security default-keychain -d user -s \
   "$HOME/Library/Keychains/login.keychain-db"
 ```
 
-### Legacy login-keychain recovery
-
-Use this path only if the dedicated-keychain procedure is unavailable and the
-device build stalls at `CodeSign` before failing with
-`errSecInternalComponent`.
-
-1. Inspect the live login-keychain identities:
-
-   ```sh
-   security find-identity -v -p codesigning \
-     "$HOME/Library/Keychains/login.keychain-db"
-   ```
-
-2. Move only the active generated provisioning profile out of Xcode's profile
-   folder, retaining a backup:
-
-   ```sh
-   BACKUP="$HOME/Library/Developer/Xcode/UserData/CodexBarSigningBackups/CodexBar-backup-$(date +%Y%m%d-%H%M%S)"
-   mkdir -p "$BACKUP/Provisioning Profiles"
-   mv "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/<PROFILE_UUID>.mobileprovision" \
-     "$BACKUP/Provisioning Profiles/"
-   ```
-
-3. Delete only the failing identity fingerprint shown in the failed
-   `codesign --sign <FINGERPRINT>` command:
-
-   ```sh
-   security delete-certificate -Z <FAILING_CERT_SHA1> \
-     "$HOME/Library/Keychains/login.keychain-db"
-   ```
-
-4. Re-run the wrapped device build above so Xcode can create or select a usable
-   profile and identity.
-
 ## Why These Rules Exist
 
 Historical login-keychain identity duplication made Xcode signing selection
 nondeterministic and caused repeated `CodeSign` hangs. Leaving the lock-on-sleep
 dedicated keychain in the global search list also caused unrelated macOS
 services to prompt for its password. These incidents are the reason to isolate
-the dedicated keychain, discover live identifiers and identities, and avoid
-using old snapshots as current configuration.
+the dedicated keychain, reset and reprovision it when it is unusable, discover
+live identifiers and identities, and avoid using old snapshots as current
+configuration. Do not fall back to signing from the login keychain.
