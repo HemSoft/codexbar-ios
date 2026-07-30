@@ -333,6 +333,20 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    func testSettingsGroupValidationStateSurfacesAndClearsFailures() {
+        var state = SettingsGroupValidationState()
+        XCTAssertNil(state.message)
+
+        state.recordFailure(storeError: "Group names must be unique.")
+        XCTAssertEqual(state.message, "Group names must be unique.")
+
+        state.clear()
+        XCTAssertNil(state.message)
+
+        state.recordFailure(storeError: nil)
+        XCTAssertEqual(state.message, "Could not save the group name.")
+    }
+
     func testSettingsCategorySummariesExposeStateWithoutAccountIdentifiers() {
         XCTAssertEqual(
             SettingsCategorySummary.accounts(accountCount: 1, groupCount: 2),

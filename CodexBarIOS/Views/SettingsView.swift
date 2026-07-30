@@ -98,6 +98,18 @@ struct SettingsRecoveryState: Equatable {
     }
 }
 
+struct SettingsGroupValidationState: Equatable {
+    private(set) var message: String?
+
+    mutating func recordFailure(storeError: String?) {
+        message = storeError ?? "Could not save the group name."
+    }
+
+    mutating func clear() {
+        message = nil
+    }
+}
+
 enum SettingsCategorySummary {
     static func accounts(accountCount: Int, groupCount: Int) -> String {
         "\(count(accountCount, singular: "account")) · \(count(groupCount, singular: "group"))"
@@ -133,7 +145,6 @@ enum SettingsCategorySummary {
 struct SettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var appUpdateController: AppUpdateController
-    var initialRoute: SettingsInitialRoute?
     var onAccountsChanged: @MainActor () -> Void = {}
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onAlertAuthorizationRequest: @MainActor () async -> Bool = { false }
@@ -148,6 +159,7 @@ struct SettingsView: View {
     @State private var addAccountRefreshState = AddAccountRefreshState()
     @State private var newGroupName = ""
     @State private var groupNameDrafts: [String: String] = [:]
+    @State private var groupValidationState = SettingsGroupValidationState()
     @State private var selectedDestination: SettingsDestination?
     @FocusState private var focusedGroupID: String?
 
@@ -161,7 +173,6 @@ struct SettingsView: View {
     ) {
         self.configurationStore = configurationStore
         self.appUpdateController = appUpdateController
-        self.initialRoute = initialRoute
         self.onAccountsChanged = onAccountsChanged
         self.onAccountRefresh = onAccountRefresh
         self.onAlertAuthorizationRequest = onAlertAuthorizationRequest
@@ -486,6 +497,14 @@ struct SettingsView: View {
                     .accessibilityLabel("Add group")
                 }
                 .disabled(configurationStore.isPersistenceRecoveryRequired)
+            }
+
+            if let message = groupValidationState.message {
+                Section("Group Error") {
+                    Text(message)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("settings-group-validation-error")
+                }
             }
         }
         .navigationTitle(SettingsDestination.accountsAndGroups.title)
@@ -816,10 +835,12 @@ struct SettingsView: View {
 
     private func addGroup() {
         guard configurationStore.addGroup(named: newGroupName) != nil else {
+            groupValidationState.recordFailure(storeError: configurationStore.lastError)
             return
         }
 
         newGroupName = ""
+        groupValidationState.clear()
     }
 
     private func deleteGroups(at offsets: IndexSet) {
@@ -839,6 +860,7 @@ struct SettingsView: View {
             },
             set: { name in
                 groupNameDrafts[group.id] = name
+                groupValidationState.clear()
             }
         )
     }
@@ -863,6 +885,7 @@ struct SettingsView: View {
         let normalizedName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalizedName != group.name else {
             groupNameDrafts[groupID] = nil
+            groupValidationState.clear()
             return true
         }
 
@@ -870,9 +893,11 @@ struct SettingsView: View {
         updated.name = draftName
         if configurationStore.updateGroup(updated) {
             groupNameDrafts[groupID] = nil
+            groupValidationState.clear()
             return true
         }
 
+        groupValidationState.recordFailure(storeError: configurationStore.lastError)
         return false
     }
 }
