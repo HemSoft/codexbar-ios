@@ -421,6 +421,32 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
+    func testPendingSnapshotRequestDoesNotRetainReleasedStore() async throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var requestCount = 0
+        var store: WatchDashboardStore? = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _ in
+                requestCount += 1
+            },
+            requestCoalescingDelay: .milliseconds(5)
+        )
+        weak let releasedStore = store
+
+        store?.scheduleCurrentSnapshotRequest()
+        store = nil
+
+        XCTAssertNil(releasedStore)
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    @MainActor
     func testSnapshotRequestFailurePreservesLastGoodDataAndOnlyErrorsWithoutCache() async throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

@@ -144,14 +144,14 @@ final class WatchDashboardStore: NSObject, ObservableObject {
 
     func scheduleCurrentSnapshotRequest() {
         snapshotRequestTask?.cancel()
+        let delay = requestCoalescingDelay
         snapshotRequestTask = Task { @MainActor [weak self] in
-            guard let self else { return }
             do {
-                try await Task.sleep(for: self.requestCoalescingDelay)
+                try await Task.sleep(for: delay)
             } catch {
                 return
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, let self else { return }
             self.requestCurrentSnapshot()
         }
     }
