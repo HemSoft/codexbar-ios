@@ -83,6 +83,10 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Organized Settings into a compact, adaptive category list with focused
+  destinations for accounts, dashboard preferences, alerts, widgets, support,
+  and recovery while keeping urgent data-recovery needs prominent.
+  ([#200](https://github.com/HemSoft/codexbar-ios/issues/200))
 - Consolidated Settings account creation into one provider-neutral Add Account
   action at the top of the Accounts section, including for additional ChatGPT /
   Codex accounts. ([#198](https://github.com/HemSoft/codexbar-ios/issues/198))

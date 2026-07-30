@@ -299,6 +299,96 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    func testSettingsHierarchyUsesSixDistinctDestinationsWithAccountsFirst() {
+        XCTAssertEqual(
+            SettingsDestination.allCases,
+            [
+                .accountsAndGroups,
+                .dashboard,
+                .alerts,
+                .widgets,
+                .helpAndAbout,
+                .dataAndRecovery,
+            ]
+        )
+        XCTAssertEqual(SettingsInitialRoute.accounts.destination, .accountsAndGroups)
+        XCTAssertEqual(
+            Set(SettingsDestination.allCases.map(\.title)).count,
+            SettingsDestination.allCases.count
+        )
+        XCTAssertTrue(SettingsDestination.allCases.allSatisfy { !$0.systemImage.isEmpty })
+    }
+
+    func testSettingsHomeRoutesAttentionToRecoveryWithoutDuplicatingDestination() {
+        let routineLayout = SettingsHomeLayout(requiresAttention: false)
+        XCTAssertNil(routineLayout.attentionDestination)
+        XCTAssertEqual(routineLayout.routineDestinations, SettingsDestination.allCases)
+
+        let attentionLayout = SettingsHomeLayout(requiresAttention: true)
+        XCTAssertEqual(attentionLayout.attentionDestination, .dataAndRecovery)
+        XCTAssertFalse(attentionLayout.routineDestinations.contains(.dataAndRecovery))
+        XCTAssertEqual(
+            attentionLayout.routineDestinations.count + 1,
+            SettingsDestination.allCases.count
+        )
+    }
+
+    func testSettingsCategorySummariesExposeStateWithoutAccountIdentifiers() {
+        XCTAssertEqual(
+            SettingsCategorySummary.accounts(accountCount: 1, groupCount: 2),
+            "1 account · 2 groups"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.dashboard(
+                appearance: .dark,
+                ordering: .smart,
+                refreshInterval: .fifteenMinutes
+            ),
+            "Dark · Smart · 15 min"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.alerts(isEnabled: true, usageThreshold: 0.85),
+            "On · Usage at 85%"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.help(
+                installedVersion: "Version 1.2",
+                availableVersion: "1.3"
+            ),
+            "Version 1.3 available"
+        )
+    }
+
+    func testSettingsRecoveryStateKeepsDestructiveSafeguardsAndProminentRouting() {
+        let emptyState = SettingsRecoveryState(
+            hasError: false,
+            isPersistenceRecoveryRequired: false,
+            accountCount: 0,
+            hasIncompleteAccountReset: false
+        )
+        XCTAssertFalse(emptyState.requiresAttention)
+        XCTAssertTrue(emptyState.resetAccountsDisabled)
+        XCTAssertEqual(emptyState.summary, "No account data")
+
+        let recoveryState = SettingsRecoveryState(
+            hasError: true,
+            isPersistenceRecoveryRequired: true,
+            accountCount: 2,
+            hasIncompleteAccountReset: true
+        )
+        XCTAssertTrue(recoveryState.requiresAttention)
+        XCTAssertTrue(recoveryState.resetAccountsDisabled)
+        XCTAssertEqual(recoveryState.summary, "Action required")
+
+        let incompleteResetState = SettingsRecoveryState(
+            hasError: false,
+            isPersistenceRecoveryRequired: false,
+            accountCount: 0,
+            hasIncompleteAccountReset: true
+        )
+        XCTAssertFalse(incompleteResetState.resetAccountsDisabled)
+    }
+
     @MainActor
     func testRepeatedCodexSelectionCreatesExactlyOneAdditionalAccount() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"

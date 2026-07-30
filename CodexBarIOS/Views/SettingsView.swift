@@ -2,14 +2,138 @@ import StoreKit
 import SwiftUI
 import UIKit
 
-enum SettingsScrollTarget: Hashable {
+enum SettingsInitialRoute: Hashable {
     case accounts
+
+    var destination: SettingsDestination {
+        switch self {
+        case .accounts:
+            .accountsAndGroups
+        }
+    }
+}
+
+enum SettingsDestination: String, CaseIterable, Identifiable, Hashable {
+    case accountsAndGroups
+    case dashboard
+    case alerts
+    case widgets
+    case helpAndAbout
+    case dataAndRecovery
+
+    var id: Self {
+        self
+    }
+
+    var title: String {
+        switch self {
+        case .accountsAndGroups:
+            "Accounts & Groups"
+        case .dashboard:
+            "Dashboard"
+        case .alerts:
+            "Alerts"
+        case .widgets:
+            "Widgets"
+        case .helpAndAbout:
+            "Help & About"
+        case .dataAndRecovery:
+            "Data & Recovery"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .accountsAndGroups:
+            "person.2"
+        case .dashboard:
+            "rectangle.3.group"
+        case .alerts:
+            "bell"
+        case .widgets:
+            "square.grid.2x2"
+        case .helpAndAbout:
+            "questionmark.circle"
+        case .dataAndRecovery:
+            "externaldrive.badge.exclamationmark"
+        }
+    }
+}
+
+struct SettingsHomeLayout: Equatable {
+    let attentionDestination: SettingsDestination?
+    let routineDestinations: [SettingsDestination]
+
+    init(requiresAttention: Bool) {
+        attentionDestination = requiresAttention ? .dataAndRecovery : nil
+        routineDestinations = SettingsDestination.allCases.filter {
+            !requiresAttention || $0 != .dataAndRecovery
+        }
+    }
+}
+
+struct SettingsRecoveryState: Equatable {
+    let hasError: Bool
+    let isPersistenceRecoveryRequired: Bool
+    let accountCount: Int
+    let hasIncompleteAccountReset: Bool
+
+    var requiresAttention: Bool {
+        hasError || isPersistenceRecoveryRequired
+    }
+
+    var resetAccountsDisabled: Bool {
+        isPersistenceRecoveryRequired
+            || (accountCount == 0 && !hasIncompleteAccountReset)
+    }
+
+    var summary: String {
+        if isPersistenceRecoveryRequired {
+            return "Action required"
+        }
+        if hasError {
+            return "Review settings error"
+        }
+        return accountCount == 0 ? "No account data" : "Reset and recovery options"
+    }
+}
+
+enum SettingsCategorySummary {
+    static func accounts(accountCount: Int, groupCount: Int) -> String {
+        "\(count(accountCount, singular: "account")) · \(count(groupCount, singular: "group"))"
+    }
+
+    static func dashboard(
+        appearance: AppAppearance,
+        ordering: DashboardOrderingMode,
+        refreshInterval: AutoRefreshInterval
+    ) -> String {
+        "\(appearance.displayName) · \(ordering.displayName) · \(refreshInterval.displayName)"
+    }
+
+    static func alerts(isEnabled: Bool, usageThreshold: Double) -> String {
+        guard isEnabled else {
+            return "Off"
+        }
+        return "On · Usage at \(Int((usageThreshold * 100).rounded()))%"
+    }
+
+    static func help(installedVersion: String, availableVersion: String?) -> String {
+        if let availableVersion {
+            return "Version \(availableVersion) available"
+        }
+        return installedVersion
+    }
+
+    private static func count(_ value: Int, singular: String) -> String {
+        "\(value) \(singular)\(value == 1 ? "" : "s")"
+    }
 }
 
 struct SettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var appUpdateController: AppUpdateController
-    var initialScrollTarget: SettingsScrollTarget? = nil
+    var initialRoute: SettingsInitialRoute?
     var onAccountsChanged: @MainActor () -> Void = {}
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onAlertAuthorizationRequest: @MainActor () async -> Bool = { false }
@@ -24,11 +148,34 @@ struct SettingsView: View {
     @State private var addAccountRefreshState = AddAccountRefreshState()
     @State private var newGroupName = ""
     @State private var groupNameDrafts: [String: String] = [:]
+    @State private var selectedDestination: SettingsDestination?
     @FocusState private var focusedGroupID: String?
 
+    init(
+        configurationStore: ProviderConfigurationStore,
+        appUpdateController: AppUpdateController,
+        initialRoute: SettingsInitialRoute? = nil,
+        onAccountsChanged: @escaping @MainActor () -> Void = {},
+        onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
+        onAlertAuthorizationRequest: @escaping @MainActor () async -> Bool = { false }
+    ) {
+        self.configurationStore = configurationStore
+        self.appUpdateController = appUpdateController
+        self.initialRoute = initialRoute
+        self.onAccountsChanged = onAccountsChanged
+        self.onAccountRefresh = onAccountRefresh
+        self.onAlertAuthorizationRequest = onAlertAuthorizationRequest
+        _selectedDestination = State(initialValue: initialRoute?.destination)
+    }
+
     var body: some View {
-        NavigationStack {
-            settingsList
+        NavigationSplitView {
+            settingsHome
+        } detail: {
+            selectedSettingsDestination
+        }
+        .toolbar {
+            doneToolbar
         }
         .sheet(
             item: $addAccountFlowRequest,
@@ -58,6 +205,67 @@ struct SettingsView: View {
                 onAccountRefresh: onAccountRefresh
             )
         }
+        .confirmationDialog(
+            "Reset all accounts?",
+            isPresented: $isConfirmingReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset Accounts", role: .destructive) {
+                let accountIDsBeforeReset = Set(configurationStore.configurations.map(\.id))
+                let resetCompleted = configurationStore.resetAccounts()
+                let accountIDsAfterReset = Set(configurationStore.configurations.map(\.id))
+                if resetCompleted || accountIDsBeforeReset != accountIDsAfterReset {
+                    onAccountsChanged()
+                }
+            }
+        } message: {
+            Text("This removes account entries and saved provider credentials from this device.")
+        }
+        .confirmationDialog(
+            "Replace unreadable account data?",
+            isPresented: $isConfirmingConfigurationReplacement,
+            titleVisibility: .visible
+        ) {
+            Button("Replace Account Data", role: .destructive) {
+                if OpenCodeZenBootstrapImporter.replaceCorruptedConfigurationsAndImportIfNeeded(
+                    configurationStore: configurationStore
+                ) {
+                    onAccountsChanged()
+                }
+            }
+        } message: {
+            Text(
+                "This replaces the damaged account list with an empty list so you can add accounts again. Saved Keychain credentials are not deleted."
+            )
+        }
+        .confirmationDialog(
+            "Replace unreadable group data?",
+            isPresented: $isConfirmingGroupReplacement,
+            titleVisibility: .visible
+        ) {
+            Button("Replace Group Data", role: .destructive) {
+                if OpenCodeZenBootstrapImporter.replaceCorruptedGroupsAndImportIfNeeded(
+                    configurationStore: configurationStore
+                ) {
+                    onAccountsChanged()
+                }
+            }
+        } message: {
+            Text(
+                "This replaces the damaged group list with an empty list and deliberately ungroups every saved account. Saved accounts and Keychain credentials are not deleted."
+            )
+        }
+        .interactiveDismissDisabled(!groupNameDrafts.isEmpty)
+        .onChange(of: focusedGroupID) { oldValue, newValue in
+            if let oldValue, oldValue != newValue {
+                commitGroupName(for: oldValue)
+            }
+        }
+        .onChange(of: selectedDestination) { oldValue, newValue in
+            if oldValue == .accountsAndGroups, newValue != oldValue {
+                _ = commitFocusedGroupName()
+            }
+        }
     }
 
     @MainActor
@@ -68,364 +276,430 @@ struct SettingsView: View {
         _ = await onAccountRefresh(configuration)
     }
 
-    private var settingsList: some View {
-        ScrollViewReader { proxy in
-            List {
-                Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: "gauge.with.dots.needle.50percent")
-                            .font(.title2)
-                            .foregroundStyle(.tint)
-                            .frame(width: 36, height: 36)
-                            .accessibilityHidden(true)
+    private var settingsHome: some View {
+        let layout = SettingsHomeLayout(requiresAttention: recoveryState.requiresAttention)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("CodexBar")
-                                .font(.headline)
-                            Text(appUpdateController.installedVersion.displayText)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(
-                        "CodexBar, \(appUpdateController.installedVersion.displayText)"
-                    )
-
-                    if let release = appUpdateController.availableRelease {
-                        LabeledContent {
-                            Text("Version \(release.version)")
-                                .foregroundStyle(.secondary)
-                        } label: {
-                            Label("Update Available", systemImage: "arrow.down.app")
-                        }
-
-                        Link(destination: release.productURL) {
-                            Label("Update", systemImage: "arrow.up.forward.app")
-                        }
-                    }
-
-                    Button {
-                        Task {
-                            await appUpdateController.checkForUpdates(force: true)
-                        }
-                    } label: {
-                        HStack {
-                            Label("Check for Updates", systemImage: "arrow.clockwise")
-                            Spacer()
-                            if appUpdateController.isChecking {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                        }
-                    }
-                    .disabled(appUpdateController.isChecking)
-                }
-
-                Section {
-                    Picker("Color Scheme", selection: appearanceBinding) {
-                        ForEach(AppAppearance.allCases) { appearance in
-                            Text(appearance.displayName).tag(appearance)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Appearance")
-                }
-
-                Section {
-                    Picker("Refresh", selection: autoRefreshIntervalBinding) {
-                        ForEach(AutoRefreshInterval.allCases) { interval in
-                            Text(interval.displayName).tag(interval)
-                        }
-                    }
-                } header: {
-                    Text("Auto Refresh")
-                }
-
-                Section {
-                    Picker("Ordering", selection: dashboardOrderingModeBinding) {
-                        ForEach(DashboardOrderingMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Dashboard")
-                }
-
-                Section {
-                    Toggle("Usage Alerts", isOn: usageAlertsEnabledBinding)
-
-                    Stepper(value: usageAlertUsagePercentBinding, in: 50...100, step: 5) {
-                        Text("Usage at \(Int((configurationStore.usageAlertSettings.usageThreshold * 100).rounded()))%")
-                    }
-                    .disabled(!configurationStore.usageAlertSettings.isEnabled)
-
-                    Stepper(value: usageAlertBalanceBinding, in: 1...100, step: 1) {
-                        Text("Balance below \(formattedBalanceThreshold)")
-                    }
-                    .disabled(!configurationStore.usageAlertSettings.isEnabled)
-
-                    Toggle("Warning and Critical Alerts", isOn: usageAlertSeverityBinding)
-                        .disabled(!configurationStore.usageAlertSettings.isEnabled)
-
-                    if let alertPermissionMessage {
-                        Text(alertPermissionMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Alerts")
-                }
-
-                Section {
-                    Picker("Update Preference", selection: widgetRefreshIntervalBinding) {
-                        ForEach(WidgetRefreshInterval.allCases) { interval in
-                            Text(interval.displayName).tag(interval)
-                        }
-                    }
-
-                    NavigationLink {
-                        WidgetBuilderView()
-                    } label: {
-                        Label("Widget Builder", systemImage: "square.grid.2x2")
-                    }
-
-                    Text("Widgets use the latest app snapshot and ask iOS to reload on this cadence. iOS may adjust timing to preserve battery.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } header: {
-                    Text("Widgets")
-                }
-
-                Section {
-                    if configurationStore.groups.isEmpty {
-                        Text("No groups")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    ForEach(configurationStore.groups) { group in
-                        TextField(
-                            "Group name",
-                            text: groupNameBinding(for: group)
-                        )
-                        .textInputAutocapitalization(.words)
-                        .focused($focusedGroupID, equals: group.id)
-                        .disabled(configurationStore.isPersistenceRecoveryRequired)
-                        .deleteDisabled(configurationStore.isPersistenceRecoveryRequired)
-                        .onSubmit {
-                            commitGroupName(for: group.id)
-                        }
-                    }
-                    .onDelete(perform: deleteGroups)
-
-                    HStack {
-                        TextField("New group", text: $newGroupName)
-                            .textInputAutocapitalization(.words)
-                            .onSubmit {
-                                addGroup()
-                            }
-
-                        Button {
-                            addGroup()
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                        }
-                        .disabled(newGroupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .accessibilityLabel("Add group")
-                    }
-                    .disabled(configurationStore.isPersistenceRecoveryRequired)
-                } header: {
-                    Text("Groups")
-                }
-
-                Section {
-                    ForEach(accountsSectionRows) { row in
-                        switch row {
-                        case .addAccount:
-                            Button {
-                                addAccountFlowRequest = AddAccountFlowRequest()
-                            } label: {
-                                Label("Add Account", systemImage: "plus.circle")
-                            }
-                            .disabled(configurationStore.isAccountCreationBlocked)
-                            .deleteDisabled(true)
-
-                        case .emptyState:
-                            Text("No accounts")
-                                .foregroundStyle(.secondary)
-                                .deleteDisabled(true)
-
-                        case let .account(accountID):
-                            if let configuration = configurationStore.configuration(
-                                accountID: accountID
-                            ) {
-                                NavigationLink {
-                                    ProviderSettingsView(
-                                        configurationStore: configurationStore,
-                                        accountID: configuration.id,
-                                        onCredentialsChanged: onAccountsChanged,
-                                        onAccountRefresh: onAccountRefresh
-                                    )
-                                } label: {
-                                    ProviderSettingsRow(
-                                        configuration: configuration,
-                                        isConfigured: configurationStore.isConfigured(configuration),
-                                        groupName: configurationStore.group(
-                                            for: configuration.groupID
-                                        )?.name
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    .onDelete(perform: deleteAccountRows)
-                } header: {
-                    Text("Accounts")
-                }
-                .id(SettingsScrollTarget.accounts)
-
-                Section {
-                    NavigationLink {
-                        FeedbackSupportView(
-                            context: .current(
-                                installedVersion: appUpdateController.installedVersion
-                            )
-                        )
-                    } label: {
-                        Label(
-                            "Feedback & Support",
-                            systemImage: "bubble.left.and.text.bubble.right"
-                        )
-                    }
-
-                    #if DEBUG
-                    if AppStoreScreenshotConfiguration.current == nil {
-                        Button {
-                            requestReview()
-                        } label: {
-                            Label("Test Rating Prompt", systemImage: "star.bubble")
-                        }
-                    }
-                    #endif
-                } header: {
-                    Text("Support")
-                }
-
-                Section {
-                    Button("Reset Accounts", role: .destructive) {
-                        isConfirmingReset = true
-                    }
-                    .disabled(
-                        configurationStore.isPersistenceRecoveryRequired
-                            || (
-                                configurationStore.configurations.isEmpty
-                                    && !configurationStore.hasIncompleteAccountReset
-                            )
-                    )
-                }
-
-                if let lastError = configurationStore.lastError {
-                    Section {
-                        Text(lastError)
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                if configurationStore.isPersistenceRecoveryRequired {
-                    Section {
-                        if configurationStore.isConfigurationRecoveryRequired {
-                            Button("Replace Damaged Account List", role: .destructive) {
-                                isConfirmingConfigurationReplacement = true
-                            }
-                        }
-
-                        if configurationStore.isGroupRecoveryRequired {
-                            Button("Replace Damaged Group List", role: .destructive) {
-                                isConfirmingGroupReplacement = true
-                            }
-                        }
-                    } header: {
-                        Text("Data Recovery")
-                    }
+        return List(selection: $selectedDestination) {
+            if let attentionDestination = layout.attentionDestination {
+                Section("Needs Attention") {
+                    settingsCategoryLink(attentionDestination)
                 }
             }
-            .navigationTitle("Settings")
-            .confirmationDialog(
-                "Reset all accounts?",
-                isPresented: $isConfirmingReset,
-                titleVisibility: .visible
-            ) {
-                Button("Reset Accounts", role: .destructive) {
-                    let accountIDsBeforeReset = Set(configurationStore.configurations.map(\.id))
-                    let resetCompleted = configurationStore.resetAccounts()
-                    let accountIDsAfterReset = Set(configurationStore.configurations.map(\.id))
-                    if resetCompleted || accountIDsBeforeReset != accountIDsAfterReset {
-                        onAccountsChanged()
-                    }
-                }
-            } message: {
-                Text("This removes account entries and saved provider credentials from this device.")
-            }
-            .confirmationDialog(
-                "Replace unreadable account data?",
-                isPresented: $isConfirmingConfigurationReplacement,
-                titleVisibility: .visible
-            ) {
-                Button("Replace Account Data", role: .destructive) {
-                    if OpenCodeZenBootstrapImporter.replaceCorruptedConfigurationsAndImportIfNeeded(
-                        configurationStore: configurationStore
-                    ) {
-                        onAccountsChanged()
-                    }
-                }
-            } message: {
-                Text(
-                    "This replaces the damaged account list with an empty list so you can add accounts again. Saved Keychain credentials are not deleted."
-                )
-            }
-            .confirmationDialog(
-                "Replace unreadable group data?",
-                isPresented: $isConfirmingGroupReplacement,
-                titleVisibility: .visible
-            ) {
-                Button("Replace Group Data", role: .destructive) {
-                    if OpenCodeZenBootstrapImporter.replaceCorruptedGroupsAndImportIfNeeded(
-                        configurationStore: configurationStore
-                    ) {
-                        onAccountsChanged()
-                    }
-                }
-            } message: {
-                Text(
-                    "This replaces the damaged group list with an empty list and deliberately ungroups every saved account. Saved accounts and Keychain credentials are not deleted."
-                )
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        if commitFocusedGroupName() {
-                            dismiss()
-                        }
-                    }
-                }
-            }
-            .interactiveDismissDisabled(!groupNameDrafts.isEmpty)
-            .onChange(of: focusedGroupID) { oldValue, newValue in
-                if let oldValue, oldValue != newValue {
-                    commitGroupName(for: oldValue)
-                }
-            }
-            .task(id: initialScrollTarget) {
-                guard let initialScrollTarget else {
-                    return
-                }
 
-                await Task.yield()
-                proxy.scrollTo(initialScrollTarget, anchor: .top)
+            Section {
+                ForEach(layout.routineDestinations) { destination in
+                    settingsCategoryLink(destination)
+                }
             }
         }
+        .navigationTitle("Settings")
+    }
+
+    @ViewBuilder
+    private var selectedSettingsDestination: some View {
+        if let selectedDestination {
+            settingsDestinationView(selectedDestination)
+        } else {
+            ContentUnavailableView(
+                "Choose a Settings Category",
+                systemImage: "gearshape",
+                description: Text("Select a category to view and change its settings.")
+            )
+            .navigationTitle("Settings")
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var doneToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button("Done") {
+                if commitFocusedGroupName() {
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private func settingsCategoryLink(_ destination: SettingsDestination) -> some View {
+        NavigationLink(value: destination) {
+            HStack(spacing: 12) {
+                Image(systemName: destination.systemImage)
+                    .foregroundStyle(categoryTint(for: destination))
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(destination.title)
+                    Text(summary(for: destination))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(destination.title)
+            .accessibilityValue(summary(for: destination))
+            .accessibilityHint("Opens \(destination.title) settings.")
+        }
+        .tag(destination)
+    }
+
+    private func categoryTint(for destination: SettingsDestination) -> Color {
+        if destination == .dataAndRecovery, recoveryState.requiresAttention {
+            return .red
+        }
+        return .accentColor
+    }
+
+    private func summary(for destination: SettingsDestination) -> String {
+        switch destination {
+        case .accountsAndGroups:
+            SettingsCategorySummary.accounts(
+                accountCount: configurationStore.configurations.count,
+                groupCount: configurationStore.groups.count
+            )
+        case .dashboard:
+            SettingsCategorySummary.dashboard(
+                appearance: configurationStore.appAppearance,
+                ordering: configurationStore.dashboardOrderingMode,
+                refreshInterval: configurationStore.autoRefreshInterval
+            )
+        case .alerts:
+            SettingsCategorySummary.alerts(
+                isEnabled: configurationStore.usageAlertSettings.isEnabled,
+                usageThreshold: configurationStore.usageAlertSettings.usageThreshold
+            )
+        case .widgets:
+            configurationStore.widgetRefreshInterval.displayName
+        case .helpAndAbout:
+            SettingsCategorySummary.help(
+                installedVersion: appUpdateController.installedVersion.displayText,
+                availableVersion: appUpdateController.availableRelease?.version
+            )
+        case .dataAndRecovery:
+            recoveryState.summary
+        }
+    }
+
+    @ViewBuilder
+    private func settingsDestinationView(_ destination: SettingsDestination) -> some View {
+        switch destination {
+        case .accountsAndGroups:
+            accountsAndGroupsSettings
+        case .dashboard:
+            dashboardSettings
+        case .alerts:
+            alertSettings
+        case .widgets:
+            widgetSettings
+        case .helpAndAbout:
+            helpAndAboutSettings
+        case .dataAndRecovery:
+            dataAndRecoverySettings
+        }
+    }
+
+    private var accountsAndGroupsSettings: some View {
+        List {
+            Section("Accounts") {
+                ForEach(accountsSectionRows) { row in
+                    switch row {
+                    case .addAccount:
+                        Button {
+                            addAccountFlowRequest = AddAccountFlowRequest()
+                        } label: {
+                            Label("Add Account", systemImage: "plus.circle")
+                        }
+                        .disabled(configurationStore.isAccountCreationBlocked)
+                        .deleteDisabled(true)
+
+                    case .emptyState:
+                        Text("No accounts")
+                            .foregroundStyle(.secondary)
+                            .deleteDisabled(true)
+
+                    case let .account(accountID):
+                        if let configuration = configurationStore.configuration(
+                            accountID: accountID
+                        ) {
+                            NavigationLink {
+                                ProviderSettingsView(
+                                    configurationStore: configurationStore,
+                                    accountID: configuration.id,
+                                    onCredentialsChanged: onAccountsChanged,
+                                    onAccountRefresh: onAccountRefresh
+                                )
+                            } label: {
+                                ProviderSettingsRow(
+                                    configuration: configuration,
+                                    isConfigured: configurationStore.isConfigured(configuration),
+                                    groupName: configurationStore.group(
+                                        for: configuration.groupID
+                                    )?.name
+                                )
+                            }
+                        }
+                    }
+                }
+                .onDelete(perform: deleteAccountRows)
+            }
+
+            Section("Groups") {
+                if configurationStore.groups.isEmpty {
+                    Text("No groups")
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(configurationStore.groups) { group in
+                    TextField(
+                        "Group name",
+                        text: groupNameBinding(for: group)
+                    )
+                    .textInputAutocapitalization(.words)
+                    .focused($focusedGroupID, equals: group.id)
+                    .disabled(configurationStore.isPersistenceRecoveryRequired)
+                    .deleteDisabled(configurationStore.isPersistenceRecoveryRequired)
+                    .onSubmit {
+                        commitGroupName(for: group.id)
+                    }
+                }
+                .onDelete(perform: deleteGroups)
+
+                HStack {
+                    TextField("New group", text: $newGroupName)
+                        .textInputAutocapitalization(.words)
+                        .onSubmit {
+                            addGroup()
+                        }
+
+                    Button {
+                        addGroup()
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                    }
+                    .disabled(newGroupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel("Add group")
+                }
+                .disabled(configurationStore.isPersistenceRecoveryRequired)
+            }
+        }
+        .navigationTitle(SettingsDestination.accountsAndGroups.title)
+    }
+
+    private var dashboardSettings: some View {
+        List {
+            Section("Appearance") {
+                Picker("Color Scheme", selection: appearanceBinding) {
+                    ForEach(AppAppearance.allCases) { appearance in
+                        Text(appearance.displayName).tag(appearance)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Section("Auto Refresh") {
+                Picker("Refresh", selection: autoRefreshIntervalBinding) {
+                    ForEach(AutoRefreshInterval.allCases) { interval in
+                        Text(interval.displayName).tag(interval)
+                    }
+                }
+            }
+
+            Section("Dashboard Ordering") {
+                Picker("Ordering", selection: dashboardOrderingModeBinding) {
+                    ForEach(DashboardOrderingMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+        }
+        .navigationTitle(SettingsDestination.dashboard.title)
+    }
+
+    private var alertSettings: some View {
+        List {
+            Section("Usage Alerts") {
+                Toggle("Usage Alerts", isOn: usageAlertsEnabledBinding)
+
+                Stepper(value: usageAlertUsagePercentBinding, in: 50...100, step: 5) {
+                    Text("Usage at \(Int((configurationStore.usageAlertSettings.usageThreshold * 100).rounded()))%")
+                }
+                .disabled(!configurationStore.usageAlertSettings.isEnabled)
+
+                Stepper(value: usageAlertBalanceBinding, in: 1...100, step: 1) {
+                    Text("Balance below \(formattedBalanceThreshold)")
+                }
+                .disabled(!configurationStore.usageAlertSettings.isEnabled)
+
+                Toggle("Warning and Critical Alerts", isOn: usageAlertSeverityBinding)
+                    .disabled(!configurationStore.usageAlertSettings.isEnabled)
+
+                if let alertPermissionMessage {
+                    Text(alertPermissionMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle(SettingsDestination.alerts.title)
+    }
+
+    private var widgetSettings: some View {
+        List {
+            Section("Widget Updates") {
+                Picker("Update Preference", selection: widgetRefreshIntervalBinding) {
+                    ForEach(WidgetRefreshInterval.allCases) { interval in
+                        Text(interval.displayName).tag(interval)
+                    }
+                }
+
+                NavigationLink {
+                    WidgetBuilderView()
+                } label: {
+                    Label("Widget Builder", systemImage: "square.grid.2x2")
+                }
+
+                Text("Widgets use the latest app snapshot and ask iOS to reload on this cadence. iOS may adjust timing to preserve battery.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle(SettingsDestination.widgets.title)
+    }
+
+    private var helpAndAboutSettings: some View {
+        List {
+            Section {
+                HStack(spacing: 12) {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                        .font(.title2)
+                        .foregroundStyle(.tint)
+                        .frame(width: 36, height: 36)
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("CodexBar")
+                            .font(.headline)
+                        Text(appUpdateController.installedVersion.displayText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(
+                    "CodexBar, \(appUpdateController.installedVersion.displayText)"
+                )
+
+                if let release = appUpdateController.availableRelease {
+                    LabeledContent {
+                        Text("Version \(release.version)")
+                            .foregroundStyle(.secondary)
+                    } label: {
+                        Label("Update Available", systemImage: "arrow.down.app")
+                    }
+
+                    Link(destination: release.productURL) {
+                        Label("Update", systemImage: "arrow.up.forward.app")
+                    }
+                }
+
+                Button {
+                    Task {
+                        await appUpdateController.checkForUpdates(force: true)
+                    }
+                } label: {
+                    HStack {
+                        Label("Check for Updates", systemImage: "arrow.clockwise")
+                        Spacer()
+                        if appUpdateController.isChecking {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                }
+                .disabled(appUpdateController.isChecking)
+            } header: {
+                Text("About")
+            }
+
+            Section("Support") {
+                NavigationLink {
+                    FeedbackSupportView(
+                        context: .current(
+                            installedVersion: appUpdateController.installedVersion
+                        )
+                    )
+                } label: {
+                    Label(
+                        "Feedback & Support",
+                        systemImage: "bubble.left.and.text.bubble.right"
+                    )
+                }
+
+                #if DEBUG
+                if AppStoreScreenshotConfiguration.current == nil {
+                    Button {
+                        requestReview()
+                    } label: {
+                        Label("Test Rating Prompt", systemImage: "star.bubble")
+                    }
+                }
+                #endif
+            }
+        }
+        .navigationTitle(SettingsDestination.helpAndAbout.title)
+    }
+
+    private var dataAndRecoverySettings: some View {
+        List {
+            if let lastError = configurationStore.lastError {
+                Section("Settings Error") {
+                    Text(lastError)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            if configurationStore.isPersistenceRecoveryRequired {
+                Section {
+                    if configurationStore.isConfigurationRecoveryRequired {
+                        Button("Replace Damaged Account List", role: .destructive) {
+                            isConfirmingConfigurationReplacement = true
+                        }
+                    }
+
+                    if configurationStore.isGroupRecoveryRequired {
+                        Button("Replace Damaged Group List", role: .destructive) {
+                            isConfirmingGroupReplacement = true
+                        }
+                    }
+                } header: {
+                    Text("Data Recovery")
+                } footer: {
+                    Text("Replacement preserves Keychain credentials. Replacing damaged groups ungroups saved accounts.")
+                }
+            }
+
+            Section {
+                Button("Reset Accounts", role: .destructive) {
+                    isConfirmingReset = true
+                }
+                .disabled(recoveryState.resetAccountsDisabled)
+            } header: {
+                Text("Reset")
+            } footer: {
+                Text("Reset removes account entries and saved provider credentials from this device after confirmation.")
+            }
+        }
+        .navigationTitle(SettingsDestination.dataAndRecovery.title)
+    }
+
+    private var recoveryState: SettingsRecoveryState {
+        SettingsRecoveryState(
+            hasError: configurationStore.lastError != nil,
+            isPersistenceRecoveryRequired: configurationStore.isPersistenceRecoveryRequired,
+            accountCount: configurationStore.configurations.count,
+            hasIncompleteAccountReset: configurationStore.hasIncompleteAccountReset
+        )
     }
 
     private var appearanceBinding: Binding<AppAppearance> {

@@ -134,7 +134,7 @@ struct CodexBarIOSApp: App {
             SettingsView(
                 configurationStore: configurationStore,
                 appUpdateController: appUpdateController,
-                initialScrollTarget: .accounts
+                initialRoute: .accounts
             )
         case .providerCopilot:
             NavigationStack {
