@@ -83,6 +83,9 @@ enum WidgetSnapshotPublisher {
                         )
                     },
                     usageMessages: result.usageMessages,
+                    barsFetchedAt: result.barsFetchedAt,
+                    creditsFetchedAt: result.creditsFetchedAt,
+                    monetaryMetricsFetchedAt: result.monetaryMetrics.isEmpty ? nil : result.fetchedAt,
                     fetchedAt: result.fetchedAt,
                     severity: CodexBarWidgetSeverity(result.highestSeverity(at: now))
                 )
