@@ -375,14 +375,12 @@ struct WatchComplicationResolver {
                 }
             }
 
-            if resetsAt <= staleDate {
-                for minutesBeforeReset in stride(from: 60, through: 0, by: -1) {
-                    let countdownDate = resetsAt.addingTimeInterval(
-                        -TimeInterval(minutesBeforeReset * 60)
-                    )
-                    if countdownDate > now {
-                        dates.append(countdownDate)
-                    }
+            for minutesBeforeReset in stride(from: 60, through: 0, by: -1) {
+                let countdownDate = resetsAt.addingTimeInterval(
+                    -TimeInterval(minutesBeforeReset * 60)
+                )
+                if countdownDate > now, countdownDate < countdownEnd {
+                    dates.append(countdownDate)
                 }
             }
         }
