@@ -2,8 +2,7 @@
 
 set -euo pipefail
 
-: "${DEVELOPER_DIR:=/Applications/Xcode.app/Contents/Developer}"
-export DEVELOPER_DIR
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 
 xcodebuild -quiet \
   -project CodexBarIOS.xcodeproj \
