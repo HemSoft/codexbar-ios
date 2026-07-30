@@ -10,6 +10,8 @@ struct CodexBarWidgetTile: Identifiable {
     let bar: CodexBarWidgetUsageBarSnapshot?
     let creditsRemaining: Double?
     let monetaryMetric: CodexBarWidgetMonetaryMetricSnapshot?
+    let barFetchedAt: Date?
+    let monetaryValueFetchedAt: Date?
     let fetchedAt: Date?
     let severity: CodexBarWidgetSeverity
 
@@ -48,6 +50,8 @@ struct CodexBarWidgetTile: Identifiable {
             bar: nil,
             creditsRemaining: nil,
             monetaryMetric: nil,
+            barFetchedAt: nil,
+            monetaryValueFetchedAt: nil,
             fetchedAt: nil,
             severity: .warning
         )
@@ -94,11 +98,24 @@ struct CodexBarWidgetRenderedTile: Identifiable {
     var id: String {
         "\(tile.id).\(displayMode.rawValue)"
     }
+
+    var fetchedAt: Date? {
+        switch displayMode {
+        case .automatic:
+            tile.fetchedAt
+        case .compactPercent, .fullBar, .urgentStatus:
+            tile.bar == nil
+                ? (tile.monetaryValueFetchedAt ?? tile.fetchedAt)
+                : (tile.barFetchedAt ?? tile.fetchedAt)
+        case .balanceOnly:
+            tile.monetaryValueFetchedAt
+        }
+    }
 }
 
 extension Collection where Element == CodexBarWidgetRenderedTile {
     func freshnessDate(fallback: Date) -> Date {
-        compactMap(\.tile.fetchedAt).min() ?? fallback
+        compactMap(\.fetchedAt).min() ?? fallback
     }
 }
 
@@ -188,17 +205,26 @@ extension CodexBarWidgetProviderSnapshot {
             bar: representativeBar,
             creditsRemaining: creditsRemaining,
             monetaryMetric: summaryMetric,
+            barFetchedAt: representativeBar == nil ? nil : (barsFetchedAt ?? fetchedAt),
+            monetaryValueFetchedAt: summaryMonetaryFetchedAt,
             fetchedAt: summaryFetchedAt,
             severity: severity
         )
     }
 
-    private var summaryFetchedAt: Date {
+    private var summaryMonetaryFetchedAt: Date? {
         if summaryMonetaryMetric != nil {
             return monetaryMetricsFetchedAt ?? fetchedAt
         }
         if creditsRemaining != nil {
             return creditsFetchedAt ?? fetchedAt
+        }
+        return nil
+    }
+
+    private var summaryFetchedAt: Date {
+        if let summaryMonetaryFetchedAt {
+            return summaryMonetaryFetchedAt
         }
         if representativeBar != nil {
             return barsFetchedAt ?? fetchedAt
@@ -227,6 +253,8 @@ extension CodexBarWidgetProviderSnapshot {
             bar: bar,
             creditsRemaining: nil,
             monetaryMetric: nil,
+            barFetchedAt: barsFetchedAt ?? fetchedAt,
+            monetaryValueFetchedAt: nil,
             fetchedAt: barsFetchedAt ?? fetchedAt,
             severity: bar.effectiveSeverity
         )
@@ -243,6 +271,8 @@ extension CodexBarWidgetProviderSnapshot {
             bar: nil,
             creditsRemaining: nil,
             monetaryMetric: metric,
+            barFetchedAt: nil,
+            monetaryValueFetchedAt: monetaryMetricsFetchedAt ?? fetchedAt,
             fetchedAt: monetaryMetricsFetchedAt ?? fetchedAt,
             severity: severity
         )

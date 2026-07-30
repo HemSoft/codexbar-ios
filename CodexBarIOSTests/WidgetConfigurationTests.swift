@@ -187,6 +187,8 @@ final class WidgetConfigurationTests: XCTestCase {
             bar: criticalProjection,
             creditsRemaining: nil,
             monetaryMetric: nil,
+            barFetchedAt: Date(timeIntervalSince1970: 1_000_000),
+            monetaryValueFetchedAt: nil,
             fetchedAt: Date(timeIntervalSince1970: 1_000_000),
             severity: .critical
         )
@@ -283,6 +285,18 @@ final class WidgetConfigurationTests: XCTestCase {
             fetchedAt: publicationDate,
             severity: .normal
         )
+        let mixedProvider = CodexBarWidgetProviderSnapshot(
+            accountID: "opencode.work",
+            providerID: "openCodeZen",
+            title: "OpenCode",
+            subtitle: "Work",
+            bars: [bar],
+            creditsRemaining: 10,
+            barsFetchedAt: barsDate,
+            creditsFetchedAt: creditsDate,
+            fetchedAt: publicationDate,
+            severity: .normal
+        )
         let renderedTiles = [
             CodexBarWidgetRenderedTile(
                 tile: usageProvider.barTile(bar),
@@ -303,6 +317,33 @@ final class WidgetConfigurationTests: XCTestCase {
         XCTAssertEqual(renderedTiles[1].tile.fetchedAt, monetaryDate)
         XCTAssertEqual(renderedTiles[2].tile.fetchedAt, creditsDate)
         XCTAssertEqual(renderedTiles.freshnessDate(fallback: publicationDate), barsDate)
+        XCTAssertEqual(
+            CodexBarWidgetRenderedTile(
+                tile: mixedProvider.summaryTile,
+                displayMode: .automatic
+            ).fetchedAt,
+            creditsDate
+        )
+        XCTAssertEqual(
+            CodexBarWidgetRenderedTile(
+                tile: mixedProvider.summaryTile,
+                displayMode: .balanceOnly
+            ).fetchedAt,
+            creditsDate
+        )
+        for mode in [
+            CodexBarWidgetTileDisplayMode.compactPercent,
+            .fullBar,
+            .urgentStatus,
+        ] {
+            XCTAssertEqual(
+                CodexBarWidgetRenderedTile(
+                    tile: mixedProvider.summaryTile,
+                    displayMode: mode
+                ).fetchedAt,
+                barsDate
+            )
+        }
         XCTAssertEqual(
             [CodexBarWidgetRenderedTile]().freshnessDate(fallback: publicationDate),
             publicationDate
