@@ -1,6 +1,7 @@
 import Foundation
 
 public enum UsageAlertKind: String, Equatable, Sendable {
+    // Retained so callers can still render details created by older app code.
     case usage
     case balance
     case severity
@@ -71,7 +72,8 @@ public enum UsageAlertEvaluator {
         knownAccountIDs: [String]
     ) -> String? {
         knownAccountIDs.first { accountID in
-            alertID == "balance.\(accountID)"
+            alertID == balanceAlertID(for: accountID)
+                || severityAlertIDs(for: accountID).contains(alertID)
                 || alertID == "severity.\(accountID)"
                 || alertID.hasPrefix("usage.\(accountID).")
         }
@@ -87,105 +89,43 @@ public enum UsageAlertEvaluator {
             return UsageAlertEvaluation(notifications: [], activeAlertIDs: [], activeAlerts: [])
         }
 
+        let thresholds = settings.severityThresholds
         var nextActiveAlertIDs = Set<String>()
         var activeAlerts: [UsageAlertDetail] = []
         var notifications: [UsageAlertNotification] = []
 
         for result in results {
-            if result.preserveCachedBarsOnFailure {
-                let usagePrefix = "usage.\(result.accountID)."
-                let severityAlertID = "severity.\(result.accountID)"
+            let accountSeverityIDs = severityAlertIDs(for: result.accountID)
+            if result.preserveCachedBarsOnFailure || !result.hasFreshBars {
                 nextActiveAlertIDs.formUnion(
-                    activeAlertIDs.filter {
-                        $0 == severityAlertID || $0.hasPrefix(usagePrefix)
-                    }
+                    activeAlertIDs.intersection(accountSeverityIDs)
                 )
             }
 
-            let balanceAlertID = "balance.\(result.accountID)"
-            if result.preserveCachedCreditsOnFailure,
+            let balanceAlertID = balanceAlertID(for: result.accountID)
+            if (result.preserveCachedCreditsOnFailure || !result.hasFreshCredits),
                activeAlertIDs.contains(balanceAlertID)
             {
                 nextActiveAlertIDs.insert(balanceAlertID)
-            }
-
-            if !result.hasFreshBars {
-                let staleUsageAlertIDs = result.bars
-                    .filter { $0.fractionUsed >= settings.usageThreshold }
-                    .map { alertID(for: result, bar: $0) }
-                    .filter(activeAlertIDs.contains)
-                nextActiveAlertIDs.formUnion(staleUsageAlertIDs)
-
-                let staleSeverity = result.bars
-                    .map { $0.effectiveSeverity(at: now) }
-                    .max() ?? .normal
-                let severityAlertID = "severity.\(result.accountID)"
-                if settings.includesSeverityAlerts,
-                   staleSeverity >= .warning,
-                   activeAlertIDs.contains(severityAlertID)
-                {
-                    nextActiveAlertIDs.insert(severityAlertID)
-                }
-            }
-
-            if !result.hasFreshCredits,
-               activeAlertIDs.contains(balanceAlertID)
-            {
-                nextActiveAlertIDs.insert(balanceAlertID)
-            }
-
-            let alertBars = result.freshBars
-            for bar in alertBars where bar.fractionUsed >= settings.usageThreshold {
-                let alertID = alertID(for: result, bar: bar)
-                let hasAlreadyQueuedAlert = nextActiveAlertIDs.contains(alertID)
-                nextActiveAlertIDs.insert(alertID)
-
-                guard !hasAlreadyQueuedAlert else {
-                    continue
-                }
-
-                let detail = usageAlertDetail(
-                    id: alertID,
-                    result: result,
-                    bar: bar,
-                    threshold: settings.usageThreshold,
-                    now: now
-                )
-                activeAlerts.append(detail)
-
-                guard !activeAlertIDs.contains(alertID) else {
-                    continue
-                }
-
-                notifications.append(
-                    UsageAlertNotification(
-                        id: alertID,
-                        accountID: result.accountID,
-                        kind: .usage,
-                        title: "\(result.title) \(bar.label) alert",
-                        body: detail.notificationBody
-                    )
-                )
             }
 
             if let creditsRemaining = result.freshCreditsRemaining,
                creditsRemaining <= settings.balanceThreshold
             {
-                let alertID = balanceAlertID
-                nextActiveAlertIDs.insert(alertID)
+                nextActiveAlertIDs.insert(balanceAlertID)
 
                 let detail = balanceAlertDetail(
-                    id: alertID,
+                    id: balanceAlertID,
                     result: result,
                     creditsRemaining: creditsRemaining,
                     threshold: settings.balanceThreshold
                 )
                 activeAlerts.append(detail)
 
-                if !activeAlertIDs.contains(alertID) {
+                if !activeAlertIDs.contains(balanceAlertID) {
                     notifications.append(
                         UsageAlertNotification(
-                            id: alertID,
+                            id: balanceAlertID,
                             accountID: result.accountID,
                             kind: .balance,
                             title: "\(result.title) balance alert",
@@ -195,36 +135,54 @@ public enum UsageAlertEvaluator {
                 }
             }
 
+            let alertBars = result.freshBars
             let highestSeverity = max(
-                alertBars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal,
+                alertBars.map {
+                    $0.effectiveSeverity(at: now, thresholds: thresholds)
+                }.max() ?? .normal,
                 result.hasReachedSpendLimit ? .critical : .normal
             )
-            if settings.includesSeverityAlerts,
-               highestSeverity >= .warning
-            {
-                let alertID = "severity.\(result.accountID)"
-                nextActiveAlertIDs.insert(alertID)
+            guard highestSeverity >= .warning else {
+                continue
+            }
 
-                let detail = severityAlertDetail(
-                    id: alertID,
-                    result: result,
-                    bars: alertBars,
-                    severity: highestSeverity,
-                    now: now
+            let warningAlertID = severityAlertID(
+                for: result.accountID,
+                severity: .warning
+            )
+            nextActiveAlertIDs.insert(warningAlertID)
+
+            let currentAlertID: String
+            if highestSeverity == .critical {
+                currentAlertID = severityAlertID(
+                    for: result.accountID,
+                    severity: .critical
                 )
-                activeAlerts.append(detail)
+                nextActiveAlertIDs.insert(currentAlertID)
+            } else {
+                currentAlertID = warningAlertID
+            }
 
-                if !activeAlertIDs.contains(alertID) {
-                    notifications.append(
-                        UsageAlertNotification(
-                            id: alertID,
-                            accountID: result.accountID,
-                            kind: .severity,
-                            title: "\(result.title) \(highestSeverity.displayName) alert",
-                            body: detail.notificationBody
-                        )
+            let detail = severityAlertDetail(
+                id: currentAlertID,
+                result: result,
+                bars: alertBars,
+                severity: highestSeverity,
+                thresholds: thresholds,
+                now: now
+            )
+            activeAlerts.append(detail)
+
+            if !activeAlertIDs.contains(currentAlertID) {
+                notifications.append(
+                    UsageAlertNotification(
+                        id: currentAlertID,
+                        accountID: result.accountID,
+                        kind: .severity,
+                        title: "\(result.title) \(highestSeverity.notificationName)",
+                        body: detail.notificationBody
                     )
-                }
+                )
             }
         }
 
@@ -232,27 +190,6 @@ public enum UsageAlertEvaluator {
             notifications: notifications,
             activeAlertIDs: nextActiveAlertIDs,
             activeAlerts: activeAlerts
-        )
-    }
-
-    private static func usageAlertDetail(
-        id: String,
-        result: ProviderUsageResult,
-        bar: UsageBar,
-        threshold: Double,
-        now: Date
-    ) -> UsageAlertDetail {
-        let thresholdText = formatPercent(threshold)
-        let usageAmountText = formatUsageAmount(used: bar.used, limit: bar.limit)
-        let resetText = bar.localizedResetDescription(at: now).map { " \($0)." } ?? ""
-
-        return UsageAlertDetail(
-            id: id,
-            accountID: result.accountID,
-            kind: .usage,
-            title: "\(bar.label) at \(bar.usageText)",
-            message: "\(usageAmountText) used. Alert threshold: \(thresholdText).\(resetText)",
-            severity: max(bar.severity, .warning)
         )
     }
 
@@ -277,14 +214,16 @@ public enum UsageAlertEvaluator {
         result: ProviderUsageResult,
         bars: [UsageBar],
         severity: UsageSeverity,
+        thresholds: UsageSeverityThresholds,
         now: Date
     ) -> UsageAlertDetail {
-        let affectedBar = bars
-            .first { $0.effectiveSeverity(at: now) == severity }
+        let affectedBar = bars.first {
+            $0.effectiveSeverity(at: now, thresholds: thresholds) == severity
+        }
         let message: String
 
         if let affectedBar {
-            if affectedBar.severity < severity,
+            if affectedBar.severity(using: thresholds) < severity,
                let projectedFraction = affectedBar.projectedFraction(at: now)
             {
                 message = "\(affectedBar.label) is projected to reach \(formatPercent(projectedFraction))."
@@ -307,52 +246,22 @@ public enum UsageAlertEvaluator {
         )
     }
 
-    private static func alertID(for result: ProviderUsageResult, bar: UsageBar) -> String {
-        "usage.\(result.accountID).\(stableUsageKey(for: bar))"
+    private static func balanceAlertID(for accountID: String) -> String {
+        "balance.\(accountID)"
     }
 
-    private static func stableUsageKey(for bar: UsageBar) -> String {
-        // Preserve the alert identity used before Claude's weekly label became more specific.
-        if bar.stableKey == ClaudeUsageIdentity.allModelsWeeklyStableKey {
-            return ClaudeUsageIdentity.allModelsWeeklyLegacyKey
-        }
-
-        if let stableKey = bar.stableKey {
-            let normalized = normalizedKeyComponent(stableKey)
-            if !normalized.isEmpty {
-                return normalized
-            }
-        }
-
-        let withoutParentheticalValues = bar.label
-            .replacingOccurrences(of: #"\([^)]*\)"#, with: "", options: .regularExpression)
-        let withoutRatios = withoutParentheticalValues
-            .replacingOccurrences(
-                of: #"\$?\d[\d,]*(?:\.\d+)?\s*/\s*\$?\d[\d,]*(?:\.\d+)?"#,
-                with: "",
-                options: .regularExpression
-            )
-        let withoutStandaloneNumbers = withoutRatios
-            .replacingOccurrences(
-                of: #"\$?\d[\d,]*(?:\.\d+)?"#,
-                with: "",
-                options: .regularExpression
-            )
-
-        let normalized = normalizedKeyComponent(withoutStandaloneNumbers)
-        if !normalized.isEmpty {
-            return normalized
-        }
-
-        return normalizedKeyComponent(bar.label)
+    private static func severityAlertID(
+        for accountID: String,
+        severity: UsageSeverity
+    ) -> String {
+        "severity.\(severity.idComponent).\(accountID)"
     }
 
-    private static func normalizedKeyComponent(_ value: String) -> String {
-        value
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: "-", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    private static func severityAlertIDs(for accountID: String) -> Set<String> {
+        [
+            severityAlertID(for: accountID, severity: .warning),
+            severityAlertID(for: accountID, severity: .critical),
+        ]
     }
 
     private static func formatPercent(_ fraction: Double) -> String {
@@ -363,26 +272,11 @@ public enum UsageAlertEvaluator {
         currencyFormatter.string(from: NSNumber(value: value)) ?? "$\(String(format: "%.2f", value))"
     }
 
-    private static func formatUsageAmount(used: Double, limit: Double) -> String {
-        "\(formatNumber(used)) of \(formatNumber(limit))"
-    }
-
-    private static func formatNumber(_ value: Double) -> String {
-        numberFormatter.string(from: NSNumber(value: value)) ?? String(format: "%.0f", value)
-    }
-
     private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         formatter.maximumFractionDigits = 2
-        return formatter
-    }()
-
-    private static let numberFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 1
         return formatter
     }()
 }
@@ -402,6 +296,28 @@ private extension UsageSeverity {
             "Warning"
         case .critical:
             "Critical"
+        }
+    }
+
+    var notificationName: String {
+        switch self {
+        case .normal:
+            "status"
+        case .warning:
+            "Warning"
+        case .critical:
+            "Critical Alert"
+        }
+    }
+
+    var idComponent: String {
+        switch self {
+        case .normal:
+            "normal"
+        case .warning:
+            "warning"
+        case .critical:
+            "critical"
         }
     }
 }

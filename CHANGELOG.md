@@ -83,6 +83,11 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Replaced overlapping usage notifications with one accessible alert model
+  whose Warning and Critical Alert percentages can be configured separately
+  and apply consistently to current and projected usage across the dashboard,
+  widgets, Apple Watch, and complications.
+  ([#207](https://github.com/HemSoft/codexbar-ios/issues/207))
 - Corrected widget freshness labels so medium, large, and extra-large widgets
   report the age of the oldest usage data they actually display, including
   cached and partially refreshed values. ([#202](https://github.com/HemSoft/codexbar-ios/issues/202))

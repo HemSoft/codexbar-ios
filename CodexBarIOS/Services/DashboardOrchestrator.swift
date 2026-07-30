@@ -74,7 +74,8 @@ final class DashboardOrchestrator: ObservableObject {
             refreshingAccountIDs: refreshService.refreshingAccountIDs,
             errorsByAccountID: refreshService.refreshErrorsByAccountID,
             orderingMode: configurationStore.dashboardOrderingMode,
-            manualOrder: configurationStore.dashboardCardOrder
+            manualOrder: configurationStore.dashboardCardOrder,
+            severityThresholds: configurationStore.usageAlertSettings.severityThresholds
         )
     }
 
@@ -346,7 +347,10 @@ final class DashboardOrchestrator: ObservableObject {
         results: [ProviderUsageResult],
         preserving preservedAccountIDs: Set<String>
     ) async {
-        historyStore.record(results: results)
+        historyStore.record(
+            results: results,
+            severityThresholds: configurationStore.usageAlertSettings.severityThresholds
+        )
         await processUsageAlerts(results: results, preserving: preservedAccountIDs)
     }
 
@@ -519,7 +523,8 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
         refreshingAccountIDs: Set<String>,
         errorsByAccountID: [String: String],
         orderingMode: DashboardOrderingMode,
-        manualOrder: [String]
+        manualOrder: [String],
+        severityThresholds: UsageSeverityThresholds = .default
     ) -> [DashboardProviderCardItem] {
         let resultsByAccountID = Dictionary(uniqueKeysWithValues: results.map { ($0.accountID, $0) })
         let items = configurations.map { configuration in
@@ -545,7 +550,8 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
         return DashboardUsageSorter.orderedResults(
             orderingResults,
             mode: orderingMode,
-            manualOrder: manualOrder
+            manualOrder: manualOrder,
+            severityThresholds: severityThresholds
         ).compactMap { itemsByAccountID[$0.accountID] }
     }
 }

@@ -535,11 +535,19 @@ final class AppAndWidgetTests: XCTestCase {
             "Dark · Smart · 15 min"
         )
         XCTAssertEqual(
-            SettingsCategorySummary.alerts(isEnabled: true, usageThreshold: 0.85),
-            "On · Usage at 85%"
+            SettingsCategorySummary.alerts(
+                isEnabled: true,
+                warningThreshold: 0.75,
+                criticalThreshold: 0.90
+            ),
+            "On · Warning 75% · Critical 90%"
         )
         XCTAssertEqual(
-            SettingsCategorySummary.alerts(isEnabled: false, usageThreshold: 0.85),
+            SettingsCategorySummary.alerts(
+                isEnabled: false,
+                warningThreshold: 0.75,
+                criticalThreshold: 0.90
+            ),
             "Off"
         )
         XCTAssertEqual(

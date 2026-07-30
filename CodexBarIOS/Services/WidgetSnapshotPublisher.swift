@@ -21,6 +21,7 @@ enum WidgetSnapshotPublisher {
             results: displayable.map { result in
                 let configuration = configurationStore.configuration(accountID: result.accountID)
                 let barsAreFresh = result.hasFreshBars
+                let severityThresholds = configurationStore.usageAlertSettings.severityThresholds
                 let plan = result.providerID.supportsPlanBadge ? result.plan : nil
                 return CodexBarWidgetProviderSnapshot(
                     accountID: result.accountID,
@@ -34,7 +35,9 @@ enum WidgetSnapshotPublisher {
                     groupName: configurationStore.group(for: configuration?.groupID)?.name,
                     bars: result.bars.enumerated().map { index, bar in
                         let projectedFraction = barsAreFresh ? bar.projectedFraction(at: now) : nil
-                        let projectedSeverity = barsAreFresh ? bar.projectedSeverity(at: now) : nil
+                        let projectedSeverity = barsAreFresh
+                            ? bar.projectedSeverity(at: now, thresholds: severityThresholds)
+                            : nil
                         let projectionParts = barsAreFresh ? bar.projectionDescriptionParts(at: now) : nil
                         return CodexBarWidgetUsageBarSnapshot(
                             id: stableBarID(
@@ -55,7 +58,11 @@ enum WidgetSnapshotPublisher {
                             ),
                             resetsAt: bar.resetsAt,
                             resetDisplayStyle: bar.resetDisplayStyle,
-                            severity: barsAreFresh ? CodexBarWidgetSeverity(bar.severity) : .normal,
+                            severity: barsAreFresh
+                                ? CodexBarWidgetSeverity(
+                                    bar.severity(using: severityThresholds)
+                                )
+                                : .normal,
                             projectedFraction: projectedFraction,
                             projectionDescription: projectionParts?.formatted(using: dateTimeFormatter),
                             projectionLeadingText: projectionParts?.leadingText,
@@ -87,7 +94,12 @@ enum WidgetSnapshotPublisher {
                     creditsFetchedAt: result.creditsFetchedAt,
                     monetaryMetricsFetchedAt: result.monetaryMetrics.isEmpty ? nil : result.fetchedAt,
                     fetchedAt: result.fetchedAt,
-                    severity: CodexBarWidgetSeverity(result.highestSeverity(at: now))
+                    severity: CodexBarWidgetSeverity(
+                        result.highestSeverity(
+                            at: now,
+                            thresholds: severityThresholds
+                        )
+                    )
                 )
             }
         )
@@ -121,7 +133,8 @@ enum WidgetSnapshotPublisher {
             displayable,
             mode: configurationStore.dashboardOrderingMode,
             manualOrder: configurationStore.dashboardCardOrder,
-            now: now
+            now: now,
+            severityThresholds: configurationStore.usageAlertSettings.severityThresholds
         )
     }
 

@@ -70,6 +70,8 @@ enum WatchSnapshotPublisher {
 
                 let barMetrics: [WatchMetricSnapshot] = result.bars.enumerated().map {
                     index, bar in
+                    let severityThresholds =
+                        configurationStore.usageAlertSettings.severityThresholds
                     let metricID = bar.metricIdentifier(providerID: result.providerID, index: index)
                     let fraction = bar.fractionUsed
                     let hasKnownLimit = bar.limit > 0
@@ -86,7 +88,12 @@ enum WatchSnapshotPublisher {
                             ? bar.usageText
                             : (bar.fractionlessUsageText ?? bar.used.formatted()),
                         severity: result.hasFreshBars
-                            ? WatchMetricSeverity(bar.effectiveSeverity(at: now))
+                            ? WatchMetricSeverity(
+                                bar.effectiveSeverity(
+                                    at: now,
+                                    thresholds: severityThresholds
+                                )
+                            )
                             : .normal,
                         resetText: localizedResetText
                             ?? (result.hasFreshBars ? bar.projectionDescriptionOverride : nil),
@@ -219,7 +226,8 @@ enum WatchSnapshotPublisher {
             displayable,
             mode: configurationStore.dashboardOrderingMode,
             manualOrder: configurationStore.dashboardCardOrder,
-            now: now
+            now: now,
+            severityThresholds: configurationStore.usageAlertSettings.severityThresholds
         )
     }
 

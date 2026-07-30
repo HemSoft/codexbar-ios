@@ -240,6 +240,9 @@ public final class ProviderConfigurationStore: ObservableObject {
         secretStore: SecretStore = KeychainService(),
         widgetSnapshotDefaults: UserDefaults? = WidgetSnapshotStore.userDefaults()
     ) {
+        let usageAlertSettingsNeedMigration = Self.usageAlertSettingsNeedMigration(
+            in: defaults
+        )
         let groupLoadResult = Self.loadGroups(from: defaults)
         let configurationLoadResult = Self.loadConfigurations(
             from: defaults,
@@ -287,6 +290,9 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
         sortConfigurations()
         refreshSecretAvailability()
+        if usageAlertSettingsNeedMigration {
+            saveUsageAlertSettings()
+        }
     }
 
     public var isPersistenceRecoveryRequired: Bool {
@@ -1197,6 +1203,12 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     public func updateUsageAlertSettings(_ settings: UsageAlertSettings) {
+        let settings = UsageAlertSettings(
+            isEnabled: settings.isEnabled,
+            warningThreshold: settings.warningThreshold,
+            criticalThreshold: settings.criticalThreshold,
+            balanceThreshold: settings.balanceThreshold
+        )
         let previousSettings = usageAlertSettings
         usageAlertSettings = settings
         saveUsageAlertSettings()
@@ -1212,21 +1224,21 @@ public final class ProviderConfigurationStore: ObservableObject {
         updateUsageAlertSettings(settings)
     }
 
-    public func updateUsageAlertUsageThreshold(_ threshold: Double) {
+    public func updateUsageAlertWarningThreshold(_ threshold: Double) {
         var settings = usageAlertSettings
-        settings.usageThreshold = UsageAlertSettings.normalizedUsageThreshold(threshold)
+        settings.updateWarningThreshold(threshold)
+        updateUsageAlertSettings(settings)
+    }
+
+    public func updateUsageAlertCriticalThreshold(_ threshold: Double) {
+        var settings = usageAlertSettings
+        settings.updateCriticalThreshold(threshold)
         updateUsageAlertSettings(settings)
     }
 
     public func updateUsageAlertBalanceThreshold(_ threshold: Double) {
         var settings = usageAlertSettings
         settings.balanceThreshold = UsageAlertSettings.normalizedBalanceThreshold(threshold)
-        updateUsageAlertSettings(settings)
-    }
-
-    public func updateUsageAlertIncludesSeverityAlerts(_ includesSeverityAlerts: Bool) {
-        var settings = usageAlertSettings
-        settings.includesSeverityAlerts = includesSeverityAlerts
         updateUsageAlertSettings(settings)
     }
 
@@ -2002,10 +2014,21 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         return UsageAlertSettings(
             isEnabled: decoded.isEnabled,
-            usageThreshold: decoded.usageThreshold,
-            balanceThreshold: decoded.balanceThreshold,
-            includesSeverityAlerts: decoded.includesSeverityAlerts
+            warningThreshold: decoded.warningThreshold,
+            criticalThreshold: decoded.criticalThreshold,
+            balanceThreshold: decoded.balanceThreshold
         )
+    }
+
+    private static func usageAlertSettingsNeedMigration(in defaults: UserDefaults) -> Bool {
+        guard
+            let data = defaults.data(forKey: DefaultsKey.usageAlertSettings),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return false
+        }
+
+        return object["warningThreshold"] == nil || object["criticalThreshold"] == nil
     }
 
     private static func loadUsageAlertActiveIDs(from defaults: UserDefaults) -> Set<String> {

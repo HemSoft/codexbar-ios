@@ -345,9 +345,14 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         highestSeverity()
     }
 
-    public func highestSeverity(at now: Date = Date()) -> UsageSeverity {
+    public func highestSeverity(
+        at now: Date = Date(),
+        thresholds: UsageSeverityThresholds = .default
+    ) -> UsageSeverity {
         max(
-            freshBars.map { $0.effectiveSeverity(at: now) }.max() ?? .normal,
+            freshBars.map {
+                $0.effectiveSeverity(at: now, thresholds: thresholds)
+            }.max() ?? .normal,
             hasReachedSpendLimit ? .critical : .normal
         )
     }

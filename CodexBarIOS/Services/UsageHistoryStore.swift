@@ -26,13 +26,20 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
         case effectiveSeverity
     }
 
-    public init(bar: UsageBar, capturedAt: Date) {
+    public init(
+        bar: UsageBar,
+        capturedAt: Date,
+        severityThresholds: UsageSeverityThresholds = .default
+    ) {
         self.stableKey = bar.stableKey
         self.label = bar.label
         self.fractionUsed = bar.fractionUsed
         self.used = bar.used
         self.limit = bar.limit
-        self.effectiveSeverity = bar.effectiveSeverity(at: capturedAt)
+        self.effectiveSeverity = bar.effectiveSeverity(
+            at: capturedAt,
+            thresholds: severityThresholds
+        )
     }
 
     public init(from decoder: Decoder) throws {
@@ -106,7 +113,11 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
     public let monetaryMetrics: [UsageHistoryMonetaryMetricSnapshot]?
     public let highestSeverity: UsageSeverity
 
-    public init(result: ProviderUsageResult, capturedAt: Date? = nil) {
+    public init(
+        result: ProviderUsageResult,
+        capturedAt: Date? = nil,
+        severityThresholds: UsageSeverityThresholds = .default
+    ) {
         let capturedAt = capturedAt ?? result.fetchedAt
         let recordableBars = result.hasFreshBars ? result.bars : []
         self.id = "\(result.accountID).\(capturedAt.timeIntervalSince1970)"
@@ -116,12 +127,21 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         self.subtitle = result.subtitle
         self.capturedAt = capturedAt
         self.bars = recordableBars.map {
-            UsageHistoryBarSnapshot(bar: $0, capturedAt: capturedAt)
+            UsageHistoryBarSnapshot(
+                bar: $0,
+                capturedAt: capturedAt,
+                severityThresholds: severityThresholds
+            )
         }
         self.creditsRemaining = result.freshCreditsRemaining
         self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
         self.highestSeverity = max(
-            recordableBars.map { $0.effectiveSeverity(at: capturedAt) }.max() ?? .normal,
+            recordableBars.map {
+                $0.effectiveSeverity(
+                    at: capturedAt,
+                    thresholds: severityThresholds
+                )
+            }.max() ?? .normal,
             result.hasReachedSpendLimit ? .critical : .normal
         )
     }
@@ -381,7 +401,11 @@ public final class UsageHistoryStore: ObservableObject {
         }
     }
 
-    public func record(results: [ProviderUsageResult], now: Date = Date()) {
+    public func record(
+        results: [ProviderUsageResult],
+        now: Date = Date(),
+        severityThresholds: UsageSeverityThresholds = .default
+    ) {
         guard !requiresRecovery else {
             return
         }
@@ -396,7 +420,12 @@ public final class UsageHistoryStore: ObservableObject {
 
         let previousSnapshots = snapshots
         var snapshotsByID = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0) })
-        for snapshot in recordableResults.map({ UsageHistorySnapshot(result: $0) }) {
+        for snapshot in recordableResults.map({
+            UsageHistorySnapshot(
+                result: $0,
+                severityThresholds: severityThresholds
+            )
+        }) {
             snapshotsByID[snapshot.id] = snapshot
         }
         snapshots = Array(snapshotsByID.values)

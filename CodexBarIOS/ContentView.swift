@@ -436,6 +436,10 @@ struct ContentView: View {
             guard performsLifecycleWork else { return }
             Task { await orchestrator.handleSystemDateTimeChange() }
         }
+        .environment(
+            \.usageSeverityThresholds,
+            configurationStore.usageAlertSettings.severityThresholds
+        )
     }
 
     @ViewBuilder

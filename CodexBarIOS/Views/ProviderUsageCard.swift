@@ -251,6 +251,7 @@ struct ProviderUsageCard: View {
     @StateObject private var resetRedemptionController: CodexBankedResetRedemptionController
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.usageSeverityThresholds) private var severityThresholds
 
     init(
         result: ProviderUsageResult,
@@ -626,7 +627,10 @@ struct ProviderUsageCard: View {
     }
 
     private var cardSeverity: UsageSeverity {
-        max(result.highestSeverity, alerts.map(\.severity).max() ?? .normal)
+        max(
+            result.highestSeverity(thresholds: severityThresholds),
+            alerts.map(\.severity).max() ?? .normal
+        )
     }
 
     @ViewBuilder
@@ -990,7 +994,11 @@ struct ProviderUsageCard: View {
     private func metricAccessibilityLabel(_ metric: ProviderUsageMetric) -> String {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
-            return Self.usageMetricAccessibilityLabel(result.bars[index], in: result)
+            return Self.usageMetricAccessibilityLabel(
+                result.bars[index],
+                in: result,
+                thresholds: severityThresholds
+            )
         case .creditsRemaining:
             return [
                 metric.label,
@@ -1017,13 +1025,16 @@ struct ProviderUsageCard: View {
 
     static func usageMetricAccessibilityLabel(
         _ bar: UsageBar,
-        in result: ProviderUsageResult
+        in result: ProviderUsageResult,
+        thresholds: UsageSeverityThresholds = .default
     ) -> String {
         [
             bar.label,
             bar.usageText,
             "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit))",
-            result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName : "status unavailable",
+            result.hasCurrentBars
+                ? bar.effectiveSeverity(thresholds: thresholds).accessibilityName
+                : "status unavailable",
             result.hasCurrentBars ? "fresh" : "stale",
             bar.localizedResetDescription(),
             result.hasCurrentBars ? bar.dashboardProjectionDescription() : nil,
@@ -2083,6 +2094,7 @@ private struct ProviderMetricTileDetailView: View {
     let visualizationStyle: MetricVisualizationStyle
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.usageSeverityThresholds) private var severityThresholds
 
     var body: some View {
         NavigationStack {
@@ -2169,7 +2181,11 @@ private struct ProviderMetricTileDetailView: View {
             detailRow("Limit", ProviderUsageCard.formattedUsageAmount(bar.limit))
             detailRow(
                 "Severity",
-                result.hasCurrentBars ? bar.effectiveSeverity().accessibilityName.capitalized : "Unavailable"
+                result.hasCurrentBars
+                    ? bar.effectiveSeverity(
+                        thresholds: severityThresholds
+                    ).accessibilityName.capitalized
+                    : "Unavailable"
             )
             detailRow("Freshness", result.hasCurrentBars ? "Current" : "Last known value")
             if let resetDescription = bar.localizedResetDescription() {
@@ -2890,6 +2906,7 @@ private struct MetricVisualizationView: View {
     let showsSeverity: Bool
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.usageSeverityThresholds) private var severityThresholds
 
     var body: some View {
         Group {
@@ -2935,7 +2952,9 @@ private struct MetricVisualizationView: View {
     }
 
     private var tint: Color {
-        showsSeverity ? bar.effectiveSeverity().tint : Color.secondary.opacity(0.7)
+        showsSeverity
+            ? bar.effectiveSeverity(thresholds: severityThresholds).tint
+            : Color.secondary.opacity(0.7)
     }
 }
 
@@ -3076,14 +3095,22 @@ private struct SemicircleShape: Shape {
 private struct UsageProgressBar: View {
     let bar: UsageBar
     let showsSeverity: Bool
+    @Environment(\.usageSeverityThresholds) private var severityThresholds
 
     var body: some View {
         let projectedFraction = showsSeverity ? bar.projectedFraction() : nil
         CodexBarUsageProgressBar(
             fractionUsed: bar.fractionUsed,
             projectedFraction: projectedFraction,
-            severity: showsSeverity ? bar.severity.widgetSeverity : .normal,
-            projectedSeverity: projectedFraction.map { UsageSeverity(fractionUsed: $0).widgetSeverity },
+            severity: showsSeverity
+                ? bar.severity(using: severityThresholds).widgetSeverity
+                : .normal,
+            projectedSeverity: projectedFraction.map {
+                UsageSeverity(
+                    fractionUsed: $0,
+                    thresholds: severityThresholds
+                ).widgetSeverity
+            },
             fillColor: showsSeverity ? nil : Color.secondary.opacity(0.55),
             height: 7,
             trackColor: Color(.tertiarySystemFill),

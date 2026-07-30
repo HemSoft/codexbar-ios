@@ -5,7 +5,8 @@ public enum DashboardUsageSorter {
         _ results: [ProviderUsageResult],
         mode: DashboardOrderingMode,
         manualOrder: [String],
-        now: Date = Date()
+        now: Date = Date(),
+        severityThresholds: UsageSeverityThresholds = .default
     ) -> [ProviderUsageResult] {
         let manualIndexes = Dictionary(
             uniqueKeysWithValues: manualOrder.enumerated().map { index, accountID in
@@ -19,7 +20,13 @@ public enum DashboardUsageSorter {
                 case .manual:
                     return manualSort(lhs, rhs, manualIndexes: manualIndexes)
                 case .smart:
-                    return smartSort(lhs, rhs, manualIndexes: manualIndexes, now: now)
+                    return smartSort(
+                        lhs,
+                        rhs,
+                        manualIndexes: manualIndexes,
+                        now: now,
+                        severityThresholds: severityThresholds
+                    )
                 }
             }
             .map(\.element)
@@ -43,10 +50,23 @@ public enum DashboardUsageSorter {
         _ lhs: EnumeratedSequence<[ProviderUsageResult]>.Element,
         _ rhs: EnumeratedSequence<[ProviderUsageResult]>.Element,
         manualIndexes: [String: Int],
-        now: Date
+        now: Date,
+        severityThresholds: UsageSeverityThresholds
     ) -> Bool {
-        let lhsScore = SmartOrderingScore(result: lhs.element, originalOffset: lhs.offset, manualIndexes: manualIndexes, now: now)
-        let rhsScore = SmartOrderingScore(result: rhs.element, originalOffset: rhs.offset, manualIndexes: manualIndexes, now: now)
+        let lhsScore = SmartOrderingScore(
+            result: lhs.element,
+            originalOffset: lhs.offset,
+            manualIndexes: manualIndexes,
+            now: now,
+            severityThresholds: severityThresholds
+        )
+        let rhsScore = SmartOrderingScore(
+            result: rhs.element,
+            originalOffset: rhs.offset,
+            manualIndexes: manualIndexes,
+            now: now,
+            severityThresholds: severityThresholds
+        )
         return lhsScore < rhsScore
     }
 }
@@ -63,10 +83,14 @@ private struct SmartOrderingScore: Comparable {
         result: ProviderUsageResult,
         originalOffset: Int,
         manualIndexes: [String: Int],
-        now: Date
+        now: Date,
+        severityThresholds: UsageSeverityThresholds
     ) {
         let freshBars = result.freshBars
-        severityRank = -result.highestSeverity(at: now).rawValue
+        severityRank = -result.highestSeverity(
+            at: now,
+            thresholds: severityThresholds
+        ).rawValue
         balanceRank = BalanceRank(creditsRemaining: result.freshCreditsRemaining)
         projectedLimitHitAt = freshBars.compactMap { $0.projectedLimitHitAt(now: now) }.min()
         projectedFractionRank = -(freshBars.map { max($0.fractionUsed, $0.projectedFraction(at: now) ?? 0) }.max() ?? 0)

@@ -29,7 +29,7 @@ struct CodexBarIOSApp: App {
             }
             if DebugUsageAlertMode.isEnabled {
                 configurationStore.updateUsageAlertsEnabled(true)
-                configurationStore.updateUsageAlertUsageThreshold(0.65)
+                configurationStore.updateUsageAlertWarningThreshold(0.65)
                 configurationStore.updateUsageAlertBalanceThreshold(15)
             }
 

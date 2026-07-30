@@ -95,19 +95,32 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
     }
 
     public var severity: UsageSeverity {
-        UsageSeverity(fractionUsed: fractionUsed)
+        severity(using: .default)
     }
 
-    public func projectedSeverity(at now: Date = Date()) -> UsageSeverity? {
+    public func severity(using thresholds: UsageSeverityThresholds) -> UsageSeverity {
+        UsageSeverity(fractionUsed: fractionUsed, thresholds: thresholds)
+    }
+
+    public func projectedSeverity(
+        at now: Date = Date(),
+        thresholds: UsageSeverityThresholds = .default
+    ) -> UsageSeverity? {
         guard let projectedFraction = projectedFraction(at: now) else {
             return nil
         }
 
-        return UsageSeverity(fractionUsed: projectedFraction)
+        return UsageSeverity(fractionUsed: projectedFraction, thresholds: thresholds)
     }
 
-    public func effectiveSeverity(at now: Date = Date()) -> UsageSeverity {
-        max(severity, projectedSeverity(at: now) ?? .normal)
+    public func effectiveSeverity(
+        at now: Date = Date(),
+        thresholds: UsageSeverityThresholds = .default
+    ) -> UsageSeverity {
+        max(
+            severity(using: thresholds),
+            projectedSeverity(at: now, thresholds: thresholds) ?? .normal
+        )
     }
 
     public var usageText: String {
