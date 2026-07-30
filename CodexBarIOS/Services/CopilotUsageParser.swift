@@ -59,7 +59,8 @@ public enum CopilotUsageParser {
                 limit: 0,
                 resetDescription: reset.description,
                 resetsAt: reset.date,
-                resetDisplayStyle: .relativeWithLocalTime
+                resetDisplayStyle: .relativeWithLocalTime,
+                fractionlessUsageText: snapshot.unlimited ? "Unlimited" : "No quota"
             )
         }
 
@@ -278,6 +279,7 @@ public enum CopilotBillingUsageParser {
                     resetDescription: resetDescription,
                     resetsAt: periodEnd,
                     resetDisplayStyle: .relativeWithLocalTime,
+                    fractionlessUsageText: formatNumber(consumed),
                     projectionCurrent: consumed,
                     projectionPeriodStart: periodStart,
                     projectionPeriodEnd: periodEnd,

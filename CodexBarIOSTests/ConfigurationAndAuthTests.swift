@@ -1871,6 +1871,25 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.label), ["Premium interactions (1,500 / 2,000)"])
     }
 
+    func testCopilotUsageParserPreservesUnlimitedPremiumValue() throws {
+        let payload = """
+        {
+          "quota_snapshots": {
+            "premium_interactions": {
+              "entitlement": 0,
+              "remaining": 0,
+              "unlimited": true
+            }
+          }
+        }
+        """
+
+        let bar = try XCTUnwrap(CopilotUsageParser.parse(Data(payload.utf8))?.bars.first)
+
+        XCTAssertEqual(bar.label, "Premium interactions - unlimited")
+        XCTAssertEqual(bar.fractionlessUsageText, "Unlimited")
+    }
+
     func testCopilotUsageParserInfersMonthlyProjectionWhenResetIsMissing() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
         let payload = """
@@ -1966,6 +1985,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.bars.map(\.label), ["AI credits used (1,500)"])
+        XCTAssertEqual(result.bars.first?.fractionlessUsageText, "1,500")
         XCTAssertEqual(
             result.bars.first?.projectionDescription(at: fetchedAt),
             "Projected month end at current pace - 5,000 AI credits"

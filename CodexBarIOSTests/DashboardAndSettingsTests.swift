@@ -985,6 +985,55 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testWatchSnapshotPublishesZeroLimitBarsAsFractionlessValues() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .copilot)
+        XCTAssertTrue(store.saveSecret("secret", for: configuration))
+        let fetchedAt = Date(timeIntervalSince1970: 2_000_000_000)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .copilot,
+            title: "GitHub Copilot",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(
+                    stableKey: "ai-credits",
+                    label: "AI credits used (1,500)",
+                    used: 1_500,
+                    limit: 0,
+                    fractionlessUsageText: "1,500"
+                ),
+                UsageBar(
+                    stableKey: "premium-interactions",
+                    label: "Premium interactions - unlimited",
+                    used: 0,
+                    limit: 0,
+                    fractionlessUsageText: "Unlimited"
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+
+        let metrics = try XCTUnwrap(
+            WatchSnapshotPublisher.makeSnapshot(
+                results: [result],
+                configurationStore: store,
+                now: fetchedAt
+            ).accounts.first?.metrics
+        )
+
+        XCTAssertEqual(metrics.map(\.exactValue), ["1,500", "Unlimited"])
+        XCTAssertEqual(metrics.map(\.usedFraction), [nil, nil])
+        XCTAssertEqual(metrics.map(\.remainingFraction), [nil, nil])
+    }
+
+    @MainActor
     func testWatchSnapshotAccountIDsRemainStableAcrossDashboardReordering() throws {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

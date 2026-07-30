@@ -72,6 +72,7 @@ enum WatchSnapshotPublisher {
                     index, bar in
                     let metricID = bar.metricIdentifier(providerID: result.providerID, index: index)
                     let fraction = bar.fractionUsed
+                    let hasKnownLimit = bar.limit > 0
                     let localizedResetText = bar.localizedResetDescription(
                         at: now,
                         dateTimeFormatter: dateTimeFormatter
@@ -79,9 +80,11 @@ enum WatchSnapshotPublisher {
                     return WatchMetricSnapshot(
                         id: metricID,
                         label: bar.label,
-                        usedFraction: fraction,
-                        remainingFraction: 1 - fraction,
-                        exactValue: bar.usageText,
+                        usedFraction: hasKnownLimit ? fraction : nil,
+                        remainingFraction: hasKnownLimit ? 1 - fraction : nil,
+                        exactValue: hasKnownLimit
+                            ? bar.usageText
+                            : (bar.fractionlessUsageText ?? bar.used.formatted()),
                         severity: result.hasFreshBars
                             ? WatchMetricSeverity(bar.effectiveSeverity(at: now))
                             : .normal,
