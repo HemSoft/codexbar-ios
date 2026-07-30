@@ -137,12 +137,14 @@ run:
 
 The reset helper asks for a new password twice through hidden local dialogs and
 backs up the previous signing keychain before recreating it. A newly reset
-keychain has no signing identity.
+keychain has no signing identity, so run the trap-protected provisioning build
+below after every successful reset.
 
-If Xcode then reports that an existing development certificate has no private
-key, revoke only that stale Apple Development certificate in the developer
-portal. Run this trap-protected recovery build to make the dedicated keychain
-the default only while Xcode provisions its replacement identity:
+If Xcode reports that an existing development certificate has no private key,
+revoke only that stale Apple Development certificate in the developer portal
+before running the build. Certificate revocation is conditional on that error;
+the provisioning build is required after every reset. It makes the dedicated
+keychain the default only while Xcode provisions its replacement identity:
 
 ```sh
 ./scripts/with-codexbar-keychain.sh /bin/bash -c '
