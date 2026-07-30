@@ -384,7 +384,10 @@ final class DashboardOrchestrator: ObservableObject {
             do {
                 try await usageAlertNotifier.deliver(notification)
             } catch {
-                deliveredActiveAlertIDs.remove(notification.id)
+                UsageAlertEvaluator.removeActiveAlertIDs(
+                    forFailedDelivery: notification,
+                    from: &deliveredActiveAlertIDs
+                )
             }
         }
         configurationStore.updateUsageAlertActiveIDs(deliveredActiveAlertIDs)
@@ -436,6 +439,9 @@ final class WidgetSnapshotCoordinator {
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
         configurationStore.$metricLayouts.dropFirst().sink { [weak self] _ in
+            self?.scheduleSnapshotPublish()
+        }.store(in: &cancellables)
+        configurationStore.$usageAlertSettings.dropFirst().sink { [weak self] _ in
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
         configurationStore.$widgetRefreshInterval.dropFirst().sink { [weak self] _ in

@@ -354,6 +354,9 @@ final class WatchSnapshotCoordinator {
         configurationStore.$autoRefreshInterval.dropFirst().sink { [weak self] _ in
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
+        configurationStore.$usageAlertSettings.dropFirst().sink { [weak self] _ in
+            self?.scheduleSnapshotPublish()
+        }.store(in: &cancellables)
 
     }
 

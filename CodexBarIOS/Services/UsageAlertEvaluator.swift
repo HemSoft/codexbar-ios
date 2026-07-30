@@ -79,6 +79,26 @@ public enum UsageAlertEvaluator {
         }
     }
 
+    static func removeActiveAlertIDs(
+        forFailedDelivery notification: UsageAlertNotification,
+        from activeAlertIDs: inout Set<String>
+    ) {
+        activeAlertIDs.remove(notification.id)
+        guard
+            notification.kind == .severity,
+            notification.id == severityAlertID(
+                for: notification.accountID,
+                severity: .critical
+            )
+        else {
+            return
+        }
+
+        activeAlertIDs.remove(
+            severityAlertID(for: notification.accountID, severity: .warning)
+        )
+    }
+
     public static func evaluate(
         results: [ProviderUsageResult],
         settings: UsageAlertSettings,

@@ -15,6 +15,7 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
     public let fractionUsed: Double
     public let used: Double
     public let limit: Double
+    public let effectiveFractionUsed: Double
     public let effectiveSeverity: UsageSeverity
 
     private enum CodingKeys: String, CodingKey {
@@ -23,6 +24,7 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
         case fractionUsed
         case used
         case limit
+        case effectiveFractionUsed
         case effectiveSeverity
     }
 
@@ -36,8 +38,12 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
         self.fractionUsed = bar.fractionUsed
         self.used = bar.used
         self.limit = bar.limit
-        self.effectiveSeverity = bar.effectiveSeverity(
-            at: capturedAt,
+        self.effectiveFractionUsed = max(
+            bar.fractionUsed,
+            bar.projectedFraction(at: capturedAt) ?? bar.fractionUsed
+        )
+        self.effectiveSeverity = UsageSeverity(
+            fractionUsed: effectiveFractionUsed,
             thresholds: severityThresholds
         )
     }
@@ -49,10 +55,24 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
         self.fractionUsed = try container.decode(Double.self, forKey: .fractionUsed)
         self.used = try container.decode(Double.self, forKey: .used)
         self.limit = try container.decode(Double.self, forKey: .limit)
-        self.effectiveSeverity = try container.decodeIfPresent(
+        let decodedSeverity = try container.decodeIfPresent(
             UsageSeverity.self,
             forKey: .effectiveSeverity
         ) ?? UsageSeverity(fractionUsed: fractionUsed)
+        self.effectiveFractionUsed = try container.decodeIfPresent(
+            Double.self,
+            forKey: .effectiveFractionUsed
+        ) ?? max(fractionUsed, decodedSeverity.minimumFraction)
+        self.effectiveSeverity = decodedSeverity
+    }
+
+    public func effectiveSeverity(
+        using thresholds: UsageSeverityThresholds
+    ) -> UsageSeverity {
+        UsageSeverity(
+            fractionUsed: effectiveFractionUsed,
+            thresholds: thresholds
+        )
     }
 }
 
@@ -112,6 +132,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
     public let creditsRemaining: Double?
     public let monetaryMetrics: [UsageHistoryMonetaryMetricSnapshot]?
     public let highestSeverity: UsageSeverity
+    public let hasReachedSpendLimit: Bool?
 
     public init(
         result: ProviderUsageResult,
@@ -135,6 +156,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         }
         self.creditsRemaining = result.freshCreditsRemaining
         self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
+        self.hasReachedSpendLimit = result.hasReachedSpendLimit
         self.highestSeverity = max(
             recordableBars.map {
                 $0.effectiveSeverity(
@@ -143,6 +165,24 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
                 )
             }.max() ?? .normal,
             result.hasReachedSpendLimit ? .critical : .normal
+        )
+    }
+
+    public func highestSeverity(
+        using thresholds: UsageSeverityThresholds
+    ) -> UsageSeverity {
+        let storedUsageSeverity = bars.map(\.effectiveSeverity).max() ?? .normal
+        let activeUsageSeverity = bars.map {
+            $0.effectiveSeverity(using: thresholds)
+        }.max() ?? .normal
+        let legacyExternalSeverity =
+            hasReachedSpendLimit == nil && highestSeverity > storedUsageSeverity
+                ? highestSeverity
+                : .normal
+
+        return max(
+            activeUsageSeverity,
+            hasReachedSpendLimit == true ? .critical : legacyExternalSeverity
         )
     }
 
@@ -210,13 +250,30 @@ public struct UsageHistoryPoint: Identifiable, Equatable, Sendable {
         self.severity = severity
     }
 
-    public init(snapshot: UsageHistorySnapshot, value: Double) {
+    public init(
+        snapshot: UsageHistorySnapshot,
+        value: Double,
+        severityThresholds: UsageSeverityThresholds = .default
+    ) {
         self.init(
             id: snapshot.id,
             capturedAt: snapshot.capturedAt,
             value: value,
-            severity: snapshot.highestSeverity
+            severity: snapshot.highestSeverity(using: severityThresholds)
         )
+    }
+}
+
+private extension UsageSeverity {
+    var minimumFraction: Double {
+        switch self {
+        case .normal:
+            0
+        case .warning:
+            UsageSeverityThresholds.default.warning
+        case .critical:
+            UsageSeverityThresholds.default.critical
+        }
     }
 }
 
@@ -464,20 +521,29 @@ public final class UsageHistoryStore: ObservableObject {
 
     public func historySeries(
         for result: ProviderUsageResult,
-        since start: Date? = nil
+        since start: Date? = nil,
+        severityThresholds: UsageSeverityThresholds = .default
     ) -> UsageHistorySeries {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
         let hasUsageHistory = accountSnapshots.contains { !$0.bars.isEmpty }
         if (result.hasFreshBars && !result.bars.isEmpty)
             || (!result.bars.isEmpty && hasUsageHistory)
         {
-            return usageSeries(for: result, snapshots: accountSnapshots)
+            return usageSeries(
+                for: result,
+                snapshots: accountSnapshots,
+                severityThresholds: severityThresholds
+            )
         }
 
         if result.freshCreditsRemaining != nil
             || accountSnapshots.contains(where: { $0.creditsRemaining != nil })
         {
-            return balanceSeries(accountID: result.accountID, snapshots: accountSnapshots)
+            return balanceSeries(
+                accountID: result.accountID,
+                snapshots: accountSnapshots,
+                severityThresholds: severityThresholds
+            )
         }
 
         let primaryMetricIdentity = primaryMonetaryMetric(in: result.monetaryMetrics).map {
@@ -500,7 +566,11 @@ public final class UsageHistoryStore: ObservableObject {
                 else {
                     return nil
                 }
-                return UsageHistoryPoint(snapshot: snapshot, value: storedMetric.doubleValue)
+                return UsageHistoryPoint(
+                    snapshot: snapshot,
+                    value: storedMetric.doubleValue,
+                    severityThresholds: severityThresholds
+                )
             },
             isBalance: true,
             currencyCode: primaryMetricIdentity?.1,
@@ -510,27 +580,38 @@ public final class UsageHistoryStore: ObservableObject {
 
     private func usageSeries(
         for result: ProviderUsageResult,
-        snapshots: [UsageHistorySnapshot]
+        snapshots: [UsageHistorySnapshot],
+        severityThresholds: UsageSeverityThresholds
     ) -> UsageHistorySeries {
         if result.providerID == .cursor {
             return cursorPrimaryUsageSeries(
                 accountID: result.accountID,
-                snapshots: snapshots
+                snapshots: snapshots,
+                severityThresholds: severityThresholds
             )
         }
 
-        return aggregateUsageSeries(accountID: result.accountID, snapshots: snapshots)
+        return aggregateUsageSeries(
+            accountID: result.accountID,
+            snapshots: snapshots,
+            severityThresholds: severityThresholds
+        )
     }
 
     private func aggregateUsageSeries(
         accountID: String,
-        snapshots: [UsageHistorySnapshot]
+        snapshots: [UsageHistorySnapshot],
+        severityThresholds: UsageSeverityThresholds
     ) -> UsageHistorySeries {
         UsageHistorySeries(
             accountID: accountID,
             points: snapshots.compactMap { snapshot in
                 snapshot.bars.map(\.fractionUsed).max().map {
-                    UsageHistoryPoint(snapshot: snapshot, value: $0)
+                    UsageHistoryPoint(
+                        snapshot: snapshot,
+                        value: $0,
+                        severityThresholds: severityThresholds
+                    )
                 }
             },
             isBalance: false
@@ -539,7 +620,8 @@ public final class UsageHistoryStore: ObservableObject {
 
     private func cursorPrimaryUsageSeries(
         accountID: String,
-        snapshots: [UsageHistorySnapshot]
+        snapshots: [UsageHistorySnapshot],
+        severityThresholds: UsageSeverityThresholds
     ) -> UsageHistorySeries {
         UsageHistorySeries(
             accountID: accountID,
@@ -556,7 +638,7 @@ public final class UsageHistoryStore: ObservableObject {
                         id: snapshot.id,
                         capturedAt: snapshot.capturedAt,
                         value: $0.fractionUsed,
-                        severity: $0.effectiveSeverity
+                        severity: $0.effectiveSeverity(using: severityThresholds)
                     )
                 }
             },
@@ -567,7 +649,8 @@ public final class UsageHistoryStore: ObservableObject {
     private func usageSeries(
         accountID: String,
         snapshots: [UsageHistorySnapshot],
-        stableKey: String
+        stableKey: String,
+        severityThresholds: UsageSeverityThresholds
     ) -> UsageHistorySeries {
         UsageHistorySeries(
             accountID: accountID,
@@ -580,7 +663,7 @@ public final class UsageHistoryStore: ObservableObject {
                         id: snapshot.id,
                         capturedAt: snapshot.capturedAt,
                         value: $0.fractionUsed,
-                        severity: $0.effectiveSeverity
+                        severity: $0.effectiveSeverity(using: severityThresholds)
                     )
                 }
             },
@@ -610,7 +693,8 @@ public final class UsageHistoryStore: ObservableObject {
     private func cursorUsageSeriesOptions(
         accountID: String,
         snapshots: [UsageHistorySnapshot],
-        currentBars: [UsageBar]
+        currentBars: [UsageBar],
+        severityThresholds: UsageSeverityThresholds
     ) -> [UsageHistorySeriesOption] {
         let metricOptions: [UsageHistorySeriesOption] = [
             ("total", "Total"),
@@ -636,7 +720,8 @@ public final class UsageHistoryStore: ObservableObject {
                 series: usageSeries(
                     accountID: accountID,
                     snapshots: snapshots,
-                    stableKey: stableKey
+                    stableKey: stableKey,
+                    severityThresholds: severityThresholds
                 )
             )
         }
@@ -660,7 +745,8 @@ public final class UsageHistoryStore: ObservableObject {
                     label: "Total / highest available",
                     series: cursorPrimaryUsageSeries(
                         accountID: accountID,
-                        snapshots: snapshots
+                        snapshots: snapshots,
+                        severityThresholds: severityThresholds
                     )
                 ),
             ] + metricOptions
@@ -670,20 +756,29 @@ public final class UsageHistoryStore: ObservableObject {
             UsageHistorySeriesOption(
                 id: "usage",
                 label: "Highest usage",
-                series: cursorPrimaryUsageSeries(accountID: accountID, snapshots: snapshots)
+                series: cursorPrimaryUsageSeries(
+                    accountID: accountID,
+                    snapshots: snapshots,
+                    severityThresholds: severityThresholds
+                )
             ),
         ] + metricOptions
     }
 
     private func balanceSeries(
         accountID: String,
-        snapshots: [UsageHistorySnapshot]
+        snapshots: [UsageHistorySnapshot],
+        severityThresholds: UsageSeverityThresholds
     ) -> UsageHistorySeries {
         UsageHistorySeries(
             accountID: accountID,
             points: snapshots.compactMap { snapshot in
                 snapshot.creditsRemaining.map {
-                    UsageHistoryPoint(snapshot: snapshot, value: $0)
+                    UsageHistoryPoint(
+                        snapshot: snapshot,
+                        value: $0,
+                        severityThresholds: severityThresholds
+                    )
                 }
             },
             isBalance: true
@@ -698,7 +793,8 @@ public final class UsageHistoryStore: ObservableObject {
 
     public func historySeriesOptions(
         for result: ProviderUsageResult,
-        since start: Date? = nil
+        since start: Date? = nil,
+        severityThresholds: UsageSeverityThresholds = .default
     ) -> [UsageHistorySeriesOption] {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
         var options: [UsageHistorySeriesOption] = []
@@ -710,7 +806,8 @@ public final class UsageHistoryStore: ObservableObject {
                 options.append(contentsOf: cursorUsageSeriesOptions(
                     accountID: result.accountID,
                     snapshots: accountSnapshots,
-                    currentBars: result.bars
+                    currentBars: result.bars,
+                    severityThresholds: severityThresholds
                 ))
             } else {
                 options.append(UsageHistorySeriesOption(
@@ -718,7 +815,8 @@ public final class UsageHistoryStore: ObservableObject {
                     label: "Usage",
                     series: aggregateUsageSeries(
                         accountID: result.accountID,
-                        snapshots: accountSnapshots
+                        snapshots: accountSnapshots,
+                        severityThresholds: severityThresholds
                     )
                 ))
             }
@@ -730,7 +828,11 @@ public final class UsageHistoryStore: ObservableObject {
             options.append(UsageHistorySeriesOption(
                 id: "balance",
                 label: "Balance",
-                series: balanceSeries(accountID: result.accountID, snapshots: accountSnapshots)
+                series: balanceSeries(
+                    accountID: result.accountID,
+                    snapshots: accountSnapshots,
+                    severityThresholds: severityThresholds
+                )
             ))
         }
 
@@ -742,7 +844,11 @@ public final class UsageHistoryStore: ObservableObject {
                 }) else {
                     return nil
                 }
-                return UsageHistoryPoint(snapshot: snapshot, value: storedMetric.doubleValue)
+                return UsageHistoryPoint(
+                    snapshot: snapshot,
+                    value: storedMetric.doubleValue,
+                    severityThresholds: severityThresholds
+                )
             }
             options.append(UsageHistorySeriesOption(
                 id: "money.\(metric.id)",
@@ -758,14 +864,29 @@ public final class UsageHistoryStore: ObservableObject {
         }
 
         return options.isEmpty
-            ? [UsageHistorySeriesOption(id: "primary", label: "Usage", series: historySeries(for: result, since: start))]
+            ? [
+                UsageHistorySeriesOption(
+                    id: "primary",
+                    label: "Usage",
+                    series: historySeries(
+                        for: result,
+                        since: start,
+                        severityThresholds: severityThresholds
+                    )
+                ),
+            ]
             : options
     }
 
-    public func trendSummary(for result: ProviderUsageResult, now: Date = Date()) -> UsageTrendSummary? {
+    public func trendSummary(
+        for result: ProviderUsageResult,
+        now: Date = Date(),
+        severityThresholds: UsageSeverityThresholds = .default
+    ) -> UsageTrendSummary? {
         let series = historySeries(
             for: result,
-            since: now.addingTimeInterval(-7 * 24 * 60 * 60)
+            since: now.addingTimeInterval(-7 * 24 * 60 * 60),
+            severityThresholds: severityThresholds
         )
         guard
             series.points.count >= 2,

@@ -238,6 +238,29 @@ final class UsageAlertTests: XCTestCase {
         })
     }
 
+    func testFailedCriticalDeliveryClearsCompanionWarningLatch() throws {
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result(used: 95)],
+            settings: UsageAlertSettings(isEnabled: true),
+            activeAlertIDs: []
+        )
+        let notification = try XCTUnwrap(evaluation.notifications.first)
+        var activeAlertIDs = evaluation.activeAlertIDs
+
+        UsageAlertEvaluator.removeActiveAlertIDs(
+            forFailedDelivery: notification,
+            from: &activeAlertIDs
+        )
+
+        XCTAssertTrue(activeAlertIDs.isEmpty)
+        let warningEvaluation = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: UsageAlertSettings(isEnabled: true),
+            activeAlertIDs: activeAlertIDs
+        )
+        XCTAssertEqual(warningEvaluation.notifications.map(\.title), ["Codex Warning"])
+    }
+
     func testSpendLimitRemainsCriticalRegardlessOfPercentageThresholds() {
         let result = ProviderUsageResult(
             accountID: "claude.capped",
@@ -406,6 +429,46 @@ final class UsageAlertTests: XCTestCase {
 
         XCTAssertEqual(snapshot.bars.first?.effectiveSeverity, .warning)
         XCTAssertEqual(snapshot.highestSeverity, .warning)
+    }
+
+    @MainActor
+    func testHistorySeriesRecomputesProjectedSeverityUsingActiveThresholds() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let capturedAt = Date(timeIntervalSince1970: 1_783_667_520)
+        let projectedResult = result(
+            used: 60,
+            projectionCurrent: 60,
+            projectionPeriodStart: capturedAt.addingTimeInterval(-75),
+            projectionPeriodEnd: capturedAt.addingTimeInterval(25),
+            fetchedAt: capturedAt
+        )
+        let historyStore = UsageHistoryStore(defaults: defaults)
+
+        historyStore.record(results: [projectedResult], now: capturedAt)
+
+        let reloadedStore = UsageHistoryStore(defaults: defaults)
+        XCTAssertEqual(
+            reloadedStore.historySeries(
+                for: projectedResult,
+                severityThresholds: UsageSeverityThresholds(
+                    warning: 0.75,
+                    critical: 0.90
+                )
+            ).points.map(\.severity),
+            [.warning]
+        )
+        XCTAssertEqual(
+            reloadedStore.historySeries(
+                for: projectedResult,
+                severityThresholds: UsageSeverityThresholds(
+                    warning: 0.85,
+                    critical: 0.95
+                )
+            ).points.map(\.severity),
+            [.normal]
+        )
     }
 
     @MainActor
