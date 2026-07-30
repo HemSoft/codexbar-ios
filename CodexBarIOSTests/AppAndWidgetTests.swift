@@ -131,6 +131,110 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertNil(navigation.finishDismissal())
     }
 
+    func testDashboardFirstAccountStateWaitsForInitialRefreshAndKeepsOtherStatesDistinct() {
+        XCTAssertEqual(
+            DashboardEmptyState.resolve(
+                hasAccounts: false,
+                needsSetupAccountID: nil,
+                cardsAreEmpty: true,
+                hasCompletedInitialRefresh: false,
+                performsLifecycleWork: true,
+                isPersistenceRecoveryRequired: false
+            ),
+            .loading
+        )
+        XCTAssertEqual(
+            DashboardEmptyState.resolve(
+                hasAccounts: false,
+                needsSetupAccountID: nil,
+                cardsAreEmpty: true,
+                hasCompletedInitialRefresh: true,
+                performsLifecycleWork: true,
+                isPersistenceRecoveryRequired: false
+            ),
+            .firstAccount
+        )
+        XCTAssertEqual(
+            DashboardEmptyState.resolve(
+                hasAccounts: false,
+                needsSetupAccountID: nil,
+                cardsAreEmpty: true,
+                hasCompletedInitialRefresh: true,
+                performsLifecycleWork: true,
+                isPersistenceRecoveryRequired: true
+            ),
+            .recovery
+        )
+        XCTAssertEqual(
+            DashboardEmptyState.resolve(
+                hasAccounts: true,
+                needsSetupAccountID: "openRouter.personal",
+                cardsAreEmpty: true,
+                hasCompletedInitialRefresh: true,
+                performsLifecycleWork: true,
+                isPersistenceRecoveryRequired: false
+            ),
+            .needsSetup(accountID: "openRouter.personal")
+        )
+        XCTAssertEqual(
+            DashboardEmptyState.resolve(
+                hasAccounts: true,
+                needsSetupAccountID: nil,
+                cardsAreEmpty: true,
+                hasCompletedInitialRefresh: true,
+                performsLifecycleWork: true,
+                isPersistenceRecoveryRequired: false
+            ),
+            .noUsageData
+        )
+        XCTAssertEqual(
+            DashboardEmptyState.resolve(
+                hasAccounts: true,
+                needsSetupAccountID: nil,
+                cardsAreEmpty: false,
+                hasCompletedInitialRefresh: true,
+                performsLifecycleWork: true,
+                isPersistenceRecoveryRequired: false
+            ),
+            .hidden
+        )
+    }
+
+    @MainActor
+    func testAddAccountFlowCreatesOnceAndRoutesToExactAccount() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        var flow = AddAccountFlowState()
+
+        let selectedAccountID = try XCTUnwrap(
+            flow.select(.openRouter, configurationStore: store)
+        )
+        let repeatedSelectionID = flow.select(.claude, configurationStore: store)
+
+        XCTAssertEqual(flow.accountID, selectedAccountID)
+        XCTAssertEqual(repeatedSelectionID, selectedAccountID)
+        XCTAssertEqual(store.configurations.count, 1)
+        XCTAssertEqual(
+            store.configuration(accountID: selectedAccountID)?.providerID,
+            .openRouter
+        )
+    }
+
+    func testAddAccountChooserContainsEveryProviderExactlyOnce() {
+        let options = AddAccountFlowState.providerOptions
+
+        XCTAssertEqual(options.count, Set(options).count)
+        XCTAssertEqual(Set(options), Set(ProviderID.allCases))
+        XCTAssertTrue(options.allSatisfy { !$0.displayName.isEmpty })
+        XCTAssertTrue(options.allSatisfy { !$0.addAccountIconName.isEmpty })
+    }
+
     func testDashboardCardMenuKeepsAccountConfigurationOnBalanceOnlyCards() {
         let balanceOnlyResult = ProviderUsageResult(
             accountID: "moonshot.balance",
