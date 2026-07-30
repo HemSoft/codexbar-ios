@@ -79,7 +79,7 @@ struct SettingsRecoveryState: Equatable {
     let hasIncompleteAccountReset: Bool
 
     var requiresAttention: Bool {
-        hasError || isPersistenceRecoveryRequired
+        hasError || isPersistenceRecoveryRequired || hasIncompleteAccountReset
     }
 
     var resetAccountsDisabled: Bool {
@@ -88,7 +88,7 @@ struct SettingsRecoveryState: Equatable {
     }
 
     var summary: String {
-        if isPersistenceRecoveryRequired {
+        if isPersistenceRecoveryRequired || hasIncompleteAccountReset {
             return "Action required"
         }
         if hasError {
@@ -170,9 +170,13 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView {
-            settingsHome
+            NavigationStack {
+                settingsHome
+            }
         } detail: {
-            selectedSettingsDestination
+            NavigationStack {
+                selectedSettingsDestination
+            }
         }
         .toolbar {
             doneToolbar
@@ -263,7 +267,9 @@ struct SettingsView: View {
         }
         .onChange(of: selectedDestination) { oldValue, newValue in
             if oldValue == .accountsAndGroups, newValue != oldValue {
-                _ = commitFocusedGroupName()
+                if !commitFocusedGroupName() {
+                    selectedDestination = oldValue
+                }
             }
         }
     }

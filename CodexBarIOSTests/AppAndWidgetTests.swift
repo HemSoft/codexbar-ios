@@ -339,6 +339,10 @@ final class AppAndWidgetTests: XCTestCase {
             "1 account · 2 groups"
         )
         XCTAssertEqual(
+            SettingsCategorySummary.accounts(accountCount: 0, groupCount: 1),
+            "0 accounts · 1 group"
+        )
+        XCTAssertEqual(
             SettingsCategorySummary.dashboard(
                 appearance: .dark,
                 ordering: .smart,
@@ -351,11 +355,22 @@ final class AppAndWidgetTests: XCTestCase {
             "On · Usage at 85%"
         )
         XCTAssertEqual(
+            SettingsCategorySummary.alerts(isEnabled: false, usageThreshold: 0.85),
+            "Off"
+        )
+        XCTAssertEqual(
             SettingsCategorySummary.help(
                 installedVersion: "Version 1.2",
                 availableVersion: "1.3"
             ),
             "Version 1.3 available"
+        )
+        XCTAssertEqual(
+            SettingsCategorySummary.help(
+                installedVersion: "Version 1.2",
+                availableVersion: nil
+            ),
+            "Version 1.2"
         )
     }
 
@@ -386,7 +401,28 @@ final class AppAndWidgetTests: XCTestCase {
             accountCount: 0,
             hasIncompleteAccountReset: true
         )
+        XCTAssertTrue(incompleteResetState.requiresAttention)
         XCTAssertFalse(incompleteResetState.resetAccountsDisabled)
+        XCTAssertEqual(incompleteResetState.summary, "Action required")
+
+        let errorState = SettingsRecoveryState(
+            hasError: true,
+            isPersistenceRecoveryRequired: false,
+            accountCount: 0,
+            hasIncompleteAccountReset: false
+        )
+        XCTAssertTrue(errorState.requiresAttention)
+        XCTAssertEqual(errorState.summary, "Review settings error")
+
+        let populatedState = SettingsRecoveryState(
+            hasError: false,
+            isPersistenceRecoveryRequired: false,
+            accountCount: 2,
+            hasIncompleteAccountReset: false
+        )
+        XCTAssertFalse(populatedState.requiresAttention)
+        XCTAssertFalse(populatedState.resetAccountsDisabled)
+        XCTAssertEqual(populatedState.summary, "Reset and recovery options")
     }
 
     @MainActor
