@@ -27,7 +27,7 @@ private extension WatchMetricVisualizationStyle {
 
 @MainActor
 protocol WatchSnapshotSending: AnyObject {
-    func activate(onActivated: @escaping @MainActor () -> Void)
+    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void)
     @discardableResult
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool
 }
@@ -300,10 +300,12 @@ final class WatchSnapshotCoordinator {
 
     private let refreshService: UsageRefreshService
     private let configurationStore: ProviderConfigurationStore
+    private let sender: any WatchSnapshotSending
     private let publishSnapshot: SnapshotPublisher
     private let coalescingDelay: Duration
     private var cancellables: Set<AnyCancellable> = []
     private var snapshotPublishTask: Task<Void, Never>?
+    private var hasStarted = false
 
     init(
         refreshService: UsageRefreshService,
@@ -315,6 +317,7 @@ final class WatchSnapshotCoordinator {
         let resolvedSender = sender ?? PhoneWatchConnectivityCoordinator.shared
         self.refreshService = refreshService
         self.configurationStore = configurationStore
+        self.sender = resolvedSender
         self.coalescingDelay = coalescingDelay
         self.publishSnapshot = publishSnapshot ?? { results, store, force in
             WatchSnapshotPublisher.publish(
@@ -344,7 +347,12 @@ final class WatchSnapshotCoordinator {
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
 
-        resolvedSender.activate { [weak self] in
+    }
+
+    func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        sender.activate { [weak self] in
             self?.publishCurrentSnapshot(force: true)
         }
     }
@@ -385,7 +393,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject, WatchSnapshotSending {
     static let shared = PhoneWatchConnectivityCoordinator()
 
     private let session: WCSession?
-    private var activationHandler: (@MainActor () -> Void)?
+    private var snapshotNeededHandler: (@MainActor () -> Void)?
     private var deduplicator = WatchSnapshotDeduplicator()
 
     init(session: WCSession? = WCSession.isSupported() ? .default : nil) {
@@ -393,15 +401,28 @@ final class PhoneWatchConnectivityCoordinator: NSObject, WatchSnapshotSending {
         super.init()
     }
 
-    func activate(onActivated: @escaping @MainActor () -> Void) {
-        activationHandler = onActivated
+    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void) {
+        snapshotNeededHandler = onSnapshotNeeded
         guard let session else { return }
         session.delegate = self
         if session.activationState == .activated {
-            onActivated()
+            onSnapshotNeeded()
         } else {
             session.activate()
         }
+    }
+
+    @discardableResult
+    func handleMessage(_ message: [String: Any]) -> Bool {
+        guard WatchDashboardSnapshot.isSnapshotRequest(message) else {
+            return false
+        }
+        snapshotNeededHandler?()
+        return true
+    }
+
+    func watchStateDidChange() {
+        snapshotNeededHandler?()
     }
 
     @discardableResult
@@ -428,7 +449,22 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
     ) {
         guard activationState == .activated, error == nil else { return }
         Task { @MainActor [weak self] in
-            self?.activationHandler?()
+            self?.snapshotNeededHandler?()
+        }
+    }
+
+    nonisolated func session(
+        _ session: WCSession,
+        didReceiveMessage message: [String: Any]
+    ) {
+        Task { @MainActor [weak self] in
+            _ = self?.handleMessage(message)
+        }
+    }
+
+    nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+        Task { @MainActor [weak self] in
+            self?.watchStateDidChange()
         }
     }
 
@@ -443,7 +479,7 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
 final class PhoneWatchConnectivityCoordinator: WatchSnapshotSending {
     static let shared = PhoneWatchConnectivityCoordinator()
 
-    func activate(onActivated: @escaping @MainActor () -> Void) {}
+    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void) {}
 
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool {
         false

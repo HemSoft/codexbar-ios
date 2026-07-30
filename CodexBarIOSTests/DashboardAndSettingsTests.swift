@@ -1531,6 +1531,9 @@ final class DashboardAndSettingsTests: XCTestCase {
             coalescingDelay: .milliseconds(5)
         )
 
+        XCTAssertEqual(sender.activationCount, 0)
+        coordinator.start()
+        coordinator.start()
         XCTAssertEqual(sender.activationCount, 1)
         sender.completeActivation()
         XCTAssertEqual(sender.publishedForces, [true])
@@ -1554,6 +1557,47 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testTransientWatchSnapshotCoordinatorDoesNotReplaceRetainedCallback() {
+        let retainedDefaults = UserDefaults(suiteName: "\(#function).retained")!
+        retainedDefaults.removePersistentDomain(forName: "\(#function).retained")
+        let retainedStore = ProviderConfigurationStore(
+            defaults: retainedDefaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: retainedDefaults
+        )
+        let retainedService = UsageRefreshService(providers: [], initialResults: [])
+        let sender = RecordingWatchSnapshotSender()
+        let retainedCoordinator = WatchSnapshotCoordinator(
+            refreshService: retainedService,
+            configurationStore: retainedStore,
+            sender: sender
+        )
+        retainedCoordinator.start()
+
+        let transientDefaults = UserDefaults(suiteName: "\(#function).transient")!
+        transientDefaults.removePersistentDomain(forName: "\(#function).transient")
+        let transientStore = ProviderConfigurationStore(
+            defaults: transientDefaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: transientDefaults
+        )
+        let transientService = UsageRefreshService(providers: [], initialResults: [])
+        do {
+            let transientCoordinator = WatchSnapshotCoordinator(
+                refreshService: transientService,
+                configurationStore: transientStore,
+                sender: sender
+            )
+            withExtendedLifetime(transientCoordinator) {}
+        }
+
+        XCTAssertEqual(sender.activationCount, 1)
+        sender.completeActivation()
+        XCTAssertEqual(sender.publishedForces, [true])
+        withExtendedLifetime(retainedCoordinator) {}
+    }
+
+    @MainActor
     func testWatchSnapshotCoordinatorPreservesLastWatchDataWhileInitialRefreshIsPending() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
@@ -1573,6 +1617,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             coalescingDelay: .milliseconds(5)
         )
 
+        coordinator.start()
         sender.completeActivation()
         XCTAssertTrue(sender.snapshots.isEmpty)
 
@@ -1585,6 +1630,24 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(sender.snapshots.count, 1)
         XCTAssertTrue(sender.snapshots[0].accounts.isEmpty)
         withExtendedLifetime(coordinator) {}
+    }
+
+    @MainActor
+    func testPhoneWatchConnectivityCoordinatorHandlesSnapshotRequestsAndWatchStateChanges() {
+        let sender = PhoneWatchConnectivityCoordinator(session: nil)
+        var snapshotNeededCount = 0
+        sender.activate {
+            snapshotNeededCount += 1
+        }
+
+        XCTAssertFalse(sender.handleMessage(["unrelated": true]))
+        XCTAssertEqual(snapshotNeededCount, 0)
+
+        XCTAssertTrue(sender.handleMessage(WatchDashboardSnapshot.snapshotRequestMessage))
+        XCTAssertEqual(snapshotNeededCount, 1)
+
+        sender.watchStateDidChange()
+        XCTAssertEqual(snapshotNeededCount, 2)
     }
 
     @MainActor
@@ -2577,9 +2640,9 @@ private final class RecordingWatchSnapshotSender: WatchSnapshotSending {
     private(set) var publishedForces: [Bool] = []
     var onPublish: (() -> Void)?
 
-    func activate(onActivated: @escaping @MainActor () -> Void) {
+    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void) {
         activationCount += 1
-        activationHandler = onActivated
+        activationHandler = onSnapshotNeeded
     }
 
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool {

@@ -199,6 +199,7 @@ final class DashboardOrchestrator: ObservableObject {
     }
 
     func initialRefresh() async {
+        watchSnapshotCoordinator.start()
         _ = await refreshNow()
     }
 
