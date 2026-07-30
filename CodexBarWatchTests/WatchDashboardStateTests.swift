@@ -1063,6 +1063,61 @@ final class WatchDashboardStateTests: XCTestCase {
         )
     }
 
+    func testRelativeResetTimelineRoundsAndAlignsBeyondOneDay() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let resetsAt = now.addingTimeInterval(27.5 * 60 * 60)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 2 * 60 * 60,
+            accounts: [
+                WatchAccountSnapshot(
+                    id: "codex",
+                    providerName: "Codex",
+                    accountLabel: "Primary",
+                    fetchedAt: now,
+                    metrics: [
+                        WatchMetricSnapshot(
+                            id: "usage",
+                            label: "Usage",
+                            usedFraction: 0.5,
+                            exactValue: "50%",
+                            resetText: "Resets later",
+                            resetsAt: resetsAt,
+                            resetDisplayStyle: .relativeWithLocalTime,
+                            fetchedAt: now
+                        ),
+                    ]
+                ),
+            ]
+        )
+        let resolver = WatchComplicationResolver()
+        let dates = resolver.timelineEntryDates(
+            snapshot: snapshot,
+            selection: .automatic,
+            now: now
+        )
+        let twentySevenHoursBeforeReset = resetsAt.addingTimeInterval(-27 * 60 * 60)
+
+        XCTAssertTrue(dates.contains(twentySevenHoursBeforeReset))
+        XCTAssertFalse(
+            dates.contains(resetsAt.addingTimeInterval(-(26 * 60 * 60) + 60))
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(
+                resolver.resolve(snapshot: snapshot, selection: .automatic, at: now).resetText
+            ).hasPrefix("Resets 28h")
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(
+                resolver.resolve(
+                    snapshot: snapshot,
+                    selection: .automatic,
+                    at: twentySevenHoursBeforeReset
+                ).resetText
+            ).hasPrefix("Resets 27h")
+        )
+    }
+
     func testNonRelativeResetStylesAvoidFinalHourCountdownEntries() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let resetsAt = now.addingTimeInterval(3 * 60 * 60)

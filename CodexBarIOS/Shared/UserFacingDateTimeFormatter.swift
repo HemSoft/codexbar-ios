@@ -109,6 +109,10 @@ public struct UserFacingDateTimeFormatter {
             return "Resets now"
         }
 
+        if !includesMinutesBeyondFinalHour, remaining >= 3_600 {
+            return "Resets \(Int(ceil(remaining / 3_600)))h"
+        }
+
         if remaining >= 86_400 {
             let days = Int(remaining / 86_400)
             let hours = Int(remaining.truncatingRemainder(dividingBy: 86_400) / 3_600)
@@ -116,9 +120,6 @@ public struct UserFacingDateTimeFormatter {
         }
 
         if remaining >= 3_600 {
-            if !includesMinutesBeyondFinalHour {
-                return "Resets \(Int(ceil(remaining / 3_600)))h"
-            }
             let hours = Int(remaining / 3_600)
             let minutes = Int(remaining.truncatingRemainder(dividingBy: 3_600) / 60)
             return "Resets \(hours)h \(minutes)m"
