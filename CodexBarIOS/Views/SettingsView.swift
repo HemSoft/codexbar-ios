@@ -156,6 +156,23 @@ enum SettingsNavigationGuard {
         navigate()
         return true
     }
+
+    @discardableResult
+    static func performCategoryChange(
+        from oldDestination: SettingsDestination?,
+        to newDestination: SettingsDestination?,
+        commitPendingChanges: () -> Bool,
+        clearNestedRoute: () -> Void
+    ) -> Bool {
+        guard oldDestination != newDestination else {
+            return true
+        }
+        if oldDestination == .accountsAndGroups, !commitPendingChanges() {
+            return false
+        }
+        clearNestedRoute()
+        return true
+    }
 }
 
 enum SettingsCategorySummary {
@@ -334,10 +351,15 @@ struct SettingsView: View {
             }
         }
         .onChange(of: selectedDestination) { oldValue, newValue in
-            if oldValue == .accountsAndGroups, newValue != oldValue {
-                if !commitPendingGroupChanges() {
-                    selectedDestination = oldValue
+            if !SettingsNavigationGuard.performCategoryChange(
+                from: oldValue,
+                to: newValue,
+                commitPendingChanges: commitPendingGroupChanges,
+                clearNestedRoute: {
+                    selectedAccountID = nil
                 }
+            ) {
+                selectedDestination = oldValue
             }
         }
     }

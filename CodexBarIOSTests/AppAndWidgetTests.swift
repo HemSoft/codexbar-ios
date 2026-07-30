@@ -438,6 +438,58 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(navigationCount, 1)
     }
 
+    func testSettingsNavigationGuardClearsAccountDetailOnlyAfterCategoryChangeCommits() {
+        var commitCount = 0
+        var clearNestedRouteCount = 0
+
+        XCTAssertFalse(
+            SettingsNavigationGuard.performCategoryChange(
+                from: .accountsAndGroups,
+                to: .dashboard,
+                commitPendingChanges: {
+                    commitCount += 1
+                    return false
+                },
+                clearNestedRoute: {
+                    clearNestedRouteCount += 1
+                }
+            )
+        )
+        XCTAssertEqual(commitCount, 1)
+        XCTAssertEqual(clearNestedRouteCount, 0)
+
+        XCTAssertTrue(
+            SettingsNavigationGuard.performCategoryChange(
+                from: .accountsAndGroups,
+                to: .dashboard,
+                commitPendingChanges: {
+                    commitCount += 1
+                    return true
+                },
+                clearNestedRoute: {
+                    clearNestedRouteCount += 1
+                }
+            )
+        )
+        XCTAssertEqual(commitCount, 2)
+        XCTAssertEqual(clearNestedRouteCount, 1)
+
+        XCTAssertTrue(
+            SettingsNavigationGuard.performCategoryChange(
+                from: .dashboard,
+                to: .alerts,
+                commitPendingChanges: {
+                    XCTFail("Non-account category changes should not commit group drafts.")
+                    return false
+                },
+                clearNestedRoute: {
+                    clearNestedRouteCount += 1
+                }
+            )
+        )
+        XCTAssertEqual(clearNestedRouteCount, 2)
+    }
+
     func testSettingsCategorySummariesExposeStateWithoutAccountIdentifiers() {
         XCTAssertEqual(
             SettingsCategorySummary.accounts(accountCount: 1, groupCount: 2),
