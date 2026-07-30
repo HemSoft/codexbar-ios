@@ -26,6 +26,9 @@ enum WatchConnectivityDelegateEvent: Sendable {
     }
 }
 
+// `nextSequence` is accessed only under `lock`. `nextEvent` also invokes its
+// nonescaping factory while holding that lock, making extraction and sequence
+// assignment atomic without allowing a non-Sendable callback value to escape.
 private final class WatchConnectivityEventSequencer: @unchecked Sendable {
     private let lock = NSLock()
     private var nextSequence: UInt64 = 0
