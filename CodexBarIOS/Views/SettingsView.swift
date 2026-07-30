@@ -272,7 +272,7 @@ struct SettingsView: View {
                         } label: {
                             Label("Add Another ChatGPT / Codex Account", systemImage: "person.badge.plus")
                         }
-                        .disabled(configurationStore.isPersistenceRecoveryRequired)
+                        .disabled(configurationStore.isAccountCreationBlocked)
                     }
 
                     Button {
@@ -280,7 +280,7 @@ struct SettingsView: View {
                     } label: {
                         Label("Add Account", systemImage: "plus.circle")
                     }
-                    .disabled(configurationStore.isPersistenceRecoveryRequired)
+                    .disabled(configurationStore.isAccountCreationBlocked)
                 } header: {
                     Text("Accounts")
                 }
@@ -682,7 +682,7 @@ struct AddAccountFlowState: Equatable {
         if let accountID {
             return accountID
         }
-        guard !configurationStore.isPersistenceRecoveryRequired else {
+        guard !configurationStore.isAccountCreationBlocked else {
             return nil
         }
 
