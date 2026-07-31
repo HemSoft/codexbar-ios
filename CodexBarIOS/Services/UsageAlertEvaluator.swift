@@ -89,13 +89,21 @@ public enum UsageAlertEvaluator {
             for: notification.accountID,
             severity: .warning
         )
+        let hadPreviouslyDeliveredWarning =
+            previouslyActiveAlertIDs.contains(warningAlertID)
+                || previouslyActiveAlertIDs.contains(
+                    "severity.\(notification.accountID)"
+                )
+                || previouslyActiveAlertIDs.contains {
+                    $0.hasPrefix("usage.\(notification.accountID).")
+                }
         guard
             notification.kind == .severity,
             notification.id == severityAlertID(
                 for: notification.accountID,
                 severity: .critical
             ),
-            !previouslyActiveAlertIDs.contains(warningAlertID)
+            !hadPreviouslyDeliveredWarning
         else {
             return
         }

@@ -229,7 +229,7 @@ final class UsageAlertTests: XCTestCase {
         )
     }
 
-    func testLegacySuppressionIDsMigrateWithoutDuplicateNotifications() {
+    func testLegacySuppressionIDsMigrateWithoutDuplicateNotifications() throws {
         let settings = UsageAlertSettings(isEnabled: true)
 
         let warning = UsageAlertEvaluator.evaluate(
@@ -259,6 +259,22 @@ final class UsageAlertTests: XCTestCase {
                 "severity.critical.codex.personal",
             ]
         )
+
+        let criticalNotification = try XCTUnwrap(critical.notifications.first)
+        var activeAlertIDs = critical.activeAlertIDs
+        UsageAlertEvaluator.removeActiveAlertIDs(
+            forFailedDelivery: criticalNotification,
+            from: &activeAlertIDs,
+            previouslyActiveAlertIDs: ["severity.codex.personal"]
+        )
+        XCTAssertEqual(activeAlertIDs, ["severity.warning.codex.personal"])
+
+        let recoveredToWarning = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: settings,
+            activeAlertIDs: activeAlertIDs
+        )
+        XCTAssertTrue(recoveredToWarning.notifications.isEmpty)
     }
 
     func testProjectedUsageUsesConfiguredThresholds() {
