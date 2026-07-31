@@ -13,9 +13,54 @@ mutation_workspace_key=$(print -rn -- "$repository_dir" | cksum | awk '{print $1
 mutation_workspace_parent="${TMPDIR:-/tmp}/codexbar-mutation.$mutation_workspace_key"
 mutation_workspace_parent=${mutation_workspace_parent:A}
 mutation_workspace="$mutation_workspace_parent/repository"
+mutation_lock="$mutation_workspace_parent.lock"
+lock_acquired=false
+
+sync_mutation_cache() {
+    if [[ -d "$mutation_workspace/.swift-mutation-testing-cache" ]]; then
+        mkdir -p "$repository_dir/.swift-mutation-testing-cache"
+        rsync -a --delete \
+            "$mutation_workspace/.swift-mutation-testing-cache/" \
+            "$repository_dir/.swift-mutation-testing-cache/"
+    fi
+}
+
+cleanup() {
+    [[ "$lock_acquired" == true ]] || return
+    local cache_saved=true
+    if ! sync_mutation_cache; then
+        cache_saved=false
+        print -u2 "Could not save the mutation cache; preserving $mutation_workspace for recovery."
+    fi
+    if [[ "$cache_saved" == true ]]; then
+        if git -C "$repository_dir" worktree list --porcelain \
+            | grep -Fqx "worktree $mutation_workspace"; then
+            git -C "$repository_dir" worktree remove --force "$mutation_workspace" \
+                || true
+        fi
+        rmdir "$mutation_workspace_parent" 2>/dev/null || true
+    fi
+    rm -f "$mutation_lock/pid"
+    rmdir "$mutation_lock" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if ! mkdir "$mutation_lock" 2>/dev/null; then
+    lock_owner=unknown
+    if [[ -r "$mutation_lock/pid" ]]; then
+        lock_owner=$(<"$mutation_lock/pid")
+    fi
+    print -u2 "Another mutation pilot owns $mutation_lock (PID $lock_owner); refusing to disturb it."
+    exit 1
+fi
+lock_acquired=true
+print -r -- "$$" > "$mutation_lock/pid"
 
 if git -C "$repository_dir" worktree list --porcelain \
     | grep -Fqx "worktree $mutation_workspace"; then
+    sync_mutation_cache
     git -C "$repository_dir" worktree remove --force "$mutation_workspace"
     rmdir "$mutation_workspace_parent" 2>/dev/null || true
 fi
@@ -24,16 +69,6 @@ if [[ -e "$mutation_workspace_parent" ]]; then
     exit 1
 fi
 mkdir -p "$mutation_workspace_parent"
-
-cleanup() {
-    if git -C "$repository_dir" worktree list --porcelain \
-        | grep -Fqx "worktree $mutation_workspace"; then
-        git -C "$repository_dir" worktree remove --force "$mutation_workspace" \
-            || true
-    fi
-    rmdir "$mutation_workspace_parent" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
 
 mkdir -p "$tool_cache_dir" "$repository_dir/build/mutation-testing"
 
@@ -104,13 +139,6 @@ if [[ -d "$mutation_workspace/build/mutation-testing" ]]; then
     rsync -a \
         "$mutation_workspace/build/mutation-testing/" \
         "$repository_dir/build/mutation-testing/"
-fi
-
-if [[ -d "$mutation_workspace/.swift-mutation-testing-cache" ]]; then
-    mkdir -p "$repository_dir/.swift-mutation-testing-cache"
-    rsync -a --delete \
-        "$mutation_workspace/.swift-mutation-testing-cache/" \
-        "$repository_dir/.swift-mutation-testing-cache/"
 fi
 
 exit "$tool_status"
