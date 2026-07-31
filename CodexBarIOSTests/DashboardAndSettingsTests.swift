@@ -1647,7 +1647,7 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testPhoneWatchConnectivityCoordinatorHandlesSnapshotRequestsAndWatchStateChanges() {
+    func testPhoneWatchConnectivityCoordinatorHandlesSnapshotRequestsAndWatchStateChanges() throws {
         let sender = PhoneWatchConnectivityCoordinator(session: nil)
         var snapshotNeededCount = 0
         sender.activate {
@@ -1667,8 +1667,32 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertTrue(sender.handleMessage(WatchDashboardSnapshot.snapshotRequestMessage))
         XCTAssertEqual(snapshotNeededCount, 1)
 
-        sender.watchStateDidChange()
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        XCTAssertFalse(sender.publish(snapshot, force: true))
+        var response: WatchDashboardSnapshotResponse?
+        XCTAssertTrue(
+            sender.handleMessage(
+                WatchDashboardSnapshot.snapshotRequestMessage,
+                replyHandler: {
+                    response = WatchDashboardSnapshotResponse($0)
+                }
+            )
+        )
+        XCTAssertEqual(try XCTUnwrap(response).decode(), snapshot)
         XCTAssertEqual(snapshotNeededCount, 2)
+
+        XCTAssertFalse(sender.handleUserInfo(["unrelated": true]))
+        XCTAssertTrue(
+            sender.handleUserInfo(WatchDashboardSnapshot.snapshotRequestMessage)
+        )
+        XCTAssertEqual(snapshotNeededCount, 3)
+
+        sender.watchStateDidChange()
+        XCTAssertEqual(snapshotNeededCount, 3)
     }
 
     @MainActor

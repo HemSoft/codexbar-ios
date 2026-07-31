@@ -1,11 +1,13 @@
 import Combine
 import Foundation
+import OSLog
 import WatchConnectivity
 import WidgetKit
 
 enum WatchConnectivityDelegateEvent: Sendable {
     case activation(
         sequence: UInt64,
+        activationState: WCSessionActivationState,
         applicationContext: WatchDashboardApplicationContext,
         isPhoneReachable: Bool,
         hadError: Bool
@@ -18,7 +20,7 @@ enum WatchConnectivityDelegateEvent: Sendable {
 
     var sequence: UInt64 {
         switch self {
-        case let .activation(sequence, _, _, _),
+        case let .activation(sequence, _, _, _, _),
              let .applicationContext(sequence, _),
              let .reachability(sequence, _):
             sequence
@@ -43,10 +45,58 @@ private final class WatchConnectivityEventSequencer: @unchecked Sendable {
     }
 }
 
+enum WatchSnapshotRequestFailure: Equatable, Sendable {
+    case sessionInactive
+    case phoneUnreachable
+    case timedOut
+    case deliveryFailed
+
+    init(_ error: Error) {
+        let nsError = error as NSError
+        guard nsError.domain == WCErrorDomain,
+              let code = WCError.Code(rawValue: nsError.code)
+        else {
+            self = .deliveryFailed
+            return
+        }
+        switch code {
+        case .sessionNotActivated:
+            self = .sessionInactive
+        case .notReachable:
+            self = .phoneUnreachable
+        case .messageReplyTimedOut, .transferTimedOut:
+            self = .timedOut
+        default:
+            self = .deliveryFailed
+        }
+    }
+
+    var recoveryMessage: String {
+        switch self {
+        case .sessionInactive:
+            "Connecting to iPhone. Keep CodexBar open on both devices"
+        case .phoneUnreachable:
+            "iPhone unavailable. Open CodexBar there; update queued"
+        case .timedOut:
+            "iPhone did not respond. Open CodexBar there; update queued"
+        case .deliveryFailed:
+            "Update queued. Open CodexBar on iPhone to finish"
+        }
+    }
+}
+
 @MainActor
 final class WatchDashboardStore: NSObject, ObservableObject {
-    typealias SnapshotRequester = (@escaping (Error) -> Void) -> Void
+    typealias SnapshotRequester = (
+        @escaping @MainActor (WatchDashboardSnapshotResponse) -> Void,
+        @escaping @MainActor (WatchSnapshotRequestFailure) -> Void
+    ) -> Void
+    typealias SnapshotRequestQueuer = () -> Void
 
+    private static let logger = Logger(
+        subsystem: "com.hemsoft.CodexBarIOS",
+        category: "WatchConnectivity.Watch"
+    )
     @Published private(set) var snapshot: WatchDashboardSnapshot?
     @Published private(set) var isPhoneReachable = false
     @Published private(set) var decodingError: String?
@@ -58,11 +108,14 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private let reloadComplications: () -> Void
     private let session: WCSession?
     private let requestSnapshot: SnapshotRequester?
+    private let queueSnapshotRequest: SnapshotRequestQueuer?
     private let requestCoalescingDelay: Duration
+    private var activationState: WCSessionActivationState
     nonisolated private let delegateEventSequencer = WatchConnectivityEventSequencer()
     private var nextDelegateEventSequence: UInt64 = 0
     private var pendingDelegateEvents: [UInt64: WatchConnectivityDelegateEvent] = [:]
     private var snapshotRequestTask: Task<Void, Never>?
+    private var hasQueuedSnapshotRequest = false
 
     init(
         defaults: UserDefaults = .standard,
@@ -72,6 +125,8 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         },
         session: WCSession? = WCSession.isSupported() ? .default : nil,
         requestSnapshot: SnapshotRequester? = nil,
+        queueSnapshotRequest: SnapshotRequestQueuer? = nil,
+        initialActivationState: WCSessionActivationState? = nil,
         requestCoalescingDelay: Duration = .milliseconds(100)
     ) {
         self.defaults = defaults
@@ -79,18 +134,40 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         self.reloadComplications = reloadComplications
         self.session = session
         self.requestCoalescingDelay = requestCoalescingDelay
+        activationState = initialActivationState
+            ?? session?.activationState
+            ?? (requestSnapshot == nil ? .notActivated : .activated)
         if let requestSnapshot {
             self.requestSnapshot = requestSnapshot
         } else if let session {
-            self.requestSnapshot = { errorHandler in
+            self.requestSnapshot = { replyHandler, errorHandler in
                 session.sendMessage(
                     WatchDashboardSnapshot.snapshotRequestMessage,
-                    replyHandler: nil,
-                    errorHandler: errorHandler
+                    replyHandler: { reply in
+                        let response = WatchDashboardSnapshotResponse(reply)
+                        Task { @MainActor in
+                            replyHandler(response)
+                        }
+                    },
+                    errorHandler: { error in
+                        let failure = WatchSnapshotRequestFailure(error)
+                        Task { @MainActor in
+                            errorHandler(failure)
+                        }
+                    }
                 )
             }
         } else {
             self.requestSnapshot = nil
+        }
+        if let queueSnapshotRequest {
+            self.queueSnapshotRequest = queueSnapshotRequest
+        } else if let session {
+            self.queueSnapshotRequest = {
+                session.transferUserInfo(WatchDashboardSnapshot.snapshotRequestMessage)
+            }
+        } else {
+            self.queueSnapshotRequest = nil
         }
         var migratedSnapshotNeedsReload = false
         let legacyData = defaults.data(forKey: Self.persistedSnapshotKey)
@@ -127,6 +204,9 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         guard let session else { return }
         session.delegate = self
         isPhoneReachable = session.isReachable
+        Self.logger.info(
+            "Starting Watch session state=\(session.activationState.rawValue, privacy: .public) reachable=\(session.isReachable, privacy: .public)"
+        )
         session.activate()
         if !session.receivedApplicationContext.isEmpty {
             receive(session.receivedApplicationContext)
@@ -157,11 +237,15 @@ final class WatchDashboardStore: NSObject, ObservableObject {
             defaults.set(encoded, forKey: Self.persistedSnapshotKey)
             snapshot = decoded
             decodingError = nil
+            hasQueuedSnapshotRequest = false
             if shouldReloadComplications {
                 reloadComplications()
             }
         } catch {
             decodingError = "Couldn’t read the latest iPhone update"
+            Self.logger.error(
+                "Snapshot context decode failed domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code, privacy: .public)"
+            )
         }
     }
 
@@ -174,17 +258,22 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     }
 
     func activationCompleted(
+        activationState: WCSessionActivationState,
         applicationContext: WatchDashboardApplicationContext,
         isPhoneReachable: Bool,
         hadError: Bool
     ) {
+        self.activationState = activationState
         self.isPhoneReachable = isPhoneReachable
+        Self.logger.info(
+            "Activation completed state=\(activationState.rawValue, privacy: .public) reachable=\(isPhoneReachable, privacy: .public) hadError=\(hadError, privacy: .public)"
+        )
         if !applicationContext.isEmpty {
             receive(applicationContext)
-        } else if hadError, snapshot == nil {
-            decodingError = "Couldn’t connect to iPhone"
+        } else if (hadError || activationState != .activated), snapshot == nil {
+            decodingError = WatchSnapshotRequestFailure.sessionInactive.recoveryMessage
         }
-        if !hadError {
+        if !hadError, activationState == .activated {
             scheduleCurrentSnapshotRequest()
         }
     }
@@ -197,8 +286,15 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         ) {
             nextDelegateEventSequence &+= 1
             switch nextEvent {
-            case let .activation(_, applicationContext, isPhoneReachable, hadError):
+            case let .activation(
+                _,
+                activationState,
+                applicationContext,
+                isPhoneReachable,
+                hadError
+            ):
                 activationCompleted(
+                    activationState: activationState,
                     applicationContext: applicationContext,
                     isPhoneReachable: isPhoneReachable,
                     hadError: hadError
@@ -226,12 +322,62 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     }
 
     func requestCurrentSnapshot() {
-        requestSnapshot? { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.snapshot == nil else { return }
-                self.decodingError = "Couldn’t request the latest update from iPhone"
-            }
+        guard activationState == .activated else {
+            decodingError = WatchSnapshotRequestFailure.sessionInactive.recoveryMessage
+            Self.logger.notice("Snapshot request deferred because session is not activated")
+            session?.activate()
+            return
         }
+        guard isPhoneReachable else {
+            queueSnapshotRequest(failure: .phoneUnreachable)
+            return
+        }
+        guard let requestSnapshot else {
+            queueSnapshotRequest(failure: .deliveryFailed)
+            return
+        }
+        Self.logger.info("Requesting immediate snapshot from reachable iPhone")
+        requestSnapshot(
+            { [weak self] response in
+                self?.receiveSnapshotResponse(response)
+            },
+            { [weak self] failure in
+                self?.queueSnapshotRequest(failure: failure)
+            }
+        )
+    }
+
+    private func receiveSnapshotResponse(_ response: WatchDashboardSnapshotResponse) {
+        switch response {
+        case .snapshot:
+            do {
+                let decoded = try response.decode()
+                receive(try decoded.applicationContext())
+                Self.logger.info("Received immediate snapshot reply from iPhone")
+            } catch {
+                decodingError = "Couldn’t read the iPhone update. Refresh CodexBar on iPhone"
+                Self.logger.error(
+                    "Immediate snapshot reply decode failed domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code, privacy: .public)"
+                )
+            }
+        case .unavailable:
+            decodingError = "No dashboard update is available yet. Refresh CodexBar on iPhone"
+            Self.logger.notice("iPhone replied without an available dashboard snapshot")
+        case .malformed:
+            decodingError = "Couldn’t read the iPhone update. Refresh CodexBar on iPhone"
+            Self.logger.error("iPhone returned a malformed snapshot reply")
+        }
+    }
+
+    private func queueSnapshotRequest(failure: WatchSnapshotRequestFailure) {
+        if !hasQueuedSnapshotRequest, let queueSnapshotRequest {
+            queueSnapshotRequest()
+            hasQueuedSnapshotRequest = true
+        }
+        decodingError = failure.recoveryMessage
+        Self.logger.notice(
+            "Queued snapshot request reason=\(String(describing: failure), privacy: .public)"
+        )
     }
 
     deinit {
@@ -248,6 +394,7 @@ extension WatchDashboardStore: WCSessionDelegate {
         let event = delegateEventSequencer.nextEvent { sequence in
             WatchConnectivityDelegateEvent.activation(
                 sequence: sequence,
+                activationState: activationState,
                 applicationContext: WatchDashboardApplicationContext(
                     session.receivedApplicationContext
                 ),

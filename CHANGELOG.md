@@ -123,6 +123,11 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Fixed Apple Watch dashboard refreshes so reachable phones reply immediately,
+  unavailable requests queue for later delivery, and failures explain how to
+  recover while preserving the last good dashboard and complication data.
+  ([#208](https://github.com/HemSoft/codexbar-ios/issues/208))
+
 - Ensured a newly installed Apple Watch companion requests and receives the
   current dashboard without waiting for an unrelated iPhone data change, while
   preserving the last good snapshot whenever the phone is unavailable.
