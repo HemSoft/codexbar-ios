@@ -2746,6 +2746,57 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+    func testDashboardUsageSorterUsesConfiguredSeverityThresholds() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let lowBalanceAtSeventyPercent = makeHistoryResult(
+            accountID: "low-balance.seventy-percent",
+            providerID: .openRouter,
+            fetchedAt: now,
+            used: 70,
+            creditsRemaining: 2
+        )
+        let highBalanceAtEightyPercent = makeHistoryResult(
+            accountID: "high-balance.eighty-percent",
+            providerID: .openRouter,
+            fetchedAt: now,
+            used: 80,
+            creditsRemaining: 20
+        )
+        let results = [
+            lowBalanceAtSeventyPercent,
+            highBalanceAtEightyPercent,
+        ]
+
+        XCTAssertEqual(
+            DashboardUsageSorter.orderedResults(
+                results,
+                mode: .smart,
+                manualOrder: [],
+                now: now
+            ).map(\.accountID),
+            [
+                "high-balance.eighty-percent",
+                "low-balance.seventy-percent",
+            ]
+        )
+        XCTAssertEqual(
+            DashboardUsageSorter.orderedResults(
+                results,
+                mode: .smart,
+                manualOrder: [],
+                now: now,
+                severityThresholds: UsageSeverityThresholds(
+                    warning: 0.65,
+                    critical: 0.90
+                )
+            ).map(\.accountID),
+            [
+                "low-balance.seventy-percent",
+                "high-balance.eighty-percent",
+            ]
+        )
+    }
+
     func testDashboardUsageSorterIgnoresStaleBarUrgency() {
         let now = Date(timeIntervalSince1970: 1_788_475_200)
         let staleCritical = ProviderUsageResult(

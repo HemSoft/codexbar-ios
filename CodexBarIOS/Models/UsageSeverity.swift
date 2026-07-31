@@ -7,9 +7,16 @@ public struct UsageSeverityThresholds: Equatable, Sendable {
     public static let minimumValue = 0.01
     public static let maximumValue = 1.0
     public static let minimumGap = 0.01
-    public static let `default` = UsageSeverityThresholds(warning: 0.75, critical: 0.90)
+    public static let defaultWarning = 0.75
+    public static let defaultCritical = 0.90
+    public static let `default` = UsageSeverityThresholds(
+        warning: Self.defaultWarning,
+        critical: Self.defaultCritical
+    )
 
     public init(warning: Double, critical: Double) {
+        let warning = warning.isFinite ? warning : Self.defaultWarning
+        let critical = critical.isFinite ? critical : Self.defaultCritical
         let normalizedWarning = min(
             max(warning, Self.minimumValue),
             Self.maximumValue - Self.minimumGap

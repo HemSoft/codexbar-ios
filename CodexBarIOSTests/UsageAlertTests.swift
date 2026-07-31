@@ -45,6 +45,26 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(reloadedStore.usageAlertSettings.criticalThreshold, 0.80)
     }
 
+    func testUsageAlertThresholdsNormalizeNonFiniteInputs() {
+        let thresholds = UsageSeverityThresholds(
+            warning: .nan,
+            critical: .nan
+        )
+        XCTAssertEqual(thresholds, .default)
+
+        var settings = UsageAlertSettings(
+            warningThreshold: .nan,
+            criticalThreshold: .nan
+        )
+        XCTAssertEqual(settings.warningThreshold, 0.75)
+        XCTAssertEqual(settings.criticalThreshold, 0.90)
+
+        settings.updateWarningThreshold(.nan)
+        settings.updateCriticalThreshold(.nan)
+        XCTAssertEqual(settings.warningThreshold, 0.75)
+        XCTAssertEqual(settings.criticalThreshold, 0.90)
+    }
+
     @MainActor
     func testLegacySettingsMigrateToSeverityDefaults() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
@@ -77,6 +97,63 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(migratedObject["criticalThreshold"] as? Double, 0.90)
         XCTAssertNil(migratedObject["usageThreshold"])
         XCTAssertNil(migratedObject["includesSeverityAlerts"])
+    }
+
+    @MainActor
+    func testLegacySettingsMigrationPreservesCredentialReadError() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let configuration = ProviderAccountConfiguration(
+            providerID: .claude,
+            authMethod: .browserSession
+        )
+        defaults.set(
+            try JSONEncoder().encode([configuration]),
+            forKey: "providerConfigurations"
+        )
+        defaults.set(
+            try JSONSerialization.data(withJSONObject: [
+                "isEnabled": true,
+                "usageThreshold": 0.80,
+                "balanceThreshold": 5.0,
+                "includesSeverityAlerts": true,
+            ]),
+            forKey: "usageAlertSettings"
+        )
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingReadSecretStore()
+        )
+
+        XCTAssertEqual(
+            store.lastError,
+            "Could not read the saved credential for Claude: Keychain unavailable"
+        )
+        XCTAssertEqual(store.usageAlertSettings.warningThreshold, 0.75)
+        XCTAssertEqual(store.usageAlertSettings.criticalThreshold, 0.90)
+    }
+
+    @MainActor
+    func testUnknownFutureSettingsPayloadIsNotRewrittenAsLegacy() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let futureData = try JSONSerialization.data(withJSONObject: [
+            "isEnabled": true,
+            "futureWarningThreshold": 0.65,
+            "futureCriticalThreshold": 0.85,
+            "balanceThreshold": 8.0,
+        ])
+        defaults.set(futureData, forKey: "usageAlertSettings")
+
+        _ = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertEqual(defaults.data(forKey: "usageAlertSettings"), futureData)
     }
 
     @MainActor

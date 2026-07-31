@@ -289,10 +289,10 @@ public final class ProviderConfigurationStore: ObservableObject {
             saveMetricLayouts()
         }
         sortConfigurations()
-        refreshSecretAvailability()
         if usageAlertSettingsNeedMigration {
             saveUsageAlertSettings()
         }
+        refreshSecretAvailability()
     }
 
     public var isPersistenceRecoveryRequired: Bool {
@@ -2028,7 +2028,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             return false
         }
 
-        return object["warningThreshold"] == nil || object["criticalThreshold"] == nil
+        return object["usageThreshold"] != nil || object["includesSeverityAlerts"] != nil
     }
 
     private static func loadUsageAlertActiveIDs(from defaults: UserDefaults) -> Set<String> {

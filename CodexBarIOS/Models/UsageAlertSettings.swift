@@ -2,8 +2,8 @@ import Foundation
 
 public struct UsageAlertSettings: Codable, Equatable, Sendable {
     public var isEnabled: Bool
-    public var warningThreshold: Double
-    public var criticalThreshold: Double
+    public private(set) var warningThreshold: Double
+    public private(set) var criticalThreshold: Double
     public var balanceThreshold: Double
 
     public init(
@@ -32,6 +32,7 @@ public struct UsageAlertSettings: Codable, Equatable, Sendable {
     }
 
     public mutating func updateWarningThreshold(_ value: Double) {
+        let value = value.isFinite ? value : Self.defaultWarningThreshold
         warningThreshold = min(
             max(value, UsageSeverityThresholds.minimumValue),
             criticalThreshold - Self.minimumThresholdGap
@@ -39,6 +40,7 @@ public struct UsageAlertSettings: Codable, Equatable, Sendable {
     }
 
     public mutating func updateCriticalThreshold(_ value: Double) {
+        let value = value.isFinite ? value : Self.defaultCriticalThreshold
         criticalThreshold = max(
             min(value, UsageSeverityThresholds.maximumValue),
             warningThreshold + Self.minimumThresholdGap
