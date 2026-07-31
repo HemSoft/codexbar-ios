@@ -203,8 +203,10 @@ public enum UsageAlertEvaluator {
             )
             activeAlerts.append(detail)
 
+            let isSuppressedByLegacyAlert =
+                highestSeverity == .warning && !legacySuppressionIDs.isEmpty
             if !activeAlertIDs.contains(currentAlertID),
-               legacySuppressionIDs.isEmpty
+               !isSuppressedByLegacyAlert
             {
                 notifications.append(
                     UsageAlertNotification(

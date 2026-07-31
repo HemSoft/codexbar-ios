@@ -248,7 +248,10 @@ final class UsageAlertTests: XCTestCase {
             settings: settings,
             activeAlertIDs: ["severity.codex.personal"]
         )
-        XCTAssertTrue(critical.notifications.isEmpty)
+        XCTAssertEqual(
+            critical.notifications.map(\.title),
+            ["Codex Critical Alert"]
+        )
         XCTAssertEqual(
             critical.activeAlertIDs,
             [
