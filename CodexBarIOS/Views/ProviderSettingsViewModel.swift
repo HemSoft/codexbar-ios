@@ -103,7 +103,8 @@ final class ProviderSettingsViewModel: ObservableObject {
                 setupMessage: "OpenRouter credit balances require a Management API Key, not a regular inference key.",
                 setupLinkTitle: "Create a Management API Key in OpenRouter",
                 setupURL: URL(string: "https://openrouter.ai/settings/management-keys"),
-                securityMessage: "Management keys can administer API keys and are more sensitive than inference keys. CodexBar stores this credential only in Keychain."
+                securityMessage: "Management keys can administer API keys and are more sensitive than inference "
+                    + "keys. CodexBar stores this credential only in Keychain."
             )
         }
 
@@ -243,7 +244,8 @@ final class ProviderSettingsViewModel: ObservableObject {
                 codexAuthError = "That ChatGPT account is already connected as “\(accountName)”. No saved account was changed. Cancel or try again with a different identity."
                 return
             case .unableToVerify:
-                codexAuthError = "ChatGPT sign-in completed, but CodexBar could not safely verify it against the other saved ChatGPT accounts. No saved account was changed. Try again."
+                codexAuthError = "ChatGPT sign-in completed, but CodexBar could not safely verify it against the "
+                    + "other saved ChatGPT accounts. No saved account was changed. Try again."
                 return
             }
 

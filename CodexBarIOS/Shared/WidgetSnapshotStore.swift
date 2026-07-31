@@ -145,7 +145,7 @@ public struct CodexBarWidgetSnapshot: Codable, Equatable, Sendable {
                     projectedFraction: projectedFraction,
                     projectionDescription: projectionDescription,
                     projectedSeverity: projectedSeverity
-                )
+                ),
             ],
             creditsRemaining: nil,
             fetchedAt: Date(),

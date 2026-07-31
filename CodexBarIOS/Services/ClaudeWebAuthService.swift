@@ -163,7 +163,7 @@ public final class ClaudeWebAuthService: Sendable {
             URLQueryItem(name: "scope", value: requestedScope),
             URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
-            URLQueryItem(name: "state", value: state)
+            URLQueryItem(name: "state", value: state),
         ]
         return components.url!
     }
@@ -180,7 +180,7 @@ public final class ClaudeWebAuthService: Sendable {
             "redirect_uri": redirectURI,
             "client_id": clientID,
             "code_verifier": codeVerifier,
-            "state": state
+            "state": state,
         ]
         return (try? JSONEncoder().encode(body)) ?? Data()
     }

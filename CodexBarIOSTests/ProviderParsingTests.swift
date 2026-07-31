@@ -3195,7 +3195,7 @@ final class ProviderParsingTests: XCTestCase {
         let result = try XCTUnwrap(ClaudeUsageParser.parseRateLimitHeaders(
             [
                 "anthropic-ratelimit-unified-5h-utilization": "0.25",
-                "anthropic-ratelimit-unified-5h-reset": "1893456000"
+                "anthropic-ratelimit-unified-5h-reset": "1893456000",
             ],
             subscriptionType: "max",
             fetchedAt: fetchedAt
@@ -3211,7 +3211,7 @@ final class ProviderParsingTests: XCTestCase {
         let overQuota = try XCTUnwrap(ClaudeUsageParser.parseRateLimitHeaders(
             [
                 "anthropic-ratelimit-unified-5h-utilization": "1.2",
-                "anthropic-ratelimit-unified-5h-reset": "1893456000"
+                "anthropic-ratelimit-unified-5h-reset": "1893456000",
             ],
             subscriptionType: "max",
             fetchedAt: fetchedAt

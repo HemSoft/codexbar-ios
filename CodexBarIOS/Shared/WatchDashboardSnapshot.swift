@@ -13,8 +13,7 @@ enum WatchDashboardApplicationContext: Equatable, Sendable {
         if applicationContext.isEmpty {
             self = .empty
         } else if let data = applicationContext[WatchDashboardSnapshot.applicationContextDataKey]
-            as? Data
-        {
+            as? Data {
             self = .snapshot(data)
         } else {
             self = .malformed

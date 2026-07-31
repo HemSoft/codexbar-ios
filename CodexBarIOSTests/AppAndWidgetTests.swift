@@ -423,12 +423,12 @@ final class AppAndWidgetTests: XCTestCase {
             draftNames: [
                 "changed": "Renamed",
                 "missing": "Removed",
-                "reverted": "  Original  "
+                "reverted": "  Original  ",
             ],
             persistedName: { groupID in
                 [
                     "changed": "Original",
-                    "reverted": "Original"
+                    "reverted": "Original",
                 ][groupID]
             }
         )

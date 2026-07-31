@@ -113,6 +113,21 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
     CodexBarIOSSmokeTests
   ```
 
+- Run the canonical repository-wide lint gate with the exact
+  `SwiftLintPlugins` version resolved by Swift Package Manager:
+
+  ```sh
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift package \
+    plugin --allow-writing-to-package-directory swiftlint lint \
+    --reporter xcode .
+  ```
+
+  The root `.swiftlint.yml` uses strict mode, so every warning fails this
+  command. The same pinned build-tool plugin runs automatically for every
+  Swift-producing iOS, watchOS, widget, test, and SwiftPM target. Xcode may ask
+  developers to trust the package plugin on first use; unattended builds can
+  pass `-skipPackagePluginValidation` after reviewing the pinned dependency.
+
 - Build the watchOS 10 companion shell on the latest installed simulator:
 
   ```sh
@@ -138,8 +153,8 @@ companion embedded in `CodexBarIOS` and includes a WidgetKit complication
 extension driven by usage snapshots from the iPhone. It does not enable
 independent installation, credentials, or provider networking.
 
-There is no separate lint/typecheck tool configured for this repo beyond
-Xcode/Swift compiler warnings and the test targets above.
+There is no separate typecheck tool beyond Xcode/Swift compiler warnings and
+the test targets above.
 
 ## Pull Request Reviewers
 

@@ -86,8 +86,7 @@ public final class UsageRefreshService: ObservableObject {
         let enabledConfigurations = configurations.filter(\.isEnabled)
         while let refreshingAccountID = enabledConfigurations.lazy
             .map(\.id)
-            .first(where: refreshingAccountIDs.contains)
-        {
+            .first(where: refreshingAccountIDs.contains) {
             await waitForRefreshToFinish(accountID: refreshingAccountID)
         }
 

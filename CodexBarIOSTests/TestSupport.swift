@@ -346,26 +346,36 @@ class TestURLProtocol: URLProtocol, @unchecked Sendable {
 
 final class AppAndWidgetMockURLProtocol: TestURLProtocol, @unchecked Sendable {
     private static let store = TestURLProtocolHandlerStore()
+    // URLProtocol requires an overridable class property.
+    // swiftlint:disable:next static_over_final_class
     override class var handlerStore: TestURLProtocolHandlerStore { store }
 }
 
 final class ConfigurationAndAuthMockURLProtocol: TestURLProtocol, @unchecked Sendable {
     private static let store = TestURLProtocolHandlerStore()
+    // URLProtocol requires an overridable class property.
+    // swiftlint:disable:next static_over_final_class
     override class var handlerStore: TestURLProtocolHandlerStore { store }
 }
 
 final class ProviderParsingMockURLProtocol: TestURLProtocol, @unchecked Sendable {
     private static let store = TestURLProtocolHandlerStore()
+    // URLProtocol requires an overridable class property.
+    // swiftlint:disable:next static_over_final_class
     override class var handlerStore: TestURLProtocolHandlerStore { store }
 }
 
 final class ProviderNetworkMockURLProtocol: TestURLProtocol, @unchecked Sendable {
     private static let store = TestURLProtocolHandlerStore()
+    // URLProtocol requires an overridable class property.
+    // swiftlint:disable:next static_over_final_class
     override class var handlerStore: TestURLProtocolHandlerStore { store }
 }
 
 final class DashboardAndSettingsMockURLProtocol: TestURLProtocol, @unchecked Sendable {
     private static let store = TestURLProtocolHandlerStore()
+    // URLProtocol requires an overridable class property.
+    // swiftlint:disable:next static_over_final_class
     override class var handlerStore: TestURLProtocolHandlerStore { store }
 }
 
@@ -387,10 +397,14 @@ final class IsolatedTestURLProtocol: TestURLProtocol, @unchecked Sendable {
         }
     }
 
+    // URLProtocol requires overridable class methods.
+    // swiftlint:disable:next static_over_final_class
     override class func canInit(with request: URLRequest) -> Bool {
         request.value(forHTTPHeaderField: handlerIDHeader) != nil
     }
 
+    // URLProtocol requires overridable class methods.
+    // swiftlint:disable:next static_over_final_class
     override class func handler(for request: URLRequest) -> TestURLProtocolHandler? {
         guard
             let handlerID = request.value(forHTTPHeaderField: handlerIDHeader)

@@ -294,8 +294,8 @@ struct SettingsView: View {
                 Task {
                     await refreshAddedAccount(accountID: accountID)
                 }
-            }
-        ) { request in
+            },
+            content: { request in
             AddAccountSetupFlow(
                 configurationStore: configurationStore,
                 initialProviderID: request.initialProviderID,
@@ -311,8 +311,9 @@ struct SettingsView: View {
                     }
                 },
                 onAccountRefresh: onAccountRefresh
-            )
-        }
+                )
+            }
+        )
         .confirmationDialog(
             "Reset all accounts?",
             isPresented: $isConfirmingReset,
@@ -360,7 +361,8 @@ struct SettingsView: View {
             }
         } message: {
             Text(
-                "This replaces the damaged group list with an empty list and deliberately ungroups every saved account. Saved accounts and Keychain credentials are not deleted."
+                "This replaces the damaged group list with an empty list and deliberately ungroups every saved "
+                    + "account. Saved accounts and Keychain credentials are not deleted."
             )
         }
         .interactiveDismissDisabled(pendingGroupChanges.hasChanges)
@@ -625,8 +627,7 @@ struct SettingsView: View {
         for target: SettingsGroupValidationTarget
     ) -> some View {
         if groupValidationState.target == target,
-           let message = groupValidationState.message
-        {
+           let message = groupValidationState.message {
             Text(message)
                 .font(.footnote)
                 .foregroundStyle(.red)
@@ -1375,7 +1376,10 @@ private struct FeedbackSupportView: View {
             Section {
                 Label {
                     Text(
-                        "Email feedback is private and does not require a GitHub account. Opening a draft does not send it; you review and explicitly send. Do not add credentials, tokens, cookies, account identifiers, or other secrets to either channel. GitHub forms remain public, require an account, and must not include email addresses."
+                        "Email feedback is private and does not require a GitHub account. Opening a draft does not "
+                            + "send it; you review and explicitly send. Do not add credentials, tokens, cookies, "
+                            + "account identifiers, or other secrets to either channel. GitHub forms remain public, "
+                            + "require an account, and must not include email addresses."
                     )
                 } icon: {
                     Image(systemName: "exclamationmark.shield")
@@ -1427,7 +1431,9 @@ private struct FeedbackSupportView: View {
                 }
             } footer: {
                 Text(
-                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be removed. CodexBar shows copyable recipient, subject, and message fields before offering to open your mail app."
+                    "Problem emails preview an allowlisted diagnostic first, and optional technical details can be "
+                        + "removed. CodexBar shows copyable recipient, subject, and message fields before offering "
+                        + "to open your mail app."
                 )
             }
 

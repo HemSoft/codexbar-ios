@@ -34,7 +34,7 @@ public enum ClaudeCredentialsParser {
             jsonPair("rateLimitTier", credentials.rateLimitTier),
             jsonPair("expiresAt", credentials.expiresAt),
             jsonPair("accessToken", credentials.accessToken),
-            jsonPair("refreshToken", credentials.refreshToken)
+            jsonPair("refreshToken", credentials.refreshToken),
         ].compactMap { $0 }
 
         return """

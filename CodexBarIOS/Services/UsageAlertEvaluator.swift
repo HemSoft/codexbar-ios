@@ -143,15 +143,13 @@ public enum UsageAlertEvaluator {
             }
 
             let balanceAlertID = balanceAlertID(for: result.accountID)
-            if (result.preserveCachedCreditsOnFailure || !result.hasFreshCredits),
-               activeAlertIDs.contains(balanceAlertID)
-            {
+            if result.preserveCachedCreditsOnFailure || !result.hasFreshCredits,
+               activeAlertIDs.contains(balanceAlertID) {
                 nextActiveAlertIDs.insert(balanceAlertID)
             }
 
             if let creditsRemaining = result.freshCreditsRemaining,
-               creditsRemaining <= settings.balanceThreshold
-            {
+               creditsRemaining <= settings.balanceThreshold {
                 nextActiveAlertIDs.insert(balanceAlertID)
 
                 let detail = balanceAlertDetail(
@@ -216,8 +214,7 @@ public enum UsageAlertEvaluator {
             let isSuppressedByLegacyAlert =
                 highestSeverity == .warning && !legacySuppressionIDs.isEmpty
             if !activeAlertIDs.contains(currentAlertID),
-               !isSuppressedByLegacyAlert
-            {
+               !isSuppressedByLegacyAlert {
                 notifications.append(
                     UsageAlertNotification(
                         id: currentAlertID,
@@ -290,8 +287,7 @@ public enum UsageAlertEvaluator {
 
         if let affectedBar {
             if affectedBar.severity(using: thresholds) < severity,
-               let projectedFraction = affectedBar.projectedFraction(at: now)
-            {
+               let projectedFraction = affectedBar.projectedFraction(at: now) {
                 message = "\(affectedBar.label) is projected to reach \(formatPercent(projectedFraction))."
             } else {
                 message = "\(affectedBar.label) is currently at \(affectedBar.usageText)."

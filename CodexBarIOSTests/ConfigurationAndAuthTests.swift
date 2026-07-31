@@ -283,7 +283,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
     }
 
     @MainActor
-    func testProviderConfigurationStorePreservesCopilotBrowserSession() {
+    func testProviderConfigurationStorePreservesCopilotBrowserSession() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -294,7 +294,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
             providerID: .copilot,
             authMethod: .browserSession
         )
-        let data = try! JSONEncoder().encode([oldCopilotConfiguration])
+        let data = try JSONEncoder().encode([oldCopilotConfiguration])
         defaults.set(data, forKey: "providerConfigurations")
 
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
@@ -1192,7 +1192,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
                 }
                 callbackComponents.queryItems = [
                     URLQueryItem(name: "code", value: "authorization-code"),
-                    URLQueryItem(name: "state", value: state)
+                    URLQueryItem(name: "state", value: state),
                 ]
                 guard let callbackURL = callbackComponents.url else {
                     XCTFail("Expected a valid GitHub callback URL.")
@@ -1374,7 +1374,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
                 }
                 callbackComponents.queryItems = [
                     URLQueryItem(name: "code", value: "authorization-code"),
-                    URLQueryItem(name: "state", value: state)
+                    URLQueryItem(name: "state", value: state),
                 ]
                 guard let callbackURL = callbackComponents.url else {
                     XCTFail("Expected a valid Claude callback URL.")
@@ -2174,6 +2174,9 @@ final class ConfigurationAndAuthTests: XCTestCase {
                     throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
                 }
             }
+            // The loopback test server deliberately preserves replacement
+            // characters so malformed requests can still be diagnosed.
+            // swiftlint:disable:next optional_data_string_conversion
             return String(decoding: response, as: UTF8.self)
         }.value
     }

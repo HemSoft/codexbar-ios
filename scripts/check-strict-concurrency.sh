@@ -7,6 +7,7 @@ export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 xcodebuild -quiet \
   -project CodexBarIOS.xcodeproj \
   -scheme CodexBarIOS \
+  -skipPackagePluginValidation \
   -destination "generic/platform=iOS Simulator" \
   CODE_SIGNING_ALLOWED=NO \
   SWIFT_STRICT_CONCURRENCY=complete \
@@ -30,6 +31,7 @@ check_watch_connectivity_diagnostics() {
 if ! xcodebuild -quiet \
   -project CodexBarIOS.xcodeproj \
   -scheme CodexBarIOS \
+  -skipPackagePluginValidation \
   -destination "generic/platform=iOS Simulator" \
   CODE_SIGNING_ALLOWED=NO \
   SWIFT_STRICT_CONCURRENCY=complete \
@@ -42,6 +44,7 @@ check_watch_connectivity_diagnostics "$ios_test_log"
 if ! xcodebuild -quiet \
   -project CodexBarIOS.xcodeproj \
   -scheme CodexBarWatchTests \
+  -skipPackagePluginValidation \
   -destination "generic/platform=watchOS Simulator" \
   CODE_SIGNING_ALLOWED=NO \
   SWIFT_STRICT_CONCURRENCY=complete \

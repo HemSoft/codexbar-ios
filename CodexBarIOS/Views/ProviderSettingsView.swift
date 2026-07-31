@@ -106,7 +106,8 @@ struct ProviderSettingsView: View {
 
                     Text(
                         viewModel.hasOtherCodexAccounts
-                            ? "A private sign-in session keeps the active Safari account from being reused. Choose the distinct ChatGPT identity you want this Codex entry to track."
+                            ? "A private sign-in session keeps the active Safari account from being reused. "
+                                + "Choose the distinct ChatGPT identity you want this Codex entry to track."
                             : "ChatGPT sign-in opens in a private browser session so you can choose the intended identity."
                     )
                     .font(.footnote)
@@ -288,8 +289,7 @@ struct ProviderSettingsView: View {
 
                             if
                                 let setupLinkTitle = viewModel.credentialPresentation.setupLinkTitle,
-                                let setupURL = viewModel.credentialPresentation.setupURL
-                            {
+                                let setupURL = viewModel.credentialPresentation.setupURL {
                                 Link(setupLinkTitle, destination: setupURL)
                             }
 

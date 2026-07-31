@@ -1,0 +1,18 @@
+# Watch foundation tests intentionally keep one scenario-focused XCTestCase.
+# All other root rules still apply to every file in this directory.
+file_length:
+  warning: 2000
+  error: 2200
+
+type_body_length:
+  warning: 1800
+  error: 2000
+
+# Snapshot fixture literals are more readable when their serialized shape is
+# visible on one line.
+line_length:
+  warning: 400
+  error: 450
+  ignores_comments: true
+  ignores_urls: true
+  ignores_interpolated_strings: true

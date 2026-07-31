@@ -881,8 +881,7 @@ struct ProviderUsageCard: View {
                                 supportingText(resetDescription)
                             }
                             if result.hasCurrentBars,
-                               let projectionDescription = bar.dashboardProjectionDescription()
-                            {
+                               let projectionDescription = bar.dashboardProjectionDescription() {
                                 supportingText(projectionDescription)
                             }
                         }
@@ -1149,8 +1148,7 @@ final class CodexBankedResetRedemptionController: ObservableObject {
         }
         if
             let creditID = retainedAttempt.creditID,
-            let credit = resets?.credits?.first(where: { $0.id == creditID })
-        {
+            let credit = resets?.credits?.first(where: { $0.id == creditID }) {
             retryItem = CodexBankedResetInventoryItem(credit: credit)
         } else if let creditID = retainedAttempt.creditID {
             retryItem = CodexBankedResetInventoryItem(
@@ -1404,7 +1402,6 @@ struct ProviderUsagePlaceholderCard: View {
     let recoveryErrorMessage: String?
     let onReportProblem: (() -> Void)?
     let onRetry: () -> Void
-
 
     init(
         configuration: ProviderAccountConfiguration,
@@ -3319,7 +3316,7 @@ private struct MetricCustomizationPreview: View {
                     used: 92,
                     limit: 100,
                     resetDescription: weeklyResetDescription
-                )
+                ),
             ],
             creditsRemaining: 18.75,
             monetaryMetrics: [

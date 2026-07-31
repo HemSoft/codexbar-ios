@@ -370,8 +370,7 @@ public enum ClaudeUsageParser {
                        hasScopedWeeklyLimit: hasScopedWeeklyLimit,
                        legacyCompatibleScopedWeeklyModelKeys: legacyCompatibleModelKeys
                    )?.key == definition.key
-               })
-            {
+               }) {
                 continue
             }
             guard semanticKeys.insert(definition.key).inserted else {
@@ -691,8 +690,7 @@ public enum ClaudeUsageParser {
             let spent,
             let limit,
             spent.currencyCode == limit.currencyCode,
-            spent.decimalPlaces == limit.decimalPlaces
-        {
+            spent.decimalPlaces == limit.decimalPlaces {
             metrics.append(ProviderMonetaryMetric(
                 kind: .remainingHeadroom,
                 label: "Remaining spend headroom",
@@ -789,8 +787,7 @@ public enum ClaudeUsageParser {
             let spentMetric,
             let limitMetric,
             spentMetric.currencyCode == limitMetric.currencyCode,
-            spentMetric.decimalPlaces == limitMetric.decimalPlaces
-        {
+            spentMetric.decimalPlaces == limitMetric.decimalPlaces {
             metrics.append(ProviderMonetaryMetric(
                 kind: .remainingHeadroom,
                 label: "Remaining spend headroom",
@@ -889,14 +886,16 @@ public enum ClaudeUsageParser {
         let decimalPlaces = extraUsage.decimalPlaces ?? currencyDecimalPlaces(currency)
 
         let spent = max(usedCredits, 0)
-        var metrics = [ProviderMonetaryMetric(
-            kind: .spent,
-            label: "Usage credits spent",
-            minorUnits: spent,
-            currencyCode: currency,
-            decimalPlaces: decimalPlaces,
-            detail: "Month to date"
-        )]
+        var metrics = [
+            ProviderMonetaryMetric(
+                kind: .spent,
+                label: "Usage credits spent",
+                minorUnits: spent,
+                currencyCode: currency,
+                decimalPlaces: decimalPlaces,
+                detail: "Month to date"
+            ),
+        ]
         var messages: [SpendMessage] = extraUsage.isEnabled == nil
             ? [
                 .dashboard(

@@ -17,7 +17,7 @@ public struct CursorWebAuthResult: Equatable, Sendable {
             jsonPair("accessToken", accessToken),
             refreshToken.map { jsonPair("refreshToken", $0) },
             authID.map { jsonPair("authId", $0) },
-            userID.map { jsonPair("userId", $0) }
+            userID.map { jsonPair("userId", $0) },
         ].compactMap { $0 }
 
         return """
@@ -113,7 +113,7 @@ public final class CursorWebAuthService: Sendable {
             URLQueryItem(name: "challenge", value: codeChallenge),
             URLQueryItem(name: "uuid", value: uuid),
             URLQueryItem(name: "mode", value: "login"),
-            URLQueryItem(name: "redirectTarget", value: "cli")
+            URLQueryItem(name: "redirectTarget", value: "cli"),
         ]
         return components.url!
     }
@@ -122,7 +122,7 @@ public final class CursorWebAuthService: Sendable {
         var components = URLComponents(url: pollURL, resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "uuid", value: uuid),
-            URLQueryItem(name: "verifier", value: codeVerifier)
+            URLQueryItem(name: "verifier", value: codeVerifier),
         ]
 
         var request = URLRequest(url: components.url!)

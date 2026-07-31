@@ -166,15 +166,13 @@ private enum DebugLaunchRoute {
     static var providerSettingsProviderID: ProviderID? {
         if
             let rawValue = ProcessInfo.processInfo.environment["CODEXBAR_DEBUG_PROVIDER_SETTINGS"],
-            let providerID = ProviderID(rawValue: rawValue)
-        {
+            let providerID = ProviderID(rawValue: rawValue) {
             return providerID
         }
 
         if
             let rawValue = UserDefaults.standard.string(forKey: "debugProviderSettings"),
-            let providerID = ProviderID(rawValue: rawValue)
-        {
+            let providerID = ProviderID(rawValue: rawValue) {
             return providerID
         }
 

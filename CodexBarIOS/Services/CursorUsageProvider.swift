@@ -98,8 +98,7 @@ public final class CursorUsageProvider: UsageProvider {
         if let data = token.data(using: .utf8),
            let credentials = try? JSONDecoder().decode(CursorCredentials.self, from: data),
            let accessToken = credentials.accessToken?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !accessToken.isEmpty
-        {
+           !accessToken.isEmpty {
             return accessToken
         }
 
@@ -157,8 +156,7 @@ public final class CursorUsageProvider: UsageProvider {
             let onDemand = usage.spendLimitUsage,
             let limit = onDemand.individualLimit,
             limit > 0,
-            let remaining = onDemand.individualRemaining
-        {
+            let remaining = onDemand.individualRemaining {
             let used = max(0, limit - remaining)
             bars.append(UsageBar(
                 stableKey: "on-demand",

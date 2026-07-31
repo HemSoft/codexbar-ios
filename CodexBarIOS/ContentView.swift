@@ -296,28 +296,32 @@ struct ContentView: View {
                 }
             }
         }
-        .sheet(isPresented: $isShowingSettings, onDismiss: {
-            Task {
-                await orchestrator.refreshAfterSettingsDismissed()
-                settingsRefreshCompletionID = UUID()
-            }
-        }) {
-            SettingsView(
-                configurationStore: configurationStore,
-                appUpdateController: appUpdateController,
-                onAccountsChanged: {
-                    Task {
-                        _ = await orchestrator.refreshNow()
-                    }
-                },
-                onAccountRefresh: { configuration in
-                    await orchestrator.refreshAccount(configuration)
-                },
-                onAlertAuthorizationRequest: {
-                    await orchestrator.requestAlertAuthorization()
+        .sheet(
+            isPresented: $isShowingSettings,
+            onDismiss: {
+                Task {
+                    await orchestrator.refreshAfterSettingsDismissed()
+                    settingsRefreshCompletionID = UUID()
                 }
-            )
-        }
+            },
+            content: {
+                SettingsView(
+                    configurationStore: configurationStore,
+                    appUpdateController: appUpdateController,
+                    onAccountsChanged: {
+                        Task {
+                            _ = await orchestrator.refreshNow()
+                        }
+                    },
+                    onAccountRefresh: { configuration in
+                        await orchestrator.refreshAccount(configuration)
+                    },
+                    onAlertAuthorizationRequest: {
+                        await orchestrator.requestAlertAuthorization()
+                    }
+                )
+            }
+        )
         .sheet(
             item: $addAccountFlowRequest,
             onDismiss: {
@@ -327,8 +331,8 @@ struct ContentView: View {
                 Task {
                     await refreshAccount(accountID: accountID)
                 }
-            }
-        ) { _ in
+            },
+            content: { _ in
             AddAccountSetupFlow(
                 configurationStore: configurationStore,
                 onAccountCreated: { accountID in
@@ -345,8 +349,9 @@ struct ContentView: View {
                 onAccountRefresh: { configuration in
                     await orchestrator.refreshAccount(configuration)
                 }
-            )
-        }
+                )
+            }
+        )
         .sheet(
             item: accountConfigurationPresentation,
             onDismiss: {
@@ -356,8 +361,8 @@ struct ContentView: View {
                 Task {
                     await refreshAccount(accountID: accountID)
                 }
-            }
-        ) { presentation in
+            },
+            content: { presentation in
             NavigationStack {
                 ProviderSettingsView(
                     configurationStore: configurationStore,
@@ -378,8 +383,9 @@ struct ContentView: View {
                         }
                     }
                 }
+                }
             }
-        }
+        )
         .sheet(item: $selectedHistoryResult) { result in
             ProviderUsageHistoryDetailView(
                 result: result,
@@ -766,8 +772,7 @@ struct ContentView: View {
     }
 
     private var accountConfigurationPresentation:
-        Binding<DashboardAccountConfigurationPresentation?>
-    {
+        Binding<DashboardAccountConfigurationPresentation?> {
         Binding(
             get: {
                 accountConfigurationNavigation.presentation

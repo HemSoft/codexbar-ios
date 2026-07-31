@@ -205,8 +205,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         if let legacySnapshot,
            sharedSnapshot == nil
                 || legacySnapshot.generatedAt
-                    > (sharedSnapshot?.generatedAt ?? .distantPast)
-        {
+                    > (sharedSnapshot?.generatedAt ?? .distantPast) {
             snapshot = legacySnapshot
             migratedSnapshotNeedsReload = (
                 try? complicationStore.saveIfChanged(
@@ -217,8 +216,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         } else if let sharedSnapshot {
             snapshot = sharedSnapshot
             if legacySnapshot != sharedSnapshot,
-               let sharedData = try? sharedSnapshot.encoded()
-            {
+               let sharedData = try? sharedSnapshot.encoded() {
                 defaults.set(sharedData, forKey: Self.persistedSnapshotKey)
             }
         } else {
@@ -308,7 +306,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         )
         if !applicationContext.isEmpty {
             receive(applicationContext)
-        } else if (hadError || activationState != .activated), snapshot == nil {
+        } else if hadError || activationState != .activated, snapshot == nil {
             decodingError = WatchSnapshotRequestFailure.sessionInactive.recoveryMessage
         }
         if !hadError, activationState == .activated {
@@ -440,8 +438,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private func queueSnapshotRequest(failure: WatchSnapshotRequestFailure) {
         if failure != .pairingUnavailable,
            !hasQueuedSnapshotRequest,
-           let queueSnapshotRequest
-        {
+           let queueSnapshotRequest {
             queueSnapshotRequest()
             hasQueuedSnapshotRequest = true
         }

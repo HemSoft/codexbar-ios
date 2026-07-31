@@ -168,7 +168,7 @@ public final class CodexWebAuthService: Sendable {
             URLQueryItem(name: "id_token_add_organizations", value: "true"),
             URLQueryItem(name: "codex_cli_simplified_flow", value: "true"),
             URLQueryItem(name: "state", value: state),
-            URLQueryItem(name: "originator", value: originator)
+            URLQueryItem(name: "originator", value: originator),
         ]
         return components.url!
     }
@@ -183,7 +183,7 @@ public final class CodexWebAuthService: Sendable {
             ("code", code),
             ("redirect_uri", redirectURI),
             ("client_id", clientID),
-            ("code_verifier", codeVerifier)
+            ("code_verifier", codeVerifier),
         ])
     }
 

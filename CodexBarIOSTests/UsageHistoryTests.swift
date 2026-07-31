@@ -1157,11 +1157,13 @@ final class UsageHistoryTests: XCTestCase {
             bars: [UsageBar(label: "5 hour usage limit", used: 25, limit: 100)],
             codexBankedRateLimitResets: CodexBankedRateLimitResets(
                 availableCount: 1,
-                credits: [CodexBankedRateLimitReset(
-                    id: "credit-1",
-                    title: "Full reset (Weekly + 5 hr)",
-                    expiresAt: Date(timeIntervalSince1970: 1_893_456_000)
-                )],
+                credits: [
+                    CodexBankedRateLimitReset(
+                        id: "credit-1",
+                        title: "Full reset (Weekly + 5 hr)",
+                        expiresAt: Date(timeIntervalSince1970: 1_893_456_000)
+                    ),
+                ],
                 canConsume: true
             ),
             fetchedAt: fetchedAt

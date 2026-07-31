@@ -1,0 +1,72 @@
+strict: true
+check_for_updates: false
+
+excluded:
+  - .build
+  - .swiftpm
+  - build
+  - DerivedData
+  - CodexBarIOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+
+# CodexBar intentionally uses trailing commas in multiline collections and
+# argument lists because they keep diffs stable when another element is added.
+trailing_comma:
+  mandatory_comma: true
+
+# Provider payload fixtures and accessibility text can be long while remaining
+# clearer as one literal. Comments, URLs, and interpolated strings are exempt;
+# executable code remains capped.
+line_length:
+  warning: 160
+  error: 240
+  ignores_comments: true
+  ignores_urls: true
+  ignores_interpolated_strings: true
+
+# The app currently keeps cohesive provider and SwiftUI features together in a
+# few large files/types. These limits still stop further unbounded growth while
+# avoiding broad source exclusions; tests use narrower, directory-local policy.
+file_length:
+  warning: 3500
+  error: 4000
+  ignore_comment_only_lines: true
+
+type_body_length:
+  warning: 1800
+  error: 2000
+
+function_body_length:
+  warning: 200
+  error: 250
+
+function_parameter_count:
+  warning: 11
+  error: 12
+
+cyclomatic_complexity:
+  warning: 20
+  error: 25
+
+large_tuple:
+  warning: 5
+  error: 6
+
+nesting:
+  type_level:
+    warning: 2
+    error: 3
+  function_level:
+    warning: 5
+    error: 6
+
+identifier_name:
+  excluded:
+    - id
+    - up
+    - x
+    - y
+
+type_name:
+  max_length:
+    warning: 60
+    error: 70

@@ -1,0 +1,19 @@
+# Test suites intentionally group related behavior and realistic payload
+# fixtures. Keep them linted under the root policy while allowing test-only
+# source and XCTestCase bodies to remain cohesive.
+file_length:
+  warning: 5000
+  error: 5500
+
+type_body_length:
+  warning: 4500
+  error: 5000
+
+# HTTP/JSON fixtures are kept on one line so their wire representation remains
+# visible and copyable in tests.
+line_length:
+  warning: 400
+  error: 450
+  ignores_comments: true
+  ignores_urls: true
+  ignores_interpolated_strings: true

@@ -278,8 +278,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         let environmentCredential = environmentNames.lazy.compactMap {
             environmentValue(named: $0, in: credential)
         }.first
-        if let extractedCredential = settingsCredential ?? environmentCredential
-        {
+        if let extractedCredential = settingsCredential ?? environmentCredential {
             credential = extractedCredential
         }
 
@@ -293,8 +292,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
 
         if
             let authValue = cookieValue(named: "auth", from: credential),
-            !authValue.isEmpty
-        {
+            !authValue.isEmpty {
             credential = authValue
         }
 
@@ -305,16 +303,14 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         var workspaceId = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if let settingsWorkspaceId = openCodeWorkspaceId(fromSettingsJSON: workspaceId)
             ?? environmentValue(named: "OPENCODE_ZEN_WORKSPACE_ID", in: workspaceId)
-            ?? environmentValue(named: "OPENCODE_GO_WORKSPACE_ID", in: workspaceId)
-        {
+            ?? environmentValue(named: "OPENCODE_GO_WORKSPACE_ID", in: workspaceId) {
             workspaceId = settingsWorkspaceId
         }
 
         if
             let url = URL(string: workspaceId),
             let workspaceIndex = url.pathComponents.firstIndex(of: "workspace"),
-            url.pathComponents.indices.contains(workspaceIndex + 1)
-        {
+            url.pathComponents.indices.contains(workspaceIndex + 1) {
             workspaceId = url.pathComponents[workspaceIndex + 1]
         }
 
@@ -333,16 +329,14 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if let workspaceId = openCodeWorkspaceId(fromSettingsJSON: trimmed)
             ?? environmentValue(named: "OPENCODE_ZEN_WORKSPACE_ID", in: trimmed)
-            ?? environmentValue(named: "OPENCODE_GO_WORKSPACE_ID", in: trimmed)
-        {
+            ?? environmentValue(named: "OPENCODE_GO_WORKSPACE_ID", in: trimmed) {
             return normalizedWorkspaceId(from: workspaceId)
         }
 
         if
             let url = URL(string: trimmed),
             let workspaceIndex = url.pathComponents.firstIndex(of: "workspace"),
-            url.pathComponents.indices.contains(workspaceIndex + 1)
-        {
+            url.pathComponents.indices.contains(workspaceIndex + 1) {
             return normalizedWorkspaceId(from: trimmed)
         }
 
@@ -427,8 +421,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             let keyRange = text.range(
                 of: sourceKey,
                 range: searchStart..<text.endIndex
-            )
-        {
+            ) {
             var segmentEnd = text.index(
                 keyRange.upperBound,
                 offsetBy: 1_500,
@@ -441,8 +434,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                         of: otherKey,
                         range: keyRange.upperBound..<segmentEnd
                     ),
-                    nextRange.lowerBound < segmentEnd
-                {
+                    nextRange.lowerBound < segmentEnd {
                     segmentEnd = nextRange.lowerBound
                 }
             }
@@ -454,8 +446,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                 usagePercent.isFinite,
                 usagePercent >= 0,
                 resetInSeconds.isFinite,
-                resetInSeconds >= 0
-            {
+                resetInSeconds >= 0 {
                 return (usagePercent, resetInSeconds)
             }
 
@@ -502,8 +493,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             let end: String.Index
             if
                 matches.indices.contains(index + 1),
-                let nextRange = Range(matches[index + 1].range, in: text)
-            {
+                let nextRange = Range(matches[index + 1].range, in: text) {
                 end = nextRange.lowerBound
             } else {
                 end = text.endIndex
@@ -754,8 +744,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             result.count >= 2,
             let first = result.first,
             let last = result.last,
-            (first == "\"" && last == "\"") || (first == "'" && last == "'")
-        {
+            (first == "\"" && last == "\"") || (first == "'" && last == "'") {
             result.removeFirst()
             result.removeLast()
         }
@@ -1051,8 +1040,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             if
                 let modelKeyExplanation = failures.first(where: {
                     $0.contains("model API key, not an OpenCode dashboard auth value")
-                })
-            {
+                }) {
                 failures = [modelKeyExplanation]
             }
             let message = failures.isEmpty

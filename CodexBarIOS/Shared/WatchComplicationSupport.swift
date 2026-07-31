@@ -357,8 +357,7 @@ struct WatchComplicationResolver {
 
         if displayed.metric.resetDisplayStyle == .relativeWithLocalTime,
            let resetsAt = displayed.metric.resetsAt,
-           resetsAt > now
-        {
+           resetsAt > now {
             let countdownEnd = min(resetsAt, staleDate)
             let wholeHoursRemaining = Int(
                 floor(resetsAt.timeIntervalSince(now) / (60 * 60))

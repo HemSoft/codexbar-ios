@@ -82,7 +82,7 @@ public extension DemoUsageProvider {
                         used: 68,
                         limit: 100,
                         resetDescription: "Resets Monday at 12:00 AM"
-                    )
+                    ),
                 ],
                 subtitle: "Personal account - live usage enabled"
             ),
@@ -102,7 +102,7 @@ public extension DemoUsageProvider {
                         resetDescription: "Resets in 9 days",
                         projectionDescriptionOverride: "Projected to stay under limit",
                         projectionSignificanceOverride: .benign
-                    )
+                    ),
                 ],
                 subtitle: "Engineering organization"
             ),
@@ -134,7 +134,7 @@ public extension DemoUsageProvider {
                         used: 71,
                         limit: 100,
                         resetDescription: "Resets Monday"
-                    )
+                    ),
                 ],
                 monetaryMetrics: [
                     ProviderMonetaryMetric(
@@ -240,7 +240,7 @@ public extension DemoUsageProvider {
                         resetDescription: "Resets Aug 1",
                         projectionDescriptionOverride: "Projected to stay under limit",
                         projectionSignificanceOverride: .benign
-                    )
+                    ),
                 ],
                 cardInformationSections: [
                     ProviderCardInformationSection(
@@ -261,7 +261,7 @@ public extension DemoUsageProvider {
                     ),
                 ],
                 subtitle: "Cursor plan usage"
-            )
+            ),
         ]
     }
 }

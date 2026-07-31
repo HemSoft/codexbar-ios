@@ -202,7 +202,7 @@ public final class CopilotWebAuthService: Sendable {
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
-            URLQueryItem(name: "prompt", value: "select_account")
+            URLQueryItem(name: "prompt", value: "select_account"),
         ]
         return components.url!
     }
@@ -219,7 +219,7 @@ public final class CopilotWebAuthService: Sendable {
             ("client_secret", clientSecret),
             ("code", code),
             ("redirect_uri", redirectURI),
-            ("code_verifier", codeVerifier)
+            ("code_verifier", codeVerifier),
         ])
     }
 
