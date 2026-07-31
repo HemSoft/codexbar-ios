@@ -10,6 +10,14 @@ private let phoneWatchConnectivityLogger = Logger(
     subsystem: "com.hemsoft.CodexBarIOS",
     category: "WatchConnectivity.Phone"
 )
+
+private struct PhoneWatchReplyHandler: @unchecked Sendable {
+    let send: ([String: Any]) -> Void
+
+    init(_ send: @escaping ([String: Any]) -> Void) {
+        self.send = send
+    }
+}
 #endif
 
 private extension WatchMetricSeverity {
@@ -548,12 +556,14 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
             replyHandler(WatchDashboardSnapshot.snapshotUnavailableReply)
             return
         }
+        let reply = PhoneWatchReplyHandler(replyHandler)
         Task { @MainActor [weak self] in
             guard let self else {
-                replyHandler(WatchDashboardSnapshot.snapshotUnavailableReply)
+                reply.send(WatchDashboardSnapshot.snapshotUnavailableReply)
                 return
             }
-            _ = self.handleMessage(message, replyHandler: replyHandler)
+            self.handleSnapshotRequest()
+            reply.send(self.snapshotReply())
         }
     }
 
@@ -562,8 +572,9 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
         didReceiveUserInfo userInfo: [String: Any] = [:]
     ) {
         guard WatchDashboardSnapshot.isSnapshotRequest(userInfo) else { return }
+        phoneWatchConnectivityLogger.info("Received queued snapshot request from Watch")
         Task { @MainActor [weak self] in
-            self?.handleUserInfo(userInfo)
+            self?.handleSnapshotRequest()
         }
     }
 
