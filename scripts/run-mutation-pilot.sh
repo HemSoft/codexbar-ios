@@ -15,6 +15,34 @@ mutation_workspace_parent=${mutation_workspace_parent:A}
 mutation_workspace="$mutation_workspace_parent/repository"
 mutation_lock="$mutation_workspace_parent.lock"
 lock_acquired=false
+requested_report_paths=()
+
+arguments=("$@")
+for ((argument_index = 1; argument_index <= ${#arguments}; argument_index++)); do
+    argument=${arguments[$argument_index]}
+    case "$argument" in
+        --output|--html-output|--sonar-output)
+            ((argument_index++))
+            if ((argument_index <= ${#arguments})); then
+                requested_report_paths+=("${arguments[$argument_index]}")
+            fi
+            ;;
+        --output=*|--html-output=*|--sonar-output=*)
+            requested_report_paths+=("${argument#*=}")
+            ;;
+    esac
+done
+
+for report_path in "${requested_report_paths[@]}"; do
+    if [[ "$report_path" != /* ]]; then
+        report_source="$mutation_workspace/$report_path"
+        report_source=${report_source:A}
+        if [[ "$report_source" != "$mutation_workspace/"* ]]; then
+            print -u2 "Relative report path must stay within the project: $report_path"
+            exit 1
+        fi
+    fi
+done
 
 sync_mutation_cache() {
     if [[ -d "$mutation_workspace/.swift-mutation-testing-cache" ]]; then
@@ -25,14 +53,35 @@ sync_mutation_cache() {
     fi
 }
 
+sync_mutation_reports() {
+    if [[ -d "$mutation_workspace/build/mutation-testing" ]]; then
+        rsync -a \
+            "$mutation_workspace/build/mutation-testing/" \
+            "$repository_dir/build/mutation-testing/"
+    fi
+    for report_path in "${requested_report_paths[@]}"; do
+        [[ "$report_path" == /* ]] && continue
+        local report_source="$mutation_workspace/$report_path"
+        local report_destination="$repository_dir/$report_path"
+        if [[ -f "$report_source" ]]; then
+            mkdir -p "${report_destination:h}"
+            rsync -a "$report_source" "$report_destination"
+        fi
+    done
+}
+
 cleanup() {
     [[ "$lock_acquired" == true ]] || return
-    local cache_saved=true
+    local artifacts_saved=true
+    if ! sync_mutation_reports; then
+        artifacts_saved=false
+        print -u2 "Could not save mutation reports; preserving $mutation_workspace for recovery."
+    fi
     if ! sync_mutation_cache; then
-        cache_saved=false
+        artifacts_saved=false
         print -u2 "Could not save the mutation cache; preserving $mutation_workspace for recovery."
     fi
-    if [[ "$cache_saved" == true ]]; then
+    if [[ "$artifacts_saved" == true ]]; then
         if git -C "$repository_dir" worktree list --porcelain \
             | grep -Fqx "worktree $mutation_workspace"; then
             git -C "$repository_dir" worktree remove --force "$mutation_workspace" \
@@ -47,7 +96,22 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-if ! mkdir "$mutation_lock" 2>/dev/null; then
+acquire_mutation_lock() {
+    mkdir "$mutation_lock" 2>/dev/null && return 0
+
+    lock_owner=unknown
+    if [[ -r "$mutation_lock/pid" ]]; then
+        lock_owner=$(<"$mutation_lock/pid")
+    fi
+    if [[ "$lock_owner" == <-> ]] && ! kill -0 "$lock_owner" 2>/dev/null; then
+        rm -f "$mutation_lock/pid"
+        rmdir "$mutation_lock" 2>/dev/null || return 1
+        mkdir "$mutation_lock" 2>/dev/null && return 0
+    fi
+    return 1
+}
+
+if ! acquire_mutation_lock; then
     lock_owner=unknown
     if [[ -r "$mutation_lock/pid" ]]; then
         lock_owner=$(<"$mutation_lock/pid")
@@ -129,16 +193,15 @@ done
 # aligned while the normal repository-wide SwiftLint gate checks real source.
 cd "$mutation_workspace"
 mkdir -p build/mutation-testing
+for report_path in "${requested_report_paths[@]}"; do
+    if [[ "$report_path" != /* ]]; then
+        mkdir -p "${report_path:h}"
+    fi
+done
 set +e
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
     "$tool_binary" . "${exclude_arguments[@]}" "$@"
 tool_status=$?
 set -e
-
-if [[ -d "$mutation_workspace/build/mutation-testing" ]]; then
-    rsync -a \
-        "$mutation_workspace/build/mutation-testing/" \
-        "$repository_dir/build/mutation-testing/"
-fi
 
 exit "$tool_status"

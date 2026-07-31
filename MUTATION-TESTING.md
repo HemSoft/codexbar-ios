@@ -68,8 +68,10 @@ worktree on success, failure, or interruption. The ignored mutation cache is
 copied into the disposable worktree and back out after each run, so normal
 follow-up runs reuse the same stable sandbox path and cached result keys while
 `--no-cache` remains available for fresh measurements. An atomic lock refuses
-concurrent runs from the same worktree, and exit/signal cleanup saves the cache
-before removing the disposable worktree.
+concurrent runs from the same worktree while reclaiming locks whose recorded
+process is no longer running. Exit/signal cleanup saves the cache and any
+explicit relative JSON, HTML, or Sonar reports before removing the disposable
+worktree.
 
 ## Expanded baseline
 
