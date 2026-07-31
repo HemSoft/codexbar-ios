@@ -123,6 +123,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Made ChatGPT, Claude, GitHub Copilot, and Cursor browser sign-in stop safely
+  with a retryable error when secure OAuth state or PKCE generation is
+  unavailable. ([#217](https://github.com/HemSoft/codexbar-ios/issues/217))
 - Fixed Apple Watch dashboard refreshes so reachable phones reply immediately,
   unavailable requests queue for later delivery, and failures explain how to
   recover while preserving the last good dashboard and complication data.

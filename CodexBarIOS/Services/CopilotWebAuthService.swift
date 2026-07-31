@@ -1,6 +1,4 @@
-import CryptoKit
 import Foundation
-import Security
 
 public struct CopilotWebAuthResult: Equatable, Sendable {
     public let accessToken: String
@@ -59,6 +57,7 @@ public final class CopilotWebAuthService: Sendable {
         case missingAuthorizationCode
         case stateMismatch
         case callbackTimedOut
+        case secureRandomUnavailable
         case tokenExchangeFailed(String)
         case invalidTokenResponse
 
@@ -74,6 +73,8 @@ public final class CopilotWebAuthService: Sendable {
                 "GitHub sign-in returned an unexpected state value."
             case .callbackTimedOut:
                 "GitHub sign-in did not return to the app. Try again and complete sign-in in the browser."
+            case .secureRandomUnavailable:
+                "GitHub sign-in could not start securely. Try again."
             case .tokenExchangeFailed(let message):
                 "GitHub token exchange failed: \(message)"
             case .invalidTokenResponse:
@@ -110,15 +111,18 @@ public final class CopilotWebAuthService: Sendable {
     private let session: URLSession
     private let callbackTimeoutNanoseconds: UInt64
     private let preferredCallbackPorts: [UInt16]
+    private let randomBytes: OAuthRandomness.Generator
 
     public init(
         session: URLSession = .shared,
         callbackTimeoutNanoseconds: UInt64 = 180_000_000_000,
-        preferredCallbackPorts: [UInt16] = [1456, 1458, 1460]
+        preferredCallbackPorts: [UInt16] = [1456, 1458, 1460],
+        randomBytes: (@Sendable (Int) throws -> Data)? = nil
     ) {
         self.session = session
         self.callbackTimeoutNanoseconds = callbackTimeoutNanoseconds
         self.preferredCallbackPorts = preferredCallbackPorts
+        self.randomBytes = randomBytes ?? OAuthRandomness.systemGenerator
     }
 
     @MainActor
@@ -135,8 +139,14 @@ public final class CopilotWebAuthService: Sendable {
             throw AuthError.missingOAuthConfiguration
         }
 
-        let state = Self.randomBase64URL(byteCount: 32)
-        let pkce = Self.makePKCEPair()
+        let state: String
+        let pkce: PKCEPair
+        do {
+            state = try OAuthRandomness.base64URL(byteCount: 32, using: randomBytes)
+            pkce = try Self.makePKCEPair(randomBytes: randomBytes)
+        } catch {
+            throw AuthError.secureRandomUnavailable
+        }
         let callbackServer = try await LoopbackOAuthCallbackServer<AuthError>.start(
             preferredPorts: preferredCallbackPorts,
             expectedState: state,
@@ -236,11 +246,13 @@ public final class CopilotWebAuthService: Sendable {
         ])
     }
 
-    public static func makePKCEPair() -> PKCEPair {
-        let verifier = randomBase64URL(byteCount: 64)
-        let digest = SHA256.hash(data: Data(verifier.utf8))
-        let challenge = Data(digest).base64URLEncodedString()
-        return PKCEPair(codeVerifier: verifier, codeChallenge: challenge)
+    public static func makePKCEPair() throws -> PKCEPair {
+        try makePKCEPair(randomBytes: OAuthRandomness.systemGenerator)
+    }
+
+    static func makePKCEPair(randomBytes: OAuthRandomness.Generator) throws -> PKCEPair {
+        let pkce = try OAuthRandomness.pkce(using: randomBytes)
+        return PKCEPair(codeVerifier: pkce.verifier, codeChallenge: pkce.challenge)
     }
 
     private func exchangeCodeForToken(
@@ -296,25 +308,10 @@ public final class CopilotWebAuthService: Sendable {
         )
     }
 
-    private static func randomBase64URL(byteCount: Int) -> String {
-        var bytes = [UInt8](repeating: 0, count: byteCount)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        return Data(bytes).base64URLEncodedString()
-    }
-
 }
 
 private extension URLComponents {
     func queryItemValue(named name: String) -> String? {
         queryItems?.first { $0.name == name }?.value
-    }
-}
-
-private extension Data {
-    func base64URLEncodedString() -> String {
-        base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
     }
 }
