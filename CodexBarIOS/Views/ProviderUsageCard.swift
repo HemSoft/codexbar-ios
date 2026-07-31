@@ -204,6 +204,14 @@ private struct ProviderMetricTileDetailPresentation: Identifiable {
 }
 
 struct ProviderUsageCard: View {
+    private static let headerControlSpacing: CGFloat = 8
+    private static let menuControlSize: CGFloat = 28
+    private static let severityDotSize: CGFloat = 10
+    private static let chevronSlotSize: CGFloat = 13
+    private static var menuTrailingOffset: CGFloat {
+        severityDotSize + chevronSlotSize + (headerControlSpacing * 2)
+    }
+
     let result: ProviderUsageResult
     let statusText: String
     let history: UsageHistorySeries
@@ -451,7 +459,7 @@ struct ProviderUsageCard: View {
     private var cardHeader: some View {
         ZStack(alignment: .trailing) {
             Button(action: toggleExpansion) {
-                HStack(alignment: .firstTextBaseline) {
+                HStack(alignment: .firstTextBaseline, spacing: Self.headerControlSpacing) {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .top, spacing: 8) {
                             ProviderLogoTile(providerID: result.providerID)
@@ -491,15 +499,16 @@ struct ProviderUsageCard: View {
                     .frame(width: 16, height: 16)
 
                     Color.clear
-                        .frame(width: 28, height: 28)
+                        .frame(width: Self.menuControlSize, height: Self.menuControlSize)
 
                     Circle()
                         .fill(cardSeverity.tint)
-                        .frame(width: 10, height: 10)
+                        .frame(width: Self.severityDotSize, height: Self.severityDotSize)
 
                     Image(systemName: "chevron.down")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .frame(width: Self.chevronSlotSize)
                         .rotationEffect(.degrees(disclosureChevronRotation))
                         .animation(
                             accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2),
@@ -549,10 +558,10 @@ struct ProviderUsageCard: View {
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.body)
-                    .frame(width: 28, height: 28)
+                    .frame(width: Self.menuControlSize, height: Self.menuControlSize)
                     .background(Color(.secondarySystemGroupedBackground))
             }
-            .padding(.trailing, 31)
+            .padding(.trailing, Self.menuTrailingOffset)
             .accessibilityLabel("More options for \(result.title)")
         }
     }

@@ -2355,4 +2355,31 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertTrue(store.collapsedDashboardAccountIDs.isEmpty)
         XCTAssertNil(defaults.stringArray(forKey: "collapsedDashboardAccountIDs"))
     }
+
+    @MainActor
+    func testProviderConfigurationStorePrunesOrphanedCollapsedDashboardAccountIDs() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let account = store.addAccount(for: .codex)
+        defaults.set(
+            [account.id, "codex.orphaned-account"].sorted(),
+            forKey: "collapsedDashboardAccountIDs"
+        )
+
+        let reloadedStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertEqual(reloadedStore.collapsedDashboardAccountIDs, [account.id])
+        XCTAssertEqual(
+            defaults.stringArray(forKey: "collapsedDashboardAccountIDs"),
+            [account.id]
+        )
+    }
 }
