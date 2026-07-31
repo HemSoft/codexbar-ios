@@ -1650,7 +1650,7 @@ final class DashboardAndSettingsTests: XCTestCase {
     func testPhoneWatchConnectivityCoordinatorHandlesSnapshotRequestsAndWatchStateChanges() throws {
         let sender = PhoneWatchConnectivityCoordinator(session: nil)
         var snapshotNeededCount = 0
-        sender.activate {
+        sender.activate { _ in
             snapshotNeededCount += 1
         }
 
@@ -1666,6 +1666,18 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertTrue(sender.handleMessage(WatchDashboardSnapshot.snapshotRequestMessage))
         XCTAssertEqual(snapshotNeededCount, 1)
+
+        var unavailableResponse: WatchDashboardSnapshotResponse?
+        XCTAssertTrue(
+            sender.handleMessage(
+                WatchDashboardSnapshot.snapshotRequestMessage,
+                replyHandler: {
+                    unavailableResponse = WatchDashboardSnapshotResponse($0)
+                }
+            )
+        )
+        XCTAssertEqual(unavailableResponse, .unavailable)
+        XCTAssertEqual(snapshotNeededCount, 2)
 
         let snapshot = WatchDashboardSnapshot(
             generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
@@ -1683,16 +1695,16 @@ final class DashboardAndSettingsTests: XCTestCase {
             )
         )
         XCTAssertEqual(try XCTUnwrap(response).decode(), snapshot)
-        XCTAssertEqual(snapshotNeededCount, 2)
+        XCTAssertEqual(snapshotNeededCount, 3)
 
         XCTAssertFalse(sender.handleUserInfo(["unrelated": true]))
         XCTAssertTrue(
             sender.handleUserInfo(WatchDashboardSnapshot.snapshotRequestMessage)
         )
-        XCTAssertEqual(snapshotNeededCount, 3)
+        XCTAssertEqual(snapshotNeededCount, 4)
 
         sender.watchStateDidChange()
-        XCTAssertEqual(snapshotNeededCount, 3)
+        XCTAssertEqual(snapshotNeededCount, 4)
     }
 
     @MainActor
@@ -2679,13 +2691,13 @@ private final class StubCodexAuthService: CodexWebAuthenticating {
 
 @MainActor
 private final class RecordingWatchSnapshotSender: WatchSnapshotSending {
-    private var activationHandler: (@MainActor () -> Void)?
+    private var activationHandler: (@MainActor (_ force: Bool) -> Void)?
     private(set) var activationCount = 0
     private(set) var snapshots: [WatchDashboardSnapshot] = []
     private(set) var publishedForces: [Bool] = []
     var onPublish: (() -> Void)?
 
-    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void) {
+    func activate(onSnapshotNeeded: @escaping @MainActor (_ force: Bool) -> Void) {
         activationCount += 1
         activationHandler = onSnapshotNeeded
     }
@@ -2698,6 +2710,6 @@ private final class RecordingWatchSnapshotSender: WatchSnapshotSending {
     }
 
     func completeActivation() {
-        activationHandler?()
+        activationHandler?(true)
     }
 }

@@ -49,6 +49,7 @@ enum WatchSnapshotRequestFailure: Equatable, Sendable {
     case sessionInactive
     case phoneUnreachable
     case timedOut
+    case pairingUnavailable
     case deliveryFailed
 
     init(_ error: Error) {
@@ -66,6 +67,8 @@ enum WatchSnapshotRequestFailure: Equatable, Sendable {
             self = .phoneUnreachable
         case .messageReplyTimedOut, .transferTimedOut:
             self = .timedOut
+        case .deviceNotPaired, .companionAppNotInstalled, .watchAppNotInstalled:
+            self = .pairingUnavailable
         default:
             self = .deliveryFailed
         }
@@ -79,6 +82,8 @@ enum WatchSnapshotRequestFailure: Equatable, Sendable {
             "iPhone unavailable. Open CodexBar there; update queued"
         case .timedOut:
             "iPhone did not respond. Open CodexBar there; update queued"
+        case .pairingUnavailable:
+            "Install and open CodexBar on the paired iPhone"
         case .deliveryFailed:
             "Update queued. Open CodexBar on iPhone to finish"
         }
@@ -134,6 +139,9 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         self.reloadComplications = reloadComplications
         self.session = session
         self.requestCoalescingDelay = requestCoalescingDelay
+        hasQueuedSnapshotRequest = session?.outstandingUserInfoTransfers.contains {
+            WatchDashboardSnapshot.isSnapshotRequest($0.userInfo)
+        } ?? false
         activationState = initialActivationState
             ?? session?.activationState
             ?? (requestSnapshot == nil ? .notActivated : .activated)
@@ -349,17 +357,9 @@ final class WatchDashboardStore: NSObject, ObservableObject {
 
     private func receiveSnapshotResponse(_ response: WatchDashboardSnapshotResponse) {
         switch response {
-        case .snapshot:
-            do {
-                let decoded = try response.decode()
-                receive(try decoded.applicationContext())
-                Self.logger.info("Received immediate snapshot reply from iPhone")
-            } catch {
-                decodingError = "Couldn’t read the iPhone update. Refresh CodexBar on iPhone"
-                Self.logger.error(
-                    "Immediate snapshot reply decode failed domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code, privacy: .public)"
-                )
-            }
+        case let .snapshot(data):
+            receive(.snapshot(data))
+            Self.logger.info("Received immediate snapshot reply from iPhone")
         case .unavailable:
             decodingError = "No dashboard update is available yet. Refresh CodexBar on iPhone"
             Self.logger.notice("iPhone replied without an available dashboard snapshot")
@@ -370,13 +370,16 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     }
 
     private func queueSnapshotRequest(failure: WatchSnapshotRequestFailure) {
-        if !hasQueuedSnapshotRequest, let queueSnapshotRequest {
+        if failure != .pairingUnavailable,
+           !hasQueuedSnapshotRequest,
+           let queueSnapshotRequest
+        {
             queueSnapshotRequest()
             hasQueuedSnapshotRequest = true
         }
         decodingError = failure.recoveryMessage
         Self.logger.notice(
-            "Queued snapshot request reason=\(String(describing: failure), privacy: .public)"
+            "Snapshot request recovery reason=\(String(describing: failure), privacy: .public) queued=\(self.hasQueuedSnapshotRequest, privacy: .public)"
         )
     }
 

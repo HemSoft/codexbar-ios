@@ -41,7 +41,7 @@ private extension WatchMetricVisualizationStyle {
 
 @MainActor
 protocol WatchSnapshotSending: AnyObject {
-    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void)
+    func activate(onSnapshotNeeded: @escaping @MainActor (_ force: Bool) -> Void)
     @discardableResult
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool
 }
@@ -377,8 +377,8 @@ final class WatchSnapshotCoordinator {
     func start() {
         guard !hasStarted else { return }
         hasStarted = true
-        sender.activate { [weak self] in
-            self?.publishCurrentSnapshot(force: true)
+        sender.activate { [weak self] force in
+            self?.publishCurrentSnapshot(force: force)
         }
     }
 
@@ -418,7 +418,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject, WatchSnapshotSending {
     static let shared = PhoneWatchConnectivityCoordinator()
 
     private let session: WCSession?
-    private var snapshotNeededHandler: (@MainActor () -> Void)?
+    private var snapshotNeededHandler: (@MainActor (_ force: Bool) -> Void)?
     private var deduplicator = WatchSnapshotDeduplicator()
     private var latestSnapshot: WatchDashboardSnapshot?
 
@@ -427,7 +427,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject, WatchSnapshotSending {
         super.init()
     }
 
-    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void) {
+    func activate(onSnapshotNeeded: @escaping @MainActor (_ force: Bool) -> Void) {
         snapshotNeededHandler = onSnapshotNeeded
         guard let session else {
             phoneWatchConnectivityLogger.error("WatchConnectivity is unavailable on this iPhone")
@@ -438,7 +438,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject, WatchSnapshotSending {
             "Activating session state=\(session.activationState.rawValue, privacy: .public) paired=\(session.isPaired, privacy: .public) watchAppInstalled=\(session.isWatchAppInstalled, privacy: .public)"
         )
         if session.activationState == .activated {
-            onSnapshotNeeded()
+            onSnapshotNeeded(true)
         } else {
             session.activate()
         }
@@ -471,7 +471,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject, WatchSnapshotSending {
 
     private func handleSnapshotRequest() {
         phoneWatchConnectivityLogger.info("Handling snapshot request from Watch")
-        snapshotNeededHandler?()
+        snapshotNeededHandler?(true)
     }
 
     private func snapshotReply() -> [String: Any] {
@@ -492,7 +492,7 @@ final class PhoneWatchConnectivityCoordinator: NSObject, WatchSnapshotSending {
         phoneWatchConnectivityLogger.info(
             "Watch state changed paired=\(session.isPaired, privacy: .public) watchAppInstalled=\(session.isWatchAppInstalled, privacy: .public) reachable=\(session.isReachable, privacy: .public)"
         )
-        snapshotNeededHandler?()
+        snapshotNeededHandler?(false)
     }
 
     @discardableResult
@@ -533,7 +533,7 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
         )
         guard activationState == .activated, error == nil else { return }
         Task { @MainActor [weak self] in
-            self?.snapshotNeededHandler?()
+            self?.snapshotNeededHandler?(true)
         }
     }
 
@@ -595,7 +595,7 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
 final class PhoneWatchConnectivityCoordinator: WatchSnapshotSending {
     static let shared = PhoneWatchConnectivityCoordinator()
 
-    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void) {}
+    func activate(onSnapshotNeeded: @escaping @MainActor (_ force: Bool) -> Void) {}
 
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool {
         false

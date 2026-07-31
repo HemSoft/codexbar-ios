@@ -616,10 +616,49 @@ final class WatchDashboardStateTests: XCTestCase {
             .timedOut
         )
         XCTAssertEqual(
+            WatchSnapshotRequestFailure(error(.deviceNotPaired)),
+            .pairingUnavailable
+        )
+        XCTAssertEqual(
+            WatchSnapshotRequestFailure(error(.companionAppNotInstalled)),
+            .pairingUnavailable
+        )
+        XCTAssertEqual(
+            WatchSnapshotRequestFailure(error(.watchAppNotInstalled)),
+            .pairingUnavailable
+        )
+        XCTAssertEqual(
             WatchSnapshotRequestFailure(
                 NSError(domain: NSCocoaErrorDomain, code: 1)
             ),
             .deliveryFailed
+        )
+    }
+
+    @MainActor
+    func testPairingFailureExplainsRecoveryWithoutQueueingImpossibleTransfer() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _, errorHandler in
+                errorHandler(.pairingUnavailable)
+            },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+        store.updateReachability(true)
+
+        store.requestCurrentSnapshot()
+
+        XCTAssertEqual(queuedRequestCount, 0)
+        XCTAssertEqual(
+            store.decodingError,
+            "Install and open CodexBar on the paired iPhone"
         )
     }
 
@@ -718,7 +757,7 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
-    func testSnapshotRequestFailurePreservesLastGoodDataAndOnlyErrorsWithoutCache() async throws {
+    func testSnapshotRequestFailurePreservesLastGoodDataAndAlwaysExplainsQueuedRecovery() async throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
