@@ -428,8 +428,17 @@ finalize_mutation_workspace_cleanup() {
 release_mutation_lock() {
     local released_lock="${mutation_lock}.released.$$.$RANDOM"
     mv "$mutation_lock" "$released_lock" 2>/dev/null || return 1
-    rm -f "$released_lock/pid" "$released_lock/pid.next"
-    rmdir "$released_lock" 2>/dev/null
+    local released_owner=$released_lock
+    if [[ -L "$released_lock" ]]; then
+        released_owner=$(readlink "$released_lock")
+        [[ "$released_owner" == "${mutation_lock}.owner."* ]] || return 1
+    fi
+    rm -f "$released_owner/pid" "$released_owner/pid.next"
+    rmdir "$released_owner" 2>/dev/null || return 1
+    if [[ -L "$released_lock" ]]; then
+        rm -f "$released_lock"
+    fi
+    return 0
 }
 
 cleanup() {
@@ -486,7 +495,17 @@ trap 'forward_signal INT 130' INT
 trap 'forward_signal TERM 143' TERM
 
 acquire_mutation_lock() {
-    mkdir "$mutation_lock" 2>/dev/null && return 0
+    local private_lock="${mutation_lock}.owner.$$.$RANDOM"
+    if mkdir "$private_lock" 2>/dev/null; then
+        if print -r -- "$$" > "$private_lock/pid" \
+            && ln -sh "$private_lock" "$mutation_lock" 2>/dev/null \
+            && [[ "$(readlink "$mutation_lock")" == "$private_lock" ]]; then
+            return 0
+        fi
+        rm -f "$mutation_lock/${private_lock:t}" 2>/dev/null || true
+        rm -f "$private_lock/pid"
+        rmdir "$private_lock" 2>/dev/null || true
+    fi
 
     [[ -r "$mutation_lock/pid" ]] || return 1
     local recorded_owner=false
@@ -504,9 +523,17 @@ acquire_mutation_lock() {
     fi
     local reclaimed_lock="${mutation_lock}.reclaimed.$$.$RANDOM"
     mv "$mutation_lock" "$reclaimed_lock" 2>/dev/null || return 1
-    rm -f "$reclaimed_lock/pid" "$reclaimed_lock/pid.next"
-    rmdir "$reclaimed_lock" 2>/dev/null || return 1
-    mkdir "$mutation_lock" 2>/dev/null
+    local reclaimed_owner=$reclaimed_lock
+    if [[ -L "$reclaimed_lock" ]]; then
+        reclaimed_owner=$(readlink "$reclaimed_lock")
+        [[ "$reclaimed_owner" == "${mutation_lock}.owner."* ]] || return 1
+    fi
+    rm -f "$reclaimed_owner/pid" "$reclaimed_owner/pid.next"
+    rmdir "$reclaimed_owner" 2>/dev/null || return 1
+    if [[ -L "$reclaimed_lock" ]]; then
+        rm -f "$reclaimed_lock"
+    fi
+    acquire_mutation_lock
 }
 
 if ! acquire_mutation_lock; then
@@ -518,7 +545,6 @@ if ! acquire_mutation_lock; then
     exit 1
 fi
 lock_acquired=true
-print -r -- "$$" > "$mutation_lock/pid"
 
 if git -C "$repository_dir" worktree list --porcelain \
     | grep -Fqx "worktree $mutation_workspace"; then
