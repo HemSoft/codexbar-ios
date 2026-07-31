@@ -124,6 +124,7 @@ print -r -- "$$" > "$mutation_lock/pid"
 
 if git -C "$repository_dir" worktree list --porcelain \
     | grep -Fqx "worktree $mutation_workspace"; then
+    sync_mutation_reports
     sync_mutation_cache
     git -C "$repository_dir" worktree remove --force "$mutation_workspace"
     rmdir "$mutation_workspace_parent" 2>/dev/null || true
