@@ -17,6 +17,7 @@ mutation_lock="$mutation_workspace_parent.lock"
 report_manifest="$mutation_workspace_parent/report-paths"
 lock_acquired=false
 tool_pid=
+cache_copy_back_enabled=true
 requested_report_paths=()
 configured_report_paths=()
 
@@ -94,6 +95,7 @@ for report_path in "${preserved_report_paths[@]}"; do
 done
 
 sync_mutation_cache() {
+    [[ "$cache_copy_back_enabled" == true ]] || return 0
     if [[ -d "$mutation_workspace/.swift-mutation-testing-cache" ]]; then
         mkdir -p "$repository_dir/.swift-mutation-testing-cache" || return 1
         rsync -a --delete \
@@ -265,9 +267,11 @@ rsync -a \
 
 if [[ -d "$repository_dir/.swift-mutation-testing-cache" ]]; then
     mkdir -p "$mutation_workspace/.swift-mutation-testing-cache"
+    cache_copy_back_enabled=false
     rsync -a --delete \
         "$repository_dir/.swift-mutation-testing-cache/" \
         "$mutation_workspace/.swift-mutation-testing-cache/"
+    cache_copy_back_enabled=true
 fi
 
 # The generated mutant schema is not production source and cannot satisfy the
