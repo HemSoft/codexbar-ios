@@ -541,6 +541,44 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
+    func testOlderImmediateReplyCannotReplaceNewerApplicationContext() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let complicationStore = WatchComplicationSnapshotStore(defaults: defaults)
+        let older = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        let newer = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_100),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var replyHandler: (@MainActor (WatchDashboardSnapshotResponse) -> Void)?
+        var reloadCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: complicationStore,
+            reloadComplications: { reloadCount += 1 },
+            session: nil,
+            requestSnapshot: { handler, _ in replyHandler = handler },
+            queueSnapshotRequest: {}
+        )
+        store.updateReachability(true)
+        store.requestCurrentSnapshot()
+
+        store.receive(try newer.applicationContext())
+        replyHandler?(.snapshot(try older.encoded()))
+
+        XCTAssertEqual(store.snapshot, newer)
+        XCTAssertEqual(complicationStore.load(), newer)
+        XCTAssertEqual(reloadCount, 1)
+        XCTAssertNil(store.decodingError)
+    }
+
+    @MainActor
     func testUnreachablePhoneQueuesRequestWithActionableRecovery() throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -565,6 +603,38 @@ final class WatchDashboardStateTests: XCTestCase {
             store.decodingError,
             "iPhone unavailable. Open CodexBar there; update queued"
         )
+    }
+
+    @MainActor
+    func testCachedContextPreservesOutstandingQueuedRequestAcrossRelaunch() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var queuedRequestCount = 0
+        var transferIsOutstanding = true
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _, _ in },
+            queueSnapshotRequest: { queuedRequestCount += 1 },
+            hasOutstandingSnapshotRequest: { transferIsOutstanding }
+        )
+
+        store.receive(try snapshot.applicationContext())
+        store.requestCurrentSnapshot()
+        XCTAssertEqual(queuedRequestCount, 0)
+
+        transferIsOutstanding = false
+        store.receive(try snapshot.applicationContext())
+        store.requestCurrentSnapshot()
+        XCTAssertEqual(queuedRequestCount, 1)
     }
 
     @MainActor

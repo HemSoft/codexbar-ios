@@ -97,6 +97,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         @escaping @MainActor (WatchSnapshotRequestFailure) -> Void
     ) -> Void
     typealias SnapshotRequestQueuer = () -> Void
+    typealias OutstandingSnapshotRequestProvider = () -> Bool
 
     private static let logger = Logger(
         subsystem: "com.hemsoft.CodexBarIOS",
@@ -114,6 +115,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private let session: WCSession?
     private let requestSnapshot: SnapshotRequester?
     private let queueSnapshotRequest: SnapshotRequestQueuer?
+    private let hasOutstandingSnapshotRequest: OutstandingSnapshotRequestProvider
     private let requestCoalescingDelay: Duration
     private var activationState: WCSessionActivationState
     nonisolated private let delegateEventSequencer = WatchConnectivityEventSequencer()
@@ -131,6 +133,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         session: WCSession? = WCSession.isSupported() ? .default : nil,
         requestSnapshot: SnapshotRequester? = nil,
         queueSnapshotRequest: SnapshotRequestQueuer? = nil,
+        hasOutstandingSnapshotRequest: OutstandingSnapshotRequestProvider? = nil,
         initialActivationState: WCSessionActivationState? = nil,
         requestCoalescingDelay: Duration = .milliseconds(100)
     ) {
@@ -139,9 +142,18 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         self.reloadComplications = reloadComplications
         self.session = session
         self.requestCoalescingDelay = requestCoalescingDelay
-        hasQueuedSnapshotRequest = session?.outstandingUserInfoTransfers.contains {
-            WatchDashboardSnapshot.isSnapshotRequest($0.userInfo)
-        } ?? false
+        if let hasOutstandingSnapshotRequest {
+            self.hasOutstandingSnapshotRequest = hasOutstandingSnapshotRequest
+        } else if let session {
+            self.hasOutstandingSnapshotRequest = {
+                session.outstandingUserInfoTransfers.contains {
+                    WatchDashboardSnapshot.isSnapshotRequest($0.userInfo)
+                }
+            }
+        } else {
+            self.hasOutstandingSnapshotRequest = { false }
+        }
+        hasQueuedSnapshotRequest = self.hasOutstandingSnapshotRequest()
         activationState = initialActivationState
             ?? session?.activationState
             ?? (requestSnapshot == nil ? .notActivated : .activated)
@@ -230,13 +242,19 @@ final class WatchDashboardStore: NSObject, ObservableObject {
         )
     }
 
-    func receive(_ applicationContext: [String: Any]) {
+    @discardableResult
+    func receive(_ applicationContext: [String: Any]) -> Bool {
         receive(WatchDashboardApplicationContext(applicationContext))
     }
 
-    func receive(_ applicationContext: WatchDashboardApplicationContext) {
+    @discardableResult
+    func receive(_ applicationContext: WatchDashboardApplicationContext) -> Bool {
         do {
             let decoded = try applicationContext.decode()
+            guard decoded.generatedAt >= (snapshot?.generatedAt ?? .distantPast) else {
+                Self.logger.notice("Ignored older snapshot delivery")
+                return false
+            }
             let encoded = try decoded.encoded()
             let shouldReloadComplications = try complicationStore.saveIfChanged(
                 decoded,
@@ -245,15 +263,17 @@ final class WatchDashboardStore: NSObject, ObservableObject {
             defaults.set(encoded, forKey: Self.persistedSnapshotKey)
             snapshot = decoded
             decodingError = nil
-            hasQueuedSnapshotRequest = false
+            hasQueuedSnapshotRequest = hasOutstandingSnapshotRequest()
             if shouldReloadComplications {
                 reloadComplications()
             }
+            return true
         } catch {
             decodingError = "Couldn’t read the latest iPhone update"
             Self.logger.error(
                 "Snapshot context decode failed domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code, privacy: .public)"
             )
+            return false
         }
     }
 
@@ -358,8 +378,9 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private func receiveSnapshotResponse(_ response: WatchDashboardSnapshotResponse) {
         switch response {
         case let .snapshot(data):
-            receive(.snapshot(data))
-            Self.logger.info("Received immediate snapshot reply from iPhone")
+            if receive(.snapshot(data)) {
+                Self.logger.info("Received immediate snapshot reply from iPhone")
+            }
         case .unavailable:
             decodingError = "No dashboard update is available yet. Refresh CodexBar on iPhone"
             Self.logger.notice("iPhone replied without an available dashboard snapshot")
