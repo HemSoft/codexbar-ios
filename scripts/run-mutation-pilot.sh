@@ -272,6 +272,11 @@ collect_single_line_yaml_report_paths() {
         mapping_key=${reply[1]}
         mapping_key="${mapping_key#"${mapping_key%%[![:space:]]*}"}"
         mapping_key="${mapping_key%"${mapping_key##*[![:space:]]}"}"
+        if [[ "${mapping_key[1]}" == \& || "${mapping_key[1]}" == \* \
+            || "${mapping_key[1]}" == \! ]]; then
+            print -u2 "YAML anchors, aliases, and tags are not supported for mapping keys."
+            return 1
+        fi
         if ! mapping_key=$(decode_yaml_quoted_scalar "$mapping_key"); then
             return 1
         fi
@@ -398,6 +403,25 @@ reconcile_mutation_recovery_staging() {
         print -u2 "Unexpected recovery entries remain; preserving $recovery_staging."
         return 1
     fi
+}
+
+quarantine_unregistered_mutation_workspace() {
+    [[ -e "$mutation_workspace_parent" || -L "$mutation_workspace_parent" ]] || return 0
+    local orphaned_workspace="${mutation_workspace_parent}.orphaned.$$.$RANDOM"
+    local artifacts_saved=true
+    if [[ -d "$mutation_workspace_parent" && ! -L "$mutation_workspace_parent" ]]; then
+        sync_mutation_reports || artifacts_saved=false
+        sync_mutation_cache || artifacts_saved=false
+    fi
+    if [[ "$artifacts_saved" != true ]]; then
+        print -u2 "Could not recover artifacts from unregistered workspace; preserving $mutation_workspace_parent."
+        return 1
+    fi
+    if ! mv "$mutation_workspace_parent" "$orphaned_workspace"; then
+        print -u2 "Could not quarantine unregistered workspace at $mutation_workspace_parent."
+        return 1
+    fi
+    print -u2 "Quarantined interrupted unregistered workspace at $orphaned_workspace."
 }
 
 finalize_mutation_workspace_cleanup() {
@@ -621,8 +645,7 @@ if git -C "$repository_dir" worktree list --porcelain \
         exit 1
     fi
 fi
-if [[ -e "$mutation_workspace_parent" ]]; then
-    print -u2 "Mutation workspace already exists but is not a registered worktree: $mutation_workspace_parent"
+if ! quarantine_unregistered_mutation_workspace; then
     exit 1
 fi
 mkdir -p "$mutation_workspace_parent"
