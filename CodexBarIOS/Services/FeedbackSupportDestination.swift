@@ -531,8 +531,8 @@ struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
             Privacy-safe diagnostic:
             \(diagnostic)
 
-            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances,
-            usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or
+            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances, \
+            usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or \
             screenshots.
             """
         )
@@ -556,8 +556,8 @@ struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
             Privacy-safe app and device context:
             \(context.systemDetails)
 
-            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances,
-            usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or
+            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances, \
+            usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or \
             screenshots.
             """
         )
