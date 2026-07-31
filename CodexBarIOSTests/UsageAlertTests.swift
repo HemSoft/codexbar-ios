@@ -280,14 +280,14 @@ final class UsageAlertTests: XCTestCase {
 
     func testLegacySuppressionIDsUseExactAccountIdentity() throws {
         let defaultResult = result(accountID: "codex", used: 95)
-        let secondaryResult = result(accountID: "codex.secondary", used: 20)
         let legacySecondaryAlertID = "usage.codex.secondary.weekly"
         let settings = UsageAlertSettings(isEnabled: true)
 
         let evaluation = UsageAlertEvaluator.evaluate(
-            results: [defaultResult, secondaryResult],
+            results: [defaultResult],
             settings: settings,
-            activeAlertIDs: [legacySecondaryAlertID]
+            activeAlertIDs: [legacySecondaryAlertID],
+            knownAccountIDs: ["codex", "codex.secondary"]
         )
 
         XCTAssertEqual(

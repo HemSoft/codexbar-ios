@@ -115,14 +115,15 @@ public enum UsageAlertEvaluator {
         results: [ProviderUsageResult],
         settings: UsageAlertSettings,
         activeAlertIDs: Set<String>,
-        now: Date = Date()
+        now: Date = Date(),
+        knownAccountIDs: Set<String> = []
     ) -> UsageAlertEvaluation {
         guard settings.isEnabled else {
             return UsageAlertEvaluation(notifications: [], activeAlertIDs: [], activeAlerts: [])
         }
 
         let thresholds = settings.severityThresholds
-        let knownAccountIDs = Set(results.map(\.accountID))
+        let knownAccountIDs = knownAccountIDs.union(results.map(\.accountID))
         var nextActiveAlertIDs = Set<String>()
         var activeAlerts: [UsageAlertDetail] = []
         var notifications: [UsageAlertNotification] = []

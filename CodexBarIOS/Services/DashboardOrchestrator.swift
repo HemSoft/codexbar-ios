@@ -376,7 +376,8 @@ final class DashboardOrchestrator: ObservableObject {
         let evaluation = UsageAlertEvaluator.evaluate(
             results: results,
             settings: configurationStore.usageAlertSettings,
-            activeAlertIDs: existingActiveAlertIDs
+            activeAlertIDs: existingActiveAlertIDs,
+            knownAccountIDs: Set(configurationStore.configurations.map(\.id))
         )
 
         var deliveredActiveAlertIDs = preservedActiveAlertIDs.union(evaluation.activeAlertIDs)
