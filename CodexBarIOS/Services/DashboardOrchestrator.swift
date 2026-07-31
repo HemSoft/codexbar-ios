@@ -74,7 +74,8 @@ final class DashboardOrchestrator: ObservableObject {
             refreshingAccountIDs: refreshService.refreshingAccountIDs,
             errorsByAccountID: refreshService.refreshErrorsByAccountID,
             orderingMode: configurationStore.dashboardOrderingMode,
-            manualOrder: configurationStore.dashboardCardOrder
+            manualOrder: configurationStore.dashboardCardOrder,
+            severityThresholds: configurationStore.usageAlertSettings.severityThresholds
         )
     }
 
@@ -346,7 +347,10 @@ final class DashboardOrchestrator: ObservableObject {
         results: [ProviderUsageResult],
         preserving preservedAccountIDs: Set<String>
     ) async {
-        historyStore.record(results: results)
+        historyStore.record(
+            results: results,
+            severityThresholds: configurationStore.usageAlertSettings.severityThresholds
+        )
         await processUsageAlerts(results: results, preserving: preservedAccountIDs)
     }
 
@@ -372,7 +376,8 @@ final class DashboardOrchestrator: ObservableObject {
         let evaluation = UsageAlertEvaluator.evaluate(
             results: results,
             settings: configurationStore.usageAlertSettings,
-            activeAlertIDs: existingActiveAlertIDs
+            activeAlertIDs: existingActiveAlertIDs,
+            knownAccountIDs: Set(configurationStore.configurations.map(\.id))
         )
 
         var deliveredActiveAlertIDs = preservedActiveAlertIDs.union(evaluation.activeAlertIDs)
@@ -380,7 +385,12 @@ final class DashboardOrchestrator: ObservableObject {
             do {
                 try await usageAlertNotifier.deliver(notification)
             } catch {
-                deliveredActiveAlertIDs.remove(notification.id)
+                UsageAlertEvaluator.removeActiveAlertIDs(
+                    forFailedDelivery: notification,
+                    from: &deliveredActiveAlertIDs,
+                    previouslyActiveAlertIDs: existingActiveAlertIDs,
+                    knownAccountIDs: Set(configurationStore.configurations.map(\.id))
+                )
             }
         }
         configurationStore.updateUsageAlertActiveIDs(deliveredActiveAlertIDs)
@@ -432,6 +442,9 @@ final class WidgetSnapshotCoordinator {
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
         configurationStore.$metricLayouts.dropFirst().sink { [weak self] _ in
+            self?.scheduleSnapshotPublish()
+        }.store(in: &cancellables)
+        configurationStore.$usageAlertSettings.dropFirst().sink { [weak self] _ in
             self?.scheduleSnapshotPublish()
         }.store(in: &cancellables)
         configurationStore.$widgetRefreshInterval.dropFirst().sink { [weak self] _ in
@@ -519,7 +532,8 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
         refreshingAccountIDs: Set<String>,
         errorsByAccountID: [String: String],
         orderingMode: DashboardOrderingMode,
-        manualOrder: [String]
+        manualOrder: [String],
+        severityThresholds: UsageSeverityThresholds = .default
     ) -> [DashboardProviderCardItem] {
         let resultsByAccountID = Dictionary(uniqueKeysWithValues: results.map { ($0.accountID, $0) })
         let items = configurations.map { configuration in
@@ -545,7 +559,8 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
         return DashboardUsageSorter.orderedResults(
             orderingResults,
             mode: orderingMode,
-            manualOrder: manualOrder
+            manualOrder: manualOrder,
+            severityThresholds: severityThresholds
         ).compactMap { itemsByAccountID[$0.accountID] }
     }
 }

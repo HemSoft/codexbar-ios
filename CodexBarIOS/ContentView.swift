@@ -383,7 +383,11 @@ struct ContentView: View {
         .sheet(item: $selectedHistoryResult) { result in
             ProviderUsageHistoryDetailView(
                 result: result,
-                seriesOptions: historyStore.historySeriesOptions(for: result)
+                seriesOptions: historyStore.historySeriesOptions(
+                    for: result,
+                    severityThresholds:
+                        configurationStore.usageAlertSettings.severityThresholds
+                )
             )
         }
         .sheet(item: $problemReportPresentation) { context in
@@ -436,6 +440,10 @@ struct ContentView: View {
             guard performsLifecycleWork else { return }
             Task { await orchestrator.handleSystemDateTimeChange() }
         }
+        .environment(
+            \.usageSeverityThresholds,
+            configurationStore.usageAlertSettings.severityThresholds
+        )
     }
 
     @ViewBuilder
@@ -535,7 +543,11 @@ struct ContentView: View {
             ProviderUsageCard(
                 result: result,
                 statusText: orchestrator.dashboardStatusText(for: result),
-                history: historyStore.historySeries(for: result),
+                history: historyStore.historySeries(
+                    for: result,
+                    severityThresholds:
+                        configurationStore.usageAlertSettings.severityThresholds
+                ),
                 alerts: alerts,
                 isHistoryEnabled: item.configuration.showsHistory,
                 isRefreshing: item.isRefreshing,
@@ -693,7 +705,11 @@ struct ContentView: View {
                     )
                 },
                 historySeriesOptions: {
-                    historyStore.historySeriesOptions(for: result)
+                    historyStore.historySeriesOptions(
+                        for: result,
+                        severityThresholds:
+                            configurationStore.usageAlertSettings.severityThresholds
+                    )
                 },
                 onMetricsDiscovered: { metricIDs in
                     configurationStore.reconcileMetricLayout(

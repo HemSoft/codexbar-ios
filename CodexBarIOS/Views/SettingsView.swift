@@ -203,11 +203,17 @@ enum SettingsCategorySummary {
         "\(appearance.displayName) · \(ordering.displayName) · \(refreshInterval.displayName)"
     }
 
-    static func alerts(isEnabled: Bool, usageThreshold: Double) -> String {
+    static func alerts(
+        isEnabled: Bool,
+        warningThreshold: Double,
+        criticalThreshold: Double
+    ) -> String {
         guard isEnabled else {
             return "Off"
         }
-        return "On · Usage at \(Int((usageThreshold * 100).rounded()))%"
+        let warningPercent = Int((warningThreshold * 100).rounded())
+        let criticalPercent = Int((criticalThreshold * 100).rounded())
+        return "On · Warning \(warningPercent)% · Critical \(criticalPercent)%"
     }
 
     static func help(installedVersion: String, availableVersion: String?) -> String {
@@ -477,7 +483,8 @@ struct SettingsView: View {
         case .alerts:
             SettingsCategorySummary.alerts(
                 isEnabled: configurationStore.usageAlertSettings.isEnabled,
-                usageThreshold: configurationStore.usageAlertSettings.usageThreshold
+                warningThreshold: configurationStore.usageAlertSettings.warningThreshold,
+                criticalThreshold: configurationStore.usageAlertSettings.criticalThreshold
             )
         case .widgets:
             configurationStore.widgetRefreshInterval.displayName
@@ -661,27 +668,47 @@ struct SettingsView: View {
 
     private var alertSettings: some View {
         List {
-            Section("Usage Alerts") {
+            Section {
                 Toggle("Usage Alerts", isOn: usageAlertsEnabledBinding)
 
-                Stepper(value: usageAlertUsagePercentBinding, in: 50...100, step: 5) {
-                    Text("Usage at \(Int((configurationStore.usageAlertSettings.usageThreshold * 100).rounded()))%")
+                Stepper(
+                    value: usageAlertWarningPercentBinding,
+                    in: 1...max(1, usageAlertCriticalPercent - 1),
+                    step: 1
+                ) {
+                    Text("Warning \(Int(usageAlertWarningPercent.rounded()))%")
                 }
                 .disabled(!configurationStore.usageAlertSettings.isEnabled)
+                .accessibilityLabel("Warning threshold")
+                .accessibilityValue("\(Int(usageAlertWarningPercent.rounded())) percent")
+                .accessibilityHint("Must remain below the Critical Alert threshold.")
+
+                Stepper(
+                    value: usageAlertCriticalPercentBinding,
+                    in: min(100, usageAlertWarningPercent + 1)...100,
+                    step: 1
+                ) {
+                    Text("Critical Alert \(Int(usageAlertCriticalPercent.rounded()))%")
+                }
+                .disabled(!configurationStore.usageAlertSettings.isEnabled)
+                .accessibilityLabel("Critical Alert threshold")
+                .accessibilityValue("\(Int(usageAlertCriticalPercent.rounded())) percent")
+                .accessibilityHint("Must remain above the Warning threshold.")
 
                 Stepper(value: usageAlertBalanceBinding, in: 1...100, step: 1) {
                     Text("Balance below \(formattedBalanceThreshold)")
                 }
                 .disabled(!configurationStore.usageAlertSettings.isEnabled)
 
-                Toggle("Warning and Critical Alerts", isOn: usageAlertSeverityBinding)
-                    .disabled(!configurationStore.usageAlertSettings.isEnabled)
-
                 if let alertPermissionMessage {
                     Text(alertPermissionMessage)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            } header: {
+                Text("Usage Alerts")
+            } footer: {
+                Text("Warning applies first. Critical Alert must be at least one percentage point higher. Projected usage uses the same thresholds.")
             }
         }
         .navigationTitle(SettingsDestination.alerts.title)
@@ -891,10 +918,25 @@ struct SettingsView: View {
         )
     }
 
-    private var usageAlertUsagePercentBinding: Binding<Double> {
+    private var usageAlertWarningPercent: Double {
+        configurationStore.usageAlertSettings.warningThreshold * 100
+    }
+
+    private var usageAlertCriticalPercent: Double {
+        configurationStore.usageAlertSettings.criticalThreshold * 100
+    }
+
+    private var usageAlertWarningPercentBinding: Binding<Double> {
         Binding(
-            get: { configurationStore.usageAlertSettings.usageThreshold * 100 },
-            set: { configurationStore.updateUsageAlertUsageThreshold($0 / 100) }
+            get: { usageAlertWarningPercent },
+            set: { configurationStore.updateUsageAlertWarningThreshold($0 / 100) }
+        )
+    }
+
+    private var usageAlertCriticalPercentBinding: Binding<Double> {
+        Binding(
+            get: { usageAlertCriticalPercent },
+            set: { configurationStore.updateUsageAlertCriticalThreshold($0 / 100) }
         )
     }
 
@@ -902,13 +944,6 @@ struct SettingsView: View {
         Binding(
             get: { configurationStore.usageAlertSettings.balanceThreshold },
             set: { configurationStore.updateUsageAlertBalanceThreshold($0) }
-        )
-    }
-
-    private var usageAlertSeverityBinding: Binding<Bool> {
-        Binding(
-            get: { configurationStore.usageAlertSettings.includesSeverityAlerts },
-            set: { configurationStore.updateUsageAlertIncludesSeverityAlerts($0) }
         )
     }
 

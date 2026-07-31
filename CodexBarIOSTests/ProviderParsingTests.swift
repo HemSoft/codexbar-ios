@@ -2701,21 +2701,20 @@ final class ProviderParsingTests: XCTestCase {
             bars: result.bars,
             fetchedAt: result.fetchedAt
         )
-        let existingAlertIDs: Set<String> = [
-            "usage.\(configuration.id).sonnet-weekly-limit",
-            "usage.\(configuration.id).opus-weekly-limit",
-        ]
         let evaluation = UsageAlertEvaluator.evaluate(
             results: [accountResult],
             settings: UsageAlertSettings(
                 isEnabled: true,
-                usageThreshold: 0.20,
-                includesSeverityAlerts: false
+                warningThreshold: 0.20,
+                criticalThreshold: 0.99
             ),
-            activeAlertIDs: existingAlertIDs
+            activeAlertIDs: []
         )
-        XCTAssertTrue(evaluation.notifications.isEmpty)
-        XCTAssertEqual(evaluation.activeAlertIDs, existingAlertIDs)
+        XCTAssertEqual(evaluation.notifications.count, 1)
+        XCTAssertEqual(
+            evaluation.activeAlertIDs,
+            ["severity.warning.\(configuration.id)"]
+        )
 
         WidgetSnapshotPublisher.publish(
             results: [accountResult],
@@ -2790,15 +2789,15 @@ final class ProviderParsingTests: XCTestCase {
             results: [result],
             settings: UsageAlertSettings(
                 isEnabled: true,
-                usageThreshold: 0.20,
-                includesSeverityAlerts: false
+                warningThreshold: 0.20,
+                criticalThreshold: 0.99
             ),
             activeAlertIDs: []
         )
-        XCTAssertEqual(evaluation.activeAlertIDs, [
-            "usage.\(configuration.id).weekly-scoped-claudesonnet4",
-            "usage.\(configuration.id).weekly-scoped-claudesonnet45",
-        ])
+        XCTAssertEqual(
+            evaluation.activeAlertIDs,
+            ["severity.warning.\(configuration.id)"]
+        )
 
         WidgetSnapshotPublisher.publish(
             results: [result],
@@ -2812,7 +2811,7 @@ final class ProviderParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testClaudeWeeklyMetricsRemainDistinctAcrossHistoryWidgetsAndAlerts() throws {
+    func testClaudeWeeklyMetricsRemainDistinctWithoutDuplicateAlerts() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         let secretStore = MemorySecretStore()
@@ -2854,17 +2853,16 @@ final class ProviderParsingTests: XCTestCase {
             results: [result],
             settings: UsageAlertSettings(
                 isEnabled: true,
-                usageThreshold: 0.20,
-                includesSeverityAlerts: false
+                warningThreshold: 0.20,
+                criticalThreshold: 0.99
             ),
             activeAlertIDs: []
         )
-        XCTAssertEqual(evaluation.notifications.count, 3)
-        XCTAssertEqual(evaluation.activeAlertIDs, [
-            "usage.\(configuration.id).session",
-            "usage.\(configuration.id).weekly-usage-limit",
-            "usage.\(configuration.id).weekly-scoped-fable",
-        ])
+        XCTAssertEqual(evaluation.notifications.count, 1)
+        XCTAssertEqual(
+            evaluation.activeAlertIDs,
+            ["severity.warning.\(configuration.id)"]
+        )
 
         WidgetSnapshotPublisher.publish(
             results: [result],
@@ -2928,7 +2926,7 @@ final class ProviderParsingTests: XCTestCase {
         ))
     }
 
-    func testClaudeScopedAlertKeysPreserveModelVersions() throws {
+    func testClaudeScopedMetricsProduceSingleSeverityAlert() throws {
         let payload = """
         {
           "limits": [
@@ -2950,19 +2948,16 @@ final class ProviderParsingTests: XCTestCase {
             results: [result],
             settings: UsageAlertSettings(
                 isEnabled: true,
-                usageThreshold: 0.20,
-                includesSeverityAlerts: false
+                warningThreshold: 0.20,
+                criticalThreshold: 0.99
             ),
             activeAlertIDs: []
         )
-        XCTAssertEqual(evaluation.notifications.count, 2)
-        XCTAssertEqual(evaluation.activeAlertIDs, [
-            "usage.claude.session-scoped-claudesonnet4",
-            "usage.claude.session-scoped-claudesonnet45",
-        ])
+        XCTAssertEqual(evaluation.notifications.count, 1)
+        XCTAssertEqual(evaluation.activeAlertIDs, ["severity.warning.claude"])
     }
 
-    func testClaudeUnscopedAlertKeySurvivesScopedLabelChange() throws {
+    func testClaudeUnscopedIdentitySurvivesScopedLabelChange() throws {
         let unscopedPayload = """
         {"limits":[{"kind":"session","percent":42,"is_active":true}]}
         """
@@ -3009,12 +3004,12 @@ final class ProviderParsingTests: XCTestCase {
                 results: [result],
                 settings: UsageAlertSettings(
                     isEnabled: true,
-                    usageThreshold: 0.20,
-                    includesSeverityAlerts: false
+                    warningThreshold: 0.20,
+                    criticalThreshold: 0.99
                 ),
                 activeAlertIDs: []
             )
-            XCTAssertEqual(evaluation.activeAlertIDs, ["usage.claude.session"])
+            XCTAssertEqual(evaluation.activeAlertIDs, ["severity.warning.claude"])
         }
     }
 

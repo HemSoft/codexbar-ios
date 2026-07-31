@@ -894,6 +894,11 @@ final class DashboardAndSettingsTests: XCTestCase {
         await Task.yield()
         XCTAssertEqual(publishedAccountIDs.count, snapshotCount + 1)
 
+        let thresholdSnapshotCount = publishedAccountIDs.count
+        store.updateUsageAlertWarningThreshold(0.65)
+        await Task.yield()
+        XCTAssertEqual(publishedAccountIDs.count, thresholdSnapshotCount + 1)
+
         store.updateWidgetRefreshInterval(.oneHour)
         await Task.yield()
         XCTAssertEqual(settingsPublishCount, 1)
@@ -1553,6 +1558,15 @@ final class DashboardAndSettingsTests: XCTestCase {
             sender.snapshots.last?.accounts[0].metrics[0].visualizationStyle,
             .largeNumeric
         )
+
+        let thresholdsPublished = expectation(description: "Watch thresholds republished")
+        sender.onPublish = {
+            thresholdsPublished.fulfill()
+        }
+        store.updateUsageAlertWarningThreshold(0.65)
+        await fulfillment(of: [thresholdsPublished], timeout: 1)
+
+        XCTAssertEqual(sender.publishedForces, [true, false, false])
         withExtendedLifetime(coordinator) {}
     }
 

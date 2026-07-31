@@ -3,387 +3,468 @@ import XCTest
 
 final class UsageAlertTests: XCTestCase {
     @MainActor
-    func testUsageAlertSettingsPersistAndClamp() {
+    func testUsageAlertSettingsPersistAndValidateThresholdRelationship() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
         XCTAssertFalse(store.usageAlertSettings.isEnabled)
-        XCTAssertEqual(store.usageAlertSettings.usageThreshold, 0.80)
+        XCTAssertEqual(store.usageAlertSettings.warningThreshold, 0.75)
+        XCTAssertEqual(store.usageAlertSettings.criticalThreshold, 0.90)
         XCTAssertEqual(store.usageAlertSettings.balanceThreshold, 5.00)
 
         store.updateUsageAlertsEnabled(true)
-        store.updateUsageAlertUsageThreshold(1.8)
+        store.updateUsageAlertWarningThreshold(0.60)
+        store.updateUsageAlertCriticalThreshold(0.80)
         store.updateUsageAlertBalanceThreshold(-5)
-        store.updateUsageAlertIncludesSeverityAlerts(false)
-        store.updateUsageAlertActiveIDs(["usage.codex.weekly", "balance.openRouter"])
+        store.updateUsageAlertActiveIDs([
+            "severity.warning.codex.personal",
+            "balance.openRouter",
+        ])
 
-        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let reloadedStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
         XCTAssertTrue(reloadedStore.usageAlertSettings.isEnabled)
-        XCTAssertEqual(reloadedStore.usageAlertSettings.usageThreshold, 1.0)
+        XCTAssertEqual(reloadedStore.usageAlertSettings.warningThreshold, 0.60)
+        XCTAssertEqual(reloadedStore.usageAlertSettings.criticalThreshold, 0.80)
         XCTAssertEqual(reloadedStore.usageAlertSettings.balanceThreshold, 0)
-        XCTAssertFalse(reloadedStore.usageAlertSettings.includesSeverityAlerts)
-        XCTAssertEqual(reloadedStore.usageAlertActiveIDs, ["usage.codex.weekly", "balance.openRouter"])
+        XCTAssertEqual(
+            reloadedStore.usageAlertActiveIDs,
+            ["severity.warning.codex.personal", "balance.openRouter"]
+        )
+
+        reloadedStore.updateUsageAlertWarningThreshold(1)
+        XCTAssertEqual(reloadedStore.usageAlertSettings.warningThreshold, 0.79)
+        reloadedStore.updateUsageAlertCriticalThreshold(0.50)
+        XCTAssertEqual(reloadedStore.usageAlertSettings.criticalThreshold, 0.80)
+    }
+
+    func testUsageAlertThresholdsNormalizeNonFiniteInputs() {
+        let thresholds = UsageSeverityThresholds(
+            warning: .nan,
+            critical: .nan
+        )
+        XCTAssertEqual(thresholds, .default)
+
+        var settings = UsageAlertSettings(
+            warningThreshold: .nan,
+            criticalThreshold: .nan
+        )
+        XCTAssertEqual(settings.warningThreshold, 0.75)
+        XCTAssertEqual(settings.criticalThreshold, 0.90)
+
+        settings.updateWarningThreshold(.nan)
+        settings.updateCriticalThreshold(.nan)
+        XCTAssertEqual(settings.warningThreshold, 0.75)
+        XCTAssertEqual(settings.criticalThreshold, 0.90)
     }
 
     @MainActor
-    func testUsageAlertSettingsChangeClearsActiveSuppressionState() {
+    func testLegacySettingsMigrateToSeverityDefaults() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
-        store.updateUsageAlertActiveIDs(["usage.codex.weekly"])
-        store.updateUsageAlertUsageThreshold(0.90)
+        let legacyData = try JSONSerialization.data(withJSONObject: [
+            "isEnabled": true,
+            "usageThreshold": 0.55,
+            "balanceThreshold": 7.0,
+            "includesSeverityAlerts": false,
+        ])
+        defaults.set(legacyData, forKey: "usageAlertSettings")
 
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertTrue(store.usageAlertSettings.isEnabled)
+        XCTAssertEqual(store.usageAlertSettings.warningThreshold, 0.75)
+        XCTAssertEqual(store.usageAlertSettings.criticalThreshold, 0.90)
+        XCTAssertEqual(store.usageAlertSettings.balanceThreshold, 7)
+
+        let migratedData = try XCTUnwrap(defaults.data(forKey: "usageAlertSettings"))
+        let migratedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: migratedData) as? [String: Any]
+        )
+        XCTAssertEqual(migratedObject["warningThreshold"] as? Double, 0.75)
+        XCTAssertEqual(migratedObject["criticalThreshold"] as? Double, 0.90)
+        XCTAssertNil(migratedObject["usageThreshold"])
+        XCTAssertNil(migratedObject["includesSeverityAlerts"])
+    }
+
+    @MainActor
+    func testLegacySettingsMigrationPreservesCredentialReadError() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let configuration = ProviderAccountConfiguration(
+            providerID: .claude,
+            authMethod: .browserSession
+        )
+        defaults.set(
+            try JSONEncoder().encode([configuration]),
+            forKey: "providerConfigurations"
+        )
+        defaults.set(
+            try JSONSerialization.data(withJSONObject: [
+                "isEnabled": true,
+                "usageThreshold": 0.80,
+                "balanceThreshold": 5.0,
+                "includesSeverityAlerts": true,
+            ]),
+            forKey: "usageAlertSettings"
+        )
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: FailingReadSecretStore()
+        )
+
+        XCTAssertEqual(
+            store.lastError,
+            "Could not read the saved credential for Claude: Keychain unavailable"
+        )
+        XCTAssertEqual(store.usageAlertSettings.warningThreshold, 0.75)
+        XCTAssertEqual(store.usageAlertSettings.criticalThreshold, 0.90)
+    }
+
+    @MainActor
+    func testUnknownFutureSettingsPayloadIsNotRewrittenAsLegacy() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let futureData = try JSONSerialization.data(withJSONObject: [
+            "isEnabled": true,
+            "futureWarningThreshold": 0.65,
+            "futureCriticalThreshold": 0.85,
+            "balanceThreshold": 8.0,
+        ])
+        defaults.set(futureData, forKey: "usageAlertSettings")
+
+        _ = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertEqual(defaults.data(forKey: "usageAlertSettings"), futureData)
+    }
+
+    @MainActor
+    func testThresholdChangesInvalidateOnlyAffectedSuppressionState() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let warningID = "severity.warning.codex.personal"
+        let criticalID = "severity.critical.codex.personal"
+        let balanceID = "balance.openRouter"
+        store.updateUsageAlertActiveIDs([warningID, criticalID, balanceID])
+
+        store.updateUsageAlertCriticalThreshold(0.95)
+        XCTAssertEqual(store.usageAlertActiveIDs, [warningID, balanceID])
+
+        store.updateUsageAlertActiveIDs([warningID, criticalID, balanceID])
+        store.updateUsageAlertWarningThreshold(0.70)
+        XCTAssertEqual(store.usageAlertActiveIDs, [criticalID, balanceID])
+
+        store.updateUsageAlertActiveIDs([warningID, criticalID, balanceID])
+        store.updateUsageAlertBalanceThreshold(10)
+        XCTAssertEqual(store.usageAlertActiveIDs, [warningID, criticalID])
+
+        store.updateUsageAlertsEnabled(true)
         XCTAssertTrue(store.usageAlertActiveIDs.isEmpty)
     }
 
-    func testUsageAlertEvaluatorSendsOnceUntilRecovery() {
-        let result = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(
-                    id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
-                    label: "5-hour",
-                    used: 81,
-                    limit: 100
-                ),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
+    func testCurrentUsageUsesConfiguredWarningAndCriticalThresholds() {
         let settings = UsageAlertSettings(
             isEnabled: true,
-            usageThreshold: 0.80,
-            includesSeverityAlerts: false
+            warningThreshold: 0.60,
+            criticalThreshold: 0.85
         )
+        let warning = result(used: 60)
+        let critical = result(used: 85)
 
-        let first = UsageAlertEvaluator.evaluate(results: [result], settings: settings, activeAlertIDs: [])
-        XCTAssertEqual(first.notifications.count, 1)
-        XCTAssertEqual(first.notifications.first?.title, "Codex 5-hour alert")
-        XCTAssertEqual(first.notifications.first?.accountID, "codex.personal")
-        XCTAssertEqual(first.notifications.first?.kind, .usage)
-        XCTAssertEqual(first.notifications.first?.body, "5-hour at 81%. 81 of 100 used. Alert threshold: 80%.")
-        XCTAssertEqual(first.activeAlerts.count, 1)
-        XCTAssertEqual(first.activeAlerts.first?.accountID, "codex.personal")
-        XCTAssertEqual(first.activeAlerts.first?.title, "5-hour at 81%")
-
-        let repeated = UsageAlertEvaluator.evaluate(
-            results: [result],
+        let warningEvaluation = UsageAlertEvaluator.evaluate(
+            results: [warning],
             settings: settings,
-            activeAlertIDs: first.activeAlertIDs
+            activeAlertIDs: []
         )
-        XCTAssertTrue(repeated.notifications.isEmpty)
-        XCTAssertEqual(repeated.activeAlerts, first.activeAlerts)
-
-        let recoveredResult = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(
-                    id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
-                    label: "5-hour",
-                    used: 40,
-                    limit: 100
-                ),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_580)
-        )
-        let recovered = UsageAlertEvaluator.evaluate(
-            results: [recoveredResult],
-            settings: settings,
-            activeAlertIDs: repeated.activeAlertIDs
-        )
-        XCTAssertTrue(recovered.activeAlertIDs.isEmpty)
-
-        let crossedAgain = UsageAlertEvaluator.evaluate(
-            results: [result],
-            settings: settings,
-            activeAlertIDs: recovered.activeAlertIDs
-        )
-        XCTAssertEqual(crossedAgain.notifications.count, 1)
-    }
-
-    func testCodexCardHidesOnlyUsageThresholdAlerts() {
-        let usageAlert = UsageAlertDetail(
-            id: "usage.codex.personal.weekly",
-            accountID: "codex.personal",
-            kind: .usage,
-            title: "Weekly at 92%",
-            message: "92 of 100 used. Alert threshold: 80%.",
-            severity: .warning
-        )
-        let severityAlert = UsageAlertDetail(
-            id: "severity.codex.personal",
-            accountID: "codex.personal",
-            kind: .severity,
-            title: "Critical status",
-            message: "Weekly is projected to reach 100%.",
-            severity: .critical
-        )
-        let codexResult = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
-            subtitle: "Live usage",
-            bars: [UsageBar(label: "Weekly", used: 92, limit: 100)],
-            fetchedAt: Date()
-        )
-        let codexCard = ProviderUsageCard(
-            result: codexResult,
-            statusText: codexResult.subtitle,
-            history: UsageHistorySeries(accountID: codexResult.accountID, points: [], isBalance: false),
-            alerts: [usageAlert, severityAlert]
-        )
-
-        XCTAssertEqual(codexCard.displayedAlerts, [severityAlert])
-
-        let cursorResult = ProviderUsageResult(
-            accountID: "cursor.personal",
-            providerID: .cursor,
-            title: "Cursor",
-            subtitle: "Live usage",
-            bars: [UsageBar(label: "Total", used: 92, limit: 100)],
-            fetchedAt: Date()
-        )
-        let cursorCard = ProviderUsageCard(
-            result: cursorResult,
-            statusText: cursorResult.subtitle,
-            history: UsageHistorySeries(accountID: cursorResult.accountID, points: [], isBalance: false),
-            alerts: [usageAlert, severityAlert]
-        )
-
-        XCTAssertEqual(cursorCard.displayedAlerts, [usageAlert, severityAlert])
-        XCTAssertTrue(cursorCard.inlineAlerts.isEmpty)
+        XCTAssertEqual(warningEvaluation.notifications.count, 1)
+        XCTAssertEqual(warningEvaluation.notifications.first?.kind, .severity)
+        XCTAssertEqual(warningEvaluation.notifications.first?.title, "Codex Warning")
+        XCTAssertEqual(warningEvaluation.activeAlerts.first?.severity, .warning)
         XCTAssertEqual(
-            cursorCard.informationSections,
+            warningEvaluation.activeAlertIDs,
+            ["severity.warning.codex.personal"]
+        )
+
+        let criticalEvaluation = UsageAlertEvaluator.evaluate(
+            results: [critical],
+            settings: settings,
+            activeAlertIDs: []
+        )
+        XCTAssertEqual(criticalEvaluation.notifications.count, 1)
+        XCTAssertEqual(
+            criticalEvaluation.notifications.first?.title,
+            "Codex Critical Alert"
+        )
+        XCTAssertEqual(criticalEvaluation.activeAlerts.first?.severity, .critical)
+        XCTAssertEqual(
+            criticalEvaluation.activeAlertIDs,
             [
-                ProviderCardInformationSection(
-                    id: "cursor.active-alerts",
-                    title: "Active alerts",
-                    items: [
-                        ProviderCardInformationItem(
-                            id: "cursor.alert.usage.codex.personal.weekly",
-                            label: "Weekly at 92%",
-                            detail: "92 of 100 used. Alert threshold: 80%."
-                        ),
-                        ProviderCardInformationItem(
-                            id: "cursor.alert.severity.codex.personal",
-                            label: "Critical status",
-                            detail: "Weekly is projected to reach 100%."
-                        ),
-                    ]
-                ),
+                "severity.warning.codex.personal",
+                "severity.critical.codex.personal",
             ]
         )
-        XCTAssertEqual(
-            ProviderUsageCard.menuActions(for: cursorResult, alerts: cursorCard.displayedAlerts),
-            [.moreInformation, .configureAccount, .customizeMetrics]
-        )
     }
 
-    func testUsageAlertEvaluatorUsesInjectedNowForResetDescription() throws {
-        let now = Date(timeIntervalSince1970: 2_000_000_000)
-        let resetAt = now.addingTimeInterval(2 * 60 * 60)
-        let result = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(
-                    label: "5-hour",
-                    used: 81,
-                    limit: 100,
-                    resetDescription: "stale reset text",
-                    resetsAt: resetAt,
-                    resetDisplayStyle: .relativeWithLocalTime
-                ),
-            ],
+    func testLegacySuppressionIDsMigrateWithoutDuplicateNotifications() throws {
+        let settings = UsageAlertSettings(isEnabled: true)
+
+        let warning = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: settings,
+            activeAlertIDs: ["usage.codex.personal.weekly"]
+        )
+        XCTAssertTrue(warning.notifications.isEmpty)
+        XCTAssertEqual(
+            warning.activeAlertIDs,
+            ["severity.warning.codex.personal"]
+        )
+
+        let critical = UsageAlertEvaluator.evaluate(
+            results: [result(used: 95)],
+            settings: settings,
+            activeAlertIDs: ["severity.codex.personal"]
+        )
+        XCTAssertEqual(
+            critical.notifications.map(\.title),
+            ["Codex Critical Alert"]
+        )
+        XCTAssertEqual(
+            critical.activeAlertIDs,
+            [
+                "severity.warning.codex.personal",
+                "severity.critical.codex.personal",
+            ]
+        )
+
+        let criticalNotification = try XCTUnwrap(critical.notifications.first)
+        var activeAlertIDs = critical.activeAlertIDs
+        UsageAlertEvaluator.removeActiveAlertIDs(
+            forFailedDelivery: criticalNotification,
+            from: &activeAlertIDs,
+            previouslyActiveAlertIDs: ["severity.codex.personal"],
+            knownAccountIDs: ["codex.personal"]
+        )
+        XCTAssertEqual(activeAlertIDs, ["severity.warning.codex.personal"])
+
+        let recoveredToWarning = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: settings,
+            activeAlertIDs: activeAlertIDs
+        )
+        XCTAssertTrue(recoveredToWarning.notifications.isEmpty)
+    }
+
+    func testLegacySuppressionIDsUseExactAccountIdentity() throws {
+        let defaultResult = result(accountID: "codex", used: 95)
+        let legacySecondaryAlertID = "usage.codex.secondary.weekly"
+        let settings = UsageAlertSettings(isEnabled: true)
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [defaultResult],
+            settings: settings,
+            activeAlertIDs: [legacySecondaryAlertID],
+            knownAccountIDs: ["codex", "codex.secondary"]
+        )
+
+        XCTAssertEqual(
+            evaluation.notifications.map(\.title),
+            ["Codex Critical Alert"]
+        )
+        let notification = try XCTUnwrap(evaluation.notifications.first)
+        var activeAlertIDs = evaluation.activeAlertIDs
+        UsageAlertEvaluator.removeActiveAlertIDs(
+            forFailedDelivery: notification,
+            from: &activeAlertIDs,
+            previouslyActiveAlertIDs: [legacySecondaryAlertID],
+            knownAccountIDs: ["codex", "codex.secondary"]
+        )
+        XCTAssertTrue(activeAlertIDs.isEmpty)
+    }
+
+    func testProjectedUsageUsesConfiguredThresholds() {
+        let now = Date(timeIntervalSince1970: 1_783_667_520)
+        let projectedResult = result(
+            used: 40,
+            projectionCurrent: 40,
+            projectionPeriodStart: now.addingTimeInterval(-4 * 24 * 60 * 60),
+            projectionPeriodEnd: now.addingTimeInterval(6 * 24 * 60 * 60),
             fetchedAt: now
         )
         let settings = UsageAlertSettings(
             isEnabled: true,
-            usageThreshold: 0.80,
-            includesSeverityAlerts: false
+            warningThreshold: 0.70,
+            criticalThreshold: 0.95
         )
 
         let evaluation = UsageAlertEvaluator.evaluate(
-            results: [result],
+            results: [projectedResult],
             settings: settings,
             activeAlertIDs: [],
             now: now
         )
 
-        let body = try XCTUnwrap(evaluation.notifications.first?.body)
-        XCTAssertTrue(body.contains("Resets 2h 0m"))
-        XCTAssertFalse(body.contains("stale reset text"))
+        XCTAssertEqual(evaluation.notifications.count, 1)
+        XCTAssertEqual(evaluation.activeAlerts.first?.severity, .critical)
+        XCTAssertEqual(
+            evaluation.activeAlerts.first?.message,
+            "Weekly is projected to reach 100%."
+        )
     }
 
-    func testUsageAlertEvaluatorUsesStableUsageKeysForMutableLabels() {
-        let firstResult = ProviderUsageResult(
-            accountID: "cursor.main",
-            providerID: .cursor,
-            title: "Cursor",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(
-                    id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
-                    label: "On-demand $12.00 / $20.00",
-                    used: 12,
-                    limit: 20
-                ),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let secondResult = ProviderUsageResult(
-            accountID: "cursor.main",
-            providerID: .cursor,
-            title: "Cursor",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(
-                    id: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!,
-                    label: "On-demand $14.00 / $20.00",
-                    used: 14,
-                    limit: 20
-                ),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_580)
-        )
-        let settings = UsageAlertSettings(isEnabled: true, usageThreshold: 0.50)
+    func testEscalationRecoveryAndRearmingProduceOnlyUsefulNotifications() {
+        let settings = UsageAlertSettings(isEnabled: true)
 
-        let first = UsageAlertEvaluator.evaluate(results: [firstResult], settings: settings, activeAlertIDs: [])
-        let repeated = UsageAlertEvaluator.evaluate(
-            results: [secondResult],
+        let warning = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
             settings: settings,
-            activeAlertIDs: first.activeAlertIDs
+            activeAlertIDs: []
+        )
+        XCTAssertEqual(warning.notifications.map(\.title), ["Codex Warning"])
+
+        let critical = UsageAlertEvaluator.evaluate(
+            results: [result(used: 95)],
+            settings: settings,
+            activeAlertIDs: warning.activeAlertIDs
+        )
+        XCTAssertEqual(critical.notifications.map(\.title), ["Codex Critical Alert"])
+
+        let recoveredToWarning = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: settings,
+            activeAlertIDs: critical.activeAlertIDs
+        )
+        XCTAssertTrue(recoveredToWarning.notifications.isEmpty)
+        XCTAssertEqual(
+            recoveredToWarning.activeAlertIDs,
+            ["severity.warning.codex.personal"]
         )
 
-        XCTAssertEqual(first.notifications.count, 1)
-        XCTAssertEqual(first.activeAlertIDs, ["usage.cursor.main.on-demand"])
-        XCTAssertTrue(repeated.notifications.isEmpty)
-        XCTAssertEqual(repeated.activeAlertIDs, ["usage.cursor.main.on-demand"])
+        let recoveredToNormal = UsageAlertEvaluator.evaluate(
+            results: [result(used: 50)],
+            settings: settings,
+            activeAlertIDs: recoveredToWarning.activeAlertIDs
+        )
+        XCTAssertTrue(recoveredToNormal.activeAlertIDs.isEmpty)
+
+        let rearmed = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: settings,
+            activeAlertIDs: recoveredToNormal.activeAlertIDs
+        )
+        XCTAssertEqual(rearmed.notifications.map(\.title), ["Codex Warning"])
     }
 
-    func testUsageAlertEvaluatorDeduplicatesBarsWithSameStableKey() {
+    func testMultipleMetricsCrossingThresholdProduceOneSeverityNotification() {
         let result = ProviderUsageResult(
-            accountID: "cursor.main",
-            providerID: .cursor,
-            title: "Cursor",
+            accountID: "codex.personal",
+            providerID: .codex,
+            title: "Codex",
             subtitle: "Live usage",
             bars: [
-                UsageBar(label: "On-demand $12.00 / $20.00", used: 12, limit: 20),
-                UsageBar(label: "On-demand $18.00 / $30.00", used: 18, limit: 30),
+                UsageBar(stableKey: "five-hour", label: "5-hour", used: 90, limit: 100),
+                UsageBar(stableKey: "weekly", label: "Weekly", used: 95, limit: 100),
             ],
             fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let settings = UsageAlertSettings(
-            isEnabled: true,
-            usageThreshold: 0.50,
-            includesSeverityAlerts: false
-        )
-
-        let evaluation = UsageAlertEvaluator.evaluate(results: [result], settings: settings, activeAlertIDs: [])
-
-        XCTAssertEqual(evaluation.notifications.count, 1)
-        XCTAssertEqual(evaluation.activeAlertIDs, ["usage.cursor.main.on-demand"])
-    }
-
-    func testUsageAlertEvaluatorReportsBalanceThreshold() {
-        let result = ProviderUsageResult(
-            accountID: "openRouter.main",
-            providerID: .openRouter,
-            title: "OpenRouter",
-            subtitle: "Credit balance",
-            bars: [],
-            creditsRemaining: 4.50,
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let settings = UsageAlertSettings(isEnabled: true, balanceThreshold: 5)
-
-        let evaluation = UsageAlertEvaluator.evaluate(results: [result], settings: settings, activeAlertIDs: [])
-
-        XCTAssertEqual(evaluation.notifications.count, 1)
-        XCTAssertEqual(evaluation.notifications.first?.title, "OpenRouter balance alert")
-        XCTAssertEqual(evaluation.notifications.first?.accountID, "openRouter.main")
-        XCTAssertEqual(evaluation.notifications.first?.kind, .balance)
-        XCTAssertTrue(evaluation.activeAlertIDs.contains("balance.openRouter.main"))
-        XCTAssertEqual(evaluation.activeAlerts.first?.title, "Balance below $5.00")
-        XCTAssertEqual(evaluation.activeAlerts.first?.message, "$4.50 remaining for OpenRouter.")
-    }
-
-    func testUsageAlertEvaluatorAlertsScopedClaudeBarsWithoutTreatingHeadroomAsBalance() {
-        let result = ProviderUsageResult(
-            accountID: "claude.personal",
-            providerID: .claude,
-            title: "Claude",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(label: "Fable weekly limit", used: 85, limit: 100),
-            ],
-            monetaryMetrics: [
-                ProviderMonetaryMetric(
-                    kind: .remainingHeadroom,
-                    label: "Remaining spend headroom",
-                    minorUnits: 250,
-                    currencyCode: "USD",
-                    decimalPlaces: 2
-                ),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let settings = UsageAlertSettings(
-            isEnabled: true,
-            usageThreshold: 0.80,
-            balanceThreshold: 5,
-            includesSeverityAlerts: false
         )
 
         let evaluation = UsageAlertEvaluator.evaluate(
             results: [result],
+            settings: UsageAlertSettings(isEnabled: true),
+            activeAlertIDs: []
+        )
+
+        XCTAssertEqual(evaluation.notifications.count, 1)
+        XCTAssertEqual(evaluation.notifications.first?.kind, .severity)
+        XCTAssertEqual(evaluation.activeAlerts.count, 1)
+        XCTAssertFalse(evaluation.activeAlertIDs.contains {
+            $0.hasPrefix("usage.")
+        })
+    }
+
+    func testFailedCriticalDeliveryClearsCompanionWarningLatch() throws {
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result(used: 95)],
+            settings: UsageAlertSettings(isEnabled: true),
+            activeAlertIDs: []
+        )
+        let notification = try XCTUnwrap(evaluation.notifications.first)
+        var activeAlertIDs = evaluation.activeAlertIDs
+
+        UsageAlertEvaluator.removeActiveAlertIDs(
+            forFailedDelivery: notification,
+            from: &activeAlertIDs,
+            previouslyActiveAlertIDs: [],
+            knownAccountIDs: ["codex.personal"]
+        )
+
+        XCTAssertTrue(activeAlertIDs.isEmpty)
+        let warningEvaluation = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: UsageAlertSettings(isEnabled: true),
+            activeAlertIDs: activeAlertIDs
+        )
+        XCTAssertEqual(warningEvaluation.notifications.map(\.title), ["Codex Warning"])
+    }
+
+    func testFailedCriticalDeliveryRetainsPreviouslyDeliveredWarningLatch() throws {
+        let settings = UsageAlertSettings(isEnabled: true)
+        let warningEvaluation = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
             settings: settings,
             activeAlertIDs: []
         )
-
-        XCTAssertEqual(evaluation.notifications.map(\.kind), [.usage])
-        XCTAssertEqual(evaluation.notifications.first?.title, "Claude Fable weekly limit alert")
-        XCTAssertFalse(evaluation.activeAlertIDs.contains("balance.claude.personal"))
-
-        let staleBarsResult = ProviderUsageResult(
-            accountID: "claude.stale-bars",
-            providerID: .claude,
-            title: "Claude",
-            subtitle: "Fresh monetary usage with cached rate limits",
-            bars: [
-                UsageBar(label: "Fable weekly limit", used: 85, limit: 100),
-            ],
-            barsFetchedAt: Date(timeIntervalSince1970: 1_783_667_520),
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_580)
+        let criticalEvaluation = UsageAlertEvaluator.evaluate(
+            results: [result(used: 95)],
+            settings: settings,
+            activeAlertIDs: warningEvaluation.activeAlertIDs
         )
-        let staleBarsEvaluation = UsageAlertEvaluator.evaluate(
-            results: [staleBarsResult],
-            settings: UsageAlertSettings(
-                isEnabled: true,
-                usageThreshold: 0.80,
-                includesSeverityAlerts: true
-            ),
-            activeAlertIDs: []
+        let criticalNotification = try XCTUnwrap(
+            criticalEvaluation.notifications.first
         )
-        XCTAssertTrue(staleBarsEvaluation.notifications.isEmpty)
-        XCTAssertTrue(staleBarsEvaluation.activeAlerts.isEmpty)
+        var activeAlertIDs = criticalEvaluation.activeAlertIDs
 
-        let cappedResult = ProviderUsageResult(
+        UsageAlertEvaluator.removeActiveAlertIDs(
+            forFailedDelivery: criticalNotification,
+            from: &activeAlertIDs,
+            previouslyActiveAlertIDs: warningEvaluation.activeAlertIDs,
+            knownAccountIDs: ["codex.personal"]
+        )
+
+        XCTAssertEqual(activeAlertIDs, ["severity.warning.codex.personal"])
+        let recoveredWarning = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: settings,
+            activeAlertIDs: activeAlertIDs
+        )
+        XCTAssertTrue(recoveredWarning.notifications.isEmpty)
+    }
+
+    func testSpendLimitRemainsCriticalRegardlessOfPercentageThresholds() {
+        let result = ProviderUsageResult(
             accountID: "claude.capped",
             providerID: .claude,
             title: "Claude",
@@ -407,60 +488,52 @@ final class UsageAlertTests: XCTestCase {
             ],
             fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
         )
-        let cappedEvaluation = UsageAlertEvaluator.evaluate(
-            results: [cappedResult],
-            settings: UsageAlertSettings(isEnabled: true, includesSeverityAlerts: true),
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(
+                isEnabled: true,
+                warningThreshold: 0.98,
+                criticalThreshold: 0.99
+            ),
             activeAlertIDs: []
         )
-        XCTAssertEqual(cappedResult.highestSeverity, .critical)
-        XCTAssertEqual(cappedEvaluation.notifications.map(\.kind), [.severity])
+
+        XCTAssertEqual(evaluation.notifications.map(\.kind), [.severity])
+        XCTAssertEqual(evaluation.activeAlerts.first?.severity, .critical)
         XCTAssertEqual(
-            cappedEvaluation.activeAlerts.first?.message,
+            evaluation.activeAlerts.first?.message,
             "The monthly usage-credit spend limit has been reached."
         )
-
-        let zeroCapResult = ProviderUsageResult(
-            providerID: .claude,
-            title: "Claude",
-            subtitle: "Live usage",
-            bars: [],
-            monetaryMetrics: [
-                ProviderMonetaryMetric(
-                    kind: .spent,
-                    label: "Usage credits spent",
-                    minorUnits: 0,
-                    currencyCode: "USD",
-                    decimalPlaces: 2
-                ),
-                ProviderMonetaryMetric(
-                    kind: .spendLimit,
-                    label: "Monthly spend limit",
-                    minorUnits: 0,
-                    currencyCode: "USD",
-                    decimalPlaces: 2
-                ),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        XCTAssertEqual(zeroCapResult.highestSeverity, .normal)
     }
 
-    func testUsageAlertEvaluatorKeepsExistingAlertIDsWhileBarsAreStale() {
+    func testLowBalanceAlertBehaviorRemainsIndependent() {
+        let result = ProviderUsageResult(
+            accountID: "openRouter.main",
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Credit balance",
+            bars: [],
+            creditsRemaining: 4.50,
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+        )
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result],
+            settings: UsageAlertSettings(isEnabled: true, balanceThreshold: 5),
+            activeAlertIDs: []
+        )
+
+        XCTAssertEqual(evaluation.notifications.map(\.kind), [.balance])
+        XCTAssertEqual(evaluation.notifications.first?.title, "OpenRouter balance alert")
+        XCTAssertEqual(evaluation.activeAlerts.first?.title, "Balance below $5.00")
+    }
+
+    func testStaleBarsPreserveSuppressionWithoutSendingNewAlert() {
         let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
-        let settings = UsageAlertSettings(
-            isEnabled: true,
-            usageThreshold: 0.80,
-            includesSeverityAlerts: true
-        )
-        let freshResult = ProviderUsageResult(
-            accountID: "claude.personal",
-            providerID: .claude,
-            title: "Claude",
-            subtitle: "Live usage",
-            bars: [UsageBar(label: "Fable weekly limit", used: 85, limit: 100)],
-            fetchedAt: fetchedAt
-        )
-        let firstEvaluation = UsageAlertEvaluator.evaluate(
+        let settings = UsageAlertSettings(isEnabled: true)
+        let freshResult = result(used: 80, fetchedAt: fetchedAt)
+        let first = UsageAlertEvaluator.evaluate(
             results: [freshResult],
             settings: settings,
             activeAlertIDs: []
@@ -469,169 +542,27 @@ final class UsageAlertTests: XCTestCase {
             accountID: freshResult.accountID,
             providerID: freshResult.providerID,
             title: freshResult.title,
-            subtitle: "Fresh monetary usage with cached rate limits",
+            subtitle: "Cached usage",
             bars: freshResult.bars,
             barsFetchedAt: fetchedAt,
             fetchedAt: fetchedAt.addingTimeInterval(60)
         )
 
-        let repeatedEvaluation = UsageAlertEvaluator.evaluate(
+        let stale = UsageAlertEvaluator.evaluate(
             results: [staleResult],
             settings: settings,
-            activeAlertIDs: firstEvaluation.activeAlertIDs
+            activeAlertIDs: first.activeAlertIDs
         )
-        XCTAssertTrue(repeatedEvaluation.notifications.isEmpty)
-        XCTAssertTrue(repeatedEvaluation.activeAlerts.isEmpty)
-        XCTAssertEqual(repeatedEvaluation.activeAlertIDs, firstEvaluation.activeAlertIDs)
 
-        let coldEvaluation = UsageAlertEvaluator.evaluate(
-            results: [staleResult],
-            settings: settings,
-            activeAlertIDs: []
-        )
-        XCTAssertTrue(coldEvaluation.activeAlertIDs.isEmpty)
+        XCTAssertTrue(stale.notifications.isEmpty)
+        XCTAssertTrue(stale.activeAlerts.isEmpty)
+        XCTAssertEqual(stale.activeAlertIDs, first.activeAlertIDs)
     }
 
-    func testUsageAlertEvaluatorProcessesFreshBarsWhilePreservingStaleBalance() {
-        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_580)
-        let accountID = "opencode.partial"
-        let result = ProviderUsageResult(
-            accountID: accountID,
-            providerID: .openCodeZen,
-            title: "OpenCode",
-            subtitle: "Fresh Go usage with cached Zen balance",
-            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 90, limit: 100)],
-            creditsRemaining: 3,
-            creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
-            fetchedAt: fetchedAt
-        )
-        let balanceAlertID = "balance.\(accountID)"
-
-        let evaluation = UsageAlertEvaluator.evaluate(
-            results: [result],
-            settings: UsageAlertSettings(
-                isEnabled: true,
-                usageThreshold: 0.80,
-                balanceThreshold: 5,
-                includesSeverityAlerts: false
-            ),
-            activeAlertIDs: [balanceAlertID],
-            now: fetchedAt
-        )
-
-        XCTAssertTrue(evaluation.activeAlertIDs.contains(balanceAlertID))
-        XCTAssertEqual(evaluation.notifications.map(\.kind), [.usage])
-        XCTAssertEqual(evaluation.activeAlerts.map(\.kind), [.usage])
-    }
-
-    func testUsageAlertEvaluatorPreservesFailedPartialComponentsWithoutCache() {
-        let fetchedAt = Date(timeIntervalSince1970: 1_783_667_580)
-        let accountID = "opencode.cold-partial"
-        let usageAlertID = "usage.\(accountID).go.weekly"
-        let severityAlertID = "severity.\(accountID)"
-        let balanceAlertID = "balance.\(accountID)"
-        let settings = UsageAlertSettings(
-            isEnabled: true,
-            usageThreshold: 0.80,
-            balanceThreshold: 5,
-            includesSeverityAlerts: true
-        )
-        let balanceOnly = ProviderUsageResult(
-            accountID: accountID,
-            providerID: .openCodeZen,
-            title: "OpenCode",
-            subtitle: "Zen credit balance",
-            bars: [],
-            creditsRemaining: 10,
-            preserveCachedBarsOnFailure: true,
-            fetchedAt: fetchedAt
-        )
-
-        let balanceOnlyEvaluation = UsageAlertEvaluator.evaluate(
-            results: [balanceOnly],
-            settings: settings,
-            activeAlertIDs: [usageAlertID, severityAlertID],
-            now: fetchedAt
-        )
-
-        XCTAssertEqual(
-            balanceOnlyEvaluation.activeAlertIDs,
-            [usageAlertID, severityAlertID]
-        )
-
-        let usageOnly = ProviderUsageResult(
-            accountID: accountID,
-            providerID: .openCodeZen,
-            title: "OpenCode",
-            subtitle: "OpenCode Go usage",
-            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage limit", used: 20, limit: 100)],
-            preserveCachedCreditsOnFailure: true,
-            fetchedAt: fetchedAt.addingTimeInterval(60)
-        )
-        let usageOnlyEvaluation = UsageAlertEvaluator.evaluate(
-            results: [usageOnly],
-            settings: settings,
-            activeAlertIDs: [balanceAlertID],
-            now: usageOnly.fetchedAt
-        )
-
-        XCTAssertEqual(usageOnlyEvaluation.activeAlertIDs, [balanceAlertID])
-    }
-
-    func testUsageAlertEvaluatorReturnsCardScopedActiveAlerts() {
-        let codex = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(label: "Weekly", used: 90, limit: 100),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let cursor = ProviderUsageResult(
-            accountID: "cursor.work",
-            providerID: .cursor,
-            title: "Cursor Work",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(label: "Included", used: 40, limit: 100),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let openRouter = ProviderUsageResult(
-            accountID: "openRouter.main",
-            providerID: .openRouter,
-            title: "OpenRouter",
-            subtitle: "Credit balance",
-            bars: [],
-            creditsRemaining: 2,
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let settings = UsageAlertSettings(
-            isEnabled: true,
-            usageThreshold: 0.80,
-            balanceThreshold: 5,
-            includesSeverityAlerts: false
-        )
-
-        let evaluation = UsageAlertEvaluator.evaluate(
-            results: [codex, cursor, openRouter],
-            settings: settings,
-            activeAlertIDs: []
-        )
-        let activeAlertsByAccountID = Dictionary(grouping: evaluation.activeAlerts, by: \.accountID)
-
-        XCTAssertEqual(Set(activeAlertsByAccountID.keys), ["codex.personal", "openRouter.main"])
-        XCTAssertEqual(activeAlertsByAccountID["codex.personal"]?.map(\.kind), [.usage])
-        XCTAssertEqual(activeAlertsByAccountID["openRouter.main"]?.map(\.kind), [.balance])
-        XCTAssertNil(activeAlertsByAccountID["cursor.work"])
-    }
-
-    func testUsageAlertEvaluatorPreservesSuppressionForExactAccountsThatDidNotRefresh() {
+    func testSuppressionPreservationUsesExactAccountIdentity() {
         let activeAlertIDs: Set<String> = [
-            "usage.codex.weekly",
-            "usage.codex.secondary.weekly",
+            "severity.warning.codex",
+            "severity.warning.codex.secondary",
             "balance.openrouter.failed",
         ]
 
@@ -643,176 +574,175 @@ final class UsageAlertTests: XCTestCase {
 
         XCTAssertEqual(
             preserved,
-            ["usage.codex.secondary.weekly", "balance.openrouter.failed"]
+            [
+                "severity.warning.codex.secondary",
+                "balance.openrouter.failed",
+            ]
         )
     }
 
-    func testUsageAlertEvaluatorClearsSuppressionWhenNoAccountsArePreserved() {
-        let preserved = UsageAlertEvaluator.activeAlertIDs(
-            ["usage.codex.weekly"],
-            belongingTo: [],
-            knownAccountIDs: ["codex"]
-        )
-
-        XCTAssertTrue(preserved.isEmpty)
-    }
-
-    func testUsageAlertEvaluatorUsesWarningPresentationBelowSeverityThreshold() {
-        let result = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(label: "5-hour", used: 55, limit: 100),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let settings = UsageAlertSettings(
-            isEnabled: true,
-            usageThreshold: 0.50,
-            includesSeverityAlerts: false
-        )
-
-        let evaluation = UsageAlertEvaluator.evaluate(results: [result], settings: settings, activeAlertIDs: [])
-
-        XCTAssertEqual(evaluation.activeAlerts.first?.severity, .warning)
-    }
-
-    func testUsageAlertEvaluatorUsesSeverityWhenSpecificThresholdsDoNotMatch() {
-        let result = ProviderUsageResult(
-            accountID: "cursor.main",
-            providerID: .cursor,
-            title: "Cursor",
-            subtitle: "Included usage - Total 76%",
-            bars: [
-                UsageBar(
-                    id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
-                    label: "Total",
-                    used: 76,
-                    limit: 100
-                ),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let settings = UsageAlertSettings(
-            isEnabled: true,
-            usageThreshold: 0.90,
-            balanceThreshold: 5,
-            includesSeverityAlerts: true
-        )
-
-        let evaluation = UsageAlertEvaluator.evaluate(results: [result], settings: settings, activeAlertIDs: [])
-
-        XCTAssertEqual(evaluation.notifications.count, 1)
-        XCTAssertEqual(evaluation.notifications.first?.title, "Cursor Warning alert")
-        XCTAssertTrue(evaluation.activeAlertIDs.contains("severity.cursor.main"))
-        XCTAssertEqual(evaluation.activeAlerts.first?.message, "Total is currently at 76%.")
-    }
-
-    func testUsageAlertEvaluatorExplainsProjectedSeverity() {
-        let now = Date(timeIntervalSince1970: 1_783_667_520)
-        let result = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(
-                    label: "Weekly",
-                    used: 40,
-                    limit: 100,
-                    projectionCurrent: 40,
-                    projectionLimit: 100,
-                    projectionPeriodStart: now.addingTimeInterval(-4 * 24 * 60 * 60),
-                    projectionPeriodEnd: now.addingTimeInterval(6 * 24 * 60 * 60)
-                ),
-            ],
-            fetchedAt: now
-        )
-        let settings = UsageAlertSettings(
-            isEnabled: true,
-            usageThreshold: 0.90,
-            includesSeverityAlerts: true
-        )
-
+    func testDisabledAlertsClearSuppressionAndDetails() {
         let evaluation = UsageAlertEvaluator.evaluate(
-            results: [result],
-            settings: settings,
-            activeAlertIDs: [],
-            now: now
-        )
-
-        XCTAssertEqual(evaluation.activeAlerts.first?.title, "Critical status")
-        XCTAssertEqual(evaluation.activeAlerts.first?.message, "Weekly is projected to reach 100%.")
-    }
-
-    func testUsageAlertEvaluatorReportsSeverityAlongsideSpecificThresholds() {
-        let result = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(
-                    id: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!,
-                    label: "Weekly usage limit",
-                    used: 95,
-                    limit: 100
-                ),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let settings = UsageAlertSettings(
-            isEnabled: true,
-            usageThreshold: 0.80,
-            balanceThreshold: 5,
-            includesSeverityAlerts: true
-        )
-
-        let first = UsageAlertEvaluator.evaluate(results: [result], settings: settings, activeAlertIDs: [])
-        let repeated = UsageAlertEvaluator.evaluate(
-            results: [result],
-            settings: settings,
-            activeAlertIDs: first.activeAlertIDs
-        )
-
-        XCTAssertEqual(first.notifications.map(\.title), ["Codex Weekly usage limit alert", "Codex Critical alert"])
-        XCTAssertEqual(first.activeAlertIDs, ["usage.codex.personal.weekly-usage-limit", "severity.codex.personal"])
-        XCTAssertEqual(first.activeAlerts.map(\.accountID), ["codex.personal", "codex.personal"])
-        XCTAssertTrue(repeated.notifications.isEmpty)
-    }
-
-    func testUsageAlertEvaluatorPreservesClaudeWeeklyAlertIdentity() {
-        let result = ProviderUsageResult(
-            accountID: "claude.personal",
-            providerID: .claude,
-            title: "Claude",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(
-                    stableKey: "weekly-all",
-                    label: "All models weekly usage limit",
-                    used: 90,
-                    limit: 100
-                ),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
-        let legacyAlertID = "usage.claude.personal.weekly-usage-limit"
-
-        let evaluation = UsageAlertEvaluator.evaluate(
-            results: [result],
-            settings: UsageAlertSettings(
-                isEnabled: true,
-                usageThreshold: 0.80,
-                includesSeverityAlerts: false
-            ),
-            activeAlertIDs: [legacyAlertID]
+            results: [result(used: 95)],
+            settings: UsageAlertSettings(isEnabled: false),
+            activeAlertIDs: [
+                "severity.warning.codex.personal",
+                "severity.critical.codex.personal",
+            ]
         )
 
         XCTAssertTrue(evaluation.notifications.isEmpty)
-        XCTAssertEqual(evaluation.activeAlertIDs, [legacyAlertID])
+        XCTAssertTrue(evaluation.activeAlertIDs.isEmpty)
+        XCTAssertTrue(evaluation.activeAlerts.isEmpty)
     }
 
+    func testUsageBarCurrentAndProjectedSeverityAcceptConfiguredThresholds() {
+        let now = Date(timeIntervalSince1970: 1_783_667_520)
+        let thresholds = UsageSeverityThresholds(warning: 0.50, critical: 0.80)
+        let bar = UsageBar(
+            label: "Weekly",
+            used: 40,
+            limit: 100,
+            projectionCurrent: 40,
+            projectionLimit: 100,
+            projectionPeriodStart: now.addingTimeInterval(-4 * 24 * 60 * 60),
+            projectionPeriodEnd: now.addingTimeInterval(6 * 24 * 60 * 60)
+        )
+
+        XCTAssertEqual(bar.severity(using: thresholds), .normal)
+        XCTAssertEqual(
+            bar.projectedSeverity(at: now, thresholds: thresholds),
+            .critical
+        )
+        XCTAssertEqual(
+            bar.effectiveSeverity(at: now, thresholds: thresholds),
+            .critical
+        )
+    }
+
+    func testHistorySnapshotsCaptureConfiguredSeverity() {
+        let snapshot = UsageHistorySnapshot(
+            result: result(used: 60),
+            severityThresholds: UsageSeverityThresholds(
+                warning: 0.50,
+                critical: 0.80
+            )
+        )
+
+        XCTAssertEqual(snapshot.bars.first?.effectiveSeverity, .warning)
+        XCTAssertEqual(snapshot.highestSeverity, .warning)
+    }
+
+    @MainActor
+    func testHistorySeriesRecomputesProjectedSeverityUsingActiveThresholds() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let capturedAt = Date(timeIntervalSince1970: 1_783_667_520)
+        let projectedResult = result(
+            used: 60,
+            projectionCurrent: 60,
+            projectionPeriodStart: capturedAt.addingTimeInterval(-75),
+            projectionPeriodEnd: capturedAt.addingTimeInterval(25),
+            fetchedAt: capturedAt
+        )
+        let historyStore = UsageHistoryStore(defaults: defaults)
+
+        historyStore.record(results: [projectedResult], now: capturedAt)
+
+        let reloadedStore = UsageHistoryStore(defaults: defaults)
+        XCTAssertEqual(
+            reloadedStore.historySeries(
+                for: projectedResult,
+                severityThresholds: UsageSeverityThresholds(
+                    warning: 0.75,
+                    critical: 0.90
+                )
+            ).points.map(\.severity),
+            [.warning]
+        )
+        XCTAssertEqual(
+            reloadedStore.historySeries(
+                for: projectedResult,
+                severityThresholds: UsageSeverityThresholds(
+                    warning: 0.85,
+                    critical: 0.95
+                )
+            ).points.map(\.severity),
+            [.normal]
+        )
+    }
+
+    @MainActor
+    func testWidgetAndWatchSnapshotsUseConfiguredThresholds() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("test-token", for: configuration))
+        store.updateUsageAlertWarningThreshold(0.50)
+        store.updateUsageAlertCriticalThreshold(0.80)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(stableKey: "weekly", label: "Weekly", used: 60, limit: 100),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let widgetProvider = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        )
+        XCTAssertEqual(widgetProvider.bars.first?.severity, .warning)
+        XCTAssertEqual(widgetProvider.severity, .warning)
+
+        let watchSnapshot = WatchSnapshotPublisher.makeSnapshot(
+            results: [result],
+            configurationStore: store
+        )
+        XCTAssertEqual(watchSnapshot.accounts.first?.metrics.first?.severity, .warning)
+    }
+
+    private func result(
+        accountID: String = "codex.personal",
+        used: Double,
+        projectionCurrent: Double? = nil,
+        projectionPeriodStart: Date? = nil,
+        projectionPeriodEnd: Date? = nil,
+        fetchedAt: Date = Date(timeIntervalSince1970: 1_783_667_520)
+    ) -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: accountID,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(
+                    stableKey: "weekly",
+                    label: "Weekly",
+                    used: used,
+                    limit: 100,
+                    projectionCurrent: projectionCurrent,
+                    projectionLimit: projectionCurrent == nil ? nil : 100,
+                    projectionPeriodStart: projectionPeriodStart,
+                    projectionPeriodEnd: projectionPeriodEnd
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+    }
 }

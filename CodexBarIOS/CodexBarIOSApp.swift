@@ -29,7 +29,7 @@ struct CodexBarIOSApp: App {
             }
             if DebugUsageAlertMode.isEnabled {
                 configurationStore.updateUsageAlertsEnabled(true)
-                configurationStore.updateUsageAlertUsageThreshold(0.65)
+                configurationStore.updateUsageAlertWarningThreshold(0.65)
                 configurationStore.updateUsageAlertBalanceThreshold(15)
             }
 
@@ -147,7 +147,11 @@ struct CodexBarIOSApp: App {
             if let result = refreshService.results.first(where: { $0.providerID == .codex }) {
                 ProviderUsageHistoryDetailView(
                     result: result,
-                    seriesOptions: historyStore.historySeriesOptions(for: result)
+                    seriesOptions: historyStore.historySeriesOptions(
+                        for: result,
+                        severityThresholds:
+                            configurationStore.usageAlertSettings.severityThresholds
+                    )
                 )
             } else {
                 ContentUnavailableView("No History", systemImage: "chart.xyaxis.line")

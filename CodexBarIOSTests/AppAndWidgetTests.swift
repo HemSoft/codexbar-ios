@@ -535,11 +535,19 @@ final class AppAndWidgetTests: XCTestCase {
             "Dark · Smart · 15 min"
         )
         XCTAssertEqual(
-            SettingsCategorySummary.alerts(isEnabled: true, usageThreshold: 0.85),
-            "On · Usage at 85%"
+            SettingsCategorySummary.alerts(
+                isEnabled: true,
+                warningThreshold: 0.75,
+                criticalThreshold: 0.90
+            ),
+            "On · Warning 75% · Critical 90%"
         )
         XCTAssertEqual(
-            SettingsCategorySummary.alerts(isEnabled: false, usageThreshold: 0.85),
+            SettingsCategorySummary.alerts(
+                isEnabled: false,
+                warningThreshold: 0.75,
+                criticalThreshold: 0.90
+            ),
             "Off"
         )
         XCTAssertEqual(
@@ -2735,6 +2743,57 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(
             ordered.map(\.accountID),
             ["critical.projection", "warning.usage", "balance.low", "balance.high", "manual.first", "manual.second"]
+        )
+    }
+
+    func testDashboardUsageSorterUsesConfiguredSeverityThresholds() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let lowBalanceAtSeventyPercent = makeHistoryResult(
+            accountID: "low-balance.seventy-percent",
+            providerID: .openRouter,
+            fetchedAt: now,
+            used: 70,
+            creditsRemaining: 2
+        )
+        let highBalanceAtEightyPercent = makeHistoryResult(
+            accountID: "high-balance.eighty-percent",
+            providerID: .openRouter,
+            fetchedAt: now,
+            used: 80,
+            creditsRemaining: 20
+        )
+        let results = [
+            lowBalanceAtSeventyPercent,
+            highBalanceAtEightyPercent,
+        ]
+
+        XCTAssertEqual(
+            DashboardUsageSorter.orderedResults(
+                results,
+                mode: .smart,
+                manualOrder: [],
+                now: now
+            ).map(\.accountID),
+            [
+                "high-balance.eighty-percent",
+                "low-balance.seventy-percent",
+            ]
+        )
+        XCTAssertEqual(
+            DashboardUsageSorter.orderedResults(
+                results,
+                mode: .smart,
+                manualOrder: [],
+                now: now,
+                severityThresholds: UsageSeverityThresholds(
+                    warning: 0.65,
+                    critical: 0.90
+                )
+            ).map(\.accountID),
+            [
+                "low-balance.seventy-percent",
+                "high-balance.eighty-percent",
+            ]
         )
     }
 
