@@ -217,7 +217,7 @@ collect_single_line_yaml_report_paths() {
     local report_scalar_active=false
     local root_indent=-1
     local report_key_indent=-1
-    local line indentation trimmed_line marker_candidate mapping_key scalar
+    local line indentation trimmed_line marker_candidate document_content mapping_key scalar
     local indent_width
     while IFS= read -r line || [[ -n "$line" ]]; do
         indentation=${line%%[![:space:]]*}
@@ -236,6 +236,15 @@ collect_single_line_yaml_report_paths() {
 
         marker_candidate=$(strip_yaml_comment "$trimmed_line")
         marker_candidate="${marker_candidate%"${marker_candidate##*[![:space:]]}"}"
+        document_content="$marker_candidate"
+        if [[ "${document_content[1,3]}" == --- ]]; then
+            document_content=${document_content[4,-1]}
+            document_content="${document_content#"${document_content%%[![:space:]]*}"}"
+        fi
+        if [[ "${document_content[1]}" == \{ ]]; then
+            print -u2 "Flow-style YAML mappings are not supported."
+            return 1
+        fi
         if [[ -z "$trimmed_line" || "${trimmed_line[1]}" == \# \
             || "$marker_candidate" == --- || "$marker_candidate" == ... \
             || "${trimmed_line[1]}" == % ]]; then
@@ -352,18 +361,23 @@ cleanup() {
         artifacts_saved=false
         print -u2 "Could not save the mutation cache; preserving $mutation_workspace for recovery."
     fi
+    local cleanup_complete=$artifacts_saved
     if [[ "$artifacts_saved" == true ]]; then
         if git -C "$repository_dir" worktree list --porcelain \
             | grep -Fqx "worktree $mutation_workspace"; then
             git -C "$repository_dir" worktree remove --force "$mutation_workspace" \
-                || true
+                || cleanup_complete=false
         fi
+    fi
+    if [[ "$cleanup_complete" == true ]]; then
         rm -f "$report_manifest" "$cache_staging_marker"
         rmdir "$mutation_workspace_parent" 2>/dev/null || true
+        rm -f "$mutation_lock/pid" "$mutation_lock/pid.next"
+        rmdir "$mutation_lock" 2>/dev/null || true
+    else
+        print -u2 "Preserving the mutation lock and recovery artifacts for the next run."
     fi
-    rm -f "$mutation_lock/pid" "$mutation_lock/pid.next"
-    rmdir "$mutation_lock" 2>/dev/null || true
-    if [[ "$artifacts_saved" != true && "$exit_status" -eq 0 ]]; then
+    if [[ "$cleanup_complete" != true && "$exit_status" -eq 0 ]]; then
         exit_status=1
     fi
     exit "$exit_status"
@@ -400,8 +414,10 @@ acquire_mutation_lock() {
         && lsof -a -d cwd "$mutation_workspace" >/dev/null 2>&1; then
         return 1
     fi
-    rm -f "$mutation_lock/pid" "$mutation_lock/pid.next"
-    rmdir "$mutation_lock" 2>/dev/null || return 1
+    local reclaimed_lock="${mutation_lock}.reclaimed.$$.$RANDOM"
+    mv "$mutation_lock" "$reclaimed_lock" 2>/dev/null || return 1
+    rm -f "$reclaimed_lock/pid" "$reclaimed_lock/pid.next"
+    rmdir "$reclaimed_lock" 2>/dev/null || return 1
     mkdir "$mutation_lock" 2>/dev/null
 }
 
