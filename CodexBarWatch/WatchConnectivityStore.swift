@@ -17,12 +17,19 @@ enum WatchConnectivityDelegateEvent: Sendable {
         applicationContext: WatchDashboardApplicationContext
     )
     case reachability(sequence: UInt64, isPhoneReachable: Bool)
+    case userInfoTransferFinished(
+        sequence: UInt64,
+        wasSnapshotRequest: Bool,
+        failed: Bool,
+        hasOtherOutstandingSnapshotRequest: Bool
+    )
 
     var sequence: UInt64 {
         switch self {
         case let .activation(sequence, _, _, _, _),
              let .applicationContext(sequence, _),
-             let .reachability(sequence, _):
+             let .reachability(sequence, _),
+             let .userInfoTransferFinished(sequence, _, _, _):
             sequence
         }
     }
@@ -334,6 +341,17 @@ final class WatchDashboardStore: NSObject, ObservableObject {
                 receive(applicationContext)
             case let .reachability(_, isPhoneReachable):
                 updateReachability(isPhoneReachable)
+            case let .userInfoTransferFinished(
+                _,
+                wasSnapshotRequest,
+                failed,
+                hasOtherOutstandingSnapshotRequest
+            ):
+                guard wasSnapshotRequest, failed else { break }
+                hasQueuedSnapshotRequest = hasOtherOutstandingSnapshotRequest
+                Self.logger.notice(
+                    "Queued snapshot transfer failed remainingRequest=\(hasOtherOutstandingSnapshotRequest, privacy: .public)"
+                )
             }
         }
     }
@@ -480,6 +498,30 @@ extension WatchDashboardStore: WCSessionDelegate {
             WatchConnectivityDelegateEvent.reachability(
                 sequence: sequence,
                 isPhoneReachable: session.isReachable
+            )
+        }
+        Task { @MainActor [weak self] in
+            self?.receiveDelegateEvent(event)
+        }
+    }
+
+    nonisolated func session(
+        _ session: WCSession,
+        didFinish userInfoTransfer: WCSessionUserInfoTransfer,
+        error: Error?
+    ) {
+        let event = delegateEventSequencer.nextEvent { sequence in
+            WatchConnectivityDelegateEvent.userInfoTransferFinished(
+                sequence: sequence,
+                wasSnapshotRequest: WatchDashboardSnapshot.isSnapshotRequest(
+                    userInfoTransfer.userInfo
+                ),
+                failed: error != nil,
+                hasOtherOutstandingSnapshotRequest:
+                    session.outstandingUserInfoTransfers.contains {
+                        $0 !== userInfoTransfer
+                            && WatchDashboardSnapshot.isSnapshotRequest($0.userInfo)
+                    }
             )
         }
         Task { @MainActor [weak self] in

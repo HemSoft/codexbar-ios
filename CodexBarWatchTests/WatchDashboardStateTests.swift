@@ -678,6 +678,37 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
+    func testFailedQueuedTransferAllowsLaterRetry() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _, _ in },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+
+        store.requestCurrentSnapshot()
+        XCTAssertEqual(queuedRequestCount, 1)
+
+        store.receiveDelegateEvent(
+            .userInfoTransferFinished(
+                sequence: 0,
+                wasSnapshotRequest: true,
+                failed: true,
+                hasOtherOutstandingSnapshotRequest: false
+            )
+        )
+        store.requestCurrentSnapshot()
+
+        XCTAssertEqual(queuedRequestCount, 2)
+    }
+
+    @MainActor
     func testCachedContextPreservesOutstandingQueuedRequestAcrossRelaunch() throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
