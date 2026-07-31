@@ -93,7 +93,7 @@ public final class CursorWebAuthService: Sendable {
         session: URLSession = .shared,
         pollIntervalNanoseconds: UInt64 = 2_000_000_000,
         maxPollAttempts: Int = 90,
-        randomBytes: (@Sendable (Int) throws -> Data)? = nil
+        randomBytes: OAuthRandomByteGenerator? = nil
     ) {
         self.session = session
         self.pollIntervalNanoseconds = pollIntervalNanoseconds

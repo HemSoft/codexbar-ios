@@ -77,7 +77,7 @@ public final class ClaudeWebAuthService: Sendable {
         session: URLSession = .shared,
         callbackTimeoutNanoseconds: UInt64 = 180_000_000_000,
         preferredCallbackPorts: [UInt16] = [1461, 1462, 1463],
-        randomBytes: (@Sendable (Int) throws -> Data)? = nil
+        randomBytes: OAuthRandomByteGenerator? = nil
     ) {
         self.session = session
         self.callbackTimeoutNanoseconds = callbackTimeoutNanoseconds

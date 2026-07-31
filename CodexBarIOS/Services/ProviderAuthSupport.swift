@@ -3,8 +3,10 @@ import Foundation
 import Network
 import Security
 
+public typealias OAuthRandomByteGenerator = @Sendable (Int) throws -> Data
+
 enum OAuthRandomness {
-    typealias Generator = @Sendable (Int) throws -> Data
+    typealias Generator = OAuthRandomByteGenerator
 
     static let systemGenerator: Generator = { byteCount in
         try systemBytes(byteCount: byteCount)
