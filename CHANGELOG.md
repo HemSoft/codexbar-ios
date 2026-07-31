@@ -223,6 +223,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Expanded the manual mutation-testing pilot to deterministic App Review policy
+  logic, documented a measured two-file baseline and complete survivor triage,
+  and added focused boundary regressions without introducing a CI gate.
+  ([#214](https://github.com/HemSoft/codexbar-ios/issues/214))
 - Added a strict, zero-violation SwiftLint policy pinned through Swift Package
   Manager, enforced by every Swift-producing build target and an independent
   annotated CI check. ([#210](https://github.com/HemSoft/codexbar-ios/issues/210))

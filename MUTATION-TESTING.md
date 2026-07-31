@@ -21,13 +21,21 @@ Stryker-compatible JSON and HTML reports, and signal-aware cleanup of isolated
 `xmr-*` sandboxes. Muter's latest tagged release is from 2023; it remains the
 fallback if the selected tool stops working with the active Xcode toolchain.
 
-The initial scope deliberately includes only
-`CodexBarIOS/Services/DashboardUsageSorter.swift`. The runner dynamically
-excludes every other service source, and the fixed configuration runs the
-`CodexBarIOS` scheme through
+The scope deliberately includes only two deterministic services:
+
+- `CodexBarIOS/Services/DashboardUsageSorter.swift`, the original branch-heavy
+  ordering baseline.
+- `CodexBarIOS/Services/AppReviewPromptPolicy.swift`, a compact state machine
+  whose clock, app version, thresholds, and `UserDefaults` store are injectable
+  and whose eligibility helper is pure. It adds meaningful boundary and
+  persistence decisions without crossing UI, StoreKit, or networking edges.
+
+The runner dynamically excludes every other service source, and the fixed
+configuration runs the `CodexBarIOS` scheme through
 `CodexBarIOSTests/AppAndWidgetTests` on an iPhone 17 simulator. Tests, build
 output, SwiftUI presentation, fixtures, widgets, watch rendering, platform
-wrappers, credentials, and networking are outside this pilot.
+wrappers, credentials, keychain access, and live networking remain outside this
+pilot.
 
 Relational, boolean, logical, arithmetic, conditional-negation, and ternary
 operators are enabled. Remove-side-effects mutations remain disabled until a
@@ -40,8 +48,8 @@ Run the complete uncached baseline:
 ```sh
 ./scripts/run-mutation-pilot.sh \
   --no-cache \
-  --output build/mutation-testing/baseline.json \
-  --html-output build/mutation-testing/baseline.html
+  --output build/mutation-testing/expanded-baseline.json \
+  --html-output build/mutation-testing/expanded-baseline.html
 ```
 
 Omit `--no-cache` for normal manual follow-up runs. The tool cache and downloaded
@@ -49,75 +57,110 @@ binary live under ignored paths. XCTest execution is intentionally serial, with
 a 120-second per-mutant timeout, because the selected tool forces serial XCTest
 workers for deterministic simulator results.
 
-The tool copies the repository into a temporary sandbox before rewriting source.
-Version 1.3.0 removes its active sandbox on normal completion and cleans
-orphaned `xmr-*` sandboxes at the next startup after an interrupted run. The
-pilot confirmed that a completed and an interrupted run left the production
-source tree unchanged.
+The runner first creates a detached temporary worktree and overlays the current
+working tree, so reports reflect local tests without rewriting production
+source. The generated mutant schema cannot satisfy the normal source-size lint
+limits, so the runner removes only the six SwiftLint build-tool dependencies
+from the disposable Xcode project. The independent strict SwiftLint gate still
+checks every real source file. Version 1.3.0 then creates and removes its own
+`xmr-*` sandbox; the runner copies reports back and removes its temporary
+worktree on success, failure, or interruption.
 
-## Baseline
+## Expanded baseline
 
-Measured on 2026-07-25 with Xcode 26.6 and an iPhone 17 simulator:
+Measured on 2026-07-31 with Xcode 26.6 and an iPhone 17 simulator:
 
 | Result | Count |
 | --- | ---: |
-| Total | 58 |
-| Killed | 35 |
-| Survived | 23 |
+| Total | 88 |
+| Killed | 67 |
+| Survived | 21 |
 | No coverage | 0 |
 | Timeout | 0 |
 | Unviable | 0 |
-| Score | 60.3% |
-| Wall-clock time | 40m 1s |
+| Score | 76.1% |
+| Wall-clock time | 98m 2s |
 
-The report classified four incompatible discoveries during schematization, but
-all four were successfully rebuilt and executed by the fallback path; the
-final unviable count is therefore zero.
+| Source | Total | Killed | Survived | Score |
+| --- | ---: | ---: | ---: | ---: |
+| `AppReviewPromptPolicy.swift` | 30 | 24 | 6 | 80.0% |
+| `DashboardUsageSorter.swift` | 58 | 43 | 15 | 74.1% |
+
+Ten incompatible discoveries were rebuilt and executed by the fallback path;
+none remained unviable. Three sorter mutants terminated the test process and
+appear as `Crash` in the JSON report, which the tool correctly aggregates into
+the killed count above.
 
 ## Survivor triage
 
-The 23 survivors divide into three useful groups:
+Every survivor falls into one of these categories:
 
-- **8 actionable test gaps.** Sorting assertions did not isolate projected-hit
-  presence, projected-fraction direction, final stable ties, invalid
-  zero-limit/zero-elapsed projections, elapsed-rate division, or a hit exactly
-  at the period end.
-- **13 equivalent or no-value mutations.** These are inclusive comparisons
-  behind an earlier inequality guard, comparisons of distinct enumeration
-  offsets, or redundant zero guards whose later rate guard produces the same
-  result.
-- **2 tool limitations.** Mutating the name of `BalanceRank`'s custom `<`
-  operator caused Swift to synthesize an equivalent `Comparable` implementation,
-  so neither mutation changed runtime behavior.
+- **6 actionable App Review policy mutations in 4 categories.** Three
+  arithmetic mutations shortened the default seven-day engagement duration;
+  one relational mutation removed the minimum-refresh gate after enough time;
+  one boolean mutation returned success before the engagement window elapsed;
+  and one boolean mutation returned success for a version that had already
+  requested a review.
+- **13 equivalent or no-value sorter mutations.** Inclusive comparisons cannot
+  change results behind prior inequality guards or when comparing distinct
+  enumeration offsets. The zero-current and zero-rate mutations also converge
+  on the same later nil-return path.
+- **2 sorter tool limitations.** Mutating the name of `BalanceRank`'s custom
+  `<` operator caused Swift to synthesize an equivalent `Comparable`
+  implementation, so neither mutation changed runtime behavior.
 
-Focused tests were added for every actionable category:
+Focused tests cover each actionable App Review category without changing
+production behavior:
 
 | Baseline gap | Focused regression |
 | --- | --- |
-| A projected hit was not distinguished from no projected hit, including an exact period-end hit. | `testDashboardUsageSorterPrioritizesProjectionHittingExactlyAtPeriodEnd` |
-| Reversing projected-fraction priority survived when neither account reached its limit. | `testDashboardUsageSorterOrdersProjectedFractionsWhenLimitsAreNotReached` |
-| Reversing the final stable tie and admitting invalid zero-limit/zero-elapsed projections survived. | `testDashboardUsageSorterPreservesEqualScoresAndIgnoresInvalidProjections` |
-| Replacing elapsed-rate division with multiplication survived. | `testDashboardUsageSorterUsesElapsedRateToOrderLimitHits` |
+| The default engagement interval was not isolated from the refresh-count threshold. | `testAppReviewPromptPolicyDefaultEngagementDurationIsSevenDays` |
+| Enough elapsed time could bypass the required successful-refresh count. | `testAppReviewPromptPolicyStillRequiresRefreshCountAfterEngagementWindow` |
+| The engagement guard was not exercised both before and beyond its boundary with the count already satisfied. | `testAppReviewPromptPolicyHonorsEngagementWindowBeyondExactBoundary` |
+| Same-version suppression was asserted before the policy could reach that guard again. | `testAppReviewPromptPolicyRejectsSameVersionAfterEligibilityRecurs` |
 
-These tests pass in the focused XCTest class and remain part of the normal
-`CodexBarIOSTests` regression suite. Equivalent mutants are documented rather
-than driving production changes that do not alter observable behavior.
+The eligibility regression also confirms that a monetary-only result counts as
+usable data. Equivalent and tool-limited sorter survivors remain documented
+rather than driving production changes that do not alter observable behavior.
 
-Post-test confirmation reruns provide representative before/after evidence:
+Run the App Review confirmation independently with:
 
-- Boolean mutations improved from 3 killed and 2 survived to 4 killed and 1
-  survived. Both nil/non-nil projected-hit branches are now killed; the sole
-  survivor is the unreachable `.none/.none` branch behind the outer inequality
-  guard.
-- Both arithmetic mutations are killed after the elapsed-rate regression was
-  added; the baseline had allowed the division-to-multiplication mutation to
-  survive.
+```sh
+./scripts/run-mutation-pilot.sh \
+  --no-cache \
+  --exclude CodexBarIOS/Services/DashboardUsageSorter.swift \
+  --output build/mutation-testing/app-review-confirmation.json \
+  --html-output build/mutation-testing/app-review-confirmation.html
+```
+
+Measured after adding the focused regressions, all six previously surviving App
+Review mutants were killed. The complete 30-mutant run reported 27 killed, zero
+survived, and three 120-second timeouts in 48m 43s. To distinguish slow simulator
+execution from survivors, the three affected operator families were rerun with a
+240-second timeout:
+
+```sh
+./scripts/run-mutation-pilot.sh \
+  --no-cache \
+  --timeout 240 \
+  --exclude CodexBarIOS/Services/DashboardUsageSorter.swift \
+  --operator NegateConditional \
+  --operator RelationalOperatorReplacement \
+  --operator ArithmeticOperatorReplacement \
+  --output build/mutation-testing/app-review-timeout-confirmation.json \
+  --html-output build/mutation-testing/app-review-timeout-confirmation.html
+```
+
+That isolated run killed all 22 selected mutants with zero survivors, timeouts,
+unviable mutants, or uncovered mutants in 28m 8s. This includes each of the three
+mutants that timed out in the complete confirmation run.
 
 ## Decision
 
-Keep the runner for occasional, manually scoped pilots on branch-heavy
-deterministic logic. Do not add scheduled CI or a blocking score threshold yet:
-40 minutes for one source file is too expensive for per-PR use, and the raw
-60.3% score includes 15 equivalent/tool-limited survivors. Any future threshold
-must exclude equivalent and unviable mutations and be based on a broader
-measured sample, not a target of 100%.
+Keep the runner for occasional, manually scoped investigations. Do not add
+scheduled CI or a blocking score threshold: expanding from 58 to 88 mutants
+increased wall-clock time from about 40 minutes to 98 minutes, which is too
+expensive for routine execution. The raw 76.1% baseline also includes 15
+equivalent or tool-limited sorter survivors. Any future threshold must exclude
+equivalent and unviable mutants and be justified by a broader measured sample,
+not a target of 100%.
