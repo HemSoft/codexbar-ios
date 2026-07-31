@@ -348,6 +348,40 @@ sync_mutation_reports() {
     [[ "$reports_saved" == true ]]
 }
 
+finalize_mutation_workspace_cleanup() {
+    local recovery_staging="${mutation_workspace_parent}.cleanup.$$.$RANDOM"
+    local staged_manifest="$recovery_staging/report-paths"
+    local staged_cache_marker="$recovery_staging/cache-staging-complete"
+    local manifest_staged=false
+    local cache_marker_staged=false
+    mkdir "$recovery_staging" 2>/dev/null || return 1
+    if [[ -e "$report_manifest" ]]; then
+        if ! mv "$report_manifest" "$staged_manifest"; then
+            rmdir "$recovery_staging" 2>/dev/null || true
+            return 1
+        fi
+        manifest_staged=true
+    fi
+    if [[ -e "$cache_staging_marker" ]]; then
+        if ! mv "$cache_staging_marker" "$staged_cache_marker"; then
+            [[ "$manifest_staged" == true ]] && mv "$staged_manifest" "$report_manifest"
+            rmdir "$recovery_staging" 2>/dev/null || true
+            return 1
+        fi
+        cache_marker_staged=true
+    fi
+    if rmdir "$mutation_workspace_parent" 2>/dev/null; then
+        rm -f "$staged_manifest" "$staged_cache_marker"
+        rmdir "$recovery_staging" 2>/dev/null || true
+        return 0
+    fi
+    [[ "$manifest_staged" == true ]] && mv "$staged_manifest" "$report_manifest"
+    [[ "$cache_marker_staged" == true ]] \
+        && mv "$staged_cache_marker" "$cache_staging_marker"
+    rmdir "$recovery_staging" 2>/dev/null || true
+    return 1
+}
+
 cleanup() {
     local exit_status=$?
     trap - EXIT
@@ -369,9 +403,11 @@ cleanup() {
                 || cleanup_complete=false
         fi
     fi
+    if [[ "$cleanup_complete" == true ]] \
+        && ! finalize_mutation_workspace_cleanup; then
+        cleanup_complete=false
+    fi
     if [[ "$cleanup_complete" == true ]]; then
-        rm -f "$report_manifest" "$cache_staging_marker"
-        rmdir "$mutation_workspace_parent" 2>/dev/null || true
         rm -f "$mutation_lock/pid" "$mutation_lock/pid.next"
         rmdir "$mutation_lock" 2>/dev/null || true
     else
@@ -442,8 +478,10 @@ if git -C "$repository_dir" worktree list --porcelain \
         exit 1
     fi
     git -C "$repository_dir" worktree remove --force "$mutation_workspace"
-    rm -f "$report_manifest" "$cache_staging_marker"
-    rmdir "$mutation_workspace_parent" 2>/dev/null || true
+    if ! finalize_mutation_workspace_cleanup; then
+        print -u2 "Could not remove the recovered mutation workspace; preserving recovery state."
+        exit 1
+    fi
 fi
 if [[ -e "$mutation_workspace_parent" ]]; then
     print -u2 "Mutation workspace already exists but is not a registered worktree: $mutation_workspace_parent"
