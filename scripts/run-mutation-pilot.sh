@@ -9,9 +9,21 @@ tool_archive_sha256=ad35efeca06baa1da2e5375932406cbc37a103b597fd1d1fa780968c2118
 tool_cache_dir="$repository_dir/.build/mutation-tools/swift-mutation-testing-v$tool_version"
 tool_archive="$tool_cache_dir/swift-mutation-testing-v$tool_version-macos.tar.gz"
 tool_binary="$tool_cache_dir/swift-mutation-testing"
-mutation_workspace_parent=$(mktemp -d "${TMPDIR:-/tmp}/codexbar-mutation.XXXXXX")
+mutation_workspace_key=$(print -rn -- "$repository_dir" | cksum | awk '{print $1}')
+mutation_workspace_parent="${TMPDIR:-/tmp}/codexbar-mutation.$mutation_workspace_key"
 mutation_workspace_parent=${mutation_workspace_parent:A}
 mutation_workspace="$mutation_workspace_parent/repository"
+
+if git -C "$repository_dir" worktree list --porcelain \
+    | grep -Fqx "worktree $mutation_workspace"; then
+    git -C "$repository_dir" worktree remove --force "$mutation_workspace"
+    rmdir "$mutation_workspace_parent" 2>/dev/null || true
+fi
+if [[ -e "$mutation_workspace_parent" ]]; then
+    print -u2 "Mutation workspace already exists but is not a registered worktree: $mutation_workspace_parent"
+    exit 1
+fi
+mkdir -p "$mutation_workspace_parent"
 
 cleanup() {
     if git -C "$repository_dir" worktree list --porcelain \
@@ -44,18 +56,26 @@ fi
 
 git -C "$repository_dir" worktree add --detach "$mutation_workspace" HEAD
 rsync -a \
+    --delete \
     --exclude .build \
     --exclude .git \
     --exclude .swift-mutation-testing-cache \
     --exclude build \
     "$repository_dir/" "$mutation_workspace/"
 
+if [[ -d "$repository_dir/.swift-mutation-testing-cache" ]]; then
+    mkdir -p "$mutation_workspace/.swift-mutation-testing-cache"
+    rsync -a --delete \
+        "$repository_dir/.swift-mutation-testing-cache/" \
+        "$mutation_workspace/.swift-mutation-testing-cache/"
+fi
+
 # The generated mutant schema is not production source and cannot satisfy the
 # normal SwiftLint limits. Detach only the six build-tool plugin references in
 # the disposable project; the standalone lint gate still checks real source.
 mutation_project="$mutation_workspace/CodexBarIOS.xcodeproj/project.pbxproj"
 sed -i '' -E \
-    '/^[[:space:]]*21000000000000000000002[1-6] \/\* PBXTargetDependency \*\/,$/d' \
+    '/^[[:space:]]*21000000000000000000002[1-6] \/\* PBXTargetDependency \*\/,[[:space:]]*$/d' \
     "$mutation_project"
 
 exclude_arguments=()
@@ -84,6 +104,13 @@ if [[ -d "$mutation_workspace/build/mutation-testing" ]]; then
     rsync -a \
         "$mutation_workspace/build/mutation-testing/" \
         "$repository_dir/build/mutation-testing/"
+fi
+
+if [[ -d "$mutation_workspace/.swift-mutation-testing-cache" ]]; then
+    mkdir -p "$repository_dir/.swift-mutation-testing-cache"
+    rsync -a --delete \
+        "$mutation_workspace/.swift-mutation-testing-cache/" \
+        "$repository_dir/.swift-mutation-testing-cache/"
 fi
 
 exit "$tool_status"

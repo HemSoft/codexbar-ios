@@ -64,7 +64,10 @@ limits, so the runner removes only the six SwiftLint build-tool dependencies
 from the disposable Xcode project. The independent strict SwiftLint gate still
 checks every real source file. Version 1.3.0 then creates and removes its own
 `xmr-*` sandbox; the runner copies reports back and removes its temporary
-worktree on success, failure, or interruption.
+worktree on success, failure, or interruption. The ignored mutation cache is
+copied into the disposable worktree and back out after each run, so normal
+follow-up runs reuse the same stable sandbox path and cached result keys while
+`--no-cache` remains available for fresh measurements.
 
 ## Expanded baseline
 
