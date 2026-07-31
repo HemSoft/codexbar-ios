@@ -258,6 +258,14 @@ collect_single_line_yaml_report_paths() {
             root_indent=$indent_width
         fi
         ((indent_width == root_indent)) || continue
+        if [[ "$document_content" == \? || "$document_content" == : \
+            || ("${document_content[1]}" == \? \
+                && "${document_content[2]}" == [[:space:]]) \
+            || ("${document_content[1]}" == : \
+                && "${document_content[2]}" == [[:space:]]) ]]; then
+            print -u2 "Explicit YAML mapping keys are not supported."
+            return 1
+        fi
 
         split_yaml_mapping_entry "$document_content" || continue
         mapping_key=${reply[1]}
@@ -417,6 +425,13 @@ finalize_mutation_workspace_cleanup() {
     return 1
 }
 
+release_mutation_lock() {
+    local released_lock="${mutation_lock}.released.$$.$RANDOM"
+    mv "$mutation_lock" "$released_lock" 2>/dev/null || return 1
+    rm -f "$released_lock/pid" "$released_lock/pid.next"
+    rmdir "$released_lock" 2>/dev/null
+}
+
 cleanup() {
     local exit_status=$?
     trap - EXIT
@@ -443,8 +458,10 @@ cleanup() {
         cleanup_complete=false
     fi
     if [[ "$cleanup_complete" == true ]]; then
-        rm -f "$mutation_lock/pid" "$mutation_lock/pid.next"
-        rmdir "$mutation_lock" 2>/dev/null || true
+        if ! release_mutation_lock; then
+            cleanup_complete=false
+            print -u2 "Could not release the mutation lock atomically."
+        fi
     else
         print -u2 "Preserving the mutation lock and recovery artifacts for the next run."
     fi
@@ -552,8 +569,15 @@ rsync -a \
     --delete \
     --exclude .build \
     --exclude .git \
+    --exclude .swiftpm \
     --exclude .swift-mutation-testing-cache \
+    --exclude DerivedData \
     --exclude build \
+    --exclude xcuserdata \
+    --exclude fastlane/Preview.html \
+    --exclude fastlane/report.xml \
+    --exclude fastlane/screenshots \
+    --exclude fastlane/test_output \
     "$repository_dir/" "$mutation_workspace/"
 
 if [[ -d "$repository_dir/.swift-mutation-testing-cache" ]]; then

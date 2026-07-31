@@ -59,7 +59,9 @@ workers for deterministic simulator results.
 
 The runner first creates a detached temporary worktree and overlays the current
 working tree, so reports reflect local tests without rewriting production
-source. The generated mutant schema cannot satisfy the normal source-size lint
+source. Ignored build products, package state, Xcode user data, and Fastlane
+outputs are excluded from that overlay. The generated mutant schema cannot
+satisfy the normal source-size lint
 limits, so the runner removes only the six SwiftLint build-tool dependencies
 from the disposable Xcode project. The independent strict SwiftLint gate still
 checks every real source file. Version 1.3.0 then creates and removes its own
