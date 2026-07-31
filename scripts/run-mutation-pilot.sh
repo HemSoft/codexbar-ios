@@ -66,16 +66,123 @@ strip_yaml_comment() {
     print -rn -- "$result"
 }
 
+decode_yaml_quoted_scalar() {
+    local value="$1"
+    if (( ${#value} < 2 )); then
+        print -rn -- "$value"
+        return
+    fi
+
+    local quote=${value[1]}
+    local decoded=""
+    local character
+    if [[ "$quote" == \' && "${value[-1]}" == \' ]]; then
+        value=${value[2,-2]}
+        for ((value_index = 1; value_index <= ${#value}; value_index++)); do
+            character=${value[$value_index]}
+            if [[ "$character" != \' ]]; then
+                decoded+="$character"
+                continue
+            fi
+            if ((value_index == ${#value})) \
+                || [[ "${value[$((value_index + 1))]}" != \' ]]; then
+                print -u2 "Invalid apostrophe escape in YAML report path."
+                return 1
+            fi
+            decoded+="'"
+            ((value_index++))
+        done
+        print -rn -- "$decoded"
+        return
+    fi
+    if [[ "$quote" != \" || "${value[-1]}" != \" ]]; then
+        print -rn -- "$value"
+        return
+    fi
+
+    value=${value[2,-2]}
+    local escape_character hex_digits
+    local code_point
+    local escape_width
+    for ((value_index = 1; value_index <= ${#value}; value_index++)); do
+        character=${value[$value_index]}
+        if [[ "$character" != \\ ]]; then
+            decoded+="$character"
+            continue
+        fi
+
+        ((value_index++))
+        if ((value_index > ${#value})); then
+            print -u2 "Invalid trailing escape in YAML report path."
+            return 1
+        fi
+        escape_character=${value[$value_index]}
+        case "$escape_character" in
+            0)
+                print -u2 "YAML report paths cannot contain a null byte."
+                return 1
+                ;;
+            a|b|t|n|v|f|r|e|\\)
+                decoded+="\\$escape_character"
+                ;;
+            \"|/)
+                decoded+="$escape_character"
+                ;;
+            ' ')
+                decoded+=' '
+                ;;
+            N)
+                decoded+="\\u0085"
+                ;;
+            _)
+                decoded+="\\u00a0"
+                ;;
+            L)
+                decoded+="\\u2028"
+                ;;
+            P)
+                decoded+="\\u2029"
+                ;;
+            x|u|U)
+                case "$escape_character" in
+                    x) escape_width=2 ;;
+                    u) escape_width=4 ;;
+                    U) escape_width=8 ;;
+                esac
+                hex_digits=${value[$((value_index + 1)),$((value_index + escape_width))]}
+                if (( ${#hex_digits} != escape_width )) \
+                    || [[ "$hex_digits" == *[^[:xdigit:]]* ]]; then
+                    print -u2 "Invalid Unicode escape in YAML report path."
+                    return 1
+                fi
+                ((code_point = 16#$hex_digits))
+                if ((code_point == 0 || code_point > 0x10ffff \
+                    || (code_point >= 0xd800 && code_point <= 0xdfff))); then
+                    print -u2 "Invalid Unicode scalar in YAML report path."
+                    return 1
+                fi
+                if [[ "$escape_character" == x ]]; then
+                    decoded+="\\u00$hex_digits"
+                else
+                    decoded+="\\$escape_character$hex_digits"
+                fi
+                ((value_index += escape_width))
+                ;;
+            *)
+                print -u2 "Unsupported escape in YAML report path: \\$escape_character"
+                return 1
+                ;;
+        esac
+    done
+    printf '%b' "$decoded"
+}
+
 if [[ -r "$repository_dir/.swift-mutation-testing.yml" ]]; then
     while IFS= read -r report_path; do
         report_path=$(strip_yaml_comment "$report_path")
         report_path="${report_path#"${report_path%%[![:space:]]*}"}"
         report_path="${report_path%"${report_path##*[![:space:]]}"}"
-        if (( ${#report_path} >= 2 )) \
-            && [[ ("${report_path[1]}" == \" && "${report_path[-1]}" == \") \
-                || ("${report_path[1]}" == \' && "${report_path[-1]}" == \') ]]; then
-            report_path=${report_path[2,-2]}
-        fi
+        report_path=$(decode_yaml_quoted_scalar "$report_path")
         [[ -n "$report_path" ]] && configured_report_paths+=("$report_path")
     done < <(sed -nE \
         's/^(output|html-output|sonar-output):[[:space:]]*(.*)$/\2/p' \
