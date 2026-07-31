@@ -33,6 +33,29 @@ enum WatchDashboardApplicationContext: Equatable, Sendable {
     }
 }
 
+enum WatchDashboardSnapshotResponse: Equatable, Sendable {
+    case snapshot(Data)
+    case unavailable
+    case malformed
+
+    init(_ reply: [String: Any]) {
+        if let data = reply[WatchDashboardSnapshot.applicationContextDataKey] as? Data {
+            self = .snapshot(data)
+        } else if reply[WatchDashboardSnapshot.snapshotUnavailableKey] as? Bool == true {
+            self = .unavailable
+        } else {
+            self = .malformed
+        }
+    }
+
+    func decode() throws -> WatchDashboardSnapshot {
+        guard case let .snapshot(data) = self else {
+            throw CocoaError(.coderReadCorrupt)
+        }
+        return try WatchDashboardSnapshot.decode(data)
+    }
+}
+
 public enum WatchMetricVisualizationStyle: String, CaseIterable, Equatable, Sendable {
     case automatic
     case linearBar
@@ -258,6 +281,7 @@ public struct WatchDashboardSnapshot: Codable, Equatable, Sendable {
     public static let applicationContextDataKey = "codexbar.dashboard.snapshot"
     public static let applicationContextVersionKey = "codexbar.dashboard.schema"
     public static let snapshotRequestKey = "codexbar.dashboard.request"
+    public static let snapshotUnavailableKey = "codexbar.dashboard.unavailable"
 
     public let schemaVersion: Int
     public let generatedAt: Date
@@ -335,6 +359,10 @@ public struct WatchDashboardSnapshot: Codable, Equatable, Sendable {
 
     public static var snapshotRequestMessage: [String: Any] {
         [snapshotRequestKey: true]
+    }
+
+    public static var snapshotUnavailableReply: [String: Any] {
+        [snapshotUnavailableKey: true]
     }
 
     public static func isSnapshotRequest(_ message: [String: Any]) -> Bool {

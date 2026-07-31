@@ -1,9 +1,23 @@
 import Combine
 import CryptoKit
 import Foundation
+import OSLog
 
 #if os(iOS)
 import WatchConnectivity
+
+private let phoneWatchConnectivityLogger = Logger(
+    subsystem: "com.hemsoft.CodexBarIOS",
+    category: "WatchConnectivity.Phone"
+)
+
+private struct PhoneWatchReplyHandler: @unchecked Sendable {
+    let send: ([String: Any]) -> Void
+
+    init(_ send: @escaping ([String: Any]) -> Void) {
+        self.send = send
+    }
+}
 #endif
 
 private extension WatchMetricSeverity {
@@ -27,7 +41,7 @@ private extension WatchMetricVisualizationStyle {
 
 @MainActor
 protocol WatchSnapshotSending: AnyObject {
-    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void)
+    func activate(onSnapshotNeeded: @escaping @MainActor (_ force: Bool) -> Void)
     @discardableResult
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool
 }
@@ -363,8 +377,8 @@ final class WatchSnapshotCoordinator {
     func start() {
         guard !hasStarted else { return }
         hasStarted = true
-        sender.activate { [weak self] in
-            self?.publishCurrentSnapshot(force: true)
+        sender.activate { [weak self] force in
+            self?.publishCurrentSnapshot(force: force)
         }
     }
 
@@ -404,53 +418,104 @@ final class PhoneWatchConnectivityCoordinator: NSObject, WatchSnapshotSending {
     static let shared = PhoneWatchConnectivityCoordinator()
 
     private let session: WCSession?
-    private var snapshotNeededHandler: (@MainActor () -> Void)?
+    private var snapshotNeededHandler: (@MainActor (_ force: Bool) -> Void)?
     private var deduplicator = WatchSnapshotDeduplicator()
+    private var latestSnapshot: WatchDashboardSnapshot?
 
     init(session: WCSession? = WCSession.isSupported() ? .default : nil) {
         self.session = session
         super.init()
     }
 
-    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void) {
+    func activate(onSnapshotNeeded: @escaping @MainActor (_ force: Bool) -> Void) {
         snapshotNeededHandler = onSnapshotNeeded
-        guard let session else { return }
+        guard let session else {
+            phoneWatchConnectivityLogger.error("WatchConnectivity is unavailable on this iPhone")
+            return
+        }
         session.delegate = self
+        phoneWatchConnectivityLogger.info(
+            "Activating session state=\(session.activationState.rawValue, privacy: .public) paired=\(session.isPaired, privacy: .public) watchAppInstalled=\(session.isWatchAppInstalled, privacy: .public)"
+        )
         if session.activationState == .activated {
-            onSnapshotNeeded()
+            onSnapshotNeeded(true)
         } else {
             session.activate()
         }
     }
 
     @discardableResult
-    func handleMessage(_ message: [String: Any]) -> Bool {
+    func handleMessage(
+        _ message: [String: Any],
+        replyHandler: (([String: Any]) -> Void)? = nil
+    ) -> Bool {
         guard WatchDashboardSnapshot.isSnapshotRequest(message) else {
             return false
         }
+        handleSnapshotRequest()
+        if let replyHandler {
+            replyHandler(snapshotReply())
+        }
+        return true
+    }
+
+    @discardableResult
+    func handleUserInfo(_ userInfo: [String: Any]) -> Bool {
+        guard WatchDashboardSnapshot.isSnapshotRequest(userInfo) else {
+            return false
+        }
+        phoneWatchConnectivityLogger.info("Received queued snapshot request from Watch")
         handleSnapshotRequest()
         return true
     }
 
     private func handleSnapshotRequest() {
-        snapshotNeededHandler?()
+        phoneWatchConnectivityLogger.info("Handling snapshot request from Watch")
+        snapshotNeededHandler?(true)
+    }
+
+    private func snapshotReply() -> [String: Any] {
+        guard let latestSnapshot else {
+            phoneWatchConnectivityLogger.notice("Snapshot request completed before iPhone data was available")
+            return WatchDashboardSnapshot.snapshotUnavailableReply
+        }
+        do {
+            return try latestSnapshot.applicationContext()
+        } catch {
+            phoneWatchConnectivityLogger.error("Could not encode snapshot reply")
+            return WatchDashboardSnapshot.snapshotUnavailableReply
+        }
     }
 
     func watchStateDidChange() {
-        snapshotNeededHandler?()
+        guard let session else { return }
+        phoneWatchConnectivityLogger.info(
+            "Watch state changed paired=\(session.isPaired, privacy: .public) watchAppInstalled=\(session.isWatchAppInstalled, privacy: .public) reachable=\(session.isReachable, privacy: .public)"
+        )
+        snapshotNeededHandler?(false)
     }
 
     @discardableResult
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool {
-        guard let session else { return false }
+        latestSnapshot = snapshot
+        guard let session else {
+            phoneWatchConnectivityLogger.error("Cannot publish snapshot because WatchConnectivity is unavailable")
+            return false
+        }
         do {
             guard try deduplicator.shouldSend(snapshot, force: force) else {
                 return false
             }
             try session.updateApplicationContext(snapshot.applicationContext())
             try deduplicator.recordSent(snapshot)
+            phoneWatchConnectivityLogger.info(
+                "Published snapshot context state=\(session.activationState.rawValue, privacy: .public) reachable=\(session.isReachable, privacy: .public)"
+            )
             return true
         } catch {
+            phoneWatchConnectivityLogger.error(
+                "Snapshot context publish failed domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code, privacy: .public)"
+            )
             return false
         }
     }
@@ -462,9 +527,13 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
+        let errorCode = (error as NSError?)?.code ?? 0
+        phoneWatchConnectivityLogger.info(
+            "Activation completed state=\(activationState.rawValue, privacy: .public) errorCode=\(errorCode, privacy: .public) paired=\(session.isPaired, privacy: .public) watchAppInstalled=\(session.isWatchAppInstalled, privacy: .public)"
+        )
         guard activationState == .activated, error == nil else { return }
         Task { @MainActor [weak self] in
-            self?.snapshotNeededHandler?()
+            self?.snapshotNeededHandler?(true)
         }
     }
 
@@ -473,6 +542,37 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
         didReceiveMessage message: [String: Any]
     ) {
         guard WatchDashboardSnapshot.isSnapshotRequest(message) else { return }
+        Task { @MainActor [weak self] in
+            self?.handleSnapshotRequest()
+        }
+    }
+
+    nonisolated func session(
+        _ session: WCSession,
+        didReceiveMessage message: [String: Any],
+        replyHandler: @escaping ([String: Any]) -> Void
+    ) {
+        guard WatchDashboardSnapshot.isSnapshotRequest(message) else {
+            replyHandler(WatchDashboardSnapshot.snapshotUnavailableReply)
+            return
+        }
+        let reply = PhoneWatchReplyHandler(replyHandler)
+        Task { @MainActor [weak self] in
+            guard let self else {
+                reply.send(WatchDashboardSnapshot.snapshotUnavailableReply)
+                return
+            }
+            self.handleSnapshotRequest()
+            reply.send(self.snapshotReply())
+        }
+    }
+
+    nonisolated func session(
+        _ session: WCSession,
+        didReceiveUserInfo userInfo: [String: Any] = [:]
+    ) {
+        guard WatchDashboardSnapshot.isSnapshotRequest(userInfo) else { return }
+        phoneWatchConnectivityLogger.info("Received queued snapshot request from Watch")
         Task { @MainActor [weak self] in
             self?.handleSnapshotRequest()
         }
@@ -495,7 +595,7 @@ extension PhoneWatchConnectivityCoordinator: WCSessionDelegate {
 final class PhoneWatchConnectivityCoordinator: WatchSnapshotSending {
     static let shared = PhoneWatchConnectivityCoordinator()
 
-    func activate(onSnapshotNeeded: @escaping @MainActor () -> Void) {}
+    func activate(onSnapshotNeeded: @escaping @MainActor (_ force: Bool) -> Void) {}
 
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool {
         false

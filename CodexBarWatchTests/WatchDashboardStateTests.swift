@@ -2,10 +2,6 @@ import XCTest
 import WatchConnectivity
 @testable import CodexBarWatch
 
-private enum SnapshotRequestTestError: Error {
-    case failed
-}
-
 final class WatchDashboardStateTests: XCTestCase {
     func testProductionStartsWithoutDemoUsage() {
         XCTAssertTrue(WatchDashboardState.empty.samples.isEmpty)
@@ -378,6 +374,7 @@ final class WatchDashboardStateTests: XCTestCase {
         )
 
         store.activationCompleted(
+            activationState: .activated,
             applicationContext: WatchDashboardApplicationContext(
                 try snapshot.applicationContext()
             ),
@@ -401,13 +398,14 @@ final class WatchDashboardStateTests: XCTestCase {
             complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
             reloadComplications: {},
             session: nil,
-            requestSnapshot: { _ in
+            requestSnapshot: { _, _ in
                 requestCount += 1
             },
             requestCoalescingDelay: .milliseconds(5)
         )
 
         store.activationCompleted(
+            activationState: .activated,
             applicationContext: .empty,
             isPhoneReachable: false,
             hadError: false
@@ -441,6 +439,431 @@ final class WatchDashboardStateTests: XCTestCase {
         let empty = WatchDashboardApplicationContext([:])
         XCTAssertThrowsError(try empty.decode())
         XCTAssertTrue(empty.isEmpty)
+    }
+
+    func testSnapshotResponseDistinguishesValidUnavailableAndMalformedReplies() throws {
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+
+        let valid = WatchDashboardSnapshotResponse(try snapshot.applicationContext())
+        XCTAssertEqual(try valid.decode(), snapshot)
+        XCTAssertEqual(
+            WatchDashboardSnapshotResponse(
+                WatchDashboardSnapshot.snapshotUnavailableReply
+            ),
+            .unavailable
+        )
+        XCTAssertEqual(WatchDashboardSnapshotResponse([:]), .malformed)
+        XCTAssertThrowsError(
+            try WatchDashboardSnapshotResponse.unavailable.decode()
+        )
+    }
+
+    @MainActor
+    func testInactiveActivationWaitsAndShowsRecoveryUntilSessionActivates() async throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var requestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _, _ in requestCount += 1 },
+            queueSnapshotRequest: {},
+            initialActivationState: .notActivated,
+            requestCoalescingDelay: .milliseconds(5)
+        )
+
+        store.activationCompleted(
+            activationState: .notActivated,
+            applicationContext: .empty,
+            isPhoneReachable: false,
+            hadError: true
+        )
+        store.requestCurrentSnapshot()
+        XCTAssertEqual(requestCount, 0)
+        XCTAssertEqual(
+            store.decodingError,
+            "Connecting to iPhone. Keep CodexBar open on both devices"
+        )
+
+        store.activationCompleted(
+            activationState: .activated,
+            applicationContext: .empty,
+            isPhoneReachable: true,
+            hadError: false
+        )
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(requestCount, 1)
+    }
+
+    @MainActor
+    func testImmediateSnapshotReplyPersistsAndReloadsComplication() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now,
+            refreshIntervalSeconds: 300,
+            accounts: [
+                account(
+                    id: "codex",
+                    provider: "Codex",
+                    metricID: "window",
+                    fraction: 0.5,
+                    generatedAt: now
+                ),
+            ]
+        )
+        let response = WatchDashboardSnapshotResponse.snapshot(try snapshot.encoded())
+        var reloadCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: { reloadCount += 1 },
+            session: nil,
+            requestSnapshot: { replyHandler, _ in replyHandler(response) },
+            queueSnapshotRequest: {}
+        )
+        store.updateReachability(true)
+
+        store.requestCurrentSnapshot()
+
+        XCTAssertEqual(store.snapshot, snapshot)
+        XCTAssertNil(store.decodingError)
+        XCTAssertEqual(reloadCount, 1)
+    }
+
+    @MainActor
+    func testOlderImmediateReplyCannotReplaceNewerApplicationContext() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let complicationStore = WatchComplicationSnapshotStore(defaults: defaults)
+        let older = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        let newer = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_100),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var replyHandler: (@MainActor (WatchDashboardSnapshotResponse) -> Void)?
+        var reloadCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: complicationStore,
+            reloadComplications: { reloadCount += 1 },
+            session: nil,
+            requestSnapshot: { handler, _ in replyHandler = handler },
+            queueSnapshotRequest: {}
+        )
+        store.updateReachability(true)
+        store.requestCurrentSnapshot()
+
+        store.receive(try newer.applicationContext())
+        replyHandler?(.snapshot(try older.encoded()))
+
+        XCTAssertEqual(store.snapshot, newer)
+        XCTAssertEqual(complicationStore.load(), newer)
+        XCTAssertEqual(reloadCount, 1)
+        XCTAssertNil(store.decodingError)
+    }
+
+    @MainActor
+    func testNewerContextInvalidatesPendingFailureAndUnavailableCallbacks() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let newer = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_100),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var replyHandler: (@MainActor (WatchDashboardSnapshotResponse) -> Void)?
+        var errorHandler: (@MainActor (WatchSnapshotRequestFailure) -> Void)?
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { reply, failure in
+                replyHandler = reply
+                errorHandler = failure
+            },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+        store.updateReachability(true)
+        store.requestCurrentSnapshot()
+
+        store.receive(try newer.applicationContext())
+        errorHandler?(.timedOut)
+        replyHandler?(.unavailable)
+
+        XCTAssertEqual(store.snapshot, newer)
+        XCTAssertNil(store.decodingError)
+        XCTAssertEqual(queuedRequestCount, 0)
+    }
+
+    @MainActor
+    func testLaterSuccessfulRequestInvalidatesEarlierFailure() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let latest = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_100),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var replyHandlers: [(@MainActor (WatchDashboardSnapshotResponse) -> Void)] = []
+        var errorHandlers: [(@MainActor (WatchSnapshotRequestFailure) -> Void)] = []
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { reply, failure in
+                replyHandlers.append(reply)
+                errorHandlers.append(failure)
+            },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+        store.updateReachability(true)
+
+        store.requestCurrentSnapshot()
+        store.requestCurrentSnapshot()
+        replyHandlers[1](.snapshot(try latest.encoded()))
+        errorHandlers[0](.deliveryFailed)
+
+        XCTAssertEqual(store.snapshot, latest)
+        XCTAssertNil(store.decodingError)
+        XCTAssertEqual(queuedRequestCount, 0)
+    }
+
+    @MainActor
+    func testUnreachablePhoneQueuesRequestWithActionableRecovery() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var immediateRequestCount = 0
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _, _ in immediateRequestCount += 1 },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+
+        store.requestCurrentSnapshot()
+        store.requestCurrentSnapshot()
+
+        XCTAssertEqual(immediateRequestCount, 0)
+        XCTAssertEqual(queuedRequestCount, 1)
+        XCTAssertEqual(
+            store.decodingError,
+            "iPhone unavailable. Open CodexBar there; update queued"
+        )
+    }
+
+    @MainActor
+    func testFailedQueuedTransferAllowsLaterRetry() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _, _ in },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+
+        store.requestCurrentSnapshot()
+        XCTAssertEqual(queuedRequestCount, 1)
+
+        store.receiveDelegateEvent(
+            .userInfoTransferFinished(
+                sequence: 0,
+                wasSnapshotRequest: true,
+                failed: true,
+                hasOtherOutstandingSnapshotRequest: false
+            )
+        )
+        store.requestCurrentSnapshot()
+
+        XCTAssertEqual(queuedRequestCount, 2)
+    }
+
+    @MainActor
+    func testSuccessfulQueuedTransferWithoutResponseAllowsLaterRetry() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _, _ in },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+
+        store.requestCurrentSnapshot()
+        XCTAssertEqual(queuedRequestCount, 1)
+
+        store.receiveDelegateEvent(
+            .userInfoTransferFinished(
+                sequence: 0,
+                wasSnapshotRequest: true,
+                failed: false,
+                hasOtherOutstandingSnapshotRequest: false
+            )
+        )
+        store.requestCurrentSnapshot()
+
+        XCTAssertEqual(queuedRequestCount, 2)
+    }
+
+    @MainActor
+    func testCachedContextPreservesOutstandingQueuedRequestAcrossRelaunch() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_000),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var queuedRequestCount = 0
+        var transferIsOutstanding = true
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _, _ in },
+            queueSnapshotRequest: { queuedRequestCount += 1 },
+            hasOutstandingSnapshotRequest: { transferIsOutstanding }
+        )
+
+        store.receive(try snapshot.applicationContext())
+        store.requestCurrentSnapshot()
+        XCTAssertEqual(queuedRequestCount, 0)
+
+        transferIsOutstanding = false
+        store.receive(try snapshot.applicationContext())
+        store.requestCurrentSnapshot()
+        XCTAssertEqual(queuedRequestCount, 1)
+    }
+
+    @MainActor
+    func testUnavailableAndMalformedImmediateRepliesExplainRecovery() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var replyHandler: (@MainActor (WatchDashboardSnapshotResponse) -> Void)?
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { handler, _ in replyHandler = handler },
+            queueSnapshotRequest: {}
+        )
+        store.updateReachability(true)
+
+        store.requestCurrentSnapshot()
+        replyHandler?(.unavailable)
+        XCTAssertEqual(
+            store.decodingError,
+            "No dashboard update is available yet. Refresh CodexBar on iPhone"
+        )
+
+        store.requestCurrentSnapshot()
+        replyHandler?(.malformed)
+        XCTAssertEqual(
+            store.decodingError,
+            "Couldn’t read the iPhone update. Refresh CodexBar on iPhone"
+        )
+    }
+
+    func testWatchConnectivityErrorsMapToSpecificRecoveryReasons() {
+        func error(_ code: WCError.Code) -> NSError {
+            NSError(domain: WCErrorDomain, code: code.rawValue)
+        }
+
+        XCTAssertEqual(
+            WatchSnapshotRequestFailure(error(.sessionNotActivated)),
+            .sessionInactive
+        )
+        XCTAssertEqual(
+            WatchSnapshotRequestFailure(error(.notReachable)),
+            .phoneUnreachable
+        )
+        XCTAssertEqual(
+            WatchSnapshotRequestFailure(error(.messageReplyTimedOut)),
+            .timedOut
+        )
+        XCTAssertEqual(
+            WatchSnapshotRequestFailure(error(.deviceNotPaired)),
+            .pairingUnavailable
+        )
+        XCTAssertEqual(
+            WatchSnapshotRequestFailure(error(.companionAppNotInstalled)),
+            .pairingUnavailable
+        )
+        XCTAssertEqual(
+            WatchSnapshotRequestFailure(error(.watchAppNotInstalled)),
+            .pairingUnavailable
+        )
+        XCTAssertEqual(
+            WatchSnapshotRequestFailure(
+                NSError(domain: NSCocoaErrorDomain, code: 1)
+            ),
+            .deliveryFailed
+        )
+    }
+
+    @MainActor
+    func testPairingFailureExplainsRecoveryWithoutQueueingImpossibleTransfer() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { _, errorHandler in
+                errorHandler(.pairingUnavailable)
+            },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+        store.updateReachability(true)
+
+        store.requestCurrentSnapshot()
+
+        XCTAssertEqual(queuedRequestCount, 0)
+        XCTAssertEqual(
+            store.decodingError,
+            "Install and open CodexBar on the paired iPhone"
+        )
     }
 
     @MainActor
@@ -488,12 +911,13 @@ final class WatchDashboardStateTests: XCTestCase {
             complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
             reloadComplications: {},
             session: nil,
-            requestSnapshot: { _ in
+            requestSnapshot: { _, _ in
                 requestCount += 1
             },
             requestCoalescingDelay: .milliseconds(5)
         )
         store.activationCompleted(
+            activationState: .activated,
             applicationContext: .empty,
             isPhoneReachable: true,
             hadError: false
@@ -521,7 +945,7 @@ final class WatchDashboardStateTests: XCTestCase {
             complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
             reloadComplications: {},
             session: nil,
-            requestSnapshot: { _ in
+            requestSnapshot: { _, _ in
                 requestCount += 1
             },
             requestCoalescingDelay: .milliseconds(5)
@@ -537,19 +961,20 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
-    func testSnapshotRequestFailurePreservesLastGoodDataAndOnlyErrorsWithoutCache() async throws {
+    func testSnapshotRequestFailurePreservesLastGoodDataAndAlwaysExplainsQueuedRecovery() async throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
-        var requestErrorHandler: ((Error) -> Void)?
+        var requestErrorHandler: ((WatchSnapshotRequestFailure) -> Void)?
         let store = WatchDashboardStore(
             defaults: defaults,
             complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
             reloadComplications: {},
             session: nil,
-            requestSnapshot: { errorHandler in
+            requestSnapshot: { _, errorHandler in
                 requestErrorHandler = errorHandler
-            }
+            },
+            queueSnapshotRequest: {}
         )
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let snapshot = WatchDashboardSnapshot(
@@ -566,33 +991,39 @@ final class WatchDashboardStateTests: XCTestCase {
             ]
         )
         store.receive(try snapshot.applicationContext())
+        store.updateReachability(true)
         store.requestCurrentSnapshot()
-        requestErrorHandler?(SnapshotRequestTestError.failed)
+        requestErrorHandler?(.deliveryFailed)
         await Task.yield()
 
         XCTAssertEqual(store.snapshot, snapshot)
-        XCTAssertNil(store.decodingError)
+        XCTAssertEqual(
+            store.decodingError,
+            "Update queued. Open CodexBar on iPhone to finish"
+        )
 
         let emptyDefaults = try XCTUnwrap(UserDefaults(suiteName: "\(suiteName).empty"))
         emptyDefaults.removePersistentDomain(forName: "\(suiteName).empty")
-        var emptyRequestErrorHandler: ((Error) -> Void)?
+        var emptyRequestErrorHandler: ((WatchSnapshotRequestFailure) -> Void)?
         let emptyStore = WatchDashboardStore(
             defaults: emptyDefaults,
             complicationStore: WatchComplicationSnapshotStore(defaults: emptyDefaults),
             reloadComplications: {},
             session: nil,
-            requestSnapshot: { errorHandler in
+            requestSnapshot: { _, errorHandler in
                 emptyRequestErrorHandler = errorHandler
-            }
+            },
+            queueSnapshotRequest: {}
         )
+        emptyStore.updateReachability(true)
         emptyStore.requestCurrentSnapshot()
-        emptyRequestErrorHandler?(SnapshotRequestTestError.failed)
+        emptyRequestErrorHandler?(.deliveryFailed)
         await Task.yield()
 
         XCTAssertNil(emptyStore.snapshot)
         XCTAssertEqual(
             emptyStore.decodingError,
-            "Couldn’t request the latest update from iPhone"
+            "Update queued. Open CodexBar on iPhone to finish"
         )
     }
 
