@@ -557,15 +557,15 @@ struct ContentView: View {
                 alerts: alerts,
                 isHistoryEnabled: item.configuration.showsHistory,
                 isRefreshing: item.isRefreshing,
+                isExpanded: !configurationStore.isDashboardCardCollapsed(accountID: result.accountID),
                 refreshErrorMessage: item.errorMessage,
                 recoveryAction: item.recoveryAction,
                 isPerformingRecovery: authenticationState.isSigningIn,
                 recoveryStatusMessage: authenticationState.statusMessage,
                 recoveryErrorMessage: authenticationState.errorMessage,
                 onReportProblem: onReportProblem,
-                onShowHistory: {
-                    selectedHistoryResult = result
-                },
+                onShowHistory: { selectedHistoryResult = result },
+                onToggleExpansion: { toggleDashboardCardExpansion(result.accountID) },
                 onConfigureAccount: {
                     accountConfigurationNavigation.present(accountID: result.accountID)
                 },
@@ -749,6 +749,11 @@ struct ContentView: View {
         case .signIn, .reauthenticate:
             claudeAuthenticationController.startSignIn(for: item.configuration)
         }
+    }
+
+    private func toggleDashboardCardExpansion(_ accountID: String) {
+        let isCollapsed = configurationStore.isDashboardCardCollapsed(accountID: accountID)
+        configurationStore.updateDashboardCardCollapsed(!isCollapsed, accountID: accountID)
     }
 
     private func problemReportContext(

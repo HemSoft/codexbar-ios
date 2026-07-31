@@ -210,6 +210,7 @@ struct ProviderUsageCard: View {
     let alerts: [UsageAlertDetail]
     let isHistoryEnabled: Bool
     let isRefreshing: Bool
+    let isExpanded: Bool
     let refreshErrorMessage: String?
     let recoveryAction: ProviderUsageRecoveryAction
     let isPerformingRecovery: Bool
@@ -217,6 +218,7 @@ struct ProviderUsageCard: View {
     let recoveryErrorMessage: String?
     let onReportProblem: (() -> Void)?
     let onShowHistory: () -> Void
+    let onToggleExpansion: () -> Void
     let onConfigureAccount: () -> Void
     let onRetry: () -> Void
     let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
@@ -251,6 +253,8 @@ struct ProviderUsageCard: View {
     @StateObject private var resetRedemptionController: CodexBankedResetRedemptionController
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.usageSeverityThresholds) private var severityThresholds
 
     init(
@@ -260,6 +264,7 @@ struct ProviderUsageCard: View {
         alerts: [UsageAlertDetail] = [],
         isHistoryEnabled: Bool = true,
         isRefreshing: Bool = false,
+        isExpanded: Bool = true,
         refreshErrorMessage: String? = nil,
         recoveryAction: ProviderUsageRecoveryAction = .retryRefresh,
         isPerformingRecovery: Bool = false,
@@ -267,6 +272,7 @@ struct ProviderUsageCard: View {
         recoveryErrorMessage: String? = nil,
         onReportProblem: (() -> Void)? = nil,
         onShowHistory: @escaping () -> Void = {},
+        onToggleExpansion: @escaping () -> Void = {},
         onConfigureAccount: @escaping () -> Void = {},
         onRetry: @escaping () -> Void = {},
         retainedCodexResetAttempt: CodexRetainedResetAttempt? = nil,
@@ -299,6 +305,7 @@ struct ProviderUsageCard: View {
         self.alerts = alerts
         self.isHistoryEnabled = isHistoryEnabled
         self.isRefreshing = isRefreshing
+        self.isExpanded = isExpanded
         self.refreshErrorMessage = refreshErrorMessage
         self.recoveryAction = recoveryAction
         self.isPerformingRecovery = isPerformingRecovery
@@ -306,6 +313,7 @@ struct ProviderUsageCard: View {
         self.recoveryErrorMessage = recoveryErrorMessage
         self.onReportProblem = onReportProblem
         self.onShowHistory = onShowHistory
+        self.onToggleExpansion = onToggleExpansion
         self.onConfigureAccount = onConfigureAccount
         self.onRetry = onRetry
         self.onUseCodexReset = onUseCodexReset
@@ -345,94 +353,212 @@ struct ProviderUsageCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .top, spacing: 8) {
-                        ProviderLogoTile(providerID: result.providerID)
+            cardHeader
 
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(result.title)
-                                    .font(.headline)
-                                    .fixedSize(horizontal: true, vertical: false)
-
-                                planBadge
-                            }
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(result.title)
-                                    .font(.headline)
-                                    .fixedSize(horizontal: false, vertical: true)
-
-                                planBadge
-                            }
-                        }
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(Self.headerAccessibilityLabel(for: result))
-
-                    Text(statusText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                ZStack {
-                    if isRefreshing || isPerformingRecovery {
-                        ProgressView()
-                            .controlSize(.small)
-                            .accessibilityLabel(
-                                isPerformingRecovery
-                                    ? "Signing in to \(result.title)"
-                                    : "Refreshing \(result.title)"
-                            )
-                    }
-                }
-                .frame(width: 16, height: 16)
-
-                Menu {
-                    ForEach(
-                        Self.menuActions(
-                            for: result,
-                            alerts: displayedAlerts,
-                            isMetricVisible: isMetricVisible
-                        ),
-                        id: \.self
-                    ) { action in
-                        switch action {
-                        case .moreInformation:
-                            Button {
-                                isShowingMoreInformation = true
-                            } label: {
-                                Label("More Information…", systemImage: "info.circle")
-                            }
-                            .accessibilityLabel("More information for \(result.title)")
-                        case .configureAccount:
-                            Button(action: onConfigureAccount) {
-                                Label("Configure Account…", systemImage: "gearshape")
-                            }
-                            .accessibilityLabel("Configure account \(result.title)")
-                        case .customizeMetrics:
-                            Button {
-                                isCustomizingMetrics = true
-                            } label: {
-                                Label("Customize Card…", systemImage: "gauge.with.dots.needle.50percent")
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.body)
-                }
-                .accessibilityLabel("More options for \(result.title)")
-
-                Circle()
-                    .fill(cardSeverity.tint)
-                    .frame(width: 10, height: 10)
-                    .accessibilityHidden(true)
+            if isExpanded {
+                cardBody
+                    .transition(
+                        accessibilityReduceMotion
+                            ? .identity
+                            : .opacity.combined(with: .move(edge: .top))
+                    )
             }
+        }
+        .padding(16)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+        .sheet(item: $resetInventoryPresentation) { presentation in
+            CodexBankedResetInventoryView(
+                resets: presentation.resets,
+                canRedeem: presentation.canRedeem,
+                onUseReset: onUseCodexReset,
+                onFeedback: { feedback in
+                    resetFeedback = feedback
+                    isResetActionUnavailable = feedback.hidesAction
+                },
+                redemptionController: resetRedemptionController
+            )
+        }
+        .sheet(isPresented: $isCustomizingMetrics) {
+            MetricVisualizationCustomizationView(
+                accountTitle: result.title,
+                result: result,
+                showsSeverity: result.hasCurrentBars,
+                isMetricVisible: isMetricVisible,
+                onUpdateMetricVisibility: onUpdateMetricVisibility,
+                watchVisibilityForMetric: watchVisibilityForMetric,
+                onUpdateWatchVisibility: onUpdateWatchVisibility,
+                visualizationStyleForMetric: visualizationStyleForMetric,
+                onUpdateVisualizationStyle: onUpdateVisualizationStyle,
+                onApplyVisualizationStyleToAll: onApplyVisualizationStyleToAll,
+                onResetVisualizationStyles: onResetVisualizationStyles,
+                metricWidthForMetric: metricWidthForMetric,
+                onUpdateMetricWidth: onUpdateMetricWidth,
+                metricLayoutProvider: metricLayoutProvider,
+                isMetricNewlyDiscovered: isMetricNewlyDiscovered,
+                onUpdateMetricOrder: onUpdateMetricOrder,
+                onReplaceMetricLayout: onReplaceMetricLayout,
+                onResetMetricLayout: onResetMetricLayout,
+                copyLayoutDestinationsProvider: copyLayoutDestinationsProvider,
+                onCopyMetricLayout: onCopyMetricLayout,
+                onMarkMetricsSeen: onMarkMetricsSeen
+            )
+        }
+        .sheet(isPresented: $isShowingMoreInformation) {
+            ProviderCardInformationView(
+                sections: informationSections
+            )
+        }
+        .sheet(item: $metricDetailPresentation) { presentation in
+            if let metric = Self.metric(withID: presentation.metricID, in: result) {
+                ProviderMetricTileDetailView(
+                    result: result,
+                    statusText: statusText,
+                    metric: metric,
+                    history: metricDetailHistorySeries(for: metric),
+                    visualizationStyle: visualizationStyleForMetric(metric.id)
+                )
+            }
+        }
+        .task(id: result.availableMetrics.map(\.id)) {
+            onMetricsDiscovered(result.availableMetrics.map(\.id))
+        }
+        .onChange(of: result.fetchedAt) {
+            resetInventoryPresentation = Self.reconciledResetInventoryPresentation(
+                current: resetInventoryPresentation,
+                requestedResets: bankedResets,
+                canRedeem: showsCodexResetRedemptionActions,
+                requestsPresentation: false
+            )
+            isResetActionUnavailable = false
+            resetFeedback = nil
+        }
+        .onChange(of: result.availableMetrics.map(\.id)) {
+            guard let metricID = metricDetailPresentation?.metricID else {
+                return
+            }
+            if Self.metric(withID: metricID, in: result) == nil {
+                metricDetailPresentation = nil
+            }
+        }
+        .onChange(of: informationSections) {
+            isShowingMoreInformation = Self.reconciledMoreInformationPresentation(
+                currentlyPresented: isShowingMoreInformation,
+                sections: informationSections
+            )
+        }
+    }
 
+    private var cardHeader: some View {
+        ZStack(alignment: .trailing) {
+            Button(action: toggleExpansion) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .top, spacing: 8) {
+                            ProviderLogoTile(providerID: result.providerID)
+
+                            ViewThatFits(in: .horizontal) {
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text(result.title)
+                                        .font(.headline)
+                                        .fixedSize(horizontal: true, vertical: false)
+
+                                    planBadge
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(result.title)
+                                        .font(.headline)
+                                        .fixedSize(horizontal: false, vertical: true)
+
+                                    planBadge
+                                }
+                            }
+                        }
+
+                        Text(statusText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    ZStack {
+                        if isRefreshing || isPerformingRecovery {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .frame(width: 16, height: 16)
+
+                    Color.clear
+                        .frame(width: 28, height: 28)
+
+                    Circle()
+                        .fill(cardSeverity.tint)
+                        .frame(width: 10, height: 10)
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(disclosureChevronRotation))
+                        .animation(
+                            accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2),
+                            value: isExpanded
+                        )
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(disclosureAccessibilityLabel)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(disclosureAccessibilityHint)
+
+            // This topmost sibling owns the menu hit area, so menu taps never
+            // reach the disclosure button underneath it.
+            Menu {
+                ForEach(
+                    Self.menuActions(
+                        for: result,
+                        alerts: displayedAlerts,
+                        isMetricVisible: isMetricVisible
+                    ),
+                    id: \.self
+                ) { action in
+                    switch action {
+                    case .moreInformation:
+                        Button {
+                            isShowingMoreInformation = true
+                        } label: {
+                            Label("More Information…", systemImage: "info.circle")
+                        }
+                        .accessibilityLabel("More information for \(result.title)")
+                    case .configureAccount:
+                        Button(action: onConfigureAccount) {
+                            Label("Configure Account…", systemImage: "gearshape")
+                        }
+                        .accessibilityLabel("Configure account \(result.title)")
+                    case .customizeMetrics:
+                        Button {
+                            isCustomizingMetrics = true
+                        } label: {
+                            Label("Customize Card…", systemImage: "gauge.with.dots.needle.50percent")
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.body)
+                    .frame(width: 28, height: 28)
+                    .background(Color(.secondarySystemGroupedBackground))
+            }
+            .padding(.trailing, 31)
+            .accessibilityLabel("More options for \(result.title)")
+        }
+    }
+
+    private var cardBody: some View {
+        VStack(alignment: .leading, spacing: 14) {
             if !inlineAlerts.isEmpty {
                 UsageAlertSummaryView(alerts: inlineAlerts)
             }
@@ -542,88 +668,61 @@ struct ProviderUsageCard: View {
                 )
             }
         }
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
-        .sheet(item: $resetInventoryPresentation) { presentation in
-            CodexBankedResetInventoryView(
-                resets: presentation.resets,
-                canRedeem: presentation.canRedeem,
-                onUseReset: onUseCodexReset,
-                onFeedback: { feedback in
-                    resetFeedback = feedback
-                    isResetActionUnavailable = feedback.hidesAction
-                },
-                redemptionController: resetRedemptionController
-            )
+    }
+
+    private var disclosureAccessibilityLabel: String {
+        Self.disclosureAccessibilityLabel(
+            for: result,
+            statusText: statusText,
+            isRefreshing: isRefreshing,
+            isPerformingRecovery: isPerformingRecovery,
+            severity: cardSeverity
+        )
+    }
+
+    private var disclosureAccessibilityHint: String {
+        Self.disclosureAccessibilityHint(isExpanded: isExpanded, title: result.title)
+    }
+
+    private var disclosureChevronRotation: Double {
+        guard !isExpanded else {
+            return 0
         }
-        .sheet(isPresented: $isCustomizingMetrics) {
-            MetricVisualizationCustomizationView(
-                accountTitle: result.title,
-                result: result,
-                showsSeverity: result.hasCurrentBars,
-                isMetricVisible: isMetricVisible,
-                onUpdateMetricVisibility: onUpdateMetricVisibility,
-                watchVisibilityForMetric: watchVisibilityForMetric,
-                onUpdateWatchVisibility: onUpdateWatchVisibility,
-                visualizationStyleForMetric: visualizationStyleForMetric,
-                onUpdateVisualizationStyle: onUpdateVisualizationStyle,
-                onApplyVisualizationStyleToAll: onApplyVisualizationStyleToAll,
-                onResetVisualizationStyles: onResetVisualizationStyles,
-                metricWidthForMetric: metricWidthForMetric,
-                onUpdateMetricWidth: onUpdateMetricWidth,
-                metricLayoutProvider: metricLayoutProvider,
-                isMetricNewlyDiscovered: isMetricNewlyDiscovered,
-                onUpdateMetricOrder: onUpdateMetricOrder,
-                onReplaceMetricLayout: onReplaceMetricLayout,
-                onResetMetricLayout: onResetMetricLayout,
-                copyLayoutDestinationsProvider: copyLayoutDestinationsProvider,
-                onCopyMetricLayout: onCopyMetricLayout,
-                onMarkMetricsSeen: onMarkMetricsSeen
-            )
+        return layoutDirection == .rightToLeft ? 90 : -90
+    }
+
+    private func toggleExpansion() {
+        withAnimation(accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2)) {
+            onToggleExpansion()
         }
-        .sheet(isPresented: $isShowingMoreInformation) {
-            ProviderCardInformationView(
-                sections: informationSections
-            )
+    }
+
+    static func disclosureAccessibilityHint(isExpanded: Bool, title: String) -> String {
+        isExpanded ? "Collapse \(title)" : "Expand \(title)"
+    }
+
+    static func disclosureAccessibilityLabel(
+        for result: ProviderUsageResult,
+        statusText: String,
+        isRefreshing: Bool,
+        isPerformingRecovery: Bool,
+        severity: UsageSeverity
+    ) -> String {
+        var components = [headerAccessibilityLabel(for: result), statusText]
+        if isPerformingRecovery {
+            components.append("Signing in")
+        } else if isRefreshing {
+            components.append("Refreshing")
         }
-        .sheet(item: $metricDetailPresentation) { presentation in
-            if let metric = Self.metric(withID: presentation.metricID, in: result) {
-                ProviderMetricTileDetailView(
-                    result: result,
-                    statusText: statusText,
-                    metric: metric,
-                    history: metricDetailHistorySeries(for: metric),
-                    visualizationStyle: visualizationStyleForMetric(metric.id)
-                )
-            }
+        switch severity {
+        case .normal:
+            components.append("Normal status")
+        case .warning:
+            components.append("Warning status")
+        case .critical:
+            components.append("Critical status")
         }
-        .task(id: result.availableMetrics.map(\.id)) {
-            onMetricsDiscovered(result.availableMetrics.map(\.id))
-        }
-        .onChange(of: result.fetchedAt) {
-            resetInventoryPresentation = Self.reconciledResetInventoryPresentation(
-                current: resetInventoryPresentation,
-                requestedResets: bankedResets,
-                canRedeem: showsCodexResetRedemptionActions,
-                requestsPresentation: false
-            )
-            isResetActionUnavailable = false
-            resetFeedback = nil
-        }
-        .onChange(of: result.availableMetrics.map(\.id)) {
-            guard let metricID = metricDetailPresentation?.metricID else {
-                return
-            }
-            if Self.metric(withID: metricID, in: result) == nil {
-                metricDetailPresentation = nil
-            }
-        }
-        .onChange(of: informationSections) {
-            isShowingMoreInformation = Self.reconciledMoreInformationPresentation(
-                currentlyPresented: isShowingMoreInformation,
-                sections: informationSections
-            )
-        }
+        return components.joined(separator: ", ")
     }
 
     private var cardSeverity: UsageSeverity {

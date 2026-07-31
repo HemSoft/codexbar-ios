@@ -8,6 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added independently saved, accessible collapse controls to loaded dashboard
+  account cards so people can reclaim space while keeping identity, status,
+  refresh progress, severity, and account actions visible at a glance.
+  ([#219](https://github.com/HemSoft/codexbar-ios/issues/219))
 - Added a welcoming first-run dashboard with a prominent Add Account action
   that guides people through provider selection and directly into setup, with
   the same flow available from Settings.
