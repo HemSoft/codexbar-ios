@@ -122,7 +122,11 @@ decode_yaml_quoted_scalar() {
                 print -u2 "YAML report paths cannot contain a null byte."
                 return 1
                 ;;
-            a|b|t|n|v|f|r|e|\\)
+            n|r)
+                print -u2 "YAML report paths cannot contain line breaks."
+                return 1
+                ;;
+            a|b|t|v|f|e|\\)
                 decoded+="\\$escape_character"
                 ;;
             \"|/)
@@ -156,7 +160,8 @@ decode_yaml_quoted_scalar() {
                     return 1
                 fi
                 ((code_point = 16#$hex_digits))
-                if ((code_point == 0 || code_point > 0x10ffff \
+                if ((code_point == 0 || code_point == 0x0a || code_point == 0x0d \
+                    || code_point > 0x10ffff \
                     || (code_point >= 0xd800 && code_point <= 0xdfff))); then
                     print -u2 "Invalid Unicode scalar in YAML report path."
                     return 1
@@ -191,6 +196,10 @@ fi
 
 preserved_report_paths=("${configured_report_paths[@]}" "${requested_report_paths[@]}")
 for report_path in "${preserved_report_paths[@]}"; do
+    if [[ "$report_path" == *$'\n'* || "$report_path" == *$'\r'* ]]; then
+        print -u2 "Report paths cannot contain line breaks."
+        exit 1
+    fi
     if [[ "$report_path" != /* ]]; then
         report_source="$mutation_workspace/$report_path"
         report_source=${report_source:A}
