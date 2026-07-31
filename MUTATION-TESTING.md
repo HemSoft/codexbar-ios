@@ -67,9 +67,10 @@ checks every real source file. Version 1.3.0 then creates and removes its own
 worktree on success, failure, or interruption. The ignored mutation cache is
 copied into the disposable worktree and back out after each run, so normal
 follow-up runs reuse the same stable sandbox path and cached result keys while
-`--no-cache` remains available for fresh measurements. An atomic lock refuses
-concurrent runs from the same worktree while reclaiming locks whose recorded
-process is no longer running. Exit/signal cleanup saves the cache and relative
+`--no-cache` remains available for fresh measurements. An atomic lock records
+both the wrapper and active mutation-tool process, refuses concurrent runs from
+the same worktree, and reclaims a lock only after no recorded or workspace-bound
+process is still running. Exit/signal cleanup saves the cache and relative
 JSON, HTML, or Sonar reports configured in `.swift-mutation-testing.yml` or on
 the command line before removing the disposable worktree; a sandbox-side
 manifest lets the next run recover those custom report paths after an

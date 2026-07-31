@@ -16,6 +16,7 @@ mutation_workspace="$mutation_workspace_parent/repository"
 mutation_lock="$mutation_workspace_parent.lock"
 report_manifest="$mutation_workspace_parent/report-paths"
 lock_acquired=false
+tool_pid=
 requested_report_paths=()
 configured_report_paths=()
 
@@ -35,16 +36,48 @@ for ((argument_index = 1; argument_index <= ${#arguments}; argument_index++)); d
     esac
 done
 
+strip_yaml_comment() {
+    local value="$1"
+    local result=""
+    local quote=""
+    local escaped=false
+    local character
+    for ((value_index = 1; value_index <= ${#value}; value_index++)); do
+        character=${value[$value_index]}
+        if [[ -n "$quote" ]]; then
+            if [[ "$quote" == \" && "$escaped" == true ]]; then
+                escaped=false
+            elif [[ "$quote" == \" && "$character" == \\ ]]; then
+                escaped=true
+            elif [[ "$character" == "$quote" ]]; then
+                quote=""
+            fi
+        elif [[ "$character" == \" || "$character" == \' ]]; then
+            quote="$character"
+        elif [[ "$character" == \# ]]; then
+            if ((value_index == 1)) \
+                || [[ "${value[$((value_index - 1))]}" == [[:space:]] ]]; then
+                break
+            fi
+        fi
+        result+="$character"
+    done
+    print -rn -- "$result"
+}
+
 if [[ -r "$repository_dir/.swift-mutation-testing.yml" ]]; then
     while IFS= read -r report_path; do
+        report_path=$(strip_yaml_comment "$report_path")
         report_path="${report_path#"${report_path%%[![:space:]]*}"}"
         report_path="${report_path%"${report_path##*[![:space:]]}"}"
-        if [[ "$report_path" == \"*\" || "$report_path" == \'*\' ]]; then
+        if (( ${#report_path} >= 2 )) \
+            && [[ ("${report_path[1]}" == \" && "${report_path[-1]}" == \") \
+                || ("${report_path[1]}" == \' && "${report_path[-1]}" == \') ]]; then
             report_path=${report_path[2,-2]}
         fi
         [[ -n "$report_path" ]] && configured_report_paths+=("$report_path")
     done < <(sed -nE \
-        's/^(output|html-output|sonar-output):[[:space:]]*([^#]*).*$/\2/p' \
+        's/^(output|html-output|sonar-output):[[:space:]]*(.*)$/\2/p' \
         "$repository_dir/.swift-mutation-testing.yml")
 fi
 
@@ -124,7 +157,7 @@ cleanup() {
         rm -f "$report_manifest"
         rmdir "$mutation_workspace_parent" 2>/dev/null || true
     fi
-    rm -f "$mutation_lock/pid"
+    rm -f "$mutation_lock/pid" "$mutation_lock/pid.next"
     rmdir "$mutation_lock" 2>/dev/null || true
     if [[ "$artifacts_saved" != true && "$exit_status" -eq 0 ]]; then
         exit_status=1
@@ -132,28 +165,46 @@ cleanup() {
     exit "$exit_status"
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+
+forward_signal() {
+    local signal_name="$1"
+    local exit_status="$2"
+    trap - "$signal_name"
+    if [[ "$tool_pid" == <-> ]] && kill -0 "$tool_pid" 2>/dev/null; then
+        kill -"$signal_name" "$tool_pid" 2>/dev/null || true
+        wait "$tool_pid" 2>/dev/null || true
+    fi
+    exit "$exit_status"
+}
+trap 'forward_signal INT 130' INT
+trap 'forward_signal TERM 143' TERM
 
 acquire_mutation_lock() {
     mkdir "$mutation_lock" 2>/dev/null && return 0
 
-    lock_owner=unknown
-    if [[ -r "$mutation_lock/pid" ]]; then
-        lock_owner=$(<"$mutation_lock/pid")
+    [[ -r "$mutation_lock/pid" ]] || return 1
+    local recorded_owner=false
+    local lock_owner_pid
+    while IFS= read -r lock_owner_pid; do
+        [[ "$lock_owner_pid" == <-> ]] || continue
+        recorded_owner=true
+        kill -0 "$lock_owner_pid" 2>/dev/null && return 1
+    done < "$mutation_lock/pid"
+    [[ "$recorded_owner" == true ]] || return 1
+    if git -C "$repository_dir" worktree list --porcelain \
+        | grep -Fqx "worktree $mutation_workspace" \
+        && lsof -a -d cwd "$mutation_workspace" >/dev/null 2>&1; then
+        return 1
     fi
-    if [[ "$lock_owner" == <-> ]] && ! kill -0 "$lock_owner" 2>/dev/null; then
-        rm -f "$mutation_lock/pid"
-        rmdir "$mutation_lock" 2>/dev/null || return 1
-        mkdir "$mutation_lock" 2>/dev/null && return 0
-    fi
-    return 1
+    rm -f "$mutation_lock/pid" "$mutation_lock/pid.next"
+    rmdir "$mutation_lock" 2>/dev/null || return 1
+    mkdir "$mutation_lock" 2>/dev/null
 }
 
 if ! acquire_mutation_lock; then
     lock_owner=unknown
     if [[ -r "$mutation_lock/pid" ]]; then
-        lock_owner=$(<"$mutation_lock/pid")
+        lock_owner=$(paste -sd, "$mutation_lock/pid")
     fi
     print -u2 "Another mutation pilot owns $mutation_lock (PID $lock_owner); refusing to disturb it."
     exit 1
@@ -245,8 +296,16 @@ for report_path in "${preserved_report_paths[@]}"; do
 done
 set +e
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-    "$tool_binary" . "${exclude_arguments[@]}" "$@"
+    "$tool_binary" . "${exclude_arguments[@]}" "$@" &
+tool_pid=$!
+{
+    print -r -- "$$"
+    print -r -- "$tool_pid"
+} > "$mutation_lock/pid.next"
+mv -f "$mutation_lock/pid.next" "$mutation_lock/pid"
+wait "$tool_pid"
 tool_status=$?
+tool_pid=
 set -e
 
 exit "$tool_status"
