@@ -347,10 +347,10 @@ final class WatchDashboardStore: NSObject, ObservableObject {
                 failed,
                 hasOtherOutstandingSnapshotRequest
             ):
-                guard wasSnapshotRequest, failed else { break }
+                guard wasSnapshotRequest else { break }
                 hasQueuedSnapshotRequest = hasOtherOutstandingSnapshotRequest
                 Self.logger.notice(
-                    "Queued snapshot transfer failed remainingRequest=\(hasOtherOutstandingSnapshotRequest, privacy: .public)"
+                    "Queued snapshot transfer completed failed=\(failed, privacy: .public) remainingRequest=\(hasOtherOutstandingSnapshotRequest, privacy: .public)"
                 )
             }
         }
