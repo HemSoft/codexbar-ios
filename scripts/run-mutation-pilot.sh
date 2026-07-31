@@ -76,7 +76,12 @@ decode_yaml_quoted_scalar() {
     local quote=${value[1]}
     local decoded=""
     local character
-    if [[ "$quote" == \' && "${value[-1]}" == \' ]]; then
+    if [[ "$quote" == \' && "${value[-1]}" != \' ]] \
+        || [[ "$quote" == \" && "${value[-1]}" != \" ]]; then
+        print -u2 "Multiline YAML report paths are not supported."
+        return 1
+    fi
+    if [[ "$quote" == \' ]]; then
         value=${value[2,-2]}
         for ((value_index = 1; value_index <= ${#value}; value_index++)); do
             character=${value[$value_index]}
@@ -182,7 +187,39 @@ decode_yaml_quoted_scalar() {
     printf '%b' "$decoded"
 }
 
+reject_multiline_yaml_report_paths() {
+    local configuration_path="$1"
+    local report_scalar_active=false
+    local line trimmed_line scalar
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        trimmed_line="${line#"${line%%[![:space:]]*}"}"
+        if [[ "$report_scalar_active" == true ]]; then
+            if [[ -z "$trimmed_line" || "${trimmed_line[1]}" == \# ]]; then
+                continue
+            fi
+            if [[ "$line" == [[:space:]]* ]]; then
+                print -u2 "Multiline YAML report paths are not supported."
+                return 1
+            fi
+            report_scalar_active=false
+        fi
+
+        if [[ "$line" =~ '^(output|html-output|sonar-output):' ]]; then
+            report_scalar_active=true
+            scalar=${line#*:}
+            scalar=$(strip_yaml_comment "$scalar")
+            scalar="${scalar#"${scalar%%[![:space:]]*}"}"
+            scalar="${scalar%"${scalar##*[![:space:]]}"}"
+            if [[ "${scalar[1]}" == \| || "${scalar[1]}" == \> ]]; then
+                print -u2 "YAML block scalars are not supported for report paths."
+                return 1
+            fi
+        fi
+    done < "$configuration_path"
+}
+
 if [[ -r "$repository_dir/.swift-mutation-testing.yml" ]]; then
+    reject_multiline_yaml_report_paths "$repository_dir/.swift-mutation-testing.yml"
     while IFS= read -r report_path; do
         report_path=$(strip_yaml_comment "$report_path")
         report_path="${report_path#"${report_path%%[![:space:]]*}"}"
