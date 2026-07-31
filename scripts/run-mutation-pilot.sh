@@ -263,7 +263,9 @@ collect_single_line_yaml_report_paths() {
         mapping_key=${reply[1]}
         mapping_key="${mapping_key#"${mapping_key%%[![:space:]]*}"}"
         mapping_key="${mapping_key%"${mapping_key##*[![:space:]]}"}"
-        mapping_key=$(decode_yaml_quoted_scalar "$mapping_key")
+        if ! mapping_key=$(decode_yaml_quoted_scalar "$mapping_key"); then
+            return 1
+        fi
         if [[ "$mapping_key" == output || "$mapping_key" == html-output \
             || "$mapping_key" == sonar-output ]]; then
             report_scalar_active=true
@@ -281,7 +283,9 @@ collect_single_line_yaml_report_paths() {
                 print -u2 "YAML anchors, aliases, and tags are not supported for report paths."
                 return 1
             fi
-            scalar=$(decode_yaml_quoted_scalar "$scalar")
+            if ! scalar=$(decode_yaml_quoted_scalar "$scalar"); then
+                return 1
+            fi
             [[ -n "$scalar" ]] && configured_report_paths+=("$scalar")
         fi
     done < "$configuration_path"
