@@ -217,7 +217,7 @@ collect_single_line_yaml_report_paths() {
     local report_scalar_active=false
     local root_indent=-1
     local report_key_indent=-1
-    local line indentation trimmed_line mapping_key scalar
+    local line indentation trimmed_line marker_candidate mapping_key scalar
     local indent_width
     while IFS= read -r line || [[ -n "$line" ]]; do
         indentation=${line%%[![:space:]]*}
@@ -234,8 +234,10 @@ collect_single_line_yaml_report_paths() {
             report_scalar_active=false
         fi
 
+        marker_candidate=$(strip_yaml_comment "$trimmed_line")
+        marker_candidate="${marker_candidate%"${marker_candidate##*[![:space:]]}"}"
         if [[ -z "$trimmed_line" || "${trimmed_line[1]}" == \# \
-            || "$trimmed_line" == --- || "$trimmed_line" == ... \
+            || "$marker_candidate" == --- || "$marker_candidate" == ... \
             || "${trimmed_line[1]}" == % ]]; then
             continue
         fi
