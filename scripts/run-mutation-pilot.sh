@@ -407,7 +407,20 @@ reconcile_mutation_recovery_staging() {
 
 quarantine_unregistered_mutation_workspace() {
     [[ -e "$mutation_workspace_parent" || -L "$mutation_workspace_parent" ]] || return 0
-    local orphaned_workspace="${mutation_workspace_parent}.orphaned.$$.$RANDOM"
+    local orphaned_container
+    local orphaned_workspace
+    local reservation_attempt
+    for reservation_attempt in {1..10}; do
+        orphaned_container="${mutation_workspace_parent}.orphaned.$$.$RANDOM"
+        if mkdir "$orphaned_container" 2>/dev/null; then
+            orphaned_workspace="$orphaned_container/workspace"
+            break
+        fi
+    done
+    if [[ -z "$orphaned_workspace" ]]; then
+        print -u2 "Could not reserve a unique quarantine path for $mutation_workspace_parent."
+        return 1
+    fi
     local artifacts_saved=true
     if [[ -d "$mutation_workspace_parent" && ! -L "$mutation_workspace_parent" ]]; then
         sync_mutation_reports || artifacts_saved=false
@@ -415,10 +428,12 @@ quarantine_unregistered_mutation_workspace() {
     fi
     if [[ "$artifacts_saved" != true ]]; then
         print -u2 "Could not recover artifacts from unregistered workspace; preserving $mutation_workspace_parent."
+        rmdir "$orphaned_container" 2>/dev/null || true
         return 1
     fi
     if ! mv "$mutation_workspace_parent" "$orphaned_workspace"; then
         print -u2 "Could not quarantine unregistered workspace at $mutation_workspace_parent."
+        rmdir "$orphaned_container" 2>/dev/null || true
         return 1
     fi
     print -u2 "Quarantined interrupted unregistered workspace at $orphaned_workspace."
