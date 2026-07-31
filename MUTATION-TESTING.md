@@ -71,7 +71,8 @@ follow-up runs reuse the same stable sandbox path and cached result keys while
 concurrent runs from the same worktree while reclaiming locks whose recorded
 process is no longer running. Exit/signal cleanup saves the cache and any
 explicit relative JSON, HTML, or Sonar reports before removing the disposable
-worktree.
+worktree; a sandbox-side manifest lets the next run recover those custom report
+paths after an untrappable process or host failure.
 
 ## Expanded baseline
 

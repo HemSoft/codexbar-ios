@@ -14,6 +14,7 @@ mutation_workspace_parent="${TMPDIR:-/tmp}/codexbar-mutation.$mutation_workspace
 mutation_workspace_parent=${mutation_workspace_parent:A}
 mutation_workspace="$mutation_workspace_parent/repository"
 mutation_lock="$mutation_workspace_parent.lock"
+report_manifest="$mutation_workspace_parent/report-paths"
 lock_acquired=false
 requested_report_paths=()
 
@@ -46,32 +47,50 @@ done
 
 sync_mutation_cache() {
     if [[ -d "$mutation_workspace/.swift-mutation-testing-cache" ]]; then
-        mkdir -p "$repository_dir/.swift-mutation-testing-cache"
+        mkdir -p "$repository_dir/.swift-mutation-testing-cache" || return 1
         rsync -a --delete \
             "$mutation_workspace/.swift-mutation-testing-cache/" \
-            "$repository_dir/.swift-mutation-testing-cache/"
+            "$repository_dir/.swift-mutation-testing-cache/" || return 1
     fi
 }
 
 sync_mutation_reports() {
+    local reports_saved=true
     if [[ -d "$mutation_workspace/build/mutation-testing" ]]; then
-        rsync -a \
+        if ! rsync -a \
             "$mutation_workspace/build/mutation-testing/" \
-            "$repository_dir/build/mutation-testing/"
+            "$repository_dir/build/mutation-testing/"; then
+            reports_saved=false
+        fi
     fi
-    for report_path in "${requested_report_paths[@]}"; do
+
+    local saved_report_paths=()
+    if [[ -r "$report_manifest" ]]; then
+        while IFS= read -r report_path; do
+            [[ -n "$report_path" ]] && saved_report_paths+=("$report_path")
+        done < "$report_manifest"
+    else
+        saved_report_paths=("${requested_report_paths[@]}")
+    fi
+
+    for report_path in "${saved_report_paths[@]}"; do
         [[ "$report_path" == /* ]] && continue
         local report_source="$mutation_workspace/$report_path"
         local report_destination="$repository_dir/$report_path"
         if [[ -f "$report_source" ]]; then
-            mkdir -p "${report_destination:h}"
-            rsync -a "$report_source" "$report_destination"
+            if ! mkdir -p "${report_destination:h}" \
+                || ! rsync -a "$report_source" "$report_destination"; then
+                reports_saved=false
+            fi
         fi
     done
+    [[ "$reports_saved" == true ]]
 }
 
 cleanup() {
-    [[ "$lock_acquired" == true ]] || return
+    local exit_status=$?
+    trap - EXIT
+    [[ "$lock_acquired" == true ]] || exit "$exit_status"
     local artifacts_saved=true
     if ! sync_mutation_reports; then
         artifacts_saved=false
@@ -87,10 +106,15 @@ cleanup() {
             git -C "$repository_dir" worktree remove --force "$mutation_workspace" \
                 || true
         fi
+        rm -f "$report_manifest"
         rmdir "$mutation_workspace_parent" 2>/dev/null || true
     fi
     rm -f "$mutation_lock/pid"
     rmdir "$mutation_lock" 2>/dev/null || true
+    if [[ "$artifacts_saved" != true && "$exit_status" -eq 0 ]]; then
+        exit_status=1
+    fi
+    exit "$exit_status"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -127,6 +151,7 @@ if git -C "$repository_dir" worktree list --porcelain \
     sync_mutation_reports
     sync_mutation_cache
     git -C "$repository_dir" worktree remove --force "$mutation_workspace"
+    rm -f "$report_manifest"
     rmdir "$mutation_workspace_parent" 2>/dev/null || true
 fi
 if [[ -e "$mutation_workspace_parent" ]]; then
@@ -134,6 +159,10 @@ if [[ -e "$mutation_workspace_parent" ]]; then
     exit 1
 fi
 mkdir -p "$mutation_workspace_parent"
+: > "$report_manifest"
+for report_path in "${requested_report_paths[@]}"; do
+    print -r -- "$report_path" >> "$report_manifest"
+done
 
 mkdir -p "$tool_cache_dir" "$repository_dir/build/mutation-testing"
 
