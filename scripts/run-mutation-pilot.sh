@@ -9,6 +9,665 @@ tool_archive_sha256=ad35efeca06baa1da2e5375932406cbc37a103b597fd1d1fa780968c2118
 tool_cache_dir="$repository_dir/.build/mutation-tools/swift-mutation-testing-v$tool_version"
 tool_archive="$tool_cache_dir/swift-mutation-testing-v$tool_version-macos.tar.gz"
 tool_binary="$tool_cache_dir/swift-mutation-testing"
+mutation_workspace_key=$(print -rn -- "$repository_dir" | cksum | awk '{print $1}')
+mutation_workspace_parent="${TMPDIR:-/tmp}/codexbar-mutation.$mutation_workspace_key"
+mutation_workspace_parent=${mutation_workspace_parent:A}
+mutation_workspace="$mutation_workspace_parent/repository"
+mutation_lock="$mutation_workspace_parent.lock"
+mutation_lock_guard="${mutation_lock}.guard"
+report_manifest="$mutation_workspace_parent/report-paths"
+cache_staging_marker="$mutation_workspace_parent/cache-staging-complete"
+lock_acquired=false
+tool_pid=
+requested_report_paths=()
+configured_report_paths=()
+
+arguments=("$@")
+for ((argument_index = 1; argument_index <= ${#arguments}; argument_index++)); do
+    argument=${arguments[$argument_index]}
+    case "$argument" in
+        --output|--html-output|--sonar-output)
+            ((argument_index++))
+            if ((argument_index <= ${#arguments})); then
+                requested_report_paths+=("${arguments[$argument_index]}")
+            fi
+            ;;
+        --output=*|--html-output=*|--sonar-output=*)
+            requested_report_paths+=("${argument#*=}")
+            ;;
+    esac
+done
+
+strip_yaml_comment() {
+    local value="$1"
+    local result=""
+    local quote=""
+    local escaped=false
+    local character
+    for ((value_index = 1; value_index <= ${#value}; value_index++)); do
+        character=${value[$value_index]}
+        if [[ -n "$quote" ]]; then
+            if [[ "$quote" == \" && "$escaped" == true ]]; then
+                escaped=false
+            elif [[ "$quote" == \" && "$character" == \\ ]]; then
+                escaped=true
+            elif [[ "$character" == "$quote" ]]; then
+                quote=""
+            fi
+        elif [[ "$character" == \" || "$character" == \' ]]; then
+            quote="$character"
+        elif [[ "$character" == \# ]]; then
+            if ((value_index == 1)) \
+                || [[ "${value[$((value_index - 1))]}" == [[:space:]] ]]; then
+                break
+            fi
+        fi
+        result+="$character"
+    done
+    print -rn -- "$result"
+}
+
+decode_yaml_quoted_scalar() {
+    local value="$1"
+    if (( ${#value} < 2 )); then
+        print -rn -- "$value"
+        return
+    fi
+
+    local quote=${value[1]}
+    local decoded=""
+    local character
+    if [[ "$quote" == \' && "${value[-1]}" != \' ]] \
+        || [[ "$quote" == \" && "${value[-1]}" != \" ]]; then
+        print -u2 "Multiline YAML report paths are not supported."
+        return 1
+    fi
+    if [[ "$quote" == \' ]]; then
+        value=${value[2,-2]}
+        for ((value_index = 1; value_index <= ${#value}; value_index++)); do
+            character=${value[$value_index]}
+            if [[ "$character" != \' ]]; then
+                decoded+="$character"
+                continue
+            fi
+            if ((value_index == ${#value})) \
+                || [[ "${value[$((value_index + 1))]}" != \' ]]; then
+                print -u2 "Invalid apostrophe escape in YAML report path."
+                return 1
+            fi
+            decoded+="'"
+            ((value_index++))
+        done
+        print -rn -- "$decoded"
+        return
+    fi
+    if [[ "$quote" != \" || "${value[-1]}" != \" ]]; then
+        print -rn -- "$value"
+        return
+    fi
+
+    value=${value[2,-2]}
+    local escape_character hex_digits
+    local code_point
+    local escape_width
+    for ((value_index = 1; value_index <= ${#value}; value_index++)); do
+        character=${value[$value_index]}
+        if [[ "$character" != \\ ]]; then
+            decoded+="$character"
+            continue
+        fi
+
+        ((value_index++))
+        if ((value_index > ${#value})); then
+            print -u2 "Invalid trailing escape in YAML report path."
+            return 1
+        fi
+        escape_character=${value[$value_index]}
+        case "$escape_character" in
+            0)
+                print -u2 "YAML report paths cannot contain a null byte."
+                return 1
+                ;;
+            n|r)
+                print -u2 "YAML report paths cannot contain line breaks."
+                return 1
+                ;;
+            a|b|t|v|f|e|\\)
+                decoded+="\\$escape_character"
+                ;;
+            \"|/)
+                decoded+="$escape_character"
+                ;;
+            ' ')
+                decoded+=' '
+                ;;
+            N)
+                decoded+="\\u0085"
+                ;;
+            _)
+                decoded+="\\u00a0"
+                ;;
+            L)
+                decoded+="\\u2028"
+                ;;
+            P)
+                decoded+="\\u2029"
+                ;;
+            x|u|U)
+                case "$escape_character" in
+                    x) escape_width=2 ;;
+                    u) escape_width=4 ;;
+                    U) escape_width=8 ;;
+                esac
+                hex_digits=${value[$((value_index + 1)),$((value_index + escape_width))]}
+                if (( ${#hex_digits} != escape_width )) \
+                    || [[ "$hex_digits" == *[^[:xdigit:]]* ]]; then
+                    print -u2 "Invalid Unicode escape in YAML report path."
+                    return 1
+                fi
+                ((code_point = 16#$hex_digits))
+                if ((code_point == 0 || code_point == 0x0a || code_point == 0x0d \
+                    || code_point > 0x10ffff \
+                    || (code_point >= 0xd800 && code_point <= 0xdfff))); then
+                    print -u2 "Invalid Unicode scalar in YAML report path."
+                    return 1
+                fi
+                if [[ "$escape_character" == x ]]; then
+                    decoded+="\\u00$hex_digits"
+                else
+                    decoded+="\\$escape_character$hex_digits"
+                fi
+                ((value_index += escape_width))
+                ;;
+            *)
+                print -u2 "Unsupported escape in YAML report path: \\$escape_character"
+                return 1
+                ;;
+        esac
+    done
+    printf '%b' "$decoded"
+}
+
+split_yaml_mapping_entry() {
+    local value="$1"
+    local quote=""
+    local escaped=false
+    local character
+    for ((value_index = 1; value_index <= ${#value}; value_index++)); do
+        character=${value[$value_index]}
+        if [[ -n "$quote" ]]; then
+            if [[ "$quote" == \" && "$escaped" == true ]]; then
+                escaped=false
+            elif [[ "$quote" == \" && "$character" == \\ ]]; then
+                escaped=true
+            elif [[ "$character" == "$quote" ]]; then
+                quote=""
+            fi
+        elif [[ "$character" == \" || "$character" == \' ]]; then
+            quote="$character"
+        elif [[ "$character" == : ]]; then
+            reply=("${value[1,$((value_index - 1))]}" "${value[$((value_index + 1)),-1]}")
+            return
+        fi
+    done
+    return 1
+}
+
+collect_single_line_yaml_report_paths() {
+    local configuration_path="$1"
+    local report_scalar_active=false
+    local root_indent=-1
+    local report_key_indent=-1
+    local line indentation trimmed_line marker_candidate document_content mapping_key scalar
+    local indent_width
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        indentation=${line%%[![:space:]]*}
+        trimmed_line=${line#"$indentation"}
+        if [[ "$report_scalar_active" == true ]]; then
+            if [[ -z "$trimmed_line" || "${trimmed_line[1]}" == \# ]]; then
+                continue
+            fi
+            indent_width=${#indentation}
+            if ((indent_width > report_key_indent)); then
+                print -u2 "Multiline YAML report paths are not supported."
+                return 1
+            fi
+            report_scalar_active=false
+        fi
+
+        marker_candidate=$(strip_yaml_comment "$trimmed_line")
+        marker_candidate="${marker_candidate%"${marker_candidate##*[![:space:]]}"}"
+        document_content="$marker_candidate"
+        if [[ "$document_content" == --- \
+            || ("${document_content[1,3]}" == --- \
+                && "${document_content[4]}" == [[:space:]]) ]]; then
+            document_content=${document_content[4,-1]}
+            document_content="${document_content#"${document_content%%[![:space:]]*}"}"
+            root_indent=-1
+        fi
+        if [[ "${document_content[1]}" == \{ ]]; then
+            print -u2 "Flow-style YAML mappings are not supported."
+            return 1
+        fi
+        if [[ -z "$trimmed_line" || "${trimmed_line[1]}" == \# \
+            || "$marker_candidate" == --- || "$marker_candidate" == ... \
+            || "${trimmed_line[1]}" == % ]]; then
+            continue
+        fi
+        indent_width=${#indentation}
+        if ((root_indent < 0)); then
+            root_indent=$indent_width
+        fi
+        ((indent_width == root_indent)) || continue
+        if [[ "$document_content" == \? || "$document_content" == : \
+            || ("${document_content[1]}" == \? \
+                && "${document_content[2]}" == [[:space:]]) \
+            || ("${document_content[1]}" == : \
+                && "${document_content[2]}" == [[:space:]]) ]]; then
+            print -u2 "Explicit YAML mapping keys are not supported."
+            return 1
+        fi
+
+        split_yaml_mapping_entry "$document_content" || continue
+        mapping_key=${reply[1]}
+        mapping_key="${mapping_key#"${mapping_key%%[![:space:]]*}"}"
+        mapping_key="${mapping_key%"${mapping_key##*[![:space:]]}"}"
+        if [[ "${mapping_key[1]}" == \& || "${mapping_key[1]}" == \* \
+            || "${mapping_key[1]}" == \! ]]; then
+            print -u2 "YAML anchors, aliases, and tags are not supported for mapping keys."
+            return 1
+        fi
+        if ! mapping_key=$(decode_yaml_quoted_scalar "$mapping_key"); then
+            return 1
+        fi
+        if [[ "$mapping_key" == output || "$mapping_key" == html-output \
+            || "$mapping_key" == sonar-output ]]; then
+            report_scalar_active=true
+            report_key_indent=$indent_width
+            scalar=${reply[2]}
+            scalar=$(strip_yaml_comment "$scalar")
+            scalar="${scalar#"${scalar%%[![:space:]]*}"}"
+            scalar="${scalar%"${scalar##*[![:space:]]}"}"
+            if [[ "${scalar[1]}" == \| || "${scalar[1]}" == \> ]]; then
+                print -u2 "YAML block scalars are not supported for report paths."
+                return 1
+            fi
+            if [[ "${scalar[1]}" == \& || "${scalar[1]}" == \* \
+                || "${scalar[1]}" == \! ]]; then
+                print -u2 "YAML anchors, aliases, and tags are not supported for report paths."
+                return 1
+            fi
+            if ! scalar=$(decode_yaml_quoted_scalar "$scalar"); then
+                return 1
+            fi
+            [[ -n "$scalar" ]] && configured_report_paths+=("$scalar")
+        fi
+    done < "$configuration_path"
+    return 0
+}
+
+if [[ -r "$repository_dir/.swift-mutation-testing.yml" ]]; then
+    if ! collect_single_line_yaml_report_paths \
+        "$repository_dir/.swift-mutation-testing.yml"; then
+        print -u2 "Could not determine report paths from .swift-mutation-testing.yml."
+        exit 1
+    fi
+fi
+
+preserved_report_paths=("${configured_report_paths[@]}" "${requested_report_paths[@]}")
+for report_path in "${preserved_report_paths[@]}"; do
+    if [[ "$report_path" == *$'\n'* || "$report_path" == *$'\r'* ]]; then
+        print -u2 "Report paths cannot contain line breaks."
+        exit 1
+    fi
+    if [[ "$report_path" != /* ]]; then
+        report_source="$mutation_workspace/$report_path"
+        report_source=${report_source:A}
+        if [[ "$report_source" != "$mutation_workspace/"* ]]; then
+            print -u2 "Relative report path must stay within the project: $report_path"
+            exit 1
+        fi
+    fi
+done
+
+sync_mutation_cache() {
+    [[ -f "$cache_staging_marker" ]] || return 0
+    if [[ -d "$mutation_workspace/.swift-mutation-testing-cache" ]]; then
+        mkdir -p "$repository_dir/.swift-mutation-testing-cache" || return 1
+        rsync -a --delete \
+            "$mutation_workspace/.swift-mutation-testing-cache/" \
+            "$repository_dir/.swift-mutation-testing-cache/" || return 1
+    fi
+}
+
+sync_mutation_reports() {
+    local reports_saved=true
+    if [[ -d "$mutation_workspace/build/mutation-testing" ]]; then
+        if ! mkdir -p "$repository_dir/build/mutation-testing" \
+            || ! rsync -a \
+            "$mutation_workspace/build/mutation-testing/" \
+            "$repository_dir/build/mutation-testing/"; then
+            reports_saved=false
+        fi
+    fi
+
+    local saved_report_paths=()
+    if [[ -r "$report_manifest" ]]; then
+        while IFS= read -r report_path; do
+            [[ -n "$report_path" ]] && saved_report_paths+=("$report_path")
+        done < "$report_manifest"
+    else
+        saved_report_paths=("${preserved_report_paths[@]}")
+    fi
+
+    for report_path in "${saved_report_paths[@]}"; do
+        [[ "$report_path" == /* ]] && continue
+        local report_source="$mutation_workspace/$report_path"
+        local report_destination="$repository_dir/$report_path"
+        if [[ -f "$report_source" ]]; then
+            if ! mkdir -p "${report_destination:h}" \
+                || ! rsync -a "$report_source" "$report_destination"; then
+                reports_saved=false
+            fi
+        fi
+    done
+    [[ "$reports_saved" == true ]]
+}
+
+reconcile_mutation_recovery_staging() {
+    local recovery_staging="${mutation_workspace_parent}.recovery"
+    local staged_manifest="$recovery_staging/report-paths"
+    local staged_cache_marker="$recovery_staging/cache-staging-complete"
+    [[ -d "$recovery_staging" ]] || return 0
+
+    local staged_path destination_path
+    for staged_path destination_path in \
+        "$staged_manifest" "$report_manifest" \
+        "$staged_cache_marker" "$cache_staging_marker"; do
+        [[ -e "$staged_path" ]] || continue
+        if [[ ! -f "$staged_path" || -L "$staged_path" ]]; then
+            print -u2 "Unexpected recovery entry at $staged_path; preserving $recovery_staging."
+            return 1
+        fi
+        if [[ -d "$mutation_workspace_parent" ]]; then
+            if [[ -e "$destination_path" || -L "$destination_path" ]] \
+                || ! mv "$staged_path" "$destination_path"; then
+                print -u2 "Could not restore $destination_path; preserving $recovery_staging."
+                return 1
+            fi
+        else
+            rm -f "$staged_path"
+        fi
+    done
+    if ! rmdir "$recovery_staging" 2>/dev/null; then
+        print -u2 "Unexpected recovery entries remain; preserving $recovery_staging."
+        return 1
+    fi
+}
+
+quarantine_unregistered_mutation_workspace() {
+    [[ -e "$mutation_workspace_parent" || -L "$mutation_workspace_parent" ]] || return 0
+    local orphaned_container
+    local orphaned_workspace
+    local reservation_attempt
+    for reservation_attempt in {1..10}; do
+        orphaned_container="${mutation_workspace_parent}.orphaned.$$.$RANDOM"
+        if mkdir "$orphaned_container" 2>/dev/null; then
+            orphaned_workspace="$orphaned_container/workspace"
+            break
+        fi
+    done
+    if [[ -z "$orphaned_workspace" ]]; then
+        print -u2 "Could not reserve a unique quarantine path for $mutation_workspace_parent."
+        return 1
+    fi
+    local artifacts_saved=true
+    if [[ -d "$mutation_workspace_parent" && ! -L "$mutation_workspace_parent" ]]; then
+        sync_mutation_reports || artifacts_saved=false
+        sync_mutation_cache || artifacts_saved=false
+    fi
+    if [[ "$artifacts_saved" != true ]]; then
+        print -u2 "Could not recover artifacts from unregistered workspace; preserving $mutation_workspace_parent."
+        rmdir "$orphaned_container" 2>/dev/null || true
+        return 1
+    fi
+    if ! mv "$mutation_workspace_parent" "$orphaned_workspace"; then
+        print -u2 "Could not quarantine unregistered workspace at $mutation_workspace_parent."
+        rmdir "$orphaned_container" 2>/dev/null || true
+        return 1
+    fi
+    print -u2 "Quarantined interrupted unregistered workspace at $orphaned_workspace."
+}
+
+finalize_mutation_workspace_cleanup() {
+    local recovery_staging="${mutation_workspace_parent}.recovery"
+    local staged_manifest="$recovery_staging/report-paths"
+    local staged_cache_marker="$recovery_staging/cache-staging-complete"
+    local manifest_staged=false
+    local cache_marker_staged=false
+    reconcile_mutation_recovery_staging || return 1
+    [[ -d "$mutation_workspace_parent" ]] || return 0
+    if ! mkdir "$recovery_staging" 2>/dev/null; then
+        print -u2 "Recovery staging already exists; preserving $recovery_staging."
+        return 1
+    fi
+    if [[ -e "$report_manifest" ]]; then
+        if ! mv "$report_manifest" "$staged_manifest"; then
+            rmdir "$recovery_staging" 2>/dev/null || true
+            return 1
+        fi
+        manifest_staged=true
+    fi
+    if [[ -e "$cache_staging_marker" ]]; then
+        if ! mv "$cache_staging_marker" "$staged_cache_marker"; then
+            if [[ "$manifest_staged" == true ]] \
+                && ! mv "$staged_manifest" "$report_manifest"; then
+                print -u2 "Could not restore $report_manifest; preserving $recovery_staging."
+            else
+                rmdir "$recovery_staging" 2>/dev/null || true
+            fi
+            return 1
+        fi
+        cache_marker_staged=true
+    fi
+    if rmdir "$mutation_workspace_parent" 2>/dev/null; then
+        rm -f "$staged_manifest" "$staged_cache_marker"
+        rmdir "$recovery_staging" 2>/dev/null || true
+        return 0
+    fi
+    local restoration_complete=true
+    if [[ "$manifest_staged" == true ]] \
+        && ! mv "$staged_manifest" "$report_manifest"; then
+        restoration_complete=false
+        print -u2 "Could not restore $report_manifest."
+    fi
+    if [[ "$cache_marker_staged" == true ]] \
+        && ! mv "$staged_cache_marker" "$cache_staging_marker"; then
+        restoration_complete=false
+        print -u2 "Could not restore $cache_staging_marker."
+    fi
+    if [[ "$restoration_complete" == true ]]; then
+        rmdir "$recovery_staging" 2>/dev/null || true
+    else
+        print -u2 "Preserving incomplete recovery staging at $recovery_staging."
+    fi
+    return 1
+}
+
+release_mutation_lock() {
+    local released_lock="${mutation_lock}.released.$$.$RANDOM"
+    mv "$mutation_lock" "$released_lock" 2>/dev/null || return 1
+    local released_owner=$released_lock
+    if [[ -L "$released_lock" ]]; then
+        released_owner=$(readlink "$released_lock")
+        [[ "$released_owner" == "${mutation_lock}.owner."* ]] || return 1
+    fi
+    rm -f "$released_owner/pid" "$released_owner/pid.next"
+    rmdir "$released_owner" 2>/dev/null || return 1
+    if [[ -L "$released_lock" ]]; then
+        rm -f "$released_lock"
+    fi
+    return 0
+}
+
+cleanup() {
+    local exit_status=$?
+    trap - EXIT
+    [[ "$lock_acquired" == true ]] || exit "$exit_status"
+    local artifacts_saved=true
+    if ! sync_mutation_reports; then
+        artifacts_saved=false
+        print -u2 "Could not save mutation reports; preserving $mutation_workspace for recovery."
+    fi
+    if ! sync_mutation_cache; then
+        artifacts_saved=false
+        print -u2 "Could not save the mutation cache; preserving $mutation_workspace for recovery."
+    fi
+    local cleanup_complete=$artifacts_saved
+    if [[ "$artifacts_saved" == true ]]; then
+        if git -C "$repository_dir" worktree list --porcelain \
+            | grep -Fqx "worktree $mutation_workspace"; then
+            git -C "$repository_dir" worktree remove --force "$mutation_workspace" \
+                || cleanup_complete=false
+        fi
+    fi
+    if [[ "$cleanup_complete" == true ]] \
+        && ! finalize_mutation_workspace_cleanup; then
+        cleanup_complete=false
+    fi
+    if [[ "$cleanup_complete" == true ]]; then
+        if ! release_mutation_lock; then
+            cleanup_complete=false
+            print -u2 "Could not release the mutation lock atomically."
+        fi
+    else
+        print -u2 "Preserving the mutation lock and recovery artifacts for the next run."
+    fi
+    if [[ "$cleanup_complete" != true && "$exit_status" -eq 0 ]]; then
+        exit_status=1
+    fi
+    exit "$exit_status"
+}
+trap cleanup EXIT
+
+forward_signal() {
+    local signal_name="$1"
+    local exit_status="$2"
+    trap - "$signal_name"
+    if [[ "$tool_pid" == <-> ]] && kill -0 "$tool_pid" 2>/dev/null; then
+        kill -"$signal_name" "$tool_pid" 2>/dev/null || true
+        wait "$tool_pid" 2>/dev/null || true
+    fi
+    exit "$exit_status"
+}
+trap 'forward_signal INT 130' INT
+trap 'forward_signal TERM 143' TERM
+
+publish_mutation_lock() {
+    local private_lock="${mutation_lock}.owner.$$.$RANDOM"
+    mkdir "$private_lock" 2>/dev/null || return 1
+    if print -r -- "$$" > "$private_lock/pid" \
+        && ln -sh "$private_lock" "$mutation_lock" 2>/dev/null \
+        && [[ "$(readlink "$mutation_lock")" == "$private_lock" ]]; then
+        return 0
+    fi
+    rm -f "$mutation_lock/${private_lock:t}" 2>/dev/null || true
+    rm -f "$private_lock/pid"
+    rmdir "$private_lock" 2>/dev/null || true
+    return 1
+}
+
+release_mutation_lock_guard() {
+    local released_guard="${mutation_lock_guard}.released.$$.$RANDOM"
+    mv "$mutation_lock_guard" "$released_guard" 2>/dev/null || return 1
+    rm -f "$released_guard"
+}
+
+acquire_mutation_lock() {
+    /usr/bin/shlock -f "$mutation_lock_guard" -p "$$" || return 1
+    local acquisition_status=1
+    if [[ ! -e "$mutation_lock" && ! -L "$mutation_lock" ]]; then
+        publish_mutation_lock && acquisition_status=0
+        release_mutation_lock_guard || return 1
+        return "$acquisition_status"
+    fi
+
+    local recorded_owner=false
+    local active_owner=false
+    local lock_owner_pid
+    if [[ -r "$mutation_lock/pid" ]]; then
+        while IFS= read -r lock_owner_pid; do
+            [[ "$lock_owner_pid" == <-> ]] || continue
+            recorded_owner=true
+            if kill -0 "$lock_owner_pid" 2>/dev/null; then
+                active_owner=true
+            fi
+        done < "$mutation_lock/pid"
+    fi
+    if [[ "$active_owner" != true && "$recorded_owner" == true ]] \
+        && git -C "$repository_dir" worktree list --porcelain \
+        | grep -Fqx "worktree $mutation_workspace" \
+        && lsof -a -d cwd "$mutation_workspace" >/dev/null 2>&1; then
+        active_owner=true
+    fi
+    if [[ "$active_owner" != true && "$recorded_owner" == true ]]; then
+        local reclaimed_lock="${mutation_lock}.reclaimed.$$.$RANDOM"
+        if mv "$mutation_lock" "$reclaimed_lock" 2>/dev/null; then
+            local reclaimed_owner=$reclaimed_lock
+            if [[ -L "$reclaimed_lock" ]]; then
+                reclaimed_owner=$(readlink "$reclaimed_lock")
+            fi
+            if [[ "$reclaimed_owner" == "${mutation_lock}.owner."* ]]; then
+                rm -f "$reclaimed_owner/pid" "$reclaimed_owner/pid.next"
+                if rmdir "$reclaimed_owner" 2>/dev/null; then
+                    rm -f "$reclaimed_lock"
+                    publish_mutation_lock && acquisition_status=0
+                fi
+            fi
+        fi
+    fi
+    release_mutation_lock_guard || return 1
+    return "$acquisition_status"
+}
+
+if ! acquire_mutation_lock; then
+    lock_owner=unknown
+    if [[ -r "$mutation_lock/pid" ]]; then
+        lock_owner=$(paste -sd, "$mutation_lock/pid")
+    fi
+    print -u2 "Another mutation pilot owns $mutation_lock (PID $lock_owner); refusing to disturb it."
+    exit 1
+fi
+lock_acquired=true
+
+if ! reconcile_mutation_recovery_staging; then
+    print -u2 "Could not reconcile interrupted mutation cleanup staging."
+    exit 1
+fi
+
+if git -C "$repository_dir" worktree list --porcelain \
+    | grep -Fqx "worktree $mutation_workspace"; then
+    recovered_artifacts_saved=true
+    sync_mutation_reports || recovered_artifacts_saved=false
+    sync_mutation_cache || recovered_artifacts_saved=false
+    if [[ "$recovered_artifacts_saved" != true ]]; then
+        print -u2 "Could not recover mutation artifacts; preserving $mutation_workspace for recovery."
+        exit 1
+    fi
+    git -C "$repository_dir" worktree remove --force "$mutation_workspace"
+    if ! finalize_mutation_workspace_cleanup; then
+        print -u2 "Could not remove the recovered mutation workspace; preserving recovery state."
+        exit 1
+    fi
+fi
+if ! quarantine_unregistered_mutation_workspace; then
+    exit 1
+fi
+mkdir -p "$mutation_workspace_parent"
+: > "$report_manifest"
+for report_path in "${preserved_report_paths[@]}"; do
+    print -r -- "$report_path" >> "$report_manifest"
+done
 
 mkdir -p "$tool_cache_dir" "$repository_dir/build/mutation-testing"
 
@@ -29,17 +688,71 @@ if [[ "$("$tool_binary" --version)" != "swift-mutation-testing $tool_version "* 
     exit 1
 fi
 
+git -C "$repository_dir" worktree add --detach "$mutation_workspace" HEAD
+rsync -a \
+    --delete \
+    --exclude .build \
+    --exclude .git \
+    --exclude .swiftpm \
+    --exclude .swift-mutation-testing-cache \
+    --exclude DerivedData \
+    --exclude build \
+    --exclude xcuserdata \
+    --exclude fastlane/Preview.html \
+    --exclude fastlane/report.xml \
+    --exclude fastlane/screenshots \
+    --exclude fastlane/test_output \
+    "$repository_dir/" "$mutation_workspace/"
+
+if [[ -d "$repository_dir/.swift-mutation-testing-cache" ]]; then
+    mkdir -p "$mutation_workspace/.swift-mutation-testing-cache"
+    rsync -a --delete \
+        "$repository_dir/.swift-mutation-testing-cache/" \
+        "$mutation_workspace/.swift-mutation-testing-cache/"
+fi
+: > "$cache_staging_marker"
+
+# The generated mutant schema is not production source and cannot satisfy the
+# normal SwiftLint limits. Detach only the six build-tool plugin references in
+# the disposable project; the standalone lint gate still checks real source.
+mutation_project="$mutation_workspace/CodexBarIOS.xcodeproj/project.pbxproj"
+sed -i '' -E \
+    '/^[[:space:]]*21000000000000000000002[1-6] \/\* PBXTargetDependency \*\/,[[:space:]]*$/d' \
+    "$mutation_project"
+
 exclude_arguments=()
-for source_file in "$repository_dir"/CodexBarIOS/Services/*.swift; do
+for source_file in "$mutation_workspace"/CodexBarIOS/Services/*.swift; do
     case "${source_file:t}" in
-        DashboardUsageSorter.swift)
+        AppReviewPromptPolicy.swift|DashboardUsageSorter.swift)
             ;;
         *)
-            exclude_arguments+=(--exclude "${source_file#$repository_dir/}")
+            exclude_arguments+=(--exclude "${source_file#$mutation_workspace/}")
             ;;
     esac
 done
 
-cd "$repository_dir"
+# swift-mutation-testing expands each selected file into a large mutant schema.
+# The disposable worktree keeps project-root discovery and mutation activation
+# aligned while the normal repository-wide SwiftLint gate checks real source.
+cd "$mutation_workspace"
+mkdir -p build/mutation-testing
+for report_path in "${preserved_report_paths[@]}"; do
+    if [[ "$report_path" != /* ]]; then
+        mkdir -p "${report_path:h}"
+    fi
+done
+set +e
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-    "$tool_binary" . "${exclude_arguments[@]}" "$@"
+    "$tool_binary" . "${exclude_arguments[@]}" "$@" &
+tool_pid=$!
+{
+    print -r -- "$$"
+    print -r -- "$tool_pid"
+} > "$mutation_lock/pid.next"
+mv -f "$mutation_lock/pid.next" "$mutation_lock/pid"
+wait "$tool_pid"
+tool_status=$?
+tool_pid=
+set -e
+
+exit "$tool_status"

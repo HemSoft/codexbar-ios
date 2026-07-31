@@ -1921,6 +1921,22 @@ final class AppAndWidgetTests: XCTestCase {
             creditsRemaining: 5,
             fetchedAt: fetchedAt
         )
+        let monetaryResult = ProviderUsageResult(
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Balance",
+            bars: [],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .balance,
+                    label: "Balance",
+                    minorUnits: 500,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
 
         XCTAssertFalse(
             AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: "Offline", results: [barsResult])
@@ -1929,6 +1945,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertFalse(AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: nil, results: [emptyResult]))
         XCTAssertTrue(AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: nil, results: [barsResult]))
         XCTAssertTrue(AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: nil, results: [creditsResult]))
+        XCTAssertTrue(AppReviewPromptEligibility.hasSuccessfulUsage(lastRefreshError: nil, results: [monetaryResult]))
     }
 
     @MainActor
@@ -4844,4 +4861,85 @@ final class AppAndWidgetTests: XCTestCase {
         )
     }
 
+}
+
+extension AppAndWidgetTests {
+    func testAppReviewPromptPolicyStillRequiresRefreshCountAfterEngagementWindow() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let start = Date(timeIntervalSince1970: 1_788_475_200)
+        let policy = AppReviewPromptPolicy(
+            defaults: defaults,
+            appVersion: "1.1",
+            minimumSuccessfulRefreshes: 5,
+            minimumEngagementDuration: 24 * 60 * 60
+        )
+
+        XCTAssertFalse(policy.registerSuccessfulRefresh(at: start))
+        XCTAssertFalse(policy.registerSuccessfulRefresh(at: start.addingTimeInterval(2 * 24 * 60 * 60)))
+    }
+
+    func testAppReviewPromptPolicyDefaultEngagementDurationIsSevenDays() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let start = Date(timeIntervalSince1970: 1_788_475_200)
+        let policy = AppReviewPromptPolicy(defaults: defaults, appVersion: "1.1")
+
+        for refreshOffset in 0..<5 {
+            XCTAssertFalse(policy.registerSuccessfulRefresh(at: start.addingTimeInterval(Double(refreshOffset))))
+        }
+        XCTAssertFalse(policy.registerSuccessfulRefresh(at: start.addingTimeInterval(6 * 24 * 60 * 60)))
+        XCTAssertTrue(policy.registerSuccessfulRefresh(at: start.addingTimeInterval(7 * 24 * 60 * 60)))
+    }
+
+    func testAppReviewPromptPolicyHonorsEngagementWindowBeyondExactBoundary() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let start = Date(timeIntervalSince1970: 1_788_475_200)
+        let policy = AppReviewPromptPolicy(
+            defaults: defaults,
+            appVersion: "1.1",
+            minimumSuccessfulRefreshes: 1,
+            minimumEngagementDuration: 7 * 24 * 60 * 60
+        )
+
+        XCTAssertFalse(policy.registerSuccessfulRefresh(at: start))
+        XCTAssertFalse(policy.registerSuccessfulRefresh(at: start.addingTimeInterval(6 * 24 * 60 * 60)))
+        XCTAssertTrue(policy.registerSuccessfulRefresh(at: start.addingTimeInterval(8 * 24 * 60 * 60)))
+    }
+
+    func testAppReviewPromptPolicyRejectsSameVersionAfterEligibilityRecurs() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let start = Date(timeIntervalSince1970: 1_788_475_200)
+        let initialPolicy = AppReviewPromptPolicy(
+            defaults: defaults,
+            appVersion: "1.1",
+            minimumSuccessfulRefreshes: 1,
+            minimumEngagementDuration: 0,
+            minimumPromptInterval: 0
+        )
+        XCTAssertTrue(initialPolicy.registerSuccessfulRefresh(at: start))
+
+        let sameVersionPolicy = AppReviewPromptPolicy(
+            defaults: defaults,
+            appVersion: "1.1",
+            minimumSuccessfulRefreshes: 1,
+            minimumEngagementDuration: 0,
+            minimumPromptInterval: 0
+        )
+        XCTAssertFalse(sameVersionPolicy.registerSuccessfulRefresh(at: start.addingTimeInterval(1)))
+    }
 }
