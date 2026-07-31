@@ -17,6 +17,7 @@ mutation_lock="$mutation_workspace_parent.lock"
 report_manifest="$mutation_workspace_parent/report-paths"
 lock_acquired=false
 requested_report_paths=()
+configured_report_paths=()
 
 arguments=("$@")
 for ((argument_index = 1; argument_index <= ${#arguments}; argument_index++)); do
@@ -34,7 +35,21 @@ for ((argument_index = 1; argument_index <= ${#arguments}; argument_index++)); d
     esac
 done
 
-for report_path in "${requested_report_paths[@]}"; do
+if [[ -r "$repository_dir/.swift-mutation-testing.yml" ]]; then
+    while IFS= read -r report_path; do
+        report_path="${report_path#"${report_path%%[![:space:]]*}"}"
+        report_path="${report_path%"${report_path##*[![:space:]]}"}"
+        if [[ "$report_path" == \"*\" || "$report_path" == \'*\' ]]; then
+            report_path=${report_path[2,-2]}
+        fi
+        [[ -n "$report_path" ]] && configured_report_paths+=("$report_path")
+    done < <(sed -nE \
+        's/^(output|html-output|sonar-output):[[:space:]]*([^#]*).*$/\2/p' \
+        "$repository_dir/.swift-mutation-testing.yml")
+fi
+
+preserved_report_paths=("${configured_report_paths[@]}" "${requested_report_paths[@]}")
+for report_path in "${preserved_report_paths[@]}"; do
     if [[ "$report_path" != /* ]]; then
         report_source="$mutation_workspace/$report_path"
         report_source=${report_source:A}
@@ -70,7 +85,7 @@ sync_mutation_reports() {
             [[ -n "$report_path" ]] && saved_report_paths+=("$report_path")
         done < "$report_manifest"
     else
-        saved_report_paths=("${requested_report_paths[@]}")
+        saved_report_paths=("${preserved_report_paths[@]}")
     fi
 
     for report_path in "${saved_report_paths[@]}"; do
@@ -160,7 +175,7 @@ if [[ -e "$mutation_workspace_parent" ]]; then
 fi
 mkdir -p "$mutation_workspace_parent"
 : > "$report_manifest"
-for report_path in "${requested_report_paths[@]}"; do
+for report_path in "${preserved_report_paths[@]}"; do
     print -r -- "$report_path" >> "$report_manifest"
 done
 
@@ -223,7 +238,7 @@ done
 # aligned while the normal repository-wide SwiftLint gate checks real source.
 cd "$mutation_workspace"
 mkdir -p build/mutation-testing
-for report_path in "${requested_report_paths[@]}"; do
+for report_path in "${preserved_report_paths[@]}"; do
     if [[ "$report_path" != /* ]]; then
         mkdir -p "${report_path:h}"
     fi
