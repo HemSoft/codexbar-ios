@@ -15,9 +15,9 @@ mutation_workspace_parent=${mutation_workspace_parent:A}
 mutation_workspace="$mutation_workspace_parent/repository"
 mutation_lock="$mutation_workspace_parent.lock"
 report_manifest="$mutation_workspace_parent/report-paths"
+cache_staging_marker="$mutation_workspace_parent/cache-staging-complete"
 lock_acquired=false
 tool_pid=
-cache_copy_back_enabled=true
 requested_report_paths=()
 configured_report_paths=()
 
@@ -95,7 +95,7 @@ for report_path in "${preserved_report_paths[@]}"; do
 done
 
 sync_mutation_cache() {
-    [[ "$cache_copy_back_enabled" == true ]] || return 0
+    [[ -f "$cache_staging_marker" ]] || return 0
     if [[ -d "$mutation_workspace/.swift-mutation-testing-cache" ]]; then
         mkdir -p "$repository_dir/.swift-mutation-testing-cache" || return 1
         rsync -a --delete \
@@ -107,7 +107,8 @@ sync_mutation_cache() {
 sync_mutation_reports() {
     local reports_saved=true
     if [[ -d "$mutation_workspace/build/mutation-testing" ]]; then
-        if ! rsync -a \
+        if ! mkdir -p "$repository_dir/build/mutation-testing" \
+            || ! rsync -a \
             "$mutation_workspace/build/mutation-testing/" \
             "$repository_dir/build/mutation-testing/"; then
             reports_saved=false
@@ -156,7 +157,7 @@ cleanup() {
             git -C "$repository_dir" worktree remove --force "$mutation_workspace" \
                 || true
         fi
-        rm -f "$report_manifest"
+        rm -f "$report_manifest" "$cache_staging_marker"
         rmdir "$mutation_workspace_parent" 2>/dev/null || true
     fi
     rm -f "$mutation_lock/pid" "$mutation_lock/pid.next"
@@ -224,7 +225,7 @@ if git -C "$repository_dir" worktree list --porcelain \
         exit 1
     fi
     git -C "$repository_dir" worktree remove --force "$mutation_workspace"
-    rm -f "$report_manifest"
+    rm -f "$report_manifest" "$cache_staging_marker"
     rmdir "$mutation_workspace_parent" 2>/dev/null || true
 fi
 if [[ -e "$mutation_workspace_parent" ]]; then
@@ -267,12 +268,11 @@ rsync -a \
 
 if [[ -d "$repository_dir/.swift-mutation-testing-cache" ]]; then
     mkdir -p "$mutation_workspace/.swift-mutation-testing-cache"
-    cache_copy_back_enabled=false
     rsync -a --delete \
         "$repository_dir/.swift-mutation-testing-cache/" \
         "$mutation_workspace/.swift-mutation-testing-cache/"
-    cache_copy_back_enabled=true
 fi
+: > "$cache_staging_marker"
 
 # The generated mutant schema is not production source and cannot satisfy the
 # normal SwiftLint limits. Detach only the six build-tool plugin references in
