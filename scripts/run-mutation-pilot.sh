@@ -187,26 +187,43 @@ decode_yaml_quoted_scalar() {
     printf '%b' "$decoded"
 }
 
-reject_multiline_yaml_report_paths() {
+collect_single_line_yaml_report_paths() {
     local configuration_path="$1"
     local report_scalar_active=false
-    local line trimmed_line scalar
+    local root_indent=-1
+    local report_key_indent=-1
+    local line indentation trimmed_line scalar
+    local indent_width
     while IFS= read -r line || [[ -n "$line" ]]; do
-        trimmed_line="${line#"${line%%[![:space:]]*}"}"
+        indentation=${line%%[![:space:]]*}
+        trimmed_line=${line#"$indentation"}
         if [[ "$report_scalar_active" == true ]]; then
             if [[ -z "$trimmed_line" || "${trimmed_line[1]}" == \# ]]; then
                 continue
             fi
-            if [[ "$line" == [[:space:]]* ]]; then
+            indent_width=${#indentation}
+            if ((indent_width > report_key_indent)); then
                 print -u2 "Multiline YAML report paths are not supported."
                 return 1
             fi
             report_scalar_active=false
         fi
 
-        if [[ "$line" =~ '^(output|html-output|sonar-output):' ]]; then
+        if [[ -z "$trimmed_line" || "${trimmed_line[1]}" == \# \
+            || "$trimmed_line" == --- || "$trimmed_line" == ... \
+            || "${trimmed_line[1]}" == % ]]; then
+            continue
+        fi
+        indent_width=${#indentation}
+        if ((root_indent < 0)); then
+            root_indent=$indent_width
+        fi
+        ((indent_width == root_indent)) || continue
+
+        if [[ "$trimmed_line" =~ '^(output|html-output|sonar-output):' ]]; then
             report_scalar_active=true
-            scalar=${line#*:}
+            report_key_indent=$indent_width
+            scalar=${trimmed_line#*:}
             scalar=$(strip_yaml_comment "$scalar")
             scalar="${scalar#"${scalar%%[![:space:]]*}"}"
             scalar="${scalar%"${scalar##*[![:space:]]}"}"
@@ -214,21 +231,19 @@ reject_multiline_yaml_report_paths() {
                 print -u2 "YAML block scalars are not supported for report paths."
                 return 1
             fi
+            if [[ "${scalar[1]}" == \& || "${scalar[1]}" == \* \
+                || "${scalar[1]}" == \! ]]; then
+                print -u2 "YAML anchors, aliases, and tags are not supported for report paths."
+                return 1
+            fi
+            scalar=$(decode_yaml_quoted_scalar "$scalar")
+            [[ -n "$scalar" ]] && configured_report_paths+=("$scalar")
         fi
     done < "$configuration_path"
 }
 
 if [[ -r "$repository_dir/.swift-mutation-testing.yml" ]]; then
-    reject_multiline_yaml_report_paths "$repository_dir/.swift-mutation-testing.yml"
-    while IFS= read -r report_path; do
-        report_path=$(strip_yaml_comment "$report_path")
-        report_path="${report_path#"${report_path%%[![:space:]]*}"}"
-        report_path="${report_path%"${report_path##*[![:space:]]}"}"
-        report_path=$(decode_yaml_quoted_scalar "$report_path")
-        [[ -n "$report_path" ]] && configured_report_paths+=("$report_path")
-    done < <(sed -nE \
-        's/^(output|html-output|sonar-output):[[:space:]]*(.*)$/\2/p' \
-        "$repository_dir/.swift-mutation-testing.yml")
+    collect_single_line_yaml_report_paths "$repository_dir/.swift-mutation-testing.yml"
 fi
 
 preserved_report_paths=("${configured_report_paths[@]}" "${requested_report_paths[@]}")
