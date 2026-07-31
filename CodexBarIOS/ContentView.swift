@@ -83,12 +83,6 @@ struct ContentView: View {
 
         NavigationStack {
             GeometryReader { geometry in
-                let gridColumns = DashboardCardGridLayout.columns(
-                    containerWidth: geometry.size.width,
-                    idiom: UIDevice.current.userInterfaceIdiom,
-                    dynamicTypeSize: dynamicTypeSize
-                )
-
                 ScrollViewReader { scrollProxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 14) {
@@ -118,6 +112,21 @@ struct ContentView: View {
                             }
 
                             ForEach(sections) { section in
+                                let hasCollapsedCard = section.items.contains { item in
+                                    guard let accountID = item.result?.accountID else {
+                                        return false
+                                    }
+                                    return configurationStore.isDashboardCardCollapsed(
+                                        accountID: accountID
+                                    )
+                                }
+                                let gridColumns = DashboardCardGridLayout.columns(
+                                    containerWidth: geometry.size.width,
+                                    idiom: UIDevice.current.userInterfaceIdiom,
+                                    dynamicTypeSize: dynamicTypeSize,
+                                    hasCollapsedCard: hasCollapsedCard
+                                )
+
                                 VStack(alignment: .leading, spacing: 8) {
                                     if showGroupHeaders {
                                         Text(section.title)
@@ -1041,9 +1050,18 @@ struct DashboardCardGridLayout {
     static func columnCount(
         containerWidth: CGFloat,
         idiom: UIUserInterfaceIdiom,
-        dynamicTypeSize: DynamicTypeSize
+        dynamicTypeSize: DynamicTypeSize,
+        hasCollapsedCard: Bool = false
     ) -> Int {
-        guard idiom == .pad, !dynamicTypeSize.isAccessibilitySize else {
+        // A two-column LazyVGrid sizes each row to its tallest card, so a short
+        // collapsed card beside an expanded card would not reclaim any height.
+        // Keep that section in source-order single-column flow while collapsed
+        // instead of introducing masonry placement and a changed reading order.
+        guard
+            !hasCollapsedCard,
+            idiom == .pad,
+            !dynamicTypeSize.isAccessibilitySize
+        else {
             return 1
         }
 
@@ -1055,14 +1073,16 @@ struct DashboardCardGridLayout {
     static func columns(
         containerWidth: CGFloat,
         idiom: UIUserInterfaceIdiom,
-        dynamicTypeSize: DynamicTypeSize
+        dynamicTypeSize: DynamicTypeSize,
+        hasCollapsedCard: Bool = false
     ) -> [GridItem] {
         Array(
             repeating: GridItem(.flexible(), spacing: cardSpacing, alignment: .top),
             count: columnCount(
                 containerWidth: containerWidth,
                 idiom: idiom,
-                dynamicTypeSize: dynamicTypeSize
+                dynamicTypeSize: dynamicTypeSize,
+                hasCollapsedCard: hasCollapsedCard
             )
         )
     }

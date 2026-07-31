@@ -859,6 +859,16 @@ final class AppAndWidgetTests: XCTestCase {
         )
         XCTAssertEqual(
             DashboardCardGridLayout.columnCount(
+                containerWidth: 768,
+                idiom: .pad,
+                dynamicTypeSize: .large,
+                hasCollapsedCard: true
+            ),
+            1,
+            "A collapsed card must leave row-based grid sizing so it reclaims height."
+        )
+        XCTAssertEqual(
+            DashboardCardGridLayout.columnCount(
                 containerWidth: 700,
                 idiom: .pad,
                 dynamicTypeSize: .large
