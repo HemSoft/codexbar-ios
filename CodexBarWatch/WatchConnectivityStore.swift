@@ -123,6 +123,8 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     private var pendingDelegateEvents: [UInt64: WatchConnectivityDelegateEvent] = [:]
     private var snapshotRequestTask: Task<Void, Never>?
     private var hasQueuedSnapshotRequest = false
+    private var nextSnapshotRequestID: UInt64 = 0
+    private var activeSnapshotRequestID: UInt64?
 
     init(
         defaults: UserDefaults = .standard,
@@ -263,6 +265,7 @@ final class WatchDashboardStore: NSObject, ObservableObject {
             defaults.set(encoded, forKey: Self.persistedSnapshotKey)
             snapshot = decoded
             decodingError = nil
+            activeSnapshotRequestID = nil
             hasQueuedSnapshotRequest = hasOutstandingSnapshotRequest()
             if shouldReloadComplications {
                 reloadComplications()
@@ -350,32 +353,46 @@ final class WatchDashboardStore: NSObject, ObservableObject {
     }
 
     func requestCurrentSnapshot() {
+        let requestID = nextSnapshotRequestID
+        nextSnapshotRequestID &+= 1
+        activeSnapshotRequestID = requestID
         guard activationState == .activated else {
+            activeSnapshotRequestID = nil
             decodingError = WatchSnapshotRequestFailure.sessionInactive.recoveryMessage
             Self.logger.notice("Snapshot request deferred because session is not activated")
             session?.activate()
             return
         }
         guard isPhoneReachable else {
+            activeSnapshotRequestID = nil
             queueSnapshotRequest(failure: .phoneUnreachable)
             return
         }
         guard let requestSnapshot else {
+            activeSnapshotRequestID = nil
             queueSnapshotRequest(failure: .deliveryFailed)
             return
         }
         Self.logger.info("Requesting immediate snapshot from reachable iPhone")
         requestSnapshot(
             { [weak self] response in
-                self?.receiveSnapshotResponse(response)
+                self?.receiveSnapshotResponse(response, requestID: requestID)
             },
             { [weak self] failure in
-                self?.queueSnapshotRequest(failure: failure)
+                self?.receiveSnapshotRequestFailure(failure, requestID: requestID)
             }
         )
     }
 
-    private func receiveSnapshotResponse(_ response: WatchDashboardSnapshotResponse) {
+    private func receiveSnapshotResponse(
+        _ response: WatchDashboardSnapshotResponse,
+        requestID: UInt64
+    ) {
+        guard activeSnapshotRequestID == requestID else {
+            Self.logger.notice("Ignored superseded snapshot response")
+            return
+        }
+        activeSnapshotRequestID = nil
         switch response {
         case let .snapshot(data):
             if receive(.snapshot(data)) {
@@ -388,6 +405,18 @@ final class WatchDashboardStore: NSObject, ObservableObject {
             decodingError = "Couldn’t read the iPhone update. Refresh CodexBar on iPhone"
             Self.logger.error("iPhone returned a malformed snapshot reply")
         }
+    }
+
+    private func receiveSnapshotRequestFailure(
+        _ failure: WatchSnapshotRequestFailure,
+        requestID: UInt64
+    ) {
+        guard activeSnapshotRequestID == requestID else {
+            Self.logger.notice("Ignored superseded snapshot request failure")
+            return
+        }
+        activeSnapshotRequestID = nil
+        queueSnapshotRequest(failure: failure)
     }
 
     private func queueSnapshotRequest(failure: WatchSnapshotRequestFailure) {

@@ -579,6 +579,78 @@ final class WatchDashboardStateTests: XCTestCase {
     }
 
     @MainActor
+    func testNewerContextInvalidatesPendingFailureAndUnavailableCallbacks() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let newer = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_100),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var replyHandler: (@MainActor (WatchDashboardSnapshotResponse) -> Void)?
+        var errorHandler: (@MainActor (WatchSnapshotRequestFailure) -> Void)?
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { reply, failure in
+                replyHandler = reply
+                errorHandler = failure
+            },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+        store.updateReachability(true)
+        store.requestCurrentSnapshot()
+
+        store.receive(try newer.applicationContext())
+        errorHandler?(.timedOut)
+        replyHandler?(.unavailable)
+
+        XCTAssertEqual(store.snapshot, newer)
+        XCTAssertNil(store.decodingError)
+        XCTAssertEqual(queuedRequestCount, 0)
+    }
+
+    @MainActor
+    func testLaterSuccessfulRequestInvalidatesEarlierFailure() throws {
+        let suiteName = "WatchDashboardStateTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let latest = WatchDashboardSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000_000_100),
+            refreshIntervalSeconds: 300,
+            accounts: []
+        )
+        var replyHandlers: [(@MainActor (WatchDashboardSnapshotResponse) -> Void)] = []
+        var errorHandlers: [(@MainActor (WatchSnapshotRequestFailure) -> Void)] = []
+        var queuedRequestCount = 0
+        let store = WatchDashboardStore(
+            defaults: defaults,
+            complicationStore: WatchComplicationSnapshotStore(defaults: defaults),
+            reloadComplications: {},
+            session: nil,
+            requestSnapshot: { reply, failure in
+                replyHandlers.append(reply)
+                errorHandlers.append(failure)
+            },
+            queueSnapshotRequest: { queuedRequestCount += 1 }
+        )
+        store.updateReachability(true)
+
+        store.requestCurrentSnapshot()
+        store.requestCurrentSnapshot()
+        replyHandlers[1](.snapshot(try latest.encoded()))
+        errorHandlers[0](.deliveryFailed)
+
+        XCTAssertEqual(store.snapshot, latest)
+        XCTAssertNil(store.decodingError)
+        XCTAssertEqual(queuedRequestCount, 0)
+    }
+
+    @MainActor
     func testUnreachablePhoneQueuesRequestWithActionableRecovery() throws {
         let suiteName = "WatchDashboardStateTests.\(#function)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
