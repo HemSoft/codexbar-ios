@@ -17,6 +17,7 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
     public let limit: Double
     public let effectiveFractionUsed: Double
     public let effectiveSeverity: UsageSeverity
+    let usesLegacySeverityFallback: Bool
 
     private enum CodingKeys: String, CodingKey {
         case stableKey
@@ -26,6 +27,7 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
         case limit
         case effectiveFractionUsed
         case effectiveSeverity
+        case usesLegacySeverityFallback
     }
 
     public init(
@@ -46,6 +48,7 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
             fractionUsed: effectiveFractionUsed,
             thresholds: severityThresholds
         )
+        self.usesLegacySeverityFallback = false
     }
 
     public init(from decoder: Decoder) throws {
@@ -59,11 +62,17 @@ public struct UsageHistoryBarSnapshot: Equatable, Codable, Sendable {
             UsageSeverity.self,
             forKey: .effectiveSeverity
         ) ?? UsageSeverity(fractionUsed: fractionUsed)
-        self.effectiveFractionUsed = try container.decodeIfPresent(
+        let decodedEffectiveFraction = try container.decodeIfPresent(
             Double.self,
             forKey: .effectiveFractionUsed
-        ) ?? max(fractionUsed, decodedSeverity.minimumFraction)
+        )
+        self.effectiveFractionUsed =
+            decodedEffectiveFraction ?? max(fractionUsed, decodedSeverity.minimumFraction)
         self.effectiveSeverity = decodedSeverity
+        self.usesLegacySeverityFallback = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .usesLegacySeverityFallback
+        ) ?? (decodedEffectiveFraction == nil)
     }
 
     public func effectiveSeverity(
@@ -175,6 +184,18 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         let activeUsageSeverity = bars.map {
             $0.effectiveSeverity(using: thresholds)
         }.max() ?? .normal
+        let legacyReachedSpendLimit: Bool
+        if hasReachedSpendLimit == nil,
+           let spent = monetaryMetrics?.first(where: { $0.kind == .spent }),
+           let limit = monetaryMetrics?.first(where: { $0.kind == .spendLimit }),
+           spent.currencyCode == limit.currencyCode,
+           spent.decimalPlaces == limit.decimalPlaces
+        {
+            legacyReachedSpendLimit =
+                limit.minorUnits > 0 && spent.minorUnits >= limit.minorUnits
+        } else {
+            legacyReachedSpendLimit = false
+        }
         let legacyExternalSeverity =
             hasReachedSpendLimit == nil && highestSeverity > storedUsageSeverity
                 ? highestSeverity
@@ -182,8 +203,20 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
 
         return max(
             activeUsageSeverity,
-            hasReachedSpendLimit == true ? .critical : legacyExternalSeverity
+            hasReachedSpendLimit == true || legacyReachedSpendLimit
+                ? .critical
+                : legacyExternalSeverity
         )
+    }
+
+    fileprivate func effectiveSeverity(
+        for bar: UsageHistoryBarSnapshot,
+        using thresholds: UsageSeverityThresholds
+    ) -> UsageSeverity {
+        if bar.usesLegacySeverityFallback {
+            return highestSeverity(using: thresholds)
+        }
+        return bar.effectiveSeverity(using: thresholds)
     }
 
     public var primaryValue: Double? {
@@ -638,7 +671,10 @@ public final class UsageHistoryStore: ObservableObject {
                         id: snapshot.id,
                         capturedAt: snapshot.capturedAt,
                         value: $0.fractionUsed,
-                        severity: $0.effectiveSeverity(using: severityThresholds)
+                        severity: snapshot.effectiveSeverity(
+                            for: $0,
+                            using: severityThresholds
+                        )
                     )
                 }
             },
@@ -663,7 +699,10 @@ public final class UsageHistoryStore: ObservableObject {
                         id: snapshot.id,
                         capturedAt: snapshot.capturedAt,
                         value: $0.fractionUsed,
-                        severity: $0.effectiveSeverity(using: severityThresholds)
+                        severity: snapshot.effectiveSeverity(
+                            for: $0,
+                            using: severityThresholds
+                        )
                     )
                 }
             },

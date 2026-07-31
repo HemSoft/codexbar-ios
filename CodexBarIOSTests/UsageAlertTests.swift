@@ -229,6 +229,35 @@ final class UsageAlertTests: XCTestCase {
         )
     }
 
+    func testLegacySuppressionIDsMigrateWithoutDuplicateNotifications() {
+        let settings = UsageAlertSettings(isEnabled: true)
+
+        let warning = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: settings,
+            activeAlertIDs: ["usage.codex.personal.weekly"]
+        )
+        XCTAssertTrue(warning.notifications.isEmpty)
+        XCTAssertEqual(
+            warning.activeAlertIDs,
+            ["severity.warning.codex.personal"]
+        )
+
+        let critical = UsageAlertEvaluator.evaluate(
+            results: [result(used: 95)],
+            settings: settings,
+            activeAlertIDs: ["severity.codex.personal"]
+        )
+        XCTAssertTrue(critical.notifications.isEmpty)
+        XCTAssertEqual(
+            critical.activeAlertIDs,
+            [
+                "severity.warning.codex.personal",
+                "severity.critical.codex.personal",
+            ]
+        )
+    }
+
     func testProjectedUsageUsesConfiguredThresholds() {
         let now = Date(timeIntervalSince1970: 1_783_667_520)
         let projectedResult = result(

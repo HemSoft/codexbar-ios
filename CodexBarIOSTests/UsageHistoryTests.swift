@@ -125,6 +125,121 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testLegacyCursorHistoryFallsBackToSnapshotSeverity() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let legacyData = Data(
+            """
+            [{
+              "id":"cursor.legacy.0",
+              "accountID":"cursor.legacy",
+              "providerID":"cursor",
+              "title":"Cursor",
+              "subtitle":"Legacy projected usage",
+              "capturedAt":0,
+              "bars":[
+                {
+                  "stableKey":"total",
+                  "label":"Total",
+                  "fractionUsed":0.4,
+                  "used":40,
+                  "limit":100,
+                  "effectiveSeverity":0
+                },
+                {
+                  "stableKey":"auto",
+                  "label":"Auto",
+                  "fractionUsed":0.5,
+                  "used":50,
+                  "limit":100,
+                  "effectiveSeverity":2
+                }
+              ],
+              "highestSeverity":2
+            }]
+            """.utf8
+        )
+        defaults.set(legacyData, forKey: "usageHistorySnapshots")
+        let result = ProviderUsageResult(
+            accountID: "cursor.legacy",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Current",
+            bars: [UsageBar(stableKey: "total", label: "Total", used: 40, limit: 100)],
+            fetchedAt: Date()
+        )
+
+        let store = UsageHistoryStore(defaults: defaults)
+
+        XCTAssertEqual(
+            store.historySeries(for: result).points.map(\.severity),
+            [.critical]
+        )
+        XCTAssertEqual(
+            store.historySeriesOptions(for: result)
+                .first(where: { $0.id == "usage.total" })?
+                .series.points.map(\.severity),
+            [.critical]
+        )
+
+        defaults.set(
+            try JSONEncoder().encode(store.snapshots),
+            forKey: "usageHistorySnapshots"
+        )
+        let reloadedStore = UsageHistoryStore(defaults: defaults)
+        XCTAssertEqual(
+            reloadedStore.historySeries(for: result).points.map(\.severity),
+            [.critical]
+        )
+    }
+
+    func testLegacyHistoryInfersReachedSpendLimitFromMetrics() throws {
+        let data = Data(
+            """
+            {
+              "id":"claude.legacy.0",
+              "accountID":"claude.legacy",
+              "providerID":"claude",
+              "title":"Claude",
+              "subtitle":"Legacy spend",
+              "capturedAt":0,
+              "bars":[{
+                "label":"Weekly",
+                "fractionUsed":0.95,
+                "used":95,
+                "limit":100,
+                "effectiveSeverity":2
+              }],
+              "monetaryMetrics":[
+                {
+                  "kind":"spent",
+                  "label":"Spent",
+                  "minorUnits":1000,
+                  "currencyCode":"USD",
+                  "decimalPlaces":2
+                },
+                {
+                  "kind":"spendLimit",
+                  "label":"Limit",
+                  "minorUnits":1000,
+                  "currencyCode":"USD",
+                  "decimalPlaces":2
+                }
+              ],
+              "highestSeverity":2
+            }
+            """.utf8
+        )
+        let snapshot = try JSONDecoder().decode(UsageHistorySnapshot.self, from: data)
+        let thresholds = UsageSeverityThresholds(warning: 0.97, critical: 0.99)
+
+        XCTAssertEqual(snapshot.highestSeverity(using: thresholds), .critical)
+    }
+
+    @MainActor
     func testCursorHistoryPersistsProjectedSeverityForSelectedMetric() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

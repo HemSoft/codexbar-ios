@@ -120,10 +120,16 @@ public enum UsageAlertEvaluator {
 
         for result in results {
             let accountSeverityIDs = severityAlertIDs(for: result.accountID)
+            let legacySeverityAlertID = "severity.\(result.accountID)"
+            let legacyUsageAlertPrefix = "usage.\(result.accountID)."
+            let legacySuppressionIDs = activeAlertIDs.filter {
+                $0 == legacySeverityAlertID || $0.hasPrefix(legacyUsageAlertPrefix)
+            }
             if result.preserveCachedBarsOnFailure || !result.hasFreshBars {
                 nextActiveAlertIDs.formUnion(
                     activeAlertIDs.intersection(accountSeverityIDs)
                 )
+                nextActiveAlertIDs.formUnion(legacySuppressionIDs)
             }
 
             let balanceAlertID = balanceAlertID(for: result.accountID)
@@ -197,7 +203,9 @@ public enum UsageAlertEvaluator {
             )
             activeAlerts.append(detail)
 
-            if !activeAlertIDs.contains(currentAlertID) {
+            if !activeAlertIDs.contains(currentAlertID),
+               legacySuppressionIDs.isEmpty
+            {
                 notifications.append(
                     UsageAlertNotification(
                         id: currentAlertID,
