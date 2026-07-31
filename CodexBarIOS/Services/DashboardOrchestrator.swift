@@ -387,7 +387,8 @@ final class DashboardOrchestrator: ObservableObject {
                 UsageAlertEvaluator.removeActiveAlertIDs(
                     forFailedDelivery: notification,
                     from: &deliveredActiveAlertIDs,
-                    previouslyActiveAlertIDs: existingActiveAlertIDs
+                    previouslyActiveAlertIDs: existingActiveAlertIDs,
+                    knownAccountIDs: Set(configurationStore.configurations.map(\.id))
                 )
             }
         }

@@ -265,7 +265,8 @@ final class UsageAlertTests: XCTestCase {
         UsageAlertEvaluator.removeActiveAlertIDs(
             forFailedDelivery: criticalNotification,
             from: &activeAlertIDs,
-            previouslyActiveAlertIDs: ["severity.codex.personal"]
+            previouslyActiveAlertIDs: ["severity.codex.personal"],
+            knownAccountIDs: ["codex.personal"]
         )
         XCTAssertEqual(activeAlertIDs, ["severity.warning.codex.personal"])
 
@@ -275,6 +276,33 @@ final class UsageAlertTests: XCTestCase {
             activeAlertIDs: activeAlertIDs
         )
         XCTAssertTrue(recoveredToWarning.notifications.isEmpty)
+    }
+
+    func testLegacySuppressionIDsUseExactAccountIdentity() throws {
+        let defaultResult = result(accountID: "codex", used: 95)
+        let secondaryResult = result(accountID: "codex.secondary", used: 20)
+        let legacySecondaryAlertID = "usage.codex.secondary.weekly"
+        let settings = UsageAlertSettings(isEnabled: true)
+
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [defaultResult, secondaryResult],
+            settings: settings,
+            activeAlertIDs: [legacySecondaryAlertID]
+        )
+
+        XCTAssertEqual(
+            evaluation.notifications.map(\.title),
+            ["Codex Critical Alert"]
+        )
+        let notification = try XCTUnwrap(evaluation.notifications.first)
+        var activeAlertIDs = evaluation.activeAlertIDs
+        UsageAlertEvaluator.removeActiveAlertIDs(
+            forFailedDelivery: notification,
+            from: &activeAlertIDs,
+            previouslyActiveAlertIDs: [legacySecondaryAlertID],
+            knownAccountIDs: ["codex", "codex.secondary"]
+        )
+        XCTAssertTrue(activeAlertIDs.isEmpty)
     }
 
     func testProjectedUsageUsesConfiguredThresholds() {
@@ -389,7 +417,8 @@ final class UsageAlertTests: XCTestCase {
         UsageAlertEvaluator.removeActiveAlertIDs(
             forFailedDelivery: notification,
             from: &activeAlertIDs,
-            previouslyActiveAlertIDs: []
+            previouslyActiveAlertIDs: [],
+            knownAccountIDs: ["codex.personal"]
         )
 
         XCTAssertTrue(activeAlertIDs.isEmpty)
@@ -421,7 +450,8 @@ final class UsageAlertTests: XCTestCase {
         UsageAlertEvaluator.removeActiveAlertIDs(
             forFailedDelivery: criticalNotification,
             from: &activeAlertIDs,
-            previouslyActiveAlertIDs: warningEvaluation.activeAlertIDs
+            previouslyActiveAlertIDs: warningEvaluation.activeAlertIDs,
+            knownAccountIDs: ["codex.personal"]
         )
 
         XCTAssertEqual(activeAlertIDs, ["severity.warning.codex.personal"])
@@ -688,6 +718,7 @@ final class UsageAlertTests: XCTestCase {
     }
 
     private func result(
+        accountID: String = "codex.personal",
         used: Double,
         projectionCurrent: Double? = nil,
         projectionPeriodStart: Date? = nil,
@@ -695,7 +726,7 @@ final class UsageAlertTests: XCTestCase {
         fetchedAt: Date = Date(timeIntervalSince1970: 1_783_667_520)
     ) -> ProviderUsageResult {
         ProviderUsageResult(
-            accountID: "codex.personal",
+            accountID: accountID,
             providerID: .codex,
             title: "Codex",
             subtitle: "Live usage",

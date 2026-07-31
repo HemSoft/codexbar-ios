@@ -82,7 +82,8 @@ public enum UsageAlertEvaluator {
     static func removeActiveAlertIDs(
         forFailedDelivery notification: UsageAlertNotification,
         from activeAlertIDs: inout Set<String>,
-        previouslyActiveAlertIDs: Set<String>
+        previouslyActiveAlertIDs: Set<String>,
+        knownAccountIDs: Set<String>
     ) {
         activeAlertIDs.remove(notification.id)
         let warningAlertID = severityAlertID(
@@ -91,12 +92,11 @@ public enum UsageAlertEvaluator {
         )
         let hadPreviouslyDeliveredWarning =
             previouslyActiveAlertIDs.contains(warningAlertID)
-                || previouslyActiveAlertIDs.contains(
-                    "severity.\(notification.accountID)"
-                )
-                || previouslyActiveAlertIDs.contains {
-                    $0.hasPrefix("usage.\(notification.accountID).")
-                }
+                || !legacySuppressionIDs(
+                    previouslyActiveAlertIDs,
+                    for: notification.accountID,
+                    knownAccountIDs: knownAccountIDs
+                ).isEmpty
         guard
             notification.kind == .severity,
             notification.id == severityAlertID(
@@ -122,17 +122,18 @@ public enum UsageAlertEvaluator {
         }
 
         let thresholds = settings.severityThresholds
+        let knownAccountIDs = Set(results.map(\.accountID))
         var nextActiveAlertIDs = Set<String>()
         var activeAlerts: [UsageAlertDetail] = []
         var notifications: [UsageAlertNotification] = []
 
         for result in results {
             let accountSeverityIDs = severityAlertIDs(for: result.accountID)
-            let legacySeverityAlertID = "severity.\(result.accountID)"
-            let legacyUsageAlertPrefix = "usage.\(result.accountID)."
-            let legacySuppressionIDs = activeAlertIDs.filter {
-                $0 == legacySeverityAlertID || $0.hasPrefix(legacyUsageAlertPrefix)
-            }
+            let legacySuppressionIDs = legacySuppressionIDs(
+                activeAlertIDs,
+                for: result.accountID,
+                knownAccountIDs: knownAccountIDs
+            )
             if result.preserveCachedBarsOnFailure || !result.hasFreshBars {
                 nextActiveAlertIDs.formUnion(
                     activeAlertIDs.intersection(accountSeverityIDs)
@@ -233,6 +234,28 @@ public enum UsageAlertEvaluator {
             activeAlertIDs: nextActiveAlertIDs,
             activeAlerts: activeAlerts
         )
+    }
+
+    private static func legacySuppressionIDs(
+        _ activeAlertIDs: Set<String>,
+        for accountID: String,
+        knownAccountIDs: Set<String>
+    ) -> Set<String> {
+        let accountIDsBySpecificity = knownAccountIDs.sorted { lhs, rhs in
+            lhs.count == rhs.count ? lhs < rhs : lhs.count > rhs.count
+        }
+        return activeAlertIDs.filter { alertID in
+            let isLegacyAlert =
+                alertID.hasPrefix("usage.")
+                    || (alertID.hasPrefix("severity.")
+                        && !alertID.hasPrefix("severity.warning.")
+                        && !alertID.hasPrefix("severity.critical."))
+            return isLegacyAlert
+                && Self.accountID(
+                    for: alertID,
+                    knownAccountIDs: accountIDsBySpecificity
+                ) == accountID
+        }
     }
 
     private static func balanceAlertDetail(
