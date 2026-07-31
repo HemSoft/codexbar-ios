@@ -237,9 +237,12 @@ collect_single_line_yaml_report_paths() {
         marker_candidate=$(strip_yaml_comment "$trimmed_line")
         marker_candidate="${marker_candidate%"${marker_candidate##*[![:space:]]}"}"
         document_content="$marker_candidate"
-        if [[ "${document_content[1,3]}" == --- ]]; then
+        if [[ "$document_content" == --- \
+            || ("${document_content[1,3]}" == --- \
+                && "${document_content[4]}" == [[:space:]]) ]]; then
             document_content=${document_content[4,-1]}
             document_content="${document_content#"${document_content%%[![:space:]]*}"}"
+            root_indent=-1
         fi
         if [[ "${document_content[1]}" == \{ ]]; then
             print -u2 "Flow-style YAML mappings are not supported."
@@ -256,7 +259,7 @@ collect_single_line_yaml_report_paths() {
         fi
         ((indent_width == root_indent)) || continue
 
-        split_yaml_mapping_entry "$trimmed_line" || continue
+        split_yaml_mapping_entry "$document_content" || continue
         mapping_key=${reply[1]}
         mapping_key="${mapping_key#"${mapping_key%%[![:space:]]*}"}"
         mapping_key="${mapping_key%"${mapping_key##*[![:space:]]}"}"
@@ -285,7 +288,11 @@ collect_single_line_yaml_report_paths() {
 }
 
 if [[ -r "$repository_dir/.swift-mutation-testing.yml" ]]; then
-    collect_single_line_yaml_report_paths "$repository_dir/.swift-mutation-testing.yml"
+    if ! collect_single_line_yaml_report_paths \
+        "$repository_dir/.swift-mutation-testing.yml"; then
+        print -u2 "Could not determine report paths from .swift-mutation-testing.yml."
+        exit 1
+    fi
 fi
 
 preserved_report_paths=("${configured_report_paths[@]}" "${requested_report_paths[@]}")
@@ -349,12 +356,20 @@ sync_mutation_reports() {
 }
 
 finalize_mutation_workspace_cleanup() {
-    local recovery_staging="${mutation_workspace_parent}.cleanup.$$.$RANDOM"
+    local recovery_staging="${mutation_workspace_parent}.recovery"
     local staged_manifest="$recovery_staging/report-paths"
     local staged_cache_marker="$recovery_staging/cache-staging-complete"
     local manifest_staged=false
     local cache_marker_staged=false
-    mkdir "$recovery_staging" 2>/dev/null || return 1
+    if [[ -d "$recovery_staging" ]] \
+        && ! rmdir "$recovery_staging" 2>/dev/null; then
+        print -u2 "Recovery staging already exists; preserving $recovery_staging."
+        return 1
+    fi
+    if ! mkdir "$recovery_staging" 2>/dev/null; then
+        print -u2 "Recovery staging already exists; preserving $recovery_staging."
+        return 1
+    fi
     if [[ -e "$report_manifest" ]]; then
         if ! mv "$report_manifest" "$staged_manifest"; then
             rmdir "$recovery_staging" 2>/dev/null || true
@@ -364,8 +379,12 @@ finalize_mutation_workspace_cleanup() {
     fi
     if [[ -e "$cache_staging_marker" ]]; then
         if ! mv "$cache_staging_marker" "$staged_cache_marker"; then
-            [[ "$manifest_staged" == true ]] && mv "$staged_manifest" "$report_manifest"
-            rmdir "$recovery_staging" 2>/dev/null || true
+            if [[ "$manifest_staged" == true ]] \
+                && ! mv "$staged_manifest" "$report_manifest"; then
+                print -u2 "Could not restore $report_manifest; preserving $recovery_staging."
+            else
+                rmdir "$recovery_staging" 2>/dev/null || true
+            fi
             return 1
         fi
         cache_marker_staged=true
@@ -375,10 +394,22 @@ finalize_mutation_workspace_cleanup() {
         rmdir "$recovery_staging" 2>/dev/null || true
         return 0
     fi
-    [[ "$manifest_staged" == true ]] && mv "$staged_manifest" "$report_manifest"
-    [[ "$cache_marker_staged" == true ]] \
-        && mv "$staged_cache_marker" "$cache_staging_marker"
-    rmdir "$recovery_staging" 2>/dev/null || true
+    local restoration_complete=true
+    if [[ "$manifest_staged" == true ]] \
+        && ! mv "$staged_manifest" "$report_manifest"; then
+        restoration_complete=false
+        print -u2 "Could not restore $report_manifest."
+    fi
+    if [[ "$cache_marker_staged" == true ]] \
+        && ! mv "$staged_cache_marker" "$cache_staging_marker"; then
+        restoration_complete=false
+        print -u2 "Could not restore $cache_staging_marker."
+    fi
+    if [[ "$restoration_complete" == true ]]; then
+        rmdir "$recovery_staging" 2>/dev/null || true
+    else
+        print -u2 "Preserving incomplete recovery staging at $recovery_staging."
+    fi
     return 1
 }
 
