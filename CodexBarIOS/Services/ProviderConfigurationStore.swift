@@ -1213,8 +1213,48 @@ public final class ProviderConfigurationStore: ObservableObject {
         usageAlertSettings = settings
         saveUsageAlertSettings()
 
-        if settings != previousSettings {
+        guard settings != previousSettings else {
+            return
+        }
+
+        if settings.isEnabled != previousSettings.isEnabled {
             updateUsageAlertActiveIDs([])
+            return
+        }
+
+        let severityThresholdChanged =
+            settings.warningThreshold != previousSettings.warningThreshold
+                || settings.criticalThreshold != previousSettings.criticalThreshold
+        let retainedActiveIDs = usageAlertActiveIDs.filter { alertID in
+            if settings.warningThreshold != previousSettings.warningThreshold,
+               alertID.hasPrefix("severity.warning.")
+            {
+                return false
+            }
+            if settings.criticalThreshold != previousSettings.criticalThreshold,
+               alertID.hasPrefix("severity.critical.")
+            {
+                return false
+            }
+            if severityThresholdChanged,
+               alertID.hasPrefix("severity."),
+               !alertID.hasPrefix("severity.warning."),
+               !alertID.hasPrefix("severity.critical.")
+            {
+                return false
+            }
+            if severityThresholdChanged, alertID.hasPrefix("usage.") {
+                return false
+            }
+            if settings.balanceThreshold != previousSettings.balanceThreshold,
+               alertID.hasPrefix("balance.")
+            {
+                return false
+            }
+            return true
+        }
+        if retainedActiveIDs != usageAlertActiveIDs {
+            updateUsageAlertActiveIDs(retainedActiveIDs)
         }
     }
 

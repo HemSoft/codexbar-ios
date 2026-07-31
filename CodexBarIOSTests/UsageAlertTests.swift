@@ -157,7 +157,7 @@ final class UsageAlertTests: XCTestCase {
     }
 
     @MainActor
-    func testThresholdChangeClearsActiveSuppressionState() {
+    func testThresholdChangesInvalidateOnlyAffectedSuppressionState() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -166,9 +166,23 @@ final class UsageAlertTests: XCTestCase {
             defaults: defaults,
             secretStore: EmptySecretStore()
         )
-        store.updateUsageAlertActiveIDs(["severity.warning.codex.personal"])
-        store.updateUsageAlertWarningThreshold(0.70)
+        let warningID = "severity.warning.codex.personal"
+        let criticalID = "severity.critical.codex.personal"
+        let balanceID = "balance.openRouter"
+        store.updateUsageAlertActiveIDs([warningID, criticalID, balanceID])
 
+        store.updateUsageAlertCriticalThreshold(0.95)
+        XCTAssertEqual(store.usageAlertActiveIDs, [warningID, balanceID])
+
+        store.updateUsageAlertActiveIDs([warningID, criticalID, balanceID])
+        store.updateUsageAlertWarningThreshold(0.70)
+        XCTAssertEqual(store.usageAlertActiveIDs, [criticalID, balanceID])
+
+        store.updateUsageAlertActiveIDs([warningID, criticalID, balanceID])
+        store.updateUsageAlertBalanceThreshold(10)
+        XCTAssertEqual(store.usageAlertActiveIDs, [warningID, criticalID])
+
+        store.updateUsageAlertsEnabled(true)
         XCTAssertTrue(store.usageAlertActiveIDs.isEmpty)
     }
 
@@ -326,7 +340,8 @@ final class UsageAlertTests: XCTestCase {
 
         UsageAlertEvaluator.removeActiveAlertIDs(
             forFailedDelivery: notification,
-            from: &activeAlertIDs
+            from: &activeAlertIDs,
+            previouslyActiveAlertIDs: []
         )
 
         XCTAssertTrue(activeAlertIDs.isEmpty)
@@ -336,6 +351,38 @@ final class UsageAlertTests: XCTestCase {
             activeAlertIDs: activeAlertIDs
         )
         XCTAssertEqual(warningEvaluation.notifications.map(\.title), ["Codex Warning"])
+    }
+
+    func testFailedCriticalDeliveryRetainsPreviouslyDeliveredWarningLatch() throws {
+        let settings = UsageAlertSettings(isEnabled: true)
+        let warningEvaluation = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: settings,
+            activeAlertIDs: []
+        )
+        let criticalEvaluation = UsageAlertEvaluator.evaluate(
+            results: [result(used: 95)],
+            settings: settings,
+            activeAlertIDs: warningEvaluation.activeAlertIDs
+        )
+        let criticalNotification = try XCTUnwrap(
+            criticalEvaluation.notifications.first
+        )
+        var activeAlertIDs = criticalEvaluation.activeAlertIDs
+
+        UsageAlertEvaluator.removeActiveAlertIDs(
+            forFailedDelivery: criticalNotification,
+            from: &activeAlertIDs,
+            previouslyActiveAlertIDs: warningEvaluation.activeAlertIDs
+        )
+
+        XCTAssertEqual(activeAlertIDs, ["severity.warning.codex.personal"])
+        let recoveredWarning = UsageAlertEvaluator.evaluate(
+            results: [result(used: 80)],
+            settings: settings,
+            activeAlertIDs: activeAlertIDs
+        )
+        XCTAssertTrue(recoveredWarning.notifications.isEmpty)
     }
 
     func testSpendLimitRemainsCriticalRegardlessOfPercentageThresholds() {

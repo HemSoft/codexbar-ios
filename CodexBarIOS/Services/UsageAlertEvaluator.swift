@@ -81,22 +81,26 @@ public enum UsageAlertEvaluator {
 
     static func removeActiveAlertIDs(
         forFailedDelivery notification: UsageAlertNotification,
-        from activeAlertIDs: inout Set<String>
+        from activeAlertIDs: inout Set<String>,
+        previouslyActiveAlertIDs: Set<String>
     ) {
         activeAlertIDs.remove(notification.id)
+        let warningAlertID = severityAlertID(
+            for: notification.accountID,
+            severity: .warning
+        )
         guard
             notification.kind == .severity,
             notification.id == severityAlertID(
                 for: notification.accountID,
                 severity: .critical
-            )
+            ),
+            !previouslyActiveAlertIDs.contains(warningAlertID)
         else {
             return
         }
 
-        activeAlertIDs.remove(
-            severityAlertID(for: notification.accountID, severity: .warning)
-        )
+        activeAlertIDs.remove(warningAlertID)
     }
 
     public static func evaluate(
