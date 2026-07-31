@@ -699,10 +699,7 @@ public final class UsageHistoryStore: ObservableObject {
                         id: snapshot.id,
                         capturedAt: snapshot.capturedAt,
                         value: $0.fractionUsed,
-                        severity: snapshot.effectiveSeverity(
-                            for: $0,
-                            using: severityThresholds
-                        )
+                        severity: $0.effectiveSeverity(using: severityThresholds)
                     )
                 }
             },

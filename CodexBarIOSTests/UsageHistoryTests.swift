@@ -182,6 +182,12 @@ final class UsageHistoryTests: XCTestCase {
             store.historySeriesOptions(for: result)
                 .first(where: { $0.id == "usage.total" })?
                 .series.points.map(\.severity),
+            [.normal]
+        )
+        XCTAssertEqual(
+            store.historySeriesOptions(for: result)
+                .first(where: { $0.id == "usage.auto" })?
+                .series.points.map(\.severity),
             [.critical]
         )
 
@@ -193,6 +199,12 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(
             reloadedStore.historySeries(for: result).points.map(\.severity),
             [.critical]
+        )
+        XCTAssertEqual(
+            reloadedStore.historySeriesOptions(for: result)
+                .first(where: { $0.id == "usage.total" })?
+                .series.points.map(\.severity),
+            [.normal]
         )
     }
 
