@@ -14,6 +14,7 @@ mutation_workspace_parent="${TMPDIR:-/tmp}/codexbar-mutation.$mutation_workspace
 mutation_workspace_parent=${mutation_workspace_parent:A}
 mutation_workspace="$mutation_workspace_parent/repository"
 mutation_lock="$mutation_workspace_parent.lock"
+mutation_lock_guard="${mutation_lock}.guard"
 report_manifest="$mutation_workspace_parent/report-paths"
 cache_staging_marker="$mutation_workspace_parent/cache-staging-complete"
 lock_acquired=false
@@ -297,6 +298,7 @@ collect_single_line_yaml_report_paths() {
             [[ -n "$scalar" ]] && configured_report_paths+=("$scalar")
         fi
     done < "$configuration_path"
+    return 0
 }
 
 if [[ -r "$repository_dir/.swift-mutation-testing.yml" ]]; then
@@ -367,17 +369,45 @@ sync_mutation_reports() {
     [[ "$reports_saved" == true ]]
 }
 
+reconcile_mutation_recovery_staging() {
+    local recovery_staging="${mutation_workspace_parent}.recovery"
+    local staged_manifest="$recovery_staging/report-paths"
+    local staged_cache_marker="$recovery_staging/cache-staging-complete"
+    [[ -d "$recovery_staging" ]] || return 0
+
+    local staged_path destination_path
+    for staged_path destination_path in \
+        "$staged_manifest" "$report_manifest" \
+        "$staged_cache_marker" "$cache_staging_marker"; do
+        [[ -e "$staged_path" ]] || continue
+        if [[ ! -f "$staged_path" || -L "$staged_path" ]]; then
+            print -u2 "Unexpected recovery entry at $staged_path; preserving $recovery_staging."
+            return 1
+        fi
+        if [[ -d "$mutation_workspace_parent" ]]; then
+            if [[ -e "$destination_path" || -L "$destination_path" ]] \
+                || ! mv "$staged_path" "$destination_path"; then
+                print -u2 "Could not restore $destination_path; preserving $recovery_staging."
+                return 1
+            fi
+        else
+            rm -f "$staged_path"
+        fi
+    done
+    if ! rmdir "$recovery_staging" 2>/dev/null; then
+        print -u2 "Unexpected recovery entries remain; preserving $recovery_staging."
+        return 1
+    fi
+}
+
 finalize_mutation_workspace_cleanup() {
     local recovery_staging="${mutation_workspace_parent}.recovery"
     local staged_manifest="$recovery_staging/report-paths"
     local staged_cache_marker="$recovery_staging/cache-staging-complete"
     local manifest_staged=false
     local cache_marker_staged=false
-    if [[ -d "$recovery_staging" ]] \
-        && ! rmdir "$recovery_staging" 2>/dev/null; then
-        print -u2 "Recovery staging already exists; preserving $recovery_staging."
-        return 1
-    fi
+    reconcile_mutation_recovery_staging || return 1
+    [[ -d "$mutation_workspace_parent" ]] || return 0
     if ! mkdir "$recovery_staging" 2>/dev/null; then
         print -u2 "Recovery staging already exists; preserving $recovery_staging."
         return 1
@@ -494,46 +524,71 @@ forward_signal() {
 trap 'forward_signal INT 130' INT
 trap 'forward_signal TERM 143' TERM
 
-acquire_mutation_lock() {
+publish_mutation_lock() {
     local private_lock="${mutation_lock}.owner.$$.$RANDOM"
-    if mkdir "$private_lock" 2>/dev/null; then
-        if print -r -- "$$" > "$private_lock/pid" \
-            && ln -sh "$private_lock" "$mutation_lock" 2>/dev/null \
-            && [[ "$(readlink "$mutation_lock")" == "$private_lock" ]]; then
-            return 0
-        fi
-        rm -f "$mutation_lock/${private_lock:t}" 2>/dev/null || true
-        rm -f "$private_lock/pid"
-        rmdir "$private_lock" 2>/dev/null || true
+    mkdir "$private_lock" 2>/dev/null || return 1
+    if print -r -- "$$" > "$private_lock/pid" \
+        && ln -sh "$private_lock" "$mutation_lock" 2>/dev/null \
+        && [[ "$(readlink "$mutation_lock")" == "$private_lock" ]]; then
+        return 0
+    fi
+    rm -f "$mutation_lock/${private_lock:t}" 2>/dev/null || true
+    rm -f "$private_lock/pid"
+    rmdir "$private_lock" 2>/dev/null || true
+    return 1
+}
+
+release_mutation_lock_guard() {
+    local released_guard="${mutation_lock_guard}.released.$$.$RANDOM"
+    mv "$mutation_lock_guard" "$released_guard" 2>/dev/null || return 1
+    rm -f "$released_guard"
+}
+
+acquire_mutation_lock() {
+    /usr/bin/shlock -f "$mutation_lock_guard" -p "$$" || return 1
+    local acquisition_status=1
+    if [[ ! -e "$mutation_lock" && ! -L "$mutation_lock" ]]; then
+        publish_mutation_lock && acquisition_status=0
+        release_mutation_lock_guard || return 1
+        return "$acquisition_status"
     fi
 
-    [[ -r "$mutation_lock/pid" ]] || return 1
     local recorded_owner=false
+    local active_owner=false
     local lock_owner_pid
-    while IFS= read -r lock_owner_pid; do
-        [[ "$lock_owner_pid" == <-> ]] || continue
-        recorded_owner=true
-        kill -0 "$lock_owner_pid" 2>/dev/null && return 1
-    done < "$mutation_lock/pid"
-    [[ "$recorded_owner" == true ]] || return 1
-    if git -C "$repository_dir" worktree list --porcelain \
+    if [[ -r "$mutation_lock/pid" ]]; then
+        while IFS= read -r lock_owner_pid; do
+            [[ "$lock_owner_pid" == <-> ]] || continue
+            recorded_owner=true
+            if kill -0 "$lock_owner_pid" 2>/dev/null; then
+                active_owner=true
+            fi
+        done < "$mutation_lock/pid"
+    fi
+    if [[ "$active_owner" != true && "$recorded_owner" == true ]] \
+        && git -C "$repository_dir" worktree list --porcelain \
         | grep -Fqx "worktree $mutation_workspace" \
         && lsof -a -d cwd "$mutation_workspace" >/dev/null 2>&1; then
-        return 1
+        active_owner=true
     fi
-    local reclaimed_lock="${mutation_lock}.reclaimed.$$.$RANDOM"
-    mv "$mutation_lock" "$reclaimed_lock" 2>/dev/null || return 1
-    local reclaimed_owner=$reclaimed_lock
-    if [[ -L "$reclaimed_lock" ]]; then
-        reclaimed_owner=$(readlink "$reclaimed_lock")
-        [[ "$reclaimed_owner" == "${mutation_lock}.owner."* ]] || return 1
+    if [[ "$active_owner" != true && "$recorded_owner" == true ]]; then
+        local reclaimed_lock="${mutation_lock}.reclaimed.$$.$RANDOM"
+        if mv "$mutation_lock" "$reclaimed_lock" 2>/dev/null; then
+            local reclaimed_owner=$reclaimed_lock
+            if [[ -L "$reclaimed_lock" ]]; then
+                reclaimed_owner=$(readlink "$reclaimed_lock")
+            fi
+            if [[ "$reclaimed_owner" == "${mutation_lock}.owner."* ]]; then
+                rm -f "$reclaimed_owner/pid" "$reclaimed_owner/pid.next"
+                if rmdir "$reclaimed_owner" 2>/dev/null; then
+                    rm -f "$reclaimed_lock"
+                    publish_mutation_lock && acquisition_status=0
+                fi
+            fi
+        fi
     fi
-    rm -f "$reclaimed_owner/pid" "$reclaimed_owner/pid.next"
-    rmdir "$reclaimed_owner" 2>/dev/null || return 1
-    if [[ -L "$reclaimed_lock" ]]; then
-        rm -f "$reclaimed_lock"
-    fi
-    acquire_mutation_lock
+    release_mutation_lock_guard || return 1
+    return "$acquisition_status"
 }
 
 if ! acquire_mutation_lock; then
@@ -545,6 +600,11 @@ if ! acquire_mutation_lock; then
     exit 1
 fi
 lock_acquired=true
+
+if ! reconcile_mutation_recovery_staging; then
+    print -u2 "Could not reconcile interrupted mutation cleanup staging."
+    exit 1
+fi
 
 if git -C "$repository_dir" worktree list --porcelain \
     | grep -Fqx "worktree $mutation_workspace"; then
