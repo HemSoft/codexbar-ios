@@ -6,7 +6,7 @@ let package = Package(
     name: "CodexBarIOS",
     platforms: [
         .iOS(.v17),
-        .macOS(.v14)
+        .macOS(.v14),
     ],
     products: [
         .library(
@@ -16,7 +16,13 @@ let package = Package(
         .executable(
             name: "CodexBarIOSSmokeTests",
             targets: ["CodexBarIOSSmokeTests"]
-        )
+        ),
+    ],
+    dependencies: [
+        .package(
+            url: "https://github.com/SimplyDanny/SwiftLintPlugins",
+            exact: "0.65.0"
+        ),
     ],
     targets: [
         .target(
@@ -29,13 +35,19 @@ let package = Package(
                 "Info.plist",
                 "PrivacyInfo.xcprivacy",
                 "Resources",
-                "Views"
+                "Views",
+            ],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
             ]
         ),
         .executableTarget(
             name: "CodexBarIOSSmokeTests",
             dependencies: ["CodexBarIOS"],
-            path: "SmokeTests"
-        )
+            path: "SmokeTests",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
+            ]
+        ),
     ]
 )

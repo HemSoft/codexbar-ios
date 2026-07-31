@@ -223,6 +223,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added a strict, zero-violation SwiftLint policy pinned through Swift Package
+  Manager, enforced by every Swift-producing build target and an independent
+  annotated CI check. ([#210](https://github.com/HemSoft/codexbar-ios/issues/210))
 - Made iPhone and Apple Watch connectivity delegate handoffs safe under complete
   Swift concurrency checking, with a repeatable warnings-as-errors build gate.
   ([#203](https://github.com/HemSoft/codexbar-ios/issues/203))

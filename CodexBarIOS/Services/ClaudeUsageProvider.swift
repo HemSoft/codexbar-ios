@@ -188,7 +188,7 @@ public final class ClaudeUsageProvider: UsageProvider {
         request.httpBody = try JSONEncoder().encode([
             "grant_type": "refresh_token",
             "refresh_token": refreshToken,
-            "client_id": Self.clientID
+            "client_id": Self.clientID,
         ])
 
         let (data, response) = try await session.data(for: request)

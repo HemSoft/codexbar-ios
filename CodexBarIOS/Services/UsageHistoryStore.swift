@@ -189,8 +189,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
            let spent = monetaryMetrics?.first(where: { $0.kind == .spent }),
            let limit = monetaryMetrics?.first(where: { $0.kind == .spendLimit }),
            spent.currencyCode == limit.currencyCode,
-           spent.decimalPlaces == limit.decimalPlaces
-        {
+           spent.decimalPlaces == limit.decimalPlaces {
             legacyReachedSpendLimit =
                 limit.minorUnits > 0 && spent.minorUnits >= limit.minorUnits
         } else {
@@ -229,8 +228,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
                 $0.stableKey == "total"
                     || ($0.stableKey == nil
                         && $0.label.caseInsensitiveCompare("Total") == .orderedSame)
-           })
-        {
+           }) {
             return total.fractionUsed
         }
 
@@ -560,8 +558,7 @@ public final class UsageHistoryStore: ObservableObject {
         let accountSnapshots = snapshots(for: result.accountID, since: start)
         let hasUsageHistory = accountSnapshots.contains { !$0.bars.isEmpty }
         if (result.hasFreshBars && !result.bars.isEmpty)
-            || (!result.bars.isEmpty && hasUsageHistory)
-        {
+            || (!result.bars.isEmpty && hasUsageHistory) {
             return usageSeries(
                 for: result,
                 snapshots: accountSnapshots,
@@ -570,8 +567,7 @@ public final class UsageHistoryStore: ObservableObject {
         }
 
         if result.freshCreditsRemaining != nil
-            || accountSnapshots.contains(where: { $0.creditsRemaining != nil })
-        {
+            || accountSnapshots.contains(where: { $0.creditsRemaining != nil }) {
             return balanceSeries(
                 accountID: result.accountID,
                 snapshots: accountSnapshots,
@@ -836,8 +832,7 @@ public final class UsageHistoryStore: ObservableObject {
         var options: [UsageHistorySeriesOption] = []
 
         if (result.hasFreshBars && !result.bars.isEmpty)
-            || accountSnapshots.contains(where: { !$0.bars.isEmpty })
-        {
+            || accountSnapshots.contains(where: { !$0.bars.isEmpty }) {
             if result.providerID == .cursor {
                 options.append(contentsOf: cursorUsageSeriesOptions(
                     accountID: result.accountID,
@@ -859,8 +854,7 @@ public final class UsageHistoryStore: ObservableObject {
         }
 
         if result.freshCreditsRemaining != nil
-            || accountSnapshots.contains(where: { $0.creditsRemaining != nil })
-        {
+            || accountSnapshots.contains(where: { $0.creditsRemaining != nil }) {
             options.append(UsageHistorySeriesOption(
                 id: "balance",
                 label: "Balance",

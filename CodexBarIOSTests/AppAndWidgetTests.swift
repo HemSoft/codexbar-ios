@@ -423,12 +423,12 @@ final class AppAndWidgetTests: XCTestCase {
             draftNames: [
                 "changed": "Renamed",
                 "missing": "Removed",
-                "reverted": "  Original  "
+                "reverted": "  Original  ",
             ],
             persistedName: { groupID in
                 [
                     "changed": "Original",
-                    "reverted": "Original"
+                    "reverted": "Original",
                 ][groupID]
             }
         )
@@ -1375,6 +1375,11 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertTrue(improvementDraft.body.contains("What would you like CodexBar to improve?"))
         XCTAssertTrue(improvementDraft.body.contains("How would this help?"))
         XCTAssertTrue(improvementDraft.body.contains(system.systemDetails))
+        let privacyFooter = "CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, "
+            + "balances, usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, "
+            + "logs, or screenshots."
+        XCTAssertTrue(problemDraft.body.hasSuffix(privacyFooter))
+        XCTAssertTrue(improvementDraft.body.hasSuffix(privacyFooter))
         XCTAssertEqual(
             problemDraft.copyableFields.map(\.kind),
             [.recipient, .subject, .message]

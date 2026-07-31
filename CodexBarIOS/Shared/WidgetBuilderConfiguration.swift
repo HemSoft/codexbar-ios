@@ -212,8 +212,7 @@ public extension CodexBarWidgetUsageBarSnapshot {
             ? String(tileID.dropFirst("bar.".count))
             : tileID
         if savedBarID == id
-            || savedBarID == "\(accountID).\(id)"
-        {
+            || savedBarID == "\(accountID).\(id)" {
             return true
         }
 

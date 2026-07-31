@@ -76,14 +76,12 @@ enum WatchSnapshotPublisher {
         return WatchDashboardSnapshot(
             generatedAt: now,
             refreshIntervalSeconds: configurationStore.autoRefreshInterval.seconds,
-            accounts: orderedResults.compactMap {
-                result -> WatchAccountSnapshot? in
+            accounts: orderedResults.compactMap { result -> WatchAccountSnapshot? in
                 guard let configuration = configurationStore.configuration(accountID: result.accountID) else {
                     return nil
                 }
 
-                let barMetrics: [WatchMetricSnapshot] = result.bars.enumerated().map {
-                    index, bar in
+                let barMetrics: [WatchMetricSnapshot] = result.bars.enumerated().map { index, bar in
                     let severityThresholds =
                         configurationStore.usageAlertSettings.severityThresholds
                     let metricID = bar.metricIdentifier(providerID: result.providerID, index: index)
@@ -123,8 +121,7 @@ enum WatchSnapshotPublisher {
                     )
                 }
 
-                let monetaryMetrics: [WatchMetricSnapshot] = result.monetaryMetrics.map {
-                    metric in
+                let monetaryMetrics: [WatchMetricSnapshot] = result.monetaryMetrics.map { metric in
                     let metricID = metric.metricIdentifier(providerID: result.providerID)
                     return WatchMetricSnapshot(
                         id: metricID,
@@ -229,8 +226,7 @@ enum WatchSnapshotPublisher {
         let resultsByAccountID = Dictionary(
             uniqueKeysWithValues: results.map { ($0.accountID, $0) }
         )
-        let displayable: [ProviderUsageResult] = configurationStore.configurations.compactMap {
-            configuration -> ProviderUsageResult? in
+        let displayable: [ProviderUsageResult] = configurationStore.configurations.compactMap { configuration in
             guard configurationStore.shouldDisplayOnDashboard(configuration) else {
                 return nil
             }

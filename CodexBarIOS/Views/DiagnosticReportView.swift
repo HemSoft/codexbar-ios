@@ -29,7 +29,8 @@ struct DiagnosticReportView: View {
             Form {
                 Section {
                     Text(
-                        "Review the privacy-safe diagnostic below. Email is private and needs no GitHub account; opening the composer does not send anything. You review and explicitly send the message."
+                        "Review the privacy-safe diagnostic below. Email is private and needs no GitHub account; "
+                            + "opening the composer does not send anything. You review and explicitly send the message."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -73,7 +74,9 @@ struct DiagnosticReportView: View {
                     }
                 } footer: {
                     Text(
-                        "GitHub is public and requires an account. CodexBar never includes logs, screenshots, provider responses, credentials, account labels or identifiers, balances, usage history, widget selections, or Apple Watch snapshots."
+                        "GitHub is public and requires an account. CodexBar never includes logs, screenshots, "
+                            + "provider responses, credentials, account labels or identifiers, balances, usage history, "
+                            + "widget selections, or Apple Watch snapshots."
                     )
                 }
             }

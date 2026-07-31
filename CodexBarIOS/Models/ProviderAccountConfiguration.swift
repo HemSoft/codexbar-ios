@@ -53,8 +53,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         let label = accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         if
             providerID == .openCodeZen,
-            let generatedDisplayName = normalizedOpenCodeGeneratedDisplayName(label)
-        {
+            let generatedDisplayName = normalizedOpenCodeGeneratedDisplayName(label) {
             return generatedDisplayName
         }
         return label.isEmpty ? providerID.displayName : label

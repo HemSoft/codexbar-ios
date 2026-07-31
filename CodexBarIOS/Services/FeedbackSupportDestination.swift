@@ -352,16 +352,14 @@ struct DiagnosticTechnicalDetails: Equatable, Sendable {
 private extension ProviderUsageResult {
     var diagnosticFailureFreshness: DiagnosticFreshness {
         if (!bars.isEmpty && hasCurrentBars)
-            || (creditsRemaining != nil && hasCurrentCredits)
-        {
+            || (creditsRemaining != nil && hasCurrentCredits) {
             return .current
         }
         if hasSuccessfulRefreshHistory
             || !bars.isEmpty
             || creditsRemaining != nil
             || !monetaryMetrics.isEmpty
-            || codexBankedRateLimitResets != nil
-        {
+            || codexBankedRateLimitResets != nil {
             return .stale
         }
         return .noSuccessfulRefresh
@@ -533,7 +531,9 @@ struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
             Privacy-safe diagnostic:
             \(diagnostic)
 
-            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances, usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or screenshots.
+            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances, \
+            usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or \
+            screenshots.
             """
         )
     }
@@ -556,7 +556,9 @@ struct FeedbackEmailDraft: Equatable, Identifiable, Sendable {
             Privacy-safe app and device context:
             \(context.systemDetails)
 
-            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances, usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or screenshots.
+            CodexBar does not include credentials, tokens, cookies, account labels, account identifiers, balances, \
+            usage history, raw provider responses or errors, widget selections, Apple Watch snapshots, logs, or \
+            screenshots.
             """
         )
     }

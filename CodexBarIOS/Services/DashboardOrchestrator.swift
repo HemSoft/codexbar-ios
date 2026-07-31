@@ -599,10 +599,7 @@ final class DashboardClaudeAuthenticationController: ObservableObject {
 
     init(
         configurationStore: ProviderConfigurationStore,
-        authenticate: @escaping Authenticate = {
-            presentAuthorizationURL,
-            reportStage,
-            didReceiveCallback in
+        authenticate: @escaping Authenticate = { presentAuthorizationURL, reportStage, didReceiveCallback in
             try await ClaudeWebAuthService().signIn(
                 presentAuthorizationURL: presentAuthorizationURL,
                 reportStage: reportStage,

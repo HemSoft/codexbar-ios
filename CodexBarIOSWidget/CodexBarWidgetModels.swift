@@ -183,8 +183,7 @@ extension CodexBarWidgetSnapshot {
     private func widgetGroupTitle(for provider: CodexBarWidgetProviderSnapshot) -> String {
         let title = provider.groupName ?? "Ungrouped"
         if provider.groupID != nil,
-           title.localizedCaseInsensitiveCompare("Ungrouped") == .orderedSame
-        {
+           title.localizedCaseInsensitiveCompare("Ungrouped") == .orderedSame {
             return "Ungrouped (group)"
         }
 

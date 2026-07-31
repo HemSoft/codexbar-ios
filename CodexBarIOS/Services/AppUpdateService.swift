@@ -173,8 +173,7 @@ final class AppUpdateController: ObservableObject {
 
         if
             let data = defaults.data(forKey: DefaultsKey.cachedRelease),
-            let cachedRelease = try? JSONDecoder().decode(AppStoreRelease.self, from: data)
-        {
+            let cachedRelease = try? JSONDecoder().decode(AppStoreRelease.self, from: data) {
             self.availableRelease = Self.newerRelease(
                 cachedRelease,
                 than: installedVersion.marketingVersion
@@ -199,8 +198,7 @@ final class AppUpdateController: ObservableObject {
             !force,
             let lastCheck = defaults.object(forKey: DefaultsKey.lastSuccessfulCheck) as? Date,
             now.timeIntervalSince(lastCheck) >= 0,
-            now.timeIntervalSince(lastCheck) < checkInterval
-        {
+            now.timeIntervalSince(lastCheck) < checkInterval {
             return
         }
 

@@ -267,8 +267,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         let metricLayoutLoadResult = Self.loadMetricLayouts(from: defaults)
         var loadedMetricLayouts = metricLayoutLoadResult.layouts
         for configuration in configurationLoadResult.configurations
-        where loadedMetricLayouts[configuration.id] == nil
-        {
+        where loadedMetricLayouts[configuration.id] == nil {
             loadedMetricLayouts[configuration.id] = AccountMetricLayout(
                 usesLegacyFullWidthDefaults: !metricLayoutLoadResult.usesVersionedStorage
             )
@@ -284,8 +283,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.lastError = configurationLoadResult.error ?? groupLoadResult.error
         if metricLayoutLoadResult.opaqueData == nil,
            metricLayoutLoadResult.needsMigration
-            || loadedMetricLayouts.count != metricLayoutLoadResult.layouts.count
-        {
+            || loadedMetricLayouts.count != metricLayoutLoadResult.layouts.count {
             saveMetricLayouts()
         }
         sortConfigurations()
@@ -591,8 +589,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         var seenKeychainAccounts = Set<String>()
         for account in configurations.map({ keychainAccount(for: $0) })
             + ProviderID.allCases.map({ keychainAccount(for: $0) })
-        where seenKeychainAccounts.insert(account).inserted
-        {
+        where seenKeychainAccounts.insert(account).inserted {
             accountsToDelete.append(account)
         }
 
@@ -1171,8 +1168,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         prepareMetricLayoutForEditing(accountID: accountID)
         var layout = metricLayouts[accountID] ?? AccountMetricLayout()
         if !layout.orderedMetricIDs.isEmpty,
-           !layout.orderedMetricIDs.contains(metricID)
-        {
+           !layout.orderedMetricIDs.contains(metricID) {
             layout.orderedMetricIDs.append(metricID)
         }
         layout.preferences[metricID] = preference
@@ -1227,28 +1223,24 @@ public final class ProviderConfigurationStore: ObservableObject {
                 || settings.criticalThreshold != previousSettings.criticalThreshold
         let retainedActiveIDs = usageAlertActiveIDs.filter { alertID in
             if settings.warningThreshold != previousSettings.warningThreshold,
-               alertID.hasPrefix("severity.warning.")
-            {
+               alertID.hasPrefix("severity.warning.") {
                 return false
             }
             if settings.criticalThreshold != previousSettings.criticalThreshold,
-               alertID.hasPrefix("severity.critical.")
-            {
+               alertID.hasPrefix("severity.critical.") {
                 return false
             }
             if severityThresholdChanged,
                alertID.hasPrefix("severity."),
                !alertID.hasPrefix("severity.warning."),
-               !alertID.hasPrefix("severity.critical.")
-            {
+               !alertID.hasPrefix("severity.critical.") {
                 return false
             }
             if severityThresholdChanged, alertID.hasPrefix("usage.") {
                 return false
             }
             if settings.balanceThreshold != previousSettings.balanceThreshold,
-               alertID.hasPrefix("balance.")
-            {
+               alertID.hasPrefix("balance.") {
                 return false
             }
             return true
@@ -1420,8 +1412,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         if configuration.requiresSecret
             || configuration.providerID == .codex
             || configuration.providerID == .claude
-            || configuration.providerID == .cursor
-        {
+            || configuration.providerID == .cursor {
             return hasSecret(for: configuration)
         }
 
@@ -1540,8 +1531,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             if configuration.providerID == .codex
                 || configuration.providerID == .copilot
                 || configuration.providerID == .claude
-                || configuration.providerID == .cursor
-            {
+                || configuration.providerID == .cursor {
                 return label.isEmpty ? "Configured - live usage enabled" : "\(label) - live usage enabled"
             }
 
@@ -1554,8 +1544,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         if configuration.providerID == .copilot {
             if configuration.copilotAccountScope == .organization
-                && configuration.githubOrganization.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
+                && configuration.githubOrganization.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return "Not configured - enter organization"
             }
 
@@ -1955,8 +1944,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 ?? AccountMetricLayout.currentVersion
             if
                 version <= AccountMetricLayout.currentVersion,
-                let decoded = try? JSONDecoder().decode(AccountMetricLayout.self, from: data)
-            {
+                let decoded = try? JSONDecoder().decode(AccountMetricLayout.self, from: data) {
                 let normalized = normalizedMetricLayout(decoded)
                 layouts[accountID] = normalized
                 needsMigration = needsMigration || normalized != decoded
@@ -2027,8 +2015,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         for (accountID, data) in unsupportedMetricLayoutData
-        where metricLayouts[accountID] != nil
-        {
+        where metricLayouts[accountID] != nil {
             guard let preserved = try? JSONSerialization.jsonObject(
                 with: data,
                 options: [.fragmentsAllowed]
@@ -2242,7 +2229,7 @@ public extension ProviderConfigurationStore {
                 accountLabel: "Moonshot (Kimi)",
                 groupID: balanceGroup.id,
                 authMethod: .apiKey
-            )
+            ),
         ]
 
         let encoder = JSONEncoder()

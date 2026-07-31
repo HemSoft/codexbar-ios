@@ -166,8 +166,7 @@ enum WidgetSnapshotPublisher {
         // "Current session" display label, including model-scoped sessions.
         if
             bar.stableKey == "session"
-                || bar.stableKey?.hasPrefix("session-scoped-") == true
-        {
+                || bar.stableKey?.hasPrefix("session-scoped-") == true {
             let legacyLabel = bar.label.replacingOccurrences(
                 of: "current session",
                 with: "5-hour usage limit",
