@@ -187,12 +187,37 @@ decode_yaml_quoted_scalar() {
     printf '%b' "$decoded"
 }
 
+split_yaml_mapping_entry() {
+    local value="$1"
+    local quote=""
+    local escaped=false
+    local character
+    for ((value_index = 1; value_index <= ${#value}; value_index++)); do
+        character=${value[$value_index]}
+        if [[ -n "$quote" ]]; then
+            if [[ "$quote" == \" && "$escaped" == true ]]; then
+                escaped=false
+            elif [[ "$quote" == \" && "$character" == \\ ]]; then
+                escaped=true
+            elif [[ "$character" == "$quote" ]]; then
+                quote=""
+            fi
+        elif [[ "$character" == \" || "$character" == \' ]]; then
+            quote="$character"
+        elif [[ "$character" == : ]]; then
+            reply=("${value[1,$((value_index - 1))]}" "${value[$((value_index + 1)),-1]}")
+            return
+        fi
+    done
+    return 1
+}
+
 collect_single_line_yaml_report_paths() {
     local configuration_path="$1"
     local report_scalar_active=false
     local root_indent=-1
     local report_key_indent=-1
-    local line indentation trimmed_line scalar
+    local line indentation trimmed_line mapping_key scalar
     local indent_width
     while IFS= read -r line || [[ -n "$line" ]]; do
         indentation=${line%%[![:space:]]*}
@@ -220,10 +245,16 @@ collect_single_line_yaml_report_paths() {
         fi
         ((indent_width == root_indent)) || continue
 
-        if [[ "$trimmed_line" =~ '^(output|html-output|sonar-output):' ]]; then
+        split_yaml_mapping_entry "$trimmed_line" || continue
+        mapping_key=${reply[1]}
+        mapping_key="${mapping_key#"${mapping_key%%[![:space:]]*}"}"
+        mapping_key="${mapping_key%"${mapping_key##*[![:space:]]}"}"
+        mapping_key=$(decode_yaml_quoted_scalar "$mapping_key")
+        if [[ "$mapping_key" == output || "$mapping_key" == html-output \
+            || "$mapping_key" == sonar-output ]]; then
             report_scalar_active=true
             report_key_indent=$indent_width
-            scalar=${trimmed_line#*:}
+            scalar=${reply[2]}
             scalar=$(strip_yaml_comment "$scalar")
             scalar="${scalar#"${scalar%%[![:space:]]*}"}"
             scalar="${scalar%"${scalar##*[![:space:]]}"}"
