@@ -1101,6 +1101,63 @@ final class UsageHistoryTests: XCTestCase {
         )
     }
 
+    func testProviderUsageCardCarriesDisclosureStateAndActionIndependently() {
+        let result = makeHistoryResult(
+            accountID: "codex.collapsed",
+            providerID: .codex,
+            fetchedAt: Date(),
+            used: 25
+        )
+        var toggleCount = 0
+        let collapsedCard = ProviderUsageCard(
+            result: result,
+            statusText: "Current",
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false),
+            isExpanded: false,
+            onToggleExpansion: {
+                toggleCount += 1
+            }
+        )
+        let expandedCard = ProviderUsageCard(
+            result: result,
+            statusText: "Current",
+            history: UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false)
+        )
+
+        XCTAssertFalse(collapsedCard.isExpanded)
+        XCTAssertTrue(expandedCard.isExpanded)
+        collapsedCard.onToggleExpansion()
+        XCTAssertEqual(toggleCount, 1)
+        XCTAssertEqual(
+            ProviderUsageCard.disclosureAccessibilityHint(isExpanded: false, title: result.title),
+            "Expand \(result.title)"
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.disclosureAccessibilityHint(isExpanded: true, title: result.title),
+            "Collapse \(result.title)"
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.disclosureAccessibilityLabel(
+                for: result,
+                statusText: "Current",
+                isRefreshing: true,
+                isPerformingRecovery: false,
+                severity: .warning
+            ),
+            "\(result.title), Current, Refreshing, Warning status"
+        )
+        XCTAssertEqual(
+            ProviderUsageCard.disclosureAccessibilityLabel(
+                for: result,
+                statusText: "Session expired",
+                isRefreshing: true,
+                isPerformingRecovery: true,
+                severity: .critical
+            ),
+            "\(result.title), Session expired, Signing in, Critical status"
+        )
+    }
+
     func testProviderUsageCardDistinguishesRetryAndClaudeSignInActions() {
         let result = makeHistoryResult(
             accountID: "claude.work",

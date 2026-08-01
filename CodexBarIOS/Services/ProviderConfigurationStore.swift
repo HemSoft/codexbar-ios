@@ -209,6 +209,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var widgetRefreshInterval: WidgetRefreshInterval
     @Published public private(set) var dashboardOrderingMode: DashboardOrderingMode
     @Published public private(set) var dashboardCardOrder: [String]
+    @Published public private(set) var collapsedDashboardAccountIDs: Set<String>
     @Published public private(set) var metricLayouts: [String: AccountMetricLayout]
     @Published public private(set) var usageAlertSettings: UsageAlertSettings
     @Published public private(set) var usageAlertActiveIDs: Set<String>
@@ -227,6 +228,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let widgetRefreshIntervalKey = DefaultsKey.widgetRefreshInterval
     private let dashboardOrderingModeKey = DefaultsKey.dashboardOrderingMode
     private let dashboardCardOrderKey = DefaultsKey.dashboardCardOrder
+    private let collapsedDashboardAccountIDsKey = DefaultsKey.collapsedDashboardAccountIDs
     private let metricCustomizationPreferencesKey = DefaultsKey.metricCustomizationPreferences
     private let usageAlertSettingsKey = DefaultsKey.usageAlertSettings
     private let usageAlertActiveIDsKey = DefaultsKey.usageAlertActiveIDs
@@ -250,6 +252,14 @@ public final class ProviderConfigurationStore: ObservableObject {
                 ? Set(groupLoadResult.groups.map(\.id))
                 : nil
         )
+        let loadedCollapsedDashboardAccountIDs = Self.loadCollapsedDashboardAccountIDs(
+            from: defaults
+        )
+        let collapsedDashboardAccountIDs = configurationLoadResult.error == nil
+            ? loadedCollapsedDashboardAccountIDs.intersection(
+                Set(configurationLoadResult.configurations.map(\.id))
+            )
+            : loadedCollapsedDashboardAccountIDs
         self.defaults = defaults
         self.secretStore = secretStore
         self.widgetSnapshotDefaults = widgetSnapshotDefaults
@@ -264,6 +274,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         )
         self.dashboardOrderingMode = Self.loadDashboardOrderingMode(from: defaults)
         self.dashboardCardOrder = Self.loadDashboardCardOrder(from: defaults)
+        self.collapsedDashboardAccountIDs = collapsedDashboardAccountIDs
         let metricLayoutLoadResult = Self.loadMetricLayouts(from: defaults)
         var loadedMetricLayouts = metricLayoutLoadResult.layouts
         for configuration in configurationLoadResult.configurations
@@ -285,6 +296,9 @@ public final class ProviderConfigurationStore: ObservableObject {
            metricLayoutLoadResult.needsMigration
             || loadedMetricLayouts.count != metricLayoutLoadResult.layouts.count {
             saveMetricLayouts()
+        }
+        if collapsedDashboardAccountIDs != loadedCollapsedDashboardAccountIDs {
+            saveCollapsedDashboardAccountIDs()
         }
         sortConfigurations()
         if usageAlertSettingsNeedMigration {
@@ -562,6 +576,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             updateDashboardCardOrder(
                 dashboardCardOrder.filter { !removedAccountIDs.contains($0) }
             )
+            removeCollapsedDashboardAccountIDs(removedAccountIDs)
             updateUsageAlertActiveIDs(
                 UsageAlertEvaluator.activeAlertIDs(
                     usageAlertActiveIDs,
@@ -615,6 +630,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             groups = []
             secretAvailability = [:]
             dashboardCardOrder = []
+            collapsedDashboardAccountIDs = []
             metricLayouts = [:]
             unsupportedMetricLayoutData = [:]
             opaqueMetricLayoutData = nil
@@ -622,6 +638,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             defaults.removeObject(forKey: configurationsKey)
             defaults.removeObject(forKey: groupsKey)
             defaults.removeObject(forKey: dashboardCardOrderKey)
+            defaults.removeObject(forKey: collapsedDashboardAccountIDsKey)
             defaults.removeObject(forKey: metricCustomizationPreferencesKey)
             defaults.removeObject(forKey: usageAlertActiveIDsKey)
             defaults.removeObject(forKey: incompleteAccountResetKey)
@@ -639,6 +656,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             updateDashboardCardOrder(
                 dashboardCardOrder.filter { !removedAccountIDs.contains($0) }
             )
+            removeCollapsedDashboardAccountIDs(removedAccountIDs)
             updateUsageAlertActiveIDs(
                 UsageAlertEvaluator.activeAlertIDs(
                     usageAlertActiveIDs,
@@ -739,6 +757,26 @@ public final class ProviderConfigurationStore: ObservableObject {
         var seenAccountIDs = Set<String>()
         dashboardCardOrder = accountIDs.filter { seenAccountIDs.insert($0).inserted }
         defaults.set(dashboardCardOrder, forKey: dashboardCardOrderKey)
+    }
+
+    public func isDashboardCardCollapsed(accountID: String) -> Bool {
+        collapsedDashboardAccountIDs.contains(accountID)
+    }
+
+    public func updateDashboardCardCollapsed(_ isCollapsed: Bool, accountID: String) {
+        let changed: Bool
+        if isCollapsed {
+            guard configurations.contains(where: { $0.id == accountID }) else {
+                return
+            }
+            changed = collapsedDashboardAccountIDs.insert(accountID).inserted
+        } else {
+            changed = collapsedDashboardAccountIDs.remove(accountID) != nil
+        }
+        guard changed else {
+            return
+        }
+        saveCollapsedDashboardAccountIDs()
     }
 
     public func visualizationStyle(accountID: String, metricID: String) -> MetricVisualizationStyle {
@@ -1698,6 +1736,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         static let widgetRefreshInterval = "widgetRefreshInterval"
         static let dashboardOrderingMode = "dashboardOrderingMode"
         static let dashboardCardOrder = "dashboardCardOrder"
+        static let collapsedDashboardAccountIDs = "collapsedDashboardAccountIDs"
         static let metricCustomizationPreferences = "metricVisualizationPreferences"
         static let usageAlertSettings = "usageAlertSettings"
         static let usageAlertActiveIDs = "usageAlertActiveIDs"
@@ -1847,6 +1886,10 @@ public final class ProviderConfigurationStore: ObservableObject {
         var seenAccountIDs = Set<String>()
         return (defaults.stringArray(forKey: DefaultsKey.dashboardCardOrder) ?? [])
             .filter { seenAccountIDs.insert($0).inserted }
+    }
+
+    private static func loadCollapsedDashboardAccountIDs(from defaults: UserDefaults) -> Set<String> {
+        Set(defaults.stringArray(forKey: DefaultsKey.collapsedDashboardAccountIDs) ?? [])
     }
 
     private static func loadMetricLayouts(
@@ -2029,6 +2072,19 @@ public final class ProviderConfigurationStore: ObservableObject {
             return
         }
         defaults.set(data, forKey: metricCustomizationPreferencesKey)
+    }
+
+    private func removeCollapsedDashboardAccountIDs(_ accountIDs: Set<String>) {
+        let priorCount = collapsedDashboardAccountIDs.count
+        collapsedDashboardAccountIDs.subtract(accountIDs)
+        guard collapsedDashboardAccountIDs.count != priorCount else {
+            return
+        }
+        saveCollapsedDashboardAccountIDs()
+    }
+
+    private func saveCollapsedDashboardAccountIDs() {
+        defaults.set(collapsedDashboardAccountIDs.sorted(), forKey: collapsedDashboardAccountIDsKey)
     }
 
     private static func loadUsageAlertSettings(from defaults: UserDefaults) -> UsageAlertSettings {

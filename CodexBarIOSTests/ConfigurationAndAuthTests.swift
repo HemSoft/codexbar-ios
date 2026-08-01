@@ -2306,4 +2306,80 @@ final class ConfigurationAndAuthTests: XCTestCase {
         }.value
     }
 
+    @MainActor
+    func testDashboardCardCollapseStateDefaultsExpandedAndPersistsPerAccount() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let collapsedAccount = store.addAccount(for: .codex)
+        let expandedAccount = store.addAccount(for: .claude)
+
+        XCTAssertFalse(store.isDashboardCardCollapsed(accountID: collapsedAccount.id))
+        XCTAssertFalse(store.isDashboardCardCollapsed(accountID: expandedAccount.id))
+
+        store.updateDashboardCardCollapsed(true, accountID: collapsedAccount.id)
+
+        let reloadedStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        XCTAssertTrue(reloadedStore.isDashboardCardCollapsed(accountID: collapsedAccount.id))
+        XCTAssertFalse(reloadedStore.isDashboardCardCollapsed(accountID: expandedAccount.id))
+
+        reloadedStore.updateDashboardCardCollapsed(false, accountID: collapsedAccount.id)
+        XCTAssertFalse(reloadedStore.isDashboardCardCollapsed(accountID: collapsedAccount.id))
+    }
+
+    @MainActor
+    func testRemovingAndResettingAccountsCleanUpDashboardCardCollapseState() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let removedAccount = store.addAccount(for: .codex)
+        store.updateDashboardCardCollapsed(true, accountID: removedAccount.id)
+
+        XCTAssertTrue(store.removeAccount(removedAccount))
+        XCTAssertFalse(store.isDashboardCardCollapsed(accountID: removedAccount.id))
+
+        let resetAccount = store.addAccount(for: .claude)
+        store.updateDashboardCardCollapsed(true, accountID: resetAccount.id)
+        XCTAssertTrue(store.resetAccounts())
+        XCTAssertTrue(store.collapsedDashboardAccountIDs.isEmpty)
+        XCTAssertNil(defaults.stringArray(forKey: "collapsedDashboardAccountIDs"))
+    }
+
+    @MainActor
+    func testProviderConfigurationStorePrunesOrphanedCollapsedDashboardAccountIDs() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let account = store.addAccount(for: .codex)
+        defaults.set(
+            [account.id, "codex.orphaned-account"].sorted(),
+            forKey: "collapsedDashboardAccountIDs"
+        )
+
+        let reloadedStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertEqual(reloadedStore.collapsedDashboardAccountIDs, [account.id])
+        XCTAssertEqual(
+            defaults.stringArray(forKey: "collapsedDashboardAccountIDs"),
+            [account.id]
+        )
+    }
 }
