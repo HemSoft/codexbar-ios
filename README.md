@@ -61,9 +61,10 @@ Use the documented simulator commands in
 
 ## Mutation Testing
 
-A focused, non-blocking mutation-testing pilot is available for deterministic
-dashboard sorting logic. See [MUTATION-TESTING.md](MUTATION-TESTING.md) for the
-pinned tool, baseline findings, survivor triage, and reproducible local command.
+A focused, non-blocking mutation-testing pilot covers deterministic dashboard
+sorting and App Review prompt policy logic. See
+[MUTATION-TESTING.md](MUTATION-TESTING.md) for the pinned tool, baseline
+findings, survivor triage, and reproducible local command.
 
 ## Reference Repo
 

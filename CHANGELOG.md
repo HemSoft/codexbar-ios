@@ -230,6 +230,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Updated the README's mutation-testing overview to reflect the complete
+  bounded pilot across dashboard sorting and App Review prompt policy logic.
+  ([#223](https://github.com/HemSoft/codexbar-ios/issues/223))
 - Expanded the manual mutation-testing pilot to deterministic App Review policy
   logic, documented a measured two-file baseline and complete survivor triage,
   and added focused boundary regressions without introducing a CI gate.
