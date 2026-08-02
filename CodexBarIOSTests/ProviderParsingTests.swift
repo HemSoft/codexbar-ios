@@ -234,6 +234,39 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertTrue(result.bars.isEmpty)
     }
 
+    func testGreptileProviderRejectsIdlessReviewsBeforePaginationDeduplication() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"result":{"codeReviews":[{"status":"COMPLETED"},{"id":"","status":"PENDING"}],"total":2}}"#.utf8
+                )
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session,
+            pageSize: 2
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.failureMessage, "Could not parse Greptile review activity.")
+        XCTAssertTrue(result.bars.isEmpty)
+    }
+
     func testGreptileProviderDistinguishesHTTPAndJSONRPCFailures() async throws {
         let cases: [(Int, [String: String]?, Data, String)] = [
             (401, nil, Data(), "Greptile rejected this organization API key."),

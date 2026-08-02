@@ -137,11 +137,8 @@ public final class GreptileUsageProvider: UsageProvider {
                     expectedTotal = max(expectedTotal ?? 0, total)
                 }
 
-                for (index, review) in page.reviews.enumerated() {
-                    let reviewID = review.id.isEmpty
-                        ? "page-\(pageCount)-offset-\(offset)-index-\(index)"
-                        : review.id
-                    guard seenReviewIDs.insert(reviewID).inserted else {
+                for review in page.reviews {
+                    guard seenReviewIDs.insert(review.id).inserted else {
                         continue
                     }
                     counts.record(review.status)
@@ -250,10 +247,19 @@ public final class GreptileUsageProvider: UsageProvider {
             return .malformed
         }
 
-        let reviews = rawReviews.map { review in
-            ReviewPage.Review(
-                id: stringValue(review["id"]) ?? "",
-                status: stringValue(review["status"]) ?? "UNKNOWN"
+        var reviews: [ReviewPage.Review] = []
+        for review in rawReviews {
+            guard
+                let id = stringValue(review["id"])?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !id.isEmpty
+            else {
+                return .malformed
+            }
+            reviews.append(
+                ReviewPage.Review(
+                    id: id,
+                    status: stringValue(review["status"]) ?? "UNKNOWN"
+                )
             )
         }
         let total = integerValue(payload["total"])
