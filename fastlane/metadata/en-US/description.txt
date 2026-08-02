@@ -10,7 +10,6 @@ Supported providers:
 - Cursor
 - OpenRouter
 - OpenCode Go + Zen
-- Moonshot (Kimi)
 - Greptile
 
 What you can track:

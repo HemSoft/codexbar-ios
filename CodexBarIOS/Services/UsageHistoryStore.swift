@@ -233,7 +233,9 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         }
 
         if providerID == .greptile,
-           let completedReviews = bars.first(where: { $0.stableKey == "completed-reviews" }) {
+           let completedReviews = bars.first(where: {
+               $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey
+           }) {
             return completedReviews.used
         }
 
@@ -374,19 +376,7 @@ public struct UsageHistorySeries: Equatable, Sendable {
         }
 
         let directionDescription = direction == .up ? "Up" : "Down"
-        if isCount {
-            return "\(directionDescription) \(abs(latestDelta).formatted(.number.precision(.fractionLength(0...2))))"
-        }
-        if isBalance {
-            let formattedDelta = UsageHistoryFormatting.formatCurrency(
-                abs(latestDelta),
-                currencyCode: currencyCode ?? "USD",
-                decimalPlaces: decimalPlaces
-            )
-            return "\(directionDescription) \(formattedDelta)"
-        }
-
-        return "\(directionDescription) \(Int((abs(latestDelta) * 100).rounded())) pts"
+        return "\(directionDescription) \(deltaMagnitudeDescription(latestDelta))"
     }
 
     public var sampleWindowDescription: String {
@@ -450,6 +440,20 @@ public struct UsageHistorySeries: Equatable, Sendable {
         }
 
         return "\(Int((value * 100).rounded()))%"
+    }
+
+    func deltaMagnitudeDescription(_ delta: Double) -> String {
+        if isCount {
+            return abs(delta).formatted(.number.precision(.fractionLength(0...2)))
+        }
+        if isBalance {
+            return UsageHistoryFormatting.formatCurrency(
+                abs(delta),
+                currencyCode: currencyCode ?? "USD",
+                decimalPlaces: decimalPlaces
+            )
+        }
+        return "\(Int((abs(delta) * 100).rounded())) pts"
     }
 
     fileprivate var latestDelta: Double? {
@@ -638,7 +642,7 @@ public final class UsageHistoryStore: ObservableObject {
             return countUsageSeries(
                 accountID: result.accountID,
                 snapshots: snapshots,
-                stableKey: "completed-reviews",
+                stableKey: GreptileUsageIdentity.completedReviewsStableKey,
                 severityThresholds: severityThresholds
             )
         }
@@ -891,12 +895,12 @@ public final class UsageHistoryStore: ObservableObject {
                 ))
             } else if result.providerID == .greptile {
                 options.append(UsageHistorySeriesOption(
-                    id: "usage.completed-reviews",
+                    id: GreptileUsageIdentity.completedReviewsHistorySeriesID,
                     label: "Completed reviews",
                     series: countUsageSeries(
                         accountID: result.accountID,
                         snapshots: accountSnapshots,
-                        stableKey: "completed-reviews",
+                        stableKey: GreptileUsageIdentity.completedReviewsStableKey,
                         severityThresholds: severityThresholds
                     )
                 ))
@@ -991,17 +995,8 @@ public final class UsageHistoryStore: ObservableObject {
 
         if direction == .flat {
             description = "No change"
-        } else if series.isCount {
-            description = "Changed \(delta > 0 ? "+" : "-")\(abs(delta).formatted(.number.precision(.fractionLength(0...2))))"
-        } else if series.isBalance {
-            let formattedDelta = UsageHistoryFormatting.formatCurrency(
-                abs(delta),
-                currencyCode: series.currencyCode ?? "USD",
-                decimalPlaces: series.decimalPlaces
-            )
-            description = "Changed \(delta > 0 ? "+" : "-")\(formattedDelta)"
         } else {
-            description = "Changed \(delta > 0 ? "+" : "-")\(Int((abs(delta) * 100).rounded())) pts"
+            description = "Changed \(delta > 0 ? "+" : "-")\(series.deltaMagnitudeDescription(delta))"
         }
 
         return UsageTrendSummary(

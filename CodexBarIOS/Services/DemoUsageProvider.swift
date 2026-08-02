@@ -266,7 +266,7 @@ public extension DemoUsageProvider {
                 providerID: .greptile,
                 bars: [
                     UsageBar(
-                        stableKey: "completed-reviews",
+                        stableKey: GreptileUsageIdentity.completedReviewsStableKey,
                         label: "Completed reviews",
                         used: 84,
                         limit: 0,

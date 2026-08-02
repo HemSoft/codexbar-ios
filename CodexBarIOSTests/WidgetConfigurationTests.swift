@@ -39,7 +39,7 @@ final class WidgetConfigurationTests: XCTestCase {
             subtitle: "All available review history",
             bars: [
                 UsageBar(
-                    stableKey: "completed-reviews",
+                    stableKey: GreptileUsageIdentity.completedReviewsStableKey,
                     label: "Completed reviews",
                     used: 27,
                     limit: 0,
@@ -58,11 +58,14 @@ final class WidgetConfigurationTests: XCTestCase {
         let bar = try XCTUnwrap(
             WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.bars.first
         )
-        XCTAssertEqual(bar.metricID, "greptile.completed-reviews")
+        XCTAssertEqual(bar.metricID, GreptileUsageIdentity.completedReviewsMetricID)
         XCTAssertEqual(bar.usageText, "27")
         XCTAssertEqual(bar.fractionUsed, 0)
         XCTAssertEqual(bar.allowsGauge, false)
         XCTAssertEqual(bar.severity, .normal)
+        let usageBar = try XCTUnwrap(result.bars.first)
+        XCTAssertEqual(usageBar.supportedVisualizationStyles, [.automatic, .largeNumeric])
+        XCTAssertEqual(usageBar.resolvedVisualizationStyle(.circularRing), .largeNumeric)
 
         let providerSnapshot = try XCTUnwrap(
             WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
@@ -78,7 +81,7 @@ final class WidgetConfigurationTests: XCTestCase {
         store.updateVisualizationStyle(
             .circularRing,
             accountID: configuration.id,
-            metricID: "greptile.completed-reviews"
+            metricID: GreptileUsageIdentity.completedReviewsMetricID
         )
         let watchMetric = try XCTUnwrap(
             WatchSnapshotPublisher.makeSnapshot(

@@ -98,6 +98,16 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         limit <= 0 && fractionlessUsageText != nil
     }
 
+    public var supportedVisualizationStyles: [MetricVisualizationStyle] {
+        isUnboundedNumeric ? [.automatic, .largeNumeric] : MetricVisualizationStyle.allCases
+    }
+
+    public func resolvedVisualizationStyle(
+        _ preferredStyle: MetricVisualizationStyle
+    ) -> MetricVisualizationStyle {
+        isUnboundedNumeric ? .largeNumeric : preferredStyle
+    }
+
     public var severity: UsageSeverity {
         severity(using: .default)
     }

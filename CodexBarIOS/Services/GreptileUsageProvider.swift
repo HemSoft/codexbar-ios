@@ -1,5 +1,11 @@
 import Foundation
 
+enum GreptileUsageIdentity {
+    static let completedReviewsStableKey = "completed-reviews"
+    static let completedReviewsMetricID = "greptile.\(completedReviewsStableKey)"
+    static let completedReviewsHistorySeriesID = "usage.\(completedReviewsStableKey)"
+}
+
 public final class GreptileUsageProvider: UsageProvider {
     struct ReviewPage: Equatable {
         struct Review: Equatable {
@@ -434,7 +440,7 @@ public final class GreptileUsageProvider: UsageProvider {
             subtitle: "All available review history",
             bars: [
                 UsageBar(
-                    stableKey: "completed-reviews",
+                    stableKey: GreptileUsageIdentity.completedReviewsStableKey,
                     label: "Completed reviews",
                     used: Double(counts.completed),
                     limit: 0,

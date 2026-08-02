@@ -24,7 +24,7 @@ final class UsageHistoryTests: XCTestCase {
                         subtitle: "All available review history",
                         bars: [
                             UsageBar(
-                                stableKey: "completed-reviews",
+                                stableKey: GreptileUsageIdentity.completedReviewsStableKey,
                                 label: "Completed reviews",
                                 used: Double(count),
                                 limit: 0,
@@ -45,7 +45,7 @@ final class UsageHistoryTests: XCTestCase {
             subtitle: "All available review history",
             bars: [
                 UsageBar(
-                    stableKey: "completed-reviews",
+                    stableKey: GreptileUsageIdentity.completedReviewsStableKey,
                     label: "Completed reviews",
                     used: 15,
                     limit: 0,
@@ -56,12 +56,16 @@ final class UsageHistoryTests: XCTestCase {
         )
         let option = store.historySeriesOptions(for: result).first
 
-        XCTAssertEqual(option?.id, "usage.completed-reviews")
+        XCTAssertEqual(option?.id, GreptileUsageIdentity.completedReviewsHistorySeriesID)
         XCTAssertEqual(option?.label, "Completed reviews")
         XCTAssertEqual(option?.series.points.map(\.value), [12, 15])
         XCTAssertEqual(option?.series.latestValueDescription, "15")
         XCTAssertEqual(option?.series.changeDescription, "Up 3")
         XCTAssertTrue(option?.series.isCount == true)
+        XCTAssertEqual(
+            store.trendSummary(for: result, now: dates.last!)?.valueDescription,
+            "Changed +3"
+        )
     }
 
     @MainActor

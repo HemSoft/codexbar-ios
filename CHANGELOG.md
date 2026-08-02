@@ -9,9 +9,10 @@ building, testing, or releasing the app.
 ### Added
 
 - Added Greptile as a read-only provider for account-scoped completed-review
-  activity, with safe pagination, status details, and clear separation from
-  pull-request counts and billing credits across the dashboard, history,
-  widgets, and Apple Watch. ([#225](https://github.com/HemSoft/codexbar-ios/issues/225))
+  activity, with reliable access to available review history, status details,
+  and clear separation from pull-request counts and billing credits across the
+  dashboard, history, widgets, and Apple Watch.
+  ([#225](https://github.com/HemSoft/codexbar-ios/issues/225))
 
 - Added independently saved, accessible collapse controls to loaded dashboard
   account cards so people can reclaim space while keeping identity, status,
