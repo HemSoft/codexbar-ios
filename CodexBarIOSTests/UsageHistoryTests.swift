@@ -3,6 +3,68 @@ import XCTest
 
 final class UsageHistoryTests: XCTestCase {
     @MainActor
+    func testGreptileHistoryStoresCompletedReviewCountsAsNumbers() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = UsageHistoryStore(defaults: defaults)
+        let dates = [
+            Date(timeIntervalSince1970: 1_788_475_200),
+            Date(timeIntervalSince1970: 1_788_561_600),
+        ]
+
+        for (index, date) in dates.enumerated() {
+            let count = 12 + index * 3
+            store.record(
+                results: [
+                    ProviderUsageResult(
+                        accountID: "greptile.team",
+                        providerID: .greptile,
+                        title: "Greptile",
+                        subtitle: "All available review history",
+                        bars: [
+                            UsageBar(
+                                stableKey: "completed-reviews",
+                                label: "Completed reviews",
+                                used: Double(count),
+                                limit: 0,
+                                fractionlessUsageText: count.formatted()
+                            ),
+                        ],
+                        fetchedAt: date
+                    ),
+                ],
+                now: dates.last!
+            )
+        }
+
+        let result = ProviderUsageResult(
+            accountID: "greptile.team",
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: [
+                UsageBar(
+                    stableKey: "completed-reviews",
+                    label: "Completed reviews",
+                    used: 15,
+                    limit: 0,
+                    fractionlessUsageText: "15"
+                ),
+            ],
+            fetchedAt: dates.last!
+        )
+        let option = store.historySeriesOptions(for: result).first
+
+        XCTAssertEqual(option?.id, "usage.completed-reviews")
+        XCTAssertEqual(option?.label, "Completed reviews")
+        XCTAssertEqual(option?.series.points.map(\.value), [12, 15])
+        XCTAssertEqual(option?.series.latestValueDescription, "15")
+        XCTAssertEqual(option?.series.changeDescription, "Up 3")
+        XCTAssertTrue(option?.series.isCount == true)
+    }
+
+    @MainActor
     func testMissingUsageHistoryInitializesWithoutAnError() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

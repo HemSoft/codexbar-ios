@@ -232,6 +232,11 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
             return total.fractionUsed
         }
 
+        if providerID == .greptile,
+           let completedReviews = bars.first(where: { $0.stableKey == "completed-reviews" }) {
+            return completedReviews.used
+        }
+
         if let usage = bars.map(\.fractionUsed).max() {
             return usage
         }
@@ -312,6 +317,7 @@ public struct UsageHistorySeries: Equatable, Sendable {
     public let accountID: String
     public let points: [UsageHistoryPoint]
     public let isBalance: Bool
+    public let isCount: Bool
     public let currencyCode: String?
     public let decimalPlaces: Int
 
@@ -319,12 +325,14 @@ public struct UsageHistorySeries: Equatable, Sendable {
         accountID: String,
         points: [UsageHistoryPoint],
         isBalance: Bool,
+        isCount: Bool = false,
         currencyCode: String? = nil,
         decimalPlaces: Int = 2
     ) {
         self.accountID = accountID
         self.points = points
         self.isBalance = isBalance
+        self.isCount = isCount
         self.currencyCode = currencyCode
         self.decimalPlaces = decimalPlaces
     }
@@ -366,6 +374,9 @@ public struct UsageHistorySeries: Equatable, Sendable {
         }
 
         let directionDescription = direction == .up ? "Up" : "Down"
+        if isCount {
+            return "\(directionDescription) \(abs(latestDelta).formatted(.number.precision(.fractionLength(0...2))))"
+        }
         if isBalance {
             let formattedDelta = UsageHistoryFormatting.formatCurrency(
                 abs(latestDelta),
@@ -406,7 +417,7 @@ public struct UsageHistorySeries: Equatable, Sendable {
     }
 
     public var chartDomain: ClosedRange<Double> {
-        guard isBalance else {
+        guard isBalance || isCount else {
             return 0...1
         }
 
@@ -427,6 +438,9 @@ public struct UsageHistorySeries: Equatable, Sendable {
     }
 
     public func valueDescription(for value: Double) -> String {
+        if isCount {
+            return value.formatted(.number.precision(.fractionLength(0...2)))
+        }
         if isBalance {
             return UsageHistoryFormatting.formatCurrency(
                 value,
@@ -620,10 +634,45 @@ public final class UsageHistoryStore: ObservableObject {
             )
         }
 
+        if result.providerID == .greptile {
+            return countUsageSeries(
+                accountID: result.accountID,
+                snapshots: snapshots,
+                stableKey: "completed-reviews",
+                severityThresholds: severityThresholds
+            )
+        }
+
         return aggregateUsageSeries(
             accountID: result.accountID,
             snapshots: snapshots,
             severityThresholds: severityThresholds
+        )
+    }
+
+    private func countUsageSeries(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot],
+        stableKey: String,
+        severityThresholds: UsageSeverityThresholds
+    ) -> UsageHistorySeries {
+        UsageHistorySeries(
+            accountID: accountID,
+            points: snapshots.compactMap { snapshot in
+                snapshot.bars.first(where: { $0.stableKey == stableKey }).map {
+                    UsageHistoryPoint(
+                        id: snapshot.id,
+                        capturedAt: snapshot.capturedAt,
+                        value: $0.used,
+                        severity: snapshot.effectiveSeverity(
+                            for: $0,
+                            using: severityThresholds
+                        )
+                    )
+                }
+            },
+            isBalance: false,
+            isCount: true
         )
     }
 
@@ -840,6 +889,17 @@ public final class UsageHistoryStore: ObservableObject {
                     currentBars: result.bars,
                     severityThresholds: severityThresholds
                 ))
+            } else if result.providerID == .greptile {
+                options.append(UsageHistorySeriesOption(
+                    id: "usage.completed-reviews",
+                    label: "Completed reviews",
+                    series: countUsageSeries(
+                        accountID: result.accountID,
+                        snapshots: accountSnapshots,
+                        stableKey: "completed-reviews",
+                        severityThresholds: severityThresholds
+                    )
+                ))
             } else {
                 options.append(UsageHistorySeriesOption(
                     id: "usage",
@@ -931,6 +991,8 @@ public final class UsageHistoryStore: ObservableObject {
 
         if direction == .flat {
             description = "No change"
+        } else if series.isCount {
+            description = "Changed \(delta > 0 ? "+" : "-")\(abs(delta).formatted(.number.precision(.fractionLength(0...2))))"
         } else if series.isBalance {
             let formattedDelta = UsageHistoryFormatting.formatCurrency(
                 abs(delta),

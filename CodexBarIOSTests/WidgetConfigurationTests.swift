@@ -13,11 +13,56 @@ final class WidgetConfigurationTests: XCTestCase {
             (.moonshot, "moonshot"),
             (.openCodeZen, "openCodeZen"),
             (.openRouter, "openRouter"),
+            (.greptile, "greptile"),
         ]
 
         for (focus, providerID) in mappings {
             XCTAssertEqual(focus.providerID, providerID)
         }
+    }
+
+    @MainActor
+    func testGreptileWidgetSnapshotPublishesCountWithoutGaugeSemantics() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .greptile)
+        XCTAssertTrue(store.saveSecret("greptile-widget-key", for: configuration))
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: [
+                UsageBar(
+                    stableKey: "completed-reviews",
+                    label: "Completed reviews",
+                    used: 27,
+                    limit: 0,
+                    fractionlessUsageText: "27"
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_788_475_200)
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+
+        let bar = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.bars.first
+        )
+        XCTAssertEqual(bar.metricID, "greptile.completed-reviews")
+        XCTAssertEqual(bar.usageText, "27")
+        XCTAssertEqual(bar.fractionUsed, 0)
+        XCTAssertEqual(bar.allowsGauge, false)
+        XCTAssertEqual(bar.severity, .normal)
     }
 
     func testEveryRefreshPolicySelectsItsOverrideOrFallback() {

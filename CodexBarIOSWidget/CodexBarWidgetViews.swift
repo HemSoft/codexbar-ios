@@ -822,7 +822,10 @@ private struct WidgetMetricVisualization: View {
     }
 
     private var resolvedStyle: MetricVisualizationStyle {
-        (bar.visualizationStyle ?? .automatic).resolvedForWidget(
+        if bar.allowsGauge == false {
+            return .largeNumeric
+        }
+        return (bar.visualizationStyle ?? .automatic).resolvedForWidget(
             allowsGauge: layoutStyle != .dense
         )
     }

@@ -1352,6 +1352,8 @@ extension ProviderID {
             "moon.stars"
         case .cursor:
             "cursorarrow"
+        case .greptile:
+            "checkmark.bubble"
         }
     }
 }

@@ -270,6 +270,8 @@ public extension ProviderAccountConfiguration {
             ProviderAccountConfiguration(providerID: providerID, authMethod: .apiKey)
         case .cursor:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
+        case .greptile:
+            ProviderAccountConfiguration(providerID: providerID, authMethod: .apiKey)
         }
     }
 }

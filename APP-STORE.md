@@ -102,7 +102,7 @@ outstanding claims about the shipped 1.1 submission.
 
 | Product-page claim | Verified source or constraint | App Store wording guidance |
 | --- | --- | --- |
-| Tracks ChatGPT / Codex, GitHub Copilot, Claude, Cursor, OpenRouter, OpenCode Go + Zen, and Moonshot (Kimi) | Current provider list used by the app and screenshot plan | Name exactly these providers; do not imply official affiliation. |
+| Tracks ChatGPT / Codex, GitHub Copilot, Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), and Greptile | Current provider list used by the app and screenshot plan | Name exactly these providers; do not imply official affiliation. |
 | Shows usage, limits, balances, reset timing, refresh state, alerts, and history | Provider data varies by API/account type | Say metrics appear where each provider makes them available. |
 | Supports multiple accounts and provider groups | Current app configuration model | Say multiple accounts/groups, not team management or shared org administration. |
 | Offers Home Screen and Lock Screen widgets | Widget extension and configurable widget surfaces | Say configurable widgets; do not promise real-time refresh because iOS controls widget timing. |
@@ -235,7 +235,7 @@ to the App Store Connect version 1.1 submission on 2026-07-11:
   neutral in-app icon.
 - [ ] Re-check non-affiliation disclaimers before the next submission.
 - [ ] Re-confirm provider-name wording (Codex, Copilot, Claude, Cursor,
-  OpenRouter, OpenCode Go + Zen, Moonshot (Kimi)) before the next submission.
+  OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), Greptile) before the next submission.
 
 The completed content-rights declaration in Final Submission records the 1.1
 submission. These unchecked items are a broader future-release brand audit.

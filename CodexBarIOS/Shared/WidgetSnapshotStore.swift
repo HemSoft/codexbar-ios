@@ -309,6 +309,7 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
     public let projectionTrailingText: String?
     public let projectedSeverity: CodexBarWidgetSeverity?
     public let visualizationStyle: MetricVisualizationStyle?
+    public let allowsGauge: Bool?
 
     public init(
         id: String,
@@ -326,7 +327,8 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
         projectionTimestamp: Date? = nil,
         projectionTrailingText: String? = nil,
         projectedSeverity: CodexBarWidgetSeverity? = nil,
-        visualizationStyle: MetricVisualizationStyle? = nil
+        visualizationStyle: MetricVisualizationStyle? = nil,
+        allowsGauge: Bool? = nil
     ) {
         self.id = id
         self.metricID = metricID
@@ -344,6 +346,7 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
         self.projectionTrailingText = projectionTrailingText
         self.projectedSeverity = projectedSeverity
         self.visualizationStyle = visualizationStyle
+        self.allowsGauge = allowsGauge
     }
 
     public var effectiveSeverity: CodexBarWidgetSeverity {

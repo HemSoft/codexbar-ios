@@ -10,10 +10,12 @@ Supported providers:
 - Cursor
 - OpenRouter
 - OpenCode Go + Zen
+- Moonshot (Kimi)
+- Greptile
 
 What you can track:
 
-- Usage limits, balance details, reset timing, refresh status, and alerts where each provider makes those metrics available
+- Usage limits, balance details, Greptile completed-review activity, reset timing, refresh status, and alerts where each provider makes those metrics available
 - Multiple accounts and grouped provider configurations, so work, personal, and team accounts can stay organized
 - Recent history and trend context for configured accounts
 - Home Screen and Lock Screen widgets with configurable tiles for the providers you care about most

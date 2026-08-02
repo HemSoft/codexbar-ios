@@ -2,6 +2,301 @@ import XCTest
 @testable import CodexBarIOS
 
 final class ProviderParsingTests: XCTestCase {
+    func testGreptileProviderUsesReadOnlyMCPPaginationAndCountsReviewStatuses() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration(
+            id: "greptile.team-a",
+            providerID: .greptile,
+            accountLabel: "Team A reviews",
+            authMethod: .apiKey
+        )
+        try secretStore.saveSecret(
+            "Authorization: Bearer greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+
+        let sessionFixture = IsolatedTestURLSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://api.greptile.com/mcp")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer greptile-test-key")
+            let body = try XCTUnwrap(requestBodyData(from: request))
+            let root = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(root["jsonrpc"] as? String, "2.0")
+            XCTAssertEqual(root["method"] as? String, "tools/call")
+            let params = try XCTUnwrap(root["params"] as? [String: Any])
+            XCTAssertEqual(params["name"] as? String, "list_code_reviews")
+            let arguments = try XCTUnwrap(params["arguments"] as? [String: Any])
+            XCTAssertEqual(arguments["limit"] as? Int, 3)
+            let offset = try XCTUnwrap(arguments["offset"] as? Int)
+
+            let payload: String
+            switch offset {
+            case 0:
+                payload = #"{"jsonrpc":"2.0","id":"one","result":{"content":[{"type":"text","text":"{\"codeReviews\":[{\"id\":\"r1\",\"status\":\"COMPLETED\",\"mergeRequest\":{\"prNumber\":45}},{\"id\":\"r2\",\"status\":\"COMPLETED\",\"mergeRequest\":{\"prNumber\":45}},{\"id\":\"r3\",\"status\":\"PENDING\"}],\"total\":8}"}]}}"#
+            case 3:
+                payload = #"{"jsonrpc":"2.0","id":"two","result":{"structuredContent":{"codeReviews":[{"id":"r4","status":"REVIEWING_FILES"},{"id":"r5","status":"GENERATING_SUMMARY"},{"id":"r6","status":"FAILED","futureField":{"ignored":true}}],"total":8}}}"#
+            case 6:
+                payload = #"{"jsonrpc":"2.0","id":"three","result":{"codeReviews":[{"id":"r7","status":"SKIPPED"},{"id":"r8","status":"FUTURE_STATUS"}],"total":8}}"#
+            default:
+                XCTFail("Unexpected Greptile pagination offset \(offset)")
+                payload = #"{"result":{"codeReviews":[],"total":8}}"#
+            }
+
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(payload.utf8)
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session,
+            pageSize: 3
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.providerID, .greptile)
+        XCTAssertEqual(result.accountID, configuration.id)
+        XCTAssertEqual(result.title, "Team A reviews")
+        XCTAssertEqual(result.subtitle, "All available review history")
+        let completed = try XCTUnwrap(result.bars.first)
+        XCTAssertEqual(completed.stableKey, "completed-reviews")
+        XCTAssertEqual(completed.label, "Completed reviews")
+        XCTAssertEqual(completed.used, 2)
+        XCTAssertEqual(completed.limit, 0)
+        XCTAssertEqual(completed.usageText, "2")
+        XCTAssertEqual(completed.severity, .normal)
+        XCTAssertEqual(result.availableMetrics.first?.id, "greptile.completed-reviews")
+        XCTAssertTrue(result.usageMessages.contains {
+            $0.contains("does not currently expose billing-credit usage")
+        })
+
+        let statusItems = try XCTUnwrap(result.cardInformationSections.first).items
+        let counts = Dictionary(uniqueKeysWithValues: statusItems.map { ($0.label, $0.detail) })
+        XCTAssertEqual(counts["Completed"], "2")
+        XCTAssertEqual(counts["Pending"], "1")
+        XCTAssertEqual(counts["In progress"], "2")
+        XCTAssertEqual(counts["Failed"], "1")
+        XCTAssertEqual(counts["Skipped"], "1")
+        XCTAssertEqual(counts["Other statuses"], "1")
+    }
+
+    func testGreptileProviderRejectsIncompleteOrMalformedPagination() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"not json"}]}}"#.utf8)
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(secretStore: secretStore, session: sessionFixture.session)
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.failureMessage, "Could not parse Greptile review activity.")
+        XCTAssertFalse(result.preserveCachedBarsOnFailure)
+        XCTAssertTrue(result.bars.isEmpty)
+    }
+
+    func testGreptileProviderDistinguishesHTTPAndJSONRPCFailures() async throws {
+        let cases: [(Int, [String: String]?, Data, String)] = [
+            (401, nil, Data(), "Greptile rejected this organization API key."),
+            (403, nil, Data(), "lacks permission"),
+            (429, ["Retry-After": "45"], Data(), "about 45 seconds"),
+            (503, nil, Data(), "temporarily unavailable (HTTP 503)"),
+            (
+                200,
+                nil,
+                Data(#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Authentication failed"}}"#.utf8),
+                "Greptile rejected this organization API key."
+            ),
+        ]
+
+        for (statusCode, headers, data, messageFragment) in cases {
+            let secretStore = MemorySecretStore()
+            let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+            try secretStore.saveSecret(
+                "greptile-test-key",
+                account: ProviderConfigurationStore.keychainAccount(for: configuration)
+            )
+            let sessionFixture = IsolatedTestURLSession { request in
+                (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: statusCode,
+                        httpVersion: nil,
+                        headerFields: headers
+                    )!,
+                    data
+                )
+            }
+            let provider = GreptileUsageProvider(
+                secretStore: secretStore,
+                session: sessionFixture.session
+            )
+
+            let result = try await provider.fetchUsage(for: configuration)
+            sessionFixture.invalidate()
+
+            XCTAssertTrue(
+                try XCTUnwrap(result.failureMessage).contains(messageFragment),
+                "Expected \(messageFragment) for HTTP \(statusCode)"
+            )
+            XCTAssertFalse(try XCTUnwrap(result.failureMessage).contains("greptile-test-key"))
+        }
+    }
+
+    @MainActor
+    func testGreptileTransientFailurePreservesStaleSameAccountSnapshot() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration(
+            id: "greptile.stale-team",
+            providerID: .greptile,
+            authMethod: .apiKey
+        )
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let successFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"result":{"codeReviews":[{"id":"r1","status":"COMPLETED"}],"total":1}}"#.utf8)
+            )
+        }
+        let successfulProvider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: successFixture.session
+        )
+        let successfulResult = try await successfulProvider.fetchUsage(for: configuration)
+        successFixture.invalidate()
+
+        let failureFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 503,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data()
+            )
+        }
+        defer { failureFixture.invalidate() }
+        let service = UsageRefreshService(
+            providers: [
+                GreptileUsageProvider(secretStore: secretStore, session: failureFixture.session),
+            ],
+            initialResults: [successfulResult]
+        )
+
+        _ = await service.refresh(configuration: configuration)
+
+        let preserved = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(preserved.accountID, configuration.id)
+        XCTAssertEqual(preserved.bars.first?.used, 1)
+        XCTAssertNotNil(preserved.failureMessage)
+        XCTAssertFalse(preserved.hasCurrentBars)
+        XCTAssertTrue(preserved.subtitle.contains("last known data"))
+    }
+
+    @MainActor
+    func testGreptileAccountsUseIsolatedCredentialsAndResults() async throws {
+        let secretStore = MemorySecretStore()
+        let first = ProviderAccountConfiguration(
+            id: "greptile.first",
+            providerID: .greptile,
+            authMethod: .apiKey
+        )
+        let second = ProviderAccountConfiguration(
+            id: "greptile.second",
+            providerID: .greptile,
+            authMethod: .apiKey
+        )
+        try secretStore.saveSecret(
+            "first-key",
+            account: ProviderConfigurationStore.keychainAccount(for: first)
+        )
+        try secretStore.saveSecret(
+            "second-key",
+            account: ProviderConfigurationStore.keychainAccount(for: second)
+        )
+        XCTAssertNotEqual(
+            ProviderConfigurationStore.keychainAccount(for: first),
+            ProviderConfigurationStore.keychainAccount(for: second)
+        )
+
+        let sessionFixture = IsolatedTestURLSession { request in
+            let authorization = try XCTUnwrap(request.value(forHTTPHeaderField: "Authorization"))
+            let completedCount = authorization == "Bearer first-key" ? 1 : 2
+            let reviews = (0..<completedCount).map { index in
+                #"{"id":"\#(authorization)-\#(index)","status":"COMPLETED"}"#
+            }.joined(separator: ",")
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"result":{"codeReviews":[\#(reviews)],"total":\#(completedCount)}}"#.utf8)
+            )
+        }
+        defer { sessionFixture.invalidate() }
+        let service = UsageRefreshService(providers: [
+            GreptileUsageProvider(secretStore: secretStore, session: sessionFixture.session),
+        ])
+
+        await service.refresh(configurations: [first, second])
+
+        let results = Dictionary(uniqueKeysWithValues: service.results.map { ($0.accountID, $0) })
+        XCTAssertEqual(results[first.id]?.bars.first?.used, 1)
+        XCTAssertEqual(results[second.id]?.bars.first?.used, 2)
+    }
+
+    func testGreptileProviderWithoutCredentialIsNotConfigured() async throws {
+        let provider = GreptileUsageProvider(secretStore: EmptySecretStore())
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.failureMessage, "Not configured - enter a Greptile organization API key.")
+        XCTAssertTrue(result.bars.isEmpty)
+    }
+
+    func testGreptileNormalizesPastedAuthorizationHeader() {
+        XCTAssertEqual(
+            GreptileUsageProvider.normalizedAPIKey(from: "Authorization: Bearer greptile-key"),
+            "greptile-key"
+        )
+        XCTAssertEqual(
+            GreptileUsageProvider.normalizedAPIKey(from: "\"quoted-key\""),
+            "quoted-key"
+        )
+    }
+
     func testOpenRouterCreditsParserCalculatesBalance() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
         let configuration = ProviderAccountConfiguration(

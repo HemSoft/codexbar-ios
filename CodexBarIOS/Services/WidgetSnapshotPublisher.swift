@@ -75,7 +75,8 @@ enum WidgetSnapshotPublisher {
                                     providerID: result.providerID,
                                     index: index
                                 )
-                            )
+                            ),
+                            allowsGauge: !bar.isUnboundedNumeric
                         )
                     },
                     creditsRemaining: result.freshCreditsRemaining,
