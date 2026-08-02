@@ -62,6 +62,7 @@ final class WidgetConfigurationTests: XCTestCase {
         XCTAssertEqual(bar.usageText, "27")
         XCTAssertEqual(bar.fractionUsed, 0)
         XCTAssertEqual(bar.allowsGauge, false)
+        XCTAssertFalse(bar.allowsAutomaticVisualization)
         XCTAssertEqual(bar.severity, .normal)
         let usageBar = try XCTUnwrap(result.bars.first)
         XCTAssertEqual(usageBar.supportedVisualizationStyles, [.automatic, .largeNumeric])

@@ -311,6 +311,10 @@ public struct CodexBarWidgetUsageBarSnapshot: Codable, Equatable, Identifiable, 
     public let visualizationStyle: MetricVisualizationStyle?
     public let allowsGauge: Bool?
 
+    public var allowsAutomaticVisualization: Bool {
+        allowsGauge != false
+    }
+
     public init(
         id: String,
         metricID: String? = nil,

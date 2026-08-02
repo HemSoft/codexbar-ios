@@ -442,7 +442,9 @@ struct ProviderWidgetTile: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                    WidgetMetricVisualization(bar: bar, layoutStyle: style)
+                    if bar.allowsAutomaticVisualization {
+                        WidgetMetricVisualization(bar: bar, layoutStyle: style)
+                    }
                 }
             } else {
                 Text(tile.subtitle)
@@ -482,7 +484,9 @@ struct ProviderWidgetTile: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
 
-                WidgetMetricVisualization(bar: bar, layoutStyle: style)
+                if bar.allowsAutomaticVisualization {
+                    WidgetMetricVisualization(bar: bar, layoutStyle: style)
+                }
 
                 if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
                     Text(detail)

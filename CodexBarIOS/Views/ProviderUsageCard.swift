@@ -2013,7 +2013,7 @@ struct ProviderUsageHistoryDetailView: View {
                     }
                 }
 
-                if !series.isBalance {
+                if series.showsQuotaLimitRule {
                     RuleMark(y: .value("Limit", 1.0))
                         .foregroundStyle(Color.secondary.opacity(0.6))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))

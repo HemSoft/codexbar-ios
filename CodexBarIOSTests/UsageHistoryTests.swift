@@ -62,6 +62,7 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(option?.series.latestValueDescription, "15")
         XCTAssertEqual(option?.series.changeDescription, "Up 3")
         XCTAssertTrue(option?.series.isCount == true)
+        XCTAssertFalse(option?.series.showsQuotaLimitRule == true)
         XCTAssertEqual(
             store.trendSummary(for: result, now: dates.last!)?.valueDescription,
             "Changed +3"

@@ -427,6 +427,10 @@ public struct UsageHistorySeries: Equatable, Sendable {
         return lowerBound...upperBound
     }
 
+    public var showsQuotaLimitRule: Bool {
+        !isBalance && !isCount
+    }
+
     public func valueDescription(for value: Double) -> String {
         if isCount {
             return value.formatted(.number.precision(.fractionLength(0...2)))
