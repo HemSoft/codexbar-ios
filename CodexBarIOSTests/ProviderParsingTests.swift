@@ -192,6 +192,48 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertNil(result.failureMessage)
     }
 
+    func testGreptileProviderRejectsOverlappingPagesThatMissReportedReviews() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            let body = try XCTUnwrap(requestBodyData(from: request))
+            let root = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let params = try XCTUnwrap(root["params"] as? [String: Any])
+            let arguments = try XCTUnwrap(params["arguments"] as? [String: Any])
+            let offset = try XCTUnwrap(arguments["offset"] as? Int)
+            let reviews = offset == 0
+                ? #"[{"id":"r1","status":"COMPLETED"},{"id":"r2","status":"COMPLETED"}]"#
+                : #"[{"id":"r2","status":"COMPLETED"},{"id":"r3","status":"COMPLETED"}]"#
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"result":{"codeReviews":\#(reviews),"total":4}}"#.utf8)
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session,
+            pageSize: 2
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(
+            result.failureMessage,
+            "Greptile returned incomplete paginated review activity. Try again later."
+        )
+        XCTAssertTrue(result.bars.isEmpty)
+    }
+
     func testGreptileProviderDistinguishesHTTPAndJSONRPCFailures() async throws {
         let cases: [(Int, [String: String]?, Data, String)] = [
             (401, nil, Data(), "Greptile rejected this organization API key."),

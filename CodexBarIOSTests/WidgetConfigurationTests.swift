@@ -72,6 +72,7 @@ final class WidgetConfigurationTests: XCTestCase {
             WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
         )
         let tile = providerSnapshot.barTile(bar)
+        XCTAssertFalse(tile.allowsUsageGauge)
         XCTAssertFalse(
             CodexBarWidgetRenderedTile(tile: tile, displayMode: .compactPercent).allowsUsageGauge
         )

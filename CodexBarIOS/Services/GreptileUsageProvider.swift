@@ -149,7 +149,12 @@ public final class GreptileUsageProvider: UsageProvider {
 
                 let nextOffset = offset + page.reviews.count
                 if let expectedTotal, nextOffset >= expectedTotal {
-                    return successResult(counts: counts, configuration: configuration)
+                    return completedPaginationResult(
+                        expectedTotal: expectedTotal,
+                        uniqueReviewCount: seenReviewIDs.count,
+                        counts: counts,
+                        configuration: configuration
+                    )
                 }
                 if page.reviews.isEmpty {
                     if expectedTotal == nil || offset >= expectedTotal ?? 0 {
@@ -468,6 +473,18 @@ public final class GreptileUsageProvider: UsageProvider {
             "Greptile returned incomplete paginated review activity. Try again later.",
             configuration: configuration
         )
+    }
+
+    private func completedPaginationResult(
+        expectedTotal: Int,
+        uniqueReviewCount: Int,
+        counts: StatusCounts,
+        configuration: ProviderAccountConfiguration
+    ) -> ProviderUsageResult {
+        guard uniqueReviewCount >= expectedTotal else {
+            return incompletePaginationFailure(configuration: configuration)
+        }
+        return successResult(counts: counts, configuration: configuration)
     }
 
     private func pageLimit(expectedTotal: Int?) -> Int {

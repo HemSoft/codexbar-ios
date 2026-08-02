@@ -17,15 +17,27 @@ struct AccessoryCircularWidget: View {
     let tile: CodexBarWidgetTile?
 
     var body: some View {
-        Gauge(value: tile?.bar?.effectiveFractionUsed ?? 0) {
-            Image(systemName: "gauge.with.dots.needle.50percent")
-        } currentValueLabel: {
-            Text(tile.map(\.summaryText) ?? "--")
-                .font(.system(size: 10, weight: .semibold))
-                .minimumScaleFactor(0.6)
+        if let tile, !tile.allowsUsageGauge {
+            VStack(spacing: 1) {
+                Image(systemName: "number")
+                Text(tile.summaryText)
+                    .font(.system(size: 10, weight: .semibold))
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(tile.severity.tint)
+            .widgetAccentable()
+        } else {
+            Gauge(value: tile?.bar?.effectiveFractionUsed ?? 0) {
+                Image(systemName: "gauge.with.dots.needle.50percent")
+            } currentValueLabel: {
+                Text(tile.map(\.summaryText) ?? "--")
+                    .font(.system(size: 10, weight: .semibold))
+                    .minimumScaleFactor(0.6)
+            }
+            .gaugeStyle(.accessoryCircularCapacity)
+            .tint(tile?.severity.tint ?? .secondary)
         }
-        .gaugeStyle(.accessoryCircularCapacity)
-        .tint(tile?.severity.tint ?? .secondary)
     }
 }
 
