@@ -540,7 +540,7 @@ struct ProviderWidgetTile: View {
                 .lineLimit(style == .dense ? 2 : 1)
                 .minimumScaleFactor(0.65)
 
-            if let bar = tile.bar {
+            if let bar = tile.bar, renderedTile.allowsUsageGauge {
                 WidgetUsageProgressBar(bar: bar)
             }
         }
@@ -561,7 +561,9 @@ struct ProviderWidgetTile: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
-                WidgetUsageProgressBar(bar: bar)
+                if renderedTile.allowsUsageGauge {
+                    WidgetUsageProgressBar(bar: bar)
+                }
 
                 if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
                     Text(detail)

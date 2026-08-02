@@ -97,7 +97,7 @@ public final class GreptileUsageProvider: UsageProvider {
         var seenReviewIDs = Set<String>()
         var counts = StatusCounts()
 
-        while pageCount < maximumPageCount {
+        while pageCount < pageLimit(expectedTotal: expectedTotal) {
             let request = makeReviewsRequest(apiKey: apiKey, offset: offset)
             let data: Data
             let response: URLResponse
@@ -216,11 +216,17 @@ public final class GreptileUsageProvider: UsageProvider {
     }
 
     private static func parseReviewPage(_ data: Data) -> PageResponse {
-        guard
-            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return .malformed
+        for root in responseObjects(in: data) {
+            let response = parseReviewPage(root)
+            if case .malformed = response {
+                continue
+            }
+            return response
         }
+        return .malformed
+    }
+
+    private static func parseReviewPage(_ root: [String: Any]) -> PageResponse {
 
         if let error = root["error"] as? [String: Any] {
             return pageResponse(for: error)
@@ -244,6 +250,48 @@ public final class GreptileUsageProvider: UsageProvider {
             return .malformed
         }
         return .page(ReviewPage(reviews: reviews, total: total))
+    }
+
+    private static func responseObjects(in data: Data) -> [[String: Any]] {
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return [object]
+        }
+
+        guard let eventStream = String(data: data, encoding: .utf8) else {
+            return []
+        }
+
+        var objects: [[String: Any]] = []
+        var dataLines: [String] = []
+
+        func appendEvent() {
+            guard !dataLines.isEmpty else {
+                return
+            }
+            defer { dataLines.removeAll(keepingCapacity: true) }
+            let payload = dataLines.joined(separator: "\n")
+            guard
+                payload != "[DONE]",
+                let payloadData = payload.data(using: .utf8),
+                let object = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+            else {
+                return
+            }
+            objects.append(object)
+        }
+
+        for rawLine in eventStream.components(separatedBy: .newlines) {
+            let line = rawLine.hasSuffix("\r") ? String(rawLine.dropLast()) : rawLine
+            if line.isEmpty {
+                appendEvent()
+            } else if line.hasPrefix("data:") {
+                dataLines.append(
+                    String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                )
+            }
+        }
+        appendEvent()
+        return objects
     }
 
     private static func reviewPayload(in root: [String: Any]) -> [String: Any]? {
@@ -414,6 +462,15 @@ public final class GreptileUsageProvider: UsageProvider {
             "Greptile returned incomplete paginated review activity. Try again later.",
             configuration: configuration
         )
+    }
+
+    private func pageLimit(expectedTotal: Int?) -> Int {
+        guard let expectedTotal else {
+            return maximumPageCount
+        }
+        let completePageCount = expectedTotal / pageSize
+        let requiredPageCount = completePageCount + (expectedTotal.isMultiple(of: pageSize) ? 0 : 1)
+        return max(maximumPageCount, requiredPageCount)
     }
 
     private func failureResult(

@@ -115,6 +115,83 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertTrue(result.bars.isEmpty)
     }
 
+    func testGreptileProviderDecodesSSEJSONRPCResponses() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            let payload = """
+            event: message
+            data: {"jsonrpc":"2.0","id":"sse","result":{"codeReviews":[{"id":"r1","status":"COMPLETED"}],"total":1}}
+
+            """
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "text/event-stream"]
+                )!,
+                Data(payload.utf8)
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.bars.first?.used, 1)
+        XCTAssertNil(result.failureMessage)
+    }
+
+    func testGreptileProviderExpandsPaginationLimitForReportedTotal() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            let body = try XCTUnwrap(requestBodyData(from: request))
+            let root = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let params = try XCTUnwrap(root["params"] as? [String: Any])
+            let arguments = try XCTUnwrap(params["arguments"] as? [String: Any])
+            let offset = try XCTUnwrap(arguments["offset"] as? Int)
+            guard (0...2).contains(offset) else {
+                XCTFail("Unexpected Greptile pagination offset \(offset)")
+                throw URLError(.badServerResponse)
+            }
+            let payload = #"{"result":{"codeReviews":[{"id":"r\#(offset)","status":"COMPLETED"}],"total":3}}"#
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(payload.utf8)
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session,
+            pageSize: 1,
+            maximumPageCount: 2
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.bars.first?.used, 3)
+        XCTAssertNil(result.failureMessage)
+    }
+
     func testGreptileProviderDistinguishesHTTPAndJSONRPCFailures() async throws {
         let cases: [(Int, [String: String]?, Data, String)] = [
             (401, nil, Data(), "Greptile rejected this organization API key."),

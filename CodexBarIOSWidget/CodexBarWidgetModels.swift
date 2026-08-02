@@ -111,6 +111,10 @@ struct CodexBarWidgetRenderedTile: Identifiable {
             tile.monetaryValueFetchedAt
         }
     }
+
+    var allowsUsageGauge: Bool {
+        tile.bar?.allowsGauge != false
+    }
 }
 
 extension Collection where Element == CodexBarWidgetRenderedTile {

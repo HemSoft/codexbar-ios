@@ -63,6 +63,32 @@ final class WidgetConfigurationTests: XCTestCase {
         XCTAssertEqual(bar.fractionUsed, 0)
         XCTAssertEqual(bar.allowsGauge, false)
         XCTAssertEqual(bar.severity, .normal)
+
+        let providerSnapshot = try XCTUnwrap(
+            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first
+        )
+        let tile = providerSnapshot.barTile(bar)
+        XCTAssertFalse(
+            CodexBarWidgetRenderedTile(tile: tile, displayMode: .compactPercent).allowsUsageGauge
+        )
+        XCTAssertFalse(
+            CodexBarWidgetRenderedTile(tile: tile, displayMode: .fullBar).allowsUsageGauge
+        )
+
+        store.updateVisualizationStyle(
+            .circularRing,
+            accountID: configuration.id,
+            metricID: "greptile.completed-reviews"
+        )
+        let watchMetric = try XCTUnwrap(
+            WatchSnapshotPublisher.makeSnapshot(
+                results: [result],
+                configurationStore: store
+            ).accounts.first?.metrics.first
+        )
+        XCTAssertNil(watchMetric.usedFraction)
+        XCTAssertEqual(watchMetric.exactValue, "27")
+        XCTAssertEqual(watchMetric.visualizationStyle, .largeNumeric)
     }
 
     func testEveryRefreshPolicySelectsItsOverrideOrFallback() {
