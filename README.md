@@ -11,11 +11,13 @@ The Windows reference implementation is checked out beside this repo at:
 ## Current Scope
 
 - SwiftUI dashboard with account-scoped usage cards for Codex, GitHub Copilot,
-  Claude, Cursor, OpenRouter, OpenCode Go + Zen, and Moonshot (Kimi)
+  Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), and Greptile
 - Live provider adapters and settings for enabling accounts, choosing supported
   authentication methods, labeling accounts, and storing credentials in Keychain
 - Usage history and charts, configurable usage alerts, and home-screen and
   lock-screen widgets
+- Read-only Greptile review-activity tracking through an organization API key,
+  with completed reviews kept distinct from pull requests and billing credits
 - An embedded watchOS companion with a live, read-only dashboard that mirrors
   presentation-ready account metrics, visualization choices, ordering, and
   freshness from iPhone; provider setup, credentials, and provider networking

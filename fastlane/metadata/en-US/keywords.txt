@@ -1,1 +1,1 @@
-AI,usage,limits,widgets,ChatGPT,Codex,Claude,Copilot,Cursor,OpenRouter,OpenCode,balance
+AI,usage,limits,widgets,ChatGPT,Codex,Claude,Copilot,Cursor,OpenRouter,OpenCode,balance,Greptile

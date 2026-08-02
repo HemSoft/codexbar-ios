@@ -94,6 +94,20 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         return min(max(used / limit, 0), 1)
     }
 
+    public var isUnboundedNumeric: Bool {
+        limit <= 0 && fractionlessUsageText != nil
+    }
+
+    public var supportedVisualizationStyles: [MetricVisualizationStyle] {
+        isUnboundedNumeric ? [.automatic, .largeNumeric] : MetricVisualizationStyle.allCases
+    }
+
+    public func resolvedVisualizationStyle(
+        _ preferredStyle: MetricVisualizationStyle
+    ) -> MetricVisualizationStyle {
+        isUnboundedNumeric ? .largeNumeric : preferredStyle
+    }
+
     public var severity: UsageSeverity {
         severity(using: .default)
     }
@@ -124,6 +138,9 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
     }
 
     public var usageText: String {
+        if isUnboundedNumeric, let fractionlessUsageText {
+            return fractionlessUsageText
+        }
         guard limit > 0 else {
             return "0%"
         }

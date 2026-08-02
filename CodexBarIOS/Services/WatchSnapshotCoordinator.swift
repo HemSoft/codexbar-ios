@@ -112,12 +112,14 @@ enum WatchSnapshotPublisher {
                         resetsAt: bar.resetsAt,
                         resetDisplayStyle: bar.resetDisplayStyle,
                         fetchedAt: result.barsFetchedAt ?? result.fetchedAt,
-                        visualizationStyle: WatchMetricVisualizationStyle(
-                            configurationStore.visualizationStyle(
-                                accountID: result.accountID,
-                                metricID: metricID
+                        visualizationStyle: bar.isUnboundedNumeric
+                            ? .largeNumeric
+                            : WatchMetricVisualizationStyle(
+                                configurationStore.visualizationStyle(
+                                    accountID: result.accountID,
+                                    metricID: metricID
+                                )
                             )
-                        )
                     )
                 }
 

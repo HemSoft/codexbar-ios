@@ -232,6 +232,13 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
             return total.fractionUsed
         }
 
+        if providerID == .greptile,
+           let completedReviews = bars.first(where: {
+               $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey
+           }) {
+            return completedReviews.used
+        }
+
         if let usage = bars.map(\.fractionUsed).max() {
             return usage
         }
@@ -312,6 +319,7 @@ public struct UsageHistorySeries: Equatable, Sendable {
     public let accountID: String
     public let points: [UsageHistoryPoint]
     public let isBalance: Bool
+    public let isCount: Bool
     public let currencyCode: String?
     public let decimalPlaces: Int
 
@@ -319,12 +327,14 @@ public struct UsageHistorySeries: Equatable, Sendable {
         accountID: String,
         points: [UsageHistoryPoint],
         isBalance: Bool,
+        isCount: Bool = false,
         currencyCode: String? = nil,
         decimalPlaces: Int = 2
     ) {
         self.accountID = accountID
         self.points = points
         self.isBalance = isBalance
+        self.isCount = isCount
         self.currencyCode = currencyCode
         self.decimalPlaces = decimalPlaces
     }
@@ -366,16 +376,7 @@ public struct UsageHistorySeries: Equatable, Sendable {
         }
 
         let directionDescription = direction == .up ? "Up" : "Down"
-        if isBalance {
-            let formattedDelta = UsageHistoryFormatting.formatCurrency(
-                abs(latestDelta),
-                currencyCode: currencyCode ?? "USD",
-                decimalPlaces: decimalPlaces
-            )
-            return "\(directionDescription) \(formattedDelta)"
-        }
-
-        return "\(directionDescription) \(Int((abs(latestDelta) * 100).rounded())) pts"
+        return "\(directionDescription) \(deltaMagnitudeDescription(latestDelta))"
     }
 
     public var sampleWindowDescription: String {
@@ -406,7 +407,7 @@ public struct UsageHistorySeries: Equatable, Sendable {
     }
 
     public var chartDomain: ClosedRange<Double> {
-        guard isBalance else {
+        guard isBalance || isCount else {
             return 0...1
         }
 
@@ -426,7 +427,14 @@ public struct UsageHistorySeries: Equatable, Sendable {
         return lowerBound...upperBound
     }
 
+    public var showsQuotaLimitRule: Bool {
+        !isBalance && !isCount
+    }
+
     public func valueDescription(for value: Double) -> String {
+        if isCount {
+            return value.formatted(.number.precision(.fractionLength(0...2)))
+        }
         if isBalance {
             return UsageHistoryFormatting.formatCurrency(
                 value,
@@ -436,6 +444,20 @@ public struct UsageHistorySeries: Equatable, Sendable {
         }
 
         return "\(Int((value * 100).rounded()))%"
+    }
+
+    func deltaMagnitudeDescription(_ delta: Double) -> String {
+        if isCount {
+            return abs(delta).formatted(.number.precision(.fractionLength(0...2)))
+        }
+        if isBalance {
+            return UsageHistoryFormatting.formatCurrency(
+                abs(delta),
+                currencyCode: currencyCode ?? "USD",
+                decimalPlaces: decimalPlaces
+            )
+        }
+        return "\(Int((abs(delta) * 100).rounded())) pts"
     }
 
     fileprivate var latestDelta: Double? {
@@ -620,10 +642,45 @@ public final class UsageHistoryStore: ObservableObject {
             )
         }
 
+        if result.providerID == .greptile {
+            return countUsageSeries(
+                accountID: result.accountID,
+                snapshots: snapshots,
+                stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                severityThresholds: severityThresholds
+            )
+        }
+
         return aggregateUsageSeries(
             accountID: result.accountID,
             snapshots: snapshots,
             severityThresholds: severityThresholds
+        )
+    }
+
+    private func countUsageSeries(
+        accountID: String,
+        snapshots: [UsageHistorySnapshot],
+        stableKey: String,
+        severityThresholds: UsageSeverityThresholds
+    ) -> UsageHistorySeries {
+        UsageHistorySeries(
+            accountID: accountID,
+            points: snapshots.compactMap { snapshot in
+                snapshot.bars.first(where: { $0.stableKey == stableKey }).map {
+                    UsageHistoryPoint(
+                        id: snapshot.id,
+                        capturedAt: snapshot.capturedAt,
+                        value: $0.used,
+                        severity: snapshot.effectiveSeverity(
+                            for: $0,
+                            using: severityThresholds
+                        )
+                    )
+                }
+            },
+            isBalance: false,
+            isCount: true
         )
     }
 
@@ -840,6 +897,17 @@ public final class UsageHistoryStore: ObservableObject {
                     currentBars: result.bars,
                     severityThresholds: severityThresholds
                 ))
+            } else if result.providerID == .greptile {
+                options.append(UsageHistorySeriesOption(
+                    id: GreptileUsageIdentity.completedReviewsHistorySeriesID,
+                    label: "Completed reviews",
+                    series: countUsageSeries(
+                        accountID: result.accountID,
+                        snapshots: accountSnapshots,
+                        stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                        severityThresholds: severityThresholds
+                    )
+                ))
             } else {
                 options.append(UsageHistorySeriesOption(
                     id: "usage",
@@ -931,15 +999,8 @@ public final class UsageHistoryStore: ObservableObject {
 
         if direction == .flat {
             description = "No change"
-        } else if series.isBalance {
-            let formattedDelta = UsageHistoryFormatting.formatCurrency(
-                abs(delta),
-                currencyCode: series.currencyCode ?? "USD",
-                decimalPlaces: series.decimalPlaces
-            )
-            description = "Changed \(delta > 0 ? "+" : "-")\(formattedDelta)"
         } else {
-            description = "Changed \(delta > 0 ? "+" : "-")\(Int((abs(delta) * 100).rounded())) pts"
+            description = "Changed \(delta > 0 ? "+" : "-")\(series.deltaMagnitudeDescription(delta))"
         }
 
         return UsageTrendSummary(

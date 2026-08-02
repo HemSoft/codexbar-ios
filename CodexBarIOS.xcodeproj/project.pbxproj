@@ -54,6 +54,7 @@
 		100000000000000000000021 /* ClaudeUsageParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* ClaudeUsageParser.swift */; };
 		100000000000000000000022 /* ClaudeUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* ClaudeUsageProvider.swift */; };
 		100000000000000000000023 /* OpenRouterUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* OpenRouterUsageProvider.swift */; };
+		A22500000000000000000001 /* GreptileUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22500000000000000000002 /* GreptileUsageProvider.swift */; };
 		10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003F /* MoonshotUsageProvider.swift */; };
 		100000000000000000000040 /* TokenEndpointErrorFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000040 /* TokenEndpointErrorFormatter.swift */; };
 		100000000000000000000041 /* ProviderAuthSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000041 /* ProviderAuthSupport.swift */; };
@@ -237,6 +238,7 @@
 		200000000000000000000023 /* ClaudeUsageParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageParser.swift; sourceTree = "<group>"; };
 		200000000000000000000024 /* ClaudeUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageProvider.swift; sourceTree = "<group>"; };
 		200000000000000000000025 /* OpenRouterUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterUsageProvider.swift; sourceTree = "<group>"; };
+		A22500000000000000000002 /* GreptileUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreptileUsageProvider.swift; sourceTree = "<group>"; };
 		20000000000000000000003F /* MoonshotUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonshotUsageProvider.swift; sourceTree = "<group>"; };
 		200000000000000000000040 /* TokenEndpointErrorFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEndpointErrorFormatter.swift; sourceTree = "<group>"; };
 		200000000000000000000041 /* ProviderAuthSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAuthSupport.swift; sourceTree = "<group>"; };
@@ -428,6 +430,7 @@
 				200000000000000000000023 /* ClaudeUsageParser.swift */,
 				200000000000000000000024 /* ClaudeUsageProvider.swift */,
 				200000000000000000000025 /* OpenRouterUsageProvider.swift */,
+				A22500000000000000000002 /* GreptileUsageProvider.swift */,
 				20000000000000000000003F /* MoonshotUsageProvider.swift */,
 				200000000000000000000040 /* TokenEndpointErrorFormatter.swift */,
 				200000000000000000000041 /* ProviderAuthSupport.swift */,
@@ -837,6 +840,7 @@
 				100000000000000000000021 /* ClaudeUsageParser.swift in Sources */,
 				100000000000000000000022 /* ClaudeUsageProvider.swift in Sources */,
 				100000000000000000000023 /* OpenRouterUsageProvider.swift in Sources */,
+				A22500000000000000000001 /* GreptileUsageProvider.swift in Sources */,
 				10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */,
 				100000000000000000000040 /* TokenEndpointErrorFormatter.swift in Sources */,
 				100000000000000000000041 /* ProviderAuthSupport.swift in Sources */,

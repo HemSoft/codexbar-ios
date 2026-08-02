@@ -76,6 +76,10 @@ struct CodexBarWidgetTile: Identifiable {
         return bar.map(metricText(for:)) ?? "No data"
     }
 
+    var allowsUsageGauge: Bool {
+        bar?.allowsGauge != false
+    }
+
     func metricText(for bar: CodexBarWidgetUsageBarSnapshot) -> String {
         bar.usageText
     }
@@ -110,6 +114,10 @@ struct CodexBarWidgetRenderedTile: Identifiable {
         case .balanceOnly:
             tile.monetaryValueFetchedAt
         }
+    }
+
+    var allowsUsageGauge: Bool {
+        tile.allowsUsageGauge
     }
 }
 

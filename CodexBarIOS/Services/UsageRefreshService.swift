@@ -446,6 +446,7 @@ public extension UsageRefreshService {
                 OpenCodeZenUsageProvider(),
                 MoonshotUsageProvider(),
                 CursorUsageProvider(),
+                GreptileUsageProvider(),
             ]
         )
     }

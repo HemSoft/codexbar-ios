@@ -394,6 +394,8 @@ extension ProviderID {
             "Moonshot (Kimi)"
         case .cursor:
             "Cursor"
+        case .greptile:
+            "Greptile"
         }
     }
 }

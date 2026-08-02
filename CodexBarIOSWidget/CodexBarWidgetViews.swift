@@ -442,7 +442,9 @@ struct ProviderWidgetTile: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                    WidgetMetricVisualization(bar: bar, layoutStyle: style)
+                    if bar.allowsAutomaticVisualization {
+                        WidgetMetricVisualization(bar: bar, layoutStyle: style)
+                    }
                 }
             } else {
                 Text(tile.subtitle)
@@ -482,7 +484,9 @@ struct ProviderWidgetTile: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
 
-                WidgetMetricVisualization(bar: bar, layoutStyle: style)
+                if bar.allowsAutomaticVisualization {
+                    WidgetMetricVisualization(bar: bar, layoutStyle: style)
+                }
 
                 if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
                     Text(detail)
@@ -540,7 +544,7 @@ struct ProviderWidgetTile: View {
                 .lineLimit(style == .dense ? 2 : 1)
                 .minimumScaleFactor(0.65)
 
-            if let bar = tile.bar {
+            if let bar = tile.bar, renderedTile.allowsUsageGauge {
                 WidgetUsageProgressBar(bar: bar)
             }
         }
@@ -561,7 +565,9 @@ struct ProviderWidgetTile: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
-                WidgetUsageProgressBar(bar: bar)
+                if renderedTile.allowsUsageGauge {
+                    WidgetUsageProgressBar(bar: bar)
+                }
 
                 if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
                     Text(detail)
@@ -822,7 +828,10 @@ private struct WidgetMetricVisualization: View {
     }
 
     private var resolvedStyle: MetricVisualizationStyle {
-        (bar.visualizationStyle ?? .automatic).resolvedForWidget(
+        if bar.allowsGauge == false {
+            return .largeNumeric
+        }
+        return (bar.visualizationStyle ?? .automatic).resolvedForWidget(
             allowsGauge: layoutStyle != .dense
         )
     }

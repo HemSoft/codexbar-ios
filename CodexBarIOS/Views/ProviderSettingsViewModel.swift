@@ -88,7 +88,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             [.browserSession]
         case .copilot:
             [.browserSession, .cliToken]
-        case .openRouter, .openCodeZen, .moonshot:
+        case .openRouter, .openCodeZen, .moonshot, .greptile:
             [.apiKey]
         }
     }
@@ -105,6 +105,20 @@ final class ProviderSettingsViewModel: ObservableObject {
                 setupURL: URL(string: "https://openrouter.ai/settings/management-keys"),
                 securityMessage: "Management keys can administer API keys and are more sensitive than inference "
                     + "keys. CodexBar stores this credential only in Keychain."
+            )
+        }
+
+        if providerID == .greptile {
+            return ProviderCredentialPresentation(
+                sectionTitle: "Greptile Organization API Key",
+                unsavedPlaceholder: "Paste Greptile organization API key",
+                savedPlaceholder: "Greptile organization API key saved",
+                saveButtonTitle: "Save and Validate API Key",
+                setupMessage: "Create an organization API key in Greptile Settings. "
+                    + "CodexBar uses it only for read-only review-usage requests and never triggers reviews.",
+                setupLinkTitle: "Open Greptile API Key Settings",
+                setupURL: URL(string: "https://app.greptile.com/settings/api"),
+                securityMessage: "CodexBar stores this credential only in Keychain. Greptile's current API does not expose billing-credit usage."
             )
         }
 

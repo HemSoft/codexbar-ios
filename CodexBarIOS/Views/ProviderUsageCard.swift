@@ -423,7 +423,7 @@ struct ProviderUsageCard: View {
                     statusText: statusText,
                     metric: metric,
                     history: metricDetailHistorySeries(for: metric),
-                    visualizationStyle: visualizationStyleForMetric(metric.id)
+                    visualizationStyle: resolvedVisualizationStyle(for: metric)
                 )
             }
         }
@@ -949,7 +949,12 @@ struct ProviderUsageCard: View {
             metrics: result.availableMetrics.filter { isMetricVisible($0.id) },
             orderedMetricIDs: metricOrder,
             widthForMetric: metricWidthForMetric,
-            visualizationStyleForMetric: visualizationStyleForMetric,
+            visualizationStyleForMetric: { metricID in
+                guard let metric = Self.metric(withID: metricID, in: result) else {
+                    return visualizationStyleForMetric(metricID)
+                }
+                return resolvedVisualizationStyle(for: metric)
+            },
             usesRegularHorizontalSizeClass: horizontalSizeClass == .regular,
             collapsesToSingleColumn: dynamicTypeSize.isAccessibilitySize
         )
@@ -970,8 +975,8 @@ struct ProviderUsageCard: View {
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        let visualizationStyle = visualizationStyleForMetric(item.metric.id)
-                        if visualizationStyle.showsStandaloneMetricTileValue {
+                        let visualizationStyle = resolvedVisualizationStyle(for: item.metric)
+                        if visualizationStyle.showsStandaloneMetricTileValue && !bar.isUnboundedNumeric {
                             Text(bar.usageText)
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(.primary)
@@ -1051,6 +1056,16 @@ struct ProviderUsageCard: View {
         .accessibilityAddTraits(.isButton)
     }
 
+    private func resolvedVisualizationStyle(
+        for metric: ProviderUsageMetric
+    ) -> MetricVisualizationStyle {
+        let preferredStyle = visualizationStyleForMetric(metric.id)
+        guard case let .usageBar(index) = metric.kind, result.bars.indices.contains(index) else {
+            return preferredStyle
+        }
+        return result.bars[index].resolvedVisualizationStyle(preferredStyle)
+    }
+
     private func supportingText(_ text: String) -> some View {
         Text(text)
             .font(.caption2)
@@ -1067,6 +1082,15 @@ struct ProviderUsageCard: View {
         let preferredOptionID: String?
         switch metric.kind {
         case let .usageBar(index):
+            if result.providerID == .greptile,
+               result.bars.indices.contains(index),
+               result.bars[index].stableKey == GreptileUsageIdentity.completedReviewsStableKey {
+                return historySeriesOptionsProvider()
+                    .first(where: {
+                        $0.id == GreptileUsageIdentity.completedReviewsHistorySeriesID
+                    })?
+                    .series
+            }
             guard
                 result.providerID == .cursor,
                 result.bars.indices.contains(index),
@@ -1135,7 +1159,16 @@ struct ProviderUsageCard: View {
         in result: ProviderUsageResult,
         thresholds: UsageSeverityThresholds = .default
     ) -> String {
-        [
+        if bar.isUnboundedNumeric {
+            return [
+                bar.label,
+                bar.usageText,
+                result.hasCurrentBars ? "fresh" : "stale",
+            ]
+            .joined(separator: ", ")
+        }
+
+        return [
             bar.label,
             bar.usageText,
             "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit))",
@@ -1980,7 +2013,7 @@ struct ProviderUsageHistoryDetailView: View {
                     }
                 }
 
-                if !series.isBalance {
+                if series.showsQuotaLimitRule {
                     RuleMark(y: .value("Limit", 1.0))
                         .foregroundStyle(Color.secondary.opacity(0.6))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
@@ -2261,7 +2294,9 @@ private struct ProviderMetricTileDetailView: View {
                 .minimumScaleFactor(0.65)
                 .lineLimit(1)
 
-            if case let .usageBar(index) = metric.kind, result.bars.indices.contains(index) {
+            if case let .usageBar(index) = metric.kind,
+               result.bars.indices.contains(index),
+               !result.bars[index].isUnboundedNumeric {
                 MetricVisualizationView(
                     bar: result.bars[index],
                     style: visualizationStyle,
@@ -2282,16 +2317,21 @@ private struct ProviderMetricTileDetailView: View {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
             let bar = result.bars[index]
-            detailRow("Used", ProviderUsageCard.formattedUsageAmount(bar.used))
-            detailRow("Limit", ProviderUsageCard.formattedUsageAmount(bar.limit))
-            detailRow(
-                "Severity",
-                result.hasCurrentBars
-                    ? bar.effectiveSeverity(
-                        thresholds: severityThresholds
-                    ).accessibilityName.capitalized
-                    : "Unavailable"
-            )
+            if bar.isUnboundedNumeric {
+                detailRow("Count", bar.usageText)
+                detailRow("Scope", result.subtitle)
+            } else {
+                detailRow("Used", ProviderUsageCard.formattedUsageAmount(bar.used))
+                detailRow("Limit", ProviderUsageCard.formattedUsageAmount(bar.limit))
+                detailRow(
+                    "Severity",
+                    result.hasCurrentBars
+                        ? bar.effectiveSeverity(
+                            thresholds: severityThresholds
+                        ).accessibilityName.capitalized
+                        : "Unavailable"
+                )
+            }
             detailRow("Freshness", result.hasCurrentBars ? "Current" : "Last known value")
             if let resetDescription = bar.localizedResetDescription() {
                 detailRow("Reset", resetDescription)
@@ -2650,7 +2690,12 @@ private struct MetricVisualizationCustomizationView: View {
             metrics: visibleMetrics,
             orderedMetricIDs: visibleMetrics.map(\.id),
             widthForMetric: metricWidthForMetric,
-            visualizationStyleForMetric: visualizationStyleForMetric,
+            visualizationStyleForMetric: { metricID in
+                guard let metric = orderedMetrics.first(where: { $0.id == metricID }) else {
+                    return visualizationStyleForMetric(metricID)
+                }
+                return resolvedVisualizationStyle(for: metric)
+            },
             usesRegularHorizontalSizeClass: horizontalSizeClass == .regular,
             collapsesToSingleColumn: dynamicTypeSize.isAccessibilitySize
         )
@@ -2740,9 +2785,9 @@ private struct MetricVisualizationCustomizationView: View {
                 }
             }
 
-            if case .usageBar = metric.kind {
+            if let bar = usageBar(for: metric) {
                 Menu("Visualization") {
-                    ForEach(MetricVisualizationStyle.allCases) { style in
+                    ForEach(bar.supportedVisualizationStyles) { style in
                         Button {
                             performChange {
                                 onUpdateVisualizationStyle(metric.id, style)
@@ -2812,9 +2857,9 @@ private struct MetricVisualizationCustomizationView: View {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
             let bar = result.bars[index]
-            let visualizationStyle = visualizationStyleForMetric(metric.id)
+            let visualizationStyle = resolvedVisualizationStyle(for: metric)
             VStack(alignment: .leading, spacing: 8) {
-                if visualizationStyle.showsStandaloneMetricTileValue {
+                if visualizationStyle.showsStandaloneMetricTileValue && !bar.isUnboundedNumeric {
                     Text(bar.usageText)
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
@@ -2921,11 +2966,25 @@ private struct MetricVisualizationCustomizationView: View {
 
     private var styleMetricIDs: [String] {
         result.availableMetrics.compactMap { metric in
-            guard case .usageBar = metric.kind else {
+            guard let bar = usageBar(for: metric), !bar.isUnboundedNumeric else {
                 return nil
             }
             return metric.id
         }
+    }
+
+    private func usageBar(for metric: ProviderUsageMetric) -> UsageBar? {
+        guard case let .usageBar(index) = metric.kind, result.bars.indices.contains(index) else {
+            return nil
+        }
+        return result.bars[index]
+    }
+
+    private func resolvedVisualizationStyle(
+        for metric: ProviderUsageMetric
+    ) -> MetricVisualizationStyle {
+        let preferredStyle = visualizationStyleForMetric(metric.id)
+        return usageBar(for: metric)?.resolvedVisualizationStyle(preferredStyle) ?? preferredStyle
     }
 
 }
@@ -3050,6 +3109,9 @@ private struct MetricVisualizationView: View {
     }
 
     private var resolvedStyle: MetricVisualizationStyle {
+        if bar.isUnboundedNumeric {
+            return .largeNumeric
+        }
         guard style == .automatic else {
             return style
         }
