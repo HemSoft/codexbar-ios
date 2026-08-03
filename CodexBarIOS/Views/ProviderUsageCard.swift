@@ -760,6 +760,7 @@ struct ProviderUsageCard: View {
         Self.hiddenSeverityAlert(
             for: result,
             cardSeverity: cardSeverity,
+            alerts: alerts,
             thresholds: severityThresholds,
             isMetricVisible: isMetricVisible
         )
@@ -768,6 +769,7 @@ struct ProviderUsageCard: View {
     static func hiddenSeverityAlert(
         for result: ProviderUsageResult,
         cardSeverity: UsageSeverity,
+        alerts: [UsageAlertDetail] = [],
         thresholds: UsageSeverityThresholds = .default,
         now: Date = Date(),
         isMetricVisible: (String) -> Bool
@@ -792,19 +794,84 @@ struct ProviderUsageCard: View {
             .map(\.severity)
             .max() ?? .normal
 
-        guard
+        if
             strongestHiddenSeverity >= .warning,
             strongestHiddenSeverity > strongestVisibleSeverity,
             strongestHiddenSeverity == cardSeverity,
             let hiddenMetric = bars.first(where: {
                 !isMetricVisible($0.metricID) && $0.severity == strongestHiddenSeverity
-            })
-        else {
-            return nil
+            }) {
+            return hiddenUsageAlert(
+                for: hiddenMetric,
+                result: result,
+                severity: strongestHiddenSeverity,
+                thresholds: thresholds,
+                now: now
+            )
         }
 
+        if
+            cardSeverity == .critical,
+            strongestVisibleSeverity < .critical,
+            result.hasReachedSpendLimit,
+            let spentMetric = result.availableMetrics.first(where: { metric in
+                guard case let .monetary(index) = metric.kind else {
+                    return false
+                }
+                return result.monetaryMetrics.indices.contains(index)
+                    && result.monetaryMetrics[index].kind == .spent
+                    && !isMetricVisible(metric.id)
+            }),
+            case let .monetary(spentIndex) = spentMetric.kind {
+            let spent = result.monetaryMetrics[spentIndex]
+            let limit = result.monetaryMetrics.first(where: { $0.kind == .spendLimit })
+            let limitDescription = limit.map { " and has reached the \($0.formattedAmount()) limit" } ?? ""
+            return UsageAlertDetail(
+                id: "hidden-severity.\(spentMetric.id)",
+                accountID: result.accountID,
+                kind: .severity,
+                title: "Critical status from hidden metric",
+                message: "Hidden metric \(spent.label) is currently at \(spent.formattedAmount())"
+                    + "\(limitDescription).",
+                severity: .critical
+            )
+        }
+
+        if
+            strongestVisibleSeverity < cardSeverity,
+            let balanceAlert = alerts.first(where: {
+                $0.kind == .balance && $0.severity == cardSeverity
+            }),
+            let creditMetric = result.availableMetrics.first(where: { metric in
+                guard case .creditsRemaining = metric.kind else {
+                    return false
+                }
+                return !isMetricVisible(metric.id)
+            }),
+            let creditsRemaining = result.creditsRemaining {
+            return UsageAlertDetail(
+                id: "hidden-severity.\(creditMetric.id)",
+                accountID: result.accountID,
+                kind: .balance,
+                title: "\(balanceAlert.title) from hidden metric",
+                message: "Hidden metric \(creditMetric.label) is currently at "
+                    + "\(CodexBarCurrencyText.format(creditsRemaining)).",
+                severity: balanceAlert.severity
+            )
+        }
+
+        return nil
+    }
+
+    private static func hiddenUsageAlert(
+        for hiddenMetric: (bar: UsageBar, metricID: String, severity: UsageSeverity),
+        result: ProviderUsageResult,
+        severity: UsageSeverity,
+        thresholds: UsageSeverityThresholds,
+        now: Date
+    ) -> UsageAlertDetail {
         let message: String
-        if hiddenMetric.bar.severity(using: thresholds) < strongestHiddenSeverity,
+        if hiddenMetric.bar.severity(using: thresholds) < severity,
            let projectedFraction = hiddenMetric.bar.projectedFraction(at: now) {
             let projectedPercent = Int((projectedFraction * 100).rounded())
             message = "Hidden metric \(hiddenMetric.bar.label) is currently at "
@@ -814,7 +881,7 @@ struct ProviderUsageCard: View {
             message = "Hidden metric \(hiddenMetric.bar.label) is currently at "
                 + "\(hiddenMetric.bar.usageText)."
         }
-        let severityName = strongestHiddenSeverity == .critical ? "Critical" : "Warning"
+        let severityName = severity == .critical ? "Critical" : "Warning"
 
         return UsageAlertDetail(
             id: "hidden-severity.\(hiddenMetric.metricID)",
@@ -822,7 +889,7 @@ struct ProviderUsageCard: View {
             kind: .severity,
             title: "\(severityName) status from hidden metric",
             message: message,
-            severity: strongestHiddenSeverity
+            severity: severity
         )
     }
 

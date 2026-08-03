@@ -44,4 +44,76 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
             "Cursor, Current, Critical status, Hidden metric API is currently at 100%."
         )
     }
+
+    func testHiddenBalanceExplainsAlertSeverity() throws {
+        let result = ProviderUsageResult(
+            accountID: "openRouter.personal",
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Credit balance",
+            bars: [],
+            creditsRemaining: 4.50,
+            fetchedAt: Date()
+        )
+        let balanceAlert = UsageAlertDetail(
+            id: "balance.openRouter.personal",
+            accountID: result.accountID,
+            kind: .balance,
+            title: "Balance below $5.00",
+            message: "$4.50 remaining for OpenRouter.",
+            severity: .warning
+        )
+        let alert = try XCTUnwrap(
+            ProviderUsageCard.hiddenSeverityAlert(
+                for: result,
+                cardSeverity: .warning,
+                alerts: [balanceAlert],
+                isMetricVisible: { _ in false }
+            )
+        )
+
+        XCTAssertEqual(alert.title, "Balance below $5.00 from hidden metric")
+        XCTAssertEqual(alert.message, "Hidden metric Credit balance is currently at $4.50.")
+    }
+
+    func testHiddenSpendExplainsReachedLimitSeverity() throws {
+        let result = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Usage credits",
+            bars: [],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: "Monthly spend",
+                    minorUnits: 5_000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+                ProviderMonetaryMetric(
+                    kind: .spendLimit,
+                    label: "Monthly spend limit",
+                    minorUnits: 5_000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            fetchedAt: Date()
+        )
+        let spentMetricID = "claude.monetary.spent.usd"
+        let alert = try XCTUnwrap(
+            ProviderUsageCard.hiddenSeverityAlert(
+                for: result,
+                cardSeverity: .critical,
+                isMetricVisible: { $0 != spentMetricID }
+            )
+        )
+
+        XCTAssertEqual(alert.title, "Critical status from hidden metric")
+        XCTAssertEqual(
+            alert.message,
+            "Hidden metric Monthly spend is currently at $50.00 and has reached the $50.00 limit."
+        )
+    }
 }
