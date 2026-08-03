@@ -823,7 +823,12 @@ struct ProviderUsageCard: View {
             case let .monetary(spentIndex) = spentMetric.kind {
             let spent = result.monetaryMetrics[spentIndex]
             let limit = result.monetaryMetrics.first(where: { $0.kind == .spendLimit })
-            let limitDescription = limit.map { " and has reached the \($0.formattedAmount()) limit" } ?? ""
+            let limitDescription = limit.map { limit in
+                if result.failureMessage == nil {
+                    return " and has reached the \(limit.formattedAmount()) limit"
+                }
+                return " and was last known to have reached the \(limit.formattedAmount()) limit"
+            } ?? ""
             let valueStatus = result.failureMessage == nil ? "is currently at" : "was last known at"
             return UsageAlertDetail(
                 id: "hidden-severity.\(spentMetric.id)",

@@ -213,5 +213,29 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
             alert.message,
             "Hidden metric Monthly spend is currently at $50.00 and has reached the $50.00 limit."
         )
+
+        let cachedResult = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: "Refresh failed. Showing last known data.",
+            bars: [],
+            monetaryMetrics: result.monetaryMetrics,
+            failureMessage: "Refresh failed",
+            fetchedAt: result.fetchedAt
+        )
+        let cachedAlert = try XCTUnwrap(
+            ProviderUsageCard.hiddenSeverityAlert(
+                for: cachedResult,
+                cardSeverity: .critical,
+                isMetricVisible: { $0 != spentMetricID }
+            )
+        )
+
+        XCTAssertEqual(
+            cachedAlert.message,
+            "Hidden metric Monthly spend was last known at $50.00 "
+                + "and was last known to have reached the $50.00 limit."
+        )
     }
 }
