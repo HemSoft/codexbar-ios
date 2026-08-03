@@ -45,6 +45,42 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
         )
     }
 
+    func testHiddenMetricExplainsProjectedSeverity() throws {
+        let now = Date(timeIntervalSince1970: 1_783_667_520)
+        let result = ProviderUsageResult(
+            accountID: "cursor.personal",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Usage",
+            bars: [
+                UsageBar(
+                    stableKey: "api",
+                    label: "API",
+                    used: 40,
+                    limit: 100,
+                    projectionCurrent: 40,
+                    projectionLimit: 100,
+                    projectionPeriodStart: now.addingTimeInterval(-4 * 24 * 60 * 60),
+                    projectionPeriodEnd: now.addingTimeInterval(6 * 24 * 60 * 60)
+                ),
+            ],
+            fetchedAt: now
+        )
+        let alert = try XCTUnwrap(
+            ProviderUsageCard.hiddenSeverityAlert(
+                for: result,
+                cardSeverity: .critical,
+                now: now,
+                isMetricVisible: { _ in false }
+            )
+        )
+
+        XCTAssertEqual(
+            alert.message,
+            "Hidden metric API is currently at 40% and projected to reach 100%."
+        )
+    }
+
     func testHiddenBalanceExplainsAlertSeverity() throws {
         let result = ProviderUsageResult(
             accountID: "openRouter.personal",
