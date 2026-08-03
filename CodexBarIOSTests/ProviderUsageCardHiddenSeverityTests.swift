@@ -79,6 +79,30 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
             alert.message,
             "Hidden metric API is currently at 40% and projected to reach 100%."
         )
+
+        let cachedResult = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: "Refresh failed. Showing last known data.",
+            bars: result.bars,
+            barsFetchedAt: now,
+            failureMessage: "Refresh failed",
+            fetchedAt: now
+        )
+        let cachedAlert = try XCTUnwrap(
+            ProviderUsageCard.hiddenSeverityAlert(
+                for: cachedResult,
+                cardSeverity: .critical,
+                now: now,
+                isMetricVisible: { _ in false }
+            )
+        )
+
+        XCTAssertEqual(
+            cachedAlert.message,
+            "Hidden metric API was last known at 40% and was projected to reach 100%."
+        )
     }
 
     func testHiddenBalanceExplainsAlertSeverity() throws {

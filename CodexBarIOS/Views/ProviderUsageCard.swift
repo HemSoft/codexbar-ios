@@ -880,9 +880,10 @@ struct ProviderUsageCard: View {
         if hiddenMetric.bar.severity(using: thresholds) < severity,
            let projectedFraction = hiddenMetric.bar.projectedFraction(at: now) {
             let projectedPercent = Int((projectedFraction * 100).rounded())
+            let projectionStatus = result.hasCurrentBars ? "and projected" : "and was projected"
             message = "Hidden metric \(hiddenMetric.bar.label) \(valueStatus) "
                 + "\(hiddenMetric.bar.usageText) "
-                + "and projected to reach \(projectedPercent)%."
+                + "\(projectionStatus) to reach \(projectedPercent)%."
         } else {
             message = "Hidden metric \(hiddenMetric.bar.label) \(valueStatus) "
                 + "\(hiddenMetric.bar.usageText)."
