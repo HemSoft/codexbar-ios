@@ -774,17 +774,15 @@ struct ProviderUsageCard: View {
         now: Date = Date(),
         isMetricVisible: (String) -> Bool
     ) -> UsageAlertDetail? {
-        guard result.hasFreshBars else {
-            return nil
-        }
-
-        let bars = result.bars.enumerated().map { index, bar in
-            (
-                bar: bar,
-                metricID: bar.metricIdentifier(providerID: result.providerID, index: index),
-                severity: bar.effectiveSeverity(at: now, thresholds: thresholds)
-            )
-        }
+        let bars = result.hasFreshBars
+            ? result.bars.enumerated().map { index, bar in
+                (
+                    bar: bar,
+                    metricID: bar.metricIdentifier(providerID: result.providerID, index: index),
+                    severity: bar.effectiveSeverity(at: now, thresholds: thresholds)
+                )
+            }
+            : []
         let strongestVisibleSeverity = bars
             .filter { isMetricVisible($0.metricID) }
             .map(\.severity)
@@ -826,12 +824,13 @@ struct ProviderUsageCard: View {
             let spent = result.monetaryMetrics[spentIndex]
             let limit = result.monetaryMetrics.first(where: { $0.kind == .spendLimit })
             let limitDescription = limit.map { " and has reached the \($0.formattedAmount()) limit" } ?? ""
+            let valueStatus = result.failureMessage == nil ? "is currently at" : "was last known at"
             return UsageAlertDetail(
                 id: "hidden-severity.\(spentMetric.id)",
                 accountID: result.accountID,
                 kind: .severity,
                 title: "Critical status from hidden metric",
-                message: "Hidden metric \(spent.label) is currently at \(spent.formattedAmount())"
+                message: "Hidden metric \(spent.label) \(valueStatus) \(spent.formattedAmount())"
                     + "\(limitDescription).",
                 severity: .critical
             )
@@ -849,12 +848,13 @@ struct ProviderUsageCard: View {
                 return !isMetricVisible(metric.id)
             }),
             let creditsRemaining = result.creditsRemaining {
+            let valueStatus = result.hasCurrentCredits ? "is currently at" : "was last known at"
             return UsageAlertDetail(
                 id: "hidden-severity.\(creditMetric.id)",
                 accountID: result.accountID,
                 kind: .balance,
                 title: "\(balanceAlert.title) from hidden metric",
-                message: "Hidden metric \(creditMetric.label) is currently at "
+                message: "Hidden metric \(creditMetric.label) \(valueStatus) "
                     + "\(CodexBarCurrencyText.format(creditsRemaining)).",
                 severity: balanceAlert.severity
             )
@@ -870,15 +870,16 @@ struct ProviderUsageCard: View {
         thresholds: UsageSeverityThresholds,
         now: Date
     ) -> UsageAlertDetail {
+        let valueStatus = result.hasCurrentBars ? "is currently at" : "was last known at"
         let message: String
         if hiddenMetric.bar.severity(using: thresholds) < severity,
            let projectedFraction = hiddenMetric.bar.projectedFraction(at: now) {
             let projectedPercent = Int((projectedFraction * 100).rounded())
-            message = "Hidden metric \(hiddenMetric.bar.label) is currently at "
+            message = "Hidden metric \(hiddenMetric.bar.label) \(valueStatus) "
                 + "\(hiddenMetric.bar.usageText) "
                 + "and projected to reach \(projectedPercent)%."
         } else {
-            message = "Hidden metric \(hiddenMetric.bar.label) is currently at "
+            message = "Hidden metric \(hiddenMetric.bar.label) \(valueStatus) "
                 + "\(hiddenMetric.bar.usageText)."
         }
         let severityName = severity == .critical ? "Critical" : "Warning"

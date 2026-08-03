@@ -112,6 +112,68 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
         XCTAssertEqual(alert.message, "Hidden metric Credit balance is currently at $4.50.")
     }
 
+    func testFreshHiddenBalanceIsExplainedWhenBarsAreStale() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_785_000_200)
+        let result = ProviderUsageResult(
+            accountID: "openCodeZen.personal",
+            providerID: .openCodeZen,
+            title: "OpenCode Go + Zen",
+            subtitle: "Go refresh failed",
+            bars: [UsageBar(stableKey: "weekly", label: "Weekly", used: 20, limit: 100)],
+            barsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            creditsRemaining: 4.50,
+            creditsFetchedAt: fetchedAt,
+            failureMessage: "Go refresh failed",
+            preserveCachedBarsOnFailure: true,
+            fetchedAt: fetchedAt
+        )
+        let balanceAlert = UsageAlertDetail(
+            id: "balance.openCodeZen.personal",
+            accountID: result.accountID,
+            kind: .balance,
+            title: "Balance below $5.00",
+            message: "$4.50 remaining for OpenCode Go + Zen.",
+            severity: .warning
+        )
+        let alert = try XCTUnwrap(
+            ProviderUsageCard.hiddenSeverityAlert(
+                for: result,
+                cardSeverity: .warning,
+                alerts: [balanceAlert],
+                isMetricVisible: { _ in false }
+            )
+        )
+
+        XCTAssertFalse(result.hasFreshBars)
+        XCTAssertTrue(result.hasCurrentCredits)
+        XCTAssertEqual(alert.message, "Hidden metric Zen credit balance is currently at $4.50.")
+    }
+
+    func testCachedHiddenUsageIsLabeledLastKnown() throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_785_000_300)
+        let result = ProviderUsageResult(
+            accountID: "cursor.personal",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Refresh failed. Showing last known data.",
+            bars: [UsageBar(stableKey: "api", label: "API", used: 100, limit: 100)],
+            barsFetchedAt: fetchedAt,
+            failureMessage: "Refresh failed",
+            fetchedAt: fetchedAt
+        )
+        let alert = try XCTUnwrap(
+            ProviderUsageCard.hiddenSeverityAlert(
+                for: result,
+                cardSeverity: .critical,
+                isMetricVisible: { _ in false }
+            )
+        )
+
+        XCTAssertTrue(result.hasFreshBars)
+        XCTAssertFalse(result.hasCurrentBars)
+        XCTAssertEqual(alert.message, "Hidden metric API was last known at 100%.")
+    }
+
     func testHiddenSpendExplainsReachedLimitSeverity() throws {
         let result = ProviderUsageResult(
             accountID: "claude.personal",
