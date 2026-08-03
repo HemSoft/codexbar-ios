@@ -6,6 +6,12 @@ building, testing, or releasing the app.
 
 ## 1.2.0 - Unreleased
 
+### Fixed
+
+- Explained warning and critical card indicators when a hidden metric is the
+  cause, including the metric's current value on the card and in VoiceOver.
+  ([#227](https://github.com/HemSoft/codexbar-ios/issues/227))
+
 ### Added
 
 - Added Greptile as a read-only provider for account-scoped completed-review
