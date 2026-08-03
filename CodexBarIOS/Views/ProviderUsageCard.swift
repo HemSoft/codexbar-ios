@@ -486,6 +486,16 @@ struct ProviderUsageCard: View {
                         Text(statusText)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+
+                        if let hiddenSeverityAlert {
+                            Label(
+                                hiddenSeverityAlert.message,
+                                systemImage: hiddenSeverityAlert.kind.systemImageName
+                            )
+                            .font(.caption)
+                            .foregroundStyle(hiddenSeverityAlert.severity.tint)
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     Spacer()
@@ -685,7 +695,8 @@ struct ProviderUsageCard: View {
             statusText: statusText,
             isRefreshing: isRefreshing,
             isPerformingRecovery: isPerformingRecovery,
-            severity: cardSeverity
+            severity: cardSeverity,
+            severitySource: hiddenSeverityAlert?.message
         )
     }
 
@@ -715,7 +726,8 @@ struct ProviderUsageCard: View {
         statusText: String,
         isRefreshing: Bool,
         isPerformingRecovery: Bool,
-        severity: UsageSeverity
+        severity: UsageSeverity,
+        severitySource: String? = nil
     ) -> String {
         var components = [headerAccessibilityLabel(for: result), statusText]
         if isPerformingRecovery {
@@ -731,6 +743,9 @@ struct ProviderUsageCard: View {
         case .critical:
             components.append("Critical status")
         }
+        if let severitySource {
+            components.append(severitySource)
+        }
         return components.joined(separator: ", ")
     }
 
@@ -738,6 +753,76 @@ struct ProviderUsageCard: View {
         max(
             result.highestSeverity(thresholds: severityThresholds),
             alerts.map(\.severity).max() ?? .normal
+        )
+    }
+
+    private var hiddenSeverityAlert: UsageAlertDetail? {
+        Self.hiddenSeverityAlert(
+            for: result,
+            cardSeverity: cardSeverity,
+            thresholds: severityThresholds,
+            isMetricVisible: isMetricVisible
+        )
+    }
+
+    static func hiddenSeverityAlert(
+        for result: ProviderUsageResult,
+        cardSeverity: UsageSeverity,
+        thresholds: UsageSeverityThresholds = .default,
+        now: Date = Date(),
+        isMetricVisible: (String) -> Bool
+    ) -> UsageAlertDetail? {
+        guard result.hasFreshBars else {
+            return nil
+        }
+
+        let bars = result.bars.enumerated().map { index, bar in
+            (
+                bar: bar,
+                metricID: bar.metricIdentifier(providerID: result.providerID, index: index),
+                severity: bar.effectiveSeverity(at: now, thresholds: thresholds)
+            )
+        }
+        let strongestVisibleSeverity = bars
+            .filter { isMetricVisible($0.metricID) }
+            .map(\.severity)
+            .max() ?? .normal
+        let strongestHiddenSeverity = bars
+            .filter { !isMetricVisible($0.metricID) }
+            .map(\.severity)
+            .max() ?? .normal
+
+        guard
+            strongestHiddenSeverity >= .warning,
+            strongestHiddenSeverity > strongestVisibleSeverity,
+            strongestHiddenSeverity == cardSeverity,
+            let hiddenMetric = bars.first(where: {
+                !isMetricVisible($0.metricID) && $0.severity == strongestHiddenSeverity
+            })
+        else {
+            return nil
+        }
+
+        let message: String
+        if hiddenMetric.bar.severity(using: thresholds) < strongestHiddenSeverity,
+           let projectedFraction = hiddenMetric.bar.projectedFraction(at: now) {
+            let projectedPercent = Int((projectedFraction * 100).rounded())
+            message = "Hidden metric \(hiddenMetric.bar.label) is currently at "
+                + "\(hiddenMetric.bar.usageText) "
+                + "and projected to reach \(projectedPercent)%."
+        } else {
+            message = "Hidden metric \(hiddenMetric.bar.label) is currently at "
+                + "\(hiddenMetric.bar.usageText)."
+        }
+        let severityName = strongestHiddenSeverity == .critical ? "Critical" : "Warning"
+
+        return UsageAlertDetail(
+            id: "hidden-severity.\(hiddenMetric.metricID)",
+            accountID: result.accountID,
+            kind: .severity,
+            title: "\(severityName) status from hidden metric",
+            message: message,
+            severity: strongestHiddenSeverity
         )
     }
 
