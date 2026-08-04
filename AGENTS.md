@@ -132,6 +132,7 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
   active Xcode toolchain. Run these commands from the repository root:
 
   ```sh
+  set -euo pipefail
   watch_device_id="$(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
     ./scripts/select-watch-simulator.sh)"
   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
@@ -143,6 +144,7 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
 - Run the watch foundation tests using the same compatible destination:
 
   ```sh
+  set -euo pipefail
   watch_device_id="$(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
     ./scripts/select-watch-simulator.sh)"
   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \

@@ -96,7 +96,18 @@ JSON
 
 cat > "$temporary_dir/xcrun" <<'SH'
 #!/usr/bin/env bash
-printf 'mock available watchOS runtime and device diagnostics\n'
+case "$*" in
+  *"simctl list runtimes available"*)
+    printf 'mock available watchOS runtime diagnostics\n'
+    ;;
+  *"simctl list devices available"*)
+    printf 'mock available Apple Watch device diagnostics\n'
+    ;;
+  *)
+    printf 'Unexpected xcrun arguments: %s\n' "$*" >&2
+    exit 1
+    ;;
+esac
 SH
 chmod +x "$temporary_dir/xcrun"
 
@@ -115,9 +126,15 @@ if ! grep -q "Active watchsimulator SDK: 26.5" "$temporary_dir/no-compatible.std
   exit 1
 fi
 
-if ! grep -q "mock available watchOS runtime and device diagnostics" \
+if ! grep -q "mock available watchOS runtime diagnostics" \
   "$temporary_dir/no-compatible.stderr"; then
-  echo "Expected failure diagnostics to list available runtimes and devices." >&2
+  echo "Expected failure diagnostics to list available runtimes." >&2
+  exit 1
+fi
+
+if ! grep -q "mock available Apple Watch device diagnostics" \
+  "$temporary_dir/no-compatible.stderr"; then
+  echo "Expected failure diagnostics to list available devices." >&2
   exit 1
 fi
 

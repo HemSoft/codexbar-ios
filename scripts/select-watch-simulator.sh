@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+
 sdk_version="${WATCH_SIMULATOR_SDK_VERSION:-$(xcrun --sdk watchsimulator --show-sdk-version)}"
 
 if [[ -n "${WATCH_SIMULATOR_LIST_JSON_FILE:-}" ]]; then
