@@ -128,30 +128,38 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
   developers to trust the package plugin on first use; unattended builds can
   pass `-skipPackagePluginValidation` after reviewing the pinned dependency.
 
-- Build the watchOS 10 companion shell on the latest installed simulator:
+- Build the watchOS 10 companion shell on a simulator compatible with the
+  active Xcode toolchain. Run these commands from the repository root:
 
   ```sh
+  set -euo pipefail
+  watch_device_id="$(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+    ./scripts/select-watch-simulator.sh)"
   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
     -project CodexBarIOS.xcodeproj -scheme CodexBarWatch \
-    -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=latest' \
+    -destination "platform=watchOS Simulator,id=$watch_device_id" \
     build
   ```
 
-- Run the watch foundation tests:
+- Run the watch foundation tests using the same compatible destination:
 
   ```sh
+  set -euo pipefail
+  watch_device_id="$(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+    ./scripts/select-watch-simulator.sh)"
   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
     -project CodexBarIOS.xcodeproj -scheme CodexBarWatchTests \
-    -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=latest' \
+    -destination "platform=watchOS Simulator,id=$watch_device_id" \
     test
   ```
 
-If that watch name is not installed, use
-`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl list devices available`
-to select another available watchOS simulator. The watch app is a dependent
-companion embedded in `CodexBarIOS` and includes a WidgetKit complication
-extension driven by usage snapshots from the iPhone. It does not enable
-independent installation, credentials, or provider networking.
+The selector chooses the newest installed watchOS runtime that is not newer
+than the active `watchsimulator` SDK, then chooses a device reproducibly. If no
+compatible device exists, it prints the active SDK plus the available runtimes
+and devices before failing. The watch app is a dependent companion embedded in
+`CodexBarIOS` and includes a WidgetKit complication extension driven by usage
+snapshots from the iPhone. It does not enable independent installation,
+credentials, or provider networking.
 
 There is no separate typecheck tool beyond Xcode/Swift compiler warnings and
 the test targets above.

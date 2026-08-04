@@ -242,6 +242,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Made local and CI watchOS tests deterministically select an installed
+  simulator runtime compatible with the active Xcode SDK, with focused selector
+  coverage and actionable diagnostics when no compatible device is available.
+  ([#229](https://github.com/HemSoft/codexbar-ios/issues/229))
 - Updated the README's mutation-testing overview to reflect the complete
   bounded pilot across dashboard sorting and App Review prompt policy logic.
   ([#223](https://github.com/HemSoft/codexbar-ios/issues/223))
