@@ -20,6 +20,7 @@ verify_plist() {
   local label="$1"
   local plist_path="$2"
   local declaration
+  local declaration_type
 
   if [[ ! -f "$plist_path" ]]; then
     echo "Missing Info.plist for $label: $plist_path" >&2
@@ -28,6 +29,16 @@ verify_plist() {
 
   if ! declaration="$(read_plist_value "$plist_path" ITSAppUsesNonExemptEncryption)"; then
     echo "$label omits ITSAppUsesNonExemptEncryption: $plist_path" >&2
+    return 1
+  fi
+
+  if ! declaration_type="$(plutil -type ITSAppUsesNonExemptEncryption "$plist_path" 2>/dev/null)"; then
+    echo "$label has an unreadable ITSAppUsesNonExemptEncryption declaration: $plist_path" >&2
+    return 1
+  fi
+
+  if [[ "$declaration_type" != "bool" ]]; then
+    echo "$label has non-Boolean ITSAppUsesNonExemptEncryption type=$declaration_type: $plist_path" >&2
     return 1
   fi
 

@@ -38,6 +38,25 @@ expect_omission_failure() {
   fi
 }
 
+expect_non_boolean_failure() {
+  local bundle_path="$1"
+
+  plutil -replace ITSAppUsesNonExemptEncryption -string false "$bundle_path/Info.plist"
+  if "$repository_dir/scripts/verify-export-compliance.sh" bundle "$fixture_app" \
+    >"$temporary_dir/non-boolean.stdout" \
+    2>"$temporary_dir/non-boolean.stderr"; then
+    echo "Expected a non-Boolean declaration to fail verification." >&2
+    exit 1
+  fi
+
+  if ! grep -q "non-Boolean ITSAppUsesNonExemptEncryption" \
+    "$temporary_dir/non-boolean.stderr"; then
+    echo "Expected the failure to identify the declaration's incorrect type." >&2
+    cat "$temporary_dir/non-boolean.stderr" >&2
+    exit 1
+  fi
+}
+
 fixture_app="$temporary_dir/CodexBarIOS.app"
 write_bundle_plist "$fixture_app" "com.hemsoft.CodexBarIOS"
 write_bundle_plist \
@@ -57,6 +76,9 @@ expect_omission_failure "$fixture_app/Watch/CodexBarWatch.app" "current-bundle-o
 
 plutil -insert ITSAppUsesNonExemptEncryption -bool false \
   "$fixture_app/Watch/CodexBarWatch.app/Info.plist"
+expect_non_boolean_failure "$fixture_app/PlugIns/CodexBarIOSWidget.appex"
+plutil -replace ITSAppUsesNonExemptEncryption -bool false \
+  "$fixture_app/PlugIns/CodexBarIOSWidget.appex/Info.plist"
 future_bundle="$fixture_app/PlugIns/FutureSubmittedProduct.appex"
 write_bundle_plist "$future_bundle" "com.hemsoft.CodexBarIOS.FutureSubmittedProduct"
 expect_omission_failure "$future_bundle" "future-bundle-omission"
