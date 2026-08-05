@@ -685,7 +685,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         await gate.waitUntilBlocked()
 
         var updatedConfiguration = harness.configuration
-        updatedConfiguration.accountLabel = "Updated Codex"
+        updatedConfiguration.oauthClientID = "updated-client"
         XCTAssertTrue(harness.configurationStore.update(updatedConfiguration))
         XCTAssertTrue(harness.refreshService.results.isEmpty)
 
@@ -700,6 +700,46 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertTrue(harness.configurationStore.usageAlertActiveIDs.isEmpty)
         XCTAssertTrue(harness.notifier.deliveredNotifications.isEmpty)
         XCTAssertTrue(harness.orchestrator.currentUsageAlertsByAccountID.isEmpty)
+    }
+
+    @MainActor
+    func testPresentationOnlyAccountChangesPreserveCachedState() async {
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.presentation-only",
+            providerID: .codex,
+            accountLabel: "Original Codex",
+            authMethod: .browserSession
+        )
+        let cachedResult = makeHistoryResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            fetchedAt: Date().addingTimeInterval(-300),
+            used: 15
+        )
+        let service = UsageRefreshService(
+            providers: [
+                SelectivelyFailingUsageProvider(
+                    providerID: .codex,
+                    failedAccountID: configuration.id
+                ),
+            ],
+            initialResults: [cachedResult]
+        )
+        await service.refresh(configurations: [configuration])
+        let resultAfterFailure = service.results
+        let cachedError = service.refreshErrorsByAccountID[configuration.id]
+        XCTAssertFalse(resultAfterFailure.isEmpty)
+        XCTAssertNotNil(cachedError)
+
+        var updatedConfiguration = configuration
+        updatedConfiguration.accountLabel = "Renamed Codex"
+        updatedConfiguration.groupID = "work"
+        updatedConfiguration.showsHistory = false
+        service.updateCurrentConfigurations([updatedConfiguration])
+
+        XCTAssertEqual(service.results, resultAfterFailure)
+        XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], cachedError)
+        XCTAssertEqual(service.lastRefreshError, cachedError)
     }
 
     @MainActor

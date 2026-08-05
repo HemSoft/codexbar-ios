@@ -465,13 +465,18 @@ public final class UsageRefreshService: ObservableObject {
         )
         let accountIDs = Set(currentConfigurationsByAccountID.keys)
             .union(nextConfigurations.keys)
-        var changedAccountIDs: Set<String> = []
+        var invalidatedAccountIDs: Set<String> = []
         for accountID in accountIDs {
-            guard currentConfigurationsByAccountID[accountID] != nextConfigurations[accountID] else {
+            let currentConfiguration = currentConfigurationsByAccountID[accountID]
+            let nextConfiguration = nextConfigurations[accountID]
+            guard currentConfiguration != nextConfiguration else {
                 continue
             }
-            changedAccountIDs.insert(accountID)
-            if nextConfigurations[accountID] == nil,
+            guard refreshInputsChanged(from: currentConfiguration, to: nextConfiguration) else {
+                continue
+            }
+            invalidatedAccountIDs.insert(accountID)
+            if nextConfiguration == nil,
                !refreshingAccountIDs.contains(accountID) {
                 refreshGenerationsByAccountID.removeValue(forKey: accountID)
             } else {
@@ -481,8 +486,8 @@ public final class UsageRefreshService: ObservableObject {
         currentConfigurationsByAccountID = nextConfigurations
 
         let enabledAccountIDs = Set(nextConfigurations.keys)
-        let invalidatedAccountIDs = hadCurrentConfigurationSnapshot ? changedAccountIDs : []
-        pruneCachedState(to: enabledAccountIDs.subtracting(invalidatedAccountIDs))
+        let evictedAccountIDs = hadCurrentConfigurationSnapshot ? invalidatedAccountIDs : []
+        pruneCachedState(to: enabledAccountIDs.subtracting(evictedAccountIDs))
         let nextLastRefreshError = enabledConfigurations.lazy
             .compactMap { self.refreshErrorsByAccountID[$0.id] }
             .first
@@ -500,6 +505,23 @@ public final class UsageRefreshService: ObservableObject {
         if nextErrors != refreshErrorsByAccountID {
             refreshErrorsByAccountID = nextErrors
         }
+    }
+
+    private func refreshInputsChanged(
+        from currentConfiguration: ProviderAccountConfiguration?,
+        to nextConfiguration: ProviderAccountConfiguration?
+    ) -> Bool {
+        guard let currentConfiguration, let nextConfiguration else {
+            return true
+        }
+        return currentConfiguration.providerID != nextConfiguration.providerID
+            || currentConfiguration.authMethod != nextConfiguration.authMethod
+            || currentConfiguration.oauthClientID != nextConfiguration.oauthClientID
+            || currentConfiguration.copilotAccountScope != nextConfiguration.copilotAccountScope
+            || currentConfiguration.githubOrganization != nextConfiguration.githubOrganization
+            || currentConfiguration.githubEnterprise != nextConfiguration.githubEnterprise
+            || currentConfiguration.copilotTotalAllotment != nextConfiguration.copilotTotalAllotment
+            || currentConfiguration.openCodeWorkspaceId != nextConfiguration.openCodeWorkspaceId
     }
 
     private func registerCurrentConfiguration(
