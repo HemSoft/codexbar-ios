@@ -126,6 +126,7 @@ public final class UsageRefreshService: ObservableObject {
         await withTaskGroup(of: AccountRefreshOutcome.self) { group in
             for (configuration, provider) in requests {
                 guard let generation = refreshGenerationsByAccountID[configuration.id] else {
+                    finishRefresh(accountID: configuration.id)
                     continue
                 }
                 group.addTask {
