@@ -599,6 +599,99 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testRemovedAndDisabledAccountsDiscardSuspendedSuccessfulRefreshes() async {
+        for mutation in StaleRefreshConfigurationMutation.allCases {
+            await assertStaleCompletionIsDiscarded(
+                fails: false,
+                mutation: mutation
+            )
+        }
+    }
+
+    @MainActor
+    func testRemovedAndDisabledAccountsDiscardSuspendedFailedRefreshes() async {
+        for mutation in StaleRefreshConfigurationMutation.allCases {
+            await assertStaleCompletionIsDiscarded(
+                fails: true,
+                mutation: mutation
+            )
+        }
+    }
+
+    @MainActor
+    private func assertStaleCompletionIsDiscarded(
+        fails: Bool,
+        mutation: StaleRefreshConfigurationMutation
+    ) async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let configurationStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = configurationStore.addAccount(for: .codex)
+        configurationStore.updateUsageAlertsEnabled(true)
+        let gate = UsageProviderGate()
+        let refreshService = UsageRefreshService(providers: [
+            StaleCompletionTestUsageProvider(
+                providerID: .codex,
+                gate: gate,
+                fails: fails
+            ),
+        ])
+        let historyStore = UsageHistoryStore(defaults: defaults)
+        let notifier = RecordingUsageAlertNotifier()
+        let orchestrator = DashboardOrchestrator(
+            refreshService: refreshService,
+            configurationStore: configurationStore,
+            historyStore: historyStore,
+            usageAlertNotifier: notifier,
+            appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                refreshService: refreshService,
+                configurationStore: configurationStore,
+                publishSnapshot: { _, _ in },
+                publishSettings: { _ in }
+            ),
+            watchSnapshotCoordinator: WatchSnapshotCoordinator(
+                refreshService: refreshService,
+                configurationStore: configurationStore,
+                publishSnapshot: { _, _, _ in }
+            )
+        )
+
+        let accountRefresh = Task { @MainActor in
+            await orchestrator.refreshAccount(configuration)
+        }
+        await gate.waitUntilBlocked()
+
+        switch mutation {
+        case .remove:
+            XCTAssertTrue(configurationStore.removeAccount(configuration))
+        case .disable:
+            var disabledConfiguration = configuration
+            disabledConfiguration.isEnabled = false
+            XCTAssertTrue(configurationStore.update(disabledConfiguration))
+        }
+        _ = await orchestrator.refreshNow()
+
+        await gate.release()
+        let result = await accountRefresh.value
+
+        XCTAssertNil(result, mutation.rawValue)
+        XCTAssertTrue(refreshService.results.isEmpty, mutation.rawValue)
+        XCTAssertTrue(refreshService.refreshErrorsByAccountID.isEmpty, mutation.rawValue)
+        XCTAssertNil(refreshService.lastRefreshError, mutation.rawValue)
+        XCTAssertTrue(refreshService.refreshingAccountIDs.isEmpty, mutation.rawValue)
+        XCTAssertTrue(historyStore.snapshots.isEmpty, mutation.rawValue)
+        XCTAssertTrue(configurationStore.usageAlertActiveIDs.isEmpty, mutation.rawValue)
+        XCTAssertTrue(notifier.deliveredNotifications.isEmpty, mutation.rawValue)
+        XCTAssertTrue(orchestrator.currentUsageAlertsByAccountID.isEmpty, mutation.rawValue)
+    }
+
+    @MainActor
     func testRefreshTracksFailuresPerAccountWithoutDiscardingSuccessfulResults() async {
         let failed = ProviderAccountConfiguration(
             id: "codex.failed",
@@ -2672,6 +2765,11 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(service.refreshErrorsByAccountID[configuration.id], "Refresh failed")
     }
 
+}
+
+private enum StaleRefreshConfigurationMutation: String, CaseIterable {
+    case remove
+    case disable
 }
 
 @MainActor

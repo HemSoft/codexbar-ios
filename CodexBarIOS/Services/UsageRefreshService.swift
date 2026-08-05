@@ -16,6 +16,8 @@ public final class UsageRefreshService: ObservableObject {
     private var isBatchRefreshRunning = false
     private var pendingBatchConfigurations: [ProviderAccountConfiguration]?
     private var batchRefreshCompletionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var currentConfigurationsByAccountID: [String: ProviderAccountConfiguration] = [:]
+    private var refreshGenerationsByAccountID: [String: UUID] = [:]
     private var codexResetAttempts: [String: CodexResetAttempt] = [:]
     private var codexResetTasks: [String: Task<CodexBankedResetConsumptionOutcome, Error>] = [:]
 
@@ -55,6 +57,7 @@ public final class UsageRefreshService: ObservableObject {
     }
 
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
+        updateCurrentConfigurations(configurations)
         if isBatchRefreshRunning {
             pendingBatchConfigurations = configurations
             await withCheckedContinuation { continuation in
@@ -98,6 +101,9 @@ public final class UsageRefreshService: ObservableObject {
         var requests: [(ProviderAccountConfiguration, any UsageProvider)] = []
         var errorsByAccountID: [String: String] = [:]
         for configuration in enabledConfigurations {
+            guard isCurrent(configuration) else {
+                continue
+            }
             guard let provider = providers.first(where: { $0.providerID == configuration.providerID }) else {
                 let message = "This provider is unavailable."
                 refreshErrorsByAccountID[configuration.id] = message
@@ -115,18 +121,23 @@ public final class UsageRefreshService: ObservableObject {
 
         await withTaskGroup(of: AccountRefreshOutcome.self) { group in
             for (configuration, provider) in requests {
+                guard let generation = refreshGenerationsByAccountID[configuration.id] else {
+                    continue
+                }
                 group.addTask {
                     do {
                         let result = try await provider.fetchUsage(for: configuration)
                         if let message = result.failureMessage {
                             return .failure(
                                 configuration: configuration,
+                                generation: generation,
                                 message: message,
                                 result: result
                             )
                         }
                         return .success(
-                            accountID: configuration.id,
+                            configuration: configuration,
+                            generation: generation,
                             result: result
                         )
                     } catch {
@@ -136,6 +147,7 @@ public final class UsageRefreshService: ObservableObject {
                         )
                         return .failure(
                             configuration: configuration,
+                            generation: generation,
                             message: error.localizedDescription,
                             result: result
                         )
@@ -145,13 +157,22 @@ public final class UsageRefreshService: ObservableObject {
 
             for await outcome in group {
                 switch outcome {
-                case .success(let accountID, let result):
+                case .success(let configuration, let generation, let result):
+                    let accountID = configuration.id
+                    guard isCurrent(configuration, generation: generation) else {
+                        finishRefresh(accountID: accountID)
+                        continue
+                    }
                     replaceResult(result)
                     refreshErrorsByAccountID.removeValue(forKey: accountID)
                     finishRefresh(accountID: accountID)
-                case .failure(let configuration, let message, let result):
-                    preserveFailureResult(result, configuration: configuration)
+                case .failure(let configuration, let generation, let message, let result):
                     let accountID = configuration.id
+                    guard isCurrent(configuration, generation: generation) else {
+                        finishRefresh(accountID: accountID)
+                        continue
+                    }
+                    preserveFailureResult(result, configuration: configuration)
                     refreshErrorsByAccountID[accountID] = message
                     errorsByAccountID[accountID] = message
                     finishRefresh(accountID: accountID)
@@ -172,7 +193,11 @@ public final class UsageRefreshService: ObservableObject {
         else {
             return nil
         }
+        let generation = registerCurrentConfiguration(configuration)
         await waitForRefreshToFinish(accountID: configuration.id)
+        guard isCurrent(configuration, generation: generation) else {
+            return nil
+        }
 
         refreshingAccountIDs.insert(configuration.id)
         refreshErrorsByAccountID.removeValue(forKey: configuration.id)
@@ -183,6 +208,9 @@ public final class UsageRefreshService: ObservableObject {
 
         do {
             let result = try await provider.fetchUsage(for: configuration)
+            guard isCurrent(configuration, generation: generation) else {
+                return nil
+            }
             if let message = result.failureMessage {
                 preserveFailureResult(result, configuration: configuration)
                 refreshErrorsByAccountID[configuration.id] = message
@@ -194,6 +222,9 @@ public final class UsageRefreshService: ObservableObject {
             lastRefreshError = nil
             return result
         } catch {
+            guard isCurrent(configuration, generation: generation) else {
+                return nil
+            }
             let message = error.localizedDescription
             let result = Self.failureResult(for: configuration, message: message)
             preserveFailureResult(result, configuration: configuration)
@@ -408,6 +439,46 @@ public final class UsageRefreshService: ObservableObject {
         }
     }
 
+    func updateCurrentConfigurations(
+        _ configurations: [ProviderAccountConfiguration]
+    ) {
+        let enabledConfigurations = configurations.filter(\.isEnabled)
+        let nextConfigurations = Dictionary(
+            uniqueKeysWithValues: enabledConfigurations.map { ($0.id, $0) }
+        )
+        let accountIDs = Set(currentConfigurationsByAccountID.keys)
+            .union(nextConfigurations.keys)
+        for accountID in accountIDs
+        where currentConfigurationsByAccountID[accountID] != nextConfigurations[accountID] {
+            refreshGenerationsByAccountID[accountID] = UUID()
+        }
+        currentConfigurationsByAccountID = nextConfigurations
+    }
+
+    private func registerCurrentConfiguration(
+        _ configuration: ProviderAccountConfiguration
+    ) -> UUID {
+        if currentConfigurationsByAccountID[configuration.id] != configuration {
+            currentConfigurationsByAccountID[configuration.id] = configuration
+            refreshGenerationsByAccountID[configuration.id] = UUID()
+        }
+        let generation = refreshGenerationsByAccountID[configuration.id] ?? UUID()
+        refreshGenerationsByAccountID[configuration.id] = generation
+        return generation
+    }
+
+    private func isCurrent(_ configuration: ProviderAccountConfiguration) -> Bool {
+        currentConfigurationsByAccountID[configuration.id] == configuration
+    }
+
+    private func isCurrent(
+        _ configuration: ProviderAccountConfiguration,
+        generation: UUID
+    ) -> Bool {
+        isCurrent(configuration)
+            && refreshGenerationsByAccountID[configuration.id] == generation
+    }
+
     private func finishRefresh(accountID: String) {
         refreshingAccountIDs.remove(accountID)
         let waiters = refreshCompletionWaiters.removeValue(forKey: accountID) ?? []
@@ -423,9 +494,14 @@ private struct CodexResetAttempt {
 }
 
 private enum AccountRefreshOutcome: Sendable {
-    case success(accountID: String, result: ProviderUsageResult)
+    case success(
+        configuration: ProviderAccountConfiguration,
+        generation: UUID,
+        result: ProviderUsageResult
+    )
     case failure(
         configuration: ProviderAccountConfiguration,
+        generation: UUID,
         message: String,
         result: ProviderUsageResult
     )

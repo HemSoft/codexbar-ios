@@ -58,7 +58,10 @@ final class DashboardOrchestrator: ObservableObject {
             configurationStore: configurationStore
         )
 
-        configurationStore.$configurations.dropFirst().sink { [weak historyStore] configurations in
+        refreshService.updateCurrentConfigurations(configurationStore.configurations)
+        configurationStore.$configurations.dropFirst().sink { [weak refreshService, weak historyStore] in
+            let configurations = $0
+            refreshService?.updateCurrentConfigurations(configurations)
             historyStore?.removeSnapshotsForMissingAccounts(
                 validAccountIDs: Set(configurations.map(\.id))
             )

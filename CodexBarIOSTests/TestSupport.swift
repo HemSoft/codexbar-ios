@@ -633,6 +633,28 @@ struct GatedUsageProvider: UsageProvider {
     }
 }
 
+struct StaleCompletionTestUsageProvider: UsageProvider {
+    let providerID: ProviderID
+    let gate: UsageProviderGate
+    let fails: Bool
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        await gate.wait()
+        if fails {
+            throw TestUsageProviderError.failed
+        }
+
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: providerID,
+            title: configuration.displayName,
+            subtitle: "Fresh usage",
+            bars: [UsageBar(label: "Usage", used: 95, limit: 100)],
+            fetchedAt: Date()
+        )
+    }
+}
+
 struct AccountGatedUsageProvider: UsageProvider {
     let providerID: ProviderID
     let gates: [String: UsageProviderGate]
@@ -788,6 +810,19 @@ final class StubUsageAlertNotifier: UsageAlertNotifying {
     }
 
     func deliver(_ notification: UsageAlertNotification) async throws {}
+}
+
+@MainActor
+final class RecordingUsageAlertNotifier: UsageAlertNotifying {
+    private(set) var deliveredNotifications: [UsageAlertNotification] = []
+
+    func requestAuthorization() async -> Bool {
+        true
+    }
+
+    func deliver(_ notification: UsageAlertNotification) async throws {
+        deliveredNotifications.append(notification)
+    }
 }
 
 extension URLComponents {

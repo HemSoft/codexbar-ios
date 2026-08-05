@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Prevented refreshes that finish after an account is removed or disabled from
+  restoring stale dashboard data, errors, history, alerts, or notifications.
+  ([#231](https://github.com/HemSoft/codexbar-ios/issues/231))
 - Explained warning and critical card indicators when a hidden metric is the
   cause, including the metric's current value on the card and in VoiceOver.
   ([#227](https://github.com/HemSoft/codexbar-ios/issues/227))
