@@ -666,6 +666,43 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testChangedAccountDiscardsCachedStateDuringSuspendedBatchRefresh() async {
+        let gate = UsageProviderGate()
+        let harness = makeStaleRefreshHarness(
+            providers: [
+                StaleCompletionTestUsageProvider(
+                    providerID: .codex,
+                    gate: gate,
+                    fails: false
+                ),
+            ]
+        )
+        defer { harness.removeDefaults() }
+
+        let refresh = Task { @MainActor in
+            await harness.orchestrator.refreshNow()
+        }
+        await gate.waitUntilBlocked()
+
+        var updatedConfiguration = harness.configuration
+        updatedConfiguration.accountLabel = "Updated Codex"
+        XCTAssertTrue(harness.configurationStore.update(updatedConfiguration))
+        XCTAssertTrue(harness.refreshService.results.isEmpty)
+
+        await gate.release()
+        _ = await refresh.value
+
+        XCTAssertTrue(harness.refreshService.results.isEmpty)
+        XCTAssertTrue(harness.refreshService.refreshErrorsByAccountID.isEmpty)
+        XCTAssertNil(harness.refreshService.lastRefreshError)
+        XCTAssertTrue(harness.refreshService.refreshingAccountIDs.isEmpty)
+        XCTAssertTrue(harness.historyStore.snapshots.isEmpty)
+        XCTAssertTrue(harness.configurationStore.usageAlertActiveIDs.isEmpty)
+        XCTAssertTrue(harness.notifier.deliveredNotifications.isEmpty)
+        XCTAssertTrue(harness.orchestrator.currentUsageAlertsByAccountID.isEmpty)
+    }
+
+    @MainActor
     private func assertSuspendedResetDoesNotReregisterConfiguration(
         _ mutation: StaleRefreshConfigurationMutation
     ) async {

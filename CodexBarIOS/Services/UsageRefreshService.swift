@@ -464,10 +464,12 @@ public final class UsageRefreshService: ObservableObject {
         )
         let accountIDs = Set(currentConfigurationsByAccountID.keys)
             .union(nextConfigurations.keys)
+        var changedAccountIDs: Set<String> = []
         for accountID in accountIDs {
             guard currentConfigurationsByAccountID[accountID] != nextConfigurations[accountID] else {
                 continue
             }
+            changedAccountIDs.insert(accountID)
             if nextConfigurations[accountID] == nil,
                !refreshingAccountIDs.contains(accountID) {
                 refreshGenerationsByAccountID.removeValue(forKey: accountID)
@@ -478,7 +480,7 @@ public final class UsageRefreshService: ObservableObject {
         currentConfigurationsByAccountID = nextConfigurations
 
         let enabledAccountIDs = Set(nextConfigurations.keys)
-        pruneCachedState(to: enabledAccountIDs)
+        pruneCachedState(to: enabledAccountIDs.subtracting(changedAccountIDs))
         let nextLastRefreshError = enabledConfigurations.lazy
             .compactMap { self.refreshErrorsByAccountID[$0.id] }
             .first
