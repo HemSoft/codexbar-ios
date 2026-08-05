@@ -395,6 +395,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         openCodeCredentialMessage = "Refreshing OpenCode Go + Zen..."
         defer { isRefreshingOpenCode = false }
 
+        flushPendingChanges()
         guard let result = await onAccountRefresh(configuration) else {
             openCodeCredentialMessage = "Refresh finished. Check the dashboard."
             return

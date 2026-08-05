@@ -633,6 +633,28 @@ struct GatedUsageProvider: UsageProvider {
     }
 }
 
+struct StaleCompletionTestUsageProvider: UsageProvider {
+    let providerID: ProviderID
+    let gate: UsageProviderGate
+    let fails: Bool
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        await gate.wait()
+        if fails {
+            throw TestUsageProviderError.failed
+        }
+
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: providerID,
+            title: configuration.displayName,
+            subtitle: "Fresh usage",
+            bars: [UsageBar(label: "Usage", used: 95, limit: 100)],
+            fetchedAt: Date()
+        )
+    }
+}
+
 struct AccountGatedUsageProvider: UsageProvider {
     let providerID: ProviderID
     let gates: [String: UsageProviderGate]
@@ -719,6 +741,7 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
     nonisolated let providerID = ProviderID.codex
     private let outcome: CodexBankedResetConsumptionOutcome
     private let fetchFails: Bool
+    private let fetchedUsed: Double
     private let consumeGate: UsageProviderGate?
     private let consumeErrorCode: URLError.Code?
     private var fetchCount = 0
@@ -728,11 +751,13 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
     init(
         outcome: CodexBankedResetConsumptionOutcome,
         fetchFails: Bool,
+        fetchedUsed: Double = 0,
         consumeGate: UsageProviderGate? = nil,
         consumeErrorCode: URLError.Code? = nil
     ) {
         self.outcome = outcome
         self.fetchFails = fetchFails
+        self.fetchedUsed = fetchedUsed
         self.consumeGate = consumeGate
         self.consumeErrorCode = consumeErrorCode
     }
@@ -747,7 +772,7 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
             providerID: .codex,
             title: configuration.displayName,
             subtitle: "Fresh usage",
-            bars: [UsageBar(label: "Usage", used: 0, limit: 100)],
+            bars: [UsageBar(label: "Usage", used: fetchedUsed, limit: 100)],
             fetchedAt: Date()
         )
     }
@@ -788,6 +813,19 @@ final class StubUsageAlertNotifier: UsageAlertNotifying {
     }
 
     func deliver(_ notification: UsageAlertNotification) async throws {}
+}
+
+@MainActor
+final class RecordingUsageAlertNotifier: UsageAlertNotifying {
+    private(set) var deliveredNotifications: [UsageAlertNotification] = []
+
+    func requestAuthorization() async -> Bool {
+        true
+    }
+
+    func deliver(_ notification: UsageAlertNotification) async throws {
+        deliveredNotifications.append(notification)
+    }
 }
 
 extension URLComponents {

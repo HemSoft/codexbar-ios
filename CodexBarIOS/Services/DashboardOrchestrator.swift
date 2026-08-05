@@ -58,7 +58,10 @@ final class DashboardOrchestrator: ObservableObject {
             configurationStore: configurationStore
         )
 
-        configurationStore.$configurations.dropFirst().sink { [weak historyStore] configurations in
+        refreshService.updateCurrentConfigurations(configurationStore.configurations)
+        configurationStore.$configurations.dropFirst().sink { [weak refreshService, weak historyStore] in
+            let configurations = $0
+            refreshService?.updateCurrentConfigurations(configurations)
             historyStore?.removeSnapshotsForMissingAccounts(
                 validAccountIDs: Set(configurations.map(\.id))
             )
@@ -223,9 +226,18 @@ final class DashboardOrchestrator: ObservableObject {
 
     @discardableResult
     func refreshAccount(_ configuration: ProviderAccountConfiguration) async -> ProviderUsageResult? {
-        let result = await refreshService.refresh(configuration: configuration)
+        guard
+            let currentConfiguration = configurationStore.configuration(accountID: configuration.id),
+            currentConfiguration.isEnabled,
+            refreshService.hasSameRefreshInputs(configuration, currentConfiguration)
+        else {
+            return nil
+        }
+        guard let result = await refreshService.refresh(configuration: currentConfiguration) else {
+            return nil
+        }
         let successfulResults = refreshService.successfulRefreshResults.filter {
-            $0.accountID == configuration.id
+            $0.accountID == currentConfiguration.id
         }
         let preservedAccountIDs = Set(configurationStore.configurations.map(\.id))
             .subtracting(successfulResults.map(\.accountID))
@@ -243,7 +255,7 @@ final class DashboardOrchestrator: ObservableObject {
                 creditID: creditID
             )
             let refreshed = await refreshAccount(configuration)
-            let refreshSucceeded = refreshed?.failureMessage == nil
+            let refreshSucceeded = refreshed.map { $0.failureMessage == nil } ?? false
 
             switch outcome {
             case .reset, .alreadyRedeemed:
