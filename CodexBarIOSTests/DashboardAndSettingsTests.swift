@@ -457,6 +457,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             await service.refresh(configurations: [startupConfiguration])
         }
         await gate.waitUntilBlocked()
+        service.updateCurrentConfigurations([updatedConfiguration])
         let explicitRefresh = Task {
             await service.refresh(configuration: updatedConfiguration)
         }
@@ -471,6 +472,45 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(updatedResult?.title, "Updated Codex")
         XCTAssertEqual(service.results.first?.title, "Updated Codex")
         XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
+    }
+
+    @MainActor
+    func testExplicitRefreshDoesNotReregisterObsoleteConfiguration() async {
+        let recorder = UsageProviderRecorder()
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.removed-explicit",
+            providerID: .codex,
+            accountLabel: "Removed Codex",
+            authMethod: .browserSession
+        )
+        let service = UsageRefreshService(providers: [
+            GatedUsageProvider(
+                providerID: .codex,
+                blockedAccountID: "not-blocked",
+                gate: UsageProviderGate(),
+                recorder: recorder
+            ),
+        ])
+        service.updateCurrentConfigurations([configuration])
+        var updatedConfiguration = configuration
+        updatedConfiguration.accountLabel = "Updated Codex"
+        service.updateCurrentConfigurations([updatedConfiguration])
+
+        let replacedResult = await service.refresh(configuration: configuration)
+        let labelsAfterReplacement = await recorder.recordedLabels()
+
+        XCTAssertNil(replacedResult)
+        XCTAssertTrue(labelsAfterReplacement.isEmpty)
+        XCTAssertEqual(service.trackedRefreshGenerationCount, 1)
+
+        service.updateCurrentConfigurations([])
+
+        let removedResult = await service.refresh(configuration: configuration)
+        let recordedLabels = await recorder.recordedLabels()
+
+        XCTAssertNil(removedResult)
+        XCTAssertTrue(recordedLabels.isEmpty)
+        XCTAssertEqual(service.trackedRefreshGenerationCount, 0)
     }
 
     @MainActor
@@ -785,6 +825,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertTrue(refreshService.refreshErrorsByAccountID.isEmpty, mutation.rawValue)
         XCTAssertNil(refreshService.lastRefreshError, mutation.rawValue)
         XCTAssertTrue(refreshService.refreshingAccountIDs.isEmpty, mutation.rawValue)
+        XCTAssertEqual(refreshService.trackedRefreshGenerationCount, 0, mutation.rawValue)
         XCTAssertTrue(historyStore.snapshots.isEmpty, mutation.rawValue)
         XCTAssertTrue(configurationStore.usageAlertActiveIDs.isEmpty, mutation.rawValue)
         XCTAssertTrue(notifier.deliveredNotifications.isEmpty, mutation.rawValue)
@@ -2022,6 +2063,32 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertEqual(store.configuration(accountID: openCode.id)?.accountLabel, "Team ZEN")
         XCTAssertEqual(store.configuration(accountID: openCode.id)?.showsHistory, false)
+    }
+
+    @MainActor
+    func testProviderSettingsViewModelFlushesPendingWorkspaceBeforeRefresh() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        var refreshedConfiguration: ProviderAccountConfiguration?
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id,
+            onAccountRefresh: { configuration in
+                refreshedConfiguration = configuration
+                return nil
+            }
+        )
+        viewModel.binding(
+            for: \.openCodeWorkspaceId,
+            persistence: .debounced
+        ).wrappedValue = "wrk_pending"
+
+        await viewModel.refreshOpenCode()
+
+        XCTAssertEqual(store.configuration(accountID: openCode.id)?.openCodeWorkspaceId, "wrk_pending")
+        XCTAssertEqual(refreshedConfiguration?.openCodeWorkspaceId, "wrk_pending")
     }
 
     @MainActor

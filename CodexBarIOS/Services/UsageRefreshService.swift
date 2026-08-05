@@ -16,6 +16,7 @@ public final class UsageRefreshService: ObservableObject {
     private var isBatchRefreshRunning = false
     private var pendingBatchConfigurations: [ProviderAccountConfiguration]?
     private var batchRefreshCompletionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var hasCurrentConfigurationSnapshot = false
     private var currentConfigurationsByAccountID: [String: ProviderAccountConfiguration] = [:]
     private var refreshGenerationsByAccountID: [String: UUID] = [:]
     private var codexResetAttempts: [String: CodexResetAttempt] = [:]
@@ -54,6 +55,10 @@ public final class UsageRefreshService: ObservableObject {
 
     func refreshWaiterCount(for accountID: String) -> Int {
         refreshCompletionWaiters[accountID]?.count ?? 0
+    }
+
+    var trackedRefreshGenerationCount: Int {
+        refreshGenerationsByAccountID.count
     }
 
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
@@ -193,7 +198,18 @@ public final class UsageRefreshService: ObservableObject {
         else {
             return nil
         }
-        let generation = registerCurrentConfiguration(configuration)
+        let generation: UUID
+        if hasCurrentConfigurationSnapshot {
+            guard
+                isCurrent(configuration),
+                let currentGeneration = refreshGenerationsByAccountID[configuration.id]
+            else {
+                return nil
+            }
+            generation = currentGeneration
+        } else {
+            generation = registerCurrentConfiguration(configuration)
+        }
         await waitForRefreshToFinish(accountID: configuration.id)
         guard isCurrent(configuration, generation: generation) else {
             return nil
@@ -442,15 +458,23 @@ public final class UsageRefreshService: ObservableObject {
     func updateCurrentConfigurations(
         _ configurations: [ProviderAccountConfiguration]
     ) {
+        hasCurrentConfigurationSnapshot = true
         let enabledConfigurations = configurations.filter(\.isEnabled)
         let nextConfigurations = Dictionary(
             uniqueKeysWithValues: enabledConfigurations.map { ($0.id, $0) }
         )
         let accountIDs = Set(currentConfigurationsByAccountID.keys)
             .union(nextConfigurations.keys)
-        for accountID in accountIDs
-        where currentConfigurationsByAccountID[accountID] != nextConfigurations[accountID] {
-            refreshGenerationsByAccountID[accountID] = UUID()
+        for accountID in accountIDs {
+            guard currentConfigurationsByAccountID[accountID] != nextConfigurations[accountID] else {
+                continue
+            }
+            if nextConfigurations[accountID] == nil,
+               !refreshingAccountIDs.contains(accountID) {
+                refreshGenerationsByAccountID.removeValue(forKey: accountID)
+            } else {
+                refreshGenerationsByAccountID[accountID] = UUID()
+            }
         }
         currentConfigurationsByAccountID = nextConfigurations
 
@@ -497,6 +521,9 @@ public final class UsageRefreshService: ObservableObject {
 
     private func finishRefresh(accountID: String) {
         refreshingAccountIDs.remove(accountID)
+        if currentConfigurationsByAccountID[accountID] == nil {
+            refreshGenerationsByAccountID.removeValue(forKey: accountID)
+        }
         let waiters = refreshCompletionWaiters.removeValue(forKey: accountID) ?? []
         for waiter in waiters {
             waiter.resume()
