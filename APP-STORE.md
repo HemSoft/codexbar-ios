@@ -285,7 +285,18 @@ use the persistent **Rate CodexBar** link instead.
 - [x] Select the final `1.1 (1)` build after App Store Connect finishes
   processing it. Selected on 2026-07-15. The previous `1.0 (1)` release used
   build ID `ccdc123f-9635-485c-b472-7b0093e026ac`.
-- [x] Complete export compliance project prep. `ITSAppUsesNonExemptEncryption` is set to `false` for the app and widget because CodexBar only uses exempt Apple platform encryption such as HTTPS and Keychain.
+- [x] Complete export compliance project prep for all four submitted executable
+  bundles: the iOS app, iOS widget, Watch app, and Watch widget declare
+  `ITSAppUsesNonExemptEncryption` as `false`. CodexBar uses only exempt Apple
+  platform encryption such as HTTPS and Keychain; the Watch products do not
+  perform provider networking or custom cryptography and receive or cache data
+  through Apple system frameworks. Before uploading, run
+  `./scripts/verify-export-compliance.sh source`, then run
+  `./scripts/verify-export-compliance.sh bundle <path-to-CodexBarIOS.app-or-xcarchive>`
+  against the built submission.
+- [ ] Confirm the processed build's export-compliance answers in App Store
+  Connect still match these four declarations before each submission; this
+  remains a manual release step even though the bundle metadata is verified.
 - [x] Complete content rights. App Store Connect records that CodexBar has the
   necessary rights to its third-party content.
 - [x] Complete age rating. App Store Connect reports `4+`, and the 2026 social-media
