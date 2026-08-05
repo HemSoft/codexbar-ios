@@ -544,7 +544,10 @@ public final class UsageRefreshService: ObservableObject {
         _ configuration: ProviderAccountConfiguration,
         generation: UUID
     ) -> Bool {
-        isCurrent(configuration)
+        guard let currentConfiguration = currentConfigurationsByAccountID[configuration.id] else {
+            return false
+        }
+        return !refreshInputsChanged(from: configuration, to: currentConfiguration)
             && refreshGenerationsByAccountID[configuration.id] == generation
     }
 

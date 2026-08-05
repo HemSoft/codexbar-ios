@@ -743,6 +743,44 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testPresentationOnlyChangesAcceptSuspendedBatchRefreshCompletion() async throws {
+        let gate = UsageProviderGate()
+        let harness = makeStaleRefreshHarness(
+            providers: [
+                StaleCompletionTestUsageProvider(
+                    providerID: .codex,
+                    gate: gate,
+                    fails: false
+                ),
+            ],
+            cachedUsed: 15
+        )
+        defer { harness.removeDefaults() }
+        let cachedResult = try XCTUnwrap(harness.refreshService.results.first)
+
+        let refresh = Task { @MainActor in
+            await harness.orchestrator.refreshNow()
+        }
+        await gate.waitUntilBlocked()
+
+        let group = try XCTUnwrap(harness.configurationStore.addGroup(named: "Work"))
+        var updatedConfiguration = harness.configuration
+        updatedConfiguration.accountLabel = "Renamed Codex"
+        updatedConfiguration.groupID = group.id
+        XCTAssertTrue(harness.configurationStore.update(updatedConfiguration))
+        XCTAssertEqual(harness.refreshService.results, [cachedResult])
+
+        await gate.release()
+        _ = await refresh.value
+
+        XCTAssertEqual(harness.refreshService.results.first?.subtitle, "Fresh usage")
+        XCTAssertFalse(harness.historyStore.snapshots.isEmpty)
+        XCTAssertFalse(harness.configurationStore.usageAlertActiveIDs.isEmpty)
+        XCTAssertFalse(harness.notifier.deliveredNotifications.isEmpty)
+        XCTAssertNotNil(harness.orchestrator.currentUsageAlertsByAccountID[harness.configuration.id])
+    }
+
+    @MainActor
     private func assertSuspendedResetDoesNotReregisterConfiguration(
         _ mutation: StaleRefreshConfigurationMutation
     ) async {
@@ -837,7 +875,8 @@ final class DashboardAndSettingsTests: XCTestCase {
 
     @MainActor
     private func makeStaleRefreshHarness(
-        providers: [any UsageProvider]
+        providers: [any UsageProvider],
+        cachedUsed: Double = 95
     ) -> StaleRefreshHarness {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -852,7 +891,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             accountID: configuration.id,
             providerID: .codex,
             fetchedAt: Date().addingTimeInterval(-300),
-            used: 95
+            used: cachedUsed
         )
         let refreshService = UsageRefreshService(
             providers: providers,
