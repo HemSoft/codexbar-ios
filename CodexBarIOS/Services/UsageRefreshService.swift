@@ -61,6 +61,13 @@ public final class UsageRefreshService: ObservableObject {
         refreshGenerationsByAccountID.count
     }
 
+    func hasSameRefreshInputs(
+        _ first: ProviderAccountConfiguration,
+        _ second: ProviderAccountConfiguration
+    ) -> Bool {
+        RefreshInputs(configuration: first) == RefreshInputs(configuration: second)
+    }
+
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
         updateCurrentConfigurations(configurations)
         if isBatchRefreshRunning {
@@ -515,8 +522,7 @@ public final class UsageRefreshService: ObservableObject {
         guard let currentConfiguration, let nextConfiguration else {
             return true
         }
-        return RefreshInputs(configuration: currentConfiguration)
-            != RefreshInputs(configuration: nextConfiguration)
+        return !hasSameRefreshInputs(currentConfiguration, nextConfiguration)
     }
 
     private func registerCurrentConfiguration(

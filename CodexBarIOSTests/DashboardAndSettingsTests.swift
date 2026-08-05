@@ -666,6 +666,84 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testPresentationOnlyChangesUseCurrentConfigurationAfterSuspendedReset() async throws {
+        let gate = UsageProviderGate()
+        let provider = ResetConsumptionTestProvider(
+            outcome: .reset,
+            fetchFails: false,
+            fetchedUsed: 95,
+            consumeGate: gate
+        )
+        let harness = makeStaleRefreshHarness(providers: [provider], cachedUsed: 15)
+        defer { harness.removeDefaults() }
+
+        let consumption = Task { @MainActor in
+            await harness.orchestrator.consumeCodexBankedReset(
+                for: harness.configuration,
+                creditID: "presentation-edit"
+            )
+        }
+        await gate.waitUntilBlocked()
+
+        let group = try XCTUnwrap(harness.configurationStore.addGroup(named: "Work"))
+        var updatedConfiguration = harness.configuration
+        updatedConfiguration.accountLabel = "Renamed Codex"
+        updatedConfiguration.groupID = group.id
+        updatedConfiguration.showsHistory = false
+        XCTAssertTrue(harness.configurationStore.update(updatedConfiguration))
+
+        await gate.release()
+        let feedback = await consumption.value
+        let fetchCount = await provider.recordedFetchCount()
+
+        XCTAssertTrue(feedback.isSuccess)
+        XCTAssertEqual(feedback.message, "Reset used. Current usage limits are refreshed.")
+        XCTAssertEqual(fetchCount, 1)
+        XCTAssertEqual(harness.refreshService.results.first?.title, "Renamed Codex")
+        XCTAssertEqual(harness.refreshService.results.first?.subtitle, "Fresh usage")
+        XCTAssertFalse(harness.historyStore.snapshots.isEmpty)
+        XCTAssertFalse(harness.configurationStore.usageAlertActiveIDs.isEmpty)
+        XCTAssertFalse(harness.notifier.deliveredNotifications.isEmpty)
+        XCTAssertNotNil(harness.orchestrator.currentUsageAlertsByAccountID[harness.configuration.id])
+    }
+
+    @MainActor
+    func testRefreshInputChangesDoNotUseCurrentConfigurationAfterSuspendedReset() async {
+        let gate = UsageProviderGate()
+        let provider = ResetConsumptionTestProvider(
+            outcome: .reset,
+            fetchFails: false,
+            consumeGate: gate
+        )
+        let harness = makeStaleRefreshHarness(providers: [provider])
+        defer { harness.removeDefaults() }
+
+        let consumption = Task { @MainActor in
+            await harness.orchestrator.consumeCodexBankedReset(
+                for: harness.configuration,
+                creditID: "refresh-input-edit"
+            )
+        }
+        await gate.waitUntilBlocked()
+
+        var updatedConfiguration = harness.configuration
+        updatedConfiguration.oauthClientID = "updated-client"
+        XCTAssertTrue(harness.configurationStore.update(updatedConfiguration))
+
+        await gate.release()
+        let feedback = await consumption.value
+        let fetchCount = await provider.recordedFetchCount()
+
+        XCTAssertTrue(feedback.isSuccess)
+        XCTAssertTrue(feedback.message.contains("could not be refreshed"))
+        XCTAssertEqual(fetchCount, 0)
+        XCTAssertTrue(harness.refreshService.results.isEmpty)
+        XCTAssertTrue(harness.historyStore.snapshots.isEmpty)
+        XCTAssertTrue(harness.configurationStore.usageAlertActiveIDs.isEmpty)
+        XCTAssertTrue(harness.notifier.deliveredNotifications.isEmpty)
+    }
+
+    @MainActor
     func testChangedAccountDiscardsCachedStateDuringSuspendedBatchRefresh() async {
         let gate = UsageProviderGate()
         let harness = makeStaleRefreshHarness(

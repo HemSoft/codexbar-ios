@@ -741,6 +741,7 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
     nonisolated let providerID = ProviderID.codex
     private let outcome: CodexBankedResetConsumptionOutcome
     private let fetchFails: Bool
+    private let fetchedUsed: Double
     private let consumeGate: UsageProviderGate?
     private let consumeErrorCode: URLError.Code?
     private var fetchCount = 0
@@ -750,11 +751,13 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
     init(
         outcome: CodexBankedResetConsumptionOutcome,
         fetchFails: Bool,
+        fetchedUsed: Double = 0,
         consumeGate: UsageProviderGate? = nil,
         consumeErrorCode: URLError.Code? = nil
     ) {
         self.outcome = outcome
         self.fetchFails = fetchFails
+        self.fetchedUsed = fetchedUsed
         self.consumeGate = consumeGate
         self.consumeErrorCode = consumeErrorCode
     }
@@ -769,7 +772,7 @@ actor ResetConsumptionTestProvider: CodexBankedResetConsuming {
             providerID: .codex,
             title: configuration.displayName,
             subtitle: "Fresh usage",
-            bars: [UsageBar(label: "Usage", used: 0, limit: 100)],
+            bars: [UsageBar(label: "Usage", used: fetchedUsed, limit: 100)],
             fetchedAt: Date()
         )
     }

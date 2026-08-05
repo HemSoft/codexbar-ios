@@ -228,8 +228,8 @@ final class DashboardOrchestrator: ObservableObject {
     func refreshAccount(_ configuration: ProviderAccountConfiguration) async -> ProviderUsageResult? {
         guard
             let currentConfiguration = configurationStore.configuration(accountID: configuration.id),
-            currentConfiguration == configuration,
-            currentConfiguration.isEnabled
+            currentConfiguration.isEnabled,
+            refreshService.hasSameRefreshInputs(configuration, currentConfiguration)
         else {
             return nil
         }
