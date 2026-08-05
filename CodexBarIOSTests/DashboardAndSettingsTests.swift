@@ -619,6 +619,86 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testRemovedAndDisabledAccountsDoNotRefreshAfterSuspendedReset() async {
+        for mutation in StaleRefreshConfigurationMutation.allCases {
+            await assertSuspendedResetDoesNotReregisterConfiguration(mutation)
+        }
+    }
+
+    @MainActor
+    private func assertSuspendedResetDoesNotReregisterConfiguration(
+        _ mutation: StaleRefreshConfigurationMutation
+    ) async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let configurationStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        let configuration = configurationStore.addAccount(for: .codex)
+        configurationStore.updateUsageAlertsEnabled(true)
+        let gate = UsageProviderGate()
+        let provider = ResetConsumptionTestProvider(
+            outcome: .reset,
+            fetchFails: false,
+            consumeGate: gate
+        )
+        let refreshService = UsageRefreshService(providers: [provider])
+        let historyStore = UsageHistoryStore(defaults: defaults)
+        let notifier = RecordingUsageAlertNotifier()
+        let orchestrator = DashboardOrchestrator(
+            refreshService: refreshService,
+            configurationStore: configurationStore,
+            historyStore: historyStore,
+            usageAlertNotifier: notifier,
+            appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                refreshService: refreshService,
+                configurationStore: configurationStore,
+                publishSnapshot: { _, _ in },
+                publishSettings: { _ in }
+            ),
+            watchSnapshotCoordinator: WatchSnapshotCoordinator(
+                refreshService: refreshService,
+                configurationStore: configurationStore,
+                publishSnapshot: { _, _, _ in }
+            )
+        )
+
+        let consumption = Task { @MainActor in
+            await orchestrator.consumeCodexBankedReset(
+                for: configuration,
+                creditID: "stale-credit"
+            )
+        }
+        await gate.waitUntilBlocked()
+
+        switch mutation {
+        case .remove:
+            XCTAssertTrue(configurationStore.removeAccount(configuration))
+        case .disable:
+            var disabledConfiguration = configuration
+            disabledConfiguration.isEnabled = false
+            XCTAssertTrue(configurationStore.update(disabledConfiguration))
+        }
+
+        await gate.release()
+        let feedback = await consumption.value
+        let fetchCount = await provider.recordedFetchCount()
+
+        XCTAssertTrue(feedback.isSuccess, mutation.rawValue)
+        XCTAssertTrue(feedback.message.contains("could not be refreshed"), mutation.rawValue)
+        XCTAssertEqual(fetchCount, 0, mutation.rawValue)
+        XCTAssertTrue(refreshService.results.isEmpty, mutation.rawValue)
+        XCTAssertTrue(refreshService.refreshErrorsByAccountID.isEmpty, mutation.rawValue)
+        XCTAssertTrue(historyStore.snapshots.isEmpty, mutation.rawValue)
+        XCTAssertTrue(configurationStore.usageAlertActiveIDs.isEmpty, mutation.rawValue)
+        XCTAssertTrue(notifier.deliveredNotifications.isEmpty, mutation.rawValue)
+    }
+
+    @MainActor
     private func assertStaleCompletionIsDiscarded(
         fails: Bool,
         mutation: StaleRefreshConfigurationMutation

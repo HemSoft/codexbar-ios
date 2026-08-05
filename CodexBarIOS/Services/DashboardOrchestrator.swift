@@ -226,9 +226,16 @@ final class DashboardOrchestrator: ObservableObject {
 
     @discardableResult
     func refreshAccount(_ configuration: ProviderAccountConfiguration) async -> ProviderUsageResult? {
-        let result = await refreshService.refresh(configuration: configuration)
+        guard
+            let currentConfiguration = configurationStore.configuration(accountID: configuration.id),
+            currentConfiguration == configuration,
+            currentConfiguration.isEnabled
+        else {
+            return nil
+        }
+        let result = await refreshService.refresh(configuration: currentConfiguration)
         let successfulResults = refreshService.successfulRefreshResults.filter {
-            $0.accountID == configuration.id
+            $0.accountID == currentConfiguration.id
         }
         let preservedAccountIDs = Set(configurationStore.configurations.map(\.id))
             .subtracting(successfulResults.map(\.accountID))
@@ -246,7 +253,7 @@ final class DashboardOrchestrator: ObservableObject {
                 creditID: creditID
             )
             let refreshed = await refreshAccount(configuration)
-            let refreshSucceeded = refreshed?.failureMessage == nil
+            let refreshSucceeded = refreshed.map { $0.failureMessage == nil } ?? false
 
             switch outcome {
             case .reset, .alreadyRedeemed:
