@@ -457,6 +457,7 @@ public final class UsageRefreshService: ObservableObject {
     func updateCurrentConfigurations(
         _ configurations: [ProviderAccountConfiguration]
     ) {
+        let hadCurrentConfigurationSnapshot = hasCurrentConfigurationSnapshot
         hasCurrentConfigurationSnapshot = true
         let enabledConfigurations = configurations.filter(\.isEnabled)
         let nextConfigurations = Dictionary(
@@ -480,7 +481,8 @@ public final class UsageRefreshService: ObservableObject {
         currentConfigurationsByAccountID = nextConfigurations
 
         let enabledAccountIDs = Set(nextConfigurations.keys)
-        pruneCachedState(to: enabledAccountIDs.subtracting(changedAccountIDs))
+        let invalidatedAccountIDs = hadCurrentConfigurationSnapshot ? changedAccountIDs : []
+        pruneCachedState(to: enabledAccountIDs.subtracting(invalidatedAccountIDs))
         let nextLastRefreshError = enabledConfigurations.lazy
             .compactMap { self.refreshErrorsByAccountID[$0.id] }
             .first
