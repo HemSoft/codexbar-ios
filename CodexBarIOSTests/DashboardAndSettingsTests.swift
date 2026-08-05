@@ -669,56 +669,18 @@ final class DashboardAndSettingsTests: XCTestCase {
     private func assertSuspendedResetDoesNotReregisterConfiguration(
         _ mutation: StaleRefreshConfigurationMutation
     ) async {
-        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let configurationStore = ProviderConfigurationStore(
-            defaults: defaults,
-            secretStore: EmptySecretStore(),
-            widgetSnapshotDefaults: defaults
-        )
-        let configuration = configurationStore.addAccount(for: .codex)
-        configurationStore.updateUsageAlertsEnabled(true)
         let gate = UsageProviderGate()
         let provider = ResetConsumptionTestProvider(
             outcome: .reset,
             fetchFails: false,
             consumeGate: gate
         )
-        let cachedResult = makeHistoryResult(
-            accountID: configuration.id,
-            providerID: .codex,
-            fetchedAt: Date().addingTimeInterval(-300),
-            used: 95
-        )
-        let refreshService = UsageRefreshService(
-            providers: [provider],
-            initialResults: [cachedResult]
-        )
-        let historyStore = UsageHistoryStore(defaults: defaults)
-        let notifier = RecordingUsageAlertNotifier()
-        let orchestrator = DashboardOrchestrator(
-            refreshService: refreshService,
-            configurationStore: configurationStore,
-            historyStore: historyStore,
-            usageAlertNotifier: notifier,
-            appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
-            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
-                refreshService: refreshService,
-                configurationStore: configurationStore,
-                publishSnapshot: { _, _ in },
-                publishSettings: { _ in }
-            ),
-            watchSnapshotCoordinator: WatchSnapshotCoordinator(
-                refreshService: refreshService,
-                configurationStore: configurationStore,
-                publishSnapshot: { _, _, _ in }
-            )
-        )
+        let harness = makeStaleRefreshHarness(providers: [provider])
+        defer { harness.removeDefaults() }
 
         let consumption = Task { @MainActor in
-            await orchestrator.consumeCodexBankedReset(
-                for: configuration,
+            await harness.orchestrator.consumeCodexBankedReset(
+                for: harness.configuration,
                 creditID: "stale-credit"
             )
         }
@@ -726,13 +688,13 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         switch mutation {
         case .remove:
-            XCTAssertTrue(configurationStore.removeAccount(configuration))
+            XCTAssertTrue(harness.configurationStore.removeAccount(harness.configuration))
         case .disable:
-            var disabledConfiguration = configuration
+            var disabledConfiguration = harness.configuration
             disabledConfiguration.isEnabled = false
-            XCTAssertTrue(configurationStore.update(disabledConfiguration))
+            XCTAssertTrue(harness.configurationStore.update(disabledConfiguration))
         }
-        XCTAssertTrue(refreshService.results.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.refreshService.results.isEmpty, mutation.rawValue)
 
         await gate.release()
         let feedback = await consumption.value
@@ -741,11 +703,11 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertTrue(feedback.isSuccess, mutation.rawValue)
         XCTAssertTrue(feedback.message.contains("could not be refreshed"), mutation.rawValue)
         XCTAssertEqual(fetchCount, 0, mutation.rawValue)
-        XCTAssertTrue(refreshService.results.isEmpty, mutation.rawValue)
-        XCTAssertTrue(refreshService.refreshErrorsByAccountID.isEmpty, mutation.rawValue)
-        XCTAssertTrue(historyStore.snapshots.isEmpty, mutation.rawValue)
-        XCTAssertTrue(configurationStore.usageAlertActiveIDs.isEmpty, mutation.rawValue)
-        XCTAssertTrue(notifier.deliveredNotifications.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.refreshService.results.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.refreshService.refreshErrorsByAccountID.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.historyStore.snapshots.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.configurationStore.usageAlertActiveIDs.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.notifier.deliveredNotifications.isEmpty, mutation.rawValue)
     }
 
     @MainActor
@@ -753,9 +715,55 @@ final class DashboardAndSettingsTests: XCTestCase {
         fails: Bool,
         mutation: StaleRefreshConfigurationMutation
     ) async {
+        let gate = UsageProviderGate()
+        let harness = makeStaleRefreshHarness(
+            providers: [
+                StaleCompletionTestUsageProvider(
+                    providerID: .codex,
+                    gate: gate,
+                    fails: fails
+                ),
+            ]
+        )
+        defer { harness.removeDefaults() }
+
+        let accountRefresh = Task { @MainActor in
+            await harness.orchestrator.refreshAccount(harness.configuration)
+        }
+        await gate.waitUntilBlocked()
+
+        switch mutation {
+        case .remove:
+            XCTAssertTrue(harness.configurationStore.removeAccount(harness.configuration))
+        case .disable:
+            var disabledConfiguration = harness.configuration
+            disabledConfiguration.isEnabled = false
+            XCTAssertTrue(harness.configurationStore.update(disabledConfiguration))
+        }
+        XCTAssertTrue(harness.refreshService.results.isEmpty, mutation.rawValue)
+        _ = await harness.orchestrator.refreshNow()
+
+        await gate.release()
+        let result = await accountRefresh.value
+
+        XCTAssertNil(result, mutation.rawValue)
+        XCTAssertTrue(harness.refreshService.results.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.refreshService.refreshErrorsByAccountID.isEmpty, mutation.rawValue)
+        XCTAssertNil(harness.refreshService.lastRefreshError, mutation.rawValue)
+        XCTAssertTrue(harness.refreshService.refreshingAccountIDs.isEmpty, mutation.rawValue)
+        XCTAssertEqual(harness.refreshService.trackedRefreshGenerationCount, 0, mutation.rawValue)
+        XCTAssertTrue(harness.historyStore.snapshots.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.configurationStore.usageAlertActiveIDs.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.notifier.deliveredNotifications.isEmpty, mutation.rawValue)
+        XCTAssertTrue(harness.orchestrator.currentUsageAlertsByAccountID.isEmpty, mutation.rawValue)
+    }
+
+    @MainActor
+    private func makeStaleRefreshHarness(
+        providers: [any UsageProvider]
+    ) -> StaleRefreshHarness {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
         let configurationStore = ProviderConfigurationStore(
             defaults: defaults,
             secretStore: EmptySecretStore(),
@@ -763,7 +771,6 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
         let configuration = configurationStore.addAccount(for: .codex)
         configurationStore.updateUsageAlertsEnabled(true)
-        let gate = UsageProviderGate()
         let cachedResult = makeHistoryResult(
             accountID: configuration.id,
             providerID: .codex,
@@ -771,13 +778,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             used: 95
         )
         let refreshService = UsageRefreshService(
-            providers: [
-                StaleCompletionTestUsageProvider(
-                    providerID: .codex,
-                    gate: gate,
-                    fails: fails
-                ),
-            ],
+            providers: providers,
             initialResults: [cachedResult]
         )
         let historyStore = UsageHistoryStore(defaults: defaults)
@@ -800,36 +801,16 @@ final class DashboardAndSettingsTests: XCTestCase {
                 publishSnapshot: { _, _, _ in }
             )
         )
-
-        let accountRefresh = Task { @MainActor in
-            await orchestrator.refreshAccount(configuration)
-        }
-        await gate.waitUntilBlocked()
-
-        switch mutation {
-        case .remove:
-            XCTAssertTrue(configurationStore.removeAccount(configuration))
-        case .disable:
-            var disabledConfiguration = configuration
-            disabledConfiguration.isEnabled = false
-            XCTAssertTrue(configurationStore.update(disabledConfiguration))
-        }
-        XCTAssertTrue(refreshService.results.isEmpty, mutation.rawValue)
-        _ = await orchestrator.refreshNow()
-
-        await gate.release()
-        let result = await accountRefresh.value
-
-        XCTAssertNil(result, mutation.rawValue)
-        XCTAssertTrue(refreshService.results.isEmpty, mutation.rawValue)
-        XCTAssertTrue(refreshService.refreshErrorsByAccountID.isEmpty, mutation.rawValue)
-        XCTAssertNil(refreshService.lastRefreshError, mutation.rawValue)
-        XCTAssertTrue(refreshService.refreshingAccountIDs.isEmpty, mutation.rawValue)
-        XCTAssertEqual(refreshService.trackedRefreshGenerationCount, 0, mutation.rawValue)
-        XCTAssertTrue(historyStore.snapshots.isEmpty, mutation.rawValue)
-        XCTAssertTrue(configurationStore.usageAlertActiveIDs.isEmpty, mutation.rawValue)
-        XCTAssertTrue(notifier.deliveredNotifications.isEmpty, mutation.rawValue)
-        XCTAssertTrue(orchestrator.currentUsageAlertsByAccountID.isEmpty, mutation.rawValue)
+        return StaleRefreshHarness(
+            suiteName: suiteName,
+            defaults: defaults,
+            configurationStore: configurationStore,
+            configuration: configuration,
+            refreshService: refreshService,
+            historyStore: historyStore,
+            notifier: notifier,
+            orchestrator: orchestrator
+        )
     }
 
     @MainActor
@@ -2937,6 +2918,22 @@ final class DashboardAndSettingsTests: XCTestCase {
 private enum StaleRefreshConfigurationMutation: String, CaseIterable {
     case remove
     case disable
+}
+
+@MainActor
+private struct StaleRefreshHarness {
+    let suiteName: String
+    let defaults: UserDefaults
+    let configurationStore: ProviderConfigurationStore
+    let configuration: ProviderAccountConfiguration
+    let refreshService: UsageRefreshService
+    let historyStore: UsageHistoryStore
+    let notifier: RecordingUsageAlertNotifier
+    let orchestrator: DashboardOrchestrator
+
+    func removeDefaults() {
+        defaults.removePersistentDomain(forName: suiteName)
+    }
 }
 
 @MainActor

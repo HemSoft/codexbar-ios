@@ -99,8 +99,7 @@ public final class UsageRefreshService: ObservableObject {
         }
 
         let enabledAccountIDs = Set(enabledConfigurations.map(\.id))
-        results.removeAll { !enabledAccountIDs.contains($0.accountID) }
-        refreshErrorsByAccountID = refreshErrorsByAccountID.filter { enabledAccountIDs.contains($0.key) }
+        pruneCachedState(to: enabledAccountIDs)
         lastRefreshError = nil
 
         var requests: [(ProviderAccountConfiguration, any UsageProvider)] = []
@@ -479,6 +478,16 @@ public final class UsageRefreshService: ObservableObject {
         currentConfigurationsByAccountID = nextConfigurations
 
         let enabledAccountIDs = Set(nextConfigurations.keys)
+        pruneCachedState(to: enabledAccountIDs)
+        let nextLastRefreshError = enabledConfigurations.lazy
+            .compactMap { self.refreshErrorsByAccountID[$0.id] }
+            .first
+        if nextLastRefreshError != lastRefreshError {
+            lastRefreshError = nextLastRefreshError
+        }
+    }
+
+    private func pruneCachedState(to enabledAccountIDs: Set<String>) {
         let nextResults = results.filter { enabledAccountIDs.contains($0.accountID) }
         if nextResults != results {
             results = nextResults
@@ -486,12 +495,6 @@ public final class UsageRefreshService: ObservableObject {
         let nextErrors = refreshErrorsByAccountID.filter { enabledAccountIDs.contains($0.key) }
         if nextErrors != refreshErrorsByAccountID {
             refreshErrorsByAccountID = nextErrors
-        }
-        let nextLastRefreshError = enabledConfigurations.lazy
-            .compactMap { nextErrors[$0.id] }
-            .first
-        if nextLastRefreshError != lastRefreshError {
-            lastRefreshError = nextLastRefreshError
         }
     }
 
