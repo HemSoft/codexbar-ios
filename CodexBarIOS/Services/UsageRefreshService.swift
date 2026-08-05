@@ -514,14 +514,8 @@ public final class UsageRefreshService: ObservableObject {
         guard let currentConfiguration, let nextConfiguration else {
             return true
         }
-        return currentConfiguration.providerID != nextConfiguration.providerID
-            || currentConfiguration.authMethod != nextConfiguration.authMethod
-            || currentConfiguration.oauthClientID != nextConfiguration.oauthClientID
-            || currentConfiguration.copilotAccountScope != nextConfiguration.copilotAccountScope
-            || currentConfiguration.githubOrganization != nextConfiguration.githubOrganization
-            || currentConfiguration.githubEnterprise != nextConfiguration.githubEnterprise
-            || currentConfiguration.copilotTotalAllotment != nextConfiguration.copilotTotalAllotment
-            || currentConfiguration.openCodeWorkspaceId != nextConfiguration.openCodeWorkspaceId
+        return RefreshInputs(configuration: currentConfiguration)
+            != RefreshInputs(configuration: nextConfiguration)
     }
 
     private func registerCurrentConfiguration(
@@ -560,6 +554,28 @@ public final class UsageRefreshService: ObservableObject {
         for waiter in waiters {
             waiter.resume()
         }
+    }
+}
+
+private struct RefreshInputs: Equatable {
+    let providerID: ProviderID
+    let authMethod: ProviderAuthMethod
+    let oauthClientID: String?
+    let copilotAccountScope: CopilotAccountScope
+    let githubOrganization: String
+    let githubEnterprise: String
+    let copilotTotalAllotment: Double?
+    let openCodeWorkspaceId: String
+
+    init(configuration: ProviderAccountConfiguration) {
+        self.providerID = configuration.providerID
+        self.authMethod = configuration.authMethod
+        self.oauthClientID = configuration.oauthClientID
+        self.copilotAccountScope = configuration.copilotAccountScope
+        self.githubOrganization = configuration.githubOrganization
+        self.githubEnterprise = configuration.githubEnterprise
+        self.copilotTotalAllotment = configuration.copilotTotalAllotment
+        self.openCodeWorkspaceId = configuration.openCodeWorkspaceId
     }
 }
 
