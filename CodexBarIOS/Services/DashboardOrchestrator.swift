@@ -233,7 +233,9 @@ final class DashboardOrchestrator: ObservableObject {
         else {
             return nil
         }
-        let result = await refreshService.refresh(configuration: currentConfiguration)
+        guard let result = await refreshService.refresh(configuration: currentConfiguration) else {
+            return nil
+        }
         let successfulResults = refreshService.successfulRefreshResults.filter {
             $0.accountID == currentConfiguration.id
         }

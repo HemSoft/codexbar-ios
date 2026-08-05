@@ -453,6 +453,22 @@ public final class UsageRefreshService: ObservableObject {
             refreshGenerationsByAccountID[accountID] = UUID()
         }
         currentConfigurationsByAccountID = nextConfigurations
+
+        let enabledAccountIDs = Set(nextConfigurations.keys)
+        let nextResults = results.filter { enabledAccountIDs.contains($0.accountID) }
+        if nextResults != results {
+            results = nextResults
+        }
+        let nextErrors = refreshErrorsByAccountID.filter { enabledAccountIDs.contains($0.key) }
+        if nextErrors != refreshErrorsByAccountID {
+            refreshErrorsByAccountID = nextErrors
+        }
+        let nextLastRefreshError = enabledConfigurations.lazy
+            .compactMap { nextErrors[$0.id] }
+            .first
+        if nextLastRefreshError != lastRefreshError {
+            lastRefreshError = nextLastRefreshError
+        }
     }
 
     private func registerCurrentConfiguration(

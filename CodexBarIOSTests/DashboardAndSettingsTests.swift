@@ -645,7 +645,16 @@ final class DashboardAndSettingsTests: XCTestCase {
             fetchFails: false,
             consumeGate: gate
         )
-        let refreshService = UsageRefreshService(providers: [provider])
+        let cachedResult = makeHistoryResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            fetchedAt: Date().addingTimeInterval(-300),
+            used: 95
+        )
+        let refreshService = UsageRefreshService(
+            providers: [provider],
+            initialResults: [cachedResult]
+        )
         let historyStore = UsageHistoryStore(defaults: defaults)
         let notifier = RecordingUsageAlertNotifier()
         let orchestrator = DashboardOrchestrator(
@@ -683,6 +692,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             disabledConfiguration.isEnabled = false
             XCTAssertTrue(configurationStore.update(disabledConfiguration))
         }
+        XCTAssertTrue(refreshService.results.isEmpty, mutation.rawValue)
 
         await gate.release()
         let feedback = await consumption.value
@@ -714,13 +724,22 @@ final class DashboardAndSettingsTests: XCTestCase {
         let configuration = configurationStore.addAccount(for: .codex)
         configurationStore.updateUsageAlertsEnabled(true)
         let gate = UsageProviderGate()
-        let refreshService = UsageRefreshService(providers: [
-            StaleCompletionTestUsageProvider(
-                providerID: .codex,
-                gate: gate,
-                fails: fails
-            ),
-        ])
+        let cachedResult = makeHistoryResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            fetchedAt: Date().addingTimeInterval(-300),
+            used: 95
+        )
+        let refreshService = UsageRefreshService(
+            providers: [
+                StaleCompletionTestUsageProvider(
+                    providerID: .codex,
+                    gate: gate,
+                    fails: fails
+                ),
+            ],
+            initialResults: [cachedResult]
+        )
         let historyStore = UsageHistoryStore(defaults: defaults)
         let notifier = RecordingUsageAlertNotifier()
         let orchestrator = DashboardOrchestrator(
@@ -755,6 +774,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             disabledConfiguration.isEnabled = false
             XCTAssertTrue(configurationStore.update(disabledConfiguration))
         }
+        XCTAssertTrue(refreshService.results.isEmpty, mutation.rawValue)
         _ = await orchestrator.refreshNow()
 
         await gate.release()
