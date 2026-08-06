@@ -512,21 +512,36 @@ func withTestWatchdog<Result: Sendable>(
     onTimeout: @escaping @Sendable () -> Void,
     operation: @escaping @Sendable () async throws -> Result
 ) async throws -> Result {
-    try await withThrowingTaskGroup(of: Result.self) { group in
-        group.addTask(operation: operation)
-        group.addTask {
-            try await Task.sleep(for: timeout)
-            try Task.checkCancellation()
-            onTimeout()
-            throw TestWatchdogError(message: failureMessage)
+    let outcomes = AsyncThrowingStream(Result.self) { continuation in
+        let operationTask = Task {
+            do {
+                continuation.yield(try await operation())
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
+            }
         }
-        defer { group.cancelAll() }
+        let timeoutTask = Task {
+            do {
+                try await Task.sleep(for: timeout)
+                try Task.checkCancellation()
+            } catch {
+                return
+            }
 
-        guard let result = try await group.next() else {
-            throw CancellationError()
+            onTimeout()
+            continuation.finish(throwing: TestWatchdogError(message: failureMessage))
         }
+        continuation.onTermination = { _ in
+            operationTask.cancel()
+            timeoutTask.cancel()
+        }
+    }
+
+    for try await result in outcomes {
         return result
     }
+    throw CancellationError()
 }
 
 final class TestDateProvider: @unchecked Sendable {

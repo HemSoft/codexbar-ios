@@ -1092,6 +1092,34 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertTrue(results.allSatisfy { $0.bars.first?.used == 25 })
     }
 
+    func testWatchdogDoesNotAwaitAnOperationThatIgnoresCancellation() async throws {
+        let startedAt = Date()
+
+        do {
+            let _: Void = try await withTestWatchdog(
+                timeout: .milliseconds(50),
+                failureMessage: "Expected watchdog timeout.",
+                onTimeout: {},
+                operation: {
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
+                            continuation.resume()
+                        }
+                    }
+                }
+            )
+            XCTFail("Expected the watchdog to time out.")
+        } catch let error as TestWatchdogError {
+            XCTAssertEqual(error.message, "Expected watchdog timeout.")
+        }
+
+        XCTAssertLessThan(
+            Date().timeIntervalSince(startedAt),
+            0.75,
+            "The watchdog must not wait for a non-cooperative operation to finish."
+        )
+    }
+
     func testCopilotUsageProviderDoesNotReuseRotatedTokenFromLateStaleRead() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
