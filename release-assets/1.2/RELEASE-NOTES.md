@@ -23,7 +23,7 @@ usage history, account recovery, accessibility, and refresh reliability.
 ## Long-form customer release notes
 
 CodexBar 1.2 makes it easier to see the usage that matters, arrange it around
-the way you work, and keep it close on every Apple device.
+the way you work, and keep it close on iPhone, iPad, and Apple Watch.
 
 ### Your dashboard, your way
 
