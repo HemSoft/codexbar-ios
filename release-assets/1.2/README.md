@@ -16,7 +16,7 @@ used.
 - Status bar: standardized 9:41 time, full battery, and simulated connectivity
 - Format: flattened RGB PNG with no alpha channel
 - iPhone family: 1320 x 2868 pixels, portrait
-- iPad family: 2064 x 2752 pixels, landscape
+- iPad family: 2064 x 2752 pixels, portrait
 - Mirroring chrome, pointer, notifications, and personal device data: absent
 - Visual review: all 12 screenshots inspected after capture
 
@@ -60,6 +60,9 @@ matching six iPad images in the same scene order for iPad:
 - Alert-threshold configuration
 - Card customization, including per-metric Watch visibility
 - Feedback, support, diagnostics, and recovery flows
+- Clean-install and first-run onboarding or empty-dashboard scenes, captured on
+  a freshly erased isolated simulator or a separate device with no signed-in or
+  restored production data
 
 Do not fill these gaps with live signed-in data. Add deterministic fixture scenes
 or use an isolated simulator populated only with fictional values before adding
