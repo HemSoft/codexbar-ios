@@ -566,6 +566,27 @@ private final class TestWatchdogTaskCoordinator: @unchecked Sendable {
     }
 }
 
+final class TestWatchdogOutcomeCoordinator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didChooseOutcome = false
+
+    func claimOperation() -> Bool {
+        claimOutcome()
+    }
+
+    func claimTimeout() -> Bool {
+        claimOutcome()
+    }
+
+    private func claimOutcome() -> Bool {
+        lock.withLock {
+            guard !didChooseOutcome else { return false }
+            didChooseOutcome = true
+            return true
+        }
+    }
+}
+
 func withTestWatchdog<Result: Sendable>(
     timeout: Duration,
     failureMessage: String,
@@ -578,6 +599,7 @@ func withTestWatchdog<Result: Sendable>(
     let outcomes = AsyncThrowingStream(Result.self) { continuation in
         let startLatch = TestWatchdogStartLatch()
         let taskCoordinator = TestWatchdogTaskCoordinator()
+        let outcomeCoordinator = TestWatchdogOutcomeCoordinator()
         continuation.onTermination = { _ in
             taskCoordinator.terminate()
         }
@@ -585,9 +607,12 @@ func withTestWatchdog<Result: Sendable>(
         let operationTask = Task {
             await startLatch.wait()
             do {
-                continuation.yield(try await operation())
+                let result = try await operation()
+                guard outcomeCoordinator.claimOperation() else { return }
+                continuation.yield(result)
                 continuation.finish()
             } catch {
+                guard outcomeCoordinator.claimOperation() else { return }
                 continuation.finish(throwing: error)
             }
         }
@@ -600,6 +625,7 @@ func withTestWatchdog<Result: Sendable>(
                 return
             }
 
+            guard outcomeCoordinator.claimTimeout() else { return }
             onTimeout()
             continuation.finish(throwing: TestWatchdogError(message: failureMessage))
         }

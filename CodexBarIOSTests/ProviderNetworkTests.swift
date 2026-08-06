@@ -1151,6 +1151,36 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertFalse(didCallOnTimeout)
     }
 
+    func testWatchdogTimeoutClaimsOutcomeBeforeCleanupCompletesOperation() async throws {
+        let operationGate = TestRequestGate()
+        defer { operationGate.release() }
+
+        do {
+            let _: Int = try await withTestWatchdog(
+                timeout: .seconds(10),
+                failureMessage: "The timeout must remain the selected outcome.",
+                onTimeout: { operationGate.release() },
+                waitForTimeout: { _ in
+                    await operationGate.waitUntilBlocked()
+                },
+                operation: {
+                    operationGate.blockUntilReleased()
+                    return 42
+                }
+            )
+            XCTFail("Expected the watchdog timeout to win.")
+        } catch let error as TestWatchdogError {
+            XCTAssertEqual(error.message, "The timeout must remain the selected outcome.")
+        }
+    }
+
+    func testWatchdogOutcomeCanOnlyBeClaimedOnce() {
+        let coordinator = TestWatchdogOutcomeCoordinator()
+
+        XCTAssertTrue(coordinator.claimTimeout())
+        XCTAssertFalse(coordinator.claimOperation())
+    }
+
     func testCopilotUsageProviderDoesNotReuseRotatedTokenFromLateStaleRead() async throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .copilot)
