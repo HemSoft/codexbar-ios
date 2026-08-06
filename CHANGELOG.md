@@ -245,6 +245,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Prepared privacy-safe, deterministic App Store release notes and a verified
+  iPhone and iPad screenshot set for the 1.2 storefront submission.
+  ([#237](https://github.com/HemSoft/codexbar-ios/issues/237))
 - Added source and built-product release verification that requires the iOS
   app, iOS widget, Watch app, and Watch widget to declare their consistent
   exempt-encryption status. ([#232](https://github.com/HemSoft/codexbar-ios/issues/232))
