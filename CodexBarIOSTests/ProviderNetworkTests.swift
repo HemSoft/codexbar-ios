@@ -1093,19 +1093,21 @@ final class ProviderNetworkTests: XCTestCase {
     }
 
     func testWatchdogDoesNotAwaitAnOperationThatIgnoresCancellation() async throws {
-        let startedAt = Date()
+        let operationGate = UsageProviderGate()
+        let operationFinished = AsyncFlag()
+        defer { Task { await operationGate.release() } }
 
         do {
             let _: Void = try await withTestWatchdog(
-                timeout: .milliseconds(50),
+                timeout: .seconds(10),
                 failureMessage: "Expected watchdog timeout.",
                 onTimeout: {},
+                waitForTimeout: { _ in
+                    await operationGate.waitUntilBlocked()
+                },
                 operation: {
-                    await withCheckedContinuation { continuation in
-                        DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
-                            continuation.resume()
-                        }
-                    }
+                    await operationGate.wait()
+                    await operationFinished.set()
                 }
             )
             XCTFail("Expected the watchdog to time out.")
@@ -1113,11 +1115,40 @@ final class ProviderNetworkTests: XCTestCase {
             XCTAssertEqual(error.message, "Expected watchdog timeout.")
         }
 
-        XCTAssertLessThan(
-            Date().timeIntervalSince(startedAt),
-            0.75,
-            "The watchdog must not wait for a non-cooperative operation to finish."
+        let didFinishOperation = await operationFinished.currentValue()
+        XCTAssertFalse(didFinishOperation)
+        await operationGate.release()
+    }
+
+    func testWatchdogCancelsTimeoutWhenOperationFinishesFirst() async throws {
+        let timeoutGate = UsageProviderGate()
+        let timeoutResumed = TestSignal()
+        let timeoutWasCancelled = AsyncFlag()
+        let onTimeoutCalled = LockedFlag()
+        defer { Task { await timeoutGate.release() } }
+
+        let result = try await withTestWatchdog(
+            timeout: .seconds(10),
+            failureMessage: "The completed operation must win.",
+            onTimeout: { onTimeoutCalled.set() },
+            waitForTimeout: { _ in
+                await timeoutGate.wait()
+                if Task.isCancelled {
+                    await timeoutWasCancelled.set()
+                }
+                timeoutResumed.signal()
+            },
+            operation: { 42 }
         )
+
+        XCTAssertEqual(result, 42)
+        await timeoutGate.waitUntilBlocked()
+        await timeoutGate.release()
+        await timeoutResumed.wait()
+        let didCancelTimeout = await timeoutWasCancelled.currentValue()
+        let didCallOnTimeout = onTimeoutCalled.currentValue()
+        XCTAssertTrue(didCancelTimeout)
+        XCTAssertFalse(didCallOnTimeout)
     }
 
     func testCopilotUsageProviderDoesNotReuseRotatedTokenFromLateStaleRead() async throws {

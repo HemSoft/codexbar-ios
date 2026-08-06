@@ -506,14 +506,84 @@ struct TestWatchdogError: LocalizedError, Sendable {
     var errorDescription: String? { message }
 }
 
+private final class TestWatchdogStartLatch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            let shouldResume = lock.withLock {
+                guard !isOpen else { return true }
+                waiters.append(continuation)
+                return false
+            }
+            if shouldResume {
+                continuation.resume()
+            }
+        }
+    }
+
+    func open() {
+        let pendingWaiters = lock.withLock {
+            isOpen = true
+            defer { waiters.removeAll() }
+            return waiters
+        }
+        for waiter in pendingWaiters {
+            waiter.resume()
+        }
+    }
+}
+
+private final class TestWatchdogTaskCoordinator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isTerminated = false
+    private var tasks: [Task<Void, Never>] = []
+
+    func install(_ tasks: [Task<Void, Never>]) {
+        let shouldCancel = lock.withLock {
+            guard !isTerminated else { return true }
+            self.tasks = tasks
+            return false
+        }
+        guard shouldCancel else { return }
+
+        for task in tasks {
+            task.cancel()
+        }
+    }
+
+    func terminate() {
+        let tasksToCancel = lock.withLock {
+            isTerminated = true
+            defer { tasks.removeAll() }
+            return tasks
+        }
+        for task in tasksToCancel {
+            task.cancel()
+        }
+    }
+}
+
 func withTestWatchdog<Result: Sendable>(
     timeout: Duration,
     failureMessage: String,
     onTimeout: @escaping @Sendable () -> Void,
+    waitForTimeout: @escaping @Sendable (Duration) async throws -> Void = { duration in
+        try await Task.sleep(for: duration)
+    },
     operation: @escaping @Sendable () async throws -> Result
 ) async throws -> Result {
     let outcomes = AsyncThrowingStream(Result.self) { continuation in
+        let startLatch = TestWatchdogStartLatch()
+        let taskCoordinator = TestWatchdogTaskCoordinator()
+        continuation.onTermination = { _ in
+            taskCoordinator.terminate()
+        }
+
         let operationTask = Task {
+            await startLatch.wait()
             do {
                 continuation.yield(try await operation())
                 continuation.finish()
@@ -522,8 +592,9 @@ func withTestWatchdog<Result: Sendable>(
             }
         }
         let timeoutTask = Task {
+            await startLatch.wait()
             do {
-                try await Task.sleep(for: timeout)
+                try await waitForTimeout(timeout)
                 try Task.checkCancellation()
             } catch {
                 return
@@ -532,10 +603,8 @@ func withTestWatchdog<Result: Sendable>(
             onTimeout()
             continuation.finish(throwing: TestWatchdogError(message: failureMessage))
         }
-        continuation.onTermination = { _ in
-            operationTask.cancel()
-            timeoutTask.cancel()
-        }
+        taskCoordinator.install([operationTask, timeoutTask])
+        startLatch.open()
     }
 
     for try await result in outcomes {
@@ -616,6 +685,19 @@ actor AsyncFlag {
 
     func currentValue() -> Bool {
         value
+    }
+}
+
+final class LockedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    func set() {
+        lock.withLock { value = true }
+    }
+
+    func currentValue() -> Bool {
+        lock.withLock { value }
     }
 }
 
