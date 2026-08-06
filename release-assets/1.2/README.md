@@ -17,6 +17,8 @@ used.
 - Format: flattened RGB PNG with no alpha channel
 - iPhone family: 1320 x 2868 pixels, portrait
 - iPad family: 2064 x 2752 pixels, portrait
+- iPadOS window-resize affordance: present on iPad captures as standard iPadOS
+  26 system UI for multitasking apps
 - Mirroring chrome, pointer, notifications, and personal device data: absent
 - Visual review: all 12 screenshots inspected after capture
 
@@ -40,18 +42,18 @@ matching six iPad images in the same scene order for iPad:
 
 | File | Device | Scene |
 | --- | --- | --- |
-| `01-iphone-dashboard-overview-light.png` | iPhone | Multi-provider dashboard in light appearance |
-| `02-iphone-dashboard-balances-dark.png` | iPhone | API balances and usage limits in dark appearance |
-| `03-iphone-widget-builder-light.png` | iPhone | Four-tile Widget Builder preview and controls |
-| `04-iphone-accounts-dark.png` | iPhone | Configured providers in Accounts & Groups |
-| `05-iphone-copilot-settings-light.png` | iPhone | GitHub Copilot organization configuration |
-| `06-iphone-usage-history-dark.png` | iPhone | Detailed usage chart, summary, and samples |
-| `07-ipad-dashboard-overview-light.png` | iPad | Two-column multi-provider dashboard in light appearance |
-| `08-ipad-dashboard-balances-dark.png` | iPad | Two-column balances and limits dashboard in dark appearance |
-| `09-ipad-widget-builder-light.png` | iPad | Wide Widget Builder preview and controls |
-| `10-ipad-accounts-dark.png` | iPad | Sidebar Settings and Accounts & Groups |
-| `11-ipad-copilot-settings-light.png` | iPad | GitHub Copilot organization configuration |
-| `12-ipad-usage-history-dark.png` | iPad | Wide usage chart, summary, and samples |
+| `screenshots/01-iphone-dashboard-overview-light.png` | iPhone | Multi-provider dashboard in light appearance |
+| `screenshots/02-iphone-dashboard-balances-dark.png` | iPhone | API balances and usage limits in dark appearance |
+| `screenshots/03-iphone-widget-builder-light.png` | iPhone | Four-tile Widget Builder preview and controls |
+| `screenshots/04-iphone-accounts-dark.png` | iPhone | Configured providers in Accounts & Groups |
+| `screenshots/05-iphone-copilot-settings-light.png` | iPhone | GitHub Copilot organization configuration |
+| `screenshots/06-iphone-usage-history-dark.png` | iPhone | Detailed usage chart, summary, and samples |
+| `screenshots/07-ipad-dashboard-overview-light.png` | iPad | Two-column multi-provider dashboard in light appearance |
+| `screenshots/08-ipad-dashboard-balances-dark.png` | iPad | Two-column balances and limits dashboard in dark appearance |
+| `screenshots/09-ipad-widget-builder-light.png` | iPad | Wide Widget Builder preview and controls |
+| `screenshots/10-ipad-accounts-dark.png` | iPad | Sidebar Settings and Accounts & Groups |
+| `screenshots/11-ipad-copilot-settings-light.png` | iPad | GitHub Copilot organization configuration |
+| `screenshots/12-ipad-usage-history-dark.png` | iPad | Wide usage chart, summary, and samples |
 
 ## Remaining capture gaps
 
