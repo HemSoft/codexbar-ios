@@ -452,29 +452,20 @@ final class IsolatedTestURLSession: @unchecked Sendable {
 
 final class TestRequestGate: @unchecked Sendable {
     private let condition = NSCondition()
-    private var requestStarted = false
+    private let requestStarted = TestSignal()
     private var released = false
 
     func blockUntilReleased() {
         condition.lock()
-        requestStarted = true
-        condition.broadcast()
+        requestStarted.signal()
         while !released {
             condition.wait()
         }
         condition.unlock()
     }
 
-    func waitUntilBlocked(timeout: TimeInterval = 2) -> Bool {
-        condition.lock()
-        defer { condition.unlock() }
-        let deadline = Date().addingTimeInterval(timeout)
-        while !requestStarted {
-            guard condition.wait(until: deadline) else {
-                return false
-            }
-        }
-        return true
+    func waitUntilBlocked() async {
+        await requestStarted.wait()
     }
 
     func release() {
@@ -486,26 +477,55 @@ final class TestRequestGate: @unchecked Sendable {
 }
 
 final class TestSignal: @unchecked Sendable {
-    private let condition = NSCondition()
-    private var signaled = false
+    private let stream: AsyncStream<Void>
+    private let continuation: AsyncStream<Void>.Continuation
 
-    func signal() {
-        condition.lock()
-        signaled = true
-        condition.broadcast()
-        condition.unlock()
+    init() {
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: Void.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        self.stream = stream
+        self.continuation = continuation
     }
 
-    func wait(timeout: TimeInterval = 2) -> Bool {
-        condition.lock()
-        defer { condition.unlock() }
-        let deadline = Date().addingTimeInterval(timeout)
-        while !signaled {
-            guard condition.wait(until: deadline) else {
-                return false
-            }
+    func signal() {
+        continuation.yield()
+    }
+
+    func wait() async {
+        for await _ in stream {
+            return
         }
-        return true
+    }
+}
+
+struct TestWatchdogError: LocalizedError, Sendable {
+    let message: String
+
+    var errorDescription: String? { message }
+}
+
+func withTestWatchdog<Result: Sendable>(
+    timeout: Duration,
+    failureMessage: String,
+    onTimeout: @escaping @Sendable () -> Void,
+    operation: @escaping @Sendable () async throws -> Result
+) async throws -> Result {
+    try await withThrowingTaskGroup(of: Result.self) { group in
+        group.addTask(operation: operation)
+        group.addTask {
+            try await Task.sleep(for: timeout)
+            try Task.checkCancellation()
+            onTimeout()
+            throw TestWatchdogError(message: failureMessage)
+        }
+        defer { group.cancelAll() }
+
+        guard let result = try await group.next() else {
+            throw CancellationError()
+        }
+        return result
     }
 }
 

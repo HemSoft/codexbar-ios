@@ -245,6 +245,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Made the GitHub Copilot concurrent-refresh regression test deterministic
+  under parallel CI and bounded synchronization failures to ten seconds.
+  ([#235](https://github.com/HemSoft/codexbar-ios/issues/235))
 - Added source and built-product release verification that requires the iOS
   app, iOS widget, Watch app, and Watch widget to declare their consistent
   exempt-encryption status. ([#232](https://github.com/HemSoft/codexbar-ios/issues/232))

@@ -1023,23 +1023,12 @@ final class ProviderNetworkTests: XCTestCase {
             )),
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
         )
-        let sessionConfiguration = URLSessionConfiguration.ephemeral
-        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
         let refreshJoined = TestSignal()
-        let provider = CopilotUsageProvider(
-            secretStore: secretStore,
-            session: URLSession(configuration: sessionConfiguration),
-            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
-            tokenEndpoint: URL(string: "https://example.test/github-token")!,
-            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
-            now: { now },
-            onJoinInFlightRefresh: { refreshJoined.signal() }
-        )
         let counterLock = NSLock()
         let refreshGate = TestRequestGate()
         var refreshRequests = 0
         var usageRequests = 0
-        ProviderNetworkMockURLProtocol.handler = { request in
+        let sessionFixture = IsolatedTestURLSession { request in
             if request.url?.path == "/github-token" {
                 counterLock.lock()
                 refreshRequests += 1
@@ -1060,14 +1049,43 @@ final class ProviderNetworkTests: XCTestCase {
                 Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)
             )
         }
-        defer { ProviderNetworkMockURLProtocol.handler = nil }
+        defer {
+            refreshGate.release()
+            sessionFixture.invalidate()
+        }
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session,
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now },
+            onJoinInFlightRefresh: { refreshJoined.signal() }
+        )
 
-        let first = Task { try await provider.fetchUsage(for: configuration) }
-        XCTAssertTrue(refreshGate.waitUntilBlocked(), "Expected the first credential refresh request to start.")
-        let second = Task { try await provider.fetchUsage(for: configuration) }
-        XCTAssertTrue(refreshJoined.wait(), "Expected the second fetch to join the in-flight credential refresh.")
-        refreshGate.release()
-        let results = try await [first.value, second.value]
+        let results = try await withTestWatchdog(
+            timeout: .seconds(10),
+            failureMessage: "Copilot concurrent refresh did not finish within the 10-second test bound.",
+            onTimeout: {
+                refreshGate.release()
+                sessionFixture.invalidate()
+            },
+            operation: {
+                let first = Task { try await provider.fetchUsage(for: configuration) }
+                defer {
+                    first.cancel()
+                    refreshGate.release()
+                }
+                await refreshGate.waitUntilBlocked()
+
+                let second = Task { try await provider.fetchUsage(for: configuration) }
+                defer { second.cancel() }
+                await refreshJoined.wait()
+
+                refreshGate.release()
+                return try await [first.value, second.value]
+            }
+        )
 
         XCTAssertEqual(refreshRequests, 1)
         XCTAssertEqual(usageRequests, 2)
