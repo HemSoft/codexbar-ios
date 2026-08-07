@@ -1,5 +1,9 @@
 # CodexBar for iOS
 
+[![Set it Free Loop](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FHemSoft%2Fcodexbar-ios%2Fmain%2Fsfl.json&query=%24.version&prefix=v&label=Set%20it%20Free%20Loop&color=FFD700&style=flat&logo=githubactions&logoColor=white)](https://github.com/HemSoft/set-it-free-loop)
+<!-- SFL_BADGE: auto-updated by deploy-workflow.ps1 -->
+# CodexBar for iOS
+
 Native iOS companion app for CodexBar. This repo starts from the Windows app's provider model and refresh-loop concepts, but uses SwiftUI and iOS-native storage, networking, and background behavior.
 
 The Windows reference implementation is checked out beside this repo at:
