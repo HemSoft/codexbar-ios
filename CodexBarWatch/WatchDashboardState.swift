@@ -197,3 +197,63 @@ struct WatchDashboardState: Equatable, Sendable {
         ]
     )
 }
+
+enum WatchAppStoreScreenshotScene: String, CaseIterable, Sendable {
+    case overview
+    case balances
+
+    static func current(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> WatchAppStoreScreenshotScene? {
+        guard arguments.contains("--app-store-screenshots") else { return nil }
+        guard let sceneFlag = arguments.firstIndex(of: "--app-store-watch-scene"),
+              arguments.indices.contains(sceneFlag + 1)
+        else {
+            return .overview
+        }
+        return WatchAppStoreScreenshotScene(rawValue: arguments[sceneFlag + 1])
+    }
+
+    var state: WatchDashboardState {
+        switch self {
+        case .overview:
+            WatchDashboardState(
+                title: "CodexBar",
+                statusText: "Updated just now",
+                samples: [
+                    WatchUsageSample(
+                        id: "screenshot-codex-studio",
+                        providerName: "Codex",
+                        accountLabel: "Demo Studio",
+                        metricLabel: "5-hour limit",
+                        exactValue: "72%",
+                        usedFraction: 0.72,
+                        severity: .warning,
+                        resetText: "Resets in 2h",
+                        visualizationStyle: .segmentedBar,
+                        freshnessText: "Updated just now"
+                    ),
+                ]
+            )
+        case .balances:
+            WatchDashboardState(
+                title: "CodexBar",
+                statusText: "Updated just now",
+                samples: [
+                    WatchUsageSample(
+                        id: "screenshot-opencode-demo",
+                        providerName: "OpenCode Zen",
+                        accountLabel: "Demo Workspace",
+                        metricLabel: "API balance",
+                        exactValue: "$24.80",
+                        usedFraction: nil,
+                        severity: .normal,
+                        resetText: nil,
+                        visualizationStyle: .largeNumeric,
+                        freshnessText: "Updated just now"
+                    ),
+                ]
+            )
+        }
+    }
+}

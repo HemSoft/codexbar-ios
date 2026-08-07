@@ -73,6 +73,18 @@ if ! grep -q "watchOS 26.5" "$temporary_dir/selection.log"; then
   exit 1
 fi
 
+preferred_device="$({
+  WATCH_SIMULATOR_SDK_VERSION=26.5 \
+  WATCH_SIMULATOR_DEVICE_NAME="Apple Watch Zulu" \
+  WATCH_SIMULATOR_LIST_JSON_FILE="$temporary_dir/simulators.json" \
+    "$repository_dir/scripts/select-watch-simulator.sh"
+} 2> "$temporary_dir/preferred-selection.log")"
+
+if [[ "$preferred_device" != "NEWEST-COMPATIBLE-ZULU" ]]; then
+  echo "Expected preferred compatible device, got: $preferred_device" >&2
+  exit 1
+fi
+
 cat > "$temporary_dir/no-compatible-simulators.json" <<'JSON'
 {
   "runtimes": [

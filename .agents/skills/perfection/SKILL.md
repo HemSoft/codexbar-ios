@@ -33,7 +33,8 @@ Run the deterministic audit from the repository root:
 
 The runner:
 
-- selects the first available iPhone and Apple Watch simulators, matching CI;
+- selects the first available iPhone simulator and an Apple Watch simulator
+  compatible with the active Xcode SDK, matching CI;
 - uses `/Applications/Xcode.app/Contents/Developer` unless `DEVELOPER_DIR` is
   already set;
 - disables code signing and treats Swift and Clang warnings as errors;

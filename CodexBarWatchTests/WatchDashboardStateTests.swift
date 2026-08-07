@@ -1920,3 +1920,49 @@ final class WatchDashboardStateTests: XCTestCase {
         )
     }
 }
+
+extension WatchDashboardStateTests {
+    func testAppStoreScreenshotScenesRequireExplicitLaunchFlag() {
+        XCTAssertNil(WatchAppStoreScreenshotScene.current(arguments: ["CodexBarWatch"]))
+        XCTAssertEqual(
+            WatchAppStoreScreenshotScene.current(
+                arguments: ["CodexBarWatch", "--app-store-screenshots"]
+            ),
+            .overview
+        )
+        XCTAssertEqual(
+            WatchAppStoreScreenshotScene.current(
+                arguments: [
+                    "CodexBarWatch",
+                    "--app-store-screenshots",
+                    "--app-store-watch-scene",
+                    "balances",
+                ]
+            ),
+            .balances
+        )
+        XCTAssertNil(
+            WatchAppStoreScreenshotScene.current(
+                arguments: [
+                    "CodexBarWatch",
+                    "--app-store-screenshots",
+                    "--app-store-watch-scene",
+                    "unknown",
+                ]
+            )
+        )
+    }
+
+    func testAppStoreScreenshotScenesContainOnlyFictionalAccountLabels() {
+        let labels = WatchAppStoreScreenshotScene.allCases.flatMap {
+            $0.state.samples.map(\.accountLabel)
+        }
+
+        XCTAssertEqual(Set(labels), ["Demo Studio", "Demo Workspace"])
+        XCTAssertTrue(
+            WatchAppStoreScreenshotScene.allCases.allSatisfy {
+                $0.state.statusText == "Updated just now"
+            }
+        )
+    }
+}

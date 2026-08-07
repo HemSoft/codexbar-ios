@@ -2,7 +2,7 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-07-28
+Status last reviewed: 2026-08-06
 
 ## Current Status
 
@@ -27,6 +27,10 @@ Status last reviewed: 2026-07-28
 - Version 1.1 build `1.1 (1)` is publicly available. Apple's public listing
   reports a release date of 2026-07-16, re-verified on 2026-07-28. The
   repository's 1.1.0 changelog snapshot remains dated 2026-07-15.
+- Version 1.2 release preparation is tracked by Issue #239. The marketing
+  version is `1.2`, the release build number is `2`, and privacy-safe iPhone,
+  iPad, and Apple Watch storefront captures are prepared in
+  `release-assets/1.2`.
 
 ## Apple Requirements To Keep Current
 
@@ -90,10 +94,11 @@ outstanding claims about the shipped 1.1 submission.
 - [x] Upload the Issue #22 iPhone and iPad screenshot sets to App Store Connect
   and verify their order and cropping. Both device sets contained six ordered
   screenshots in the version 1.1 submission on 2026-07-11.
-- [ ] Verify Apple Watch screenshot handling for the next watch-enabled App
-  Store submission. The embedded watchOS app target is present, but neither an
-  Apple Watch screenshot requirement nor a completed watch screenshot set has
-  been verified in App Store Connect as of 2026-07-24.
+- [x] Prepare Apple Watch screenshots for the watch-enabled version 1.2
+  submission. Two deterministic dashboard scenes use only fictional account
+  labels and values and are flattened without alpha at an Apple-accepted native
+  Watch size. App Store Connect upload and preview verification remain part of
+  the final submission step.
 - [ ] Consider an app preview video for a future release.
 - [ ] Verify the App Store icon renders correctly and has no transparency
   before the next release submission.
@@ -281,6 +286,21 @@ The native request has no effect in TestFlight, so TestFlight verification must
 use the persistent **Rate CodexBar** link instead.
 
 ### 8. Final Submission
+
+Version 1.2 submission status:
+
+- [x] Prepare version 1.2 release copy and privacy-safe iPhone, iPad, and Apple
+  Watch screenshots.
+- [x] Set the repository release version to `1.2 (2)` and date the 1.2.0
+  changelog snapshot.
+- [ ] Run final release validation and verify the archived bundle's export
+  compliance metadata.
+- [ ] Upload and validate build `1.2 (2)` in App Store Connect.
+- [ ] Complete TestFlight verification on iPhone, iPad, and Apple Watch.
+- [ ] Re-audit privacy answers, review notes, age rating, app icon, and
+  availability for version 1.2.
+- [ ] Upload and preview the 1.2 screenshot sets, select build `1.2 (2)`, and
+  submit the phased release for App Review.
 
 - [x] Select the final `1.1 (1)` build after App Store Connect finishes
   processing it. Selected on 2026-07-15. The previous `1.0 (1)` release used
