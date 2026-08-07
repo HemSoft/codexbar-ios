@@ -8,6 +8,13 @@ struct CodexBarWatchApp: App {
         WindowGroup {
             if let screenshotScene {
                 WatchDashboardView(state: screenshotScene.state)
+                    .task {
+                        let settleNanoseconds = UInt64(
+                            WatchAppStoreScreenshotScene.settleDelay * 1_000_000_000
+                        )
+                        try? await Task.sleep(nanoseconds: settleNanoseconds)
+                        screenshotScene.markReady()
+                    }
             } else {
                 ProductionWatchDashboardRoot()
             }

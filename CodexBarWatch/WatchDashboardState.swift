@@ -202,6 +202,15 @@ enum WatchAppStoreScreenshotScene: String, CaseIterable, Sendable {
     case overview
     case balances
 
+    static let readyFileName = "app-store-watch-screenshot-ready"
+
+    static var settleDelay: TimeInterval {
+        settleDelay(
+            arguments: ProcessInfo.processInfo.arguments,
+            environment: ProcessInfo.processInfo.environment
+        )
+    }
+
     static func current(
         arguments: [String] = ProcessInfo.processInfo.arguments
     ) -> WatchAppStoreScreenshotScene? {
@@ -212,6 +221,38 @@ enum WatchAppStoreScreenshotScene: String, CaseIterable, Sendable {
             return .overview
         }
         return WatchAppStoreScreenshotScene(rawValue: arguments[sceneFlag + 1])
+    }
+
+    static func settleDelay(
+        arguments: [String],
+        environment: [String: String] = [:]
+    ) -> TimeInterval {
+        let argumentValue = value(after: "--app-store-settle-seconds", in: arguments)
+        let delay = argumentValue.flatMap(TimeInterval.init)
+            ?? environment["CODEXBAR_APP_STORE_SETTLE_SECONDS"].flatMap(TimeInterval.init)
+            ?? 3
+        guard delay.isFinite else { return 3 }
+        return min(max(delay, 0), 30)
+    }
+
+    func markReady(cachesDirectory: URL? = nil) {
+        let resolvedCachesDirectory = cachesDirectory ?? FileManager.default.urls(
+            for: .cachesDirectory,
+            in: .userDomainMask
+        ).first
+        guard let resolvedCachesDirectory else { return }
+
+        let readyFile = resolvedCachesDirectory.appendingPathComponent(Self.readyFileName)
+        try? Data(rawValue.utf8).write(to: readyFile, options: .atomic)
+    }
+
+    private static func value(after argument: String, in arguments: [String]) -> String? {
+        guard let index = arguments.firstIndex(of: argument),
+              arguments.indices.contains(index + 1)
+        else {
+            return nil
+        }
+        return arguments[index + 1]
     }
 
     var state: WatchDashboardState {

@@ -4,6 +4,14 @@ Notable changes to CodexBar are documented here. Entries describe shipped app
 behavior; development-only changes are listed separately when they affect
 building, testing, or releasing the app.
 
+## 1.3.0 - Unreleased
+
+### Developer Experience
+
+- Made Apple Watch App Store screenshot capture wait for the requested scene,
+  reject invalid settle intervals, and choose only storefront-compatible
+  simulator sizes. ([#239](https://github.com/HemSoft/codexbar-ios/issues/239))
+
 ## 1.2.0 - 2026-08-06
 
 ### Fixed

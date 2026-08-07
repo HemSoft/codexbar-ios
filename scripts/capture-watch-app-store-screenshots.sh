@@ -9,7 +9,10 @@ APP_BUNDLE_ID="com.hemsoft.CodexBarIOS.watchkitapp"
 APP_PATH="$DERIVED_DATA/Build/Products/Debug-watchsimulator/CodexBarWatch.app"
 DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 SCREENSHOT_SETTLE_SECONDS="${SCREENSHOT_SETTLE_SECONDS:-3}"
-WATCH_DEVICE_NAME="${WATCH_DEVICE_NAME:-Apple Watch Series 11 (46mm)}"
+READY_FILE_NAME="app-store-watch-screenshot-ready"
+READY_TIMEOUT_SECONDS="${READY_TIMEOUT_SECONDS:-60}"
+WATCH_DEVICE_NAME="${WATCH_DEVICE_NAME:-}"
+WATCH_DEVICE_NAME_PATTERN="${WATCH_DEVICE_NAME_PATTERN:-\\((44|45|46|49)mm\\)$}"
 
 export DEVELOPER_DIR
 
@@ -28,6 +31,7 @@ trap 'rm -rf "$temporary_directory"' EXIT
 
 watch_device_id="$(
   WATCH_SIMULATOR_DEVICE_NAME="$WATCH_DEVICE_NAME" \
+  WATCH_SIMULATOR_DEVICE_NAME_PATTERN="$WATCH_DEVICE_NAME_PATTERN" \
     "$ROOT_DIR/scripts/select-watch-simulator.sh"
 )"
 
@@ -47,8 +51,27 @@ xcrun simctl bootstatus "$watch_device_id" -b
 xcrun simctl terminate "$watch_device_id" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 xcrun simctl uninstall "$watch_device_id" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 xcrun simctl install "$watch_device_id" "$APP_PATH"
+data_container="$(xcrun simctl get_app_container "$watch_device_id" "$APP_BUNDLE_ID" data)"
+ready_file="$data_container/Library/Caches/$READY_FILE_NAME"
 
 mkdir -p "$OUTPUT_DIR"
+
+wait_for_scene_ready() {
+  local scene="$1"
+  local deadline=$((SECONDS + READY_TIMEOUT_SECONDS))
+  local ready_scene=""
+
+  while (( SECONDS < deadline )); do
+    ready_scene="$(cat "$ready_file" 2>/dev/null || true)"
+    if [[ "$ready_scene" == "$scene" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "Timed out waiting for Watch scene '$scene'. Last value: '${ready_scene:-<unset>}'" >&2
+  return 1
+}
 
 verify_dimensions() {
   local image_path="$1"
@@ -85,10 +108,12 @@ for scene_entry in "${SCENES[@]}"; do
 
   echo "Capturing privacy-safe Watch scene: $scene"
   xcrun simctl terminate "$watch_device_id" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
+  rm -f "$ready_file"
   xcrun simctl launch --terminate-running-process "$watch_device_id" "$APP_BUNDLE_ID" \
     --app-store-screenshots \
-    --app-store-watch-scene "$scene" >/dev/null
-  sleep "$SCREENSHOT_SETTLE_SECONDS"
+    --app-store-watch-scene "$scene" \
+    --app-store-settle-seconds "$SCREENSHOT_SETTLE_SECONDS" >/dev/null
+  wait_for_scene_ready "$scene"
   xcrun simctl io "$watch_device_id" screenshot --type=png "$raw_path"
   sips -s format bmp "$raw_path" --out "$opaque_path" >/dev/null
   sips -s format png "$opaque_path" --out "$output_path" >/dev/null
