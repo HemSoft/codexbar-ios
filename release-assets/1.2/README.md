@@ -25,7 +25,7 @@ used.
 - iPadOS window-resize affordance: present on iPad captures as standard iPadOS
   26 system UI for multitasking apps
 - Mirroring chrome, pointer, notifications, and personal device data: absent
-- Visual review: all 12 screenshots inspected after capture
+- Visual review: all 14 screenshots inspected after capture
 
 The source simulator captures included an opaque alpha channel. The final files
 were flattened to RGB for upload compatibility, and raw-pixel hashes confirmed

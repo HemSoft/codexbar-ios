@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
 sdk_version="${WATCH_SIMULATOR_SDK_VERSION:-$(xcrun --sdk watchsimulator --show-sdk-version)}"
 preferred_device_name="${WATCH_SIMULATOR_DEVICE_NAME:-}"
