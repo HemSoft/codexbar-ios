@@ -6,6 +6,7 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 
 sdk_version="${WATCH_SIMULATOR_SDK_VERSION:-$(xcrun --sdk watchsimulator --show-sdk-version)}"
 preferred_device_name="${WATCH_SIMULATOR_DEVICE_NAME:-}"
+preferred_device_name_pattern="${WATCH_SIMULATOR_DEVICE_NAME_PATTERN:-}"
 
 if [[ -n "${WATCH_SIMULATOR_LIST_JSON_FILE:-}" ]]; then
   simulator_json="$(<"$WATCH_SIMULATOR_LIST_JSON_FILE")"
@@ -16,7 +17,8 @@ fi
 device="$({
   jq -r \
     --arg sdk_version "$sdk_version" \
-    --arg preferred_device_name "$preferred_device_name" '
+    --arg preferred_device_name "$preferred_device_name" \
+    --arg preferred_device_name_pattern "$preferred_device_name_pattern" '
     def version_components:
       split(".")
       | map(tonumber)
@@ -37,8 +39,13 @@ device="$({
         | $simulators.devices[$runtime_identifier][]?
         | select(.isAvailable == true and (.name | startswith("Apple Watch")))
         | select(
-            $preferred_device_name == ""
-            or .name == $preferred_device_name
+            if $preferred_device_name != "" then
+              .name == $preferred_device_name
+            elif $preferred_device_name_pattern != "" then
+              (.name | test($preferred_device_name_pattern))
+            else
+              true
+            end
           )
         | {
             name,
@@ -63,6 +70,8 @@ device="$({
 if [[ -z "$device" ]]; then
   if [[ -n "$preferred_device_name" ]]; then
     echo "No available $preferred_device_name simulator is compatible with watchsimulator SDK $sdk_version." >&2
+  elif [[ -n "$preferred_device_name_pattern" ]]; then
+    echo "No available Apple Watch simulator matching $preferred_device_name_pattern is compatible with watchsimulator SDK $sdk_version." >&2
   else
     echo "No available Apple Watch simulator is compatible with watchsimulator SDK $sdk_version." >&2
   fi

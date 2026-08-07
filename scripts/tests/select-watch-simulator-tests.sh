@@ -85,6 +85,18 @@ if [[ "$preferred_device" != "NEWEST-COMPATIBLE-ZULU" ]]; then
   exit 1
 fi
 
+pattern_device="$({
+  WATCH_SIMULATOR_SDK_VERSION=26.5 \
+  WATCH_SIMULATOR_DEVICE_NAME_PATTERN="Zulu$" \
+  WATCH_SIMULATOR_LIST_JSON_FILE="$temporary_dir/simulators.json" \
+    "$repository_dir/scripts/select-watch-simulator.sh"
+} 2> "$temporary_dir/pattern-selection.log")"
+
+if [[ "$pattern_device" != "NEWEST-COMPATIBLE-ZULU" ]]; then
+  echo "Expected a compatible device matching the preferred pattern, got: $pattern_device" >&2
+  exit 1
+fi
+
 cat > "$temporary_dir/no-compatible-simulators.json" <<'JSON'
 {
   "runtimes": [

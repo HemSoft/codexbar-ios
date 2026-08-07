@@ -1980,6 +1980,12 @@ extension WatchDashboardStateTests {
             ),
             30
         )
+        XCTAssertEqual(
+            WatchAppStoreScreenshotScene.settleDelay(
+                arguments: ["CodexBarWatch", "--app-store-settle-seconds", "nan"]
+            ),
+            3
+        )
 
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1987,9 +1993,7 @@ extension WatchDashboardStateTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         WatchAppStoreScreenshotScene.balances.markReady(cachesDirectory: directory)
-        let readyFile = directory.appendingPathComponent(
-            WatchAppStoreScreenshotScene.readyFileName
-        )
+        let readyFile = directory.appendingPathComponent(WatchAppStoreScreenshotScene.readyFileName)
         XCTAssertEqual(try String(contentsOf: readyFile, encoding: .utf8), "balances")
     }
 }

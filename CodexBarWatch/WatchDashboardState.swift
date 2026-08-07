@@ -231,6 +231,7 @@ enum WatchAppStoreScreenshotScene: String, CaseIterable, Sendable {
         let delay = argumentValue.flatMap(TimeInterval.init)
             ?? environment["CODEXBAR_APP_STORE_SETTLE_SECONDS"].flatMap(TimeInterval.init)
             ?? 3
+        guard delay.isFinite else { return 3 }
         return min(max(delay, 0), 30)
     }
 
