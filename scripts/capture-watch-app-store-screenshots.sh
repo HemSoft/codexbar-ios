@@ -13,6 +13,11 @@ WATCH_DEVICE_NAME="${WATCH_DEVICE_NAME:-Apple Watch Series 11 (46mm)}"
 
 export DEVELOPER_DIR
 
+if ! command -v sips >/dev/null 2>&1; then
+  echo "The macOS sips utility is required to flatten screenshots." >&2
+  exit 1
+fi
+
 SCENES=(
   "overview:13-watch-dashboard-overview.png"
   "balances:14-watch-dashboard-balances.png"
@@ -48,11 +53,18 @@ mkdir -p "$OUTPUT_DIR"
 verify_dimensions() {
   local image_path="$1"
   local dimensions
+  local has_alpha
 
   dimensions="$(
     sips -g pixelWidth -g pixelHeight "$image_path" 2>/dev/null \
       | awk '/pixelWidth/ { width = $2 } /pixelHeight/ { height = $2 } END { print width "x" height }'
   )"
+  has_alpha="$(sips -g hasAlpha "$image_path" 2>/dev/null | awk '/hasAlpha/ { print $2 }')"
+
+  if [[ "$has_alpha" != "no" ]]; then
+    echo "Expected an opaque storefront PNG, but $image_path hasAlpha is $has_alpha." >&2
+    return 1
+  fi
 
   case "$dimensions" in
     422x514|410x502|416x496|396x484|368x448|312x390)
@@ -68,6 +80,7 @@ verify_dimensions() {
 for scene_entry in "${SCENES[@]}"; do
   IFS=":" read -r scene filename <<< "$scene_entry"
   raw_path="$temporary_directory/$filename"
+  opaque_path="$temporary_directory/${filename%.png}.bmp"
   output_path="$OUTPUT_DIR/$filename"
 
   echo "Capturing privacy-safe Watch scene: $scene"
@@ -77,7 +90,8 @@ for scene_entry in "${SCENES[@]}"; do
     --app-store-watch-scene "$scene" >/dev/null
   sleep "$SCREENSHOT_SETTLE_SECONDS"
   xcrun simctl io "$watch_device_id" screenshot --type=png "$raw_path"
-  ffmpeg -loglevel error -y -i "$raw_path" -vf format=rgb24 "$output_path"
+  sips -s format bmp "$raw_path" --out "$opaque_path" >/dev/null
+  sips -s format png "$opaque_path" --out "$output_path" >/dev/null
   verify_dimensions "$output_path"
 done
 

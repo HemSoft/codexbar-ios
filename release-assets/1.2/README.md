@@ -17,7 +17,8 @@ used.
   simulated connectivity
 - Apple Watch status bar: native simulator capture time; watchOS does not
   support CoreSimulator status-bar overrides
-- Format: flattened RGB PNG with no alpha channel
+- Format: flattened RGB PNG with no alpha channel, using the macOS-provided
+  `sips` utility (no third-party image tool is required)
 - iPhone family: 1320 x 2868 pixels, portrait
 - iPad family: 2064 x 2752 pixels, portrait
 - Apple Watch family: captured from a compatible isolated watchOS simulator at
