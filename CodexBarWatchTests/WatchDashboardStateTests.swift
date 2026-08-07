@@ -1965,4 +1965,31 @@ extension WatchDashboardStateTests {
             }
         )
     }
+
+    func testAppStoreScreenshotReadinessUsesRequestedSceneAndBoundedDelay() throws {
+        XCTAssertEqual(
+            WatchAppStoreScreenshotScene.settleDelay(
+                arguments: ["CodexBarWatch", "--app-store-settle-seconds", "1.5"]
+            ),
+            1.5
+        )
+        XCTAssertEqual(
+            WatchAppStoreScreenshotScene.settleDelay(
+                arguments: ["CodexBarWatch"],
+                environment: ["CODEXBAR_APP_STORE_SETTLE_SECONDS": "45"]
+            ),
+            30
+        )
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        WatchAppStoreScreenshotScene.balances.markReady(cachesDirectory: directory)
+        let readyFile = directory.appendingPathComponent(
+            WatchAppStoreScreenshotScene.readyFileName
+        )
+        XCTAssertEqual(try String(contentsOf: readyFile, encoding: .utf8), "balances")
+    }
 }
