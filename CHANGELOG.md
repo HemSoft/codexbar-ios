@@ -245,6 +245,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Made the GitHub Copilot concurrent-refresh regression test deterministic
+  under parallel CI and bounded synchronization failures to ten seconds.
+  ([#235](https://github.com/HemSoft/codexbar-ios/issues/235))
 - Prepared privacy-safe, deterministic App Store release notes and a verified
   iPhone and iPad screenshot set for the 1.2 storefront submission.
   ([#237](https://github.com/HemSoft/codexbar-ios/issues/237))

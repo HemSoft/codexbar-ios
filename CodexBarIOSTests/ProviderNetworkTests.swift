@@ -1023,23 +1023,12 @@ final class ProviderNetworkTests: XCTestCase {
             )),
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
         )
-        let sessionConfiguration = URLSessionConfiguration.ephemeral
-        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
         let refreshJoined = TestSignal()
-        let provider = CopilotUsageProvider(
-            secretStore: secretStore,
-            session: URLSession(configuration: sessionConfiguration),
-            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
-            tokenEndpoint: URL(string: "https://example.test/github-token")!,
-            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
-            now: { now },
-            onJoinInFlightRefresh: { refreshJoined.signal() }
-        )
         let counterLock = NSLock()
         let refreshGate = TestRequestGate()
         var refreshRequests = 0
         var usageRequests = 0
-        ProviderNetworkMockURLProtocol.handler = { request in
+        let sessionFixture = IsolatedTestURLSession { request in
             if request.url?.path == "/github-token" {
                 counterLock.lock()
                 refreshRequests += 1
@@ -1060,18 +1049,136 @@ final class ProviderNetworkTests: XCTestCase {
                 Data(#"{"login":"octocat","copilot_plan":"individual_pro","quota_reset_date_utc":"2033-05-19T03:33:20Z","quota_snapshots":{"premium_interactions":{"entitlement":100,"remaining":75,"unlimited":false}}}"#.utf8)
             )
         }
-        defer { ProviderNetworkMockURLProtocol.handler = nil }
+        defer {
+            refreshGate.release()
+            sessionFixture.invalidate()
+        }
+        let provider = CopilotUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session,
+            usageEndpoint: URL(string: "https://example.test/copilot-usage")!,
+            tokenEndpoint: URL(string: "https://example.test/github-token")!,
+            oauthConfiguration: CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret"),
+            now: { now },
+            onJoinInFlightRefresh: { refreshJoined.signal() }
+        )
 
-        let first = Task { try await provider.fetchUsage(for: configuration) }
-        XCTAssertTrue(refreshGate.waitUntilBlocked(), "Expected the first credential refresh request to start.")
-        let second = Task { try await provider.fetchUsage(for: configuration) }
-        XCTAssertTrue(refreshJoined.wait(), "Expected the second fetch to join the in-flight credential refresh.")
-        refreshGate.release()
-        let results = try await [first.value, second.value]
+        let results = try await withTestWatchdog(
+            timeout: .seconds(10),
+            failureMessage: "Copilot concurrent refresh did not finish within the 10-second test bound.",
+            onTimeout: {
+                refreshGate.release()
+                sessionFixture.invalidate()
+            },
+            operation: {
+                let first = Task { try await provider.fetchUsage(for: configuration) }
+                defer {
+                    first.cancel()
+                    refreshGate.release()
+                }
+                await refreshGate.waitUntilBlocked()
+
+                let second = Task { try await provider.fetchUsage(for: configuration) }
+                defer { second.cancel() }
+                await refreshJoined.wait()
+
+                refreshGate.release()
+                return try await [first.value, second.value]
+            }
+        )
 
         XCTAssertEqual(refreshRequests, 1)
         XCTAssertEqual(usageRequests, 2)
         XCTAssertTrue(results.allSatisfy { $0.bars.first?.used == 25 })
+    }
+
+    func testWatchdogDoesNotAwaitAnOperationThatIgnoresCancellation() async throws {
+        let operationGate = UsageProviderGate()
+        let operationFinished = AsyncFlag()
+        defer { Task { await operationGate.release() } }
+
+        do {
+            let _: Void = try await withTestWatchdog(
+                timeout: .seconds(10),
+                failureMessage: "Expected watchdog timeout.",
+                onTimeout: {},
+                waitForTimeout: { _ in
+                    await operationGate.waitUntilBlocked()
+                },
+                operation: {
+                    await operationGate.wait()
+                    await operationFinished.set()
+                }
+            )
+            XCTFail("Expected the watchdog to time out.")
+        } catch let error as TestWatchdogError {
+            XCTAssertEqual(error.message, "Expected watchdog timeout.")
+        }
+
+        let didFinishOperation = await operationFinished.currentValue()
+        XCTAssertFalse(didFinishOperation)
+        await operationGate.release()
+    }
+
+    func testWatchdogCancelsTimeoutWhenOperationFinishesFirst() async throws {
+        let timeoutGate = UsageProviderGate()
+        let timeoutResumed = TestSignal()
+        let timeoutWasCancelled = AsyncFlag()
+        let onTimeoutCalled = LockedFlag()
+        defer { Task { await timeoutGate.release() } }
+
+        let result = try await withTestWatchdog(
+            timeout: .seconds(10),
+            failureMessage: "The completed operation must win.",
+            onTimeout: { onTimeoutCalled.set() },
+            waitForTimeout: { _ in
+                await timeoutGate.wait()
+                if Task.isCancelled {
+                    await timeoutWasCancelled.set()
+                }
+                timeoutResumed.signal()
+            },
+            operation: { 42 }
+        )
+
+        XCTAssertEqual(result, 42)
+        await timeoutGate.waitUntilBlocked()
+        await timeoutGate.release()
+        await timeoutResumed.wait()
+        let didCancelTimeout = await timeoutWasCancelled.currentValue()
+        let didCallOnTimeout = onTimeoutCalled.currentValue()
+        XCTAssertTrue(didCancelTimeout)
+        XCTAssertFalse(didCallOnTimeout)
+    }
+
+    func testWatchdogTimeoutClaimsOutcomeBeforeCleanupCompletesOperation() async throws {
+        let operationGate = TestRequestGate()
+        defer { operationGate.release() }
+
+        do {
+            let _: Int = try await withTestWatchdog(
+                timeout: .seconds(10),
+                failureMessage: "The timeout must remain the selected outcome.",
+                onTimeout: { operationGate.release() },
+                waitForTimeout: { _ in
+                    await operationGate.waitUntilBlocked()
+                },
+                operation: {
+                    operationGate.blockUntilReleased()
+                    return 42
+                }
+            )
+            XCTFail("Expected the watchdog timeout to win.")
+        } catch let error as TestWatchdogError {
+            XCTAssertEqual(error.message, "The timeout must remain the selected outcome.")
+        }
+    }
+
+    func testWatchdogOutcomeCanOnlyBeClaimedOnce() {
+        let coordinator = TestWatchdogOutcomeCoordinator()
+
+        XCTAssertTrue(coordinator.claimTimeout())
+        XCTAssertFalse(coordinator.claimOperation())
     }
 
     func testCopilotUsageProviderDoesNotReuseRotatedTokenFromLateStaleRead() async throws {
