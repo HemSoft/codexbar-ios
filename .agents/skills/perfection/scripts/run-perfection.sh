@@ -156,12 +156,7 @@ if [[ "$needs_ios" == true && -z "$ios_destination" ]]; then
 fi
 
 if [[ "$needs_watch" == true && -z "$watch_destination" ]]; then
-  watch_device_id="$(select_simulator_id "Apple Watch")"
-  if [[ -z "$watch_device_id" ]]; then
-    xcrun simctl list devices available
-    echo "No available Apple Watch simulator was found." >&2
-    exit 1
-  fi
+  watch_device_id="$("$repo_root/scripts/select-watch-simulator.sh")"
   watch_destination="platform=watchOS Simulator,id=$watch_device_id"
 fi
 
@@ -211,6 +206,7 @@ run_gate \
     -scheme "$IOS_SCHEME" \
     -destination "$ios_destination" \
     -derivedDataPath "$derived_data" \
+    -skipPackagePluginValidation \
     CODE_SIGNING_ALLOWED=NO \
     SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
     GCC_TREAT_WARNINGS_AS_ERRORS=YES \
@@ -225,6 +221,7 @@ run_gate \
     -destination "$ios_destination" \
     -derivedDataPath "$derived_data" \
     -resultBundlePath "$run_dir/CodexBarIOSTests.xcresult" \
+    -skipPackagePluginValidation \
     CODE_SIGNING_ALLOWED=NO \
     SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
     GCC_TREAT_WARNINGS_AS_ERRORS=YES \
@@ -245,6 +242,7 @@ run_gate \
     -scheme "$WATCH_BUILD_SCHEME" \
     -destination "$watch_destination" \
     -derivedDataPath "$derived_data" \
+    -skipPackagePluginValidation \
     CODE_SIGNING_ALLOWED=NO \
     SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
     GCC_TREAT_WARNINGS_AS_ERRORS=YES \
@@ -259,6 +257,7 @@ run_gate \
     -destination "$watch_destination" \
     -derivedDataPath "$derived_data" \
     -resultBundlePath "$run_dir/CodexBarWatchTests.xcresult" \
+    -skipPackagePluginValidation \
     CODE_SIGNING_ALLOWED=NO \
     SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
     GCC_TREAT_WARNINGS_AS_ERRORS=YES \

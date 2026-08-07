@@ -13,14 +13,20 @@ used.
 - Source: debug simulator build with `--app-store-screenshots` fixtures
 - Content: fictional account labels, organization, balances, usage values, and
   history samples defined in the repository
-- Status bar: standardized 9:41 time, full battery, and simulated connectivity
-- Format: flattened RGB PNG with no alpha channel
+- iPhone and iPad status bars: standardized 9:41 time, full battery, and
+  simulated connectivity
+- Apple Watch status bar: native simulator capture time; watchOS does not
+  support CoreSimulator status-bar overrides
+- Format: flattened RGB PNG with no alpha channel, using the macOS-provided
+  `sips` utility (no third-party image tool is required)
 - iPhone family: 1320 x 2868 pixels, portrait
 - iPad family: 2064 x 2752 pixels, portrait
+- Apple Watch family: captured from a compatible isolated watchOS simulator at
+  an Apple-accepted native size, with deterministic fictional dashboard data
 - iPadOS window-resize affordance: present on iPad captures as standard iPadOS
   26 system UI for multitasking apps
 - Mirroring chrome, pointer, notifications, and personal device data: absent
-- Visual review: all 12 screenshots inspected after capture
+- Visual review: all 14 screenshots inspected after capture
 
 The source simulator captures included an opaque alpha channel. The final files
 were flattened to RGB for upload compatibility, and raw-pixel hashes confirmed
@@ -29,7 +35,8 @@ that the visible RGB pixels did not change.
 ## Recommended storefront sequence
 
 Use the six iPhone images in numbered order for the iPhone storefront and the
-matching six iPad images in the same scene order for iPad:
+matching six iPad images in the same scene order for iPad. Use both Apple Watch
+images in numbered order for the Watch storefront:
 
 1. Dashboard overview — usage across several providers at a glance.
 2. Balance and quota dashboard — light and dark appearance coverage.
@@ -37,6 +44,11 @@ matching six iPad images in the same scene order for iPad:
 4. Accounts & Groups — broad provider support and organization.
 5. GitHub Copilot settings — account configuration and browser-session support.
 6. Usage history — trends, summaries, and recent samples.
+
+The Watch sequence adds:
+
+1. Usage dashboard — current limits, severity, reset timing, and visualization.
+2. Balance dashboard — a fictional OpenCode Zen balance.
 
 ## Screenshot catalog
 
@@ -54,10 +66,11 @@ matching six iPad images in the same scene order for iPad:
 | `screenshots/10-ipad-accounts-dark.png` | iPad | Sidebar Settings and Accounts & Groups |
 | `screenshots/11-ipad-copilot-settings-light.png` | iPad | GitHub Copilot organization configuration |
 | `screenshots/12-ipad-usage-history-dark.png` | iPad | Wide usage chart, summary, and samples |
+| `screenshots/13-watch-dashboard-overview.png` | Apple Watch | Fictional usage limits and severity on the Watch dashboard |
+| `screenshots/14-watch-dashboard-balances.png` | Apple Watch | Fictional provider balances on the Watch dashboard |
 
 ## Remaining capture gaps
 
-- Apple Watch dashboard and complication families
 - Widget gallery and complication gallery presentation
 - Alert-threshold configuration
 - Card customization, including per-metric Watch visibility

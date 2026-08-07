@@ -4,7 +4,7 @@ Notable changes to CodexBar are documented here. Entries describe shipped app
 behavior; development-only changes are listed separately when they affect
 building, testing, or releasing the app.
 
-## 1.2.0 - Unreleased
+## 1.2.0 - 2026-08-06
 
 ### Fixed
 
@@ -248,6 +248,12 @@ building, testing, or releasing the app.
 - Made the GitHub Copilot concurrent-refresh regression test deterministic
   under parallel CI and bounded synchronization failures to ten seconds.
   ([#235](https://github.com/HemSoft/codexbar-ios/issues/235))
+- Finalized version 1.2 release metadata, added deterministic, privacy-safe
+  Apple Watch storefront captures alongside the verified iPhone and iPad set,
+  and made unattended release validation honor the reviewed pinned build-tool
+  plug-in in clean worktrees while selecting an Xcode-compatible Watch runtime
+  and keeping loopback-auth tests reliable under parallel release validation.
+  ([#239](https://github.com/HemSoft/codexbar-ios/issues/239))
 - Prepared privacy-safe, deterministic App Store release notes and a verified
   iPhone and iPad screenshot set for the 1.2 storefront submission.
   ([#237](https://github.com/HemSoft/codexbar-ios/issues/237))

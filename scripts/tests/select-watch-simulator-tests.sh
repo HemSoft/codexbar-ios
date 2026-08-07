@@ -73,6 +73,18 @@ if ! grep -q "watchOS 26.5" "$temporary_dir/selection.log"; then
   exit 1
 fi
 
+preferred_device="$({
+  WATCH_SIMULATOR_SDK_VERSION=26.5 \
+  WATCH_SIMULATOR_DEVICE_NAME="Apple Watch Zulu" \
+  WATCH_SIMULATOR_LIST_JSON_FILE="$temporary_dir/simulators.json" \
+    "$repository_dir/scripts/select-watch-simulator.sh"
+} 2> "$temporary_dir/preferred-selection.log")"
+
+if [[ "$preferred_device" != "NEWEST-COMPATIBLE-ZULU" ]]; then
+  echo "Expected preferred compatible device, got: $preferred_device" >&2
+  exit 1
+fi
+
 cat > "$temporary_dir/no-compatible-simulators.json" <<'JSON'
 {
   "runtimes": [
@@ -96,7 +108,17 @@ JSON
 
 cat > "$temporary_dir/xcrun" <<'SH'
 #!/usr/bin/env bash
+if [[ -n "${EXPECTED_DEVELOPER_DIR:-}" && "${DEVELOPER_DIR:-}" != "$EXPECTED_DEVELOPER_DIR" ]]; then
+  printf 'Expected DEVELOPER_DIR %s, got %s\n' "$EXPECTED_DEVELOPER_DIR" "${DEVELOPER_DIR:-unset}" >&2
+  exit 1
+fi
 case "$*" in
+  *"--sdk watchsimulator --show-sdk-version"*)
+    printf '26.5\n'
+    ;;
+  *"simctl list --json"*)
+    command cat "$SIMULATOR_FIXTURE_PATH"
+    ;;
   *"simctl list runtimes available"*)
     printf 'mock available watchOS runtime diagnostics\n'
     ;;
@@ -110,6 +132,20 @@ case "$*" in
 esac
 SH
 chmod +x "$temporary_dir/xcrun"
+
+alternate_developer_dir="$temporary_dir/AlternateXcode.app/Contents/Developer"
+inherited_device="$({
+  PATH="$temporary_dir:$PATH" \
+  DEVELOPER_DIR="$alternate_developer_dir" \
+  EXPECTED_DEVELOPER_DIR="$alternate_developer_dir" \
+  SIMULATOR_FIXTURE_PATH="$temporary_dir/simulators.json" \
+    "$repository_dir/scripts/select-watch-simulator.sh"
+} 2> "$temporary_dir/inherited-selection.log")"
+
+if [[ "$inherited_device" != "NEWEST-COMPATIBLE-ALPHA" ]]; then
+  echo "Expected selection to preserve the caller's Xcode, got: $inherited_device" >&2
+  exit 1
+fi
 
 if PATH="$temporary_dir:$PATH" \
   WATCH_SIMULATOR_SDK_VERSION=26.5 \

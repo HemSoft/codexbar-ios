@@ -2482,7 +2482,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             onCredentialsChanged: { credentialsChangedCount += 1 },
             copilotAuthService: CopilotWebAuthService(
                 session: sessionFixture.session,
-                callbackTimeoutNanoseconds: 1_000_000_000,
+                callbackTimeoutNanoseconds: 5_000_000_000,
                 preferredCallbackPorts: [0]
             ),
             copilotUsageProvider: makeCopilotUsageProvider(session: sessionFixture.session)
@@ -2526,7 +2526,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             onCredentialsChanged: { credentialsChangedCount += 1 },
             copilotAuthService: CopilotWebAuthService(
                 session: sessionFixture.session,
-                callbackTimeoutNanoseconds: 1_000_000_000,
+                callbackTimeoutNanoseconds: 5_000_000_000,
                 preferredCallbackPorts: [0]
             ),
             copilotUsageProvider: makeCopilotUsageProvider(session: sessionFixture.session)
