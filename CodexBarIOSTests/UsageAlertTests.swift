@@ -1175,7 +1175,7 @@ final class GitHubStatusTests: XCTestCase {
     }
 
     @MainActor
-    func testMonitorDiscardsInFlightFetchAcrossDisableAndReenable() async throws {
+    func testMonitorDiscardsInFlightResultsAcrossDisableAndReenable() async throws {
         let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1209,6 +1209,18 @@ final class GitHubStatusTests: XCTestCase {
 
         XCTAssertNil(preferences.snapshot)
         XCTAssertTrue(notifier.notifications.isEmpty)
+
+        let failedRefresh = Task {
+            await monitor.refreshIfDue(force: true, now: incident.checkedAt.addingTimeInterval(1))
+        }
+        await fetcher.waitUntilStarted()
+        preferences.updateSettings(disabledSettings)
+        preferences.updateSettings(enabledSettings)
+        await fetcher.fail(with: GitHubStatusParsingError.invalidResponse)
+        await failedRefresh.value
+
+        XCTAssertNil(preferences.lastChecked)
+        XCTAssertNil(preferences.lastError)
     }
 
     @MainActor
@@ -1294,11 +1306,11 @@ private actor StubGitHubStatusFetcher: GitHubStatusFetching {
 }
 
 private actor SuspendedGitHubStatusFetcher: GitHubStatusFetching {
-    private var fetchContinuation: CheckedContinuation<GitHubServiceStatusSnapshot, Never>?
+    private var fetchContinuation: CheckedContinuation<GitHubServiceStatusSnapshot, any Error>?
     private var startContinuations: [CheckedContinuation<Void, Never>] = []
 
     func fetchStatus(checkedAt: Date) async throws -> GitHubServiceStatusSnapshot {
-        await withCheckedContinuation { continuation in
+        try await withCheckedThrowingContinuation { continuation in
             fetchContinuation = continuation
             startContinuations.forEach { $0.resume() }
             startContinuations.removeAll()
@@ -1314,6 +1326,11 @@ private actor SuspendedGitHubStatusFetcher: GitHubStatusFetching {
 
     func complete(with snapshot: GitHubServiceStatusSnapshot) {
         fetchContinuation?.resume(returning: snapshot)
+        fetchContinuation = nil
+    }
+
+    func fail(with error: any Error) {
+        fetchContinuation?.resume(throwing: error)
         fetchContinuation = nil
     }
 }

@@ -582,7 +582,10 @@ public final class GitHubStatusMonitor: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled,
+                  preferences.settings.isEnabled,
+                  preferences.monitoringGeneration == monitoringGeneration
+            else { return }
             preferences.recordFailure(error, attemptedAt: now)
         }
     }
