@@ -1175,6 +1175,43 @@ final class GitHubStatusTests: XCTestCase {
     }
 
     @MainActor
+    func testMonitorDiscardsInFlightFetchAcrossDisableAndReenable() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        let enabledSettings = GitHubStatusSettings(
+            isEnabled: true,
+            sendsIncidentNotifications: true
+        )
+        preferences.updateSettings(enabledSettings)
+        let fetcher = SuspendedGitHubStatusFetcher()
+        let notifier = RecordingGitHubStatusNotifier()
+        let monitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: fetcher,
+            notifier: notifier
+        )
+        let incident = Self.snapshot(
+            severity: .major,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-1"
+        )
+
+        let refresh = Task { await monitor.refreshIfDue(force: true, now: incident.checkedAt) }
+        await fetcher.waitUntilStarted()
+        var disabledSettings = enabledSettings
+        disabledSettings.isEnabled = false
+        preferences.updateSettings(disabledSettings)
+        preferences.updateSettings(enabledSettings)
+        await fetcher.complete(with: incident)
+        await refresh.value
+
+        XCTAssertNil(preferences.snapshot)
+        XCTAssertTrue(notifier.notifications.isEmpty)
+    }
+
+    @MainActor
     func testFetchFailurePreservesLastKnownIncidentAndMarksItStale() async throws {
         let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -1253,6 +1290,31 @@ private actor StubGitHubStatusFetcher: GitHubStatusFetching {
             throw GitHubStatusParsingError.invalidResponse
         }
         return try results.removeFirst().get()
+    }
+}
+
+private actor SuspendedGitHubStatusFetcher: GitHubStatusFetching {
+    private var fetchContinuation: CheckedContinuation<GitHubServiceStatusSnapshot, Never>?
+    private var startContinuations: [CheckedContinuation<Void, Never>] = []
+
+    func fetchStatus(checkedAt: Date) async throws -> GitHubServiceStatusSnapshot {
+        await withCheckedContinuation { continuation in
+            fetchContinuation = continuation
+            startContinuations.forEach { $0.resume() }
+            startContinuations.removeAll()
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard fetchContinuation == nil else { return }
+        await withCheckedContinuation { continuation in
+            startContinuations.append(continuation)
+        }
+    }
+
+    func complete(with snapshot: GitHubServiceStatusSnapshot) {
+        fetchContinuation?.resume(returning: snapshot)
+        fetchContinuation = nil
     }
 }
 

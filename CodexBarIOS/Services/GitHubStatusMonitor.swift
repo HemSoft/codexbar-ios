@@ -387,6 +387,7 @@ public final class GitHubStatusPreferences: ObservableObject {
     @Published public private(set) var lastChecked: Date?
     @Published public private(set) var lastError: String?
     @Published public private(set) var dismissedBannerIdentity: String?
+    private(set) var monitoringGeneration = 0
 
     private let defaults: UserDefaults
     private let settingsKey = "githubStatusSettings"
@@ -421,7 +422,11 @@ public final class GitHubStatusPreferences: ObservableObject {
     }
 
     public func updateSettings(_ settings: GitHubStatusSettings) {
+        let enabledStateChanged = self.settings.isEnabled != settings.isEnabled
         self.settings = settings
+        if enabledStateChanged {
+            monitoringGeneration &+= 1
+        }
         state.pendingNotifications = pendingNotifications.filter { notification in
             switch notification.kind {
             case .incident, .escalation:
@@ -547,6 +552,7 @@ public final class GitHubStatusMonitor: ObservableObject {
             return
         }
 
+        let monitoringGeneration = preferences.monitoringGeneration
         isRefreshing = true
         defer {
             isRefreshing = false
@@ -555,7 +561,15 @@ public final class GitHubStatusMonitor: ObservableObject {
         let previous = preferences.snapshot
         do {
             await deliverPendingNotifications()
+            guard !Task.isCancelled,
+                  preferences.settings.isEnabled,
+                  preferences.monitoringGeneration == monitoringGeneration
+            else { return }
             let snapshot = try await fetcher.fetchStatus(checkedAt: now)
+            guard !Task.isCancelled,
+                  preferences.settings.isEnabled,
+                  preferences.monitoringGeneration == monitoringGeneration
+            else { return }
             if let notification = GitHubStatusTransitionEvaluator.notification(
                 previous: previous,
                 current: snapshot,
