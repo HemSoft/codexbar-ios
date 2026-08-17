@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import OSLog
 #if os(iOS)
 import BackgroundTasks
 #endif
@@ -167,14 +168,21 @@ public enum GitHubStatusParser {
 
     public static func parse(_ data: Data, checkedAt: Date = Date()) throws -> GitHubServiceStatusSnapshot {
         let response = try JSONDecoder().decode(StatuspageSummary.self, from: data)
-        let activeIncidents = response.incidents.filter { $0.status != "resolved" }
+        let activeIncidents = response.incidents.filter {
+            $0.status != "resolved" && Self.severity(forImpact: $0.impact) != .operational
+        }
 
         if !activeIncidents.isEmpty {
             let severity: GitHubServiceSeverity = activeIncidents
                 .map { Self.severity(forImpact: $0.impact) }
                 .max() ?? .minor
             let ordered = activeIncidents.sorted {
-                Self.severity(forImpact: $0.impact) > Self.severity(forImpact: $1.impact)
+                let lhsSeverity = Self.severity(forImpact: $0.impact)
+                let rhsSeverity = Self.severity(forImpact: $1.impact)
+                if lhsSeverity != rhsSeverity {
+                    return lhsSeverity > rhsSeverity
+                }
+                return $0.id < $1.id
             }
             guard let leadIncident = ordered.first else {
                 throw GitHubStatusParsingError.invalidResponse
@@ -233,6 +241,7 @@ public enum GitHubStatusParser {
 
     private static func severity(forImpact impact: String) -> GitHubServiceSeverity {
         switch impact {
+        case "none": .operational
         case "critical": .critical
         case "major": .major
         case "minor", "maintenance": .minor
@@ -463,6 +472,10 @@ public final class GitHubStatusMonitor: ObservableObject {
 
     private let fetcher: any GitHubStatusFetching
     private let notifier: any GitHubStatusNotifying
+    private static let logger = Logger(
+        subsystem: "com.hemsoft.CodexBarIOS",
+        category: "github-status"
+    )
 
     public init(
         preferences: GitHubStatusPreferences,
@@ -531,7 +544,13 @@ public final class GitHubStatusMonitor: ObservableObject {
         guard preferences.settings.isEnabled else { return }
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
         request.earliestBeginDate = max(preferences.nextEligibleCheck, Date().addingTimeInterval(60))
-        try? BGTaskScheduler.shared.submit(request)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            Self.logger.error(
+                "Background status refresh scheduling failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
         #endif
     }
 }

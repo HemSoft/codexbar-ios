@@ -36,8 +36,8 @@ struct ContentView: View {
         configurationStore: ProviderConfigurationStore,
         historyStore: UsageHistoryStore,
         appUpdateController: AppUpdateController,
-        githubStatusPreferences: GitHubStatusPreferences? = nil,
-        githubStatusMonitor: GitHubStatusMonitor? = nil,
+        githubStatusPreferences: GitHubStatusPreferences,
+        githubStatusMonitor: GitHubStatusMonitor,
         usageAlertNotifier: (any UsageAlertNotifying)? = nil,
         appReviewPromptPolicy: AppReviewPromptPolicy = AppReviewPromptPolicy(),
         performsLifecycleWork: Bool = true
@@ -46,12 +46,8 @@ struct ContentView: View {
         self.configurationStore = configurationStore
         self.historyStore = historyStore
         self.appUpdateController = appUpdateController
-        let statusPreferences = githubStatusPreferences ?? GitHubStatusPreferences()
-        self.githubStatusPreferences = statusPreferences
-        self.githubStatusMonitor = githubStatusMonitor ?? GitHubStatusMonitor(
-            preferences: statusPreferences,
-            notifier: LocalUsageAlertNotifier.shared
-        )
+        self.githubStatusPreferences = githubStatusPreferences
+        self.githubStatusMonitor = githubStatusMonitor
         self.performsLifecycleWork = performsLifecycleWork
         let orchestrator = DashboardOrchestrator(
             refreshService: refreshService,
@@ -983,10 +979,11 @@ private struct GitHubStatusBanner: View {
 
     private var freshnessText: String {
         let updated = UserFacingDateTimeFormatter.current.dateAndTime(snapshot.updatedAt)
-        if statusCheckFailed || isStale {
-            return "Last known status, updated \(updated). A recent status check was unavailable; this is not a newly confirmed outage."
-        }
-        return "GitHub updated this status \(updated)."
+        return GitHubStatusBannerMessage.freshness(
+            updatedAt: updated,
+            isStale: isStale,
+            statusCheckFailed: statusCheckFailed
+        )
     }
 
     private var severityColor: Color {
@@ -995,6 +992,18 @@ private struct GitHubStatusBanner: View {
         case .minor: .orange
         case .major, .critical: .red
         }
+    }
+}
+
+enum GitHubStatusBannerMessage {
+    static func freshness(updatedAt: String, isStale: Bool, statusCheckFailed: Bool) -> String {
+        if statusCheckFailed {
+            return "Last known status, updated \(updatedAt). A recent status check was unavailable; this is not a newly confirmed outage."
+        }
+        if isStale {
+            return "Last known status, updated \(updatedAt). This status is stale because a newer check has not completed."
+        }
+        return "GitHub updated this status \(updatedAt)."
     }
 }
 
@@ -1297,10 +1306,16 @@ private struct AutoRefreshRing: View {
 }
 
 #Preview {
+    let statusPreferences = GitHubStatusPreferences()
     ContentView(
         refreshService: .demo(),
         configurationStore: ProviderConfigurationStore(),
         historyStore: UsageHistoryStore(),
-        appUpdateController: AppUpdateController()
+        appUpdateController: AppUpdateController(),
+        githubStatusPreferences: statusPreferences,
+        githubStatusMonitor: GitHubStatusMonitor(
+            preferences: statusPreferences,
+            notifier: LocalUsageAlertNotifier.shared
+        )
     )
 }

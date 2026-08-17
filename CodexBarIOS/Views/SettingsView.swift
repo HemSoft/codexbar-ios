@@ -260,7 +260,7 @@ struct SettingsView: View {
     init(
         configurationStore: ProviderConfigurationStore,
         appUpdateController: AppUpdateController,
-        githubStatusPreferences: GitHubStatusPreferences? = nil,
+        githubStatusPreferences: GitHubStatusPreferences,
         initialRoute: SettingsInitialRoute? = nil,
         onAccountsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
@@ -269,7 +269,7 @@ struct SettingsView: View {
     ) {
         self.configurationStore = configurationStore
         self.appUpdateController = appUpdateController
-        self.githubStatusPreferences = githubStatusPreferences ?? GitHubStatusPreferences()
+        self.githubStatusPreferences = githubStatusPreferences
         self.onAccountsChanged = onAccountsChanged
         self.onAccountRefresh = onAccountRefresh
         self.onAlertAuthorizationRequest = onAlertAuthorizationRequest
@@ -1513,7 +1513,8 @@ extension ProviderID {
 #Preview {
     SettingsView(
         configurationStore: ProviderConfigurationStore(),
-        appUpdateController: AppUpdateController()
+        appUpdateController: AppUpdateController(),
+        githubStatusPreferences: GitHubStatusPreferences()
     )
 }
 
