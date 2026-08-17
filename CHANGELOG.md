@@ -6,6 +6,13 @@ building, testing, or releasing the app.
 
 ## 1.3.0 - Unreleased
 
+### Fixed
+
+- Made usage notifications name the affected account, metric, current or
+  projected percentage, and configured Warning or Critical Alert threshold,
+  with deterministic metric selection and explicit spend-limit wording.
+  ([#242](https://github.com/HemSoft/codexbar-ios/issues/242))
+
 ### Developer Experience
 
 - Made Apple Watch App Store screenshot capture wait for the requested scene,
