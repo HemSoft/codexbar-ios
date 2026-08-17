@@ -146,12 +146,21 @@ public enum GitHubStatusTransitionEvaluator {
 }
 
 public enum GitHubStatusFreshness {
+    public static let timelineRefreshInterval: TimeInterval = 60
+
+    public static func staleDate(
+        _ snapshot: GitHubServiceStatusSnapshot,
+        interval: GitHubStatusPollingInterval
+    ) -> Date {
+        snapshot.checkedAt.addingTimeInterval(max(interval.seconds * 2, 3_600))
+    }
+
     public static func isStale(
         _ snapshot: GitHubServiceStatusSnapshot,
         interval: GitHubStatusPollingInterval,
         now: Date = Date()
     ) -> Bool {
-        now.timeIntervalSince(snapshot.checkedAt) > max(interval.seconds * 2, 3_600)
+        now >= staleDate(snapshot, interval: interval)
     }
 }
 

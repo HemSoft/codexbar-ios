@@ -1089,6 +1089,32 @@ final class GitHubStatusTests: XCTestCase {
         )
     }
 
+    func testBannerFreshnessTimelineCrossesAtDeadline() {
+        let snapshot = Self.snapshot(
+            severity: .major,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-1"
+        )
+        let staleDate = GitHubStatusFreshness.staleDate(snapshot, interval: .thirtyMinutes)
+
+        XCTAssertEqual(staleDate, snapshot.checkedAt.addingTimeInterval(3_600))
+        XCTAssertEqual(GitHubStatusFreshness.timelineRefreshInterval, 60)
+        XCTAssertFalse(
+            GitHubStatusFreshness.isStale(
+                snapshot,
+                interval: .thirtyMinutes,
+                now: staleDate.addingTimeInterval(-1)
+            )
+        )
+        XCTAssertTrue(
+            GitHubStatusFreshness.isStale(
+                snapshot,
+                interval: .thirtyMinutes,
+                now: staleDate
+            )
+        )
+    }
+
     @MainActor
     func testMonitorDeliversNewIncidentNotification() async throws {
         let suiteName = "GitHubStatusTests.\(UUID().uuidString)"

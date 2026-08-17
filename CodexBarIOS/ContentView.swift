@@ -110,15 +110,21 @@ struct ContentView: View {
                             }
 
                             if let snapshot = visibleGitHubStatusSnapshot {
-                                GitHubStatusBanner(
-                                    snapshot: snapshot,
-                                    isStale: GitHubStatusFreshness.isStale(
-                                        snapshot,
-                                        interval: githubStatusPreferences.settings.pollingInterval
-                                    ),
-                                    statusCheckFailed: githubStatusPreferences.lastError != nil,
-                                    onDismiss: githubStatusPreferences.dismissCurrentBanner
-                                )
+                                TimelineView(.periodic(
+                                    from: snapshot.checkedAt,
+                                    by: GitHubStatusFreshness.timelineRefreshInterval
+                                )) { context in
+                                    GitHubStatusBanner(
+                                        snapshot: snapshot,
+                                        isStale: GitHubStatusFreshness.isStale(
+                                            snapshot,
+                                            interval: githubStatusPreferences.settings.pollingInterval,
+                                            now: context.date
+                                        ),
+                                        statusCheckFailed: githubStatusPreferences.lastError != nil,
+                                        onDismiss: githubStatusPreferences.dismissCurrentBanner
+                                    )
+                                }
                             }
 
                             if !cardItems.isEmpty,
