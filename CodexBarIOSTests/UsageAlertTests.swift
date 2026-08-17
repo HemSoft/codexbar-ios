@@ -1247,10 +1247,13 @@ final class GitHubStatusTests: XCTestCase {
             updateIdentity: "current"
         )
         await fetcher.complete(with: currentSnapshot)
-        while monitor.isRefreshing {
-            await Task.yield()
+        var waitAttempts = 0
+        while monitor.isRefreshing, waitAttempts < 100 {
+            waitAttempts += 1
+            try await Task.sleep(for: .milliseconds(10))
         }
 
+        XCTAssertFalse(monitor.isRefreshing, "Queued refresh did not finish within one second")
         XCTAssertEqual(preferences.snapshot, currentSnapshot)
         XCTAssertTrue(notifier.notifications.isEmpty)
 
