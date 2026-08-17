@@ -85,13 +85,13 @@ public struct GitHubServiceStatusSnapshot: Codable, Equatable, Sendable {
     public var bannerIdentity: String { "\(incidentIDs.joined(separator: ","))|\(updateIdentity)|\(severity.rawValue)" }
 }
 
-public enum GitHubStatusNotificationKind: Equatable, Sendable {
+public enum GitHubStatusNotificationKind: String, Codable, Equatable, Sendable {
     case incident
     case escalation
     case recovery
 }
 
-public struct GitHubStatusNotification: Equatable, Sendable {
+public struct GitHubStatusNotification: Codable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let body: String
@@ -187,8 +187,23 @@ public enum GitHubStatusParser {
             guard let leadIncident = ordered.first else {
                 throw GitHubStatusParsingError.invalidResponse
             }
-            let latestUpdate = leadIncident.incidentUpdates.max {
-                parsedDate($0.updatedAt) < parsedDate($1.updatedAt)
+            let latestUpdate = activeIncidents
+                .flatMap(\.incidentUpdates)
+                .max {
+                    let lhsDate = parsedDate($0.updatedAt)
+                    let rhsDate = parsedDate($1.updatedAt)
+                    if lhsDate != rhsDate {
+                        return lhsDate < rhsDate
+                    }
+                    return $0.id > $1.id
+                }
+            let latestIncident = activeIncidents.max {
+                let lhsDate = parsedDate($0.updatedAt)
+                let rhsDate = parsedDate($1.updatedAt)
+                if lhsDate != rhsDate {
+                    return lhsDate < rhsDate
+                }
+                return $0.id > $1.id
             }
             let summary = activeIncidents.count == 1
                 ? leadIncident.name
@@ -197,8 +212,9 @@ public enum GitHubStatusParser {
                 severity: severity,
                 summary: summary,
                 incidentIDs: activeIncidents.map(\.id).sorted(),
-                updateIdentity: latestUpdate?.id ?? leadIncident.id,
+                updateIdentity: latestUpdate?.id ?? latestIncident?.id ?? leadIncident.id,
                 updatedAt: latestUpdate.map { parsedDate($0.updatedAt) }
+                    ?? latestIncident.map { parsedDate($0.updatedAt) }
                     ?? parsedDate(leadIncident.updatedAt),
                 checkedAt: checkedAt,
                 detailsURL: leadIncident.shortlink.flatMap(URL.init(string:)) ?? statusURL
@@ -399,11 +415,19 @@ public final class GitHubStatusPreferences: ObservableObject {
 
     public func updateSettings(_ settings: GitHubStatusSettings) {
         self.settings = settings
+        state.pendingNotifications = pendingNotifications.filter { notification in
+            switch notification.kind {
+            case .incident, .escalation:
+                settings.isEnabled && settings.sendsIncidentNotifications
+            case .recovery:
+                settings.isEnabled && settings.sendsRecoveryNotifications
+            }
+        }
         if !settings.isEnabled {
             dismissedBannerIdentity = nil
             state.dismissedBannerIdentity = nil
-            saveState()
         }
+        saveState()
         if let data = try? JSONEncoder().encode(settings) {
             defaults.set(data, forKey: settingsKey)
         }
@@ -445,6 +469,23 @@ public final class GitHubStatusPreferences: ObservableObject {
         saveState()
     }
 
+    var pendingNotifications: [GitHubStatusNotification] {
+        state.pendingNotifications ?? []
+    }
+
+    func enqueueNotification(_ notification: GitHubStatusNotification) {
+        guard !pendingNotifications.contains(where: { $0.id == notification.id }) else {
+            return
+        }
+        state.pendingNotifications = pendingNotifications + [notification]
+        saveState()
+    }
+
+    func removePendingNotification(id: String) {
+        state.pendingNotifications = pendingNotifications.filter { $0.id != id }
+        saveState()
+    }
+
     private func saveState() {
         if let data = try? JSONEncoder().encode(state) {
             defaults.set(data, forKey: stateKey)
@@ -458,6 +499,7 @@ public final class GitHubStatusPreferences: ObservableObject {
         var lastError: String?
         var dismissedBannerIdentity: String?
         var consecutiveFailures = 0
+        var pendingNotifications: [GitHubStatusNotification]?
     }
 }
 
@@ -509,10 +551,14 @@ public final class GitHubStatusMonitor: ObservableObject {
                 current: snapshot,
                 settings: preferences.settings
             ) {
-                try? await notifier.deliverGitHubStatus(notification)
+                preferences.enqueueNotification(notification)
             }
             preferences.recordSuccess(snapshot)
+            await deliverPendingNotifications()
+        } catch is CancellationError {
+            return
         } catch {
+            guard !Task.isCancelled else { return }
             preferences.recordFailure(error, attemptedAt: now)
         }
     }
@@ -552,5 +598,19 @@ public final class GitHubStatusMonitor: ObservableObject {
             )
         }
         #endif
+    }
+
+    private func deliverPendingNotifications() async {
+        for notification in preferences.pendingNotifications {
+            do {
+                try await notifier.deliverGitHubStatus(notification)
+                preferences.removePendingNotification(id: notification.id)
+            } catch {
+                Self.logger.error(
+                    "GitHub status notification delivery failed: \(error.localizedDescription, privacy: .public)"
+                )
+                return
+            }
+        }
     }
 }

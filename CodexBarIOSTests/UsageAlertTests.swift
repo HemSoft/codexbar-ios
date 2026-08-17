@@ -902,6 +902,34 @@ final class GitHubStatusTests: XCTestCase {
         XCTAssertEqual(snapshot.updateIdentity, "a-incident")
     }
 
+    func testSecondaryIncidentLatestUpdateChangesBannerIdentity() throws {
+        let data = Data(
+            """
+            {
+              "components": [],
+              "incidents": [
+                {"id": "a-incident", "name": "Alpha", "status": "investigating",
+                 "impact": "major", "updated_at": "2026-08-17T15:00:00Z",
+                 "shortlink": null, "incident_updates": [
+                   {"id": "alpha-update", "updated_at": "2026-08-17T15:00:00Z"}
+                 ]},
+                {"id": "b-incident", "name": "Beta", "status": "monitoring",
+                 "impact": "minor", "updated_at": "2026-08-17T15:05:00Z",
+                 "shortlink": null, "incident_updates": [
+                   {"id": "beta-update", "updated_at": "2026-08-17T15:05:00Z"}
+                 ]}
+              ],
+              "status": {"indicator": "major", "description": "Partial outage"}
+            }
+            """.utf8
+        )
+
+        let snapshot = try GitHubStatusParser.parse(data)
+
+        XCTAssertEqual(snapshot.summary, "Alpha and 1 more incident")
+        XCTAssertEqual(snapshot.updateIdentity, "beta-update")
+    }
+
     @MainActor
     func testPreferencesAreOffByDefaultAndPersistIndependentChoices() throws {
         let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
@@ -1048,6 +1076,62 @@ final class GitHubStatusTests: XCTestCase {
     }
 
     @MainActor
+    func testMonitorRetriesNotificationAfterDeliveryFailure() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        preferences.updateSettings(
+            GitHubStatusSettings(
+                isEnabled: true,
+                sendsIncidentNotifications: true
+            )
+        )
+        let incident = Self.snapshot(
+            severity: .major,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-1"
+        )
+        let notifier = RecordingGitHubStatusNotifier(failuresRemaining: 1)
+        let firstMonitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: StubGitHubStatusFetcher(results: [.success(incident)]),
+            notifier: notifier
+        )
+
+        await firstMonitor.refreshIfDue(force: true, now: incident.checkedAt)
+        XCTAssertTrue(notifier.notifications.isEmpty)
+
+        let reloadedPreferences = GitHubStatusPreferences(defaults: defaults)
+        let retryMonitor = GitHubStatusMonitor(
+            preferences: reloadedPreferences,
+            fetcher: StubGitHubStatusFetcher(results: [.success(incident)]),
+            notifier: notifier
+        )
+        await retryMonitor.refreshIfDue(force: true, now: incident.checkedAt.addingTimeInterval(1))
+        XCTAssertEqual(notifier.notifications.map(\.kind), [.incident])
+    }
+
+    @MainActor
+    func testMonitorIgnoresCancellationWithoutRecordingFailure() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        preferences.updateSettings(GitHubStatusSettings(isEnabled: true))
+        let monitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: StubGitHubStatusFetcher(results: [.failure(CancellationError())]),
+            notifier: RecordingGitHubStatusNotifier()
+        )
+
+        await monitor.refreshIfDue(force: true)
+
+        XCTAssertNil(preferences.lastChecked)
+        XCTAssertNil(preferences.lastError)
+    }
+
+    @MainActor
     func testFetchFailurePreservesLastKnownIncidentAndMarksItStale() async throws {
         let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -1132,8 +1216,17 @@ private actor StubGitHubStatusFetcher: GitHubStatusFetching {
 @MainActor
 private final class RecordingGitHubStatusNotifier: GitHubStatusNotifying {
     private(set) var notifications: [GitHubStatusNotification] = []
+    private var failuresRemaining: Int
+
+    init(failuresRemaining: Int = 0) {
+        self.failuresRemaining = failuresRemaining
+    }
 
     func deliverGitHubStatus(_ notification: GitHubStatusNotification) async throws {
+        if failuresRemaining > 0 {
+            failuresRemaining -= 1
+            throw GitHubStatusParsingError.invalidResponse
+        }
         notifications.append(notification)
     }
 }

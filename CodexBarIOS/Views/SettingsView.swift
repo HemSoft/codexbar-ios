@@ -248,6 +248,9 @@ struct SettingsView: View {
     @State private var isConfirmingConfigurationReplacement = false
     @State private var isConfirmingGroupReplacement = false
     @State private var alertPermissionMessage: String?
+    @State private var githubStatusPermissionMessage: String?
+    @State private var githubIncidentAuthorizationRequestID: UUID?
+    @State private var githubRecoveryAuthorizationRequestID: UUID?
     @State private var addAccountFlowRequest: AddAccountFlowRequest?
     @State private var addAccountRefreshState = AddAccountRefreshState()
     @State private var newGroupName = ""
@@ -761,7 +764,11 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if alertPermissionMessage != nil {
+                if let githubStatusPermissionMessage {
+                    Text(githubStatusPermissionMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
                     Button("Open System Notification Settings") {
                         guard let url = URL(string: UIApplication.openNotificationSettingsURLString)
                         else { return }
@@ -994,6 +1001,10 @@ struct SettingsView: View {
                 githubStatusPreferences.updateSettings(settings)
                 if isEnabled {
                     Task { await onGitHubStatusRefresh() }
+                } else {
+                    githubIncidentAuthorizationRequestID = nil
+                    githubRecoveryAuthorizationRequestID = nil
+                    githubStatusPermissionMessage = nil
                 }
             }
         )
@@ -1023,7 +1034,10 @@ struct SettingsView: View {
 
     private var githubStatusIncidentNotificationsBinding: Binding<Bool> {
         Binding(
-            get: { githubStatusPreferences.settings.sendsIncidentNotifications },
+            get: {
+                githubStatusPreferences.settings.sendsIncidentNotifications
+                    || githubIncidentAuthorizationRequestID != nil
+            },
             set: { isEnabled in
                 updateGitHubStatusNotificationSetting(isEnabled: isEnabled, recovery: false)
             }
@@ -1032,7 +1046,10 @@ struct SettingsView: View {
 
     private var githubStatusRecoveryNotificationsBinding: Binding<Bool> {
         Binding(
-            get: { githubStatusPreferences.settings.sendsRecoveryNotifications },
+            get: {
+                githubStatusPreferences.settings.sendsRecoveryNotifications
+                    || githubRecoveryAuthorizationRequestID != nil
+            },
             set: { isEnabled in
                 updateGitHubStatusNotificationSetting(isEnabled: isEnabled, recovery: true)
             }
@@ -1048,6 +1065,11 @@ struct SettingsView: View {
 
     private func updateGitHubStatusNotificationSetting(isEnabled: Bool, recovery: Bool) {
         guard isEnabled else {
+            if recovery {
+                githubRecoveryAuthorizationRequestID = nil
+            } else {
+                githubIncidentAuthorizationRequestID = nil
+            }
             var settings = githubStatusPreferences.settings
             if recovery {
                 settings.sendsRecoveryNotifications = false
@@ -1055,11 +1077,28 @@ struct SettingsView: View {
                 settings.sendsIncidentNotifications = false
             }
             githubStatusPreferences.updateSettings(settings)
+            githubStatusPermissionMessage = nil
             return
+        }
+
+        let requestID = UUID()
+        if recovery {
+            githubRecoveryAuthorizationRequestID = requestID
+        } else {
+            githubIncidentAuthorizationRequestID = requestID
         }
 
         Task {
             let granted = await onAlertAuthorizationRequest()
+            let activeRequestID = recovery
+                ? githubRecoveryAuthorizationRequestID
+                : githubIncidentAuthorizationRequestID
+            guard activeRequestID == requestID else { return }
+            if recovery {
+                githubRecoveryAuthorizationRequestID = nil
+            } else {
+                githubIncidentAuthorizationRequestID = nil
+            }
             var settings = githubStatusPreferences.settings
             if recovery {
                 settings.sendsRecoveryNotifications = granted
@@ -1067,7 +1106,7 @@ struct SettingsView: View {
                 settings.sendsIncidentNotifications = granted
             }
             githubStatusPreferences.updateSettings(settings)
-            alertPermissionMessage = granted ? nil : "Notifications are disabled for CodexBar."
+            githubStatusPermissionMessage = granted ? nil : "Notifications are disabled for CodexBar."
         }
     }
 
