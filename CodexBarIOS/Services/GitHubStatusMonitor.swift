@@ -187,24 +187,16 @@ public enum GitHubStatusParser {
             guard let leadIncident = ordered.first else {
                 throw GitHubStatusParsingError.invalidResponse
             }
-            let latestUpdate = activeIncidents
-                .flatMap(\.incidentUpdates)
-                .max {
-                    let lhsDate = parsedDate($0.updatedAt)
-                    let rhsDate = parsedDate($1.updatedAt)
-                    if lhsDate != rhsDate {
-                        return lhsDate < rhsDate
-                    }
-                    return $0.id > $1.id
-                }
-            let latestIncident = activeIncidents.max {
-                let lhsDate = parsedDate($0.updatedAt)
-                let rhsDate = parsedDate($1.updatedAt)
-                if lhsDate != rhsDate {
-                    return lhsDate < rhsDate
-                }
-                return $0.id > $1.id
-            }
+            let latestUpdate = latest(
+                in: activeIncidents.flatMap(\.incidentUpdates),
+                updatedAt: \.updatedAt,
+                id: \.id
+            )
+            let latestIncident = latest(
+                in: activeIncidents,
+                updatedAt: \.updatedAt,
+                id: \.id
+            )
             let summary = activeIncidents.count == 1
                 ? leadIncident.name
                 : "\(leadIncident.name) and \(activeIncidents.count - 1) more incident\(activeIncidents.count == 2 ? "" : "s")"
@@ -290,6 +282,21 @@ public enum GitHubStatusParser {
             return date
         }
         return ISO8601DateFormatter().date(from: value) ?? .distantPast
+    }
+
+    private static func latest<Element>(
+        in values: [Element],
+        updatedAt: KeyPath<Element, String>,
+        id: KeyPath<Element, String>
+    ) -> Element? {
+        values.max {
+            let lhsDate = parsedDate($0[keyPath: updatedAt])
+            let rhsDate = parsedDate($1[keyPath: updatedAt])
+            if lhsDate != rhsDate {
+                return lhsDate < rhsDate
+            }
+            return $0[keyPath: id] > $1[keyPath: id]
+        }
     }
 }
 
@@ -547,6 +554,7 @@ public final class GitHubStatusMonitor: ObservableObject {
         }
         let previous = preferences.snapshot
         do {
+            await deliverPendingNotifications()
             let snapshot = try await fetcher.fetchStatus(checkedAt: now)
             if let notification = GitHubStatusTransitionEvaluator.notification(
                 previous: previous,
@@ -611,6 +619,7 @@ public final class GitHubStatusMonitor: ObservableObject {
                 Self.logger.error(
                     "GitHub status notification delivery failed: \(error.localizedDescription, privacy: .public)"
                 )
+                // Keep strict ordering so a recovery cannot arrive before its undelivered incident.
                 return
             }
         }

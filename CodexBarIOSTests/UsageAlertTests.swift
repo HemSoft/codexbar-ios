@@ -1119,7 +1119,7 @@ final class GitHubStatusTests: XCTestCase {
     }
 
     @MainActor
-    func testMonitorRetriesNotificationAfterDeliveryFailure() async throws {
+    func testMonitorRetriesNotificationBeforeNextFetchSucceeds() async throws {
         let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1148,7 +1148,7 @@ final class GitHubStatusTests: XCTestCase {
         let reloadedPreferences = GitHubStatusPreferences(defaults: defaults)
         let retryMonitor = GitHubStatusMonitor(
             preferences: reloadedPreferences,
-            fetcher: StubGitHubStatusFetcher(results: [.success(incident)]),
+            fetcher: StubGitHubStatusFetcher(results: [.failure(GitHubStatusParsingError.invalidResponse)]),
             notifier: notifier
         )
         await retryMonitor.refreshIfDue(force: true, now: incident.checkedAt.addingTimeInterval(1))
