@@ -205,15 +205,20 @@ enum SettingsCategorySummary {
 
     static func alerts(
         isEnabled: Bool,
+        githubStatusEnabled: Bool = false,
         warningThreshold: Double,
         criticalThreshold: Double
     ) -> String {
-        guard isEnabled else {
+        guard isEnabled || githubStatusEnabled else {
             return "Off"
+        }
+        guard isEnabled else {
+            return "GitHub status on"
         }
         let warningPercent = Int((warningThreshold * 100).rounded())
         let criticalPercent = Int((criticalThreshold * 100).rounded())
-        return "On · Warning \(warningPercent)% · Critical \(criticalPercent)%"
+        let statusSuffix = githubStatusEnabled ? " · GitHub status on" : ""
+        return "On · Warning \(warningPercent)% · Critical \(criticalPercent)%\(statusSuffix)"
     }
 
     static func help(installedVersion: String, availableVersion: String?) -> String {
@@ -231,9 +236,11 @@ enum SettingsCategorySummary {
 struct SettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var appUpdateController: AppUpdateController
+    @ObservedObject var githubStatusPreferences: GitHubStatusPreferences
     var onAccountsChanged: @MainActor () -> Void = {}
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onAlertAuthorizationRequest: @MainActor () async -> Bool = { false }
+    var onGitHubStatusRefresh: @MainActor () async -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.requestReview) private var requestReview
@@ -241,6 +248,9 @@ struct SettingsView: View {
     @State private var isConfirmingConfigurationReplacement = false
     @State private var isConfirmingGroupReplacement = false
     @State private var alertPermissionMessage: String?
+    @State private var githubStatusPermissionMessage: String?
+    @State private var githubIncidentAuthorizationRequestID: UUID?
+    @State private var githubRecoveryAuthorizationRequestID: UUID?
     @State private var addAccountFlowRequest: AddAccountFlowRequest?
     @State private var addAccountRefreshState = AddAccountRefreshState()
     @State private var newGroupName = ""
@@ -253,16 +263,20 @@ struct SettingsView: View {
     init(
         configurationStore: ProviderConfigurationStore,
         appUpdateController: AppUpdateController,
+        githubStatusPreferences: GitHubStatusPreferences,
         initialRoute: SettingsInitialRoute? = nil,
         onAccountsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
-        onAlertAuthorizationRequest: @escaping @MainActor () async -> Bool = { false }
+        onAlertAuthorizationRequest: @escaping @MainActor () async -> Bool = { false },
+        onGitHubStatusRefresh: @escaping @MainActor () async -> Void = {}
     ) {
         self.configurationStore = configurationStore
         self.appUpdateController = appUpdateController
+        self.githubStatusPreferences = githubStatusPreferences
         self.onAccountsChanged = onAccountsChanged
         self.onAccountRefresh = onAccountRefresh
         self.onAlertAuthorizationRequest = onAlertAuthorizationRequest
+        self.onGitHubStatusRefresh = onGitHubStatusRefresh
         _selectedDestination = State(initialValue: initialRoute?.destination)
     }
 
@@ -485,6 +499,7 @@ struct SettingsView: View {
         case .alerts:
             SettingsCategorySummary.alerts(
                 isEnabled: configurationStore.usageAlertSettings.isEnabled,
+                githubStatusEnabled: githubStatusPreferences.settings.isEnabled,
                 warningThreshold: configurationStore.usageAlertSettings.warningThreshold,
                 criticalThreshold: configurationStore.usageAlertSettings.criticalThreshold
             )
@@ -711,6 +726,64 @@ struct SettingsView: View {
             } footer: {
                 Text("Warning applies first. Critical Alert must be at least one percentage point higher. Projected usage uses the same thresholds.")
             }
+
+            Section {
+                Toggle("Monitor GitHub Service Status", isOn: githubStatusEnabledBinding)
+
+                Picker("Check Interval", selection: githubStatusIntervalBinding) {
+                    ForEach(GitHubStatusPollingInterval.allCases) { interval in
+                        Text(interval.displayName).tag(interval)
+                    }
+                }
+                .disabled(!githubStatusPreferences.settings.isEnabled)
+
+                Toggle("In-App Status Banner", isOn: githubStatusBannerBinding)
+                    .disabled(!githubStatusPreferences.settings.isEnabled)
+
+                Toggle("Incident Notifications", isOn: githubStatusIncidentNotificationsBinding)
+                    .disabled(!githubStatusPreferences.settings.isEnabled)
+
+                Toggle("Recovery Notifications", isOn: githubStatusRecoveryNotificationsBinding)
+                    .disabled(!githubStatusPreferences.settings.isEnabled)
+
+                LabeledContent("Last Checked", value: githubStatusLastCheckedText)
+
+                Button("Check GitHub Status Now") {
+                    Task { await onGitHubStatusRefresh() }
+                }
+                .disabled(!githubStatusPreferences.settings.isEnabled)
+
+                Link(
+                    "Open GitHub Status",
+                    destination: URL(string: "https://www.githubstatus.com")!
+                )
+
+                if let error = githubStatusPreferences.lastError {
+                    Text("\(error) A failed check is not treated as a GitHub outage.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let githubStatusPermissionMessage {
+                    Text(githubStatusPermissionMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Button("Open System Notification Settings") {
+                        guard let url = URL(string: UIApplication.openNotificationSettingsURLString)
+                        else { return }
+                        UIApplication.shared.open(url)
+                    }
+                }
+            } header: {
+                Text("GitHub Service Status")
+            } footer: {
+                Text(
+                    "Monitoring is off by default. The interval is a target: iOS may defer "
+                        + "background checks to preserve battery. Status comes from GitHub's public "
+                        + "Statuspage API and does not use an account or token."
+                )
+            }
         }
         .navigationTitle(SettingsDestination.alerts.title)
     }
@@ -917,6 +990,124 @@ struct SettingsView: View {
                 }
             }
         )
+    }
+
+    private var githubStatusEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { githubStatusPreferences.settings.isEnabled },
+            set: { isEnabled in
+                var settings = githubStatusPreferences.settings
+                settings.isEnabled = isEnabled
+                githubStatusPreferences.updateSettings(settings)
+                if isEnabled {
+                    Task { await onGitHubStatusRefresh() }
+                } else {
+                    githubIncidentAuthorizationRequestID = nil
+                    githubRecoveryAuthorizationRequestID = nil
+                    githubStatusPermissionMessage = nil
+                }
+            }
+        )
+    }
+
+    private var githubStatusIntervalBinding: Binding<GitHubStatusPollingInterval> {
+        Binding(
+            get: { githubStatusPreferences.settings.pollingInterval },
+            set: { interval in
+                var settings = githubStatusPreferences.settings
+                settings.pollingInterval = interval
+                githubStatusPreferences.updateSettings(settings)
+            }
+        )
+    }
+
+    private var githubStatusBannerBinding: Binding<Bool> {
+        Binding(
+            get: { githubStatusPreferences.settings.showsInAppBanner },
+            set: { showsBanner in
+                var settings = githubStatusPreferences.settings
+                settings.showsInAppBanner = showsBanner
+                githubStatusPreferences.updateSettings(settings)
+            }
+        )
+    }
+
+    private var githubStatusIncidentNotificationsBinding: Binding<Bool> {
+        Binding(
+            get: {
+                githubStatusPreferences.settings.sendsIncidentNotifications
+                    || githubIncidentAuthorizationRequestID != nil
+            },
+            set: { isEnabled in
+                updateGitHubStatusNotificationSetting(isEnabled: isEnabled, recovery: false)
+            }
+        )
+    }
+
+    private var githubStatusRecoveryNotificationsBinding: Binding<Bool> {
+        Binding(
+            get: {
+                githubStatusPreferences.settings.sendsRecoveryNotifications
+                    || githubRecoveryAuthorizationRequestID != nil
+            },
+            set: { isEnabled in
+                updateGitHubStatusNotificationSetting(isEnabled: isEnabled, recovery: true)
+            }
+        )
+    }
+
+    private var githubStatusLastCheckedText: String {
+        guard let lastChecked = githubStatusPreferences.lastChecked else {
+            return "Never"
+        }
+        return UserFacingDateTimeFormatter.current.dateAndTime(lastChecked)
+    }
+
+    private func updateGitHubStatusNotificationSetting(isEnabled: Bool, recovery: Bool) {
+        guard isEnabled else {
+            if recovery {
+                githubRecoveryAuthorizationRequestID = nil
+            } else {
+                githubIncidentAuthorizationRequestID = nil
+            }
+            var settings = githubStatusPreferences.settings
+            if recovery {
+                settings.sendsRecoveryNotifications = false
+            } else {
+                settings.sendsIncidentNotifications = false
+            }
+            githubStatusPreferences.updateSettings(settings)
+            githubStatusPermissionMessage = nil
+            return
+        }
+
+        let requestID = UUID()
+        if recovery {
+            githubRecoveryAuthorizationRequestID = requestID
+        } else {
+            githubIncidentAuthorizationRequestID = requestID
+        }
+
+        Task {
+            let granted = await onAlertAuthorizationRequest()
+            let activeRequestID = recovery
+                ? githubRecoveryAuthorizationRequestID
+                : githubIncidentAuthorizationRequestID
+            guard activeRequestID == requestID else { return }
+            if recovery {
+                githubRecoveryAuthorizationRequestID = nil
+            } else {
+                githubIncidentAuthorizationRequestID = nil
+            }
+            var settings = githubStatusPreferences.settings
+            if recovery {
+                settings.sendsRecoveryNotifications = granted
+            } else {
+                settings.sendsIncidentNotifications = granted
+            }
+            githubStatusPreferences.updateSettings(settings)
+            githubStatusPermissionMessage = granted ? nil : "Notifications are disabled for CodexBar."
+        }
     }
 
     private var usageAlertWarningPercent: Double {
@@ -1361,7 +1552,8 @@ extension ProviderID {
 #Preview {
     SettingsView(
         configurationStore: ProviderConfigurationStore(),
-        appUpdateController: AppUpdateController()
+        appUpdateController: AppUpdateController(),
+        githubStatusPreferences: GitHubStatusPreferences()
     )
 }
 

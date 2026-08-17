@@ -1,3 +1,4 @@
+import BackgroundTasks
 import SwiftUI
 
 @main
@@ -6,12 +7,22 @@ struct CodexBarIOSApp: App {
     @StateObject private var configurationStore: ProviderConfigurationStore
     @StateObject private var historyStore: UsageHistoryStore
     @StateObject private var appUpdateController = AppUpdateController()
+    @StateObject private var githubStatusPreferences: GitHubStatusPreferences
+    @StateObject private var githubStatusMonitor: GitHubStatusMonitor
     #if DEBUG
     private let screenshotConfiguration = AppStoreScreenshotConfiguration.current
     @State private var debugProviderSettingsProviderID = DebugLaunchRoute.providerSettingsProviderID
     #endif
 
     init() {
+        let statusPreferences = GitHubStatusPreferences()
+        _githubStatusPreferences = StateObject(wrappedValue: statusPreferences)
+        _githubStatusMonitor = StateObject(
+            wrappedValue: GitHubStatusMonitor(
+                preferences: statusPreferences,
+                notifier: LocalUsageAlertNotifier.shared
+            )
+        )
         #if DEBUG
         if let screenshotConfiguration {
             let configurationStore = ProviderConfigurationStore.appStoreScreenshotDemo()
@@ -76,6 +87,11 @@ struct CodexBarIOSApp: App {
                     #endif
                 }
         }
+        .backgroundTask(
+            .appRefresh(GitHubStatusMonitor.backgroundTaskIdentifier)
+        ) {
+            await githubStatusMonitor.performBackgroundRefresh()
+        }
     }
 
     @ViewBuilder
@@ -114,6 +130,8 @@ struct CodexBarIOSApp: App {
             configurationStore: configurationStore,
             historyStore: historyStore,
             appUpdateController: appUpdateController,
+            githubStatusPreferences: githubStatusPreferences,
+            githubStatusMonitor: githubStatusMonitor,
             performsLifecycleWork: performsLifecycleWork
         )
     }
@@ -134,6 +152,7 @@ struct CodexBarIOSApp: App {
             SettingsView(
                 configurationStore: configurationStore,
                 appUpdateController: appUpdateController,
+                githubStatusPreferences: githubStatusPreferences,
                 initialRoute: .accounts
             )
         case .providerCopilot:

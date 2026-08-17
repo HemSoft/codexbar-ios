@@ -10,6 +10,8 @@ struct ContentView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var historyStore: UsageHistoryStore
     @ObservedObject var appUpdateController: AppUpdateController
+    @ObservedObject var githubStatusPreferences: GitHubStatusPreferences
+    @ObservedObject var githubStatusMonitor: GitHubStatusMonitor
     @StateObject private var orchestrator: DashboardOrchestrator
     @StateObject private var claudeAuthenticationController: DashboardClaudeAuthenticationController
     private let performsLifecycleWork: Bool
@@ -34,6 +36,8 @@ struct ContentView: View {
         configurationStore: ProviderConfigurationStore,
         historyStore: UsageHistoryStore,
         appUpdateController: AppUpdateController,
+        githubStatusPreferences: GitHubStatusPreferences,
+        githubStatusMonitor: GitHubStatusMonitor,
         usageAlertNotifier: (any UsageAlertNotifying)? = nil,
         appReviewPromptPolicy: AppReviewPromptPolicy = AppReviewPromptPolicy(),
         performsLifecycleWork: Bool = true
@@ -42,6 +46,8 @@ struct ContentView: View {
         self.configurationStore = configurationStore
         self.historyStore = historyStore
         self.appUpdateController = appUpdateController
+        self.githubStatusPreferences = githubStatusPreferences
+        self.githubStatusMonitor = githubStatusMonitor
         self.performsLifecycleWork = performsLifecycleWork
         let orchestrator = DashboardOrchestrator(
             refreshService: refreshService,
@@ -100,6 +106,24 @@ struct ContentView: View {
                                         .buttonStyle(.bordered)
                                         .accessibilityIdentifier("reset-corrupted-usage-history")
                                     }
+                                }
+                            }
+
+                            if let snapshot = visibleGitHubStatusSnapshot {
+                                TimelineView(.periodic(
+                                    from: snapshot.checkedAt,
+                                    by: GitHubStatusFreshness.timelineRefreshInterval
+                                )) { context in
+                                    GitHubStatusBanner(
+                                        snapshot: snapshot,
+                                        isStale: GitHubStatusFreshness.isStale(
+                                            snapshot,
+                                            interval: githubStatusPreferences.settings.pollingInterval,
+                                            now: context.date
+                                        ),
+                                        statusCheckFailed: githubStatusPreferences.lastError != nil,
+                                        onDismiss: githubStatusPreferences.dismissCurrentBanner
+                                    )
                                 }
                             }
 
@@ -317,6 +341,7 @@ struct ContentView: View {
                 SettingsView(
                     configurationStore: configurationStore,
                     appUpdateController: appUpdateController,
+                    githubStatusPreferences: githubStatusPreferences,
                     onAccountsChanged: {
                         Task {
                             _ = await orchestrator.refreshNow()
@@ -327,6 +352,9 @@ struct ContentView: View {
                     },
                     onAlertAuthorizationRequest: {
                         await orchestrator.requestAlertAuthorization()
+                    },
+                    onGitHubStatusRefresh: {
+                        await githubStatusMonitor.refreshIfDue(force: true)
                     }
                 )
             }
@@ -447,6 +475,10 @@ struct ContentView: View {
             }
             await orchestrator.runAutoRefreshLoop()
         }
+        .task(id: githubStatusPreferences.settings) {
+            guard performsLifecycleWork else { return }
+            await githubStatusMonitor.runForegroundLoop()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
             guard performsLifecycleWork else { return }
             Task { await orchestrator.handleSystemDateTimeChange() }
@@ -459,6 +491,18 @@ struct ContentView: View {
             \.usageSeverityThresholds,
             configurationStore.usageAlertSettings.severityThresholds
         )
+    }
+
+    private var visibleGitHubStatusSnapshot: GitHubServiceStatusSnapshot? {
+        guard githubStatusPreferences.settings.isEnabled,
+              githubStatusPreferences.settings.showsInAppBanner,
+              let snapshot = githubStatusPreferences.snapshot,
+              snapshot.isActive,
+              snapshot.bannerIdentity != githubStatusPreferences.dismissedBannerIdentity
+        else {
+            return nil
+        }
+        return snapshot
     }
 
     @ViewBuilder
@@ -897,6 +941,78 @@ struct ContentView: View {
     }
 }
 
+private struct GitHubStatusBanner: View {
+    let snapshot: GitHubServiceStatusSnapshot
+    let isStale: Bool
+    let statusCheckFailed: Bool
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Label(snapshot.severity.displayName, systemImage: snapshot.severity.systemImage)
+                    .font(.headline)
+                    .foregroundStyle(severityColor)
+                Spacer(minLength: 8)
+                Button("Dismiss", systemImage: "xmark", action: onDismiss)
+                    .labelStyle(.iconOnly)
+                    .accessibilityHint("Hides this update. A new incident update can appear later.")
+            }
+
+            Text(snapshot.summary)
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(freshnessText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Link(destination: snapshot.detailsURL) {
+                Label("Open GitHub Status", systemImage: "arrow.up.right.square")
+            }
+            .font(.footnote.weight(.semibold))
+        }
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(severityColor, lineWidth: 2)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("github-service-status-banner")
+    }
+
+    private var freshnessText: String {
+        let updated = UserFacingDateTimeFormatter.current.dateAndTime(snapshot.updatedAt)
+        return GitHubStatusBannerMessage.freshness(
+            updatedAt: updated,
+            isStale: isStale,
+            statusCheckFailed: statusCheckFailed
+        )
+    }
+
+    private var severityColor: Color {
+        switch snapshot.severity {
+        case .operational: .green
+        case .minor: .orange
+        case .major, .critical: .red
+        }
+    }
+}
+
+enum GitHubStatusBannerMessage {
+    static func freshness(updatedAt: String, isStale: Bool, statusCheckFailed: Bool) -> String {
+        if statusCheckFailed {
+            return "Last known status, updated \(updatedAt). A recent status check was unavailable; this is not a newly confirmed outage."
+        }
+        if isStale {
+            return "Last known status, updated \(updatedAt). This status is stale because a newer check has not completed."
+        }
+        return "GitHub updated this status \(updatedAt)."
+    }
+}
+
 struct DashboardDeepLinkNavigationState: Equatable {
     private(set) var accountID: String?
     private(set) var waitsForRefresh = false
@@ -1196,10 +1312,16 @@ private struct AutoRefreshRing: View {
 }
 
 #Preview {
+    let statusPreferences = GitHubStatusPreferences()
     ContentView(
         refreshService: .demo(),
         configurationStore: ProviderConfigurationStore(),
         historyStore: UsageHistoryStore(),
-        appUpdateController: AppUpdateController()
+        appUpdateController: AppUpdateController(),
+        githubStatusPreferences: statusPreferences,
+        githubStatusMonitor: GitHubStatusMonitor(
+            preferences: statusPreferences,
+            notifier: LocalUsageAlertNotifier.shared
+        )
     )
 }

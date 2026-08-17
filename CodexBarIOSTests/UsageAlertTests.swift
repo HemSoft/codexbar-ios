@@ -794,3 +794,667 @@ final class UsageAlertTests: XCTestCase {
         )
     }
 }
+
+final class GitHubStatusTests: XCTestCase {
+    func testStatuspageIncidentParsingUsesLatestUpdateAndWorstSeverity() throws {
+        let checkedAt = Date(timeIntervalSince1970: 2_000)
+        let data = Data(
+            """
+            {
+              "components": [],
+              "incidents": [{
+                "id": "incident-1",
+                "name": "Actions is unavailable",
+                "status": "investigating",
+                "impact": "critical",
+                "updated_at": "2026-08-17T15:00:00Z",
+                "shortlink": "https://www.githubstatus.com/incidents/abc",
+                "incident_updates": [
+                  {"id": "update-1", "updated_at": "2026-08-17T15:00:00Z"},
+                  {"id": "update-2", "updated_at": "2026-08-17T15:10:00Z"}
+                ]
+              }],
+              "status": {"indicator": "critical", "description": "Major outage"}
+            }
+            """.utf8
+        )
+
+        let snapshot = try GitHubStatusParser.parse(data, checkedAt: checkedAt)
+
+        XCTAssertEqual(snapshot.severity, .critical)
+        XCTAssertEqual(snapshot.summary, "Actions is unavailable")
+        XCTAssertEqual(snapshot.incidentIDs, ["incident-1"])
+        XCTAssertEqual(snapshot.updateIdentity, "update-2")
+        XCTAssertEqual(snapshot.checkedAt, checkedAt)
+        XCTAssertEqual(snapshot.detailsURL.absoluteString, "https://www.githubstatus.com/incidents/abc")
+    }
+
+    func testComponentDegradationMapsWithoutInventingIncident() throws {
+        let data = Data(
+            """
+            {
+              "components": [
+                {"id": "api", "name": "API Requests", "status": "partial_outage",
+                 "updated_at": "2026-08-17T15:10:00Z", "group": false},
+                {"id": "web", "name": "Git Operations", "status": "operational",
+                 "updated_at": "2026-08-17T15:10:00Z", "group": false}
+              ],
+              "incidents": [],
+              "status": {"indicator": "major", "description": "Partial outage"}
+            }
+            """.utf8
+        )
+
+        let snapshot = try GitHubStatusParser.parse(data)
+
+        XCTAssertEqual(snapshot.severity, .major)
+        XCTAssertEqual(snapshot.summary, "Affected components: API Requests")
+        XCTAssertEqual(snapshot.incidentIDs, ["component:api"])
+    }
+
+    func testNoImpactIncidentDoesNotCreateOutage() throws {
+        let data = Data(
+            """
+            {
+              "components": [],
+              "incidents": [{
+                "id": "informational",
+                "name": "Informational update",
+                "status": "monitoring",
+                "impact": "none",
+                "updated_at": "2026-08-17T15:00:00Z",
+                "shortlink": null,
+                "incident_updates": []
+              }],
+              "status": {"indicator": "none", "description": "All Systems Operational"}
+            }
+            """.utf8
+        )
+
+        let snapshot = try GitHubStatusParser.parse(data)
+
+        XCTAssertEqual(snapshot.severity, .operational)
+        XCTAssertFalse(snapshot.isActive)
+        XCTAssertTrue(snapshot.incidentIDs.isEmpty)
+    }
+
+    func testSameSeverityIncidentsChooseLeadDeterministically() throws {
+        let data = Data(
+            """
+            {
+              "components": [],
+              "incidents": [
+                {"id": "z-incident", "name": "Zulu", "status": "investigating",
+                 "impact": "major", "updated_at": "2026-08-17T15:00:00Z",
+                 "shortlink": null, "incident_updates": []},
+                {"id": "a-incident", "name": "Alpha", "status": "investigating",
+                 "impact": "major", "updated_at": "2026-08-17T15:00:00Z",
+                 "shortlink": null, "incident_updates": []}
+              ],
+              "status": {"indicator": "major", "description": "Partial outage"}
+            }
+            """.utf8
+        )
+
+        let snapshot = try GitHubStatusParser.parse(data)
+
+        XCTAssertEqual(snapshot.summary, "Alpha and 1 more incident")
+        XCTAssertEqual(snapshot.updateIdentity, "a-incident")
+    }
+
+    func testSecondaryIncidentLatestUpdateChangesBannerIdentity() throws {
+        let data = Data(
+            """
+            {
+              "components": [],
+              "incidents": [
+                {"id": "a-incident", "name": "Alpha", "status": "investigating",
+                 "impact": "major", "updated_at": "2026-08-17T15:00:00Z",
+                 "shortlink": null, "incident_updates": [
+                   {"id": "alpha-update", "updated_at": "2026-08-17T15:00:00Z"}
+                 ]},
+                {"id": "b-incident", "name": "Beta", "status": "monitoring",
+                 "impact": "minor", "updated_at": "2026-08-17T15:05:00Z",
+                 "shortlink": null, "incident_updates": [
+                   {"id": "beta-update", "updated_at": "2026-08-17T15:05:00Z"}
+                 ]}
+              ],
+              "status": {"indicator": "major", "description": "Partial outage"}
+            }
+            """.utf8
+        )
+
+        let snapshot = try GitHubStatusParser.parse(data)
+
+        XCTAssertEqual(snapshot.summary, "Alpha and 1 more incident")
+        XCTAssertEqual(snapshot.updateIdentity, "beta-update")
+    }
+
+    @MainActor
+    func testPreferencesAreOffByDefaultAndPersistIndependentChoices() throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        XCTAssertFalse(preferences.settings.isEnabled)
+
+        preferences.updateSettings(
+            GitHubStatusSettings(
+                isEnabled: true,
+                pollingInterval: .oneHour,
+                showsInAppBanner: false,
+                sendsIncidentNotifications: true,
+                sendsRecoveryNotifications: false
+            )
+        )
+        let reloaded = GitHubStatusPreferences(defaults: defaults)
+
+        XCTAssertEqual(reloaded.settings.pollingInterval, .oneHour)
+        XCTAssertFalse(reloaded.settings.showsInAppBanner)
+        XCTAssertTrue(reloaded.settings.sendsIncidentNotifications)
+        XCTAssertFalse(reloaded.settings.sendsRecoveryNotifications)
+    }
+
+    @MainActor
+    func testDisablingMonitorClearsIncidentTransitionBaseline() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        let enabledSettings = GitHubStatusSettings(
+            isEnabled: true,
+            sendsRecoveryNotifications: true
+        )
+        preferences.updateSettings(enabledSettings)
+        preferences.recordSuccess(
+            Self.snapshot(
+                severity: .major,
+                incidentIDs: ["incident-1"],
+                updateIdentity: "update-1"
+            )
+        )
+
+        var disabledSettings = enabledSettings
+        disabledSettings.isEnabled = false
+        preferences.updateSettings(disabledSettings)
+
+        let reloadedPreferences = GitHubStatusPreferences(defaults: defaults)
+        XCTAssertNil(reloadedPreferences.snapshot)
+        reloadedPreferences.updateSettings(enabledSettings)
+        let notifier = RecordingGitHubStatusNotifier()
+        let recovered = Self.snapshot(
+            severity: .operational,
+            incidentIDs: [],
+            updateIdentity: "none"
+        )
+        let monitor = GitHubStatusMonitor(
+            preferences: reloadedPreferences,
+            fetcher: StubGitHubStatusFetcher(results: [.success(recovered)]),
+            notifier: notifier
+        )
+
+        await monitor.refreshIfDue(force: true, now: recovered.checkedAt)
+
+        XCTAssertTrue(notifier.notifications.isEmpty)
+    }
+
+    func testTransitionDeduplicatesUpdatesAndNotifiesEscalationAndRecovery() {
+        let settings = GitHubStatusSettings(
+            isEnabled: true,
+            sendsIncidentNotifications: true,
+            sendsRecoveryNotifications: true
+        )
+        let incident = snapshot(
+            severity: .minor,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-1"
+        )
+        let repeatedPoll = snapshot(
+            severity: .minor,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-2"
+        )
+        let escalated = snapshot(
+            severity: .critical,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-3"
+        )
+        let recovered = snapshot(severity: .operational, incidentIDs: [], updateIdentity: "none")
+
+        XCTAssertEqual(
+            GitHubStatusTransitionEvaluator.notification(
+                previous: nil,
+                current: incident,
+                settings: settings
+            )?.kind,
+            .incident
+        )
+        XCTAssertNil(
+            GitHubStatusTransitionEvaluator.notification(
+                previous: incident,
+                current: repeatedPoll,
+                settings: settings
+            )
+        )
+        XCTAssertEqual(
+            GitHubStatusTransitionEvaluator.notification(
+                previous: repeatedPoll,
+                current: escalated,
+                settings: settings
+            )?.kind,
+            .escalation
+        )
+        XCTAssertEqual(
+            GitHubStatusTransitionEvaluator.notification(
+                previous: escalated,
+                current: recovered,
+                settings: settings
+            )?.kind,
+            .recovery
+        )
+
+        let disabledSettings = GitHubStatusSettings(isEnabled: true)
+        XCTAssertNil(
+            GitHubStatusTransitionEvaluator.notification(
+                previous: nil,
+                current: incident,
+                settings: disabledSettings
+            )
+        )
+        XCTAssertNil(
+            GitHubStatusTransitionEvaluator.notification(
+                previous: escalated,
+                current: recovered,
+                settings: disabledSettings
+            )
+        )
+    }
+
+    func testBannerFreshnessDistinguishesDeferredDataFromFailedCheck() {
+        XCTAssertEqual(
+            GitHubStatusBannerMessage.freshness(
+                updatedAt: "Aug 17 at 3:00 PM",
+                isStale: true,
+                statusCheckFailed: false
+            ),
+            "Last known status, updated Aug 17 at 3:00 PM. This status is stale because a newer check has not completed."
+        )
+        XCTAssertEqual(
+            GitHubStatusBannerMessage.freshness(
+                updatedAt: "Aug 17 at 3:00 PM",
+                isStale: true,
+                statusCheckFailed: true
+            ),
+            "Last known status, updated Aug 17 at 3:00 PM. A recent status check was unavailable; this is not a newly confirmed outage."
+        )
+    }
+
+    func testBannerFreshnessTimelineCrossesAtDeadline() {
+        let snapshot = Self.snapshot(
+            severity: .major,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-1"
+        )
+        let staleDate = GitHubStatusFreshness.staleDate(snapshot, interval: .thirtyMinutes)
+
+        XCTAssertEqual(staleDate, snapshot.checkedAt.addingTimeInterval(3_600))
+        XCTAssertEqual(GitHubStatusFreshness.timelineRefreshInterval, 60)
+        XCTAssertFalse(
+            GitHubStatusFreshness.isStale(
+                snapshot,
+                interval: .thirtyMinutes,
+                now: staleDate.addingTimeInterval(-1)
+            )
+        )
+        XCTAssertTrue(
+            GitHubStatusFreshness.isStale(
+                snapshot,
+                interval: .thirtyMinutes,
+                now: staleDate
+            )
+        )
+    }
+
+    @MainActor
+    func testMonitorDeliversNewIncidentNotification() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        preferences.updateSettings(
+            GitHubStatusSettings(
+                isEnabled: true,
+                sendsIncidentNotifications: true
+            )
+        )
+        let incident = Self.snapshot(
+            severity: .major,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-1"
+        )
+        let notifier = RecordingGitHubStatusNotifier()
+        let monitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: StubGitHubStatusFetcher(results: [.success(incident)]),
+            notifier: notifier
+        )
+
+        await monitor.refreshIfDue(force: true, now: incident.checkedAt)
+
+        XCTAssertEqual(notifier.notifications.map(\.kind), [.incident])
+    }
+
+    @MainActor
+    func testMonitorRetriesNotificationBeforeNextFetchSucceeds() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        preferences.updateSettings(
+            GitHubStatusSettings(
+                isEnabled: true,
+                sendsIncidentNotifications: true
+            )
+        )
+        let incident = Self.snapshot(
+            severity: .major,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-1"
+        )
+        let notifier = RecordingGitHubStatusNotifier(failuresRemaining: 1)
+        let firstMonitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: StubGitHubStatusFetcher(results: [.success(incident)]),
+            notifier: notifier
+        )
+
+        await firstMonitor.refreshIfDue(force: true, now: incident.checkedAt)
+        XCTAssertTrue(notifier.notifications.isEmpty)
+
+        let reloadedPreferences = GitHubStatusPreferences(defaults: defaults)
+        let retryMonitor = GitHubStatusMonitor(
+            preferences: reloadedPreferences,
+            fetcher: StubGitHubStatusFetcher(results: [.failure(GitHubStatusParsingError.invalidResponse)]),
+            notifier: notifier
+        )
+        await retryMonitor.refreshIfDue(force: true, now: incident.checkedAt.addingTimeInterval(1))
+        XCTAssertEqual(notifier.notifications.map(\.kind), [.incident])
+    }
+
+    @MainActor
+    func testMonitorIgnoresCancellationWithoutRecordingFailure() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        preferences.updateSettings(GitHubStatusSettings(isEnabled: true))
+        let monitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: StubGitHubStatusFetcher(results: [.failure(CancellationError())]),
+            notifier: RecordingGitHubStatusNotifier()
+        )
+
+        await monitor.refreshIfDue(force: true)
+
+        XCTAssertNil(preferences.lastChecked)
+        XCTAssertNil(preferences.lastError)
+    }
+
+    @MainActor
+    func testMonitorDiscardsInFlightResultsAcrossDisableAndReenable() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        let enabledSettings = GitHubStatusSettings(
+            isEnabled: true,
+            sendsIncidentNotifications: true
+        )
+        preferences.updateSettings(enabledSettings)
+        let fetcher = SuspendedGitHubStatusFetcher()
+        let notifier = RecordingGitHubStatusNotifier()
+        let monitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: fetcher,
+            notifier: notifier
+        )
+        let incident = Self.snapshot(
+            severity: .major,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-1"
+        )
+
+        let refresh = Task { await monitor.refreshIfDue(force: true, now: incident.checkedAt) }
+        await fetcher.waitUntilStarted()
+        var disabledSettings = enabledSettings
+        disabledSettings.isEnabled = false
+        preferences.updateSettings(disabledSettings)
+        preferences.updateSettings(enabledSettings)
+        let queuedRefresh = Task {
+            await monitor.refreshIfDue(force: true, now: incident.checkedAt.addingTimeInterval(1))
+        }
+        await Task.yield()
+        await fetcher.complete(with: incident)
+        await refresh.value
+        await fetcher.waitUntilStarted()
+
+        XCTAssertNil(preferences.snapshot)
+        XCTAssertTrue(notifier.notifications.isEmpty)
+
+        let currentSnapshot = Self.snapshot(
+            severity: .operational,
+            incidentIDs: [],
+            updateIdentity: "current"
+        )
+        await fetcher.complete(with: currentSnapshot)
+        var waitAttempts = 0
+        while monitor.isRefreshing, waitAttempts < 100 {
+            waitAttempts += 1
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertFalse(monitor.isRefreshing, "Queued refresh did not finish within one second")
+        await queuedRefresh.value
+        XCTAssertEqual(preferences.snapshot, currentSnapshot)
+        XCTAssertTrue(notifier.notifications.isEmpty)
+
+        let failedRefresh = Task {
+            await monitor.refreshIfDue(force: true, now: incident.checkedAt.addingTimeInterval(1))
+        }
+        await fetcher.waitUntilStarted()
+        preferences.updateSettings(disabledSettings)
+        preferences.updateSettings(enabledSettings)
+        await fetcher.fail(with: GitHubStatusParsingError.invalidResponse)
+        await failedRefresh.value
+
+        XCTAssertEqual(preferences.lastChecked, currentSnapshot.checkedAt)
+        XCTAssertNil(preferences.lastError)
+    }
+
+    @MainActor
+    func testBackgroundRefreshWaitsForCoalescedFetch() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        preferences.updateSettings(GitHubStatusSettings(isEnabled: true))
+        let fetcher = SuspendedGitHubStatusFetcher()
+        let monitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: fetcher,
+            notifier: RecordingGitHubStatusNotifier()
+        )
+        let completion = AsyncCompletionFlag()
+        let firstSnapshot = Self.snapshot(
+            severity: .operational,
+            incidentIDs: [],
+            updateIdentity: "first"
+        )
+        let secondSnapshot = Self.snapshot(
+            severity: .operational,
+            incidentIDs: [],
+            updateIdentity: "second"
+        )
+
+        let foregroundRefresh = Task { await monitor.refreshIfDue(force: true) }
+        await fetcher.waitUntilStarted()
+        let backgroundRefresh = Task {
+            await monitor.performBackgroundRefresh()
+            await completion.markComplete()
+        }
+        for _ in 0..<10 {
+            await Task.yield()
+        }
+
+        await fetcher.complete(with: firstSnapshot)
+        await foregroundRefresh.value
+        await fetcher.waitUntilStarted()
+
+        let completedBeforeCoalescedFetch = await completion.isComplete
+        XCTAssertFalse(completedBeforeCoalescedFetch)
+
+        await fetcher.complete(with: secondSnapshot)
+        await backgroundRefresh.value
+
+        XCTAssertEqual(preferences.snapshot, secondSnapshot)
+        let completedAfterCoalescedFetch = await completion.isComplete
+        XCTAssertTrue(completedAfterCoalescedFetch)
+    }
+
+    @MainActor
+    func testFetchFailurePreservesLastKnownIncidentAndMarksItStale() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        preferences.updateSettings(GitHubStatusSettings(isEnabled: true))
+        let active = Self.snapshot(
+            severity: .major,
+            incidentIDs: ["incident-1"],
+            updateIdentity: "update-1",
+            checkedAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let fetcher = StubGitHubStatusFetcher(results: [
+            .success(active),
+            .failure(GitHubStatusParsingError.invalidResponse),
+        ])
+        let monitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: fetcher,
+            notifier: RecordingGitHubStatusNotifier()
+        )
+
+        await monitor.refreshIfDue(force: true, now: active.checkedAt)
+        await monitor.refreshIfDue(force: true, now: Date(timeIntervalSince1970: 10_000))
+
+        XCTAssertEqual(preferences.snapshot, active)
+        XCTAssertNotNil(preferences.lastError)
+        XCTAssertTrue(
+            GitHubStatusFreshness.isStale(
+                active,
+                interval: .thirtyMinutes,
+                now: Date(timeIntervalSince1970: 10_000)
+            )
+        )
+    }
+
+    private static func snapshot(
+        severity: GitHubServiceSeverity,
+        incidentIDs: [String],
+        updateIdentity: String,
+        checkedAt: Date = Date(timeIntervalSince1970: 2_000)
+    ) -> GitHubServiceStatusSnapshot {
+        GitHubServiceStatusSnapshot(
+            severity: severity,
+            summary: severity.displayName,
+            incidentIDs: incidentIDs,
+            updateIdentity: updateIdentity,
+            updatedAt: checkedAt,
+            checkedAt: checkedAt,
+            detailsURL: URL(string: "https://www.githubstatus.com")!
+        )
+    }
+
+    private func snapshot(
+        severity: GitHubServiceSeverity,
+        incidentIDs: [String],
+        updateIdentity: String
+    ) -> GitHubServiceStatusSnapshot {
+        Self.snapshot(
+            severity: severity,
+            incidentIDs: incidentIDs,
+            updateIdentity: updateIdentity
+        )
+    }
+}
+
+private actor StubGitHubStatusFetcher: GitHubStatusFetching {
+    private var results: [Result<GitHubServiceStatusSnapshot, Error>]
+
+    init(results: [Result<GitHubServiceStatusSnapshot, Error>]) {
+        self.results = results
+    }
+
+    func fetchStatus(checkedAt: Date) async throws -> GitHubServiceStatusSnapshot {
+        guard !results.isEmpty else {
+            throw GitHubStatusParsingError.invalidResponse
+        }
+        return try results.removeFirst().get()
+    }
+}
+
+private actor SuspendedGitHubStatusFetcher: GitHubStatusFetching {
+    private var fetchContinuation: CheckedContinuation<GitHubServiceStatusSnapshot, any Error>?
+    private var startContinuations: [CheckedContinuation<Void, Never>] = []
+
+    func fetchStatus(checkedAt: Date) async throws -> GitHubServiceStatusSnapshot {
+        try await withCheckedThrowingContinuation { continuation in
+            fetchContinuation = continuation
+            startContinuations.forEach { $0.resume() }
+            startContinuations.removeAll()
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard fetchContinuation == nil else { return }
+        await withCheckedContinuation { continuation in
+            startContinuations.append(continuation)
+        }
+    }
+
+    func complete(with snapshot: GitHubServiceStatusSnapshot) {
+        fetchContinuation?.resume(returning: snapshot)
+        fetchContinuation = nil
+    }
+
+    func fail(with error: any Error) {
+        fetchContinuation?.resume(throwing: error)
+        fetchContinuation = nil
+    }
+}
+
+private actor AsyncCompletionFlag {
+    private(set) var isComplete = false
+
+    func markComplete() {
+        isComplete = true
+    }
+}
+
+@MainActor
+private final class RecordingGitHubStatusNotifier: GitHubStatusNotifying {
+    private(set) var notifications: [GitHubStatusNotification] = []
+    private var failuresRemaining: Int
+
+    init(failuresRemaining: Int = 0) {
+        self.failuresRemaining = failuresRemaining
+    }
+
+    func deliverGitHubStatus(_ notification: GitHubStatusNotification) async throws {
+        if failuresRemaining > 0 {
+            failuresRemaining -= 1
+            throw GitHubStatusParsingError.invalidResponse
+        }
+        notifications.append(notification)
+    }
+}
