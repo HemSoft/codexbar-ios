@@ -6,6 +6,13 @@ building, testing, or releasing the app.
 
 ## 1.3.0 - Unreleased
 
+### Added
+
+- Added opt-in GitHub service-status monitoring with configurable, battery-conscious
+  checks, an accessible incident banner, and deduplicated incident, escalation, and
+  recovery notifications that clearly distinguish stale or unavailable data.
+  ([#244](https://github.com/HemSoft/codexbar-ios/issues/244))
+
 ### Fixed
 
 - Made usage notifications name the affected account, metric, current or

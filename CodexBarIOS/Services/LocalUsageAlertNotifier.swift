@@ -10,7 +10,7 @@ public protocol UsageAlertNotifying: AnyObject {
 }
 
 @MainActor
-public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, UNUserNotificationCenterDelegate {
+public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, GitHubStatusNotifying, UNUserNotificationCenterDelegate {
     public static let shared = LocalUsageAlertNotifier()
 
     private let center: UNUserNotificationCenter
@@ -47,6 +47,21 @@ public final class LocalUsageAlertNotifier: NSObject, UsageAlertNotifying, UNUse
             trigger: nil
         )
 
+        try await center.add(request)
+    }
+
+    public func deliverGitHubStatus(_ notification: GitHubStatusNotification) async throws {
+        let content = UNMutableNotificationContent()
+        content.title = notification.title
+        content.body = notification.body
+        content.sound = .default
+        content.userInfo = ["kind": "github-status"]
+
+        let request = UNNotificationRequest(
+            identifier: notification.id,
+            content: content,
+            trigger: nil
+        )
         try await center.add(request)
     }
 
