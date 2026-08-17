@@ -322,7 +322,7 @@ public enum UsageAlertEvaluator {
                 return SeverityAlertTrigger(
                     source: .current,
                     bar: bar,
-                    fraction: bar.fractionUsed
+                    fraction: currentUsageFraction(for: bar)
                 )
             }
             if bar.projectedSeverity(at: now, thresholds: thresholds) == severity,
@@ -352,6 +352,13 @@ public enum UsageAlertEvaluator {
             }
             return (lhs.bar?.label ?? "") < (rhs.bar?.label ?? "")
         }.first
+    }
+
+    private static func currentUsageFraction(for bar: UsageBar) -> Double {
+        guard bar.limit > 0 else {
+            return bar.fractionUsed
+        }
+        return max(bar.used / bar.limit, 0)
     }
 
     private static func balanceAlertID(for accountID: String) -> String {

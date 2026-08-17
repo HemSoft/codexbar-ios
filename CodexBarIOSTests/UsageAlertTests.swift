@@ -415,8 +415,8 @@ final class UsageAlertTests: XCTestCase {
 
     func testMultipleMetricsChooseTheLargestCrossingRegardlessOfArrayOrder() {
         let bars = [
-            UsageBar(stableKey: "five-hour", label: "5-hour", used: 90, limit: 100),
-            UsageBar(stableKey: "weekly", label: "Weekly", used: 95, limit: 100),
+            UsageBar(stableKey: "five-hour", label: "5-hour", used: 105, limit: 100),
+            UsageBar(stableKey: "weekly", label: "Weekly", used: 112, limit: 100),
         ]
         func makeResult(bars: [UsageBar]) -> ProviderUsageResult {
             ProviderUsageResult(
@@ -441,8 +441,8 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(
             evaluations.compactMap { $0.notifications.first?.body },
             [
-                "Critical status. Weekly current usage is 95% (Critical Alert at 90%).",
-                "Critical status. Weekly current usage is 95% (Critical Alert at 90%).",
+                "Critical status. Weekly current usage is 112% (Critical Alert at 90%).",
+                "Critical status. Weekly current usage is 112% (Critical Alert at 90%).",
             ]
         )
         XCTAssertTrue(evaluations.allSatisfy { evaluation in
