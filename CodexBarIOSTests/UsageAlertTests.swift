@@ -203,6 +203,10 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(warningEvaluation.notifications.count, 1)
         XCTAssertEqual(warningEvaluation.notifications.first?.kind, .severity)
         XCTAssertEqual(warningEvaluation.notifications.first?.title, "Codex Warning")
+        XCTAssertEqual(
+            warningEvaluation.notifications.first?.body,
+            "Warning status. Weekly current usage is 60% (Warning at 60%)."
+        )
         XCTAssertEqual(warningEvaluation.activeAlerts.first?.severity, .warning)
         XCTAssertEqual(
             warningEvaluation.activeAlertIDs,
@@ -219,6 +223,10 @@ final class UsageAlertTests: XCTestCase {
             criticalEvaluation.notifications.first?.title,
             "Codex Critical Alert"
         )
+        XCTAssertEqual(
+            criticalEvaluation.notifications.first?.body,
+            "Critical status. Weekly current usage is 85% (Critical Alert at 85%)."
+        )
         XCTAssertEqual(criticalEvaluation.activeAlerts.first?.severity, .critical)
         XCTAssertEqual(
             criticalEvaluation.activeAlertIDs,
@@ -227,6 +235,29 @@ final class UsageAlertTests: XCTestCase {
                 "severity.critical.codex.personal",
             ]
         )
+    }
+
+    func testNotificationsIdentifyCustomAndFallbackLabelsForSameProvider() {
+        let evaluations = [
+            result(accountID: "codex.first-private-id", title: "Work Codex", used: 80),
+            result(accountID: "codex.second-private-id", title: "Codex 2", used: 80),
+        ].map {
+            UsageAlertEvaluator.evaluate(
+                results: [$0],
+                settings: UsageAlertSettings(isEnabled: true),
+                activeAlertIDs: []
+            )
+        }
+
+        XCTAssertEqual(
+            evaluations.compactMap { $0.notifications.first?.title },
+            ["Work Codex Warning", "Codex 2 Warning"]
+        )
+        let notificationText = evaluations.flatMap(\.notifications).map {
+            "\($0.title) \($0.body)"
+        }.joined(separator: " ")
+        XCTAssertFalse(notificationText.contains("first-private-id"))
+        XCTAssertFalse(notificationText.contains("second-private-id"))
     }
 
     func testLegacySuppressionIDsMigrateWithoutDuplicateNotifications() throws {
@@ -331,7 +362,11 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(evaluation.activeAlerts.first?.severity, .critical)
         XCTAssertEqual(
             evaluation.activeAlerts.first?.message,
-            "Weekly is projected to reach 100%."
+            "Weekly projected usage is 100% (Critical Alert at 95%)."
+        )
+        XCTAssertEqual(
+            evaluation.notifications.first?.body,
+            "Critical status. Weekly projected usage is 100% (Critical Alert at 95%)."
         )
     }
 
@@ -378,30 +413,41 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(rearmed.notifications.map(\.title), ["Codex Warning"])
     }
 
-    func testMultipleMetricsCrossingThresholdProduceOneSeverityNotification() {
-        let result = ProviderUsageResult(
-            accountID: "codex.personal",
-            providerID: .codex,
-            title: "Codex",
-            subtitle: "Live usage",
-            bars: [
-                UsageBar(stableKey: "five-hour", label: "5-hour", used: 90, limit: 100),
-                UsageBar(stableKey: "weekly", label: "Weekly", used: 95, limit: 100),
-            ],
-            fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
-        )
+    func testMultipleMetricsChooseTheLargestCrossingRegardlessOfArrayOrder() {
+        let bars = [
+            UsageBar(stableKey: "five-hour", label: "5-hour", used: 105, limit: 100),
+            UsageBar(stableKey: "weekly", label: "Weekly", used: 112, limit: 100),
+        ]
+        func makeResult(bars: [UsageBar]) -> ProviderUsageResult {
+            ProviderUsageResult(
+                accountID: "codex.personal",
+                providerID: .codex,
+                title: "Codex",
+                subtitle: "Live usage",
+                bars: bars,
+                fetchedAt: Date(timeIntervalSince1970: 1_783_667_520)
+            )
+        }
 
-        let evaluation = UsageAlertEvaluator.evaluate(
-            results: [result],
-            settings: UsageAlertSettings(isEnabled: true),
-            activeAlertIDs: []
-        )
+        let evaluations = [bars, Array(bars.reversed())].map { bars in
+            UsageAlertEvaluator.evaluate(
+                results: [makeResult(bars: Array(bars))],
+                settings: UsageAlertSettings(isEnabled: true),
+                activeAlertIDs: []
+            )
+        }
 
-        XCTAssertEqual(evaluation.notifications.count, 1)
-        XCTAssertEqual(evaluation.notifications.first?.kind, .severity)
-        XCTAssertEqual(evaluation.activeAlerts.count, 1)
-        XCTAssertFalse(evaluation.activeAlertIDs.contains {
-            $0.hasPrefix("usage.")
+        XCTAssertTrue(evaluations.allSatisfy { $0.notifications.count == 1 })
+        XCTAssertEqual(
+            evaluations.compactMap { $0.notifications.first?.body },
+            [
+                "Critical status. Weekly current usage is 112% (Critical Alert at 90%).",
+                "Critical status. Weekly current usage is 112% (Critical Alert at 90%).",
+            ]
+        )
+        XCTAssertTrue(evaluations.allSatisfy { evaluation in
+            evaluation.activeAlerts.count == 1
+                && !evaluation.activeAlertIDs.contains { $0.hasPrefix("usage.") }
         })
     }
 
@@ -467,7 +513,7 @@ final class UsageAlertTests: XCTestCase {
         let result = ProviderUsageResult(
             accountID: "claude.capped",
             providerID: .claude,
-            title: "Claude",
+            title: "Work Claude",
             subtitle: "Live usage",
             bars: [],
             monetaryMetrics: [
@@ -500,10 +546,11 @@ final class UsageAlertTests: XCTestCase {
         )
 
         XCTAssertEqual(evaluation.notifications.map(\.kind), [.severity])
+        XCTAssertEqual(evaluation.notifications.first?.title, "Work Claude Critical Alert")
         XCTAssertEqual(evaluation.activeAlerts.first?.severity, .critical)
         XCTAssertEqual(
             evaluation.activeAlerts.first?.message,
-            "The monthly usage-credit spend limit has been reached."
+            "Work Claude reached its monthly usage-credit spend limit."
         )
     }
 
@@ -719,6 +766,7 @@ final class UsageAlertTests: XCTestCase {
 
     private func result(
         accountID: String = "codex.personal",
+        title: String = "Codex",
         used: Double,
         projectionCurrent: Double? = nil,
         projectionPeriodStart: Date? = nil,
@@ -728,7 +776,7 @@ final class UsageAlertTests: XCTestCase {
         ProviderUsageResult(
             accountID: accountID,
             providerID: .codex,
-            title: "Codex",
+            title: title,
             subtitle: "Live usage",
             bars: [
                 UsageBar(
