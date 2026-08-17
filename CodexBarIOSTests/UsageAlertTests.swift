@@ -1204,10 +1204,28 @@ final class GitHubStatusTests: XCTestCase {
         disabledSettings.isEnabled = false
         preferences.updateSettings(disabledSettings)
         preferences.updateSettings(enabledSettings)
+        let queuedRefresh = Task {
+            await monitor.refreshIfDue(force: true, now: incident.checkedAt.addingTimeInterval(1))
+        }
+        await queuedRefresh.value
         await fetcher.complete(with: incident)
         await refresh.value
+        await fetcher.waitUntilStarted()
 
         XCTAssertNil(preferences.snapshot)
+        XCTAssertTrue(notifier.notifications.isEmpty)
+
+        let currentSnapshot = Self.snapshot(
+            severity: .operational,
+            incidentIDs: [],
+            updateIdentity: "current"
+        )
+        await fetcher.complete(with: currentSnapshot)
+        while monitor.isRefreshing {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(preferences.snapshot, currentSnapshot)
         XCTAssertTrue(notifier.notifications.isEmpty)
 
         let failedRefresh = Task {
@@ -1219,7 +1237,7 @@ final class GitHubStatusTests: XCTestCase {
         await fetcher.fail(with: GitHubStatusParsingError.invalidResponse)
         await failedRefresh.value
 
-        XCTAssertNil(preferences.lastChecked)
+        XCTAssertEqual(preferences.lastChecked, currentSnapshot.checkedAt)
         XCTAssertNil(preferences.lastError)
     }
 

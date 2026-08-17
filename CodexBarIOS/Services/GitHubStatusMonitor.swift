@@ -528,6 +528,7 @@ public final class GitHubStatusMonitor: ObservableObject {
 
     private let fetcher: any GitHubStatusFetching
     private let notifier: any GitHubStatusNotifying
+    private var needsForcedRefresh = false
     private static let logger = Logger(
         subsystem: "com.hemsoft.CodexBarIOS",
         category: "github-status"
@@ -544,10 +545,16 @@ public final class GitHubStatusMonitor: ObservableObject {
     }
 
     public func refreshIfDue(force: Bool = false, now: Date = Date()) async {
-        guard preferences.settings.isEnabled,
-              !isRefreshing,
-              force || now >= preferences.nextEligibleCheck
-        else {
+        guard preferences.settings.isEnabled else {
+            scheduleBackgroundRefresh()
+            return
+        }
+        guard !isRefreshing else {
+            needsForcedRefresh = needsForcedRefresh || force
+            scheduleBackgroundRefresh()
+            return
+        }
+        guard force || now >= preferences.nextEligibleCheck else {
             scheduleBackgroundRefresh()
             return
         }
@@ -557,6 +564,12 @@ public final class GitHubStatusMonitor: ObservableObject {
         defer {
             isRefreshing = false
             scheduleBackgroundRefresh()
+            if needsForcedRefresh {
+                needsForcedRefresh = false
+                Task { @MainActor [weak self] in
+                    await self?.refreshIfDue(force: true)
+                }
+            }
         }
         let previous = preferences.snapshot
         do {
