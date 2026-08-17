@@ -955,6 +955,49 @@ final class GitHubStatusTests: XCTestCase {
         XCTAssertFalse(reloaded.settings.sendsRecoveryNotifications)
     }
 
+    @MainActor
+    func testDisablingMonitorClearsIncidentTransitionBaseline() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        let enabledSettings = GitHubStatusSettings(
+            isEnabled: true,
+            sendsRecoveryNotifications: true
+        )
+        preferences.updateSettings(enabledSettings)
+        preferences.recordSuccess(
+            Self.snapshot(
+                severity: .major,
+                incidentIDs: ["incident-1"],
+                updateIdentity: "update-1"
+            )
+        )
+
+        var disabledSettings = enabledSettings
+        disabledSettings.isEnabled = false
+        preferences.updateSettings(disabledSettings)
+
+        let reloadedPreferences = GitHubStatusPreferences(defaults: defaults)
+        XCTAssertNil(reloadedPreferences.snapshot)
+        reloadedPreferences.updateSettings(enabledSettings)
+        let notifier = RecordingGitHubStatusNotifier()
+        let recovered = Self.snapshot(
+            severity: .operational,
+            incidentIDs: [],
+            updateIdentity: "none"
+        )
+        let monitor = GitHubStatusMonitor(
+            preferences: reloadedPreferences,
+            fetcher: StubGitHubStatusFetcher(results: [.success(recovered)]),
+            notifier: notifier
+        )
+
+        await monitor.refreshIfDue(force: true, now: recovered.checkedAt)
+
+        XCTAssertTrue(notifier.notifications.isEmpty)
+    }
+
     func testTransitionDeduplicatesUpdatesAndNotifiesEscalationAndRecovery() {
         let settings = GitHubStatusSettings(
             isEnabled: true,

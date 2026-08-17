@@ -424,7 +424,9 @@ public final class GitHubStatusPreferences: ObservableObject {
             }
         }
         if !settings.isEnabled {
+            snapshot = nil
             dismissedBannerIdentity = nil
+            state.snapshot = nil
             state.dismissedBannerIdentity = nil
         }
         saveState()
