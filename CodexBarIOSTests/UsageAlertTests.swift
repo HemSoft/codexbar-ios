@@ -1233,7 +1233,7 @@ final class GitHubStatusTests: XCTestCase {
         let queuedRefresh = Task {
             await monitor.refreshIfDue(force: true, now: incident.checkedAt.addingTimeInterval(1))
         }
-        await queuedRefresh.value
+        await Task.yield()
         await fetcher.complete(with: incident)
         await refresh.value
         await fetcher.waitUntilStarted()
@@ -1254,6 +1254,7 @@ final class GitHubStatusTests: XCTestCase {
         }
 
         XCTAssertFalse(monitor.isRefreshing, "Queued refresh did not finish within one second")
+        await queuedRefresh.value
         XCTAssertEqual(preferences.snapshot, currentSnapshot)
         XCTAssertTrue(notifier.notifications.isEmpty)
 
@@ -1268,6 +1269,56 @@ final class GitHubStatusTests: XCTestCase {
 
         XCTAssertEqual(preferences.lastChecked, currentSnapshot.checkedAt)
         XCTAssertNil(preferences.lastError)
+    }
+
+    @MainActor
+    func testBackgroundRefreshWaitsForCoalescedFetch() async throws {
+        let suiteName = "GitHubStatusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = GitHubStatusPreferences(defaults: defaults)
+        preferences.updateSettings(GitHubStatusSettings(isEnabled: true))
+        let fetcher = SuspendedGitHubStatusFetcher()
+        let monitor = GitHubStatusMonitor(
+            preferences: preferences,
+            fetcher: fetcher,
+            notifier: RecordingGitHubStatusNotifier()
+        )
+        let completion = AsyncCompletionFlag()
+        let firstSnapshot = Self.snapshot(
+            severity: .operational,
+            incidentIDs: [],
+            updateIdentity: "first"
+        )
+        let secondSnapshot = Self.snapshot(
+            severity: .operational,
+            incidentIDs: [],
+            updateIdentity: "second"
+        )
+
+        let foregroundRefresh = Task { await monitor.refreshIfDue(force: true) }
+        await fetcher.waitUntilStarted()
+        let backgroundRefresh = Task {
+            await monitor.performBackgroundRefresh()
+            await completion.markComplete()
+        }
+        for _ in 0..<10 {
+            await Task.yield()
+        }
+
+        await fetcher.complete(with: firstSnapshot)
+        await foregroundRefresh.value
+        await fetcher.waitUntilStarted()
+
+        let completedBeforeCoalescedFetch = await completion.isComplete
+        XCTAssertFalse(completedBeforeCoalescedFetch)
+
+        await fetcher.complete(with: secondSnapshot)
+        await backgroundRefresh.value
+
+        XCTAssertEqual(preferences.snapshot, secondSnapshot)
+        let completedAfterCoalescedFetch = await completion.isComplete
+        XCTAssertTrue(completedAfterCoalescedFetch)
     }
 
     @MainActor
@@ -1379,6 +1430,14 @@ private actor SuspendedGitHubStatusFetcher: GitHubStatusFetching {
     func fail(with error: any Error) {
         fetchContinuation?.resume(throwing: error)
         fetchContinuation = nil
+    }
+}
+
+private actor AsyncCompletionFlag {
+    private(set) var isComplete = false
+
+    func markComplete() {
+        isComplete = true
     }
 }
 

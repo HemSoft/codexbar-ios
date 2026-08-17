@@ -538,6 +538,7 @@ public final class GitHubStatusMonitor: ObservableObject {
     private let fetcher: any GitHubStatusFetching
     private let notifier: any GitHubStatusNotifying
     private var needsForcedRefresh = false
+    private var forcedRefreshWaiters: [CheckedContinuation<Void, Never>] = []
     private static let logger = Logger(
         subsystem: "com.hemsoft.CodexBarIOS",
         category: "github-status"
@@ -561,6 +562,11 @@ public final class GitHubStatusMonitor: ObservableObject {
         guard !isRefreshing else {
             needsForcedRefresh = needsForcedRefresh || force
             scheduleBackgroundRefresh()
+            if force {
+                await withCheckedContinuation { continuation in
+                    forcedRefreshWaiters.append(continuation)
+                }
+            }
             return
         }
         guard force || now >= preferences.nextEligibleCheck else {
@@ -575,8 +581,11 @@ public final class GitHubStatusMonitor: ObservableObject {
             scheduleBackgroundRefresh()
             if needsForcedRefresh {
                 needsForcedRefresh = false
-                Task { @MainActor [weak self] in
-                    await self?.refreshIfDue(force: true)
+                let waiters = forcedRefreshWaiters
+                forcedRefreshWaiters.removeAll()
+                Task { @MainActor [self] in
+                    await refreshIfDue(force: true)
+                    waiters.forEach { $0.resume() }
                 }
             }
         }
