@@ -1,6 +1,6 @@
 # CodexBar Privacy Policy
 
-Effective date: July 6, 2026
+Effective date: August 18, 2026
 
 CodexBar Usage Monitor is a local dashboard for monitoring AI provider usage, limits, and API balances. It does not require a CodexBar account and does not send your provider credentials or usage data to HemSoft servers.
 
@@ -12,6 +12,11 @@ paired Apple Watch:
 - Provider account labels and configuration choices you enter in the app.
 - API keys, access tokens, refresh tokens, and similar credentials for providers you choose to connect.
 - Usage, balance, refresh status, and snapshot history used to show cards, trends, alerts, and widgets.
+- GitHub Status monitoring choices and local observation state, including the
+  selected check interval, banner and notification preferences, last status
+  snapshot and check or error result used to show freshness, dismissed-banner
+  identity, consecutive-failure retry state, and the pending local-notification
+  queue used to avoid duplicates.
 - Widget configuration, including which tiles you choose to show.
 - A presentation-only Apple Watch snapshot containing account labels, metric
   names and values, visualization choices, reset context, status, and freshness.
@@ -29,6 +34,17 @@ snapshot locally so it can remain useful during a temporary disconnection.
 When you connect a provider, CodexBar uses the credentials you provide to request usage, balance, or review-activity data for the configured account or organization directly from that provider. Depending on what you configure, this may include services such as OpenAI/ChatGPT, Anthropic Claude, GitHub Copilot, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot AI (Kimi), and Greptile.
 
 Those requests are made to the provider's own APIs or web endpoints. The provider may process the request according to its own terms and privacy policy.
+
+GitHub Status monitoring is independently configurable and off by default. If
+you enable it, CodexBar periodically requests GitHub's public
+[`summary.json`](https://www.githubstatus.com/api/v2/summary.json) Statuspage
+endpoint directly from your device. iOS may also perform a deferred background
+check when the system permits it.
+
+The GitHub Status request does not use or send a GitHub account, token, provider
+account identifier, credential, or usage or balance history. GitHub processes
+the request under its own
+[Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
 
 For GitHub Copilot browser sign-in, CodexBar includes public OAuth application
 credentials that identify the Copilot-compatible client. They are not personal
@@ -94,7 +110,18 @@ HemSoft does not sell your data and does not share your CodexBar data with adver
 
 ## Data Retention And Deletion
 
-CodexBar keeps local settings, credentials, and snapshots until you remove a provider, clear the relevant setting, or delete the app. Deleting the app removes app data stored in the app container. Some Keychain items may remain according to iOS Keychain behavior; you can remove saved provider credentials from CodexBar settings before deleting the app.
+CodexBar keeps local settings, credentials, and snapshots until you remove a
+provider, use an available in-app removal or reset control, or delete the app.
+Deleting the app removes app data stored in the app container. Some Keychain
+items may remain according to iOS Keychain behavior; you can remove saved
+provider credentials from CodexBar settings before deleting the app.
+
+Turning off GitHub Status monitoring clears the current status snapshot,
+dismissed-banner identity, and pending local-notification queue. The selected
+monitoring settings, last attempt and check times, last check error, and
+consecutive-failure count remain stored locally until a later check overwrites
+them or you delete the app. CodexBar does not currently provide a separate
+control to erase that retained check metadata.
 
 ## Contact
 
