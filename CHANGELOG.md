@@ -13,6 +13,13 @@ building, testing, or releasing the app.
   recovery notifications that clearly distinguish stale or unavailable data.
   ([#244](https://github.com/HemSoft/codexbar-ios/issues/244))
 
+### Changed
+
+- Clarified that optional GitHub service-status checks use GitHub's public
+  endpoint without account credentials or provider usage data, and documented
+  the monitoring state kept locally on the device.
+  ([#246](https://github.com/HemSoft/codexbar-ios/issues/246))
+
 ### Fixed
 
 - Made usage notifications name the affected account, metric, current or
