@@ -110,7 +110,18 @@ HemSoft does not sell your data and does not share your CodexBar data with adver
 
 ## Data Retention And Deletion
 
-CodexBar keeps local settings, credentials, and snapshots until you remove a provider, clear the relevant setting, or delete the app. Deleting the app removes app data stored in the app container. Some Keychain items may remain according to iOS Keychain behavior; you can remove saved provider credentials from CodexBar settings before deleting the app.
+CodexBar keeps local settings, credentials, and snapshots until you remove a
+provider, use an available in-app removal or reset control, or delete the app.
+Deleting the app removes app data stored in the app container. Some Keychain
+items may remain according to iOS Keychain behavior; you can remove saved
+provider credentials from CodexBar settings before deleting the app.
+
+Turning off GitHub Status monitoring clears the current status snapshot,
+dismissed-banner identity, and pending local-notification queue. The selected
+monitoring settings, last attempt and check times, last check error, and
+consecutive-failure count remain stored locally until a later check overwrites
+them or you delete the app. CodexBar does not currently provide a separate
+control to erase that retained check metadata.
 
 ## Contact
 
