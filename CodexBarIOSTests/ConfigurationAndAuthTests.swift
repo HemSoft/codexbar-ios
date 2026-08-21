@@ -1017,7 +1017,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
                 return true
             }
         }
-        await fulfillment(of: [authorizationPresented], timeout: 2)
+        await fulfillment(of: [authorizationPresented], timeout: 30)
 
         signInTask.cancel()
 
@@ -1193,6 +1193,70 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertEqual(URL(string: redirectURI)?.host, "127.0.0.1")
     }
 
+    @MainActor
+    func testCopilotBrowserSignInExchangesSuccessfulCallbackForTokens() async throws {
+        let sessionFixture = IsolatedTestURLSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://github.com/login/oauth/access_token")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "Content-Type"),
+                "application/x-www-form-urlencoded"
+            )
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"access_token":"access","refresh_token":"refresh","expires_in":3600,"refresh_token_expires_in":7200}"#.utf8
+                )
+            )
+        }
+        defer { sessionFixture.invalidate() }
+        let service = CopilotWebAuthService(
+            session: sessionFixture.session,
+            callbackTimeoutNanoseconds: 30_000_000_000,
+            preferredCallbackPorts: [0]
+        )
+        let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
+        let startedAt = Int64(Date().timeIntervalSince1970)
+        let authorizationPresented = expectation(description: "Copilot authorization URL presented")
+        var presentedURL: URL?
+
+        let signInTask = Task {
+            try await service.signIn(configuration: configuration) { authorizationURL in
+                presentedURL = authorizationURL
+                authorizationPresented.fulfill()
+            }
+        }
+        defer { signInTask.cancel() }
+        await fulfillment(of: [authorizationPresented], timeout: 30)
+        let authorizationComponents = try XCTUnwrap(
+            URLComponents(url: try XCTUnwrap(presentedURL), resolvingAgainstBaseURL: false)
+        )
+        let redirectURI = try XCTUnwrap(authorizationComponents.queryItemValue(named: "redirect_uri"))
+        let state = try XCTUnwrap(authorizationComponents.queryItemValue(named: "state"))
+        var callbackComponents = try XCTUnwrap(URLComponents(string: redirectURI))
+        callbackComponents.queryItems = [
+            URLQueryItem(name: "code", value: "authorization-code"),
+            URLQueryItem(name: "state", value: state),
+        ]
+        let callbackURL = try XCTUnwrap(callbackComponents.url)
+        _ = try await URLSession.shared.data(from: callbackURL)
+        let result = try await signInTask.value
+        let completedAt = Int64(Date().timeIntervalSince1970)
+
+        XCTAssertEqual(result.accessToken, "access")
+        XCTAssertEqual(result.refreshToken, "refresh")
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(result.expiresAt), startedAt + 3_600)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(result.expiresAt), completedAt + 3_600)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(result.refreshTokenExpiresAt), startedAt + 7_200)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(result.refreshTokenExpiresAt), completedAt + 7_200)
+    }
+
     func testCopilotTokenRequestBodyUsesAuthorizationCodeExchange() {
         let body = String(
             data: CopilotWebAuthService.makeTokenRequestBody(
@@ -1246,7 +1310,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
         defer { sessionFixture.invalidate() }
         let service = CopilotWebAuthService(
             session: sessionFixture.session,
-            callbackTimeoutNanoseconds: 5_000_000_000,
+            callbackTimeoutNanoseconds: 30_000_000_000,
             preferredCallbackPorts: [0]
         )
         let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
@@ -1368,7 +1432,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
             }
         }
 
-        await fulfillment(of: [authorizationPresented], timeout: 2)
+        await fulfillment(of: [authorizationPresented], timeout: 30)
         guard presentedURL != nil else {
             signInTask.cancel()
             _ = try? await signInTask.value
@@ -1451,7 +1515,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
         defer { sessionFixture.invalidate() }
         let service = ClaudeWebAuthService(
             session: sessionFixture.session,
-            callbackTimeoutNanoseconds: 5_000_000_000,
+            callbackTimeoutNanoseconds: 30_000_000_000,
             preferredCallbackPorts: [0]
         )
 

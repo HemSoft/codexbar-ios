@@ -41,7 +41,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let onCredentialsChanged: @MainActor () -> Void
     private let onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     private let codexAuthService: any CodexWebAuthenticating
-    private let copilotAuthService: CopilotWebAuthService
+    private let copilotAuthService: any CopilotWebAuthenticating
     private let claudeAuthService: ClaudeWebAuthService
     private let cursorAuthService: CursorWebAuthService
     private let copilotUsageProvider: CopilotUsageProvider
@@ -59,7 +59,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         codexAuthService: any CodexWebAuthenticating = CodexWebAuthService(),
-        copilotAuthService: CopilotWebAuthService = CopilotWebAuthService(),
+        copilotAuthService: any CopilotWebAuthenticating = CopilotWebAuthService(),
         claudeAuthService: ClaudeWebAuthService = ClaudeWebAuthService(),
         cursorAuthService: CursorWebAuthService = CursorWebAuthService(),
         copilotUsageProvider: CopilotUsageProvider = CopilotUsageProvider()

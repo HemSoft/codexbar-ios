@@ -29,6 +29,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Made GitHub Copilot credential-replacement tests wait on a deterministic
+  browser-auth callback signal, and gave token-error callback tasks enough time
+  to run under a loaded simulator instead of racing a five-second timeout.
+  ([#248](https://github.com/HemSoft/codexbar-ios/issues/248))
 - Made Apple Watch App Store screenshot capture wait for the requested scene,
   reject invalid settle intervals, and choose only storefront-compatible
   simulator sizes. ([#239](https://github.com/HemSoft/codexbar-ios/issues/239))
