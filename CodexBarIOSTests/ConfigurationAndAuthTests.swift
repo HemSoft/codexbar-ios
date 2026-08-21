@@ -1218,37 +1218,35 @@ final class ConfigurationAndAuthTests: XCTestCase {
         defer { sessionFixture.invalidate() }
         let service = CopilotWebAuthService(
             session: sessionFixture.session,
-            callbackTimeoutNanoseconds: 30_000_000_000,
+            callbackTimeoutNanoseconds: 5_000_000_000,
             preferredCallbackPorts: [0]
         )
         let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
         let startedAt = Int64(Date().timeIntervalSince1970)
+        let authorizationPresented = expectation(description: "Copilot authorization URL presented")
+        var presentedURL: URL?
 
-        let result = try await service.signIn(configuration: configuration) { authorizationURL in
-            guard
-                let authorizationComponents = URLComponents(
-                    url: authorizationURL,
-                    resolvingAgainstBaseURL: false
-                ),
-                let redirectURI = authorizationComponents.queryItemValue(named: "redirect_uri"),
-                let state = authorizationComponents.queryItemValue(named: "state"),
-                var callbackComponents = URLComponents(string: redirectURI)
-            else {
-                XCTFail("Expected a valid GitHub authorization callback URL.")
-                return
-            }
-            callbackComponents.queryItems = [
-                URLQueryItem(name: "code", value: "authorization-code"),
-                URLQueryItem(name: "state", value: state),
-            ]
-            guard let callbackURL = callbackComponents.url else {
-                XCTFail("Expected a valid GitHub callback URL.")
-                return
-            }
-            Task.detached {
-                _ = try? await URLSession.shared.data(from: callbackURL)
+        let signInTask = Task {
+            try await service.signIn(configuration: configuration) { authorizationURL in
+                presentedURL = authorizationURL
+                authorizationPresented.fulfill()
             }
         }
+        defer { signInTask.cancel() }
+        await fulfillment(of: [authorizationPresented], timeout: 2)
+        let authorizationComponents = try XCTUnwrap(
+            URLComponents(url: try XCTUnwrap(presentedURL), resolvingAgainstBaseURL: false)
+        )
+        let redirectURI = try XCTUnwrap(authorizationComponents.queryItemValue(named: "redirect_uri"))
+        let state = try XCTUnwrap(authorizationComponents.queryItemValue(named: "state"))
+        var callbackComponents = try XCTUnwrap(URLComponents(string: redirectURI))
+        callbackComponents.queryItems = [
+            URLQueryItem(name: "code", value: "authorization-code"),
+            URLQueryItem(name: "state", value: state),
+        ]
+        let callbackURL = try XCTUnwrap(callbackComponents.url)
+        _ = try await URLSession.shared.data(from: callbackURL)
+        let result = try await signInTask.value
         let completedAt = Int64(Date().timeIntervalSince1970)
 
         XCTAssertEqual(result.accessToken, "access")
