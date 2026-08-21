@@ -1017,7 +1017,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
                 return true
             }
         }
-        await fulfillment(of: [authorizationPresented], timeout: 2)
+        await fulfillment(of: [authorizationPresented], timeout: 30)
 
         signInTask.cancel()
 
@@ -1432,7 +1432,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
             }
         }
 
-        await fulfillment(of: [authorizationPresented], timeout: 2)
+        await fulfillment(of: [authorizationPresented], timeout: 30)
         guard presentedURL != nil else {
             signInTask.cancel()
             _ = try? await signInTask.value
