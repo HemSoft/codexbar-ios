@@ -1193,6 +1193,72 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertEqual(URL(string: redirectURI)?.host, "127.0.0.1")
     }
 
+    @MainActor
+    func testCopilotBrowserSignInExchangesSuccessfulCallbackForTokens() async throws {
+        let sessionFixture = IsolatedTestURLSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://github.com/login/oauth/access_token")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "Content-Type"),
+                "application/x-www-form-urlencoded"
+            )
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"access_token":"access","refresh_token":"refresh","expires_in":3600,"refresh_token_expires_in":7200}"#.utf8
+                )
+            )
+        }
+        defer { sessionFixture.invalidate() }
+        let service = CopilotWebAuthService(
+            session: sessionFixture.session,
+            callbackTimeoutNanoseconds: 30_000_000_000,
+            preferredCallbackPorts: [0]
+        )
+        let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
+        let startedAt = Int64(Date().timeIntervalSince1970)
+
+        let result = try await service.signIn(configuration: configuration) { authorizationURL in
+            guard
+                let authorizationComponents = URLComponents(
+                    url: authorizationURL,
+                    resolvingAgainstBaseURL: false
+                ),
+                let redirectURI = authorizationComponents.queryItemValue(named: "redirect_uri"),
+                let state = authorizationComponents.queryItemValue(named: "state"),
+                var callbackComponents = URLComponents(string: redirectURI)
+            else {
+                XCTFail("Expected a valid GitHub authorization callback URL.")
+                return
+            }
+            callbackComponents.queryItems = [
+                URLQueryItem(name: "code", value: "authorization-code"),
+                URLQueryItem(name: "state", value: state),
+            ]
+            guard let callbackURL = callbackComponents.url else {
+                XCTFail("Expected a valid GitHub callback URL.")
+                return
+            }
+            Task.detached {
+                _ = try? await URLSession.shared.data(from: callbackURL)
+            }
+        }
+        let completedAt = Int64(Date().timeIntervalSince1970)
+
+        XCTAssertEqual(result.accessToken, "access")
+        XCTAssertEqual(result.refreshToken, "refresh")
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(result.expiresAt), startedAt + 3_600)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(result.expiresAt), completedAt + 3_600)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(result.refreshTokenExpiresAt), startedAt + 7_200)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(result.refreshTokenExpiresAt), completedAt + 7_200)
+    }
+
     func testCopilotTokenRequestBodyUsesAuthorizationCodeExchange() {
         let body = String(
             data: CopilotWebAuthService.makeTokenRequestBody(
