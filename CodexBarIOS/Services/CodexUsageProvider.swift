@@ -145,7 +145,7 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
         case 200..<300:
             let parsedResult = CodexUsageParser.parse(data, fetchedAt: now())
                 ?? failureResult("Could not parse ChatGPT usage.", configuration: configuration)
-            let resultWithResetDetails = await addResetDetails(
+            let resultWithResetDetails = try await addResetDetails(
                 to: parsedResult,
                 credentials: credentials
             )
@@ -216,7 +216,7 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
     private func addResetDetails(
         to result: ProviderUsageResult,
         credentials: CodexCredentials
-    ) async -> ProviderUsageResult {
+    ) async throws -> ProviderUsageResult {
         // New grants can reach the inventory endpoint before the usage summary advertises them.
         var request = authenticatedRequest(
             url: resetCreditsEndpoint,
@@ -225,8 +225,16 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
         )
         request.timeoutInterval = 15
 
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            try Task.checkCancellation()
+            return result
+        }
+
         guard
-            let (data, response) = try? await session.data(for: request),
             let httpResponse = response as? HTTPURLResponse,
             (200..<300).contains(httpResponse.statusCode),
             let details = CodexUsageParser.parseResetCredits(data, canConsume: true)
