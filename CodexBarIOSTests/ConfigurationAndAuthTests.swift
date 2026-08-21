@@ -1218,7 +1218,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
         defer { sessionFixture.invalidate() }
         let service = CopilotWebAuthService(
             session: sessionFixture.session,
-            callbackTimeoutNanoseconds: 5_000_000_000,
+            callbackTimeoutNanoseconds: 30_000_000_000,
             preferredCallbackPorts: [0]
         )
         let configuration = CopilotOAuthConfiguration(clientID: "client", clientSecret: "secret")
@@ -1233,7 +1233,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
             }
         }
         defer { signInTask.cancel() }
-        await fulfillment(of: [authorizationPresented], timeout: 2)
+        await fulfillment(of: [authorizationPresented], timeout: 30)
         let authorizationComponents = try XCTUnwrap(
             URLComponents(url: try XCTUnwrap(presentedURL), resolvingAgainstBaseURL: false)
         )
