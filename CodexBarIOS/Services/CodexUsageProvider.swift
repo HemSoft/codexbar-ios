@@ -217,10 +217,7 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
         to result: ProviderUsageResult,
         credentials: CodexCredentials
     ) async -> ProviderUsageResult {
-        guard result.codexBankedRateLimitResets != nil else {
-            return result
-        }
-
+        // New grants can reach the inventory endpoint before the usage summary advertises them.
         var request = authenticatedRequest(
             url: resetCreditsEndpoint,
             method: "GET",

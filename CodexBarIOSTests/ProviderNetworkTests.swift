@@ -62,7 +62,7 @@ final class ProviderNetworkTests: XCTestCase {
 
         let result = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(requestCount, 3)
         XCTAssertEqual(result.title, "Personal Codex")
         XCTAssertEqual(result.plan?.identifier, "codex.pro")
         XCTAssertEqual(result.bars.first?.used, 25)
@@ -112,6 +112,54 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertEqual(result.codexBankedRateLimitResets?.availableCount, 2)
         XCTAssertTrue(try XCTUnwrap(result.codexBankedRateLimitResets).canConsume)
         XCTAssertEqual(result.codexBankedRateLimitResets?.preferredCredit?.id, "credit-1")
+    }
+
+    func testCodexUsageProviderFindsResetGrantedOutsideUsageSummary() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "codex-access",
+                accountID: "chatgpt-account",
+                expiresAt: 2_100_000_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/wham/usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/wham/rate-limit-reset-credits")!,
+            now: { Date(timeIntervalSince1970: 2_000_000_000) }
+        )
+        var requestedPaths: [String] = []
+
+        ProviderNetworkMockURLProtocol.handler = { request in
+            requestedPaths.append(try XCTUnwrap(request.url?.path))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer codex-access")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-Id"), "chatgpt-account")
+            if request.url?.path == "/wham/rate-limit-reset-credits" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"available_count":1,"credits":[{"id":"new-grant","status":"available"}]}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/wham/usage")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
+            )
+        }
+        defer { ProviderNetworkMockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestedPaths, ["/wham/usage", "/wham/rate-limit-reset-credits"])
+        XCTAssertEqual(result.codexBankedRateLimitResets?.availableCount, 1)
+        XCTAssertTrue(try XCTUnwrap(result.codexBankedRateLimitResets).canConsume)
+        XCTAssertEqual(result.codexBankedRateLimitResets?.preferredCredit?.id, "new-grant")
     }
 
     func testCodexUsageProviderConsumesWithStillValidTokenWithoutRefreshToken() async throws {
@@ -451,6 +499,7 @@ final class ProviderNetworkTests: XCTestCase {
             secretStore: secretStore,
             session: URLSession(configuration: sessionConfiguration),
             usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/codex-usage")!,
             now: { now }
         )
         ProviderNetworkMockURLProtocol.handler = { request in
@@ -631,7 +680,7 @@ final class ProviderNetworkTests: XCTestCase {
 
         let result = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(requestCount, 3)
         XCTAssertEqual(result.bars.first?.used, 25)
     }
 
@@ -804,7 +853,7 @@ final class ProviderNetworkTests: XCTestCase {
 
         let result = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(usageRequests, 2)
+        XCTAssertEqual(usageRequests, 3)
         XCTAssertEqual(refreshRequests, 1)
         XCTAssertEqual(result.bars.first?.used, 25)
     }
