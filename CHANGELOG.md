@@ -22,6 +22,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Let percentage history charts expand above 100% so over-limit usage remains
+  visible while preserving the dotted 100% allowance reference.
+  ([#250](https://github.com/HemSoft/codexbar-ios/issues/250))
 - Made usage notifications name the affected account, metric, current or
   projected percentage, and configured Warning or Critical Alert threshold,
   with deterministic metric selection and explicit spend-limit wording.
