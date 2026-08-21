@@ -274,16 +274,27 @@ final class ProviderNetworkTests: XCTestCase {
         }
 
         let fetchTask = Task { try await provider.fetchUsage(for: configuration) }
-        await resetRequestGate.waitUntilBlocked()
-        fetchTask.cancel()
-        resetRequestGate.release()
+        defer { fetchTask.cancel() }
+        try await withTestWatchdog(
+            timeout: .seconds(10),
+            failureMessage: "Codex reset inventory request did not start within the 10-second test bound.",
+            onTimeout: {
+                fetchTask.cancel()
+                resetRequestGate.release()
+            },
+            operation: {
+                await resetRequestGate.waitUntilBlocked()
+                fetchTask.cancel()
+                resetRequestGate.release()
 
-        do {
-            _ = try await fetchTask.value
-            XCTFail("Expected cancellation while loading reset inventory")
-        } catch {
-            XCTAssertTrue(error is CancellationError)
-        }
+                do {
+                    _ = try await fetchTask.value
+                    XCTFail("Expected cancellation while loading reset inventory")
+                } catch {
+                    XCTAssertTrue(error is CancellationError)
+                }
+            }
+        )
     }
 
     func testCodexUsageProviderConsumesWithStillValidTokenWithoutRefreshToken() async throws {
