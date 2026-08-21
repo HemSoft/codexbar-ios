@@ -26,6 +26,9 @@ building, testing, or releasing the app.
   projected percentage, and configured Warning or Critical Alert threshold,
   with deterministic metric selection and explicit spend-limit wording.
   ([#242](https://github.com/HemSoft/codexbar-ios/issues/242))
+- Included the saved-account label and provider in every usage Warning and
+  Critical Alert notification body, so previews identify the subscription even
+  when they omit the notification title. ([#249](https://github.com/HemSoft/codexbar-ios/issues/249))
 
 ### Developer Experience
 

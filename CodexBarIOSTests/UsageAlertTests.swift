@@ -205,7 +205,7 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(warningEvaluation.notifications.first?.title, "Codex Warning")
         XCTAssertEqual(
             warningEvaluation.notifications.first?.body,
-            "Warning status. Weekly current usage is 60% (Warning at 60%)."
+            "Codex (ChatGPT / Codex): Warning status. Weekly current usage is 60% (Warning at 60%)."
         )
         XCTAssertEqual(warningEvaluation.activeAlerts.first?.severity, .warning)
         XCTAssertEqual(
@@ -225,7 +225,7 @@ final class UsageAlertTests: XCTestCase {
         )
         XCTAssertEqual(
             criticalEvaluation.notifications.first?.body,
-            "Critical status. Weekly current usage is 85% (Critical Alert at 85%)."
+            "Codex (ChatGPT / Codex): Critical status. Weekly current usage is 85% (Critical Alert at 85%)."
         )
         XCTAssertEqual(criticalEvaluation.activeAlerts.first?.severity, .critical)
         XCTAssertEqual(
@@ -240,7 +240,16 @@ final class UsageAlertTests: XCTestCase {
     func testNotificationsIdentifyCustomAndFallbackLabelsForSameProvider() {
         let evaluations = [
             result(accountID: "codex.first-private-id", title: "Work Codex", used: 80),
-            result(accountID: "codex.second-private-id", title: "Codex 2", used: 80),
+            result(
+                accountID: "codex.second-private-id",
+                title: "ChatGPT / Codex",
+                used: 80
+            ),
+            result(
+                accountID: "codex.third-private-id",
+                title: "ChatGPT / Codex 2",
+                used: 80
+            ),
         ].map {
             UsageAlertEvaluator.evaluate(
                 results: [$0],
@@ -251,13 +260,26 @@ final class UsageAlertTests: XCTestCase {
 
         XCTAssertEqual(
             evaluations.compactMap { $0.notifications.first?.title },
-            ["Work Codex Warning", "Codex 2 Warning"]
+            [
+                "Work Codex Warning",
+                "ChatGPT / Codex Warning",
+                "ChatGPT / Codex 2 Warning",
+            ]
+        )
+        XCTAssertEqual(
+            evaluations.compactMap { $0.notifications.first?.body },
+            [
+                "Work Codex (ChatGPT / Codex): Warning status. Weekly current usage is 80% (Warning at 75%).",
+                "ChatGPT / Codex: Warning status. Weekly current usage is 80% (Warning at 75%).",
+                "ChatGPT / Codex 2 (ChatGPT / Codex): Warning status. Weekly current usage is 80% (Warning at 75%).",
+            ]
         )
         let notificationText = evaluations.flatMap(\.notifications).map {
             "\($0.title) \($0.body)"
         }.joined(separator: " ")
         XCTAssertFalse(notificationText.contains("first-private-id"))
         XCTAssertFalse(notificationText.contains("second-private-id"))
+        XCTAssertFalse(notificationText.contains("third-private-id"))
     }
 
     func testLegacySuppressionIDsMigrateWithoutDuplicateNotifications() throws {
@@ -339,6 +361,7 @@ final class UsageAlertTests: XCTestCase {
     func testProjectedUsageUsesConfiguredThresholds() {
         let now = Date(timeIntervalSince1970: 1_783_667_520)
         let projectedResult = result(
+            title: "Personal Codex",
             used: 40,
             projectionCurrent: 40,
             projectionPeriodStart: now.addingTimeInterval(-4 * 24 * 60 * 60),
@@ -366,7 +389,7 @@ final class UsageAlertTests: XCTestCase {
         )
         XCTAssertEqual(
             evaluation.notifications.first?.body,
-            "Critical status. Weekly projected usage is 100% (Critical Alert at 95%)."
+            "Personal Codex (ChatGPT / Codex): Critical status. Weekly projected usage is 100% (Critical Alert at 95%)."
         )
     }
 
@@ -441,8 +464,8 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(
             evaluations.compactMap { $0.notifications.first?.body },
             [
-                "Critical status. Weekly current usage is 112% (Critical Alert at 90%).",
-                "Critical status. Weekly current usage is 112% (Critical Alert at 90%).",
+                "Codex (ChatGPT / Codex): Critical status. Weekly current usage is 112% (Critical Alert at 90%).",
+                "Codex (ChatGPT / Codex): Critical status. Weekly current usage is 112% (Critical Alert at 90%).",
             ]
         )
         XCTAssertTrue(evaluations.allSatisfy { evaluation in
@@ -551,6 +574,28 @@ final class UsageAlertTests: XCTestCase {
         XCTAssertEqual(
             evaluation.activeAlerts.first?.message,
             "Work Claude reached its monthly usage-credit spend limit."
+        )
+        XCTAssertEqual(
+            evaluation.notifications.first?.body,
+            "Work Claude (Claude): Critical status. Work Claude reached its monthly usage-credit spend limit."
+        )
+    }
+
+    @MainActor
+    func testLocalNotifierDeliversEvaluatorTitleAndAccountSpecificBody() throws {
+        let evaluation = UsageAlertEvaluator.evaluate(
+            results: [result(title: "Personal Codex", used: 95)],
+            settings: UsageAlertSettings(isEnabled: true),
+            activeAlertIDs: []
+        )
+        let notification = try XCTUnwrap(evaluation.notifications.first)
+
+        let content = LocalUsageAlertNotifier.content(for: notification)
+
+        XCTAssertEqual(content.title, "Personal Codex Critical Alert")
+        XCTAssertEqual(
+            content.body,
+            "Personal Codex (ChatGPT / Codex): Critical status. Weekly current usage is 95% (Critical Alert at 90%)."
         )
     }
 
