@@ -173,6 +173,66 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertEqual(result.codexBankedRateLimitResets?.preferredCredit?.id, "new-grant")
     }
 
+    @MainActor
+    func testCodexUsageProviderParseFailurePreservesCachedUsageWithoutInventoryProbe() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "codex-access",
+                expiresAt: 2_100_000_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/wham/usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/wham/rate-limit-reset-credits")!,
+            now: { Date(timeIntervalSince1970: 2_000_000_000) }
+        )
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: configuration.displayName,
+            subtitle: "Live ChatGPT usage",
+            bars: [UsageBar(label: "Session", used: 25, limit: 100)],
+            fetchedAt: Date(timeIntervalSince1970: 1_999_999_000)
+        )
+        let service = UsageRefreshService(providers: [provider], initialResults: [cachedResult])
+        var requestedPaths: [String] = []
+
+        ProviderNetworkMockURLProtocol.handler = { request in
+            requestedPaths.append(try XCTUnwrap(request.url?.path))
+            if request.url?.path == "/wham/rate-limit-reset-credits" {
+                XCTFail("Reset inventory should not be requested after usage parsing fails")
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"available_count":1,"credits":[{"id":"new-grant","status":"available"}]}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/wham/usage")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("not-json".utf8)
+            )
+        }
+        defer { ProviderNetworkMockURLProtocol.handler = nil }
+
+        let failure = await service.refresh(configuration: configuration)
+
+        XCTAssertEqual(requestedPaths, ["/wham/usage"])
+        XCTAssertEqual(failure?.failureMessage, "Could not parse ChatGPT usage.")
+        XCTAssertEqual(service.results.first?.bars, cachedResult.bars)
+        XCTAssertNil(service.results.first?.codexBankedRateLimitResets)
+        XCTAssertEqual(
+            service.results.first?.subtitle,
+            "Could not parse ChatGPT usage. Showing last known data."
+        )
+    }
+
     func testCodexUsageProviderPropagatesCancellationWhileLoadingResetInventory() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)

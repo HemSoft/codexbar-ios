@@ -143,8 +143,9 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
 
         switch httpResponse.statusCode {
         case 200..<300:
-            let parsedResult = CodexUsageParser.parse(data, fetchedAt: now())
-                ?? failureResult("Could not parse ChatGPT usage.", configuration: configuration)
+            guard let parsedResult = CodexUsageParser.parse(data, fetchedAt: now()) else {
+                return failureResult("Could not parse ChatGPT usage.", configuration: configuration)
+            }
             let resultWithResetDetails = try await addResetDetails(
                 to: parsedResult,
                 credentials: credentials
