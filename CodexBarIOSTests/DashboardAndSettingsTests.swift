@@ -2488,7 +2488,11 @@ final class DashboardAndSettingsTests: XCTestCase {
         let signInTask = Task {
             await viewModel.signInWithCopilot()
         }
-        await authService.waitUntilCallbackScheduled()
+        defer {
+            signInTask.cancel()
+            authService.completeCallback()
+        }
+        try await authService.waitUntilCallbackScheduled()
         XCTAssertTrue(viewModel.isSigningInWithCopilot)
         XCTAssertNotNil(viewModel.authURL)
         await Task.yield()
@@ -2537,7 +2541,11 @@ final class DashboardAndSettingsTests: XCTestCase {
         let signInTask = Task {
             await viewModel.signInWithCopilot()
         }
-        await authService.waitUntilCallbackScheduled()
+        defer {
+            signInTask.cancel()
+            authService.completeCallback()
+        }
+        try await authService.waitUntilCallbackScheduled()
         authService.completeCallback()
         await signInTask.value
 
@@ -3123,12 +3131,26 @@ private final class DelayedStubCopilotAuthService: CopilotWebAuthenticating {
     ) async throws -> CopilotWebAuthResult {
         presentAuthorizationURL(URL(string: "https://github.com/login/oauth/authorize")!)
         callbackScheduled.signal()
-        await callbackRelease.wait()
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "Copilot callback release did not arrive within the five-second test bound.",
+            onTimeout: {},
+            operation: { [callbackRelease] in
+                await callbackRelease.wait()
+            }
+        )
         return try result.get()
     }
 
-    func waitUntilCallbackScheduled() async {
-        await callbackScheduled.wait()
+    func waitUntilCallbackScheduled() async throws {
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "Copilot callback was not scheduled within the five-second test bound.",
+            onTimeout: {},
+            operation: { [callbackScheduled] in
+                await callbackScheduled.wait()
+            }
+        )
     }
 
     func completeCallback() {
