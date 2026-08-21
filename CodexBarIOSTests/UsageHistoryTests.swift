@@ -1023,6 +1023,62 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testPercentageChartDomainExpandsPastHighestOverLimitValue() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = UsageHistoryStore(defaults: defaults)
+        let samples = [
+            makeHistoryResult(
+                accountID: "copilot.organization",
+                providerID: .copilot,
+                fetchedAt: now.addingTimeInterval(-60),
+                used: 80
+            ),
+            makeHistoryResult(
+                accountID: "copilot.organization",
+                providerID: .copilot,
+                fetchedAt: now,
+                used: 125
+            ),
+        ]
+
+        for sample in samples {
+            store.record(results: [sample], now: now)
+        }
+
+        let series = store.historySeries(for: samples[1])
+
+        XCTAssertEqual(series.points.map(\.value), [0.8, 1.25])
+        XCTAssertEqual(series.chartDomain.lowerBound, 0)
+        XCTAssertGreaterThan(series.chartDomain.upperBound, 1.25)
+        XCTAssertEqual(series.latestValueDescription, "125%")
+        XCTAssertEqual(series.maximumValueDescription, "125%")
+        XCTAssertEqual(series.rangeDescription, "Range 80% to 125%")
+        XCTAssertTrue(series.showsQuotaLimitRule)
+    }
+
+    @MainActor
+    func testPercentageChartDomainStaysAtOneHundredPercentAtOrBelowLimit() {
+        let now = Date(timeIntervalSince1970: 1_788_475_200)
+        let series = UsageHistorySeries(
+            accountID: "copilot.organization",
+            points: [
+                UsageHistoryPoint(id: "under", capturedAt: now.addingTimeInterval(-60), value: 0.8, severity: .normal),
+                UsageHistoryPoint(id: "limit", capturedAt: now, value: 1, severity: .critical),
+            ],
+            isBalance: false
+        )
+
+        XCTAssertEqual(series.chartDomain, 0...1)
+        XCTAssertEqual(series.latestValueDescription, "100%")
+        XCTAssertTrue(series.showsQuotaLimitRule)
+    }
+
+    @MainActor
     func testUsageHistorySeriesPadsFlatBalanceChartDomain() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
