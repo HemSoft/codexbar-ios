@@ -221,7 +221,10 @@ public enum UsageAlertEvaluator {
                         accountID: result.accountID,
                         kind: .severity,
                         title: "\(result.title) \(highestSeverity.notificationName)",
-                        body: detail.notificationBody
+                        body: severityNotificationBody(
+                            result: result,
+                            detail: detail
+                        )
                     )
                 )
             }
@@ -300,6 +303,17 @@ public enum UsageAlertEvaluator {
             ) ?? result.subtitle,
             severity: severity
         )
+    }
+
+    private static func severityNotificationBody(
+        result: ProviderUsageResult,
+        detail: UsageAlertDetail
+    ) -> String {
+        let providerName = result.providerID.displayName
+        let accountIdentity = result.title == providerName
+            ? providerName
+            : "\(result.title) (\(providerName))"
+        return "\(accountIdentity): \(detail.notificationBody)"
     }
 
     private static func severityAlertTrigger(
