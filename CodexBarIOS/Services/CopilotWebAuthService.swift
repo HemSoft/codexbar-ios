@@ -50,6 +50,14 @@ public struct CopilotOAuthConfiguration: Equatable, Sendable {
     }
 }
 
+@MainActor
+protocol CopilotWebAuthenticating {
+    func signIn(
+        configuration: CopilotOAuthConfiguration,
+        presentAuthorizationURL: @escaping @MainActor (URL) -> Void
+    ) async throws -> CopilotWebAuthResult
+}
+
 public final class CopilotWebAuthService: Sendable {
     public enum AuthError: LocalizedError, Equatable, Sendable {
         case couldNotStartCallbackServer
@@ -309,6 +317,8 @@ public final class CopilotWebAuthService: Sendable {
     }
 
 }
+
+extension CopilotWebAuthService: CopilotWebAuthenticating {}
 
 private extension URLComponents {
     func queryItemValue(named name: String) -> String? {

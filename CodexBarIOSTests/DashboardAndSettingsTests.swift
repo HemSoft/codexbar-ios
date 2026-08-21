@@ -2460,11 +2460,12 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testBrowserCopilotReplacementFailurePreservesPersistedIdentityAndCredential() async throws {
+    func testDelayedBrowserCopilotReplacementFailurePreservesPersistedIdentityAndCredential() async throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         let secretStore = FailingSaveSecretStore(secret: "existing-token")
         let sessionFixture = makeCopilotBrowserReplacementSession()
+        let authService = DelayedStubCopilotAuthService(result: .success(replacementCopilotAuthResult))
         defer {
             sessionFixture.invalidate()
             defaults.removePersistentDomain(forName: suiteName)
@@ -2480,15 +2481,19 @@ final class DashboardAndSettingsTests: XCTestCase {
             configurationStore: store,
             accountID: configuration.id,
             onCredentialsChanged: { credentialsChangedCount += 1 },
-            copilotAuthService: CopilotWebAuthService(
-                session: sessionFixture.session,
-                callbackTimeoutNanoseconds: 5_000_000_000,
-                preferredCallbackPorts: [0]
-            ),
+            copilotAuthService: authService,
             copilotUsageProvider: makeCopilotUsageProvider(session: sessionFixture.session)
         )
 
-        try await completeCopilotBrowserSignIn(viewModel)
+        let signInTask = Task {
+            await viewModel.signInWithCopilot()
+        }
+        await authService.waitUntilCallbackScheduled()
+        XCTAssertTrue(viewModel.isSigningInWithCopilot)
+        XCTAssertNotNil(viewModel.authURL)
+        await Task.yield()
+        authService.completeCallback()
+        await signInTask.value
 
         XCTAssertNotNil(viewModel.copilotAuthError)
         XCTAssertEqual(credentialsChangedCount, 0)
@@ -2508,6 +2513,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         let secretStore = MemorySecretStore()
         let sessionFixture = makeCopilotBrowserReplacementSession()
+        let authService = DelayedStubCopilotAuthService(result: .success(replacementCopilotAuthResult))
         defer {
             sessionFixture.invalidate()
             defaults.removePersistentDomain(forName: suiteName)
@@ -2524,15 +2530,16 @@ final class DashboardAndSettingsTests: XCTestCase {
             configurationStore: store,
             accountID: configuration.id,
             onCredentialsChanged: { credentialsChangedCount += 1 },
-            copilotAuthService: CopilotWebAuthService(
-                session: sessionFixture.session,
-                callbackTimeoutNanoseconds: 5_000_000_000,
-                preferredCallbackPorts: [0]
-            ),
+            copilotAuthService: authService,
             copilotUsageProvider: makeCopilotUsageProvider(session: sessionFixture.session)
         )
 
-        try await completeCopilotBrowserSignIn(viewModel)
+        let signInTask = Task {
+            await viewModel.signInWithCopilot()
+        }
+        await authService.waitUntilCallbackScheduled()
+        authService.completeCallback()
+        await signInTask.value
 
         XCTAssertNil(viewModel.copilotAuthError)
         XCTAssertEqual(credentialsChangedCount, 1)
@@ -2585,21 +2592,18 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
     }
 
+    private var replacementCopilotAuthResult: CopilotWebAuthResult {
+        CopilotWebAuthResult(
+            accessToken: "replacement-token",
+            refreshToken: "replacement-refresh-token",
+            expiresAt: nil,
+            refreshTokenExpiresAt: nil
+        )
+    }
+
     private func makeCopilotBrowserReplacementSession() -> IsolatedTestURLSession {
         IsolatedTestURLSession { request in
             switch request.url?.path {
-            case "/login/oauth/access_token":
-                return (
-                    HTTPURLResponse(
-                        url: try XCTUnwrap(request.url),
-                        statusCode: 200,
-                        httpVersion: nil,
-                        headerFields: nil
-                    )!,
-                    Data(
-                        #"{"access_token":"replacement-token","refresh_token":"replacement-refresh-token"}"#.utf8
-                    )
-                )
             case "/copilot-usage":
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "token replacement-token")
                 return (
@@ -2614,48 +2618,6 @@ final class DashboardAndSettingsTests: XCTestCase {
             default:
                 throw URLError(.badURL)
             }
-        }
-    }
-
-    @MainActor
-    private func completeCopilotBrowserSignIn(
-        _ viewModel: ProviderSettingsViewModel
-    ) async throws {
-        let signInTask = Task {
-            await viewModel.signInWithCopilot()
-        }
-        do {
-            var authorizationURL: URL?
-            for _ in 0..<100 {
-                authorizationURL = viewModel.authURL?.url
-                if authorizationURL != nil {
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(10))
-            }
-
-            guard let authorizationURL else {
-                signInTask.cancel()
-                await signInTask.value
-                XCTFail("Copilot authorization URL was never presented.")
-                return
-            }
-            let components = try XCTUnwrap(
-                URLComponents(url: authorizationURL, resolvingAgainstBaseURL: false)
-            )
-            let redirectURI = try XCTUnwrap(components.queryItemValue(named: "redirect_uri"))
-            let state = try XCTUnwrap(components.queryItemValue(named: "state"))
-            var callbackComponents = try XCTUnwrap(URLComponents(string: redirectURI))
-            callbackComponents.queryItems = [
-                URLQueryItem(name: "code", value: "authorization-code"),
-                URLQueryItem(name: "state", value: state),
-            ]
-            _ = try await URLSession.shared.data(from: try XCTUnwrap(callbackComponents.url))
-            await signInTask.value
-        } catch {
-            signInTask.cancel()
-            await signInTask.value
-            throw error
         }
     }
 
@@ -3142,6 +3104,35 @@ private final class StubCodexAuthService: CodexWebAuthenticating {
         presentAuthorizationURL: @escaping @MainActor (URL) -> Bool
     ) async throws -> CodexWebAuthResult {
         try result.get()
+    }
+}
+
+@MainActor
+private final class DelayedStubCopilotAuthService: CopilotWebAuthenticating {
+    private let result: Result<CopilotWebAuthResult, Error>
+    private let callbackScheduled = TestSignal()
+    private let callbackRelease = TestSignal()
+
+    init(result: Result<CopilotWebAuthResult, Error>) {
+        self.result = result
+    }
+
+    func signIn(
+        configuration: CopilotOAuthConfiguration,
+        presentAuthorizationURL: @escaping @MainActor (URL) -> Void
+    ) async throws -> CopilotWebAuthResult {
+        presentAuthorizationURL(URL(string: "https://github.com/login/oauth/authorize")!)
+        callbackScheduled.signal()
+        await callbackRelease.wait()
+        return try result.get()
+    }
+
+    func waitUntilCallbackScheduled() async {
+        await callbackScheduled.wait()
+    }
+
+    func completeCallback() {
+        callbackRelease.signal()
     }
 }
 
