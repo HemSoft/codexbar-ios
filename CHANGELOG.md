@@ -37,6 +37,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Updated the pinned SwiftLint tooling to 0.65.1, including its fix for
+  correctly ignoring URLs in line-length checks.
+  ([#256](https://github.com/HemSoft/codexbar-ios/issues/256))
 - Made GitHub Copilot credential-replacement tests wait on a deterministic
   browser-auth callback signal, and gave token-error callback tasks enough time
   to run under a loaded simulator instead of racing a five-second timeout.
