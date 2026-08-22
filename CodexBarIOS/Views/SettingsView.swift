@@ -198,9 +198,11 @@ enum SettingsCategorySummary {
     static func dashboard(
         appearance: AppAppearance,
         ordering: DashboardOrderingMode,
-        refreshInterval: AutoRefreshInterval
+        refreshInterval: AutoRefreshInterval,
+        historySamplingInterval: HistorySamplingInterval
     ) -> String {
-        "\(appearance.displayName) · \(ordering.displayName) · \(refreshInterval.displayName)"
+        "\(appearance.displayName) · \(ordering.displayName) · \(refreshInterval.displayName) refresh · "
+            + "\(historySamplingInterval.displayName) history"
     }
 
     static func alerts(
@@ -494,7 +496,8 @@ struct SettingsView: View {
             SettingsCategorySummary.dashboard(
                 appearance: configurationStore.appAppearance,
                 ordering: configurationStore.dashboardOrderingMode,
-                refreshInterval: configurationStore.autoRefreshInterval
+                refreshInterval: configurationStore.autoRefreshInterval,
+                historySamplingInterval: configurationStore.historySamplingInterval
             )
         case .alerts:
             SettingsCategorySummary.alerts(
@@ -668,6 +671,21 @@ struct SettingsView: View {
                         Text(interval.displayName).tag(interval)
                     }
                 }
+            }
+
+            Section {
+                Picker("Store Sample", selection: historySamplingIntervalBinding) {
+                    ForEach(HistorySamplingInterval.allCases) { interval in
+                        Text(interval.displayName).tag(interval)
+                    }
+                }
+            } header: {
+                Text("History")
+            } footer: {
+                Text(
+                    "Usage still refreshes normally. History stores at most one sample "
+                        + "per account during this interval."
+                )
             }
 
             Section("Dashboard Ordering") {
@@ -957,6 +975,13 @@ struct SettingsView: View {
         Binding(
             get: { configurationStore.autoRefreshInterval },
             set: { configurationStore.updateAutoRefreshInterval($0) }
+        )
+    }
+
+    private var historySamplingIntervalBinding: Binding<HistorySamplingInterval> {
+        Binding(
+            get: { configurationStore.historySamplingInterval },
+            set: { configurationStore.updateHistorySamplingInterval($0) }
         )
     }
 

@@ -206,6 +206,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var secretAvailability: [String: Bool]
     @Published public private(set) var appAppearance: AppAppearance
     @Published public private(set) var autoRefreshInterval: AutoRefreshInterval
+    @Published public private(set) var historySamplingInterval: HistorySamplingInterval
     @Published public private(set) var widgetRefreshInterval: WidgetRefreshInterval
     @Published public private(set) var dashboardOrderingMode: DashboardOrderingMode
     @Published public private(set) var dashboardCardOrder: [String]
@@ -225,6 +226,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private let groupsKey = DefaultsKey.groups
     private let appAppearanceKey = DefaultsKey.appAppearance
     private let autoRefreshIntervalKey = DefaultsKey.autoRefreshInterval
+    private let historySamplingIntervalKey = DefaultsKey.historySamplingInterval
     private let widgetRefreshIntervalKey = DefaultsKey.widgetRefreshInterval
     private let dashboardOrderingModeKey = DefaultsKey.dashboardOrderingMode
     private let dashboardCardOrderKey = DefaultsKey.dashboardCardOrder
@@ -268,6 +270,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.secretAvailability = [:]
         self.appAppearance = Self.loadAppAppearance(from: defaults)
         self.autoRefreshInterval = Self.loadAutoRefreshInterval(from: defaults)
+        self.historySamplingInterval = Self.loadHistorySamplingInterval(from: defaults)
         self.widgetRefreshInterval = Self.loadWidgetRefreshInterval(
             from: defaults,
             widgetSnapshotDefaults: widgetSnapshotDefaults
@@ -740,6 +743,11 @@ public final class ProviderConfigurationStore: ObservableObject {
     public func updateAutoRefreshInterval(_ interval: AutoRefreshInterval) {
         autoRefreshInterval = interval
         defaults.set(interval.rawValue, forKey: autoRefreshIntervalKey)
+    }
+
+    public func updateHistorySamplingInterval(_ interval: HistorySamplingInterval) {
+        historySamplingInterval = interval
+        defaults.set(interval.rawValue, forKey: historySamplingIntervalKey)
     }
 
     public func updateWidgetRefreshInterval(_ interval: WidgetRefreshInterval) {
@@ -1733,6 +1741,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         static let groups = "providerAccountGroups"
         static let appAppearance = "appAppearance"
         static let autoRefreshInterval = "autoRefreshInterval"
+        static let historySamplingInterval = "historySamplingInterval"
         static let widgetRefreshInterval = "widgetRefreshInterval"
         static let dashboardOrderingMode = "dashboardOrderingMode"
         static let dashboardCardOrder = "dashboardCardOrder"
@@ -1851,6 +1860,21 @@ public final class ProviderConfigurationStore: ObservableObject {
             let interval = AutoRefreshInterval(rawValue: defaults.integer(forKey: DefaultsKey.autoRefreshInterval))
         else {
             return .off
+        }
+
+        return interval
+    }
+
+    private static func loadHistorySamplingInterval(
+        from defaults: UserDefaults
+    ) -> HistorySamplingInterval {
+        guard
+            defaults.object(forKey: DefaultsKey.historySamplingInterval) != nil,
+            let interval = HistorySamplingInterval(
+                rawValue: defaults.integer(forKey: DefaultsKey.historySamplingInterval)
+            )
+        else {
+            return .twoHours
         }
 
         return interval

@@ -530,9 +530,10 @@ final class AppAndWidgetTests: XCTestCase {
             SettingsCategorySummary.dashboard(
                 appearance: .dark,
                 ordering: .smart,
-                refreshInterval: .fifteenMinutes
+                refreshInterval: .fifteenMinutes,
+                historySamplingInterval: .twoHours
             ),
-            "Dark · Smart · 15 min"
+            "Dark · Smart · 15 min refresh · 2 hours history"
         )
         XCTAssertEqual(
             SettingsCategorySummary.alerts(
@@ -1982,6 +1983,31 @@ final class AppAndWidgetTests: XCTestCase {
             widgetSnapshotDefaults: defaults
         )
         XCTAssertEqual(reloadedStore.autoRefreshInterval, .fiveMinutes)
+    }
+
+    @MainActor
+    func testHistorySamplingIntervalDefaultsToTwoHoursAndPersists() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        XCTAssertEqual(store.historySamplingInterval, .twoHours)
+
+        store.updateHistorySamplingInterval(.fourHours)
+
+        let reloadedStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore(),
+            widgetSnapshotDefaults: defaults
+        )
+        XCTAssertEqual(reloadedStore.historySamplingInterval, .fourHours)
     }
 
     @MainActor
