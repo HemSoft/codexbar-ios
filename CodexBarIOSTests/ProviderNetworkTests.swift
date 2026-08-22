@@ -25,13 +25,16 @@ final class ProviderNetworkTests: XCTestCase {
             secretStore: secretStore,
             session: session,
             usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/codex-reset-credits")!,
             tokenEndpoint: URL(string: "https://example.test/codex-token")!,
             now: { now }
         )
         var requestCount = 0
+        var requestedPaths: [String] = []
 
         ProviderNetworkMockURLProtocol.handler = { request in
             requestCount += 1
+            requestedPaths.append(try XCTUnwrap(request.url?.path))
             if request.url?.path == "/codex-token" {
                 XCTAssertEqual(request.httpMethod, "POST")
                 XCTAssertEqual(request.timeoutInterval, 15)
@@ -53,6 +56,13 @@ final class ProviderNetworkTests: XCTestCase {
             XCTAssertEqual(persisted.accessToken, "new-access")
             XCTAssertEqual(persisted.refreshToken, "new-refresh")
             XCTAssertEqual(persisted.expiresAt, 2_000_003_600)
+            if request.url?.path == "/codex-reset-credits" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"available_count":0,"credits":[]}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/codex-usage")
             return (
                 HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
                 Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
@@ -62,7 +72,8 @@ final class ProviderNetworkTests: XCTestCase {
 
         let result = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(requestCount, 3)
+        XCTAssertEqual(requestedPaths, ["/codex-token", "/codex-usage", "/codex-reset-credits"])
         XCTAssertEqual(result.title, "Personal Codex")
         XCTAssertEqual(result.plan?.identifier, "codex.pro")
         XCTAssertEqual(result.bars.first?.used, 25)
@@ -112,6 +123,178 @@ final class ProviderNetworkTests: XCTestCase {
         XCTAssertEqual(result.codexBankedRateLimitResets?.availableCount, 2)
         XCTAssertTrue(try XCTUnwrap(result.codexBankedRateLimitResets).canConsume)
         XCTAssertEqual(result.codexBankedRateLimitResets?.preferredCredit?.id, "credit-1")
+    }
+
+    func testCodexUsageProviderFindsResetGrantedOutsideUsageSummary() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "codex-access",
+                accountID: "chatgpt-account",
+                expiresAt: 2_100_000_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/wham/usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/wham/rate-limit-reset-credits")!,
+            now: { Date(timeIntervalSince1970: 2_000_000_000) }
+        )
+        var requestedPaths: [String] = []
+
+        ProviderNetworkMockURLProtocol.handler = { request in
+            requestedPaths.append(try XCTUnwrap(request.url?.path))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer codex-access")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-Id"), "chatgpt-account")
+            if request.url?.path == "/wham/rate-limit-reset-credits" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"available_count":1,"credits":[{"id":"new-grant","status":"available"}]}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/wham/usage")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
+            )
+        }
+        defer { ProviderNetworkMockURLProtocol.handler = nil }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(requestedPaths, ["/wham/usage", "/wham/rate-limit-reset-credits"])
+        XCTAssertEqual(result.codexBankedRateLimitResets?.availableCount, 1)
+        XCTAssertTrue(try XCTUnwrap(result.codexBankedRateLimitResets).canConsume)
+        XCTAssertEqual(result.codexBankedRateLimitResets?.preferredCredit?.id, "new-grant")
+    }
+
+    @MainActor
+    func testCodexUsageProviderParseFailurePreservesCachedUsageWithoutInventoryProbe() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "codex-access",
+                expiresAt: 2_100_000_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/wham/usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/wham/rate-limit-reset-credits")!,
+            now: { Date(timeIntervalSince1970: 2_000_000_000) }
+        )
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: configuration.displayName,
+            subtitle: "Live ChatGPT usage",
+            bars: [UsageBar(label: "Session", used: 25, limit: 100)],
+            fetchedAt: Date(timeIntervalSince1970: 1_999_999_000)
+        )
+        let service = UsageRefreshService(providers: [provider], initialResults: [cachedResult])
+        var requestedPaths: [String] = []
+
+        ProviderNetworkMockURLProtocol.handler = { request in
+            requestedPaths.append(try XCTUnwrap(request.url?.path))
+            if request.url?.path == "/wham/rate-limit-reset-credits" {
+                XCTFail("Reset inventory should not be requested after usage parsing fails")
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"available_count":1,"credits":[{"id":"new-grant","status":"available"}]}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/wham/usage")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("not-json".utf8)
+            )
+        }
+        defer { ProviderNetworkMockURLProtocol.handler = nil }
+
+        let failure = await service.refresh(configuration: configuration)
+
+        XCTAssertEqual(requestedPaths, ["/wham/usage"])
+        XCTAssertEqual(failure?.failureMessage, "Could not parse ChatGPT usage.")
+        XCTAssertEqual(service.results.first?.bars, cachedResult.bars)
+        XCTAssertNil(service.results.first?.codexBankedRateLimitResets)
+        XCTAssertEqual(
+            service.results.first?.subtitle,
+            "Could not parse ChatGPT usage. Showing last known data."
+        )
+    }
+
+    func testCodexUsageProviderPropagatesCancellationWhileLoadingResetInventory() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .codex)
+        try secretStore.saveSecret(
+            CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "codex-access",
+                expiresAt: 2_100_000_000
+            )),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [ProviderNetworkMockURLProtocol.self]
+        let provider = CodexUsageProvider(
+            secretStore: secretStore,
+            session: URLSession(configuration: sessionConfiguration),
+            usageEndpoint: URL(string: "https://example.test/wham/usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/wham/rate-limit-reset-credits")!,
+            now: { Date(timeIntervalSince1970: 2_000_000_000) }
+        )
+        let resetRequestGate = TestRequestGate()
+
+        ProviderNetworkMockURLProtocol.handler = { request in
+            if request.url?.path == "/wham/rate-limit-reset-credits" {
+                resetRequestGate.blockUntilReleased()
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"available_count":1,"credits":[{"id":"new-grant","status":"available"}]}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/wham/usage")
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
+            )
+        }
+        defer {
+            resetRequestGate.release()
+            ProviderNetworkMockURLProtocol.handler = nil
+        }
+
+        let fetchTask = Task { try await provider.fetchUsage(for: configuration) }
+        defer { fetchTask.cancel() }
+        try await withTestWatchdog(
+            timeout: .seconds(10),
+            failureMessage: "Codex reset inventory request did not start within the 10-second test bound.",
+            onTimeout: {
+                fetchTask.cancel()
+                resetRequestGate.release()
+            },
+            operation: {
+                await resetRequestGate.waitUntilBlocked()
+                fetchTask.cancel()
+                resetRequestGate.release()
+
+                do {
+                    _ = try await fetchTask.value
+                    XCTFail("Expected cancellation while loading reset inventory")
+                } catch {
+                    XCTAssertTrue(error is CancellationError)
+                }
+            }
+        )
     }
 
     func testCodexUsageProviderConsumesWithStillValidTokenWithoutRefreshToken() async throws {
@@ -451,6 +634,7 @@ final class ProviderNetworkTests: XCTestCase {
             secretStore: secretStore,
             session: URLSession(configuration: sessionConfiguration),
             usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/codex-usage")!,
             now: { now }
         )
         ProviderNetworkMockURLProtocol.handler = { request in
@@ -609,12 +793,15 @@ final class ProviderNetworkTests: XCTestCase {
             secretStore: secretStore,
             session: URLSession(configuration: sessionConfiguration),
             usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/codex-reset-credits")!,
             tokenEndpoint: URL(string: "https://example.test/codex-token")!,
             now: { now }
         )
         var requestCount = 0
+        var requestedPaths: [String] = []
         ProviderNetworkMockURLProtocol.handler = { request in
             requestCount += 1
+            requestedPaths.append(try XCTUnwrap(request.url?.path))
             if request.url?.path == "/codex-token" {
                 return (
                     HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil)!,
@@ -622,6 +809,13 @@ final class ProviderNetworkTests: XCTestCase {
                 )
             }
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer still-valid-access")
+            if request.url?.path == "/codex-reset-credits" {
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"available_count":0,"credits":[]}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/codex-usage")
             return (
                 HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
                 Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
@@ -631,7 +825,8 @@ final class ProviderNetworkTests: XCTestCase {
 
         let result = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(requestCount, 3)
+        XCTAssertEqual(requestedPaths, ["/codex-token", "/codex-usage", "/codex-reset-credits"])
         XCTAssertEqual(result.bars.first?.used, 25)
     }
 
@@ -774,11 +969,14 @@ final class ProviderNetworkTests: XCTestCase {
             secretStore: secretStore,
             session: URLSession(configuration: sessionConfiguration),
             usageEndpoint: URL(string: "https://example.test/codex-usage")!,
+            resetCreditsEndpoint: URL(string: "https://example.test/codex-reset-credits")!,
             tokenEndpoint: URL(string: "https://example.test/codex-token")!
         )
         var usageRequests = 0
         var refreshRequests = 0
+        var requestedPaths: [String] = []
         ProviderNetworkMockURLProtocol.handler = { request in
+            requestedPaths.append(try XCTUnwrap(request.url?.path))
             if request.url?.path == "/codex-token" {
                 refreshRequests += 1
                 return (
@@ -786,6 +984,14 @@ final class ProviderNetworkTests: XCTestCase {
                     Data(#"{"access_token":"new-access","refresh_token":"rotated-refresh","expires_in":3600}"#.utf8)
                 )
             }
+            if request.url?.path == "/codex-reset-credits" {
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer new-access")
+                return (
+                    HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"available_count":0,"credits":[]}"#.utf8)
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/codex-usage")
             usageRequests += 1
             XCTAssertEqual(
                 request.value(forHTTPHeaderField: "Authorization"),
@@ -806,6 +1012,10 @@ final class ProviderNetworkTests: XCTestCase {
 
         XCTAssertEqual(usageRequests, 2)
         XCTAssertEqual(refreshRequests, 1)
+        XCTAssertEqual(
+            requestedPaths,
+            ["/codex-usage", "/codex-token", "/codex-usage", "/codex-reset-credits"]
+        )
         XCTAssertEqual(result.bars.first?.used, 25)
     }
 

@@ -22,6 +22,8 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Made newly granted banked Codex resets appear even when the main usage
+  response has not yet advertised them. ([#251](https://github.com/HemSoft/codexbar-ios/issues/251))
 - Let percentage history charts expand above 100% so over-limit usage remains
   visible while preserving the dotted 100% allowance reference.
   ([#250](https://github.com/HemSoft/codexbar-ios/issues/250))
