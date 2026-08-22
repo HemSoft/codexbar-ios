@@ -15,6 +15,9 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Added a saved History sampling setting, defaulting to two hours, so regular
+  usage refreshes no longer create unnecessarily dense history.
+  ([#259](https://github.com/HemSoft/codexbar-ios/issues/259))
 - Clarified that optional GitHub service-status checks use GitHub's public
   endpoint without account credentials or provider usage data, and documented
   the monitoring state kept locally on the device.

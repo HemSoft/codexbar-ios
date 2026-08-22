@@ -178,6 +178,114 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertNil(reloadedStore.snapshots.first?.creditsRemaining)
     }
 
+    @MainActor
+    func testUsageHistoryStoreEnforcesSamplingIntervalPerAccount() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(
+            results: [
+                makeHistoryResult(
+                    accountID: "codex.personal",
+                    fetchedAt: firstFetch,
+                    used: 20
+                ),
+            ],
+            now: firstFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [
+                makeHistoryResult(
+                    accountID: "codex.personal",
+                    fetchedAt: firstFetch.addingTimeInterval(60 * 60),
+                    used: 30
+                ),
+                makeHistoryResult(
+                    accountID: "codex.work",
+                    fetchedAt: firstFetch.addingTimeInterval(60 * 60),
+                    used: 40
+                ),
+            ],
+            now: firstFetch.addingTimeInterval(60 * 60),
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [
+                makeHistoryResult(
+                    accountID: "codex.personal",
+                    fetchedAt: firstFetch.addingTimeInterval(2 * 60 * 60),
+                    used: 50
+                ),
+            ],
+            now: firstFetch.addingTimeInterval(2 * 60 * 60),
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+
+        XCTAssertEqual(
+            store.snapshots(for: "codex.personal").compactMap { $0.bars.first?.used },
+            [20, 50]
+        )
+        XCTAssertEqual(
+            store.snapshots(for: "codex.work").compactMap { $0.bars.first?.used },
+            [40]
+        )
+    }
+
+    @MainActor
+    func testUsageHistoryStoreAppliesChangedIntervalOnlyToFutureSamples() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let changedFetch = firstFetch.addingTimeInterval(3 * 60 * 60)
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(
+            results: [
+                makeHistoryResult(
+                    accountID: "codex.personal",
+                    fetchedAt: firstFetch,
+                    used: 20
+                ),
+            ],
+            now: firstFetch,
+            samplingInterval: HistorySamplingInterval.fourHours.seconds
+        )
+        store.record(
+            results: [
+                makeHistoryResult(
+                    accountID: "codex.personal",
+                    fetchedAt: changedFetch,
+                    used: 30
+                ),
+            ],
+            now: changedFetch,
+            samplingInterval: HistorySamplingInterval.fourHours.seconds
+        )
+        XCTAssertEqual(store.snapshots(for: "codex.personal").count, 1)
+
+        store.record(
+            results: [
+                makeHistoryResult(
+                    accountID: "codex.personal",
+                    fetchedAt: changedFetch,
+                    used: 30
+                ),
+            ],
+            now: changedFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+
+        XCTAssertEqual(
+            store.snapshots(for: "codex.personal").compactMap { $0.bars.first?.used },
+            [20, 30]
+        )
+    }
+
     func testUsageHistoryBarSnapshotDecodesLegacyLabelOnlyData() throws {
         let data = Data(
             #"{"label":"Total","fractionUsed":0.38,"used":38,"limit":100}"#.utf8

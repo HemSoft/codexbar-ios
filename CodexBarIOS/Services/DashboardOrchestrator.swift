@@ -361,7 +361,8 @@ final class DashboardOrchestrator: ObservableObject {
     ) async {
         historyStore.record(
             results: results,
-            severityThresholds: configurationStore.usageAlertSettings.severityThresholds
+            severityThresholds: configurationStore.usageAlertSettings.severityThresholds,
+            samplingInterval: configurationStore.historySamplingInterval.seconds
         )
         await processUsageAlerts(results: results, preserving: preservedAccountIDs)
     }

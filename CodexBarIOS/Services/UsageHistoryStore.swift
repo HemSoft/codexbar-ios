@@ -528,7 +528,8 @@ public final class UsageHistoryStore: ObservableObject {
     public func record(
         results: [ProviderUsageResult],
         now: Date = Date(),
-        severityThresholds: UsageSeverityThresholds = .default
+        severityThresholds: UsageSeverityThresholds = .default,
+        samplingInterval: TimeInterval = 0
     ) {
         guard !requiresRecovery else {
             return
@@ -544,13 +545,28 @@ public final class UsageHistoryStore: ObservableObject {
 
         let previousSnapshots = snapshots
         var snapshotsByID = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0) })
-        for snapshot in recordableResults.map({
+        var latestCaptureByAccountID = snapshots.reduce(into: [String: Date]()) { latestCaptureByAccountID, snapshot in
+            latestCaptureByAccountID[snapshot.accountID] = max(
+                latestCaptureByAccountID[snapshot.accountID] ?? snapshot.capturedAt,
+                snapshot.capturedAt
+            )
+        }
+        for snapshot in recordableResults.map({ result in
             UsageHistorySnapshot(
-                result: $0,
+                result: result,
                 severityThresholds: severityThresholds
             )
         }) {
+            if samplingInterval > 0,
+               let latestCapture = latestCaptureByAccountID[snapshot.accountID],
+               snapshot.capturedAt.timeIntervalSince(latestCapture) < samplingInterval {
+                continue
+            }
             snapshotsByID[snapshot.id] = snapshot
+            latestCaptureByAccountID[snapshot.accountID] = max(
+                latestCaptureByAccountID[snapshot.accountID] ?? snapshot.capturedAt,
+                snapshot.capturedAt
+            )
         }
         snapshots = Array(snapshotsByID.values)
         prune(now: now, validAccountIDs: Set(recordableResults.map(\.accountID)), removeMissingAccounts: false)
