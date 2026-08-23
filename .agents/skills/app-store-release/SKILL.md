@@ -2,7 +2,7 @@
 name: app-store-release
 description: "V1.0 - Commands: Prepare, Upload, Submit, Resume. Prepare, validate, upload, and submit CodexBar production releases through App Store review."
 disable-model-invocation: true
-compatibility: Requires macOS, Xcode, git, GitHub and App Store Connect access, CodexBar signing authority for upload stages, plus the issue-to-mergeable-pr, pr-processor, control-in-app-browser, and unslop skills.
+compatibility: Requires macOS, Xcode, PowerShell 7, git, GitHub and App Store Connect access, CodexBar signing authority for upload stages, plus the issue-to-mergeable-pr, pr-processor, control-in-app-browser, and unslop skills.
 hooks:
   PostToolUse:
     - matcher: "Read|Write|Edit"
@@ -14,7 +14,7 @@ hooks:
             Check if History/{YYYY-MM-DD}.md exists and contains an entry for this interaction with:
             - Format: "## HH:MM - {Action Taken}"
             - One-line summary
-            - Accurate timestamp (obtained via `Get-Date -Format "HH:mm"` command, never guessed)
+            - Accurate timestamp (obtained via `pwsh -NoLogo -NoProfile -Command 'Get-Date -Format "HH:mm"'`, never guessed)
 
             If history entry is missing or incomplete, provide specific feedback on what needs to be added.
             If history entry exists and is properly formatted, acknowledge completion.
@@ -26,7 +26,7 @@ hooks:
             Before stopping, if app-store-release was used (check if any files in app-store-release directory were modified), verify that the interaction was logged:
 
             1. Check if History/{YYYY-MM-DD}.md exists in app-store-release directory
-            2. Verify it contains an entry with format "## HH:MM - {Action Taken}" where HH:MM was obtained via `Get-Date -Format "HH:mm"` (never guessed)
+            2. Verify it contains an entry with format "## HH:MM - {Action Taken}" where HH:MM was obtained via `pwsh -NoLogo -NoProfile -Command 'Get-Date -Format "HH:mm"'` (never guessed)
             3. Ensure the entry includes a one-line summary of what was done
             4. If retrospectives are enabled, verify retrospective check was performed
 
