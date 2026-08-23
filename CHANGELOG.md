@@ -4,6 +4,16 @@ Notable changes to CodexBar are documented here. Entries describe shipped app
 behavior; development-only changes are listed separately when they affect
 building, testing, or releasing the app.
 
+## 1.4.0 - Unreleased
+
+### Developer Experience
+
+- Added a resumable App Store release skill that derives customer copy from
+  changes since the last live version, composes the repository's existing
+  validation and submission runbooks, and keeps upload and final submission as
+  separately authorized milestones.
+  ([#264](https://github.com/HemSoft/codexbar-ios/issues/264))
+
 ## 1.3.0 - 2026-08-23
 
 ### Added
