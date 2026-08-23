@@ -39,13 +39,13 @@ hooks:
             Include a systemMessage with details about the history entry status.
 ---
 
-# App Store Release
+# App Store release
 
 Take a merged CodexBar product state through one production App Store release.
 Compose the repository's existing release documentation and skills; do not
 replace their instructions here.
 
-## Commands And Authority
+## Commands and authority
 
 - **Prepare** (default): resolve the release boundary, audit changes, prepare
   copy, and validate. Stop before archive upload and every App Store Connect
@@ -64,7 +64,7 @@ action unless the current task explicitly authorizes submission of the exact
 version and build. Never automate agreements, tax, banking, certificate
 revocation, account roles, or a material release-policy choice.
 
-## Compose These Sources
+## Compose these sources
 
 - Follow `AGENTS.md` for issue-first repository changes, changelog policy,
   signing safety, and the reviewed PR path.
@@ -81,7 +81,7 @@ revocation, account roles, or a material release-policy choice.
 - Invoke `unslop` for customer copy. Product and privacy claims still require
   evidence from the shipping build and repository.
 
-## Release Ledger
+## Release ledger
 
 Use one release issue as the live ledger until reviewed tracker changes merge.
 At every checkpoint record the version/build, source commit SHA, timestamp,
@@ -97,7 +97,7 @@ metadata edits, or submissions.
 
 ## Workflow
 
-### 1. Resolve The Release Boundary
+### 1. Resolve the release boundary
 
 1. Inspect the public/App Store Connect version and build, the last version
    that reached distribution, any version already uploaded or submitted, and
@@ -113,7 +113,7 @@ metadata edits, or submissions.
 Resume by recomputing the boundary. Stop if the live version, candidate SHA, or
 intended version differs from the ledger.
 
-### 2. Audit Changes Since The Last Live Release
+### 2. Audit changes since the last live release
 
 1. Diff the last-live commit/tag to the candidate. Reconcile commits, merged
    PRs, linked issues, App Store Connect state, and the candidate changelog.
@@ -125,7 +125,7 @@ intended version differs from the ledger.
    candidate's unreleased section or were skipped by an earlier submission.
 4. Record the evidence range and checkpoint `changes-audited`.
 
-### 3. Prepare Release Copy
+### 3. Prepare release copy
 
 1. Date the candidate changelog section only when the candidate is final.
    Preserve customer sections separately from `Developer Experience`.
@@ -140,7 +140,7 @@ intended version differs from the ledger.
 4. Prepare a longer GitHub release or announcement only when requested. Record
    the copy-to-changelog map and checkpoint `copy-approved`.
 
-### 4. Run Release Validation
+### 4. Run release validation
 
 1. Run strict SwiftLint and invoke `perfection` for the complete current suite:
    iOS build and tests, SwiftPM smoke, watchOS build and tests.
@@ -155,7 +155,7 @@ intended version differs from the ledger.
    scope and reason. Never convert them to passed. Checkpoint
    `candidate-validated` only when blocking failures are fixed and rerun.
 
-### 5. Archive And Upload
+### 5. Archive and upload
 
 Skip this entire stage in Prepare mode.
 
@@ -194,7 +194,7 @@ record checkpoint `submission-ready`. Pause for authentication, legal or
 account changes, missing signing authority, missing metadata, or a release
 policy that differs materially from the ledger.
 
-### 7. Submit And Record The Outcome
+### 7. Submit and record the outcome
 
 1. Confirm `submission-ready`, exact version/build, unchanged candidate SHA,
    and exact current-task authority for **Submit for Review**. Otherwise stop
@@ -225,7 +225,7 @@ policy that differs materially from the ledger.
   branch/SHA, artifacts, and App Store state. Continue from the first
   unverified checkpoint; never infer completion from a local file alone.
 
-## Completion Report
+## Completion report
 
 Report the release boundary, candidate SHA, version/build matrix, changelog
 range, exact copy, validation evidence, archive/export paths, upload and
