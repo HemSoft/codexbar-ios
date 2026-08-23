@@ -2,7 +2,7 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-08-06
+Status last reviewed: 2026-08-23
 
 ## Current Status
 
@@ -31,6 +31,11 @@ Status last reviewed: 2026-08-06
   version is `1.2`, the release build number is `2`, and privacy-safe iPhone,
   iPad, and Apple Watch storefront captures are prepared in
   `release-assets/1.2`.
+- Version 1.3 release preparation is tracked by Issue #261. The repository
+  release candidate uses marketing version `1.3` and build number `3` across
+  the iOS app, widgets, Apple Watch app, Apple Watch widget, and test targets.
+  The 1.3.0 changelog is dated 2026-08-23, and the App Store "What's New" copy
+  is in `fastlane/metadata/en-US/release_notes.txt`.
 
 ## Apple Requirements To Keep Current
 
@@ -52,8 +57,8 @@ Reference links:
 ## Release Work
 
 Version 1.1 is already public. Checked items below record completed release
-history; unchecked items are follow-up for a future release and are not
-outstanding claims about the shipped 1.1 submission.
+history; unchecked items remain manual or App Store Connect work for the next
+submission unless a version-specific note says otherwise.
 
 ### 1. App Store Connect Setup
 
@@ -286,6 +291,31 @@ The native request has no effect in TestFlight, so TestFlight verification must
 use the persistent **Rate CodexBar** link instead.
 
 ### 8. Final Submission
+
+Version 1.3 submission status:
+
+- [x] Prepare version 1.3 "What's New" copy from the dated 1.3.0 changelog.
+- [x] Set the repository release candidate to version `1.3 (3)` across every
+  Xcode target configuration.
+- [x] Run the canonical SwiftLint gate and the complete Perfection audit on the
+  release candidate. SwiftLint reported zero violations in 91 files, and all
+  five supported build and test gates passed on 2026-08-23.
+- [x] Create a signed Release archive and perform a local `app-store-connect`
+  export without uploading. The iOS app, iOS widget, Apple Watch app, and Watch
+  widget all export as `1.3 (3)` with App Store provisioning, valid distribution
+  signatures, privacy manifests, and export-compliance declarations.
+- [x] Recheck repository metadata needed by the submission. The support and
+  privacy URLs return successfully, the App Store icon is an opaque 1024-pixel
+  square, release notes fit Apple's limit, and the pinned package graph contains
+  no third-party runtime SDK.
+- [ ] Upload and validate build `1.3 (3)` in App Store Connect.
+- [ ] Complete TestFlight verification on iPhone, iPad, and Apple Watch.
+- [ ] Reconfirm App Store Connect privacy answers, review notes, age rating,
+  app icon, support and privacy URLs, pricing, and availability for version 1.3.
+- [ ] Preview the reused storefront screenshots, select build `1.3 (3)`, and
+  submit the release for App Review.
+
+Version 1.2 submission preparation history:
 
 Version 1.2 submission status:
 
