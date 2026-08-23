@@ -55,8 +55,8 @@ replace their instructions here.
 - **Submit**: resume a processed upload, verify the storefront, and submit for
   App Review only with exact final-submission authority in the current task.
 - **Resume**: inspect GitHub, local artifacts, and App Store Connect first, then
-  continue at the first incomplete checkpoint without repeating completed
-  writes.
+  continue at the first incomplete checkpoint allowed by the ledger's recorded
+  mode. A bare Resume never expands Prepare, Upload, or Submit authority.
 
 An instruction to prepare, validate, archive, export, upload, or use TestFlight
 is not authority to click **Submit for Review**. Ask immediately before that
@@ -88,10 +88,14 @@ writing workflow.
 ## Release ledger
 
 Use one release issue as the live ledger until reviewed tracker changes merge.
-At every checkpoint record the version/build, source commit SHA, timestamp,
-actor, completed command, evidence or artifact path, identifiers returned by
-Apple, skipped checks, and next safe resume action. Do not record credentials,
-cookies, signing passwords, private keys, or other secrets.
+At the start, record the authorized mode and its source task. At every
+checkpoint record the version/build, source commit SHA, timestamp, actor,
+completed command, evidence or artifact path, identifiers returned by Apple,
+skipped checks, and next safe resume action. Resume inherits that mode. Only a
+new current-task instruction that explicitly grants Upload or exact Submit
+authority may expand it, and the ledger must record that grant before the first
+newly authorized write. Do not record credentials, cookies, signing passwords,
+private keys, or other secrets.
 
 Before any repository edit, create or identify the release issue. Make changes
 only from synchronized `main` after intended product PRs have merged, using an
@@ -170,7 +174,8 @@ intended version differs from the ledger.
 
 ### 5. Archive and upload
 
-Skip this entire stage in Prepare mode.
+Skip this entire stage when the recorded mode is Prepare. Resume does not
+change the recorded mode.
 
 1. Recheck `candidate-validated`, current SHA, App Store Connect version/build,
    and signing authority. Immediately before the archive command, require the
@@ -192,7 +197,8 @@ Skip this entire stage in Prepare mode.
 
 ### 6. Verify App Store Connect
 
-Skip this stage in Prepare mode; Upload mode may inspect but must not write.
+Skip this stage when the recorded mode is Prepare. Upload mode may inspect but
+must not write. Resume does not change the recorded mode.
 
 Using the claimed browser tab, verify and record:
 
