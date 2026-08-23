@@ -204,20 +204,6 @@ enum SettingsDoneToolbarPolicy {
     }
 }
 
-enum SettingsDismissalGuard {
-    @discardableResult
-    static func perform(
-        commitPendingChanges: () -> Bool,
-        dismiss: () -> Void
-    ) -> Bool {
-        guard commitPendingChanges() else {
-            return false
-        }
-        dismiss()
-        return true
-    }
-}
-
 enum SettingsCategorySummary {
     static func accounts(accountCount: Int, groupCount: Int) -> String {
         "\(count(accountCount, singular: "account")) · \(count(groupCount, singular: "group"))"
@@ -490,9 +476,9 @@ struct SettingsView: View {
     private var doneToolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button("Done") {
-                SettingsDismissalGuard.perform(
+                SettingsNavigationGuard.perform(
                     commitPendingChanges: commitPendingGroupChanges,
-                    dismiss: dismiss.callAsFunction
+                    navigate: dismiss.callAsFunction
                 )
             }
         }

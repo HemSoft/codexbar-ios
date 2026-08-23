@@ -32,16 +32,16 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
     }
 
-    func testSettingsDismissalGuardCommitsBeforeDismissing() {
+    func testSettingsDoneActionCommitsBeforeDismissing() {
         var events: [String] = []
 
         XCTAssertTrue(
-            SettingsDismissalGuard.perform(
+            SettingsNavigationGuard.perform(
                 commitPendingChanges: {
                     events.append("commit")
                     return true
                 },
-                dismiss: {
+                navigate: {
                     events.append("dismiss")
                 }
             )
@@ -49,13 +49,13 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(events, ["commit", "dismiss"])
     }
 
-    func testSettingsDismissalGuardKeepsSettingsOpenAfterInvalidEdit() {
+    func testSettingsDoneActionKeepsSettingsOpenAfterInvalidEdit() {
         var didDismiss = false
 
         XCTAssertFalse(
-            SettingsDismissalGuard.perform(
+            SettingsNavigationGuard.perform(
                 commitPendingChanges: { false },
-                dismiss: { didDismiss = true }
+                navigate: { didDismiss = true }
             )
         )
         XCTAssertFalse(didDismiss)
