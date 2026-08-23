@@ -308,12 +308,21 @@ Version 1.3 submission status:
   privacy URLs return successfully, the App Store icon is an opaque 1024-pixel
   square, release notes fit Apple's limit, and the pinned package graph contains
   no third-party runtime SDK.
-- [ ] Upload and validate build `1.3 (3)` in App Store Connect.
+- [x] Upload and validate build `1.3 (3)` in App Store Connect. Apple completed
+  processing on 2026-08-23 with binary state `Validated`, symbols included, no
+  non-exempt encryption, and build upload ID
+  `3addfe4f-f3fe-4cfb-a2b5-60fe57da5219`.
 - [ ] Complete TestFlight verification on iPhone, iPad, and Apple Watch.
-- [ ] Reconfirm App Store Connect privacy answers, review notes, age rating,
+- [x] Reconfirm App Store Connect privacy answers, review notes, age rating,
   app icon, support and privacy URLs, pricing, and availability for version 1.3.
-- [ ] Preview the reused storefront screenshots, select build `1.3 (3)`, and
-  submit the release for App Review.
+  The listing reports Data Not Collected, age 4+, a $3.99 US price, and
+  availability in 175 regions.
+- [x] Preview the reused storefront screenshots, select build `1.3 (3)`, and
+  submit the release for App Review. Version 1.3 reused six iPhone, six iPad,
+  and two Apple Watch screenshots and entered `Waiting for Review` on
+  2026-08-23 at 5:01 PM EDT. Submission
+  `ba051fea-b0bc-4c47-9e08-3ed9c69bd9a6` uses automatic release after approval
+  with immediate rollout and keeps the existing star rating.
 
 Version 1.2 submission preparation history:
 
