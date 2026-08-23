@@ -1,0 +1,234 @@
+---
+name: app-store-release
+description: "V1.0 - Commands: Prepare, Upload, Submit, Resume. Prepare, validate, upload, and submit CodexBar production releases through App Store review."
+disable-model-invocation: true
+compatibility: Requires macOS, Xcode, git, GitHub access, App Store Connect access, and CodexBar signing authority for upload stages.
+hooks:
+  PostToolUse:
+    - matcher: "Read|Write|Edit"
+      hooks:
+        - type: prompt
+          prompt: |
+            If a file was read, written, or edited in the app-store-release directory (path contains 'app-store-release'), verify that history logging occurred.
+
+            Check if History/{YYYY-MM-DD}.md exists and contains an entry for this interaction with:
+            - Format: "## HH:MM - {Action Taken}"
+            - One-line summary
+            - Accurate timestamp (obtained via `Get-Date -Format "HH:mm"` command, never guessed)
+
+            If history entry is missing or incomplete, provide specific feedback on what needs to be added.
+            If history entry exists and is properly formatted, acknowledge completion.
+  Stop:
+    - matcher: "*"
+      hooks:
+        - type: prompt
+          prompt: |
+            Before stopping, if app-store-release was used (check if any files in app-store-release directory were modified), verify that the interaction was logged:
+
+            1. Check if History/{YYYY-MM-DD}.md exists in app-store-release directory
+            2. Verify it contains an entry with format "## HH:MM - {Action Taken}" where HH:MM was obtained via `Get-Date -Format "HH:mm"` (never guessed)
+            3. Ensure the entry includes a one-line summary of what was done
+            4. If retrospectives are enabled, verify retrospective check was performed
+
+            If history entry is missing:
+            - Return {"decision": "block", "reason": "History entry missing. Please log this interaction to History/{YYYY-MM-DD}.md with format: ## HH:MM - {Action Taken}\n{One-line summary}"}
+
+            If history entry exists:
+            - Return {"decision": "approve"}
+
+            Include a systemMessage with details about the history entry status.
+---
+
+# App Store Release
+
+Take a merged CodexBar product state through one production App Store release.
+Compose the repository's existing release documentation and skills; do not
+replace their instructions here.
+
+## Commands And Authority
+
+- **Prepare** (default): resolve the release boundary, audit changes, prepare
+  copy, and validate. Stop before archive upload and every App Store Connect
+  write.
+- **Upload**: run Prepare, archive, export, upload exactly once, and wait for
+  processing. Stop before selecting a build or changing submission metadata.
+- **Submit**: resume a processed upload, verify the storefront, and submit for
+  App Review only with exact final-submission authority in the current task.
+- **Resume**: inspect GitHub, local artifacts, and App Store Connect first, then
+  continue at the first incomplete checkpoint without repeating completed
+  writes.
+
+An instruction to prepare, validate, archive, export, upload, or use TestFlight
+is not authority to click **Submit for Review**. Ask immediately before that
+action unless the current task explicitly authorizes submission of the exact
+version and build. Never automate agreements, tax, banking, certificate
+revocation, account roles, or a material release-policy choice.
+
+## Compose These Sources
+
+- Follow `AGENTS.md` for issue-first repository changes, changelog policy,
+  signing safety, and the reviewed PR path.
+- Treat `CHANGELOG.md` as release history and `APP-STORE.md` as the release
+  tracker. Check `PRIVACY.md`, `SUPPORT.md`, `DEVICE-DEPLOYMENT.md`, Fastlane
+  metadata, Xcode settings, and the signing/export scripts as applicable.
+- Invoke the repository `perfection` skill for supported builds and tests, and
+  run the strict SwiftLint command documented in `AGENTS.md`.
+- Invoke `issue-to-mergeable-pr` for release-tracker changes and
+  `pr-processor` when resuming their review gate. Do not bypass checks,
+  reviews, or merge protections.
+- Invoke `control-in-app-browser` for App Store Connect so an authenticated,
+  claimed tab can be inspected before each write and left on the final result.
+- Invoke `unslop` for customer copy. Product and privacy claims still require
+  evidence from the shipping build and repository.
+
+## Release Ledger
+
+Use one release issue as the live ledger until reviewed tracker changes merge.
+At every checkpoint record the version/build, source commit SHA, timestamp,
+actor, completed command, evidence or artifact path, identifiers returned by
+Apple, skipped checks, and next safe resume action. Do not record credentials,
+cookies, signing passwords, private keys, or other secrets.
+
+Before any repository edit, create or identify the release issue. Make changes
+only from synchronized `main` after intended product PRs have merged, using an
+issue branch and reviewed PR. Before every App Store Connect write, re-read the
+version/build state and ledger to prevent duplicate uploads, build selection,
+metadata edits, or submissions.
+
+## Workflow
+
+### 1. Resolve The Release Boundary
+
+1. Inspect the public/App Store Connect version and build, the last version
+   that reached distribution, any version already uploaded or submitted, and
+   the intended new version. App Store Connect state wins over assumptions in
+   repository headings.
+2. Resolve the last-live commit or tag and candidate SHA. Confirm synchronized
+   `main` contains every intended merged PR and no later unintended work.
+3. Enumerate every submitted executable bundle from the archive/export plan.
+   Verify `MARKETING_VERSION` and build number in every relevant app,
+   extension, widget, Watch product, and configuration.
+4. Record boundary evidence and checkpoint `boundary-resolved`.
+
+Resume by recomputing the boundary. Stop if the live version, candidate SHA, or
+intended version differs from the ledger.
+
+### 2. Audit Changes Since The Last Live Release
+
+1. Diff the last-live commit/tag to the candidate. Reconcile commits, merged
+   PRs, linked issues, App Store Connect state, and the candidate changelog.
+2. Classify each shipped change as customer-visible or Developer Experience.
+   Flag omissions, duplicates, planned-but-unshipped claims, internal wording,
+   and edits to published history other than factual corrections.
+3. Do not use the latest changelog heading as the release boundary. In
+   particular, exclude changes already distributed even if they share the
+   candidate's unreleased section or were skipped by an earlier submission.
+4. Record the evidence range and checkpoint `changes-audited`.
+
+### 3. Prepare Release Copy
+
+1. Date the candidate changelog section only when the candidate is final.
+   Preserve customer sections separately from `Developer Experience`.
+2. Derive **What's New** only from verified customer-visible changes after the
+   last live release. Map each sentence or bullet to changelog entries and show
+   the exact final copy before any App Store Connect write.
+3. Do not produce cumulative multi-version copy unless the current task
+   explicitly requests a broader announcement. Keep App Store copy within its
+   current limit, lead with user benefit, use product terms, omit internal
+   implementation detail, and reconcile privacy/data-flow claims with the
+   shipping build and `PRIVACY.md`.
+4. Prepare a longer GitHub release or announcement only when requested. Record
+   the copy-to-changelog map and checkpoint `copy-approved`.
+
+### 4. Run Release Validation
+
+1. Run strict SwiftLint and invoke `perfection` for the complete current suite:
+   iOS build and tests, SwiftPM smoke, watchOS build and tests.
+2. Record exact commands, start/end timestamps, candidate SHA, results, and
+   artifact locations. Retry an infrastructure or simulator flake only after
+   preserving its evidence and explaining why it is non-product; never use a
+   retry to hide a reproducible failure.
+3. Verify metadata limits, support/privacy URLs, App Store icon, package graph,
+   screenshot inputs, release-copy diff, and repository-required checks that
+   apply before archive creation.
+4. Record skipped TestFlight or physical-device checks as **skipped**, with
+   scope and reason. Never convert them to passed. Checkpoint
+   `candidate-validated` only when blocking failures are fixed and rerun.
+
+### 5. Archive And Upload
+
+Skip this entire stage in Prepare mode.
+
+1. Recheck `candidate-validated`, current SHA, App Store Connect version/build,
+   and signing authority. Follow the repository signing runbook without
+   changing keychain policy or exposing secrets.
+2. Create the signed Release archive and local App Store export. Inspect every
+   submitted bundle for consistent version/build, distribution signature,
+   provisioning, required privacy manifests, and export-compliance
+   declarations. Run the repository export-compliance verifier against source
+   and archive/exported product.
+3. Record archive/export paths and checkpoint `archive-verified` before upload.
+4. Re-read App Store Connect. If this build or a valid upload already exists,
+   record its identifier and resume processing instead of uploading again.
+   Otherwise upload once and record the returned upload/build ID immediately.
+5. Wait for processing and validation. Record Apple's final binary state and
+   checkpoint `upload-processed`; do not select or submit the build yet.
+
+### 6. Verify App Store Connect
+
+Skip this stage in Prepare mode; Upload mode may inspect but must not write.
+
+Using the claimed browser tab, verify and record:
+
+- selected version and build, processed state, and export compliance;
+- localized release notes and other metadata;
+- screenshots for every maintained iPhone, iPad, and Apple Watch family;
+- privacy answers, review notes, contact details, age rating, app icon,
+  support URL, and privacy URL;
+- price, regions, availability, automatic/manual release, phased/immediate
+  rollout, and whether the existing star rating is kept;
+- TestFlight verification and every explicitly accepted omission.
+
+Preview the storefront, show the exact final **What's New** copy again, and
+record checkpoint `submission-ready`. Pause for authentication, legal or
+account changes, missing signing authority, missing metadata, or a release
+policy that differs materially from the ledger.
+
+### 7. Submit And Record The Outcome
+
+1. Confirm `submission-ready`, exact version/build, unchanged candidate SHA,
+   and exact current-task authority for **Submit for Review**. Otherwise stop
+   and ask for confirmation.
+2. Submit once. Confirm the resulting App Store Connect state and record the
+   submission ID, version, build, submitter, timestamp, release policy,
+   rollout, rating choice, and Apple's displayed review estimate.
+3. Leave App Store Connect on the submission result. Record checkpoint
+   `submitted` and report all skipped TestFlight or physical-device work.
+4. Update `APP-STORE.md`, release metadata, the dated changelog, and the next
+   `Unreleased` section through the release issue, branch, PR, automated review,
+   required checks, and merge gate. Do not edit or merge directly on `main`.
+
+## Recovery
+
+- **Interrupted upload:** inspect organizer/transporter logs and App Store
+  Connect by exact version/build and upload ID. Resume processing if Apple
+  received it; upload again only when evidence proves it did not.
+- **Processing delay:** keep `upload-processed` incomplete, record Apple's
+  current state and next check, and make no duplicate upload or submission.
+- **CI or simulator flake:** preserve the failed run, distinguish hosted-runner
+  or simulator evidence from product failure, retry once when justified, and
+  fix/revalidate any reproducible failure.
+- **Browser-session loss:** release or record the lost tab claim, reauthenticate
+  without exposing session data, reclaim one tab, then re-read App Store
+  Connect and compare it with the ledger before any write.
+- **Repository interruption:** inspect the release issue, PR, checks, current
+  branch/SHA, artifacts, and App Store state. Continue from the first
+  unverified checkpoint; never infer completion from a local file alone.
+
+## Completion Report
+
+Report the release boundary, candidate SHA, version/build matrix, changelog
+range, exact copy, validation evidence, archive/export paths, upload and
+submission IDs/states, metadata and release-policy decisions, PR/check state,
+skipped verification, and the next resume action. A processed upload is not a
+submission, and a submitted release is not a distributed release.
