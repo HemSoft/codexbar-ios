@@ -1,10 +1,9 @@
-CodexBar 1.2 is our biggest update yet.
+CodexBar 1.3 adds clearer service health, history, and alert details.
 
-- Bring your usage to Apple Watch with a live dashboard and configurable complications.
-- Make the dashboard yours: reorder, resize, restyle, show, hide, and collapse account metrics with a live card editor.
-- Track more services, including OpenCode Go limits, Moonshot (Kimi) balances, and completed Greptile reviews.
-- Connect multiple ChatGPT / Codex accounts with private, independent browser sign-in.
-- Set separate Warning and Critical Alert thresholds for current and projected usage.
-- Find accounts, widgets, recovery, and private feedback faster in the new Settings and Support experience.
+- Opt in to GitHub service-status monitoring with accessible incident and recovery alerts.
+- Choose how often regular refreshes add samples to History.
+- See newly granted banked Codex resets as soon as they become available.
+- Keep over-limit percentage history visible above the 100% allowance line.
+- Get Warning and Critical Alert notifications that identify the provider, account, metric, value, and configured threshold.
 
-This release also improves widget freshness, Watch syncing, browser sign-in, usage history, account recovery, accessibility, and refresh reliability.
+GitHub status checks use GitHub's public endpoint without account credentials or provider usage data. Monitoring state stays on your device.
