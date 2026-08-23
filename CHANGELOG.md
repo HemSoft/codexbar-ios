@@ -6,6 +6,12 @@ building, testing, or releasing the app.
 
 ## 1.4.0 - Unreleased
 
+### Fixed
+
+- Kept the Settings **Done** button visible at the root and throughout nested
+  screens while preserving standard Back navigation and pending-edit validation.
+  ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))
+
 ### Developer Experience
 
 - Added a resumable App Store release skill that derives customer copy from

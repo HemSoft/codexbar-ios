@@ -190,6 +190,20 @@ enum SettingsNavigationGuard {
     }
 }
 
+enum SettingsDoneToolbarLocation {
+    case sidebar
+    case detail
+}
+
+enum SettingsDoneToolbarPolicy {
+    static func showsDone(
+        in location: SettingsDoneToolbarLocation,
+        horizontalSizeClass: UserInterfaceSizeClass?
+    ) -> Bool {
+        location == .detail || horizontalSizeClass == .compact
+    }
+}
+
 enum SettingsCategorySummary {
     static func accounts(accountCount: Int, groupCount: Int) -> String {
         "\(count(accountCount, singular: "account")) · \(count(groupCount, singular: "group"))"
@@ -245,6 +259,7 @@ struct SettingsView: View {
     var onGitHubStatusRefresh: @MainActor () async -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.requestReview) private var requestReview
     @State private var isConfirmingReset = false
     @State private var isConfirmingConfigurationReplacement = false
@@ -285,6 +300,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             settingsHome
+                .toolbar {
+                    if SettingsDoneToolbarPolicy.showsDone(
+                        in: .sidebar,
+                        horizontalSizeClass: horizontalSizeClass
+                    ) {
+                        doneToolbar
+                    }
+                }
         } detail: {
             NavigationStack {
                 selectedSettingsDestination
@@ -297,9 +320,14 @@ struct SettingsView: View {
                         )
                     }
             }
-        }
-        .toolbar {
-            doneToolbar
+            .toolbar {
+                if SettingsDoneToolbarPolicy.showsDone(
+                    in: .detail,
+                    horizontalSizeClass: horizontalSizeClass
+                ) {
+                    doneToolbar
+                }
+            }
         }
         .sheet(
             item: $addAccountFlowRequest,
@@ -448,9 +476,10 @@ struct SettingsView: View {
     private var doneToolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button("Done") {
-                if commitPendingGroupChanges() {
-                    dismiss()
-                }
+                SettingsNavigationGuard.perform(
+                    commitPendingChanges: commitPendingGroupChanges,
+                    navigate: dismiss.callAsFunction
+                )
             }
         }
     }

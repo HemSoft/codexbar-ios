@@ -2,6 +2,65 @@ import XCTest
 @testable import CodexBarIOS
 
 final class DashboardAndSettingsTests: XCTestCase {
+    func testSettingsDoneToolbarPolicyKeepsDoneVisibleAcrossCompactNavigation() {
+        XCTAssertTrue(
+            SettingsDoneToolbarPolicy.showsDone(
+                in: .sidebar,
+                horizontalSizeClass: .compact
+            )
+        )
+        XCTAssertTrue(
+            SettingsDoneToolbarPolicy.showsDone(
+                in: .detail,
+                horizontalSizeClass: .compact
+            )
+        )
+    }
+
+    func testSettingsDoneToolbarPolicyAvoidsDuplicateDoneButtonsInRegularLayouts() {
+        XCTAssertFalse(
+            SettingsDoneToolbarPolicy.showsDone(
+                in: .sidebar,
+                horizontalSizeClass: .regular
+            )
+        )
+        XCTAssertTrue(
+            SettingsDoneToolbarPolicy.showsDone(
+                in: .detail,
+                horizontalSizeClass: .regular
+            )
+        )
+    }
+
+    func testSettingsDoneActionCommitsBeforeDismissing() {
+        var events: [String] = []
+
+        XCTAssertTrue(
+            SettingsNavigationGuard.perform(
+                commitPendingChanges: {
+                    events.append("commit")
+                    return true
+                },
+                navigate: {
+                    events.append("dismiss")
+                }
+            )
+        )
+        XCTAssertEqual(events, ["commit", "dismiss"])
+    }
+
+    func testSettingsDoneActionKeepsSettingsOpenAfterInvalidEdit() {
+        var didDismiss = false
+
+        XCTAssertFalse(
+            SettingsNavigationGuard.perform(
+                commitPendingChanges: { false },
+                navigate: { didDismiss = true }
+            )
+        )
+        XCTAssertFalse(didDismiss)
+    }
+
     @MainActor
     func testDemoRefreshReturnsEveryProviderResult() async {
         let service = UsageRefreshService.demo()
