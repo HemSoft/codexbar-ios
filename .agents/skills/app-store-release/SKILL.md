@@ -200,10 +200,17 @@ Using the claimed browser tab, verify and record:
   rollout, and whether the existing star rating is kept;
 - TestFlight verification and every explicitly accepted omission.
 
-Preview the storefront, show the exact final **What's New** copy again, and
-record checkpoint `submission-ready`. Pause for authentication, legal or
-account changes, missing signing authority, missing metadata, or a release
-policy that differs materially from the ledger.
+In Submit mode, re-read App Store Connect and select the exact processed build.
+Apply only the exact approved version-localized metadata, one idempotent write
+at a time, and re-read each saved value. This authority does not cover a new
+global-metadata or release-policy choice. Upload mode must not perform these
+writes.
+
+Re-verify the selected build and saved metadata, preview the storefront, show
+the exact final **What's New** copy again, and record checkpoint
+`submission-ready`. Pause for authentication, legal or account changes,
+missing signing authority, missing metadata, or a release policy that differs
+materially from the ledger.
 
 ### 7. Submit and record the outcome
 
