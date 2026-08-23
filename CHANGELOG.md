@@ -8,16 +8,16 @@ building, testing, or releasing the app.
 
 ### Added
 
-- Added opt-in GitHub service-status monitoring with configurable, battery-conscious
-  checks, an accessible incident banner, and deduplicated incident, escalation, and
-  recovery notifications that clearly distinguish stale or unavailable data.
+- Added opt-in GitHub service-status monitoring with configurable checks, an
+  accessible incident banner, and deduplicated incident, escalation, and
+  recovery notifications. Stale or unavailable status data remains visible.
   ([#244](https://github.com/HemSoft/codexbar-ios/issues/244))
-
-### Changed
-
 - Added a saved History sampling setting, defaulting to two hours, so regular
   usage refreshes no longer create unnecessarily dense history.
   ([#259](https://github.com/HemSoft/codexbar-ios/issues/259))
+
+### Changed
+
 - Clarified that optional GitHub service-status checks use GitHub's public
   endpoint without account credentials or provider usage data, and documented
   the monitoring state kept locally on the device.
@@ -30,13 +30,12 @@ building, testing, or releasing the app.
 - Let percentage history charts expand above 100% so over-limit usage remains
   visible while preserving the dotted 100% allowance reference.
   ([#250](https://github.com/HemSoft/codexbar-ios/issues/250))
-- Made usage notifications name the affected account, metric, current or
-  projected percentage, and configured Warning or Critical Alert threshold,
-  with deterministic metric selection and explicit spend-limit wording.
-  ([#242](https://github.com/HemSoft/codexbar-ios/issues/242))
-- Included the saved-account label and provider in every usage Warning and
-  Critical Alert notification body, so previews identify the subscription even
-  when they omit the notification title. ([#249](https://github.com/HemSoft/codexbar-ios/issues/249))
+- Made usage Warning and Critical Alert notifications name the provider, saved
+  account, metric, current or projected value, and configured threshold. Metric
+  selection is deterministic, spend limits use explicit wording, and previews
+  remain identifiable when they omit the notification title.
+  ([#242](https://github.com/HemSoft/codexbar-ios/issues/242),
+  [#249](https://github.com/HemSoft/codexbar-ios/issues/249))
 
 ### Developer Experience
 
