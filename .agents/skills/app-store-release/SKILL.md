@@ -152,9 +152,11 @@ intended version differs from the ledger.
 
 ### 4. Run release validation
 
-1. Confirm `release-preparation-merged`, synchronized `main`, and the recorded
-   candidate SHA. Run strict SwiftLint and invoke `perfection` for the complete
-   current suite: iOS build and tests, SwiftPM smoke, watchOS build and tests.
+1. Confirm `release-preparation-merged`, synchronized `main`, the recorded
+   candidate SHA, and an empty `git status --porcelain`. Stop if tracked or
+   untracked repository content could alter the build. Run strict SwiftLint and
+   invoke `perfection` for the complete current suite: iOS build and tests,
+   SwiftPM smoke, watchOS build and tests.
 2. Record exact commands, start/end timestamps, candidate SHA, results, and
    artifact locations. Retry an infrastructure or simulator flake only after
    preserving its evidence and explaining why it is non-product; never use a
@@ -171,8 +173,11 @@ intended version differs from the ledger.
 Skip this entire stage in Prepare mode.
 
 1. Recheck `candidate-validated`, current SHA, App Store Connect version/build,
-   and signing authority. Follow the repository signing runbook without
-   changing keychain policy or exposing secrets.
+   and signing authority. Immediately before the archive command, require the
+   current SHA to equal the validated SHA and `git status --porcelain` to be
+   empty. Stop instead of archiving unreviewed worktree content. Follow the
+   repository signing runbook without changing keychain policy or exposing
+   secrets.
 2. Create the signed Release archive and local App Store export. Inspect every
    submitted bundle for consistent version/build, distribution signature,
    provisioning, required privacy manifests, and export-compliance
