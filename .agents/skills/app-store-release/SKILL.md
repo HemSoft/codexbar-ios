@@ -2,7 +2,7 @@
 name: app-store-release
 description: "V1.0 - Commands: Prepare, Upload, Submit, Resume. Prepare, validate, upload, and submit CodexBar production releases through App Store review."
 disable-model-invocation: true
-compatibility: Requires macOS, Xcode, git, GitHub access, App Store Connect access, and CodexBar signing authority for upload stages.
+compatibility: Requires macOS, Xcode, git, GitHub and App Store Connect access, CodexBar signing authority for upload stages, plus the issue-to-mergeable-pr, pr-processor, control-in-app-browser, and unslop skills.
 hooks:
   PostToolUse:
     - matcher: "Read|Write|Edit"
@@ -81,6 +81,10 @@ revocation, account roles, or a material release-policy choice.
 - Invoke `unslop` for customer copy. Product and privacy claims still require
   evidence from the shipping build and repository.
 
+Stop before the affected stage if a required companion skill is unavailable.
+Install or enable that skill instead of improvising its GitHub, browser, or
+writing workflow.
+
 ## Release ledger
 
 Use one release issue as the live ledger until reviewed tracker changes merge.
@@ -139,11 +143,18 @@ intended version differs from the ledger.
    shipping build and `PRIVACY.md`.
 4. Prepare a longer GitHub release or announcement only when requested. Record
    the copy-to-changelog map and checkpoint `copy-approved`.
+5. Deliver the changelog, release notes, version settings, and other
+   release-preparation edits through the release issue's PR. Pass its reviews,
+   required checks, and merge gate, then merge it before building the release.
+6. Synchronize `main`, confirm the intended preparation PRs are present, and
+   resolve a new immutable candidate SHA. Record checkpoint
+   `release-preparation-merged`. Do not validate or archive the review branch.
 
 ### 4. Run release validation
 
-1. Run strict SwiftLint and invoke `perfection` for the complete current suite:
-   iOS build and tests, SwiftPM smoke, watchOS build and tests.
+1. Confirm `release-preparation-merged`, synchronized `main`, and the recorded
+   candidate SHA. Run strict SwiftLint and invoke `perfection` for the complete
+   current suite: iOS build and tests, SwiftPM smoke, watchOS build and tests.
 2. Record exact commands, start/end timestamps, candidate SHA, results, and
    artifact locations. Retry an infrastructure or simulator flake only after
    preserving its evidence and explaining why it is non-product; never use a
@@ -204,9 +215,10 @@ policy that differs materially from the ledger.
    rollout, rating choice, and Apple's displayed review estimate.
 3. Leave App Store Connect on the submission result. Record checkpoint
    `submitted` and report all skipped TestFlight or physical-device work.
-4. Update `APP-STORE.md`, release metadata, the dated changelog, and the next
-   `Unreleased` section through the release issue, branch, PR, automated review,
-   required checks, and merge gate. Do not edit or merge directly on `main`.
+4. Update `APP-STORE.md` with the final identifiers and state. Add the next
+   `Unreleased` section and any remaining release metadata through the release
+   issue, branch, PR, automated review, required checks, and merge gate. Do not
+   edit or merge directly on `main`.
 
 ## Recovery
 
