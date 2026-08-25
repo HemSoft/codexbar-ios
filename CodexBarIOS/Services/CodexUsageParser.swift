@@ -16,8 +16,40 @@ public enum CodexUsageParser {
 
         var windows: [CodexUsageWindow] = []
         if let rateLimit = root["rate_limit"] as? [String: Any] {
-            addWindow(named: "primary_window", from: rateLimit, to: &windows)
-            addWindow(named: "secondary_window", from: rateLimit, to: &windows)
+            addWindows(
+                from: rateLimit,
+                bucketStableKey: nil,
+                bucketLabel: nil,
+                bucketOrder: 0,
+                to: &windows
+            )
+        }
+        for key in root.keys.sorted() where key.hasSuffix("_rate_limit") && key != "rate_limit" {
+            guard let rateLimit = root[key] as? [String: Any] else {
+                continue
+            }
+            let identity = String(key.dropLast("_rate_limit".count))
+            addWindows(
+                from: rateLimit,
+                bucketStableKey: "bucket-\(stableKeyComponent(identity) ?? "other")",
+                bucketLabel: bucketLabel(from: identity),
+                bucketOrder: 1,
+                to: &windows
+            )
+        }
+        for rateLimit in additionalRateLimits(from: root["additional_rate_limits"]) {
+            let identity = nonemptyString(rateLimit["metered_feature"])
+                ?? nonemptyString(rateLimit["limit_id"])
+                ?? nonemptyString(rateLimit["limit_name"])
+            let stableComponent = identity.flatMap(stableKeyComponent) ?? "additional"
+            let rateLimitWindows = rateLimit["rate_limit"] as? [String: Any] ?? rateLimit
+            addWindows(
+                from: rateLimitWindows,
+                bucketStableKey: "bucket-\(stableComponent)",
+                bucketLabel: nonemptyString(rateLimit["limit_name"]) ?? "Additional Codex usage",
+                bucketOrder: 2,
+                to: &windows
+            )
         }
         let resetCredits = parseResetCredits(
             root["rate_limit_reset_credits"],
@@ -29,12 +61,28 @@ public enum CodexUsageParser {
             return nil
         }
 
-        windows.sort { $0.durationSeconds < $1.durationSeconds }
-        let bars = windows.map { window in
+        windows.sort {
+            if $0.bucketOrder != $1.bucketOrder {
+                return $0.bucketOrder < $1.bucketOrder
+            }
+            if $0.bucketStableKey != $1.bucketStableKey {
+                return ($0.bucketStableKey ?? "") < ($1.bucketStableKey ?? "")
+            }
+            if $0.durationSeconds != $1.durationSeconds {
+                return $0.durationSeconds < $1.durationSeconds
+            }
+            return $0.windowOrder < $1.windowOrder
+        }
+        var seenStableKeys = Set<String>()
+        let bars = windows.compactMap { window -> UsageBar? in
+            let stableKey = stableKey(for: window)
+            guard seenStableKeys.insert(stableKey).inserted else {
+                return nil
+            }
             let usedFraction = window.usedPercent / 100
             return UsageBar(
-                stableKey: "window-\(canonicalDuration(window.durationSeconds))",
-                label: label(forDuration: window.durationSeconds),
+                stableKey: stableKey,
+                label: label(for: window),
                 used: window.usedPercent,
                 limit: 100,
                 resetDescription: formatReset(
@@ -109,7 +157,42 @@ public enum CodexUsageParser {
         )
     }
 
-    private static func addWindow(named name: String, from rateLimit: [String: Any], to windows: inout [CodexUsageWindow]) {
+    private static func addWindows(
+        from rateLimit: [String: Any],
+        bucketStableKey: String?,
+        bucketLabel: String?,
+        bucketOrder: Int,
+        to windows: inout [CodexUsageWindow]
+    ) {
+        addWindow(
+            named: "primary_window",
+            windowOrder: 0,
+            from: rateLimit,
+            bucketStableKey: bucketStableKey,
+            bucketLabel: bucketLabel,
+            bucketOrder: bucketOrder,
+            to: &windows
+        )
+        addWindow(
+            named: "secondary_window",
+            windowOrder: 1,
+            from: rateLimit,
+            bucketStableKey: bucketStableKey,
+            bucketLabel: bucketLabel,
+            bucketOrder: bucketOrder,
+            to: &windows
+        )
+    }
+
+    private static func addWindow(
+        named name: String,
+        windowOrder: Int,
+        from rateLimit: [String: Any],
+        bucketStableKey: String?,
+        bucketLabel: String?,
+        bucketOrder: Int,
+        to windows: inout [CodexUsageWindow]
+    ) {
         guard
             let window = rateLimit[name] as? [String: Any],
             let usedPercent = doubleValue(window["used_percent"]),
@@ -123,9 +206,67 @@ public enum CodexUsageParser {
             CodexUsageWindow(
                 usedPercent: min(max(usedPercent, 0), 100),
                 resetsAt: Date(timeIntervalSince1970: TimeInterval(resetEpoch)),
-                durationSeconds: durationSeconds
+                durationSeconds: durationSeconds,
+                bucketStableKey: bucketStableKey,
+                bucketLabel: bucketLabel,
+                bucketOrder: bucketOrder,
+                windowOrder: windowOrder
             )
         )
+    }
+
+    private static func additionalRateLimits(from value: Any?) -> [[String: Any]] {
+        if let rateLimits = value as? [Any] {
+            return rateLimits.compactMap { $0 as? [String: Any] }
+        }
+        guard let rateLimits = value as? [String: Any] else {
+            return []
+        }
+        return rateLimits.keys.sorted().compactMap { key in
+            guard var rateLimit = rateLimits[key] as? [String: Any] else {
+                return nil
+            }
+            if rateLimit["metered_feature"] == nil {
+                rateLimit["metered_feature"] = key
+            }
+            return rateLimit
+        }
+    }
+
+    private static func stableKeyComponent(_ value: String) -> String? {
+        let component = value
+            .lowercased()
+            .split { !$0.isLetter && !$0.isNumber }
+            .joined(separator: "-")
+        return component.isEmpty ? nil : component
+    }
+
+    private static func bucketLabel(from identity: String) -> String {
+        let words = identity
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+        guard let first = words.first else {
+            return "Other Codex usage"
+        }
+        return ([first.capitalized] + words.dropFirst().map { $0.lowercased() })
+            .joined(separator: " ")
+    }
+
+    private static func stableKey(for window: CodexUsageWindow) -> String {
+        let durationKey = "window-\(canonicalDuration(window.durationSeconds))"
+        guard let bucketStableKey = window.bucketStableKey else {
+            // Preserve the identifiers used by existing general Codex metrics.
+            return durationKey
+        }
+        return "\(bucketStableKey).\(durationKey)"
+    }
+
+    private static func label(for window: CodexUsageWindow) -> String {
+        let durationLabel = label(forDuration: window.durationSeconds)
+        guard let bucketLabel = window.bucketLabel else {
+            return durationLabel
+        }
+        return "\(bucketLabel) · \(durationLabel)"
     }
 
     private static func label(forDuration durationSeconds: Int) -> String {
@@ -284,4 +425,8 @@ private struct CodexUsageWindow {
     let usedPercent: Double
     let resetsAt: Date
     let durationSeconds: Int
+    let bucketStableKey: String?
+    let bucketLabel: String?
+    let bucketOrder: Int
+    let windowOrder: Int
 }

@@ -6,6 +6,13 @@ building, testing, or releasing the app.
 
 ## 1.4.0 - Unreleased
 
+### Added
+
+- Added account-aware Codex limit tracking for every usage window the service
+  reports, including separate GPT-5.3-Codex-Spark limits. Each discovered
+  metric can be shown, hidden, and arranged in Customize Card.
+  ([#270](https://github.com/HemSoft/codexbar-ios/issues/270))
+
 ### Fixed
 
 - Kept the Settings **Done** button visible at the root and throughout nested
