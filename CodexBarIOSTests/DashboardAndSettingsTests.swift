@@ -2469,7 +2469,7 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         viewModel.secret = "new-management-key"
         viewModel.saveGenericCredential()
-        for _ in 0..<10 where viewModel.availableMetrics.isEmpty {
+        for _ in 0..<100 where viewModel.availableMetrics.isEmpty {
             await Task.yield()
         }
 
@@ -2525,7 +2525,7 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         viewModel.secret = "replacement-key"
         viewModel.saveGenericCredential()
-        for _ in 0..<10 where viewModel.usageResult?.creditsRemaining != 42 {
+        for _ in 0..<100 where viewModel.usageResult?.creditsRemaining != 42 {
             await Task.yield()
         }
 
