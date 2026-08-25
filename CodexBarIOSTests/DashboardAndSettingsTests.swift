@@ -2692,6 +2692,67 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testAccountSettingsKeepsSyncBlockedAcrossQueuedCredentialRefreshes() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .openRouter)
+        let firstGate = UsageProviderGate()
+        let secondGate = UsageProviderGate()
+        var refreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialRefresh: { configuration in
+                refreshCount += 1
+                if refreshCount == 1 {
+                    await firstGate.wait()
+                } else {
+                    await secondGate.wait()
+                }
+                return ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openRouter,
+                    title: "OpenRouter",
+                    subtitle: refreshCount == 1 ? "First key" : "Second key",
+                    bars: [],
+                    creditsRemaining: refreshCount == 1 ? 10 : 42,
+                    fetchedAt: Date(timeIntervalSince1970: 2_000_000_000 + Double(refreshCount))
+                )
+            }
+        )
+
+        viewModel.secret = "first-key"
+        viewModel.saveGenericCredential()
+        await firstGate.waitUntilBlocked()
+        viewModel.secret = "second-key"
+        viewModel.saveGenericCredential()
+        await firstGate.release()
+        await secondGate.waitUntilBlocked()
+
+        viewModel.synchronizeUsageResult(
+            ProviderUsageResult(
+                accountID: configuration.id,
+                providerID: .openRouter,
+                title: "OpenRouter",
+                subtitle: "First key",
+                bars: [],
+                creditsRemaining: 10,
+                fetchedAt: Date(timeIntervalSince1970: 2_000_000_001)
+            )
+        )
+        XCTAssertNil(viewModel.usageResult)
+
+        await secondGate.release()
+        for _ in 0..<100 where viewModel.usageResult?.subtitle != "Second key" {
+            await Task.yield()
+        }
+        XCTAssertEqual(refreshCount, 2)
+        XCTAssertEqual(viewModel.usageResult?.subtitle, "Second key")
+        XCTAssertEqual(viewModel.usageResult?.creditsRemaining, 42)
+    }
+
+    @MainActor
     func testAccountSettingsDoNotOfferMetricRefreshWhileAccountIsDisabled() async {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

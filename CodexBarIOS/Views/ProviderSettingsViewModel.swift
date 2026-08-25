@@ -238,25 +238,22 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
 
+        let credentialRevision = metricsCredentialRevision
         guard
             configuration.isEnabled,
             allowUnconfiguredAccount || canRefreshMetrics
         else {
             if requiresFreshRequest {
-                isCredentialRefreshPending = false
+                completeCredentialRefresh(revision: credentialRevision)
             }
             return
         }
 
         flushPendingChanges()
         isLoadingMetrics = true
-        let credentialRevision = metricsCredentialRevision
         let result = requiresFreshRequest
             ? await onCredentialRefresh(configuration)
             : await onAccountRefresh(configuration)
-        if requiresFreshRequest {
-            isCredentialRefreshPending = false
-        }
         isLoadingMetrics = false
 
         if needsCredentialMetricsRefresh {
@@ -265,6 +262,9 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
 
+        if requiresFreshRequest {
+            completeCredentialRefresh(revision: credentialRevision)
+        }
         guard credentialRevision == metricsCredentialRevision else { return }
         guard let result else { return }
         acceptUsageResult(result)
@@ -494,9 +494,6 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func refreshOpenCode(requiresFreshRequest: Bool) async {
         guard !isRefreshingOpenCode else {
-            if requiresFreshRequest {
-                isCredentialRefreshPending = false
-            }
             return
         }
         isRefreshingOpenCode = true
@@ -509,7 +506,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             ? await onCredentialRefresh(configuration)
             : await onAccountRefresh(configuration)
         if requiresFreshRequest {
-            isCredentialRefreshPending = false
+            completeCredentialRefresh(revision: credentialRevision)
         }
         guard credentialRevision == metricsCredentialRevision else { return }
         guard let result else {
@@ -644,6 +641,11 @@ final class ProviderSettingsViewModel: ObservableObject {
         Task { @MainActor [weak self] in
             await self?.refreshMetrics(allowUnconfiguredAccount: true, requiresFreshRequest: true)
         }
+    }
+
+    private func completeCredentialRefresh(revision: Int) {
+        guard revision == metricsCredentialRevision else { return }
+        isCredentialRefreshPending = false
     }
 
     private func updateConfiguration(
