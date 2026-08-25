@@ -2523,7 +2523,9 @@ final class ProviderParsingTests: XCTestCase {
         var reorderedRoot = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any]
         )
-        let additionalRateLimits = try XCTUnwrap(reorderedRoot["additional_rate_limits"] as? [Any])
+        let additionalRateLimits = try XCTUnwrap(
+            reorderedRoot["additional_rate_limits"] as? [Any]
+        )
         reorderedRoot["additional_rate_limits"] = Array(additionalRateLimits.reversed())
         let reorderedData = try JSONSerialization.data(withJSONObject: reorderedRoot)
         let reordered = try XCTUnwrap(CodexUsageParser.parse(reorderedData))
@@ -2598,6 +2600,25 @@ final class ProviderParsingTests: XCTestCase {
                 "bucket-foo_5Fbar.window-3600.duplicate-2",
             ]
         )
+
+        var reorderedRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any]
+        )
+        var collidingBuckets = try XCTUnwrap(
+            reorderedRoot["additional_rate_limits"] as? [Any]
+        )
+        collidingBuckets.swapAt(0, 4)
+        reorderedRoot["additional_rate_limits"] = collidingBuckets
+        let reorderedData = try JSONSerialization.data(withJSONObject: reorderedRoot)
+        let reordered = try XCTUnwrap(CodexUsageParser.parse(reorderedData))
+        let keyedUsage = Dictionary(uniqueKeysWithValues: result.bars.compactMap { bar in
+            bar.stableKey.map { ($0, bar.used) }
+        })
+        let reorderedKeyedUsage = Dictionary(uniqueKeysWithValues: reordered.bars.compactMap { bar in
+            bar.stableKey.map { ($0, bar.used) }
+        })
+
+        XCTAssertEqual(reorderedKeyedUsage, keyedUsage)
     }
 
     func testCodexUsageParserIgnoresUnsafeWindowDurations() throws {
@@ -2640,6 +2661,14 @@ final class ProviderParsingTests: XCTestCase {
               "metered_feature": "valid",
               "primary_window": {
                 "used_percent": 5,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 3600
+              }
+            },
+            {
+              "metered_feature": "nonfinite_usage",
+              "primary_window": {
+                "used_percent": "nan",
                 "reset_at": 1893456000,
                 "limit_window_seconds": 3600
               }

@@ -72,7 +72,16 @@ public enum CodexUsageParser {
             if $0.durationSeconds != $1.durationSeconds {
                 return $0.durationSeconds < $1.durationSeconds
             }
-            return $0.windowOrder < $1.windowOrder
+            if $0.bucketLabel != $1.bucketLabel {
+                return ($0.bucketLabel ?? "") < ($1.bucketLabel ?? "")
+            }
+            if $0.windowOrder != $1.windowOrder {
+                return $0.windowOrder < $1.windowOrder
+            }
+            if $0.resetsAt != $1.resetsAt {
+                return $0.resetsAt < $1.resetsAt
+            }
+            return $0.usedPercent.bitPattern < $1.usedPercent.bitPattern
         }
         var stableKeyOccurrences: [String: Int] = [:]
         let bars = windows.map { window in
@@ -367,19 +376,20 @@ public enum CodexUsageParser {
     }
 
     private static func doubleValue(_ value: Any?) -> Double? {
+        let parsed: Double?
         if let value = value as? Double {
-            return value
+            parsed = value
+        } else if let value = value as? Int {
+            parsed = Double(value)
+        } else if let value = value as? String {
+            parsed = Double(value)
+        } else {
+            parsed = nil
         }
-
-        if let value = value as? Int {
-            return Double(value)
+        guard let parsed, parsed.isFinite else {
+            return nil
         }
-
-        if let value = value as? String {
-            return Double(value)
-        }
-
-        return nil
+        return parsed
     }
 
     private static func intValue(_ value: Any?) -> Int? {
