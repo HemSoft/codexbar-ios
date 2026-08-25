@@ -4,6 +4,7 @@ import Foundation
 public enum CodexUsageParser {
     private static let fiveHourDurationSeconds = 18_000
     private static let weeklyDurationSeconds = 604_800
+    private static let maximumWindowDurationSeconds = 315_360_000
 
     public static func parse(
         _ data: Data,
@@ -199,7 +200,9 @@ public enum CodexUsageParser {
             let window = rateLimit[name] as? [String: Any],
             let usedPercent = doubleValue(window["used_percent"]),
             let resetEpoch = intValue(window["reset_at"]),
-            let durationSeconds = intValue(window["limit_window_seconds"])
+            let durationSeconds = intValue(window["limit_window_seconds"]),
+            durationSeconds > 0,
+            durationSeconds <= maximumWindowDurationSeconds
         else {
             return
         }
@@ -380,19 +383,18 @@ public enum CodexUsageParser {
     }
 
     private static func intValue(_ value: Any?) -> Int? {
-        if let value = value as? Int {
-            return value
-        }
-
-        if let value = value as? Double {
-            return Int(value)
-        }
-
         if let value = value as? String {
             return Int(value)
         }
-
-        return nil
+        guard
+            let number = value as? NSNumber,
+            CFGetTypeID(number) != CFBooleanGetTypeID(),
+            number.doubleValue.isFinite,
+            number.doubleValue.rounded(.towardZero) == number.doubleValue
+        else {
+            return nil
+        }
+        return Int(exactly: number.doubleValue)
     }
 
     private static func nonnegativeInteger(_ value: Any?) -> Int? {

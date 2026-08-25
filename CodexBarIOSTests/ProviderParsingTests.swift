@@ -2600,6 +2600,60 @@ final class ProviderParsingTests: XCTestCase {
         )
     }
 
+    func testCodexUsageParserIgnoresUnsafeWindowDurations() throws {
+        let payload = """
+        {
+          "additional_rate_limits": [
+            {
+              "metered_feature": "zero",
+              "primary_window": {
+                "used_percent": 1,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 0
+              }
+            },
+            {
+              "metered_feature": "negative",
+              "primary_window": {
+                "used_percent": 2,
+                "reset_at": 1893456000,
+                "limit_window_seconds": -1
+              }
+            },
+            {
+              "metered_feature": "extreme",
+              "primary_window": {
+                "used_percent": 3,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 1e100
+              }
+            },
+            {
+              "metered_feature": "implausibly_long",
+              "primary_window": {
+                "used_percent": 4,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 315360001
+              }
+            },
+            {
+              "metered_feature": "valid",
+              "primary_window": {
+                "used_percent": 5,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 3600
+              }
+            }
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8)))
+
+        XCTAssertEqual(result.bars.map(\.stableKey), ["bucket-valid.window-3600"])
+        XCTAssertEqual(result.bars.map(\.used), [5])
+    }
+
     func testCodexUsageParserNormalizesOnlyVerifiedPlanValues() throws {
         let mappings: [(rawValue: String, identifier: String, label: String)] = [
             ("free", "codex.free", "FREE"),
