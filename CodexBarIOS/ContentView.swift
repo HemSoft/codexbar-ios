@@ -354,6 +354,9 @@ struct ContentView: View {
                     onCredentialsChanged: {
                         settingsDismissalRefreshState.credentialsChanged()
                     },
+                    onRefreshInputsChanged: {
+                        settingsDismissalRefreshState.refreshInputsChanged()
+                    },
                     usageResultForAccount: { accountID in
                         orchestrator.dashboardCardItems.first {
                             $0.id == accountID
@@ -393,6 +396,9 @@ struct ContentView: View {
                 onCredentialsChanged: {
                     _ = addAccountRefreshState.credentialsChanged()
                 },
+                onRefreshInputsChanged: {
+                    addAccountRefreshState.refreshInputsChanged()
+                },
                 onAccountRefresh: { configuration in
                     await orchestrator.loadAccountMetrics(configuration)
                 },
@@ -422,6 +428,9 @@ struct ContentView: View {
                     }?.result,
                     onCredentialsChanged: {
                         accountConfigurationNavigation.credentialsChanged()
+                    },
+                    onRefreshInputsChanged: {
+                        accountConfigurationNavigation.refreshInputsChanged()
                     },
                     onAccountRefresh: { configuration in
                         await orchestrator.loadAccountMetrics(configuration)
@@ -1067,6 +1076,10 @@ struct SettingsDismissalRefreshState: Equatable {
         shouldRefreshOnDismiss = false
     }
 
+    mutating func refreshInputsChanged() {
+        shouldRefreshOnDismiss = true
+    }
+
     mutating func finishDismissal() -> Bool {
         defer { shouldRefreshOnDismiss = true }
         return shouldRefreshOnDismiss
@@ -1088,6 +1101,10 @@ struct DashboardAccountConfigurationNavigationState: Equatable {
 
     mutating func credentialsChanged() {
         accountIDAwaitingDismissalRefresh = nil
+    }
+
+    mutating func refreshInputsChanged() {
+        accountIDAwaitingDismissalRefresh = presentation?.accountID
     }
 
     mutating func finishDismissal() -> String? {

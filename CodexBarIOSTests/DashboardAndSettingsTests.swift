@@ -10,6 +10,42 @@ final class DashboardAndSettingsTests: XCTestCase {
         state.credentialsChanged()
         XCTAssertFalse(state.finishDismissal())
         XCTAssertTrue(state.finishDismissal())
+
+        state.credentialsChanged()
+        state.refreshInputsChanged()
+        XCTAssertTrue(state.finishDismissal())
+
+        var navigation = DashboardAccountConfigurationNavigationState()
+        navigation.present(accountID: "openRouter.work")
+        navigation.credentialsChanged()
+        navigation.refreshInputsChanged()
+        XCTAssertEqual(navigation.finishDismissal(), "openRouter.work")
+
+        var addAccountState = AddAccountRefreshState()
+        addAccountState.accountCreated("openCodeZen.team")
+        XCTAssertEqual(addAccountState.credentialsChanged(), "openCodeZen.team")
+        addAccountState.refreshInputsChanged()
+        XCTAssertEqual(addAccountState.finishDismissal(), "openCodeZen.team")
+    }
+
+    @MainActor
+    func testAccountSettingsReportsOnlyProviderRefreshInputChanges() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .openCodeZen)
+        var refreshInputChangeCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onRefreshInputsChanged: { refreshInputChangeCount += 1 }
+        )
+
+        viewModel.binding(for: \.accountLabel).wrappedValue = "Team Zen"
+        XCTAssertEqual(refreshInputChangeCount, 0)
+
+        viewModel.binding(for: \.openCodeWorkspaceId).wrappedValue = "wrk_changed"
+        XCTAssertEqual(refreshInputChangeCount, 1)
     }
 
     func testSettingsDoneToolbarPolicyKeepsDoneVisibleAcrossCompactNavigation() {

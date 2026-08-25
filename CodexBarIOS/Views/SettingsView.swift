@@ -255,6 +255,7 @@ struct SettingsView: View {
     @ObservedObject var githubStatusPreferences: GitHubStatusPreferences
     var onAccountsChanged: @MainActor () -> Void = {}
     var onCredentialsChanged: @MainActor () -> Void = {}
+    var onRefreshInputsChanged: @MainActor () -> Void = {}
     var usageResultForAccount: @MainActor (String) -> ProviderUsageResult? = { _ in nil }
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
@@ -287,6 +288,7 @@ struct SettingsView: View {
         initialRoute: SettingsInitialRoute? = nil,
         onAccountsChanged: @escaping @MainActor () -> Void = {},
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
+        onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
         usageResultForAccount: @escaping @MainActor (String) -> ProviderUsageResult? = { _ in nil },
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
@@ -298,6 +300,7 @@ struct SettingsView: View {
         self.githubStatusPreferences = githubStatusPreferences
         self.onAccountsChanged = onAccountsChanged
         self.onCredentialsChanged = onCredentialsChanged
+        self.onRefreshInputsChanged = onRefreshInputsChanged
         self.usageResultForAccount = usageResultForAccount
         self.onAccountRefresh = onAccountRefresh
         self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
@@ -326,6 +329,7 @@ struct SettingsView: View {
                             accountID: accountID,
                             initialUsageResult: usageResultForAccount(accountID),
                             onCredentialsChanged: onCredentialsChanged,
+                            onRefreshInputsChanged: onRefreshInputsChanged,
                             onAccountRefresh: onAccountRefresh,
                             onCredentialRefresh: onCredentialRefresh
                         )
@@ -360,6 +364,10 @@ struct SettingsView: View {
                 onCredentialsChanged: {
                     _ = addAccountRefreshState.credentialsChanged()
                     onCredentialsChanged()
+                },
+                onRefreshInputsChanged: {
+                    addAccountRefreshState.refreshInputsChanged()
+                    onRefreshInputsChanged()
                 },
                 onAccountRefresh: onAccountRefresh,
                 onCredentialRefresh: onCredentialRefresh
@@ -1443,6 +1451,11 @@ struct AddAccountRefreshState: Equatable {
         return accountID
     }
 
+    mutating func refreshInputsChanged() {
+        guard accountID != nil else { return }
+        shouldRefreshOnDismiss = true
+    }
+
     mutating func finishDismissal() -> String? {
         defer {
             accountID = nil
@@ -1508,6 +1521,7 @@ struct AddAccountSetupFlow: View {
     let initialProviderID: ProviderID?
     var onAccountCreated: @MainActor (String) -> Void
     var onCredentialsChanged: @MainActor () -> Void
+    var onRefreshInputsChanged: @MainActor () -> Void
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     var onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
 
@@ -1519,6 +1533,7 @@ struct AddAccountSetupFlow: View {
         initialProviderID: ProviderID? = nil,
         onAccountCreated: @escaping @MainActor (String) -> Void = { _ in },
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
+        onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil
     ) {
@@ -1526,6 +1541,7 @@ struct AddAccountSetupFlow: View {
         self.initialProviderID = initialProviderID
         self.onAccountCreated = onAccountCreated
         self.onCredentialsChanged = onCredentialsChanged
+        self.onRefreshInputsChanged = onRefreshInputsChanged
         self.onAccountRefresh = onAccountRefresh
         self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
     }
@@ -1537,6 +1553,7 @@ struct AddAccountSetupFlow: View {
                     configurationStore: configurationStore,
                     accountID: accountID,
                     onCredentialsChanged: onCredentialsChanged,
+                    onRefreshInputsChanged: onRefreshInputsChanged,
                     onAccountRefresh: onAccountRefresh,
                     onCredentialRefresh: onCredentialRefresh
                 )

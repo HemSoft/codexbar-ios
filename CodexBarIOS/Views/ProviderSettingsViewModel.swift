@@ -41,6 +41,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let configurationStore: ProviderConfigurationStore
     private let accountID: String
     private let onCredentialsChanged: @MainActor () -> Void
+    private let onRefreshInputsChanged: @MainActor () -> Void
     private let onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     private let onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     private let codexAuthService: any CodexWebAuthenticating
@@ -63,6 +64,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         accountID: String,
         initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
+        onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
         codexAuthService: any CodexWebAuthenticating = CodexWebAuthService(),
@@ -77,6 +79,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             ? initialUsageResult
             : nil
         self.onCredentialsChanged = onCredentialsChanged
+        self.onRefreshInputsChanged = onRefreshInputsChanged
         self.onAccountRefresh = onAccountRefresh
         self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
         self.codexAuthService = codexAuthService
@@ -628,7 +631,11 @@ final class ProviderSettingsViewModel: ObservableObject {
         _ updated: ProviderAccountConfiguration,
         persistence: PersistenceBehavior
     ) {
+        let didChangeRefreshInputs = refreshInputsChanged(from: configuration, to: updated)
         configuration = updated
+        if didChangeRefreshInputs {
+            onRefreshInputsChanged()
+        }
         switch persistence {
         case .immediate:
             pendingPersistenceTask?.cancel()
@@ -702,6 +709,20 @@ final class ProviderSettingsViewModel: ObservableObject {
         let normalized = value.replacingOccurrences(of: ",", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return normalized.isEmpty ? nil : Double(normalized)
+    }
+
+    private func refreshInputsChanged(
+        from current: ProviderAccountConfiguration,
+        to updated: ProviderAccountConfiguration
+    ) -> Bool {
+        current.isEnabled != updated.isEnabled
+            || current.authMethod != updated.authMethod
+            || current.oauthClientID != updated.oauthClientID
+            || current.copilotAccountScope != updated.copilotAccountScope
+            || current.githubOrganization != updated.githubOrganization
+            || current.githubEnterprise != updated.githubEnterprise
+            || current.copilotTotalAllotment != updated.copilotTotalAllotment
+            || current.openCodeWorkspaceId != updated.openCodeWorkspaceId
     }
 
     private static let openCodeBalanceFormatter: NumberFormatter = {
