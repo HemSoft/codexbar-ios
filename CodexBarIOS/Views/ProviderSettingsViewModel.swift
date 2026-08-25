@@ -58,6 +58,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var pendingConfiguration: ProviderAccountConfiguration?
     private var needsCredentialMetricsRefresh = false
     private var metricsCredentialRevision = 0
+    private var isCredentialRefreshPending = false
 
     init(
         configurationStore: ProviderConfigurationStore,
@@ -214,6 +215,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func synchronizeUsageResult(_ result: ProviderUsageResult?) {
+        guard !isCredentialRefreshPending else { return }
         guard let result else {
             usageResult = nil
             return
@@ -240,6 +242,9 @@ final class ProviderSettingsViewModel: ObservableObject {
             configuration.isEnabled,
             allowUnconfiguredAccount || canRefreshMetrics
         else {
+            if requiresFreshRequest {
+                isCredentialRefreshPending = false
+            }
             return
         }
 
@@ -249,6 +254,9 @@ final class ProviderSettingsViewModel: ObservableObject {
         let result = requiresFreshRequest
             ? await onCredentialRefresh(configuration)
             : await onAccountRefresh(configuration)
+        if requiresFreshRequest {
+            isCredentialRefreshPending = false
+        }
         isLoadingMetrics = false
 
         if needsCredentialMetricsRefresh {
@@ -485,7 +493,12 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     private func refreshOpenCode(requiresFreshRequest: Bool) async {
-        guard !isRefreshingOpenCode else { return }
+        guard !isRefreshingOpenCode else {
+            if requiresFreshRequest {
+                isCredentialRefreshPending = false
+            }
+            return
+        }
         isRefreshingOpenCode = true
         openCodeCredentialMessage = "Refreshing OpenCode Go + Zen..."
         defer { isRefreshingOpenCode = false }
@@ -494,6 +507,9 @@ final class ProviderSettingsViewModel: ObservableObject {
         let result = requiresFreshRequest
             ? await onCredentialRefresh(configuration)
             : await onAccountRefresh(configuration)
+        if requiresFreshRequest {
+            isCredentialRefreshPending = false
+        }
         guard let result else {
             openCodeCredentialMessage = "Refresh finished. Check the dashboard."
             return
@@ -617,6 +633,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         onCredentialsChanged()
         usageResult = nil
         metricsCredentialRevision += 1
+        isCredentialRefreshPending = true
         guard refreshMetrics else { return }
         if isLoadingMetrics {
             needsCredentialMetricsRefresh = true

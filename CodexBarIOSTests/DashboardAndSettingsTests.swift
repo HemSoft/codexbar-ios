@@ -2667,6 +2667,18 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         viewModel.secret = "replacement-key"
         viewModel.saveGenericCredential()
+        viewModel.synchronizeUsageResult(
+            ProviderUsageResult(
+                accountID: configuration.id,
+                providerID: .openRouter,
+                title: "OpenRouter",
+                subtitle: "Stale parent result",
+                bars: [],
+                creditsRemaining: 10,
+                fetchedAt: Date(timeIntervalSince1970: 2_000_000_001)
+            )
+        )
+        XCTAssertNil(viewModel.usageResult)
         await gate.release()
         await prepareTask.value
 
