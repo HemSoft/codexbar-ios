@@ -2593,8 +2593,8 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(
             Set(result.bars.compactMap(\.stableKey)),
             [
-                "bucket-additional-3.window-3600",
-                "bucket-additional-4.window-3600",
+                "bucket-additional.window-3600",
+                "bucket-additional.window-3600.duplicate-2",
                 "bucket-foo_2Dbar.window-3600",
                 "bucket-foo_5Fbar.window-3600",
                 "bucket-foo_5Fbar.window-3600.duplicate-2",
@@ -2604,11 +2604,10 @@ final class ProviderParsingTests: XCTestCase {
         var reorderedRoot = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any]
         )
-        var collidingBuckets = try XCTUnwrap(
+        let collidingBuckets = try XCTUnwrap(
             reorderedRoot["additional_rate_limits"] as? [Any]
         )
-        collidingBuckets.swapAt(0, 4)
-        reorderedRoot["additional_rate_limits"] = collidingBuckets
+        reorderedRoot["additional_rate_limits"] = Array(collidingBuckets.reversed())
         let reorderedData = try JSONSerialization.data(withJSONObject: reorderedRoot)
         let reordered = try XCTUnwrap(CodexUsageParser.parse(reorderedData))
         let keyedUsage = Dictionary(uniqueKeysWithValues: result.bars.compactMap { bar in
