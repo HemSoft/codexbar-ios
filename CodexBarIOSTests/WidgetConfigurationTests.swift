@@ -151,9 +151,7 @@ final class WidgetConfigurationTests: XCTestCase {
         XCTAssertEqual(renamedBarID, originalBarID)
         XCTAssertEqual(renamed.builderTile(resolvingSavedID: savedTileID)?.title, "Renamed Codex limit")
         XCTAssertEqual(
-            renamed.builderTile(
-                resolvingSavedID: "bar.\(configuration.id).0.renamed-codex-limit"
-            )?.title,
+            renamed.builderTile(resolvingSavedID: legacyTileID)?.title,
             "Renamed Codex limit"
         )
 

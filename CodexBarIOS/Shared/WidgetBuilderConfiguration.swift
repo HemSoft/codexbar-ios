@@ -230,16 +230,11 @@ public extension CodexBarWidgetUsageBarSnapshot {
         else {
             return false
         }
-        let canonicalSavedSuffix = Self.canonicalIdentitySuffix(savedIdentity.suffix)
         if let savedIndex = savedIdentity.legacyIndex {
-            guard savedIndex == currentIndex else {
-                return false
-            }
-            return canonicalSavedSuffix == Self.canonicalIdentitySuffix(
-                Self.normalizedBarLabel(label)
-            )
+            return savedIndex == currentIndex
         }
-        return canonicalSavedSuffix == Self.canonicalIdentitySuffix(currentIdentity.suffix)
+        return Self.canonicalIdentitySuffix(savedIdentity.suffix)
+            == Self.canonicalIdentitySuffix(currentIdentity.suffix)
     }
 
     private static func identity(
@@ -265,14 +260,6 @@ public extension CodexBarWidgetUsageBarSnapshot {
             return suffix
         }
         return String(suffix.dropLast(oldScopedWeeklySuffix.count)) + "-weekly-usage-limit"
-    }
-
-    private static func normalizedBarLabel(_ label: String) -> String {
-        label
-            .lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: "-")
     }
 }
 
