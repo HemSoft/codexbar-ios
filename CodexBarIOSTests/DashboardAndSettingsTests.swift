@@ -534,6 +534,42 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testMetricDiscoveryReusesInFlightAccountRefresh() async {
+        let gate = UsageProviderGate()
+        let recorder = UsageProviderRecorder()
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.metrics",
+            providerID: .codex,
+            accountLabel: "Codex Metrics",
+            authMethod: .browserSession
+        )
+        let service = UsageRefreshService(providers: [
+            GatedUsageProvider(
+                providerID: .codex,
+                blockedAccountID: configuration.id,
+                gate: gate,
+                recorder: recorder
+            ),
+        ])
+
+        let dashboardRefresh = Task {
+            await service.refresh(configurations: [configuration])
+        }
+        await gate.waitUntilBlocked()
+        let metricDiscovery = Task {
+            await service.resultAfterCurrentRefresh(configuration: configuration)
+        }
+
+        await gate.release()
+        await dashboardRefresh.value
+        let result = await metricDiscovery.value
+        let recordedLabels = await recorder.recordedLabels()
+
+        XCTAssertEqual(result?.accountID, configuration.id)
+        XCTAssertEqual(recordedLabels, ["Codex Metrics"])
+    }
+
+    @MainActor
     func testExplicitRefreshDoesNotReregisterObsoleteConfiguration() async {
         let recorder = UsageProviderRecorder()
         let configuration = ProviderAccountConfiguration(

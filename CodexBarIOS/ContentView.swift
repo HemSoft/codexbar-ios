@@ -353,7 +353,7 @@ struct ContentView: View {
                         }?.result
                     },
                     onAccountRefresh: { configuration in
-                        await orchestrator.refreshAccount(configuration)
+                        await orchestrator.loadAccountMetrics(configuration)
                     },
                     onAlertAuthorizationRequest: {
                         await orchestrator.requestAlertAuthorization()
@@ -384,7 +384,7 @@ struct ContentView: View {
                     _ = addAccountRefreshState.credentialsChanged()
                 },
                 onAccountRefresh: { configuration in
-                    await orchestrator.refreshAccount(configuration)
+                    await orchestrator.loadAccountMetrics(configuration)
                 }
                 )
             }
@@ -411,7 +411,7 @@ struct ContentView: View {
                         accountConfigurationNavigation.credentialsChanged()
                     },
                     onAccountRefresh: { configuration in
-                        await orchestrator.refreshAccount(configuration)
+                        await orchestrator.loadAccountMetrics(configuration)
                     }
                 )
                 .toolbar {
