@@ -135,9 +135,19 @@ final class WidgetConfigurationTests: XCTestCase {
         let original = try publish(label: "Original Codex limit")
         let originalBarID = try XCTUnwrap(original.results.first?.bars.first?.id)
         let savedTileID = "bar.\(originalBarID)"
+        let legacyTileID = "bar.\(configuration.id).0.original-codex-limit"
+        XCTAssertEqual(
+            original.builderTile(resolvingSavedID: legacyTileID)?.title,
+            "Original Codex limit"
+        )
+
         let renamed = try publish(label: "Renamed Codex limit")
         let renamedBarID = try XCTUnwrap(renamed.results.first?.bars.first?.id)
 
+        XCTAssertEqual(
+            originalBarID,
+            "\(configuration.id).codex.bucket-spark.window-18000"
+        )
         XCTAssertEqual(renamedBarID, originalBarID)
         XCTAssertEqual(renamed.builderTile(resolvingSavedID: savedTileID)?.title, "Renamed Codex limit")
         XCTAssertEqual(
