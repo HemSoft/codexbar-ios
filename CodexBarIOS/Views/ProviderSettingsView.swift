@@ -234,7 +234,10 @@ struct ProviderSettingsView: View {
                     Button(configurationStore.hasSecret(for: configuration) ? "Update and Refresh" : "Save and Refresh") {
                         viewModel.saveOpenCodeCredential()
                     }
-                    .disabled(viewModel.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        viewModel.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || viewModel.isRefreshingOpenCode
+                    )
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button {

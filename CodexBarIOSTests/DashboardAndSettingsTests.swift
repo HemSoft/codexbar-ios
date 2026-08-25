@@ -2476,6 +2476,9 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
         reloadedViewModel.synchronizeUsageResult(synchronizedResult)
         XCTAssertEqual(reloadedViewModel.availableMetrics.map(\.label), ["GPT-5.3-Codex-Spark · Weekly limit"])
+
+        reloadedViewModel.synchronizeUsageResult(nil)
+        XCTAssertTrue(reloadedViewModel.availableMetrics.isEmpty)
     }
 
     @MainActor
@@ -2744,14 +2747,26 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testProviderSettingsViewModelCancelsPendingEditsWhenSavingOpenCodeCredential() {
+    func testProviderSettingsViewModelCancelsPendingEditsWhenSavingOpenCodeCredential() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
         let openCode = store.addAccount(for: .openCodeZen)
+        var discoveryRefreshCount = 0
+        var credentialRefreshCount = 0
+        var credentialsChangedCount = 0
         let viewModel = ProviderSettingsViewModel(
             configurationStore: store,
-            accountID: openCode.id
+            accountID: openCode.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 },
+            onAccountRefresh: { _ in
+                discoveryRefreshCount += 1
+                return nil
+            },
+            onCredentialRefresh: { _ in
+                credentialRefreshCount += 1
+                return nil
+            }
         )
         viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "Team ZEN"
         viewModel.secret = "opencode-token"
@@ -2761,9 +2776,15 @@ final class DashboardAndSettingsTests: XCTestCase {
         externallyUpdated.showsHistory = false
         XCTAssertTrue(store.update(externallyUpdated))
         viewModel.flushPendingChanges()
+        for _ in 0..<100 where credentialRefreshCount == 0 {
+            await Task.yield()
+        }
 
         XCTAssertEqual(store.configuration(accountID: openCode.id)?.accountLabel, "Team ZEN")
         XCTAssertEqual(store.configuration(accountID: openCode.id)?.showsHistory, false)
+        XCTAssertEqual(credentialsChangedCount, 1)
+        XCTAssertEqual(discoveryRefreshCount, 0)
+        XCTAssertEqual(credentialRefreshCount, 1)
     }
 
     @MainActor

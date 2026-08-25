@@ -56,6 +56,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var pendingPersistenceTask: Task<Void, Never>?
     private var pendingConfiguration: ProviderAccountConfiguration?
     private var needsCredentialMetricsRefresh = false
+    private var metricsCredentialRevision = 0
 
     init(
         configurationStore: ProviderConfigurationStore,
@@ -210,7 +211,10 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func synchronizeUsageResult(_ result: ProviderUsageResult?) {
-        guard let result else { return }
+        guard let result else {
+            usageResult = nil
+            return
+        }
         acceptUsageResult(result)
     }
 
@@ -238,6 +242,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
         flushPendingChanges()
         isLoadingMetrics = true
+        let credentialRevision = metricsCredentialRevision
         let result = requiresFreshRequest
             ? await onCredentialRefresh(configuration)
             : await onAccountRefresh(configuration)
@@ -249,6 +254,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
 
+        guard credentialRevision == metricsCredentialRevision else { return }
         guard let result else { return }
         acceptUsageResult(result)
     }
@@ -467,17 +473,25 @@ final class ProviderSettingsViewModel: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "OpenCode dashboard auth value saved. Enter the workspace ID, then refresh."
             : "OpenCode dashboard auth value saved. Refreshing..."
-        Task { await refreshOpenCode() }
+        credentialsDidChange(refreshMetrics: false)
+        Task { await refreshOpenCode(requiresFreshRequest: true) }
     }
 
     func refreshOpenCode() async {
+        await refreshOpenCode(requiresFreshRequest: false)
+    }
+
+    private func refreshOpenCode(requiresFreshRequest: Bool) async {
         guard !isRefreshingOpenCode else { return }
         isRefreshingOpenCode = true
         openCodeCredentialMessage = "Refreshing OpenCode Go + Zen..."
         defer { isRefreshingOpenCode = false }
 
         flushPendingChanges()
-        guard let result = await onAccountRefresh(configuration) else {
+        let result = requiresFreshRequest
+            ? await onCredentialRefresh(configuration)
+            : await onAccountRefresh(configuration)
+        guard let result else {
             openCodeCredentialMessage = "Refresh finished. Check the dashboard."
             return
         }
@@ -596,9 +610,11 @@ final class ProviderSettingsViewModel: ObservableObject {
         #endif
     }
 
-    private func credentialsDidChange() {
+    private func credentialsDidChange(refreshMetrics: Bool = true) {
         onCredentialsChanged()
         usageResult = nil
+        metricsCredentialRevision += 1
+        guard refreshMetrics else { return }
         if isLoadingMetrics {
             needsCredentialMetricsRefresh = true
             return
