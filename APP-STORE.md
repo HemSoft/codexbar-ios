@@ -2,7 +2,7 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-08-23
+Status last reviewed: 2026-08-25
 
 ## Current Status
 
@@ -31,11 +31,11 @@ Status last reviewed: 2026-08-23
   version is `1.2`, the release build number is `2`, and privacy-safe iPhone,
   iPad, and Apple Watch storefront captures are prepared in
   `release-assets/1.2`.
-- Version 1.3 release preparation is tracked by Issue #261. The repository
-  release candidate uses marketing version `1.3` and build number `3` across
-  the iOS app, widgets, Apple Watch app, Apple Watch widget, and test targets.
-  The 1.3.0 changelog is dated 2026-08-23, and the App Store "What's New" copy
-  is in `fastlane/metadata/en-US/release_notes.txt`.
+- Version 1.3 build `1.3 (3)` is publicly available. Apple's public lookup
+  response reports a release timestamp of 2026-08-24 at 17:21:45 UTC,
+  re-verified on 2026-08-25. The repository's 1.3.0 changelog snapshot remains
+  dated 2026-08-23, and the App Store "What's New" copy is in
+  `fastlane/metadata/en-US/release_notes.txt`.
 
 ## Apple Requirements To Keep Current
 
@@ -319,10 +319,10 @@ Version 1.3 submission status:
   availability in 175 regions.
 - [x] Preview the reused storefront screenshots, select build `1.3 (3)`, and
   submit the release for App Review. Version 1.3 reused six iPhone, six iPad,
-  and two Apple Watch screenshots and entered `Waiting for Review` on
-  2026-08-23 at 5:01 PM EDT. Submission
-  `ba051fea-b0bc-4c47-9e08-3ed9c69bd9a6` uses automatic release after approval
-  with immediate rollout and keeps the existing star rating.
+  and two Apple Watch screenshots. Apple approved submission
+  `ba051fea-b0bc-4c47-9e08-3ed9c69bd9a6`, and the automatic release became
+  publicly available on 2026-08-24 at 17:21:45 UTC with immediate rollout and
+  the existing star rating.
 
 Version 1.2 submission preparation history:
 
