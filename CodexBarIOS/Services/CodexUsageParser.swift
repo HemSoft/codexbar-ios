@@ -39,10 +39,18 @@ public enum CodexUsageParser {
             )
         }
         for rateLimit in additionalRateLimits(from: root["additional_rate_limits"]) {
-            let identity = nonemptyString(rateLimit["metered_feature"])
-                ?? nonemptyString(rateLimit["limit_id"])
-                ?? nonemptyString(rateLimit["limit_name"])
-            let stableComponent = identity.flatMap(stableKeyComponent) ?? "additional"
+            let meteredFeature = nonemptyString(rateLimit["metered_feature"])
+                .flatMap(stableKeyComponent)
+            let limitID = nonemptyString(rateLimit["limit_id"])
+                .flatMap(stableKeyComponent)
+            let stableComponent = if let meteredFeature, let limitID {
+                "\(meteredFeature).limit-\(limitID)"
+            } else {
+                meteredFeature
+                    ?? limitID
+                    ?? nonemptyString(rateLimit["limit_name"]).flatMap(stableKeyComponent)
+                    ?? "additional"
+            }
             let rateLimitWindows = rateLimit["rate_limit"] as? [String: Any] ?? rateLimit
             addWindows(
                 from: rateLimitWindows,

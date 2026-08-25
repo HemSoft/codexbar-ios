@@ -2620,6 +2620,60 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(reorderedKeyedUsage, keyedUsage)
     }
 
+    func testCodexUsageParserKeepsSharedFeaturesBoundToImmutableLimitIDs() throws {
+        func bucket(limitID: String, usedPercent: Double) -> [String: Any] {
+            [
+                "metered_feature": "shared",
+                "limit_id": limitID,
+                "rate_limit": [
+                    "primary_window": [
+                        "used_percent": usedPercent,
+                        "reset_at": 1_893_456_000,
+                        "limit_window_seconds": 3_600,
+                    ],
+                ],
+            ]
+        }
+
+        func parse(_ buckets: [[String: Any]]) throws -> ProviderUsageResult {
+            let data = try JSONSerialization.data(withJSONObject: [
+                "additional_rate_limits": buckets,
+            ])
+            return try XCTUnwrap(CodexUsageParser.parse(data))
+        }
+
+        func keyedUsage(_ result: ProviderUsageResult) -> [String: Double] {
+            Dictionary(uniqueKeysWithValues: result.bars.compactMap { bar in
+                bar.stableKey.map { ($0, bar.used) }
+            })
+        }
+
+        let initial = try parse([
+            bucket(limitID: "alpha", usedPercent: 10),
+            bucket(limitID: "beta", usedPercent: 20),
+        ])
+        XCTAssertEqual(keyedUsage(initial), [
+            "bucket-shared.limit-alpha.window-3600": 10,
+            "bucket-shared.limit-beta.window-3600": 20,
+        ])
+
+        let refreshed = try parse([
+            bucket(limitID: "beta", usedPercent: 35),
+            bucket(limitID: "alpha", usedPercent: 25),
+        ])
+        XCTAssertEqual(keyedUsage(refreshed), [
+            "bucket-shared.limit-alpha.window-3600": 25,
+            "bucket-shared.limit-beta.window-3600": 35,
+        ])
+
+        let surviving = try parse([
+            bucket(limitID: "beta", usedPercent: 45),
+        ])
+        XCTAssertEqual(keyedUsage(surviving), [
+            "bucket-shared.limit-beta.window-3600": 45,
+        ])
+    }
+
     func testCodexUsageParserIgnoresUnsafeWindowDurations() throws {
         let payload = """
         {
