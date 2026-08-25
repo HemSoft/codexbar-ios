@@ -34,6 +34,10 @@ enum WidgetSnapshotPublisher {
                     groupID: configuration?.groupID,
                     groupName: configurationStore.group(for: configuration?.groupID)?.name,
                     bars: result.bars.enumerated().map { index, bar in
+                        let metricID = bar.metricIdentifier(
+                            providerID: result.providerID,
+                            index: index
+                        )
                         let projectedFraction = barsAreFresh ? bar.projectedFraction(at: now) : nil
                         let projectedSeverity = barsAreFresh
                             ? bar.projectedSeverity(at: now, thresholds: severityThresholds)
@@ -43,12 +47,10 @@ enum WidgetSnapshotPublisher {
                             id: stableBarID(
                                 accountID: result.accountID,
                                 bar: bar,
-                                index: index
+                                index: index,
+                                metricID: metricID
                             ),
-                            metricID: bar.metricIdentifier(
-                                providerID: result.providerID,
-                                index: index
-                            ),
+                            metricID: metricID,
                             label: bar.label,
                             fractionUsed: bar.fractionUsed,
                             usageText: bar.usageText,
@@ -161,7 +163,8 @@ enum WidgetSnapshotPublisher {
     private static func stableBarID(
         accountID: String,
         bar: UsageBar,
-        index: Int
+        index: Int,
+        metricID: String
     ) -> String {
         // Keep saved Claude session tiles stable after matching the first-party
         // "Current session" display label, including model-scoped sessions.
@@ -184,7 +187,7 @@ enum WidgetSnapshotPublisher {
             return "\(accountID).\(legacyKey)"
         }
 
-        return "\(accountID).\(index).\(normalizedBarLabel(bar.label))"
+        return "\(accountID).\(metricID)"
     }
 
     private static func normalizedBarLabel(_ label: String) -> String {

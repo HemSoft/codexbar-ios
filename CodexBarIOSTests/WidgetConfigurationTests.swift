@@ -96,6 +96,58 @@ final class WidgetConfigurationTests: XCTestCase {
         XCTAssertEqual(watchMetric.visualizationStyle, .largeNumeric)
     }
 
+    @MainActor
+    func testWidgetSnapshotPublisherKeepsMetricTileIDAcrossLabelChanges() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("codex-widget-key", for: configuration))
+
+        func publish(label: String) throws -> CodexBarWidgetSnapshot {
+            let result = ProviderUsageResult(
+                accountID: configuration.id,
+                providerID: .codex,
+                title: "Codex",
+                subtitle: "Live usage",
+                bars: [
+                    UsageBar(
+                        stableKey: "bucket-spark.window-18000",
+                        label: label,
+                        used: 25,
+                        limit: 100
+                    ),
+                ],
+                fetchedAt: Date(timeIntervalSince1970: 1_788_475_200)
+            )
+            WidgetSnapshotPublisher.publish(
+                results: [result],
+                configurationStore: store,
+                snapshotDefaults: defaults
+            )
+            return WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        }
+
+        let original = try publish(label: "Original Codex limit")
+        let originalBarID = try XCTUnwrap(original.results.first?.bars.first?.id)
+        let savedTileID = "bar.\(originalBarID)"
+        let renamed = try publish(label: "Renamed Codex limit")
+        let renamedBarID = try XCTUnwrap(renamed.results.first?.bars.first?.id)
+
+        XCTAssertEqual(renamedBarID, originalBarID)
+        XCTAssertEqual(renamed.builderTile(resolvingSavedID: savedTileID)?.title, "Renamed Codex limit")
+        XCTAssertEqual(
+            renamed.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).0.renamed-codex-limit"
+            )?.title,
+            "Renamed Codex limit"
+        )
+    }
+
     func testEveryRefreshPolicySelectsItsOverrideOrFallback() {
         let fallback = WidgetRefreshInterval.threeHours
 
