@@ -375,10 +375,25 @@ struct CodexBarWidgetTileChoiceQuery: EntityStringQuery {
     }
 
     func entities(for identifiers: [CodexBarWidgetTileChoice.ID]) async throws -> [CodexBarWidgetTileChoice] {
-        let choices = choices()
+        let snapshot = loadSnapshot()
+        let choices = Self.choices(
+            snapshot: snapshot,
+            group: groupOverride ?? intent?.group,
+            focus: focusOverride ?? intent?.focus ?? .dashboardOrder
+        )
         return identifiers.map { identifier in
-            choices.first { $0.id == identifier }
-                ?? CodexBarWidgetTileChoice(id: identifier, title: "Saved Tile", subtitle: "Open CodexBar to refresh")
+            if let exactMatch = choices.first(where: { $0.id == identifier }) {
+                return exactMatch
+            }
+            if let migratedID = snapshot.builderTile(resolvingSavedID: identifier)?.id,
+               let migratedChoice = choices.first(where: { $0.id == migratedID }) {
+                return migratedChoice
+            }
+            return CodexBarWidgetTileChoice(
+                id: identifier,
+                title: "Saved Tile",
+                subtitle: "Open CodexBar to refresh"
+            )
         }
     }
 

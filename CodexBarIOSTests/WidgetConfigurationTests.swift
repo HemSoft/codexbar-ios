@@ -296,11 +296,14 @@ final class WidgetConfigurationTests: XCTestCase {
 
         let resolved = try await query.entities(for: [
             "bar.codex.work.five-hour",
+            "bar.codex.work.0.5-hour-usage",
             "missing-tile",
         ])
         XCTAssertEqual(resolved[0].title, "ChatGPT / Codex - 5-hour usage")
-        XCTAssertEqual(resolved[1].id, "missing-tile")
-        XCTAssertEqual(resolved[1].title, "Saved Tile")
+        XCTAssertEqual(resolved[1].id, "bar.codex.work.five-hour")
+        XCTAssertEqual(resolved[1].title, "ChatGPT / Codex - 5-hour usage")
+        XCTAssertEqual(resolved[2].id, "missing-tile")
+        XCTAssertEqual(resolved[2].title, "Saved Tile")
     }
 
     func testProviderTilesSelectRepresentativeBarAndBuildEveryTileKind() throws {
