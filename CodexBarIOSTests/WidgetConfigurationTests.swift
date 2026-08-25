@@ -156,6 +156,40 @@ final class WidgetConfigurationTests: XCTestCase {
             )?.title,
             "Renamed Codex limit"
         )
+
+        let duplicateLabels = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(
+                    stableKey: "bucket-first.window-18000",
+                    label: "Shared label",
+                    used: 10,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: "bucket-second.window-18000",
+                    label: "Shared label",
+                    used: 20,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_788_475_200)
+        )
+        WidgetSnapshotPublisher.publish(
+            results: [duplicateLabels],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let duplicateLabelSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        XCTAssertEqual(
+            duplicateLabelSnapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).1.shared-label"
+            )?.id,
+            "bar.\(configuration.id).codex.bucket-second.window-18000"
+        )
     }
 
     func testEveryRefreshPolicySelectsItsOverrideOrFallback() {

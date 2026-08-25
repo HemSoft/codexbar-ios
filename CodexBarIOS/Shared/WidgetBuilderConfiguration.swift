@@ -195,10 +195,14 @@ public extension CodexBarWidgetSnapshot {
         }
 
         for provider in results.sorted(by: { $0.accountID.count > $1.accountID.count }) {
-            if let bar = provider.bars.first(where: {
-                $0.matchesSavedBuilderTileID(tileID, accountID: provider.accountID)
+            if let indexedBar = provider.bars.enumerated().first(where: {
+                $0.element.matchesSavedBuilderTileID(
+                    tileID,
+                    accountID: provider.accountID,
+                    currentIndex: $0.offset
+                )
             }) {
-                return provider.builderBarTile(bar)
+                return provider.builderBarTile(indexedBar.element)
             }
         }
 
@@ -207,7 +211,11 @@ public extension CodexBarWidgetSnapshot {
 }
 
 public extension CodexBarWidgetUsageBarSnapshot {
-    func matchesSavedBuilderTileID(_ tileID: String, accountID: String) -> Bool {
+    func matchesSavedBuilderTileID(
+        _ tileID: String,
+        accountID: String,
+        currentIndex: Int? = nil
+    ) -> Bool {
         let savedBarID = tileID.hasPrefix("bar.")
             ? String(tileID.dropFirst("bar.".count))
             : tileID
@@ -217,21 +225,27 @@ public extension CodexBarWidgetUsageBarSnapshot {
         }
 
         guard
-            let savedSuffix = Self.identitySuffix(in: savedBarID, accountID: accountID),
-            let currentSuffix = Self.identitySuffix(in: id, accountID: accountID)
+            let savedIdentity = Self.identity(in: savedBarID, accountID: accountID),
+            let currentIdentity = Self.identity(in: id, accountID: accountID)
         else {
             return false
         }
-        let canonicalSavedSuffix = Self.canonicalIdentitySuffix(savedSuffix)
-        if canonicalSavedSuffix == Self.canonicalIdentitySuffix(currentSuffix) {
-            return true
+        let canonicalSavedSuffix = Self.canonicalIdentitySuffix(savedIdentity.suffix)
+        if let savedIndex = savedIdentity.legacyIndex {
+            guard savedIndex == currentIndex else {
+                return false
+            }
+            return canonicalSavedSuffix == Self.canonicalIdentitySuffix(
+                Self.normalizedBarLabel(label)
+            )
         }
-        return canonicalSavedSuffix == Self.canonicalIdentitySuffix(
-            Self.normalizedBarLabel(label)
-        )
+        return canonicalSavedSuffix == Self.canonicalIdentitySuffix(currentIdentity.suffix)
     }
 
-    private static func identitySuffix(in barID: String, accountID: String) -> String? {
+    private static func identity(
+        in barID: String,
+        accountID: String
+    ) -> (suffix: String, legacyIndex: Int?)? {
         let accountPrefix = "\(accountID)."
         guard barID.hasPrefix(accountPrefix) else {
             return nil
@@ -239,10 +253,10 @@ public extension CodexBarWidgetUsageBarSnapshot {
 
         let accountSuffix = String(barID.dropFirst(accountPrefix.count))
         let components = accountSuffix.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
-        if components.count == 2, Int(components[0]) != nil {
-            return String(components[1])
+        if components.count == 2, let legacyIndex = Int(components[0]) {
+            return (String(components[1]), legacyIndex)
         }
-        return accountSuffix
+        return (accountSuffix, nil)
     }
 
     private static func canonicalIdentitySuffix(_ suffix: String) -> String {
