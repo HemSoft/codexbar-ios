@@ -191,10 +191,20 @@ struct CodexBarWidgetView: View {
             .sorted { $0.accountID.count > $1.accountID.count }
 
         for provider in providers {
-            if let matchingBar = provider.bars.first(where: {
+            let identityMatches = provider.bars.filter {
                 $0.matchesSavedBuilderTileID(choiceID, accountID: provider.accountID)
+            }
+            if identityMatches.count == 1, let identityMatch = identityMatches.first {
+                return provider.barTile(identityMatch)
+            }
+            if let indexedBar = provider.bars.enumerated().first(where: {
+                $0.element.matchesSavedBuilderTileID(
+                    choiceID,
+                    accountID: provider.accountID,
+                    currentIndex: $0.offset
+                )
             }) {
-                return provider.barTile(matchingBar)
+                return provider.barTile(indexedBar.element)
             }
 
             if provider.bars.count == 1, let onlyBar = provider.bars.first {

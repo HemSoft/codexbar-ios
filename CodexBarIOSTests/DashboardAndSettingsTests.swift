@@ -1568,6 +1568,141 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testDiscoveredCodexMetricsPreserveCustomizationWhenOfferedSetChanges() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let initialPayload = """
+        {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 10,
+              "reset_at": 1893456000,
+              "limit_window_seconds": 18000
+            },
+            "secondary_window": {
+              "used_percent": 20,
+              "reset_at": 1894060800,
+              "limit_window_seconds": 604800
+            }
+          },
+          "additional_rate_limits": [{
+            "metered_feature": "codex_bengalfox",
+            "limit_name": "GPT-5.3-Codex-Spark",
+            "rate_limit": {
+              "primary_window": {
+                "used_percent": 30,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 18000
+              },
+              "secondary_window": {
+                "used_percent": 40,
+                "reset_at": 1894060800,
+                "limit_window_seconds": 604800
+              }
+            }
+          }]
+        }
+        """
+        let updatedPayload = """
+        {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 21,
+              "reset_at": 1894060800,
+              "limit_window_seconds": 604800
+            }
+          },
+          "additional_rate_limits": [
+            {
+              "metered_feature": "codex_future",
+              "limit_name": "Future model",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 5,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 7200
+                }
+              }
+            },
+            {
+              "metered_feature": "codex_bengalfox",
+              "limit_name": "GPT-5.3-Codex-Spark",
+              "rate_limit": {
+                "secondary_window": {
+                  "used_percent": 41,
+                  "reset_at": 1894060800,
+                  "limit_window_seconds": 604800
+                },
+                "primary_window": {
+                  "used_percent": 31,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 18000
+                }
+              }
+            }
+          ]
+        }
+        """
+        let initial = try XCTUnwrap(CodexUsageParser.parse(Data(initialPayload.utf8)))
+        let updated = try XCTUnwrap(CodexUsageParser.parse(Data(updatedPayload.utf8)))
+        let initialMetricIDs = initial.availableMetrics.map(\.id)
+        let updatedMetricIDs = updated.availableMetrics.map(\.id)
+        let accountID = "codex.dynamic"
+        let generalFiveHourID = "codex.window-18000"
+        let generalWeeklyID = "codex.window-604800"
+        let sparkFiveHourID = "codex.bucket-codex_5Fbengalfox.window-18000"
+        let sparkWeeklyID = "codex.bucket-codex_5Fbengalfox.window-604800"
+        let futureID = "codex.bucket-codex_5Ffuture.window-7200"
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertEqual(
+            initialMetricIDs,
+            [generalFiveHourID, generalWeeklyID, sparkFiveHourID, sparkWeeklyID]
+        )
+        _ = store.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: initialMetricIDs
+        )
+        store.updateMetricOrder(
+            [sparkWeeklyID, generalFiveHourID, sparkFiveHourID, generalWeeklyID],
+            accountID: accountID
+        )
+        store.updateMetricVisibility(false, accountID: accountID, metricID: sparkFiveHourID)
+
+        _ = store.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: updatedMetricIDs
+        )
+
+        XCTAssertEqual(
+            store.metricOrder(accountID: accountID, availableMetricIDs: updatedMetricIDs),
+            [sparkWeeklyID, generalFiveHourID, sparkFiveHourID, generalWeeklyID, futureID]
+        )
+        XCTAssertFalse(store.isMetricVisible(accountID: accountID, metricID: sparkFiveHourID))
+        XCTAssertTrue(store.isMetricVisible(accountID: accountID, metricID: futureID))
+        XCTAssertTrue(
+            try XCTUnwrap(store.metricLayouts[accountID]?.preferences[futureID])
+                .isNewlyDiscovered
+        )
+
+        let reloaded = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        XCTAssertFalse(reloaded.isMetricVisible(accountID: accountID, metricID: sparkFiveHourID))
+        XCTAssertEqual(
+            reloaded.metricOrder(accountID: accountID, availableMetricIDs: updatedMetricIDs),
+            [sparkWeeklyID, generalFiveHourID, sparkFiveHourID, generalWeeklyID, futureID]
+        )
+    }
+
+    @MainActor
     func testWatchSnapshotFiltersHiddenMetricsAndRestoresThemWithSavedStyles() throws {
         let defaults = UserDefaults(suiteName: #function)!
         defer {

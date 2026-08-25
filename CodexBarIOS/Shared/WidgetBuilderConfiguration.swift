@@ -195,10 +195,20 @@ public extension CodexBarWidgetSnapshot {
         }
 
         for provider in results.sorted(by: { $0.accountID.count > $1.accountID.count }) {
-            if let bar = provider.bars.first(where: {
+            let identityMatches = provider.bars.filter {
                 $0.matchesSavedBuilderTileID(tileID, accountID: provider.accountID)
+            }
+            if identityMatches.count == 1, let identityMatch = identityMatches.first {
+                return provider.builderBarTile(identityMatch)
+            }
+            if let indexedBar = provider.bars.enumerated().first(where: {
+                $0.element.matchesSavedBuilderTileID(
+                    tileID,
+                    accountID: provider.accountID,
+                    currentIndex: $0.offset
+                )
             }) {
-                return provider.builderBarTile(bar)
+                return provider.builderBarTile(indexedBar.element)
             }
         }
 
@@ -207,7 +217,11 @@ public extension CodexBarWidgetSnapshot {
 }
 
 public extension CodexBarWidgetUsageBarSnapshot {
-    func matchesSavedBuilderTileID(_ tileID: String, accountID: String) -> Bool {
+    func matchesSavedBuilderTileID(
+        _ tileID: String,
+        accountID: String,
+        currentIndex: Int? = nil
+    ) -> Bool {
         let savedBarID = tileID.hasPrefix("bar.")
             ? String(tileID.dropFirst("bar.".count))
             : tileID
@@ -217,16 +231,29 @@ public extension CodexBarWidgetUsageBarSnapshot {
         }
 
         guard
-            let savedSuffix = Self.identitySuffix(in: savedBarID, accountID: accountID),
-            let currentSuffix = Self.identitySuffix(in: id, accountID: accountID)
+            let savedIdentity = Self.identity(in: savedBarID, accountID: accountID),
+            let currentIdentity = Self.identity(in: id, accountID: accountID)
         else {
             return false
         }
-        return Self.canonicalIdentitySuffix(savedSuffix)
-            == Self.canonicalIdentitySuffix(currentSuffix)
+        if let savedIndex = savedIdentity.legacyIndex {
+            if currentIndex == nil {
+                let canonicalSavedSuffix = Self.canonicalIdentitySuffix(savedIdentity.suffix)
+                return canonicalSavedSuffix == Self.canonicalIdentitySuffix(currentIdentity.suffix)
+                    || canonicalSavedSuffix == Self.canonicalIdentitySuffix(
+                        Self.normalizedBarLabel(label)
+                    )
+            }
+            return savedIndex == currentIndex
+        }
+        return Self.canonicalIdentitySuffix(savedIdentity.suffix)
+            == Self.canonicalIdentitySuffix(currentIdentity.suffix)
     }
 
-    private static func identitySuffix(in barID: String, accountID: String) -> String? {
+    private static func identity(
+        in barID: String,
+        accountID: String
+    ) -> (suffix: String, legacyIndex: Int?)? {
         let accountPrefix = "\(accountID)."
         guard barID.hasPrefix(accountPrefix) else {
             return nil
@@ -234,10 +261,10 @@ public extension CodexBarWidgetUsageBarSnapshot {
 
         let accountSuffix = String(barID.dropFirst(accountPrefix.count))
         let components = accountSuffix.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
-        if components.count == 2, Int(components[0]) != nil {
-            return String(components[1])
+        if components.count == 2, let legacyIndex = Int(components[0]) {
+            return (String(components[1]), legacyIndex)
         }
-        return accountSuffix
+        return (accountSuffix, nil)
     }
 
     private static func canonicalIdentitySuffix(_ suffix: String) -> String {
@@ -246,6 +273,14 @@ public extension CodexBarWidgetUsageBarSnapshot {
             return suffix
         }
         return String(suffix.dropLast(oldScopedWeeklySuffix.count)) + "-weekly-usage-limit"
+    }
+
+    private static func normalizedBarLabel(_ label: String) -> String {
+        label
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
     }
 }
 

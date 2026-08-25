@@ -2371,7 +2371,7 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertTrue(result.bars.isEmpty)
     }
 
-    func testCodexUsageParserReadsUsageWindows() throws {
+    func testCodexUsageParserReadsPlusUsageWindows() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_893_369_600)
         let formatter = UserFacingDateTimeFormatter(
             timeZone: try XCTUnwrap(TimeZone(identifier: "Europe/Berlin")),
@@ -2379,7 +2379,7 @@ final class ProviderParsingTests: XCTestCase {
         )
         let payload = """
         {
-          "plan_type": "pro",
+          "plan_type": "plus",
           "rate_limit": {
             "primary_window": {
               "used_percent": 42,
@@ -2405,9 +2405,9 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(
             result.plan,
             ProviderPlanDescriptor(
-                identifier: "codex.pro",
-                displayLabel: "PRO",
-                accessibilityLabel: "Pro"
+                identifier: "codex.plus",
+                displayLabel: "PLUS",
+                accessibilityLabel: "Plus"
             )
         )
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
@@ -2431,7 +2431,309 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.projectionLimit, 1)
         XCTAssertEqual(result.bars.first?.projectionPeriodStart, Date(timeIntervalSince1970: 1_893_438_000))
         XCTAssertEqual(result.bars.first?.projectionPeriodEnd, Date(timeIntervalSince1970: 1_893_456_000))
+    }
 
+    func testCodexUsageParserReadsEveryReturnedRateLimitBucketDeterministically() throws {
+        let payload = """
+        {
+          "plan_type": "pro",
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 30,
+              "reset_at": 1894060800,
+              "limit_window_seconds": 604800
+            },
+            "secondary_window": null
+          },
+          "code_review_rate_limit": {
+            "primary_window": {
+              "used_percent": 12,
+              "reset_at": 1893456000,
+              "limit_window_seconds": 18000
+            }
+          },
+          "additional_rate_limits": [
+            null,
+            {
+              "metered_feature": "codex_future",
+              "limit_name": "Future model",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 7,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 7200
+                }
+              }
+            },
+            {"metered_feature": "malformed", "rate_limit": "unexpected"},
+            {
+              "metered_feature": "codex_bengalfox",
+              "limit_name": "GPT-5.3-Codex-Spark",
+              "rate_limit": {
+                "secondary_window": {
+                  "used_percent": 66,
+                  "reset_at": 1894060800,
+                  "limit_window_seconds": 604800
+                },
+                "primary_window": {
+                  "used_percent": 44,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 18000
+                }
+              }
+            },
+            {
+              "metered_feature": "codex_quiet",
+              "primary_window": {
+                "used_percent": 9,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 9000
+              }
+            }
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8)))
+
+        XCTAssertEqual(
+            result.bars.map(\.stableKey),
+            [
+                "window-604800",
+                "bucket-code_5Freview.window-18000",
+                "bucket-codex_5Fbengalfox.window-18000",
+                "bucket-codex_5Fbengalfox.window-604800",
+                "bucket-codex_5Ffuture.window-7200",
+                "bucket-codex_5Fquiet.window-9000",
+            ]
+        )
+        XCTAssertEqual(
+            result.bars.map(\.label),
+            [
+                "Weekly usage limit",
+                "Code review · 5 hour usage limit",
+                "GPT-5.3-Codex-Spark · 5 hour usage limit",
+                "GPT-5.3-Codex-Spark · Weekly usage limit",
+                "Future model · 2 hour usage limit",
+                "Additional Codex usage · 150 minute usage limit",
+            ]
+        )
+        XCTAssertEqual(result.bars.map(\.used), [30, 12, 44, 66, 7, 9])
+
+        var reorderedRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any]
+        )
+        let additionalRateLimits = try XCTUnwrap(
+            reorderedRoot["additional_rate_limits"] as? [Any]
+        )
+        reorderedRoot["additional_rate_limits"] = Array(additionalRateLimits.reversed())
+        let reorderedData = try JSONSerialization.data(withJSONObject: reorderedRoot)
+        let reordered = try XCTUnwrap(CodexUsageParser.parse(reorderedData))
+
+        XCTAssertEqual(reordered.bars.map(\.stableKey), result.bars.map(\.stableKey))
+        XCTAssertEqual(reordered.bars.map(\.label), result.bars.map(\.label))
+    }
+
+    func testCodexUsageParserDoesNotDropCollidingOrAnonymousBuckets() throws {
+        let payload = """
+        {
+          "additional_rate_limits": [
+            {
+              "metered_feature": "foo_bar",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 1,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 3600
+                }
+              }
+            },
+            {
+              "metered_feature": "foo-bar",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 2,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 3600
+                }
+              }
+            },
+            {
+              "primary_window": {
+                "used_percent": 3,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 3600
+              }
+            },
+            {
+              "primary_window": {
+                "used_percent": 4,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 3600
+              }
+            },
+            {
+              "metered_feature": "foo_bar",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 5,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 3600
+                }
+              }
+            }
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8)))
+
+        XCTAssertEqual(result.bars.count, 5)
+        XCTAssertEqual(Set(result.bars.compactMap(\.stableKey)).count, 5)
+        XCTAssertEqual(
+            Set(result.bars.compactMap(\.stableKey)),
+            [
+                "bucket-additional.window-3600",
+                "bucket-additional.window-3600.duplicate-2",
+                "bucket-foo_2Dbar.window-3600",
+                "bucket-foo_5Fbar.window-3600",
+                "bucket-foo_5Fbar.window-3600.duplicate-2",
+            ]
+        )
+
+        var reorderedRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any]
+        )
+        let collidingBuckets = try XCTUnwrap(
+            reorderedRoot["additional_rate_limits"] as? [Any]
+        )
+        reorderedRoot["additional_rate_limits"] = Array(collidingBuckets.reversed())
+        let reorderedData = try JSONSerialization.data(withJSONObject: reorderedRoot)
+        let reordered = try XCTUnwrap(CodexUsageParser.parse(reorderedData))
+        let keyedUsage = Dictionary(uniqueKeysWithValues: result.bars.compactMap { bar in
+            bar.stableKey.map { ($0, bar.used) }
+        })
+        let reorderedKeyedUsage = Dictionary(uniqueKeysWithValues: reordered.bars.compactMap { bar in
+            bar.stableKey.map { ($0, bar.used) }
+        })
+
+        XCTAssertEqual(reorderedKeyedUsage, keyedUsage)
+    }
+
+    func testCodexUsageParserKeepsSharedFeaturesBoundToImmutableLimitIDs() throws {
+        func bucket(limitID: String, usedPercent: Double) -> [String: Any] {
+            [
+                "metered_feature": "shared",
+                "limit_id": limitID,
+                "rate_limit": [
+                    "primary_window": [
+                        "used_percent": usedPercent,
+                        "reset_at": 1_893_456_000,
+                        "limit_window_seconds": 3_600,
+                    ],
+                ],
+            ]
+        }
+
+        func parse(_ buckets: [[String: Any]]) throws -> ProviderUsageResult {
+            let data = try JSONSerialization.data(withJSONObject: [
+                "additional_rate_limits": buckets,
+            ])
+            return try XCTUnwrap(CodexUsageParser.parse(data))
+        }
+
+        func keyedUsage(_ result: ProviderUsageResult) -> [String: Double] {
+            Dictionary(uniqueKeysWithValues: result.bars.compactMap { bar in
+                bar.stableKey.map { ($0, bar.used) }
+            })
+        }
+
+        let initial = try parse([
+            bucket(limitID: "alpha", usedPercent: 10),
+            bucket(limitID: "beta", usedPercent: 20),
+        ])
+        XCTAssertEqual(keyedUsage(initial), [
+            "bucket-shared.limit-alpha.window-3600": 10,
+            "bucket-shared.limit-beta.window-3600": 20,
+        ])
+
+        let refreshed = try parse([
+            bucket(limitID: "beta", usedPercent: 35),
+            bucket(limitID: "alpha", usedPercent: 25),
+        ])
+        XCTAssertEqual(keyedUsage(refreshed), [
+            "bucket-shared.limit-alpha.window-3600": 25,
+            "bucket-shared.limit-beta.window-3600": 35,
+        ])
+
+        let surviving = try parse([
+            bucket(limitID: "beta", usedPercent: 45),
+        ])
+        XCTAssertEqual(keyedUsage(surviving), [
+            "bucket-shared.limit-beta.window-3600": 45,
+        ])
+    }
+
+    func testCodexUsageParserIgnoresUnsafeWindowDurations() throws {
+        let payload = """
+        {
+          "additional_rate_limits": [
+            {
+              "metered_feature": "zero",
+              "primary_window": {
+                "used_percent": 1,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 0
+              }
+            },
+            {
+              "metered_feature": "negative",
+              "primary_window": {
+                "used_percent": 2,
+                "reset_at": 1893456000,
+                "limit_window_seconds": -1
+              }
+            },
+            {
+              "metered_feature": "extreme",
+              "primary_window": {
+                "used_percent": 3,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 1e100
+              }
+            },
+            {
+              "metered_feature": "implausibly_long",
+              "primary_window": {
+                "used_percent": 4,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 315360001
+              }
+            },
+            {
+              "metered_feature": "valid",
+              "primary_window": {
+                "used_percent": 5,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 3600
+              }
+            },
+            {
+              "metered_feature": "nonfinite_usage",
+              "primary_window": {
+                "used_percent": "nan",
+                "reset_at": 1893456000,
+                "limit_window_seconds": 3600
+              }
+            }
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8)))
+
+        XCTAssertEqual(result.bars.map(\.stableKey), ["bucket-valid.window-3600"])
+        XCTAssertEqual(result.bars.map(\.used), [5])
     }
 
     func testCodexUsageParserNormalizesOnlyVerifiedPlanValues() throws {
@@ -2554,7 +2856,7 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertTrue(countOnly.canConsume)
     }
 
-    func testCodexUsageParserSilentlyAcceptsMissingFiveHourWindowAndDurationDrift() throws {
+    func testCodexUsageParserAcceptsWeeklyOnlyProAndDurationDrift() throws {
         let weeklyOnlyPayload = #"{"plan_type":"prolite","rate_limit":{"primary_window":{"used_percent":30,"reset_at":1894060800,"limit_window_seconds":604800},"secondary_window":null}}"#
         let weeklyOnly = try XCTUnwrap(CodexUsageParser.parse(Data(weeklyOnlyPayload.utf8)))
 
