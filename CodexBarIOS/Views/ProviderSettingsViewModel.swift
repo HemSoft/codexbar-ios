@@ -219,6 +219,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
 
         guard
+            configuration.isEnabled,
             allowUnconfiguredAccount || canRefreshMetrics
         else {
             return

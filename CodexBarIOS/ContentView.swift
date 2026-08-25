@@ -407,7 +407,9 @@ struct ContentView: View {
                     initialUsageResult: orchestrator.dashboardCardItems.first {
                         $0.id == presentation.accountID
                     }?.result,
-                    onCredentialsChanged: {},
+                    onCredentialsChanged: {
+                        accountConfigurationNavigation.credentialsChanged()
+                    },
                     onAccountRefresh: { configuration in
                         await orchestrator.refreshAccount(configuration)
                     }
@@ -1053,6 +1055,10 @@ struct DashboardAccountConfigurationNavigationState: Equatable {
 
     mutating func clearPresentation() {
         presentation = nil
+    }
+
+    mutating func credentialsChanged() {
+        accountIDAwaitingDismissalRefresh = nil
     }
 
     mutating func finishDismissal() -> String? {

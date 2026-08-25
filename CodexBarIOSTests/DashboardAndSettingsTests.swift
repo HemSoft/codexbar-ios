@@ -2435,14 +2435,9 @@ final class DashboardAndSettingsTests: XCTestCase {
     func testAccountSettingsLoadMetricsAfterFirstCredentialSave() async {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let store = ProviderConfigurationStore(
-            defaults: defaults,
-            secretStore: MemorySecretStore()
-        )
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
         let configuration = store.addAccount(for: .openRouter)
         let refreshedResult = ProviderUsageResult(
             accountID: configuration.id,
@@ -2481,14 +2476,9 @@ final class DashboardAndSettingsTests: XCTestCase {
     func testAccountSettingsReplaceCachedMetricsAfterCredentialChange() async {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let store = ProviderConfigurationStore(
-            defaults: defaults,
-            secretStore: MemorySecretStore()
-        )
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
         let configuration = store.addAccount(for: .openRouter)
         XCTAssertTrue(store.saveSecret("old-key", for: configuration))
         let oldResult = ProviderUsageResult(
@@ -2616,6 +2606,13 @@ final class DashboardAndSettingsTests: XCTestCase {
             viewModel.metricsEmptyStateMessage,
             "Enable this account to discover its dashboard metrics."
         )
+        XCTAssertEqual(refreshCount, 0)
+
+        viewModel.secret = "replacement-key"
+        viewModel.saveGenericCredential()
+        for _ in 0..<100 {
+            await Task.yield()
+        }
         XCTAssertEqual(refreshCount, 0)
     }
 
