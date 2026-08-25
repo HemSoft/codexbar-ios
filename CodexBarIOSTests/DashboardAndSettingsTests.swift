@@ -1653,9 +1653,9 @@ final class DashboardAndSettingsTests: XCTestCase {
         let accountID = "codex.dynamic"
         let generalFiveHourID = "codex.window-18000"
         let generalWeeklyID = "codex.window-604800"
-        let sparkFiveHourID = "codex.bucket-codex-bengalfox.window-18000"
-        let sparkWeeklyID = "codex.bucket-codex-bengalfox.window-604800"
-        let futureID = "codex.bucket-codex-future.window-7200"
+        let sparkFiveHourID = "codex.bucket-codex_5Fbengalfox.window-18000"
+        let sparkWeeklyID = "codex.bucket-codex_5Fbengalfox.window-604800"
+        let futureID = "codex.bucket-codex_5Ffuture.window-7200"
         let store = ProviderConfigurationStore(
             defaults: defaults,
             secretStore: EmptySecretStore()

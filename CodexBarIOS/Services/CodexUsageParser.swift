@@ -37,11 +37,11 @@ public enum CodexUsageParser {
                 to: &windows
             )
         }
-        for rateLimit in additionalRateLimits(from: root["additional_rate_limits"]) {
+        for (index, rateLimit) in additionalRateLimits(from: root["additional_rate_limits"]).enumerated() {
             let identity = nonemptyString(rateLimit["metered_feature"])
                 ?? nonemptyString(rateLimit["limit_id"])
                 ?? nonemptyString(rateLimit["limit_name"])
-            let stableComponent = identity.flatMap(stableKeyComponent) ?? "additional"
+            let stableComponent = identity.flatMap(stableKeyComponent) ?? "additional-\(index + 1)"
             let rateLimitWindows = rateLimit["rate_limit"] as? [String: Any] ?? rateLimit
             addWindows(
                 from: rateLimitWindows,
@@ -73,12 +73,14 @@ public enum CodexUsageParser {
             }
             return $0.windowOrder < $1.windowOrder
         }
-        var seenStableKeys = Set<String>()
-        let bars = windows.compactMap { window -> UsageBar? in
-            let stableKey = stableKey(for: window)
-            guard seenStableKeys.insert(stableKey).inserted else {
-                return nil
-            }
+        var stableKeyOccurrences: [String: Int] = [:]
+        let bars = windows.map { window in
+            let baseStableKey = stableKey(for: window)
+            let occurrence = stableKeyOccurrences[baseStableKey, default: 0] + 1
+            stableKeyOccurrences[baseStableKey] = occurrence
+            let stableKey = occurrence == 1
+                ? baseStableKey
+                : "\(baseStableKey).duplicate-\(occurrence)"
             let usedFraction = window.usedPercent / 100
             return UsageBar(
                 stableKey: stableKey,
@@ -234,11 +236,17 @@ public enum CodexUsageParser {
     }
 
     private static func stableKeyComponent(_ value: String) -> String? {
-        let component = value
-            .lowercased()
-            .split { !$0.isLetter && !$0.isNumber }
-            .joined(separator: "-")
-        return component.isEmpty ? nil : component
+        guard !value.isEmpty else {
+            return nil
+        }
+        return value.utf8.map { byte in
+            switch byte {
+            case 48 ... 57, 65 ... 90, 97 ... 122:
+                String(UnicodeScalar(byte))
+            default:
+                String(format: "_%02X", byte)
+            }
+        }.joined()
     }
 
     private static func bucketLabel(from identity: String) -> String {

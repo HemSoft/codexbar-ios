@@ -2500,11 +2500,11 @@ final class ProviderParsingTests: XCTestCase {
             result.bars.map(\.stableKey),
             [
                 "window-604800",
-                "bucket-code-review.window-18000",
-                "bucket-codex-bengalfox.window-18000",
-                "bucket-codex-bengalfox.window-604800",
-                "bucket-codex-future.window-7200",
-                "bucket-codex-quiet.window-9000",
+                "bucket-code_5Freview.window-18000",
+                "bucket-codex_5Fbengalfox.window-18000",
+                "bucket-codex_5Fbengalfox.window-604800",
+                "bucket-codex_5Ffuture.window-7200",
+                "bucket-codex_5Fquiet.window-9000",
             ]
         )
         XCTAssertEqual(
@@ -2530,6 +2530,74 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertEqual(reordered.bars.map(\.stableKey), result.bars.map(\.stableKey))
         XCTAssertEqual(reordered.bars.map(\.label), result.bars.map(\.label))
+    }
+
+    func testCodexUsageParserDoesNotDropCollidingOrAnonymousBuckets() throws {
+        let payload = """
+        {
+          "additional_rate_limits": [
+            {
+              "metered_feature": "foo_bar",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 1,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 3600
+                }
+              }
+            },
+            {
+              "metered_feature": "foo-bar",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 2,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 3600
+                }
+              }
+            },
+            {
+              "primary_window": {
+                "used_percent": 3,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 3600
+              }
+            },
+            {
+              "primary_window": {
+                "used_percent": 4,
+                "reset_at": 1893456000,
+                "limit_window_seconds": 3600
+              }
+            },
+            {
+              "metered_feature": "foo_bar",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 5,
+                  "reset_at": 1893456000,
+                  "limit_window_seconds": 3600
+                }
+              }
+            }
+          ]
+        }
+        """
+
+        let result = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8)))
+
+        XCTAssertEqual(result.bars.count, 5)
+        XCTAssertEqual(Set(result.bars.compactMap(\.stableKey)).count, 5)
+        XCTAssertEqual(
+            Set(result.bars.compactMap(\.stableKey)),
+            [
+                "bucket-additional-3.window-3600",
+                "bucket-additional-4.window-3600",
+                "bucket-foo_2Dbar.window-3600",
+                "bucket-foo_5Fbar.window-3600",
+                "bucket-foo_5Fbar.window-3600.duplicate-2",
+            ]
+        )
     }
 
     func testCodexUsageParserNormalizesOnlyVerifiedPlanValues() throws {
