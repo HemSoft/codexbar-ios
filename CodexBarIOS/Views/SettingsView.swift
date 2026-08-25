@@ -254,6 +254,7 @@ struct SettingsView: View {
     @ObservedObject var appUpdateController: AppUpdateController
     @ObservedObject var githubStatusPreferences: GitHubStatusPreferences
     var onAccountsChanged: @MainActor () -> Void = {}
+    var usageResultForAccount: @MainActor (String) -> ProviderUsageResult? = { _ in nil }
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onAlertAuthorizationRequest: @MainActor () async -> Bool = { false }
     var onGitHubStatusRefresh: @MainActor () async -> Void = {}
@@ -283,6 +284,7 @@ struct SettingsView: View {
         githubStatusPreferences: GitHubStatusPreferences,
         initialRoute: SettingsInitialRoute? = nil,
         onAccountsChanged: @escaping @MainActor () -> Void = {},
+        usageResultForAccount: @escaping @MainActor (String) -> ProviderUsageResult? = { _ in nil },
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onAlertAuthorizationRequest: @escaping @MainActor () async -> Bool = { false },
         onGitHubStatusRefresh: @escaping @MainActor () async -> Void = {}
@@ -291,6 +293,7 @@ struct SettingsView: View {
         self.appUpdateController = appUpdateController
         self.githubStatusPreferences = githubStatusPreferences
         self.onAccountsChanged = onAccountsChanged
+        self.usageResultForAccount = usageResultForAccount
         self.onAccountRefresh = onAccountRefresh
         self.onAlertAuthorizationRequest = onAlertAuthorizationRequest
         self.onGitHubStatusRefresh = onGitHubStatusRefresh
@@ -315,6 +318,7 @@ struct SettingsView: View {
                         ProviderSettingsView(
                             configurationStore: configurationStore,
                             accountID: accountID,
+                            initialUsageResult: usageResultForAccount(accountID),
                             onCredentialsChanged: onAccountsChanged,
                             onAccountRefresh: onAccountRefresh
                         )

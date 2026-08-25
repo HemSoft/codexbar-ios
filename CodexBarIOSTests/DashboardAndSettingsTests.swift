@@ -2338,6 +2338,100 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testAccountSettingsToggleThreeCodexMetricsIndependentlyAndPersist() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let configuration = store.addAccount(for: .codex)
+        let otherConfiguration = store.addAccount(for: .codex)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Pro",
+            bars: [
+                UsageBar(
+                    stableKey: "window-604800",
+                    label: "Weekly limit",
+                    used: 20,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: "bucket-spark.window-18000",
+                    label: "GPT-5.3-Codex-Spark · 5-hour limit",
+                    used: 30,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: "bucket-spark.window-604800",
+                    label: "GPT-5.3-Codex-Spark · Weekly limit",
+                    used: 40,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let metricIDs = result.availableMetrics.map(\.id)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            initialUsageResult: result
+        )
+
+        await viewModel.prepare()
+
+        XCTAssertEqual(
+            viewModel.availableMetrics.map(\.label),
+            [
+                "Weekly limit",
+                "GPT-5.3-Codex-Spark · 5-hour limit",
+                "GPT-5.3-Codex-Spark · Weekly limit",
+            ]
+        )
+        for metricID in metricIDs {
+            viewModel.setMetricVisibility(false, metricID: metricID)
+            XCTAssertFalse(viewModel.isMetricVisible(metricID))
+            XCTAssertTrue(
+                metricIDs.filter { $0 != metricID }.allSatisfy(viewModel.isMetricVisible)
+            )
+            viewModel.setMetricVisibility(true, metricID: metricID)
+        }
+
+        viewModel.setMetricVisibility(false, metricID: metricIDs[1])
+        _ = store.reconcileMetricLayout(
+            accountID: otherConfiguration.id,
+            availableMetricIDs: metricIDs
+        )
+        XCTAssertTrue(
+            metricIDs.allSatisfy {
+                store.isMetricVisible(accountID: otherConfiguration.id, metricID: $0)
+            }
+        )
+
+        let reloadedStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let reloadedViewModel = ProviderSettingsViewModel(
+            configurationStore: reloadedStore,
+            accountID: configuration.id,
+            initialUsageResult: result
+        )
+        await reloadedViewModel.prepare()
+
+        XCTAssertTrue(reloadedViewModel.isMetricVisible(metricIDs[0]))
+        XCTAssertFalse(reloadedViewModel.isMetricVisible(metricIDs[1]))
+        XCTAssertTrue(reloadedViewModel.isMetricVisible(metricIDs[2]))
+    }
+
+    @MainActor
     func testOpenRouterSettingsExplainManagementKeyRequirementsAndStorage() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

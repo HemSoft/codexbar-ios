@@ -35,6 +35,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published private(set) var copilotTotalAllotmentText = ""
     @Published private(set) var openCodeCredentialMessage: String?
     @Published private(set) var isRefreshingOpenCode = false
+    @Published private(set) var usageResult: ProviderUsageResult?
+    @Published private(set) var isLoadingMetrics = false
 
     private let configurationStore: ProviderConfigurationStore
     private let accountID: String
@@ -56,6 +58,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     init(
         configurationStore: ProviderConfigurationStore,
         accountID: String,
+        initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         codexAuthService: any CodexWebAuthenticating = CodexWebAuthService(),
@@ -66,6 +69,9 @@ final class ProviderSettingsViewModel: ObservableObject {
     ) {
         self.configurationStore = configurationStore
         self.accountID = accountID
+        self.usageResult = initialUsageResult?.accountID == accountID
+            ? initialUsageResult
+            : nil
         self.onCredentialsChanged = onCredentialsChanged
         self.onAccountRefresh = onAccountRefresh
         self.codexAuthService = codexAuthService
@@ -173,6 +179,40 @@ final class ProviderSettingsViewModel: ObservableObject {
             : "Sign in with ChatGPT"
     }
 
+    var availableMetrics: [ProviderUsageMetric] {
+        usageResult?.availableMetrics ?? []
+    }
+
+    var canRefreshMetrics: Bool {
+        configurationStore.isConfigured(configuration)
+    }
+
+    func isMetricVisible(_ metricID: String) -> Bool {
+        configurationStore.isMetricVisible(accountID: accountID, metricID: metricID)
+    }
+
+    func setMetricVisibility(_ isVisible: Bool, metricID: String) {
+        configurationStore.updateMetricVisibility(
+            isVisible,
+            accountID: accountID,
+            metricID: metricID
+        )
+    }
+
+    func refreshMetrics() async {
+        guard canRefreshMetrics, !isLoadingMetrics else {
+            return
+        }
+
+        flushPendingChanges()
+        isLoadingMetrics = true
+        defer { isLoadingMetrics = false }
+        guard let result = await onAccountRefresh(configuration) else {
+            return
+        }
+        acceptUsageResult(result)
+    }
+
     func prepare() async {
         let stored = configurationStore.configuration(accountID: accountID) ?? configuration
         let normalized = normalizedConfiguration(stored)
@@ -183,6 +223,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
         configurationStore.refreshSecretAvailability()
         await debugAutostartCopilotAuthIfNeeded()
+        await loadMetricsIfNeeded()
     }
 
     func cancelAuthentication() {
@@ -400,6 +441,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             openCodeCredentialMessage = "Refresh finished. Check the dashboard."
             return
         }
+        acceptUsageResult(result)
         let usageContext = result.usageMessages.isEmpty
             ? ""
             : " \(result.usageMessages.joined(separator: " "))"
@@ -413,6 +455,28 @@ final class ProviderSettingsViewModel: ObservableObject {
         } else {
             openCodeCredentialMessage = result.subtitle
         }
+    }
+
+    private func loadMetricsIfNeeded() async {
+        if let usageResult {
+            acceptUsageResult(usageResult)
+            return
+        }
+        guard configurationStore.isConfigured(configuration) else {
+            return
+        }
+        await refreshMetrics()
+    }
+
+    private func acceptUsageResult(_ result: ProviderUsageResult) {
+        guard result.accountID == accountID else {
+            return
+        }
+        usageResult = result
+        configurationStore.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: result.availableMetrics.map(\.id)
+        )
     }
 
     func saveCopilotCredential() async {

@@ -8,6 +8,7 @@ struct ProviderSettingsView: View {
     init(
         configurationStore: ProviderConfigurationStore,
         accountID: String,
+        initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     ) {
@@ -16,6 +17,7 @@ struct ProviderSettingsView: View {
             wrappedValue: ProviderSettingsViewModel(
                 configurationStore: configurationStore,
                 accountID: accountID,
+                initialUsageResult: initialUsageResult,
                 onCredentialsChanged: onCredentialsChanged,
                 onAccountRefresh: onAccountRefresh
             )
@@ -311,6 +313,49 @@ struct ProviderSettingsView: View {
                 }
             } header: {
                 Text(viewModel.credentialPresentation.sectionTitle)
+            }
+
+            Section {
+                if viewModel.isLoadingMetrics {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Loading discovered metrics…")
+                            .foregroundStyle(.secondary)
+                    }
+                } else if viewModel.availableMetrics.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("No metrics discovered yet. Refresh this account to load its dashboard metrics.")
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("account-metrics-empty-state")
+
+                        Button {
+                            Task {
+                                await viewModel.refreshMetrics()
+                            }
+                        } label: {
+                            Label("Refresh Metrics", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(!viewModel.canRefreshMetrics)
+                    }
+                } else {
+                    ForEach(viewModel.availableMetrics) { metric in
+                        Toggle(
+                            metric.label,
+                            isOn: Binding(
+                                get: { viewModel.isMetricVisible(metric.id) },
+                                set: { viewModel.setMetricVisibility($0, metricID: metric.id) }
+                            )
+                        )
+                        .accessibilityLabel("Show \(metric.label) on dashboard")
+                        .accessibilityIdentifier("account-metric-visibility-\(metric.id)")
+                    }
+                }
+            } header: {
+                Text("Metrics")
+            } footer: {
+                if !viewModel.availableMetrics.isEmpty {
+                    Text("Changes apply immediately and stay in sync with Customize Card.")
+                }
             }
 
             Section {

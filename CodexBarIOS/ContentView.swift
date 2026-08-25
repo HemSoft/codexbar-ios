@@ -347,6 +347,11 @@ struct ContentView: View {
                             _ = await orchestrator.refreshNow()
                         }
                     },
+                    usageResultForAccount: { accountID in
+                        orchestrator.dashboardCardItems.first {
+                            $0.id == accountID
+                        }?.result
+                    },
                     onAccountRefresh: { configuration in
                         await orchestrator.refreshAccount(configuration)
                     },
@@ -404,6 +409,9 @@ struct ContentView: View {
                 ProviderSettingsView(
                     configurationStore: configurationStore,
                     accountID: presentation.accountID,
+                    initialUsageResult: orchestrator.dashboardCardItems.first {
+                        $0.id == presentation.accountID
+                    }?.result,
                     onCredentialsChanged: {
                         Task {
                             await refreshAccount(accountID: presentation.accountID)
