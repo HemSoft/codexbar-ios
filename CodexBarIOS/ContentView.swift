@@ -333,10 +333,21 @@ struct ContentView: View {
         .sheet(
             isPresented: $isShowingSettings,
             onDismiss: {
-                let shouldRefresh = settingsDismissalRefreshState.finishDismissal()
+                let refreshAction = settingsDismissalRefreshState.finishDismissal()
                 Task {
-                    if shouldRefresh {
+                    switch refreshAction {
+                    case .allAccounts:
                         await orchestrator.refreshAfterSettingsDismissed()
+                    case .accounts(let accountIDs):
+                        configurationStore.refreshSecretAvailability()
+                        for accountID in accountIDs.sorted() {
+                            guard let configuration = configurationStore.configuration(accountID: accountID) else {
+                                continue
+                            }
+                            _ = await orchestrator.refreshAccount(configuration)
+                        }
+                    case .none:
+                        configurationStore.refreshSecretAvailability()
                     }
                     settingsRefreshCompletionID = UUID()
                 }
@@ -1069,26 +1080,37 @@ struct DashboardAccountConfigurationPresentation: Identifiable, Equatable {
     }
 }
 
+enum SettingsDismissalRefreshAction: Equatable {
+    case allAccounts
+    case accounts(Set<String>)
+    case none
+}
+
 struct SettingsDismissalRefreshState: Equatable {
-    private var shouldRefreshOnDismiss = true
+    private var consumedCredentialRefresh = false
     private var accountIDsNeedingRefresh: Set<String> = []
 
     mutating func credentialsChanged(accountID: String) {
+        consumedCredentialRefresh = true
         accountIDsNeedingRefresh.remove(accountID)
-        shouldRefreshOnDismiss = !accountIDsNeedingRefresh.isEmpty
     }
 
     mutating func refreshInputsChanged(accountID: String) {
         accountIDsNeedingRefresh.insert(accountID)
-        shouldRefreshOnDismiss = true
     }
 
-    mutating func finishDismissal() -> Bool {
+    mutating func finishDismissal() -> SettingsDismissalRefreshAction {
         defer {
-            shouldRefreshOnDismiss = true
+            consumedCredentialRefresh = false
             accountIDsNeedingRefresh.removeAll()
         }
-        return shouldRefreshOnDismiss
+        if !consumedCredentialRefresh {
+            return .allAccounts
+        }
+        if accountIDsNeedingRefresh.isEmpty {
+            return .none
+        }
+        return .accounts(accountIDsNeedingRefresh)
     }
 }
 

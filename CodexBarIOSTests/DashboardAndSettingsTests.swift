@@ -5,19 +5,19 @@ final class DashboardAndSettingsTests: XCTestCase {
     func testSettingsDismissalConsumesCredentialRefreshExactlyOnce() {
         var state = SettingsDismissalRefreshState()
 
-        XCTAssertTrue(state.finishDismissal())
+        XCTAssertEqual(state.finishDismissal(), .allAccounts)
 
         state.credentialsChanged(accountID: "openRouter.personal")
-        XCTAssertFalse(state.finishDismissal())
-        XCTAssertTrue(state.finishDismissal())
+        XCTAssertEqual(state.finishDismissal(), .none)
+        XCTAssertEqual(state.finishDismissal(), .allAccounts)
 
         state.credentialsChanged(accountID: "openRouter.personal")
         state.refreshInputsChanged(accountID: "openRouter.personal")
-        XCTAssertTrue(state.finishDismissal())
+        XCTAssertEqual(state.finishDismissal(), .accounts(["openRouter.personal"]))
 
         state.refreshInputsChanged(accountID: "codex.work")
         state.credentialsChanged(accountID: "openRouter.personal")
-        XCTAssertTrue(state.finishDismissal())
+        XCTAssertEqual(state.finishDismissal(), .accounts(["codex.work"]))
 
         var navigation = DashboardAccountConfigurationNavigationState()
         navigation.present(accountID: "openRouter.work")
@@ -2692,7 +2692,7 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testAccountSettingsKeepsSyncBlockedAcrossQueuedCredentialRefreshes() async {
+    func testAccountSettingsKeepsSyncBlockedAcrossQueuedCredentialRefreshes() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
@@ -2724,11 +2724,29 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         viewModel.secret = "first-key"
         viewModel.saveGenericCredential()
-        await firstGate.waitUntilBlocked()
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "The first credential refresh did not block within five seconds.",
+            onTimeout: {
+                Task { await firstGate.release() }
+            },
+            operation: {
+                await firstGate.waitUntilBlocked()
+            }
+        )
         viewModel.secret = "second-key"
         viewModel.saveGenericCredential()
         await firstGate.release()
-        await secondGate.waitUntilBlocked()
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "The queued credential refresh did not block within five seconds.",
+            onTimeout: {
+                Task { await secondGate.release() }
+            },
+            operation: {
+                await secondGate.waitUntilBlocked()
+            }
+        )
 
         viewModel.synchronizeUsageResult(
             ProviderUsageResult(
