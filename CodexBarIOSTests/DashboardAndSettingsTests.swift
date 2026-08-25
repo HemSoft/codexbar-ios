@@ -7,12 +7,16 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertTrue(state.finishDismissal())
 
-        state.credentialsChanged()
+        state.credentialsChanged(accountID: "openRouter.personal")
         XCTAssertFalse(state.finishDismissal())
         XCTAssertTrue(state.finishDismissal())
 
-        state.credentialsChanged()
-        state.refreshInputsChanged()
+        state.credentialsChanged(accountID: "openRouter.personal")
+        state.refreshInputsChanged(accountID: "openRouter.personal")
+        XCTAssertTrue(state.finishDismissal())
+
+        state.refreshInputsChanged(accountID: "codex.work")
+        state.credentialsChanged(accountID: "openRouter.personal")
         XCTAssertTrue(state.finishDismissal())
 
         var navigation = DashboardAccountConfigurationNavigationState()
@@ -2843,6 +2847,54 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(credentialsChangedCount, 1)
         XCTAssertEqual(discoveryRefreshCount, 0)
         XCTAssertEqual(credentialRefreshCount, 1)
+    }
+
+    @MainActor
+    func testOpenCodeRefreshRejectsResultAfterCredentialRemoval() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        XCTAssertTrue(store.saveSecret("old-token", for: openCode))
+        let gate = UsageProviderGate()
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id,
+            onAccountRefresh: { configuration in
+                await gate.wait()
+                return ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openCodeZen,
+                    title: "OpenCode",
+                    subtitle: "Stale credential",
+                    bars: [UsageBar(label: "Stale metric", used: 1, limit: 10)],
+                    fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+                )
+            },
+            onCredentialRefresh: { configuration in
+                ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openCodeZen,
+                    title: "OpenCode",
+                    subtitle: "Credential removed",
+                    bars: [],
+                    fetchedAt: Date(timeIntervalSince1970: 2_000_000_001)
+                )
+            }
+        )
+
+        let staleRefresh = Task { await viewModel.refreshOpenCode() }
+        await gate.waitUntilBlocked()
+        viewModel.removeSavedCredential(message: "Credential removed")
+        for _ in 0..<100 where viewModel.usageResult?.subtitle != "Credential removed" {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(viewModel.usageResult?.subtitle, "Credential removed")
+        await gate.release()
+        await staleRefresh.value
+        XCTAssertEqual(viewModel.usageResult?.subtitle, "Credential removed")
+        XCTAssertTrue(viewModel.availableMetrics.isEmpty)
     }
 
     @MainActor

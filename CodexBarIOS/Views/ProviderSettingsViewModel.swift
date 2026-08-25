@@ -504,12 +504,14 @@ final class ProviderSettingsViewModel: ObservableObject {
         defer { isRefreshingOpenCode = false }
 
         flushPendingChanges()
+        let credentialRevision = metricsCredentialRevision
         let result = requiresFreshRequest
             ? await onCredentialRefresh(configuration)
             : await onAccountRefresh(configuration)
         if requiresFreshRequest {
             isCredentialRefreshPending = false
         }
+        guard credentialRevision == metricsCredentialRevision else { return }
         guard let result else {
             openCodeCredentialMessage = "Refresh finished. Check the dashboard."
             return

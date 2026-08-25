@@ -254,8 +254,8 @@ struct SettingsView: View {
     @ObservedObject var appUpdateController: AppUpdateController
     @ObservedObject var githubStatusPreferences: GitHubStatusPreferences
     var onAccountsChanged: @MainActor () -> Void = {}
-    var onCredentialsChanged: @MainActor () -> Void = {}
-    var onRefreshInputsChanged: @MainActor () -> Void = {}
+    var onCredentialsChanged: @MainActor (String) -> Void = { _ in }
+    var onRefreshInputsChanged: @MainActor (String) -> Void = { _ in }
     var usageResultForAccount: @MainActor (String) -> ProviderUsageResult? = { _ in nil }
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
@@ -287,8 +287,8 @@ struct SettingsView: View {
         githubStatusPreferences: GitHubStatusPreferences,
         initialRoute: SettingsInitialRoute? = nil,
         onAccountsChanged: @escaping @MainActor () -> Void = {},
-        onCredentialsChanged: @escaping @MainActor () -> Void = {},
-        onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
+        onCredentialsChanged: @escaping @MainActor (String) -> Void = { _ in },
+        onRefreshInputsChanged: @escaping @MainActor (String) -> Void = { _ in },
         usageResultForAccount: @escaping @MainActor (String) -> ProviderUsageResult? = { _ in nil },
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
@@ -328,8 +328,8 @@ struct SettingsView: View {
                             configurationStore: configurationStore,
                             accountID: accountID,
                             initialUsageResult: usageResultForAccount(accountID),
-                            onCredentialsChanged: onCredentialsChanged,
-                            onRefreshInputsChanged: onRefreshInputsChanged,
+                            onCredentialsChanged: { onCredentialsChanged(accountID) },
+                            onRefreshInputsChanged: { onRefreshInputsChanged(accountID) },
                             onAccountRefresh: onAccountRefresh,
                             onCredentialRefresh: onCredentialRefresh
                         )
@@ -362,12 +362,15 @@ struct SettingsView: View {
                     addAccountRefreshState.accountCreated(accountID)
                 },
                 onCredentialsChanged: {
-                    _ = addAccountRefreshState.credentialsChanged()
-                    onCredentialsChanged()
+                    if let accountID = addAccountRefreshState.credentialsChanged() {
+                        onCredentialsChanged(accountID)
+                    }
                 },
                 onRefreshInputsChanged: {
                     addAccountRefreshState.refreshInputsChanged()
-                    onRefreshInputsChanged()
+                    if let accountID = addAccountRefreshState.accountID {
+                        onRefreshInputsChanged(accountID)
+                    }
                 },
                 onAccountRefresh: onAccountRefresh,
                 onCredentialRefresh: onCredentialRefresh

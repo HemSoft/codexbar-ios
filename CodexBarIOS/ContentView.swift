@@ -351,11 +351,11 @@ struct ContentView: View {
                             _ = await orchestrator.refreshNow()
                         }
                     },
-                    onCredentialsChanged: {
-                        settingsDismissalRefreshState.credentialsChanged()
+                    onCredentialsChanged: { accountID in
+                        settingsDismissalRefreshState.credentialsChanged(accountID: accountID)
                     },
-                    onRefreshInputsChanged: {
-                        settingsDismissalRefreshState.refreshInputsChanged()
+                    onRefreshInputsChanged: { accountID in
+                        settingsDismissalRefreshState.refreshInputsChanged(accountID: accountID)
                     },
                     usageResultForAccount: { accountID in
                         orchestrator.dashboardCardItems.first {
@@ -1071,17 +1071,23 @@ struct DashboardAccountConfigurationPresentation: Identifiable, Equatable {
 
 struct SettingsDismissalRefreshState: Equatable {
     private var shouldRefreshOnDismiss = true
+    private var accountIDsNeedingRefresh: Set<String> = []
 
-    mutating func credentialsChanged() {
-        shouldRefreshOnDismiss = false
+    mutating func credentialsChanged(accountID: String) {
+        accountIDsNeedingRefresh.remove(accountID)
+        shouldRefreshOnDismiss = !accountIDsNeedingRefresh.isEmpty
     }
 
-    mutating func refreshInputsChanged() {
+    mutating func refreshInputsChanged(accountID: String) {
+        accountIDsNeedingRefresh.insert(accountID)
         shouldRefreshOnDismiss = true
     }
 
     mutating func finishDismissal() -> Bool {
-        defer { shouldRefreshOnDismiss = true }
+        defer {
+            shouldRefreshOnDismiss = true
+            accountIDsNeedingRefresh.removeAll()
+        }
         return shouldRefreshOnDismiss
     }
 }
