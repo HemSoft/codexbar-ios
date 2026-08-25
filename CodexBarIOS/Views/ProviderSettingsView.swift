@@ -4,6 +4,7 @@ import SafariServices
 struct ProviderSettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @StateObject private var viewModel: ProviderSettingsViewModel
+    private let latestUsageResult: ProviderUsageResult?
 
     init(
         configurationStore: ProviderConfigurationStore,
@@ -13,6 +14,7 @@ struct ProviderSettingsView: View {
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     ) {
         self.configurationStore = configurationStore
+        self.latestUsageResult = initialUsageResult
         self._viewModel = StateObject(
             wrappedValue: ProviderSettingsViewModel(
                 configurationStore: configurationStore,
@@ -369,6 +371,9 @@ struct ProviderSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.prepare()
+        }
+        .onChange(of: latestUsageResult) { _, result in
+            viewModel.synchronizeUsageResult(result)
         }
         .onDisappear {
             viewModel.flushPendingChanges()

@@ -2465,6 +2465,17 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertTrue(reloadedViewModel.isMetricVisible(metricIDs[0]))
         XCTAssertFalse(reloadedViewModel.isMetricVisible(metricIDs[1]))
         XCTAssertTrue(reloadedViewModel.isMetricVisible(metricIDs[2]))
+
+        let synchronizedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Updated metrics",
+            bars: [result.bars[2]],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_100)
+        )
+        reloadedViewModel.synchronizeUsageResult(synchronizedResult)
+        XCTAssertEqual(reloadedViewModel.availableMetrics.map(\.label), ["GPT-5.3-Codex-Spark · Weekly limit"])
     }
 
     @MainActor

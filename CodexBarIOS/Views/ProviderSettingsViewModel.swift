@@ -206,6 +206,11 @@ final class ProviderSettingsViewModel: ObservableObject {
         )
     }
 
+    func synchronizeUsageResult(_ result: ProviderUsageResult?) {
+        guard let result else { return }
+        acceptUsageResult(result)
+    }
+
     func refreshMetrics() async {
         await refreshMetrics(allowUnconfiguredAccount: false)
     }
