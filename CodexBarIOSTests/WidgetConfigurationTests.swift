@@ -155,6 +155,31 @@ final class WidgetConfigurationTests: XCTestCase {
             "Renamed Codex limit"
         )
 
+        let reorderedUniqueLabels = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Live usage",
+            bars: [
+                UsageBar(stableKey: "bucket-first.window-18000", label: "First", used: 10, limit: 100),
+                UsageBar(stableKey: "bucket-inserted.window-18000", label: "Inserted", used: 15, limit: 100),
+                UsageBar(stableKey: "bucket-target.window-18000", label: "Target", used: 20, limit: 100),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_788_475_200)
+        )
+        WidgetSnapshotPublisher.publish(
+            results: [reorderedUniqueLabels],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let reorderedUniqueSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        XCTAssertEqual(
+            reorderedUniqueSnapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).1.target"
+            )?.id,
+            "bar.\(configuration.id).codex.bucket-target.window-18000"
+        )
+
         let duplicateLabels = ProviderUsageResult(
             accountID: configuration.id,
             providerID: .codex,

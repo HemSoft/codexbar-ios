@@ -195,6 +195,12 @@ public extension CodexBarWidgetSnapshot {
         }
 
         for provider in results.sorted(by: { $0.accountID.count > $1.accountID.count }) {
+            let identityMatches = provider.bars.filter {
+                $0.matchesSavedBuilderTileID(tileID, accountID: provider.accountID)
+            }
+            if identityMatches.count == 1, let identityMatch = identityMatches.first {
+                return provider.builderBarTile(identityMatch)
+            }
             if let indexedBar = provider.bars.enumerated().first(where: {
                 $0.element.matchesSavedBuilderTileID(
                     tileID,
@@ -231,6 +237,10 @@ public extension CodexBarWidgetUsageBarSnapshot {
             return false
         }
         if let savedIndex = savedIdentity.legacyIndex {
+            if currentIndex == nil {
+                return Self.canonicalIdentitySuffix(savedIdentity.suffix)
+                    == Self.canonicalIdentitySuffix(Self.normalizedBarLabel(label))
+            }
             return savedIndex == currentIndex
         }
         return Self.canonicalIdentitySuffix(savedIdentity.suffix)
@@ -260,6 +270,14 @@ public extension CodexBarWidgetUsageBarSnapshot {
             return suffix
         }
         return String(suffix.dropLast(oldScopedWeeklySuffix.count)) + "-weekly-usage-limit"
+    }
+
+    private static func normalizedBarLabel(_ label: String) -> String {
+        label
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
     }
 }
 
