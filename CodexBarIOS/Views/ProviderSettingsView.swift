@@ -4,20 +4,28 @@ import SafariServices
 struct ProviderSettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @StateObject private var viewModel: ProviderSettingsViewModel
+    private let latestUsageResult: ProviderUsageResult?
 
     init(
         configurationStore: ProviderConfigurationStore,
         accountID: String,
+        initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
-        onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
+        onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
+        onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
+        onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil
     ) {
         self.configurationStore = configurationStore
+        self.latestUsageResult = initialUsageResult
         self._viewModel = StateObject(
             wrappedValue: ProviderSettingsViewModel(
                 configurationStore: configurationStore,
                 accountID: accountID,
+                initialUsageResult: initialUsageResult,
                 onCredentialsChanged: onCredentialsChanged,
-                onAccountRefresh: onAccountRefresh
+                onRefreshInputsChanged: onRefreshInputsChanged,
+                onAccountRefresh: onAccountRefresh,
+                onCredentialRefresh: onCredentialRefresh
             )
         )
     }
@@ -228,7 +236,10 @@ struct ProviderSettingsView: View {
                     Button(configurationStore.hasSecret(for: configuration) ? "Update and Refresh" : "Save and Refresh") {
                         viewModel.saveOpenCodeCredential()
                     }
-                    .disabled(viewModel.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        viewModel.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || viewModel.isRefreshingOpenCode
+                    )
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button {
@@ -314,6 +325,49 @@ struct ProviderSettingsView: View {
             }
 
             Section {
+                if viewModel.isLoadingMetrics {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Loading discovered metrics…")
+                            .foregroundStyle(.secondary)
+                    }
+                } else if viewModel.availableMetrics.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(viewModel.metricsEmptyStateMessage)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("account-metrics-empty-state")
+
+                        Button {
+                            Task {
+                                await viewModel.refreshMetrics()
+                            }
+                        } label: {
+                            Label("Refresh Metrics", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(!viewModel.canRefreshMetrics)
+                    }
+                } else {
+                    ForEach(viewModel.availableMetrics) { metric in
+                        Toggle(
+                            metric.label,
+                            isOn: Binding(
+                                get: { viewModel.isMetricVisible(metric.id) },
+                                set: { viewModel.setMetricVisibility($0, metricID: metric.id) }
+                            )
+                        )
+                        .accessibilityLabel("Show \(metric.label) on dashboard")
+                        .accessibilityIdentifier("account-metric-visibility-\(metric.id)")
+                    }
+                }
+            } header: {
+                Text("Metrics")
+            } footer: {
+                if !viewModel.availableMetrics.isEmpty {
+                    Text("Changes apply immediately and stay in sync with Customize Card.")
+                }
+            }
+
+            Section {
                 Text(configurationStore.statusText(for: configuration))
                     .foregroundStyle(.secondary)
             } header: {
@@ -324,6 +378,9 @@ struct ProviderSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.prepare()
+        }
+        .onChange(of: latestUsageResult) { _, result in
+            viewModel.synchronizeUsageResult(result)
         }
         .onDisappear {
             viewModel.flushPendingChanges()

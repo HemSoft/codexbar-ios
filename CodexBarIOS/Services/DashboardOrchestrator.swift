@@ -245,6 +245,20 @@ final class DashboardOrchestrator: ObservableObject {
         return result
     }
 
+    func loadAccountMetrics(_ configuration: ProviderAccountConfiguration) async -> ProviderUsageResult? {
+        guard
+            let currentConfiguration = configurationStore.configuration(accountID: configuration.id),
+            currentConfiguration.isEnabled,
+            refreshService.hasSameRefreshInputs(configuration, currentConfiguration)
+        else {
+            return nil
+        }
+        if refreshService.refreshingAccountIDs.contains(currentConfiguration.id) {
+            return await refreshService.resultAfterCurrentRefresh(configuration: currentConfiguration)
+        }
+        return await refreshAccount(currentConfiguration)
+    }
+
     func consumeCodexBankedReset(
         for configuration: ProviderAccountConfiguration,
         creditID: String?

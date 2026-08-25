@@ -121,13 +121,12 @@ final class AppAndWidgetTests: XCTestCase {
         navigation.clearPresentation()
         XCTAssertNil(navigation.presentation)
 
-        var refreshedAccountIDs: [String] = []
-        if let accountID = navigation.finishDismissal() {
-            refreshedAccountIDs.append(accountID)
-        }
-
-        XCTAssertEqual(refreshedAccountIDs, ["openRouter.work"])
+        XCTAssertEqual(navigation.finishDismissal(), "openRouter.work")
         XCTAssertNil(navigation.presentation)
+        XCTAssertNil(navigation.finishDismissal())
+
+        navigation.present(accountID: "openRouter.work")
+        navigation.credentialsChanged()
         XCTAssertNil(navigation.finishDismissal())
     }
 

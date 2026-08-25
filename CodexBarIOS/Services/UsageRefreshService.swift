@@ -257,6 +257,22 @@ public final class UsageRefreshService: ObservableObject {
         }
     }
 
+    func resultAfterCurrentRefresh(
+        configuration: ProviderAccountConfiguration
+    ) async -> ProviderUsageResult? {
+        guard
+            isCurrent(configuration),
+            let generation = refreshGenerationsByAccountID[configuration.id]
+        else {
+            return nil
+        }
+        await waitForRefreshToFinish(accountID: configuration.id)
+        guard isCurrent(configuration, generation: generation) else {
+            return nil
+        }
+        return results.first { $0.accountID == configuration.id }
+    }
+
     public func refresh() async {
         await refresh(configurations: ProviderID.allCases.map(ProviderAccountConfiguration.defaultConfiguration))
     }

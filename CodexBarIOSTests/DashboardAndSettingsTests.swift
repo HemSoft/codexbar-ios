@@ -2,6 +2,56 @@ import XCTest
 @testable import CodexBarIOS
 
 final class DashboardAndSettingsTests: XCTestCase {
+    func testSettingsDismissalConsumesCredentialRefreshExactlyOnce() {
+        var state = SettingsDismissalRefreshState()
+
+        XCTAssertEqual(state.finishDismissal(), .allAccounts)
+
+        state.credentialsChanged(accountID: "openRouter.personal")
+        XCTAssertEqual(state.finishDismissal(), .none)
+        XCTAssertEqual(state.finishDismissal(), .allAccounts)
+
+        state.credentialsChanged(accountID: "openRouter.personal")
+        state.refreshInputsChanged(accountID: "openRouter.personal")
+        XCTAssertEqual(state.finishDismissal(), .accounts(["openRouter.personal"]))
+
+        state.refreshInputsChanged(accountID: "codex.work")
+        state.credentialsChanged(accountID: "openRouter.personal")
+        XCTAssertEqual(state.finishDismissal(), .accounts(["codex.work"]))
+
+        var navigation = DashboardAccountConfigurationNavigationState()
+        navigation.present(accountID: "openRouter.work")
+        navigation.credentialsChanged()
+        navigation.refreshInputsChanged()
+        XCTAssertEqual(navigation.finishDismissal(), "openRouter.work")
+
+        var addAccountState = AddAccountRefreshState()
+        addAccountState.accountCreated("openCodeZen.team")
+        XCTAssertEqual(addAccountState.credentialsChanged(), "openCodeZen.team")
+        addAccountState.refreshInputsChanged()
+        XCTAssertEqual(addAccountState.finishDismissal(), "openCodeZen.team")
+    }
+
+    @MainActor
+    func testAccountSettingsReportsOnlyProviderRefreshInputChanges() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .openCodeZen)
+        var refreshInputChangeCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onRefreshInputsChanged: { refreshInputChangeCount += 1 }
+        )
+
+        viewModel.binding(for: \.accountLabel).wrappedValue = "Team Zen"
+        XCTAssertEqual(refreshInputChangeCount, 0)
+
+        viewModel.binding(for: \.openCodeWorkspaceId).wrappedValue = "wrk_changed"
+        XCTAssertEqual(refreshInputChangeCount, 1)
+    }
+
     func testSettingsDoneToolbarPolicyKeepsDoneVisibleAcrossCompactNavigation() {
         XCTAssertTrue(
             SettingsDoneToolbarPolicy.showsDone(
@@ -531,6 +581,42 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(updatedResult?.title, "Updated Codex")
         XCTAssertEqual(service.results.first?.title, "Updated Codex")
         XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
+    }
+
+    @MainActor
+    func testMetricDiscoveryReusesInFlightAccountRefresh() async {
+        let gate = UsageProviderGate()
+        let recorder = UsageProviderRecorder()
+        let configuration = ProviderAccountConfiguration(
+            id: "codex.metrics",
+            providerID: .codex,
+            accountLabel: "Codex Metrics",
+            authMethod: .browserSession
+        )
+        let service = UsageRefreshService(providers: [
+            GatedUsageProvider(
+                providerID: .codex,
+                blockedAccountID: configuration.id,
+                gate: gate,
+                recorder: recorder
+            ),
+        ])
+
+        let dashboardRefresh = Task {
+            await service.refresh(configurations: [configuration])
+        }
+        await gate.waitUntilBlocked()
+        let metricDiscovery = Task {
+            await service.resultAfterCurrentRefresh(configuration: configuration)
+        }
+
+        await gate.release()
+        await dashboardRefresh.value
+        let result = await metricDiscovery.value
+        let recordedLabels = await recorder.recordedLabels()
+
+        XCTAssertEqual(result?.accountID, configuration.id)
+        XCTAssertEqual(recordedLabels, ["Codex Metrics"])
     }
 
     @MainActor
@@ -2338,6 +2424,396 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testAccountSettingsToggleThreeCodexMetricsIndependentlyAndPersist() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let configuration = store.addAccount(for: .codex)
+        let otherConfiguration = store.addAccount(for: .codex)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Pro",
+            bars: [
+                UsageBar(
+                    stableKey: "window-604800",
+                    label: "Weekly limit",
+                    used: 20,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: "bucket-spark.window-18000",
+                    label: "GPT-5.3-Codex-Spark · 5-hour limit",
+                    used: 30,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: "bucket-spark.window-604800",
+                    label: "GPT-5.3-Codex-Spark · Weekly limit",
+                    used: 40,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let metricIDs = result.availableMetrics.map(\.id)
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            initialUsageResult: result
+        )
+
+        await viewModel.prepare()
+
+        XCTAssertEqual(
+            viewModel.availableMetrics.map(\.label),
+            [
+                "Weekly limit",
+                "GPT-5.3-Codex-Spark · 5-hour limit",
+                "GPT-5.3-Codex-Spark · Weekly limit",
+            ]
+        )
+        for metricID in metricIDs {
+            viewModel.setMetricVisibility(false, metricID: metricID)
+            XCTAssertFalse(viewModel.isMetricVisible(metricID))
+            XCTAssertTrue(
+                metricIDs.filter { $0 != metricID }.allSatisfy(viewModel.isMetricVisible)
+            )
+            viewModel.setMetricVisibility(true, metricID: metricID)
+        }
+
+        viewModel.setMetricVisibility(false, metricID: metricIDs[1])
+        _ = store.reconcileMetricLayout(
+            accountID: otherConfiguration.id,
+            availableMetricIDs: metricIDs
+        )
+        XCTAssertTrue(
+            metricIDs.allSatisfy {
+                store.isMetricVisible(accountID: otherConfiguration.id, metricID: $0)
+            }
+        )
+
+        let reloadedStore = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        let reloadedViewModel = ProviderSettingsViewModel(
+            configurationStore: reloadedStore,
+            accountID: configuration.id,
+            initialUsageResult: result
+        )
+        await reloadedViewModel.prepare()
+
+        XCTAssertTrue(reloadedViewModel.isMetricVisible(metricIDs[0]))
+        XCTAssertFalse(reloadedViewModel.isMetricVisible(metricIDs[1]))
+        XCTAssertTrue(reloadedViewModel.isMetricVisible(metricIDs[2]))
+
+        let synchronizedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .codex,
+            title: "Codex",
+            subtitle: "Updated metrics",
+            bars: [result.bars[2]],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_100)
+        )
+        reloadedViewModel.synchronizeUsageResult(synchronizedResult)
+        XCTAssertEqual(reloadedViewModel.availableMetrics.map(\.label), ["GPT-5.3-Codex-Spark · Weekly limit"])
+
+        reloadedViewModel.synchronizeUsageResult(nil)
+        XCTAssertTrue(reloadedViewModel.availableMetrics.isEmpty)
+    }
+
+    @MainActor
+    func testAccountSettingsLoadMetricsAfterFirstCredentialSave() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .openRouter)
+        let refreshedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Management API key",
+            bars: [],
+            creditsRemaining: 42,
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        var refreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onAccountRefresh: { _ in
+                refreshCount += 1
+                return refreshedResult
+            }
+        )
+
+        await viewModel.prepare()
+        XCTAssertTrue(viewModel.availableMetrics.isEmpty)
+        XCTAssertEqual(refreshCount, 0)
+
+        viewModel.secret = "new-management-key"
+        viewModel.saveGenericCredential()
+        for _ in 0..<100 where viewModel.availableMetrics.isEmpty {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(viewModel.availableMetrics.map(\.label), ["Credit balance"])
+    }
+
+    @MainActor
+    func testAccountSettingsReplaceCachedMetricsAfterCredentialChange() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .openRouter)
+        XCTAssertTrue(store.saveSecret("old-key", for: configuration))
+        let oldResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Old key",
+            bars: [],
+            creditsRemaining: 10,
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let refreshedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Replacement key",
+            bars: [],
+            creditsRemaining: 42,
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_100)
+        )
+        var discoveryRefreshCount = 0
+        var credentialRefreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            initialUsageResult: oldResult,
+            onAccountRefresh: { _ in
+                discoveryRefreshCount += 1
+                return oldResult
+            },
+            onCredentialRefresh: { _ in
+                credentialRefreshCount += 1
+                return refreshedResult
+            }
+        )
+
+        await viewModel.prepare()
+        XCTAssertEqual(viewModel.usageResult?.creditsRemaining, 10)
+
+        viewModel.secret = "replacement-key"
+        viewModel.saveGenericCredential()
+        for _ in 0..<100 where viewModel.usageResult?.creditsRemaining != 42 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(discoveryRefreshCount, 0)
+        XCTAssertEqual(credentialRefreshCount, 1)
+        XCTAssertEqual(viewModel.usageResult?.creditsRemaining, 42)
+    }
+
+    @MainActor
+    func testAccountSettingsQueuesCredentialRefreshBehindInFlightMetricLoad() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        XCTAssertTrue(store.saveSecret("old-key", for: configuration))
+        let gate = UsageProviderGate()
+        var refreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onAccountRefresh: { configuration in
+                refreshCount += 1
+                if refreshCount == 1 {
+                    await gate.wait()
+                }
+                return ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openRouter,
+                    title: "OpenRouter",
+                    subtitle: refreshCount == 1 ? "Old key" : "Replacement key",
+                    bars: [],
+                    creditsRemaining: refreshCount == 1 ? 10 : 42,
+                    fetchedAt: Date(timeIntervalSince1970: 2_000_000_000 + Double(refreshCount))
+                )
+            }
+        )
+
+        let prepareTask = Task { await viewModel.prepare() }
+        await gate.waitUntilBlocked()
+        XCTAssertTrue(viewModel.isLoadingMetrics)
+
+        viewModel.secret = "replacement-key"
+        viewModel.saveGenericCredential()
+        viewModel.synchronizeUsageResult(
+            ProviderUsageResult(
+                accountID: configuration.id,
+                providerID: .openRouter,
+                title: "OpenRouter",
+                subtitle: "Stale parent result",
+                bars: [],
+                creditsRemaining: 10,
+                fetchedAt: Date(timeIntervalSince1970: 2_000_000_001)
+            )
+        )
+        XCTAssertNil(viewModel.usageResult)
+        await gate.release()
+        await prepareTask.value
+
+        XCTAssertEqual(refreshCount, 2)
+        XCTAssertEqual(viewModel.usageResult?.creditsRemaining, 42)
+        XCTAssertEqual(viewModel.usageResult?.subtitle, "Replacement key")
+    }
+
+    @MainActor
+    func testAccountSettingsKeepsSyncBlockedAcrossQueuedCredentialRefreshes() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .openRouter)
+        let firstGate = UsageProviderGate()
+        let secondGate = UsageProviderGate()
+        var refreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialRefresh: { configuration in
+                refreshCount += 1
+                if refreshCount == 1 {
+                    await firstGate.wait()
+                } else {
+                    await secondGate.wait()
+                }
+                return ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openRouter,
+                    title: "OpenRouter",
+                    subtitle: refreshCount == 1 ? "First key" : "Second key",
+                    bars: [],
+                    creditsRemaining: refreshCount == 1 ? 10 : 42,
+                    fetchedAt: Date(timeIntervalSince1970: 2_000_000_000 + Double(refreshCount))
+                )
+            }
+        )
+
+        viewModel.secret = "first-key"
+        viewModel.saveGenericCredential()
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "The first credential refresh did not block within five seconds.",
+            onTimeout: {
+                Task { await firstGate.release() }
+            },
+            operation: {
+                await firstGate.waitUntilBlocked()
+            }
+        )
+        viewModel.secret = "second-key"
+        viewModel.saveGenericCredential()
+        await firstGate.release()
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "The queued credential refresh did not block within five seconds.",
+            onTimeout: {
+                Task { await secondGate.release() }
+            },
+            operation: {
+                await secondGate.waitUntilBlocked()
+            }
+        )
+
+        viewModel.synchronizeUsageResult(
+            ProviderUsageResult(
+                accountID: configuration.id,
+                providerID: .openRouter,
+                title: "OpenRouter",
+                subtitle: "First key",
+                bars: [],
+                creditsRemaining: 10,
+                fetchedAt: Date(timeIntervalSince1970: 2_000_000_001)
+            )
+        )
+        XCTAssertNil(viewModel.usageResult)
+
+        await secondGate.release()
+        for _ in 0..<100 where viewModel.usageResult?.subtitle != "Second key" {
+            await Task.yield()
+        }
+        XCTAssertEqual(refreshCount, 2)
+        XCTAssertEqual(viewModel.usageResult?.subtitle, "Second key")
+        XCTAssertEqual(viewModel.usageResult?.creditsRemaining, 42)
+    }
+
+    @MainActor
+    func testAccountSettingsDoNotOfferMetricRefreshWhileAccountIsDisabled() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        var configuration = store.addAccount(for: .openRouter)
+        XCTAssertTrue(store.saveSecret("management-key", for: configuration))
+        configuration.isEnabled = false
+        XCTAssertTrue(store.update(configuration))
+        var refreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onAccountRefresh: { _ in
+                refreshCount += 1
+                return nil
+            }
+        )
+
+        await viewModel.prepare()
+
+        XCTAssertFalse(viewModel.canRefreshMetrics)
+        XCTAssertEqual(
+            viewModel.metricsEmptyStateMessage,
+            "Enable this account to discover its dashboard metrics."
+        )
+        XCTAssertEqual(refreshCount, 0)
+
+        viewModel.secret = "replacement-key"
+        viewModel.saveGenericCredential()
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+        XCTAssertEqual(refreshCount, 0)
+    }
+
+    @MainActor
     func testOpenRouterSettingsExplainManagementKeyRequirementsAndStorage() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
@@ -2412,14 +2888,26 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testProviderSettingsViewModelCancelsPendingEditsWhenSavingOpenCodeCredential() {
+    func testProviderSettingsViewModelCancelsPendingEditsWhenSavingOpenCodeCredential() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
         let openCode = store.addAccount(for: .openCodeZen)
+        var discoveryRefreshCount = 0
+        var credentialRefreshCount = 0
+        var credentialsChangedCount = 0
         let viewModel = ProviderSettingsViewModel(
             configurationStore: store,
-            accountID: openCode.id
+            accountID: openCode.id,
+            onCredentialsChanged: { credentialsChangedCount += 1 },
+            onAccountRefresh: { _ in
+                discoveryRefreshCount += 1
+                return nil
+            },
+            onCredentialRefresh: { _ in
+                credentialRefreshCount += 1
+                return nil
+            }
         )
         viewModel.binding(for: \.accountLabel, persistence: .debounced).wrappedValue = "Team ZEN"
         viewModel.secret = "opencode-token"
@@ -2429,9 +2917,94 @@ final class DashboardAndSettingsTests: XCTestCase {
         externallyUpdated.showsHistory = false
         XCTAssertTrue(store.update(externallyUpdated))
         viewModel.flushPendingChanges()
+        for _ in 0..<100 where credentialRefreshCount == 0 {
+            await Task.yield()
+        }
 
         XCTAssertEqual(store.configuration(accountID: openCode.id)?.accountLabel, "Team ZEN")
         XCTAssertEqual(store.configuration(accountID: openCode.id)?.showsHistory, false)
+        XCTAssertEqual(credentialsChangedCount, 1)
+        XCTAssertEqual(discoveryRefreshCount, 0)
+        XCTAssertEqual(credentialRefreshCount, 1)
+    }
+
+    @MainActor
+    func testOpenCodeRefreshRejectsResultAfterCredentialRemoval() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        XCTAssertTrue(store.saveSecret("old-token", for: openCode))
+        let gate = UsageProviderGate()
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id,
+            onAccountRefresh: { configuration in
+                await gate.wait()
+                return ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openCodeZen,
+                    title: "OpenCode",
+                    subtitle: "Stale credential",
+                    bars: [UsageBar(label: "Stale metric", used: 1, limit: 10)],
+                    fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+                )
+            },
+            onCredentialRefresh: { configuration in
+                ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openCodeZen,
+                    title: "OpenCode",
+                    subtitle: "Credential removed",
+                    bars: [],
+                    fetchedAt: Date(timeIntervalSince1970: 2_000_000_001)
+                )
+            }
+        )
+
+        let staleRefresh = Task { await viewModel.refreshOpenCode() }
+        await gate.waitUntilBlocked()
+        viewModel.removeSavedCredential(message: "Credential removed")
+        for _ in 0..<100 where viewModel.usageResult?.subtitle != "Credential removed" {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(viewModel.usageResult?.subtitle, "Credential removed")
+        await gate.release()
+        await staleRefresh.value
+        XCTAssertEqual(viewModel.usageResult?.subtitle, "Credential removed")
+        XCTAssertTrue(viewModel.availableMetrics.isEmpty)
+    }
+
+    @MainActor
+    func testCredentialRemovalFlushesPendingRefreshInputsBeforeRefreshing() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        XCTAssertTrue(store.saveSecret("old-token", for: openCode))
+        var storedWorkspaceDuringRefresh: String?
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id,
+            onCredentialRefresh: { configuration in
+                storedWorkspaceDuringRefresh = store.configuration(accountID: configuration.id)?.openCodeWorkspaceId
+                return nil
+            }
+        )
+        viewModel.binding(
+            for: \.openCodeWorkspaceId,
+            persistence: .debounced
+        ).wrappedValue = "wrk_updated"
+
+        viewModel.removeSavedCredential()
+        for _ in 0..<100 where storedWorkspaceDuringRefresh == nil {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(storedWorkspaceDuringRefresh, "wrk_updated")
+        XCTAssertEqual(store.configuration(accountID: openCode.id)?.openCodeWorkspaceId, "wrk_updated")
+        XCTAssertFalse(store.hasSecret(for: openCode))
     }
 
     @MainActor

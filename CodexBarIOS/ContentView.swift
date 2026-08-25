@@ -28,6 +28,7 @@ struct ContentView: View {
     @State private var deepLinkNavigation = DashboardDeepLinkNavigationState()
     @State private var hasCompletedInitialRefresh = false
     @State private var settingsRefreshCompletionID = UUID()
+    @State private var settingsDismissalRefreshState = SettingsDismissalRefreshState()
     @State private var isConfirmingHistoryReset = false
     @State private var problemReportPresentation: PrivacySafeDiagnosticContext?
 
@@ -332,8 +333,22 @@ struct ContentView: View {
         .sheet(
             isPresented: $isShowingSettings,
             onDismiss: {
+                let refreshAction = settingsDismissalRefreshState.finishDismissal()
                 Task {
-                    await orchestrator.refreshAfterSettingsDismissed()
+                    switch refreshAction {
+                    case .allAccounts:
+                        await orchestrator.refreshAfterSettingsDismissed()
+                    case .accounts(let accountIDs):
+                        configurationStore.refreshSecretAvailability()
+                        for accountID in accountIDs.sorted() {
+                            guard let configuration = configurationStore.configuration(accountID: accountID) else {
+                                continue
+                            }
+                            _ = await orchestrator.refreshAccount(configuration)
+                        }
+                    case .none:
+                        configurationStore.refreshSecretAvailability()
+                    }
                     settingsRefreshCompletionID = UUID()
                 }
             },
@@ -347,7 +362,21 @@ struct ContentView: View {
                             _ = await orchestrator.refreshNow()
                         }
                     },
+                    onCredentialsChanged: { accountID in
+                        settingsDismissalRefreshState.credentialsChanged(accountID: accountID)
+                    },
+                    onRefreshInputsChanged: { accountID in
+                        settingsDismissalRefreshState.refreshInputsChanged(accountID: accountID)
+                    },
+                    usageResultForAccount: { accountID in
+                        orchestrator.dashboardCardItems.first {
+                            $0.id == accountID
+                        }?.result
+                    },
                     onAccountRefresh: { configuration in
+                        await orchestrator.loadAccountMetrics(configuration)
+                    },
+                    onCredentialRefresh: { configuration in
                         await orchestrator.refreshAccount(configuration)
                     },
                     onAlertAuthorizationRequest: {
@@ -376,14 +405,15 @@ struct ContentView: View {
                     addAccountRefreshState.accountCreated(accountID)
                 },
                 onCredentialsChanged: {
-                    guard let accountID = addAccountRefreshState.credentialsChanged() else {
-                        return
-                    }
-                    Task {
-                        await refreshAccount(accountID: accountID)
-                    }
+                    _ = addAccountRefreshState.credentialsChanged()
+                },
+                onRefreshInputsChanged: {
+                    addAccountRefreshState.refreshInputsChanged()
                 },
                 onAccountRefresh: { configuration in
+                    await orchestrator.loadAccountMetrics(configuration)
+                },
+                onCredentialRefresh: { configuration in
                     await orchestrator.refreshAccount(configuration)
                 }
                 )
@@ -404,12 +434,19 @@ struct ContentView: View {
                 ProviderSettingsView(
                     configurationStore: configurationStore,
                     accountID: presentation.accountID,
+                    initialUsageResult: orchestrator.dashboardCardItems.first {
+                        $0.id == presentation.accountID
+                    }?.result,
                     onCredentialsChanged: {
-                        Task {
-                            await refreshAccount(accountID: presentation.accountID)
-                        }
+                        accountConfigurationNavigation.credentialsChanged()
+                    },
+                    onRefreshInputsChanged: {
+                        accountConfigurationNavigation.refreshInputsChanged()
                     },
                     onAccountRefresh: { configuration in
+                        await orchestrator.loadAccountMetrics(configuration)
+                    },
+                    onCredentialRefresh: { configuration in
                         await orchestrator.refreshAccount(configuration)
                     }
                 )
@@ -1043,6 +1080,40 @@ struct DashboardAccountConfigurationPresentation: Identifiable, Equatable {
     }
 }
 
+enum SettingsDismissalRefreshAction: Equatable {
+    case allAccounts
+    case accounts(Set<String>)
+    case none
+}
+
+struct SettingsDismissalRefreshState: Equatable {
+    private var consumedCredentialRefresh = false
+    private var accountIDsNeedingRefresh: Set<String> = []
+
+    mutating func credentialsChanged(accountID: String) {
+        consumedCredentialRefresh = true
+        accountIDsNeedingRefresh.remove(accountID)
+    }
+
+    mutating func refreshInputsChanged(accountID: String) {
+        accountIDsNeedingRefresh.insert(accountID)
+    }
+
+    mutating func finishDismissal() -> SettingsDismissalRefreshAction {
+        defer {
+            consumedCredentialRefresh = false
+            accountIDsNeedingRefresh.removeAll()
+        }
+        if !consumedCredentialRefresh {
+            return .allAccounts
+        }
+        if accountIDsNeedingRefresh.isEmpty {
+            return .none
+        }
+        return .accounts(accountIDsNeedingRefresh)
+    }
+}
+
 struct DashboardAccountConfigurationNavigationState: Equatable {
     private(set) var presentation: DashboardAccountConfigurationPresentation?
     private var accountIDAwaitingDismissalRefresh: String?
@@ -1054,6 +1125,14 @@ struct DashboardAccountConfigurationNavigationState: Equatable {
 
     mutating func clearPresentation() {
         presentation = nil
+    }
+
+    mutating func credentialsChanged() {
+        accountIDAwaitingDismissalRefresh = nil
+    }
+
+    mutating func refreshInputsChanged() {
+        accountIDAwaitingDismissalRefresh = presentation?.accountID
     }
 
     mutating func finishDismissal() -> String? {

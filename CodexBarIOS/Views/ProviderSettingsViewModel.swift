@@ -35,11 +35,15 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published private(set) var copilotTotalAllotmentText = ""
     @Published private(set) var openCodeCredentialMessage: String?
     @Published private(set) var isRefreshingOpenCode = false
+    @Published private(set) var usageResult: ProviderUsageResult?
+    @Published private(set) var isLoadingMetrics = false
 
     private let configurationStore: ProviderConfigurationStore
     private let accountID: String
     private let onCredentialsChanged: @MainActor () -> Void
+    private let onRefreshInputsChanged: @MainActor () -> Void
     private let onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
+    private let onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     private let codexAuthService: any CodexWebAuthenticating
     private let copilotAuthService: any CopilotWebAuthenticating
     private let claudeAuthService: ClaudeWebAuthService
@@ -52,12 +56,18 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var debugAutostartedCopilotAuth = false
     private var pendingPersistenceTask: Task<Void, Never>?
     private var pendingConfiguration: ProviderAccountConfiguration?
+    private var needsCredentialMetricsRefresh = false
+    private var metricsCredentialRevision = 0
+    private var isCredentialRefreshPending = false
 
     init(
         configurationStore: ProviderConfigurationStore,
         accountID: String,
+        initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
+        onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
+        onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
         codexAuthService: any CodexWebAuthenticating = CodexWebAuthService(),
         copilotAuthService: any CopilotWebAuthenticating = CopilotWebAuthService(),
         claudeAuthService: ClaudeWebAuthService = ClaudeWebAuthService(),
@@ -66,8 +76,13 @@ final class ProviderSettingsViewModel: ObservableObject {
     ) {
         self.configurationStore = configurationStore
         self.accountID = accountID
+        self.usageResult = initialUsageResult?.accountID == accountID
+            ? initialUsageResult
+            : nil
         self.onCredentialsChanged = onCredentialsChanged
+        self.onRefreshInputsChanged = onRefreshInputsChanged
         self.onAccountRefresh = onAccountRefresh
+        self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
         self.codexAuthService = codexAuthService
         self.copilotAuthService = copilotAuthService
         self.claudeAuthService = claudeAuthService
@@ -173,6 +188,88 @@ final class ProviderSettingsViewModel: ObservableObject {
             : "Sign in with ChatGPT"
     }
 
+    var availableMetrics: [ProviderUsageMetric] {
+        usageResult?.availableMetrics ?? []
+    }
+
+    var canRefreshMetrics: Bool {
+        configuration.isEnabled && configurationStore.isConfigured(configuration)
+    }
+
+    var metricsEmptyStateMessage: String {
+        configuration.isEnabled
+            ? "No metrics discovered yet. Refresh this account to load its dashboard metrics."
+            : "Enable this account to discover its dashboard metrics."
+    }
+
+    func isMetricVisible(_ metricID: String) -> Bool {
+        configurationStore.isMetricVisible(accountID: accountID, metricID: metricID)
+    }
+
+    func setMetricVisibility(_ isVisible: Bool, metricID: String) {
+        configurationStore.updateMetricVisibility(
+            isVisible,
+            accountID: accountID,
+            metricID: metricID
+        )
+    }
+
+    func synchronizeUsageResult(_ result: ProviderUsageResult?) {
+        guard !isCredentialRefreshPending else { return }
+        guard let result else {
+            usageResult = nil
+            return
+        }
+        acceptUsageResult(result)
+    }
+
+    func refreshMetrics() async {
+        await refreshMetrics(allowUnconfiguredAccount: false, requiresFreshRequest: false)
+    }
+
+    private func refreshMetrics(
+        allowUnconfiguredAccount: Bool,
+        requiresFreshRequest: Bool
+    ) async {
+        if isLoadingMetrics {
+            if allowUnconfiguredAccount {
+                needsCredentialMetricsRefresh = true
+            }
+            return
+        }
+
+        let credentialRevision = metricsCredentialRevision
+        guard
+            configuration.isEnabled,
+            allowUnconfiguredAccount || canRefreshMetrics
+        else {
+            if requiresFreshRequest {
+                completeCredentialRefresh(revision: credentialRevision)
+            }
+            return
+        }
+
+        flushPendingChanges()
+        isLoadingMetrics = true
+        let result = requiresFreshRequest
+            ? await onCredentialRefresh(configuration)
+            : await onAccountRefresh(configuration)
+        isLoadingMetrics = false
+
+        if needsCredentialMetricsRefresh {
+            needsCredentialMetricsRefresh = false
+            await refreshMetrics(allowUnconfiguredAccount: true, requiresFreshRequest: true)
+            return
+        }
+
+        if requiresFreshRequest {
+            completeCredentialRefresh(revision: credentialRevision)
+        }
+        guard credentialRevision == metricsCredentialRevision else { return }
+        guard let result else { return }
+        acceptUsageResult(result)
+    }
+
     func prepare() async {
         let stored = configurationStore.configuration(accountID: accountID) ?? configuration
         let normalized = normalizedConfiguration(stored)
@@ -183,6 +280,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
         configurationStore.refreshSecretAvailability()
         await debugAutostartCopilotAuthIfNeeded()
+        await loadMetricsIfNeeded()
     }
 
     func cancelAuthentication() {
@@ -211,17 +309,18 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
         secret = ""
-        onCredentialsChanged()
+        credentialsDidChange()
     }
 
     func removeSavedCredential(message: String? = nil) {
         credentialError = nil
+        flushPendingChanges()
         guard persistSecret("") else {
             credentialError = configurationStore.lastError
             return
         }
         openCodeCredentialMessage = message
-        onCredentialsChanged()
+        credentialsDidChange()
     }
 
     func startCodexSignIn() {
@@ -269,7 +368,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 codexAuthError = configurationStore.lastError
                 return
             }
-            onCredentialsChanged()
+            credentialsDidChange()
         } catch {
             codexAuthError = error is CancellationError || Task.isCancelled
                 ? "ChatGPT sign-in canceled. Saved accounts were not changed."
@@ -306,7 +405,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 return
             }
             secret = ""
-            onCredentialsChanged()
+            credentialsDidChange()
             authURL = nil
         } catch {
             copilotAuthError = error.localizedDescription
@@ -339,7 +438,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 return
             }
             secret = ""
-            onCredentialsChanged()
+            credentialsDidChange()
             authURL = nil
             claudeAuthDiagnostic = "Claude sign-in complete."
         } catch {
@@ -367,7 +466,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
         configuration = disconnected
-        onCredentialsChanged()
+        credentialsDidChange()
     }
 
     func saveOpenCodeCredential() {
@@ -386,20 +485,36 @@ final class ProviderSettingsViewModel: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "OpenCode dashboard auth value saved. Enter the workspace ID, then refresh."
             : "OpenCode dashboard auth value saved. Refreshing..."
-        Task { await refreshOpenCode() }
+        credentialsDidChange(refreshMetrics: false)
+        Task { await refreshOpenCode(requiresFreshRequest: true) }
     }
 
     func refreshOpenCode() async {
-        guard !isRefreshingOpenCode else { return }
+        await refreshOpenCode(requiresFreshRequest: false)
+    }
+
+    private func refreshOpenCode(requiresFreshRequest: Bool) async {
+        guard !isRefreshingOpenCode else {
+            return
+        }
         isRefreshingOpenCode = true
         openCodeCredentialMessage = "Refreshing OpenCode Go + Zen..."
         defer { isRefreshingOpenCode = false }
 
         flushPendingChanges()
-        guard let result = await onAccountRefresh(configuration) else {
+        let credentialRevision = metricsCredentialRevision
+        let result = requiresFreshRequest
+            ? await onCredentialRefresh(configuration)
+            : await onAccountRefresh(configuration)
+        if requiresFreshRequest {
+            completeCredentialRefresh(revision: credentialRevision)
+        }
+        guard credentialRevision == metricsCredentialRevision else { return }
+        guard let result else {
             openCodeCredentialMessage = "Refresh finished. Check the dashboard."
             return
         }
+        acceptUsageResult(result)
         let usageContext = result.usageMessages.isEmpty
             ? ""
             : " \(result.usageMessages.joined(separator: " "))"
@@ -413,6 +528,28 @@ final class ProviderSettingsViewModel: ObservableObject {
         } else {
             openCodeCredentialMessage = result.subtitle
         }
+    }
+
+    private func loadMetricsIfNeeded() async {
+        if let usageResult {
+            acceptUsageResult(usageResult)
+            return
+        }
+        guard configurationStore.isConfigured(configuration) else {
+            return
+        }
+        await refreshMetrics()
+    }
+
+    private func acceptUsageResult(_ result: ProviderUsageResult) {
+        guard result.accountID == accountID else {
+            return
+        }
+        usageResult = result
+        configurationStore.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: result.availableMetrics.map(\.id)
+        )
     }
 
     func saveCopilotCredential() async {
@@ -439,7 +576,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 return
             }
             secret = ""
-            onCredentialsChanged()
+            credentialsDidChange()
         } catch {
             copilotAuthError = error.localizedDescription
         }
@@ -471,7 +608,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             }
             configuration = connected
             secret = ""
-            onCredentialsChanged()
+            credentialsDidChange()
         } catch {
             cursorAuthError = Task.isCancelled
                 ? "Cursor sign-in canceled. The existing account was not changed."
@@ -492,11 +629,35 @@ final class ProviderSettingsViewModel: ObservableObject {
         #endif
     }
 
+    private func credentialsDidChange(refreshMetrics: Bool = true) {
+        onCredentialsChanged()
+        usageResult = nil
+        metricsCredentialRevision += 1
+        isCredentialRefreshPending = true
+        guard refreshMetrics else { return }
+        if isLoadingMetrics {
+            needsCredentialMetricsRefresh = true
+            return
+        }
+        Task { @MainActor [weak self] in
+            await self?.refreshMetrics(allowUnconfiguredAccount: true, requiresFreshRequest: true)
+        }
+    }
+
+    private func completeCredentialRefresh(revision: Int) {
+        guard revision == metricsCredentialRevision else { return }
+        isCredentialRefreshPending = false
+    }
+
     private func updateConfiguration(
         _ updated: ProviderAccountConfiguration,
         persistence: PersistenceBehavior
     ) {
+        let didChangeRefreshInputs = refreshInputsChanged(from: configuration, to: updated)
         configuration = updated
+        if didChangeRefreshInputs {
+            onRefreshInputsChanged()
+        }
         switch persistence {
         case .immediate:
             pendingPersistenceTask?.cancel()
@@ -570,6 +731,20 @@ final class ProviderSettingsViewModel: ObservableObject {
         let normalized = value.replacingOccurrences(of: ",", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return normalized.isEmpty ? nil : Double(normalized)
+    }
+
+    private func refreshInputsChanged(
+        from current: ProviderAccountConfiguration,
+        to updated: ProviderAccountConfiguration
+    ) -> Bool {
+        current.isEnabled != updated.isEnabled
+            || current.authMethod != updated.authMethod
+            || current.oauthClientID != updated.oauthClientID
+            || current.copilotAccountScope != updated.copilotAccountScope
+            || current.githubOrganization != updated.githubOrganization
+            || current.githubEnterprise != updated.githubEnterprise
+            || current.copilotTotalAllotment != updated.copilotTotalAllotment
+            || current.openCodeWorkspaceId != updated.openCodeWorkspaceId
     }
 
     private static let openCodeBalanceFormatter: NumberFormatter = {
