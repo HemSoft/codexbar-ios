@@ -46,6 +46,7 @@ enum WidgetSnapshotPublisher {
                         return CodexBarWidgetUsageBarSnapshot(
                             id: stableBarID(
                                 accountID: result.accountID,
+                                providerID: result.providerID,
                                 bar: bar,
                                 index: index,
                                 metricID: metricID
@@ -162,13 +163,14 @@ enum WidgetSnapshotPublisher {
 
     private static func stableBarID(
         accountID: String,
+        providerID: ProviderID,
         bar: UsageBar,
         index: Int,
         metricID: String
     ) -> String {
         // Keep saved Claude session tiles stable after matching the first-party
         // "Current session" display label, including model-scoped sessions.
-        if
+        if providerID == .claude,
             bar.stableKey == "session"
                 || bar.stableKey?.hasPrefix("session-scoped-") == true {
             let legacyLabel = bar.label.replacingOccurrences(
@@ -180,11 +182,17 @@ enum WidgetSnapshotPublisher {
             return "\(accountID).\(index).\(suffix)"
         }
         // Keep existing saved Claude weekly tiles resolvable when the visible label becomes more specific.
-        if bar.stableKey == ClaudeUsageIdentity.allModelsWeeklyStableKey {
+        if providerID == .claude,
+           bar.stableKey == ClaudeUsageIdentity.allModelsWeeklyStableKey {
             return "\(accountID).\(ClaudeUsageIdentity.allModelsWeeklyLegacyKey)"
         }
-        if let legacyKey = ClaudeUsageIdentity.legacyScopedWeeklyKey(for: bar.stableKey) {
+        if providerID == .claude,
+           let legacyKey = ClaudeUsageIdentity.legacyScopedWeeklyKey(for: bar.stableKey) {
             return "\(accountID).\(legacyKey)"
+        }
+        if providerID == .claude,
+           bar.stableKey?.hasPrefix("weekly-scoped-") == true {
+            return "\(accountID).\(index).\(normalizedBarLabel(bar.label))"
         }
 
         return "\(accountID).\(metricID)"

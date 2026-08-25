@@ -238,8 +238,11 @@ public extension CodexBarWidgetUsageBarSnapshot {
         }
         if let savedIndex = savedIdentity.legacyIndex {
             if currentIndex == nil {
-                return Self.canonicalIdentitySuffix(savedIdentity.suffix)
-                    == Self.canonicalIdentitySuffix(Self.normalizedBarLabel(label))
+                let canonicalSavedSuffix = Self.canonicalIdentitySuffix(savedIdentity.suffix)
+                return canonicalSavedSuffix == Self.canonicalIdentitySuffix(currentIdentity.suffix)
+                    || canonicalSavedSuffix == Self.canonicalIdentitySuffix(
+                        Self.normalizedBarLabel(label)
+                    )
             }
             return savedIndex == currentIndex
         }
