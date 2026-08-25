@@ -558,9 +558,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func credentialsDidChange() {
         onCredentialsChanged()
-        guard usageResult == nil else {
-            return
-        }
+        usageResult = nil
         Task { @MainActor [weak self] in
             await self?.refreshMetrics()
         }

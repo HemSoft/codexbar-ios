@@ -2478,6 +2478,62 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testAccountSettingsReplaceCachedMetricsAfterCredentialChange() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        XCTAssertTrue(store.saveSecret("old-key", for: configuration))
+        let oldResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Old key",
+            bars: [],
+            creditsRemaining: 10,
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let refreshedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Replacement key",
+            bars: [],
+            creditsRemaining: 42,
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_100)
+        )
+        var refreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            initialUsageResult: oldResult,
+            onAccountRefresh: { _ in
+                refreshCount += 1
+                return refreshedResult
+            }
+        )
+
+        await viewModel.prepare()
+        XCTAssertEqual(viewModel.usageResult?.creditsRemaining, 10)
+
+        viewModel.secret = "replacement-key"
+        viewModel.saveGenericCredential()
+        for _ in 0..<10 where viewModel.usageResult?.creditsRemaining != 42 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(viewModel.usageResult?.creditsRemaining, 42)
+    }
+
+    @MainActor
     func testOpenRouterSettingsExplainManagementKeyRequirementsAndStorage() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

@@ -12,12 +12,12 @@ building, testing, or releasing the app.
   reports, including separate GPT-5.3-Codex-Spark limits. Each discovered
   metric can be shown, hidden, and arranged in Customize Card.
   ([#270](https://github.com/HemSoft/codexbar-ios/issues/270))
-
-### Fixed
-
 - Added per-metric dashboard visibility controls to each account's Settings
   screen, using the same saved choices as Customize Card.
   ([#272](https://github.com/HemSoft/codexbar-ios/issues/272))
+
+### Fixed
+
 - Kept the Settings **Done** button visible at the root and throughout nested
   screens while preserving standard Back navigation and pending-edit validation.
   ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))
