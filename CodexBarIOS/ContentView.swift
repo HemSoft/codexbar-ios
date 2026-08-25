@@ -381,12 +381,7 @@ struct ContentView: View {
                     addAccountRefreshState.accountCreated(accountID)
                 },
                 onCredentialsChanged: {
-                    guard let accountID = addAccountRefreshState.credentialsChanged() else {
-                        return
-                    }
-                    Task {
-                        await refreshAccount(accountID: accountID)
-                    }
+                    _ = addAccountRefreshState.credentialsChanged()
                 },
                 onAccountRefresh: { configuration in
                     await orchestrator.refreshAccount(configuration)
@@ -412,11 +407,7 @@ struct ContentView: View {
                     initialUsageResult: orchestrator.dashboardCardItems.first {
                         $0.id == presentation.accountID
                     }?.result,
-                    onCredentialsChanged: {
-                        Task {
-                            await refreshAccount(accountID: presentation.accountID)
-                        }
-                    },
+                    onCredentialsChanged: {},
                     onAccountRefresh: { configuration in
                         await orchestrator.refreshAccount(configuration)
                     }

@@ -200,7 +200,14 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func refreshMetrics() async {
-        guard canRefreshMetrics, !isLoadingMetrics else {
+        await refreshMetrics(allowUnconfiguredAccount: false)
+    }
+
+    private func refreshMetrics(allowUnconfiguredAccount: Bool) async {
+        guard
+            allowUnconfiguredAccount || canRefreshMetrics,
+            !isLoadingMetrics
+        else {
             return
         }
 
@@ -560,7 +567,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         onCredentialsChanged()
         usageResult = nil
         Task { @MainActor [weak self] in
-            await self?.refreshMetrics()
+            await self?.refreshMetrics(allowUnconfiguredAccount: true)
         }
     }
 

@@ -319,7 +319,7 @@ struct SettingsView: View {
                             configurationStore: configurationStore,
                             accountID: accountID,
                             initialUsageResult: usageResultForAccount(accountID),
-                            onCredentialsChanged: onAccountsChanged,
+                            onCredentialsChanged: {},
                             onAccountRefresh: onAccountRefresh
                         )
                     }
@@ -351,12 +351,7 @@ struct SettingsView: View {
                     addAccountRefreshState.accountCreated(accountID)
                 },
                 onCredentialsChanged: {
-                    guard let accountID = addAccountRefreshState.credentialsChanged() else {
-                        return
-                    }
-                    Task {
-                        await refreshAddedAccount(accountID: accountID)
-                    }
+                    _ = addAccountRefreshState.credentialsChanged()
                 },
                 onAccountRefresh: onAccountRefresh
                 )
