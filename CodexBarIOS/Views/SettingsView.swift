@@ -256,6 +256,7 @@ struct SettingsView: View {
     var onAccountsChanged: @MainActor () -> Void = {}
     var usageResultForAccount: @MainActor (String) -> ProviderUsageResult? = { _ in nil }
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
+    var onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onAlertAuthorizationRequest: @MainActor () async -> Bool = { false }
     var onGitHubStatusRefresh: @MainActor () async -> Void = {}
 
@@ -286,6 +287,7 @@ struct SettingsView: View {
         onAccountsChanged: @escaping @MainActor () -> Void = {},
         usageResultForAccount: @escaping @MainActor (String) -> ProviderUsageResult? = { _ in nil },
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
+        onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
         onAlertAuthorizationRequest: @escaping @MainActor () async -> Bool = { false },
         onGitHubStatusRefresh: @escaping @MainActor () async -> Void = {}
     ) {
@@ -295,6 +297,7 @@ struct SettingsView: View {
         self.onAccountsChanged = onAccountsChanged
         self.usageResultForAccount = usageResultForAccount
         self.onAccountRefresh = onAccountRefresh
+        self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
         self.onAlertAuthorizationRequest = onAlertAuthorizationRequest
         self.onGitHubStatusRefresh = onGitHubStatusRefresh
         _selectedDestination = State(initialValue: initialRoute?.destination)
@@ -320,7 +323,8 @@ struct SettingsView: View {
                             accountID: accountID,
                             initialUsageResult: usageResultForAccount(accountID),
                             onCredentialsChanged: {},
-                            onAccountRefresh: onAccountRefresh
+                            onAccountRefresh: onAccountRefresh,
+                            onCredentialRefresh: onCredentialRefresh
                         )
                     }
             }
@@ -353,7 +357,8 @@ struct SettingsView: View {
                 onCredentialsChanged: {
                     _ = addAccountRefreshState.credentialsChanged()
                 },
-                onAccountRefresh: onAccountRefresh
+                onAccountRefresh: onAccountRefresh,
+                onCredentialRefresh: onCredentialRefresh
                 )
             }
         )
@@ -1500,6 +1505,7 @@ struct AddAccountSetupFlow: View {
     var onAccountCreated: @MainActor (String) -> Void
     var onCredentialsChanged: @MainActor () -> Void
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
+    var onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
 
     @Environment(\.dismiss) private var dismiss
     @State private var flowState = AddAccountFlowState()
@@ -1509,13 +1515,15 @@ struct AddAccountSetupFlow: View {
         initialProviderID: ProviderID? = nil,
         onAccountCreated: @escaping @MainActor (String) -> Void = { _ in },
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
-        onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
+        onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
+        onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil
     ) {
         self.configurationStore = configurationStore
         self.initialProviderID = initialProviderID
         self.onAccountCreated = onAccountCreated
         self.onCredentialsChanged = onCredentialsChanged
         self.onAccountRefresh = onAccountRefresh
+        self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
     }
 
     var body: some View {
@@ -1525,7 +1533,8 @@ struct AddAccountSetupFlow: View {
                     configurationStore: configurationStore,
                     accountID: accountID,
                     onCredentialsChanged: onCredentialsChanged,
-                    onAccountRefresh: onAccountRefresh
+                    onAccountRefresh: onAccountRefresh,
+                    onCredentialRefresh: onCredentialRefresh
                 )
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {

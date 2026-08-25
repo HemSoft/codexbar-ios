@@ -2546,13 +2546,18 @@ final class DashboardAndSettingsTests: XCTestCase {
             creditsRemaining: 42,
             fetchedAt: Date(timeIntervalSince1970: 2_000_000_100)
         )
-        var refreshCount = 0
+        var discoveryRefreshCount = 0
+        var credentialRefreshCount = 0
         let viewModel = ProviderSettingsViewModel(
             configurationStore: store,
             accountID: configuration.id,
             initialUsageResult: oldResult,
             onAccountRefresh: { _ in
-                refreshCount += 1
+                discoveryRefreshCount += 1
+                return oldResult
+            },
+            onCredentialRefresh: { _ in
+                credentialRefreshCount += 1
                 return refreshedResult
             }
         )
@@ -2566,7 +2571,8 @@ final class DashboardAndSettingsTests: XCTestCase {
             await Task.yield()
         }
 
-        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(discoveryRefreshCount, 0)
+        XCTAssertEqual(credentialRefreshCount, 1)
         XCTAssertEqual(viewModel.usageResult?.creditsRemaining, 42)
     }
 

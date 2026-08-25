@@ -11,7 +11,8 @@ struct ProviderSettingsView: View {
         accountID: String,
         initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
-        onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
+        onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
+        onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil
     ) {
         self.configurationStore = configurationStore
         self.latestUsageResult = initialUsageResult
@@ -21,7 +22,8 @@ struct ProviderSettingsView: View {
                 accountID: accountID,
                 initialUsageResult: initialUsageResult,
                 onCredentialsChanged: onCredentialsChanged,
-                onAccountRefresh: onAccountRefresh
+                onAccountRefresh: onAccountRefresh,
+                onCredentialRefresh: onCredentialRefresh
             )
         )
     }

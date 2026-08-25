@@ -355,6 +355,9 @@ struct ContentView: View {
                     onAccountRefresh: { configuration in
                         await orchestrator.loadAccountMetrics(configuration)
                     },
+                    onCredentialRefresh: { configuration in
+                        await orchestrator.refreshAccount(configuration)
+                    },
                     onAlertAuthorizationRequest: {
                         await orchestrator.requestAlertAuthorization()
                     },
@@ -385,6 +388,9 @@ struct ContentView: View {
                 },
                 onAccountRefresh: { configuration in
                     await orchestrator.loadAccountMetrics(configuration)
+                },
+                onCredentialRefresh: { configuration in
+                    await orchestrator.refreshAccount(configuration)
                 }
                 )
             }
@@ -412,6 +418,9 @@ struct ContentView: View {
                     },
                     onAccountRefresh: { configuration in
                         await orchestrator.loadAccountMetrics(configuration)
+                    },
+                    onCredentialRefresh: { configuration in
+                        await orchestrator.refreshAccount(configuration)
                     }
                 )
                 .toolbar {

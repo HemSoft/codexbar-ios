@@ -42,6 +42,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let accountID: String
     private let onCredentialsChanged: @MainActor () -> Void
     private let onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
+    private let onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     private let codexAuthService: any CodexWebAuthenticating
     private let copilotAuthService: any CopilotWebAuthenticating
     private let claudeAuthService: ClaudeWebAuthService
@@ -62,6 +63,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
+        onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
         codexAuthService: any CodexWebAuthenticating = CodexWebAuthService(),
         copilotAuthService: any CopilotWebAuthenticating = CopilotWebAuthService(),
         claudeAuthService: ClaudeWebAuthService = ClaudeWebAuthService(),
@@ -75,6 +77,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             : nil
         self.onCredentialsChanged = onCredentialsChanged
         self.onAccountRefresh = onAccountRefresh
+        self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
         self.codexAuthService = codexAuthService
         self.copilotAuthService = copilotAuthService
         self.claudeAuthService = claudeAuthService
@@ -212,10 +215,13 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func refreshMetrics() async {
-        await refreshMetrics(allowUnconfiguredAccount: false)
+        await refreshMetrics(allowUnconfiguredAccount: false, requiresFreshRequest: false)
     }
 
-    private func refreshMetrics(allowUnconfiguredAccount: Bool) async {
+    private func refreshMetrics(
+        allowUnconfiguredAccount: Bool,
+        requiresFreshRequest: Bool
+    ) async {
         if isLoadingMetrics {
             if allowUnconfiguredAccount {
                 needsCredentialMetricsRefresh = true
@@ -232,12 +238,14 @@ final class ProviderSettingsViewModel: ObservableObject {
 
         flushPendingChanges()
         isLoadingMetrics = true
-        let result = await onAccountRefresh(configuration)
+        let result = requiresFreshRequest
+            ? await onCredentialRefresh(configuration)
+            : await onAccountRefresh(configuration)
         isLoadingMetrics = false
 
         if needsCredentialMetricsRefresh {
             needsCredentialMetricsRefresh = false
-            await refreshMetrics(allowUnconfiguredAccount: true)
+            await refreshMetrics(allowUnconfiguredAccount: true, requiresFreshRequest: true)
             return
         }
 
@@ -596,7 +604,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
         Task { @MainActor [weak self] in
-            await self?.refreshMetrics(allowUnconfiguredAccount: true)
+            await self?.refreshMetrics(allowUnconfiguredAccount: true, requiresFreshRequest: true)
         }
     }
 
