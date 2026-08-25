@@ -252,7 +252,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
         secret = ""
-        onCredentialsChanged()
+        credentialsDidChange()
     }
 
     func removeSavedCredential(message: String? = nil) {
@@ -262,7 +262,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
         openCodeCredentialMessage = message
-        onCredentialsChanged()
+        credentialsDidChange()
     }
 
     func startCodexSignIn() {
@@ -310,7 +310,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 codexAuthError = configurationStore.lastError
                 return
             }
-            onCredentialsChanged()
+            credentialsDidChange()
         } catch {
             codexAuthError = error is CancellationError || Task.isCancelled
                 ? "ChatGPT sign-in canceled. Saved accounts were not changed."
@@ -347,7 +347,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 return
             }
             secret = ""
-            onCredentialsChanged()
+            credentialsDidChange()
             authURL = nil
         } catch {
             copilotAuthError = error.localizedDescription
@@ -380,7 +380,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 return
             }
             secret = ""
-            onCredentialsChanged()
+            credentialsDidChange()
             authURL = nil
             claudeAuthDiagnostic = "Claude sign-in complete."
         } catch {
@@ -408,7 +408,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
         configuration = disconnected
-        onCredentialsChanged()
+        credentialsDidChange()
     }
 
     func saveOpenCodeCredential() {
@@ -503,7 +503,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 return
             }
             secret = ""
-            onCredentialsChanged()
+            credentialsDidChange()
         } catch {
             copilotAuthError = error.localizedDescription
         }
@@ -535,7 +535,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             }
             configuration = connected
             secret = ""
-            onCredentialsChanged()
+            credentialsDidChange()
         } catch {
             cursorAuthError = Task.isCancelled
                 ? "Cursor sign-in canceled. The existing account was not changed."
@@ -554,6 +554,16 @@ final class ProviderSettingsViewModel: ObservableObject {
         await Task.yield()
         await signInWithCopilot()
         #endif
+    }
+
+    private func credentialsDidChange() {
+        onCredentialsChanged()
+        guard usageResult == nil else {
+            return
+        }
+        Task { @MainActor [weak self] in
+            await self?.refreshMetrics()
+        }
     }
 
     private func updateConfiguration(

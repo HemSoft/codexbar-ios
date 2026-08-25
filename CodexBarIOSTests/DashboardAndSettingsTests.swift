@@ -2432,6 +2432,52 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testAccountSettingsLoadMetricsAfterFirstCredentialSave() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        let refreshedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .openRouter,
+            title: "OpenRouter",
+            subtitle: "Management API key",
+            bars: [],
+            creditsRemaining: 42,
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        var refreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onAccountRefresh: { _ in
+                refreshCount += 1
+                return refreshedResult
+            }
+        )
+
+        await viewModel.prepare()
+        XCTAssertTrue(viewModel.availableMetrics.isEmpty)
+        XCTAssertEqual(refreshCount, 0)
+
+        viewModel.secret = "new-management-key"
+        viewModel.saveGenericCredential()
+        for _ in 0..<10 where viewModel.availableMetrics.isEmpty {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(viewModel.availableMetrics.map(\.label), ["Credit balance"])
+    }
+
+    @MainActor
     func testOpenRouterSettingsExplainManagementKeyRequirementsAndStorage() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
