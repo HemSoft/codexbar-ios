@@ -2959,6 +2959,37 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testCredentialRemovalFlushesPendingRefreshInputsBeforeRefreshing() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let openCode = store.addAccount(for: .openCodeZen)
+        XCTAssertTrue(store.saveSecret("old-token", for: openCode))
+        var storedWorkspaceDuringRefresh: String?
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: openCode.id,
+            onCredentialRefresh: { configuration in
+                storedWorkspaceDuringRefresh = store.configuration(accountID: configuration.id)?.openCodeWorkspaceId
+                return nil
+            }
+        )
+        viewModel.binding(
+            for: \.openCodeWorkspaceId,
+            persistence: .debounced
+        ).wrappedValue = "wrk_updated"
+
+        viewModel.removeSavedCredential()
+        for _ in 0..<100 where storedWorkspaceDuringRefresh == nil {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(storedWorkspaceDuringRefresh, "wrk_updated")
+        XCTAssertEqual(store.configuration(accountID: openCode.id)?.openCodeWorkspaceId, "wrk_updated")
+        XCTAssertFalse(store.hasSecret(for: openCode))
+    }
+
+    @MainActor
     func testProviderSettingsViewModelFlushesPendingWorkspaceBeforeRefresh() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

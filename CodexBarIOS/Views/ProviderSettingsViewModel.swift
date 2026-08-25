@@ -314,6 +314,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func removeSavedCredential(message: String? = nil) {
         credentialError = nil
+        flushPendingChanges()
         guard persistSecret("") else {
             credentialError = configurationStore.lastError
             return
