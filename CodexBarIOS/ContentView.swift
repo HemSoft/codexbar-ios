@@ -28,6 +28,7 @@ struct ContentView: View {
     @State private var deepLinkNavigation = DashboardDeepLinkNavigationState()
     @State private var hasCompletedInitialRefresh = false
     @State private var settingsRefreshCompletionID = UUID()
+    @State private var settingsDismissalRefreshState = SettingsDismissalRefreshState()
     @State private var isConfirmingHistoryReset = false
     @State private var problemReportPresentation: PrivacySafeDiagnosticContext?
 
@@ -332,8 +333,11 @@ struct ContentView: View {
         .sheet(
             isPresented: $isShowingSettings,
             onDismiss: {
+                let shouldRefresh = settingsDismissalRefreshState.finishDismissal()
                 Task {
-                    await orchestrator.refreshAfterSettingsDismissed()
+                    if shouldRefresh {
+                        await orchestrator.refreshAfterSettingsDismissed()
+                    }
                     settingsRefreshCompletionID = UUID()
                 }
             },
@@ -346,6 +350,9 @@ struct ContentView: View {
                         Task {
                             _ = await orchestrator.refreshNow()
                         }
+                    },
+                    onCredentialsChanged: {
+                        settingsDismissalRefreshState.credentialsChanged()
                     },
                     usageResultForAccount: { accountID in
                         orchestrator.dashboardCardItems.first {
@@ -1050,6 +1057,19 @@ struct DashboardAccountConfigurationPresentation: Identifiable, Equatable {
 
     var id: String {
         accountID
+    }
+}
+
+struct SettingsDismissalRefreshState: Equatable {
+    private var shouldRefreshOnDismiss = true
+
+    mutating func credentialsChanged() {
+        shouldRefreshOnDismiss = false
+    }
+
+    mutating func finishDismissal() -> Bool {
+        defer { shouldRefreshOnDismiss = true }
+        return shouldRefreshOnDismiss
     }
 }
 

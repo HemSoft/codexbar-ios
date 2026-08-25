@@ -2,6 +2,16 @@ import XCTest
 @testable import CodexBarIOS
 
 final class DashboardAndSettingsTests: XCTestCase {
+    func testSettingsDismissalConsumesCredentialRefreshExactlyOnce() {
+        var state = SettingsDismissalRefreshState()
+
+        XCTAssertTrue(state.finishDismissal())
+
+        state.credentialsChanged()
+        XCTAssertFalse(state.finishDismissal())
+        XCTAssertTrue(state.finishDismissal())
+    }
+
     func testSettingsDoneToolbarPolicyKeepsDoneVisibleAcrossCompactNavigation() {
         XCTAssertTrue(
             SettingsDoneToolbarPolicy.showsDone(

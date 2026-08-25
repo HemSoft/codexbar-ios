@@ -254,6 +254,7 @@ struct SettingsView: View {
     @ObservedObject var appUpdateController: AppUpdateController
     @ObservedObject var githubStatusPreferences: GitHubStatusPreferences
     var onAccountsChanged: @MainActor () -> Void = {}
+    var onCredentialsChanged: @MainActor () -> Void = {}
     var usageResultForAccount: @MainActor (String) -> ProviderUsageResult? = { _ in nil }
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
@@ -285,6 +286,7 @@ struct SettingsView: View {
         githubStatusPreferences: GitHubStatusPreferences,
         initialRoute: SettingsInitialRoute? = nil,
         onAccountsChanged: @escaping @MainActor () -> Void = {},
+        onCredentialsChanged: @escaping @MainActor () -> Void = {},
         usageResultForAccount: @escaping @MainActor (String) -> ProviderUsageResult? = { _ in nil },
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
@@ -295,6 +297,7 @@ struct SettingsView: View {
         self.appUpdateController = appUpdateController
         self.githubStatusPreferences = githubStatusPreferences
         self.onAccountsChanged = onAccountsChanged
+        self.onCredentialsChanged = onCredentialsChanged
         self.usageResultForAccount = usageResultForAccount
         self.onAccountRefresh = onAccountRefresh
         self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
@@ -322,7 +325,7 @@ struct SettingsView: View {
                             configurationStore: configurationStore,
                             accountID: accountID,
                             initialUsageResult: usageResultForAccount(accountID),
-                            onCredentialsChanged: {},
+                            onCredentialsChanged: onCredentialsChanged,
                             onAccountRefresh: onAccountRefresh,
                             onCredentialRefresh: onCredentialRefresh
                         )
@@ -356,6 +359,7 @@ struct SettingsView: View {
                 },
                 onCredentialsChanged: {
                     _ = addAccountRefreshState.credentialsChanged()
+                    onCredentialsChanged()
                 },
                 onAccountRefresh: onAccountRefresh,
                 onCredentialRefresh: onCredentialRefresh
