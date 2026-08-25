@@ -2534,6 +2534,92 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testAccountSettingsQueuesCredentialRefreshBehindInFlightMetricLoad() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .openRouter)
+        XCTAssertTrue(store.saveSecret("old-key", for: configuration))
+        let gate = UsageProviderGate()
+        var refreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onAccountRefresh: { configuration in
+                refreshCount += 1
+                if refreshCount == 1 {
+                    await gate.wait()
+                }
+                return ProviderUsageResult(
+                    accountID: configuration.id,
+                    providerID: .openRouter,
+                    title: "OpenRouter",
+                    subtitle: refreshCount == 1 ? "Old key" : "Replacement key",
+                    bars: [],
+                    creditsRemaining: refreshCount == 1 ? 10 : 42,
+                    fetchedAt: Date(timeIntervalSince1970: 2_000_000_000 + Double(refreshCount))
+                )
+            }
+        )
+
+        let prepareTask = Task { await viewModel.prepare() }
+        await gate.waitUntilBlocked()
+        XCTAssertTrue(viewModel.isLoadingMetrics)
+
+        viewModel.secret = "replacement-key"
+        viewModel.saveGenericCredential()
+        await gate.release()
+        await prepareTask.value
+
+        XCTAssertEqual(refreshCount, 2)
+        XCTAssertEqual(viewModel.usageResult?.creditsRemaining, 42)
+        XCTAssertEqual(viewModel.usageResult?.subtitle, "Replacement key")
+    }
+
+    @MainActor
+    func testAccountSettingsDoNotOfferMetricRefreshWhileAccountIsDisabled() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        var configuration = store.addAccount(for: .openRouter)
+        XCTAssertTrue(store.saveSecret("management-key", for: configuration))
+        configuration.isEnabled = false
+        XCTAssertTrue(store.update(configuration))
+        var refreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onAccountRefresh: { _ in
+                refreshCount += 1
+                return nil
+            }
+        )
+
+        await viewModel.prepare()
+
+        XCTAssertFalse(viewModel.canRefreshMetrics)
+        XCTAssertEqual(
+            viewModel.metricsEmptyStateMessage,
+            "Enable this account to discover its dashboard metrics."
+        )
+        XCTAssertEqual(refreshCount, 0)
+    }
+
+    @MainActor
     func testOpenRouterSettingsExplainManagementKeyRequirementsAndStorage() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

@@ -324,7 +324,7 @@ struct ProviderSettingsView: View {
                     }
                 } else if viewModel.availableMetrics.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("No metrics discovered yet. Refresh this account to load its dashboard metrics.")
+                        Text(viewModel.metricsEmptyStateMessage)
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("account-metrics-empty-state")
 

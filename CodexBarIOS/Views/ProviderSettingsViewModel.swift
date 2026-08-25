@@ -54,6 +54,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var debugAutostartedCopilotAuth = false
     private var pendingPersistenceTask: Task<Void, Never>?
     private var pendingConfiguration: ProviderAccountConfiguration?
+    private var needsCredentialMetricsRefresh = false
 
     init(
         configurationStore: ProviderConfigurationStore,
@@ -184,7 +185,13 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     var canRefreshMetrics: Bool {
-        configurationStore.isConfigured(configuration)
+        configuration.isEnabled && configurationStore.isConfigured(configuration)
+    }
+
+    var metricsEmptyStateMessage: String {
+        configuration.isEnabled
+            ? "No metrics discovered yet. Refresh this account to load its dashboard metrics."
+            : "Enable this account to discover its dashboard metrics."
     }
 
     func isMetricVisible(_ metricID: String) -> Bool {
@@ -204,19 +211,31 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     private func refreshMetrics(allowUnconfiguredAccount: Bool) async {
+        if isLoadingMetrics {
+            if allowUnconfiguredAccount {
+                needsCredentialMetricsRefresh = true
+            }
+            return
+        }
+
         guard
-            allowUnconfiguredAccount || canRefreshMetrics,
-            !isLoadingMetrics
+            allowUnconfiguredAccount || canRefreshMetrics
         else {
             return
         }
 
         flushPendingChanges()
         isLoadingMetrics = true
-        defer { isLoadingMetrics = false }
-        guard let result = await onAccountRefresh(configuration) else {
+        let result = await onAccountRefresh(configuration)
+        isLoadingMetrics = false
+
+        if needsCredentialMetricsRefresh {
+            needsCredentialMetricsRefresh = false
+            await refreshMetrics(allowUnconfiguredAccount: true)
             return
         }
+
+        guard let result else { return }
         acceptUsageResult(result)
     }
 
@@ -566,6 +585,10 @@ final class ProviderSettingsViewModel: ObservableObject {
     private func credentialsDidChange() {
         onCredentialsChanged()
         usageResult = nil
+        if isLoadingMetrics {
+            needsCredentialMetricsRefresh = true
+            return
+        }
         Task { @MainActor [weak self] in
             await self?.refreshMetrics(allowUnconfiguredAccount: true)
         }
