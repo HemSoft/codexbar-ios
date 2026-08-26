@@ -2682,6 +2682,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             subtitle: "Greptile rejected this organization API key.",
             bars: [],
             failureMessage: "Greptile rejected this organization API key.",
+            recoveryAction: .reauthenticate,
             fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
         )
         let validatedResult = ProviderUsageResult(
@@ -2719,6 +2720,66 @@ final class DashboardAndSettingsTests: XCTestCase {
             viewModel.credentialMessage,
             "API key saved in Keychain and validated by Greptile."
         )
+        XCTAssertNil(viewModel.credentialError)
+    }
+
+    @MainActor
+    func testGreptileTransientFailureDoesNotRejectOrUndoValidatedCredential() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .greptile)
+        let transientFailure = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Greptile rate limit reached. Wait before refreshing again.",
+            bars: [],
+            failureMessage: "Greptile rate limit reached. Wait before refreshing again.",
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let validatedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: [],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_001)
+        )
+        var manualRefreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onAccountRefresh: { _ in
+                manualRefreshCount += 1
+                return manualRefreshCount == 1 ? validatedResult : transientFailure
+            },
+            onCredentialRefresh: { _ in transientFailure }
+        )
+        viewModel.secret = "greptile-key"
+
+        viewModel.saveGenericCredential()
+        for _ in 0..<100 where viewModel.credentialMessage?.contains("could not validate") != true {
+            await Task.yield()
+        }
+        XCTAssertNil(viewModel.credentialError)
+        XCTAssertTrue(viewModel.credentialMessage?.contains("could not validate it right now") == true)
+
+        await viewModel.refreshMetrics()
+        XCTAssertEqual(viewModel.credentialMessage, "API key saved in Keychain and validated by Greptile.")
+        XCTAssertNil(viewModel.credentialError)
+
+        await viewModel.refreshMetrics()
+        XCTAssertEqual(viewModel.credentialMessage, "API key saved in Keychain and validated by Greptile.")
+        XCTAssertNil(viewModel.credentialError)
+
+        viewModel.removeSavedCredential()
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+        XCTAssertNil(viewModel.credentialMessage)
         XCTAssertNil(viewModel.credentialError)
     }
 

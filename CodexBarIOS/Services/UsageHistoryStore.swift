@@ -803,7 +803,8 @@ public final class UsageHistoryStore: ObservableObject {
         result: ProviderUsageResult,
         snapshots: [UsageHistorySnapshot]
     ) -> String {
-        if let currentKey = result.bars.lazy.compactMap(\.stableKey).first(where: {
+        if result.hasCurrentBars,
+           let currentKey = result.bars.lazy.compactMap(\.stableKey).first(where: {
             $0 == GreptileUsageIdentity.reviewQuotaStableKey
                 || $0 == GreptileUsageIdentity.completedReviewsStableKey
         }) {

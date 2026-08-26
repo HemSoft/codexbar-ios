@@ -276,8 +276,11 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
         acceptUsageResult(result)
-        if requiresFreshRequest || showsGreptileValidationFeedback {
+        if showsGreptileValidationFeedback {
             updateGreptileCredentialFeedback(with: result)
+            if result.failureMessage == nil {
+                showsGreptileValidationFeedback = false
+            }
         }
     }
 
@@ -578,8 +581,13 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
         if let failureMessage = result.failureMessage {
-            credentialMessage = nil
-            credentialError = "API key saved in Keychain, but Greptile validation failed. \(failureMessage)"
+            if result.recoveryAction == .reauthenticate || result.recoveryAction == .signIn {
+                credentialMessage = nil
+                credentialError = "API key saved in Keychain, but Greptile validation failed. \(failureMessage)"
+            } else {
+                credentialError = nil
+                credentialMessage = "API key saved in Keychain. Greptile could not validate it right now. \(failureMessage)"
+            }
         } else {
             credentialError = nil
             credentialMessage = "API key saved in Keychain and validated by Greptile."

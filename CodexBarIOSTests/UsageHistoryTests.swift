@@ -143,6 +143,20 @@ final class UsageHistoryTests: XCTestCase {
             store.trendSummary(for: quotaResult, now: dates.last!)?.valueDescription,
             "Changed +1"
         )
+
+        let failedResult = ProviderUsageResult(
+            accountID: "greptile.team",
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Greptile rate limit reached.",
+            bars: completedResult.bars,
+            barsFetchedAt: dates[0],
+            failureMessage: "Greptile rate limit reached.",
+            preserveCachedBarsOnFailure: true,
+            fetchedAt: dates[2]
+        )
+        XCTAssertFalse(failedResult.hasCurrentBars)
+        XCTAssertEqual(store.historySeries(for: failedResult).points.map(\.value), [1, 2])
     }
 
     @MainActor

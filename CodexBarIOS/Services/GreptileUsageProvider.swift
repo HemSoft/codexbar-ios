@@ -105,7 +105,8 @@ public final class GreptileUsageProvider: UsageProvider {
         else {
             return failureResult(
                 "Not configured - enter a Greptile organization API key.",
-                configuration: configuration
+                configuration: configuration,
+                recoveryAction: .signIn
             )
         }
 
@@ -192,12 +193,14 @@ public final class GreptileUsageProvider: UsageProvider {
             case .authenticationFailure:
                 return failureResult(
                     "Greptile rejected this organization API key.",
-                    configuration: configuration
+                    configuration: configuration,
+                    recoveryAction: .reauthenticate
                 )
             case .permissionFailure:
                 return failureResult(
                     "This Greptile API key lacks permission to read organization review activity.",
-                    configuration: configuration
+                    configuration: configuration,
+                    recoveryAction: .reauthenticate
                 )
             case .rateLimited:
                 return failureResult(
@@ -520,12 +523,14 @@ public final class GreptileUsageProvider: UsageProvider {
         case 401:
             failureResult(
                 "Greptile rejected this organization API key.",
-                configuration: configuration
+                configuration: configuration,
+                recoveryAction: .reauthenticate
             )
         case 403:
             failureResult(
                 "This Greptile API key lacks permission to read organization review activity.",
-                configuration: configuration
+                configuration: configuration,
+                recoveryAction: .reauthenticate
             )
         case 429:
             failureResult(
@@ -681,7 +686,8 @@ public final class GreptileUsageProvider: UsageProvider {
 
     private func failureResult(
         _ message: String,
-        configuration: ProviderAccountConfiguration
+        configuration: ProviderAccountConfiguration,
+        recoveryAction: ProviderUsageRecoveryAction = .retryRefresh
     ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id,
@@ -690,6 +696,7 @@ public final class GreptileUsageProvider: UsageProvider {
             subtitle: message,
             bars: [],
             failureMessage: message,
+            recoveryAction: recoveryAction,
             fetchedAt: Date()
         )
     }
