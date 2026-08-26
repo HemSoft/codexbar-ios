@@ -1047,15 +1047,8 @@ public final class UsageHistoryStore: ObservableObject {
                         "Completed reviews"
                     ),
                 ]
-                let preferredStableKey = accountSnapshots.reversed().lazy.compactMap { snapshot in
-                    seriesIdentities.lazy.compactMap { identity in
-                        snapshot.bars.contains(where: { $0.stableKey == identity.0 })
-                            ? identity.0
-                            : nil
-                    }.first
-                }.first
-                if let preferredStableKey,
-                   let preferredIndex = seriesIdentities.firstIndex(where: { $0.0 == preferredStableKey }),
+                let preferredStableKey = greptilePrimaryStableKey(snapshots: accountSnapshots)
+                if let preferredIndex = seriesIdentities.firstIndex(where: { $0.0 == preferredStableKey }),
                    preferredIndex != seriesIdentities.startIndex {
                     let preferredIdentity = seriesIdentities.remove(at: preferredIndex)
                     seriesIdentities.insert(preferredIdentity, at: seriesIdentities.startIndex)
