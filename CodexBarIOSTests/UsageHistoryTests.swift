@@ -80,6 +80,7 @@ final class UsageHistoryTests: XCTestCase {
             Date(timeIntervalSince1970: 1_788_475_200),
             Date(timeIntervalSince1970: 1_788_561_600),
             Date(timeIntervalSince1970: 1_788_648_000),
+            Date(timeIntervalSince1970: 1_788_734_400),
         ]
 
         let completedResult = ProviderUsageResult(
@@ -166,7 +167,7 @@ final class UsageHistoryTests: XCTestCase {
             title: "Greptile",
             subtitle: "All available review history",
             bars: completedResult.bars,
-            fetchedAt: dates[2]
+            fetchedAt: dates[3]
         )
         XCTAssertEqual(
             store.historySeriesOptions(for: currentCompletedResult).map(\.id),
@@ -174,6 +175,21 @@ final class UsageHistoryTests: XCTestCase {
                 GreptileUsageIdentity.completedReviewsHistorySeriesID,
                 GreptileUsageIdentity.reviewQuotaHistorySeriesID,
             ]
+        )
+        store.record(results: [currentCompletedResult], now: dates[3])
+
+        let staleQuotaResult = ProviderUsageResult(
+            accountID: quotaResult.accountID,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Current billing period",
+            bars: quotaResult.bars,
+            fetchedAt: dates[2]
+        )
+        XCTAssertEqual(store.historySeries(for: staleQuotaResult).points.map(\.value), [50, 50])
+        XCTAssertEqual(
+            store.historySeriesOptions(for: staleQuotaResult).first?.id,
+            GreptileUsageIdentity.completedReviewsHistorySeriesID
         )
 
         let failedResult = ProviderUsageResult(
@@ -185,15 +201,15 @@ final class UsageHistoryTests: XCTestCase {
             barsFetchedAt: dates[0],
             failureMessage: "Greptile rate limit reached.",
             preserveCachedBarsOnFailure: true,
-            fetchedAt: dates[2]
+            fetchedAt: dates[3]
         )
         XCTAssertFalse(failedResult.hasCurrentBars)
-        XCTAssertEqual(store.historySeries(for: failedResult).points.map(\.value), [1, 2])
+        XCTAssertEqual(store.historySeries(for: failedResult).points.map(\.value), [50, 50])
         XCTAssertEqual(
             store.historySeriesOptions(for: failedResult).map(\.id),
             [
-                GreptileUsageIdentity.reviewQuotaHistorySeriesID,
                 GreptileUsageIdentity.completedReviewsHistorySeriesID,
+                GreptileUsageIdentity.reviewQuotaHistorySeriesID,
             ]
         )
     }

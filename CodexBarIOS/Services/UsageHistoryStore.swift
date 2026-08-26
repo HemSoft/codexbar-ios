@@ -762,7 +762,7 @@ public final class UsageHistoryStore: ObservableObject {
             return countUsageSeries(
                 accountID: result.accountID,
                 snapshots: snapshots,
-                stableKey: greptilePrimaryStableKey(result: result, snapshots: snapshots),
+                stableKey: greptilePrimaryStableKey(snapshots: snapshots),
                 severityThresholds: severityThresholds
             )
         }
@@ -800,28 +800,18 @@ public final class UsageHistoryStore: ObservableObject {
         )
     }
 
-    private func greptilePrimaryStableKey(
-        result: ProviderUsageResult,
-        snapshots: [UsageHistorySnapshot]
-    ) -> String {
-        if result.hasCurrentBars {
-            if result.bars.contains(where: {
-                $0.stableKey == GreptileUsageIdentity.reviewQuotaStableKey
-            }) {
-                return GreptileUsageIdentity.reviewQuotaStableKey
-            }
-            if result.bars.contains(where: {
-                $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey
-            }) {
-                return GreptileUsageIdentity.completedReviewsStableKey
-            }
-        }
-        if snapshots.contains(where: { snapshot in
+    private func greptilePrimaryStableKey(snapshots: [UsageHistorySnapshot]) -> String {
+        if let latestSnapshot = snapshots.reversed().first(where: { snapshot in
             snapshot.bars.contains(where: {
                 $0.stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+                    || $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey
             })
         }) {
-            return GreptileUsageIdentity.reviewQuotaStableKey
+            return latestSnapshot.bars.contains(where: {
+                $0.stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+            })
+                ? GreptileUsageIdentity.reviewQuotaStableKey
+                : GreptileUsageIdentity.completedReviewsStableKey
         }
         return GreptileUsageIdentity.completedReviewsStableKey
     }
@@ -1056,22 +1046,13 @@ public final class UsageHistoryStore: ObservableObject {
                         "Completed reviews"
                     ),
                 ]
-                let preferredStableKey: String?
-                if result.hasCurrentBars {
-                    preferredStableKey = seriesIdentities.lazy.compactMap { identity in
-                        result.bars.contains(where: { $0.stableKey == identity.0 })
+                let preferredStableKey = accountSnapshots.reversed().lazy.compactMap { snapshot in
+                    seriesIdentities.lazy.compactMap { identity in
+                        snapshot.bars.contains(where: { $0.stableKey == identity.0 })
                             ? identity.0
                             : nil
                     }.first
-                } else {
-                    preferredStableKey = accountSnapshots.reversed().lazy.compactMap { snapshot in
-                        seriesIdentities.lazy.compactMap { identity in
-                            snapshot.bars.contains(where: { $0.stableKey == identity.0 })
-                                ? identity.0
-                                : nil
-                        }.first
-                    }.first
-                }
+                }.first
                 if let preferredStableKey,
                    let preferredIndex = seriesIdentities.firstIndex(where: { $0.0 == preferredStableKey }),
                    preferredIndex != seriesIdentities.startIndex {
