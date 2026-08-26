@@ -2667,6 +2667,55 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testGreptileCredentialSavedWhileDisabledValidatesWhenEnabled() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        var configuration = store.addAccount(for: .greptile)
+        configuration.isEnabled = false
+        XCTAssertTrue(store.update(configuration))
+        let validatedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: [],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        var credentialRefreshCount = 0
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialRefresh: { _ in
+                credentialRefreshCount += 1
+                return validatedResult
+            }
+        )
+        viewModel.secret = "greptile-key"
+
+        viewModel.saveGenericCredential()
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+        XCTAssertEqual(credentialRefreshCount, 0)
+        XCTAssertEqual(
+            viewModel.credentialMessage,
+            "API key saved in Keychain. Enable this account to validate it with Greptile."
+        )
+
+        viewModel.binding(for: \.isEnabled).wrappedValue = true
+        for _ in 0..<100 where viewModel.credentialMessage?.contains("validated") != true {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(credentialRefreshCount, 1)
+        XCTAssertEqual(viewModel.credentialMessage, "API key saved in Keychain and validated by Greptile.")
+        XCTAssertNil(viewModel.credentialError)
+    }
+
+    @MainActor
     func testGreptileCredentialSaveReportsValidationFailureAndManualRetrySuccess() async {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

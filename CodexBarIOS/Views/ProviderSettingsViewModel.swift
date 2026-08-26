@@ -679,6 +679,10 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func credentialsDidChange(refreshMetrics: Bool = true) {
         onCredentialsChanged()
+        requestCredentialMetricsRefresh(refreshMetrics: refreshMetrics)
+    }
+
+    private func requestCredentialMetricsRefresh(refreshMetrics: Bool = true) {
         usageResult = nil
         metricsCredentialRevision += 1
         isCredentialRefreshPending = true
@@ -701,6 +705,10 @@ final class ProviderSettingsViewModel: ObservableObject {
         _ updated: ProviderAccountConfiguration,
         persistence: PersistenceBehavior
     ) {
+        let shouldValidateSavedGreptileCredential = providerID == .greptile
+            && !configuration.isEnabled
+            && updated.isEnabled
+            && showsGreptileValidationFeedback
         let didChangeRefreshInputs = refreshInputsChanged(from: configuration, to: updated)
         configuration = updated
         if didChangeRefreshInputs {
@@ -723,6 +731,11 @@ final class ProviderSettingsViewModel: ObservableObject {
                 }
                 self?.flushPendingChanges()
             }
+        }
+        if shouldValidateSavedGreptileCredential {
+            credentialError = nil
+            credentialMessage = "API key saved in Keychain. Validating with Greptile..."
+            requestCredentialMetricsRefresh()
         }
     }
 
