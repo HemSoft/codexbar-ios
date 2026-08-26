@@ -322,10 +322,11 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         }
 
         if providerID == .greptile,
-           let completedReviews = bars.first(where: {
-               $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey
+           let reviews = bars.first(where: {
+               $0.stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+                   || $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey
            }) {
-            return completedReviews.used
+            return reviews.used
         }
 
         if let usage = bars.map(\.historyFractionUsed).max() {
@@ -760,7 +761,7 @@ public final class UsageHistoryStore: ObservableObject {
             return countUsageSeries(
                 accountID: result.accountID,
                 snapshots: snapshots,
-                stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                stableKey: greptilePrimaryStableKey(result: result, snapshots: snapshots),
                 severityThresholds: severityThresholds
             )
         }
@@ -796,6 +797,26 @@ public final class UsageHistoryStore: ObservableObject {
             isBalance: false,
             isCount: true
         )
+    }
+
+    private func greptilePrimaryStableKey(
+        result: ProviderUsageResult,
+        snapshots: [UsageHistorySnapshot]
+    ) -> String {
+        if let currentKey = result.bars.lazy.compactMap(\.stableKey).first(where: {
+            $0 == GreptileUsageIdentity.reviewQuotaStableKey
+                || $0 == GreptileUsageIdentity.completedReviewsStableKey
+        }) {
+            return currentKey
+        }
+        if snapshots.contains(where: { snapshot in
+            snapshot.bars.contains(where: {
+                $0.stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+            })
+        }) {
+            return GreptileUsageIdentity.reviewQuotaStableKey
+        }
+        return GreptileUsageIdentity.completedReviewsStableKey
     }
 
     private func aggregateUsageSeries(
@@ -1016,16 +1037,34 @@ public final class UsageHistoryStore: ObservableObject {
                     severityThresholds: severityThresholds
                 ))
             } else if result.providerID == .greptile {
-                options.append(UsageHistorySeriesOption(
-                    id: GreptileUsageIdentity.completedReviewsHistorySeriesID,
-                    label: "Completed reviews",
-                    series: countUsageSeries(
-                        accountID: result.accountID,
-                        snapshots: accountSnapshots,
-                        stableKey: GreptileUsageIdentity.completedReviewsStableKey,
-                        severityThresholds: severityThresholds
-                    )
-                ))
+                let seriesIdentities = [
+                    (
+                        GreptileUsageIdentity.reviewQuotaStableKey,
+                        GreptileUsageIdentity.reviewQuotaHistorySeriesID,
+                        "Reviews used"
+                    ),
+                    (
+                        GreptileUsageIdentity.completedReviewsStableKey,
+                        GreptileUsageIdentity.completedReviewsHistorySeriesID,
+                        "Completed reviews"
+                    ),
+                ]
+                for (stableKey, seriesID, label) in seriesIdentities where
+                    result.bars.contains(where: { $0.stableKey == stableKey })
+                        || accountSnapshots.contains(where: { snapshot in
+                            snapshot.bars.contains(where: { $0.stableKey == stableKey })
+                        }) {
+                    options.append(UsageHistorySeriesOption(
+                        id: seriesID,
+                        label: label,
+                        series: countUsageSeries(
+                            accountID: result.accountID,
+                            snapshots: accountSnapshots,
+                            stableKey: stableKey,
+                            severityThresholds: severityThresholds
+                        )
+                    ))
+                }
             } else {
                 options.append(UsageHistorySeriesOption(
                     id: "usage",

@@ -60,6 +60,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var needsCredentialMetricsRefresh = false
     private var metricsCredentialRevision = 0
     private var isCredentialRefreshPending = false
+    private var showsGreptileValidationFeedback = false
 
     init(
         configurationStore: ProviderConfigurationStore,
@@ -275,7 +276,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             return
         }
         acceptUsageResult(result)
-        if requiresFreshRequest {
+        if requiresFreshRequest || showsGreptileValidationFeedback {
             updateGreptileCredentialFeedback(with: result)
         }
     }
@@ -311,6 +312,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     func saveGenericCredential() {
         credentialError = nil
         credentialMessage = nil
+        showsGreptileValidationFeedback = false
         guard persist(configuration) else {
             credentialError = configurationStore.lastError
             return
@@ -321,6 +323,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
         secret = ""
         if providerID == .greptile {
+            showsGreptileValidationFeedback = true
             credentialMessage = configuration.isEnabled
                 ? "API key saved in Keychain. Validating with Greptile..."
                 : "API key saved in Keychain. Enable this account to validate it with Greptile."
@@ -331,6 +334,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     func removeSavedCredential(message: String? = nil) {
         credentialError = nil
         credentialMessage = nil
+        showsGreptileValidationFeedback = false
         flushPendingChanges()
         guard persistSecret("") else {
             credentialError = configurationStore.lastError

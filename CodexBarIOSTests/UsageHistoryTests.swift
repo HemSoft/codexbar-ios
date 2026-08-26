@@ -70,6 +70,82 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testGreptileQuotaHistoryDoesNotMixWithCompletedReviewHistory() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = UsageHistoryStore(defaults: defaults)
+        let dates = [
+            Date(timeIntervalSince1970: 1_788_475_200),
+            Date(timeIntervalSince1970: 1_788_561_600),
+            Date(timeIntervalSince1970: 1_788_648_000),
+        ]
+
+        let completedResult = ProviderUsageResult(
+            accountID: "greptile.team",
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                    label: "Completed reviews",
+                    used: 50,
+                    limit: 0,
+                    fractionlessUsageText: "50"
+                ),
+            ],
+            fetchedAt: dates[0]
+        )
+        store.record(results: [completedResult], now: dates.last!)
+
+        var quotaResult = ProviderUsageResult(
+            accountID: "greptile.team",
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Current billing period",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.reviewQuotaStableKey,
+                    label: "Reviews used",
+                    used: 1,
+                    limit: 50
+                ),
+            ],
+            fetchedAt: dates[1]
+        )
+        store.record(results: [quotaResult], now: dates.last!)
+        quotaResult = ProviderUsageResult(
+            accountID: "greptile.team",
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Current billing period",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.reviewQuotaStableKey,
+                    label: "Reviews used",
+                    used: 2,
+                    limit: 50
+                ),
+            ],
+            fetchedAt: dates[2]
+        )
+        store.record(results: [quotaResult], now: dates.last!)
+
+        let options = store.historySeriesOptions(for: quotaResult)
+        XCTAssertEqual(options.map(\.id), [
+            GreptileUsageIdentity.reviewQuotaHistorySeriesID,
+            GreptileUsageIdentity.completedReviewsHistorySeriesID,
+        ])
+        XCTAssertEqual(options[0].series.points.map(\.value), [1, 2])
+        XCTAssertEqual(options[1].series.points.map(\.value), [50])
+        XCTAssertEqual(
+            store.trendSummary(for: quotaResult, now: dates.last!)?.valueDescription,
+            "Changed +1"
+        )
+    }
+
+    @MainActor
     func testMissingUsageHistoryInitializesWithoutAnError() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

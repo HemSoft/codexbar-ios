@@ -2656,7 +2656,7 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testGreptileCredentialSaveReportsValidationFailureWithoutClaimingSuccess() async {
+    func testGreptileCredentialSaveReportsValidationFailureAndManualRetrySuccess() async {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -2675,9 +2675,18 @@ final class DashboardAndSettingsTests: XCTestCase {
             failureMessage: "Greptile rejected this organization API key.",
             fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
         )
+        let validatedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: [],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_001)
+        )
         let viewModel = ProviderSettingsViewModel(
             configurationStore: store,
             accountID: configuration.id,
+            onAccountRefresh: { _ in validatedResult },
             onCredentialRefresh: { _ in rejectedResult }
         )
         viewModel.secret = "expired-greptile-key"
@@ -2694,6 +2703,14 @@ final class DashboardAndSettingsTests: XCTestCase {
                 + "Greptile rejected this organization API key."
         )
         XCTAssertTrue(store.hasSecret(for: configuration))
+
+        await viewModel.refreshMetrics()
+
+        XCTAssertEqual(
+            viewModel.credentialMessage,
+            "API key saved in Keychain and validated by Greptile."
+        )
+        XCTAssertNil(viewModel.credentialError)
     }
 
     @MainActor

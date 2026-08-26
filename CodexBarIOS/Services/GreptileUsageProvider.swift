@@ -4,6 +4,9 @@ enum GreptileUsageIdentity {
     static let completedReviewsStableKey = "completed-reviews"
     static let completedReviewsMetricID = "greptile.\(completedReviewsStableKey)"
     static let completedReviewsHistorySeriesID = "usage.\(completedReviewsStableKey)"
+    static let reviewQuotaStableKey = "review-quota"
+    static let reviewQuotaMetricID = "greptile.\(reviewQuotaStableKey)"
+    static let reviewQuotaHistorySeriesID = "usage.\(reviewQuotaStableKey)"
 }
 
 public final class GreptileUsageProvider: UsageProvider {
@@ -559,7 +562,7 @@ public final class GreptileUsageProvider: UsageProvider {
 
         let bar = quota.map { quota in
             UsageBar(
-                stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                stableKey: GreptileUsageIdentity.reviewQuotaStableKey,
                 label: "Reviews used",
                 used: quota.reviewsUsed,
                 limit: quota.reviewAllowance,

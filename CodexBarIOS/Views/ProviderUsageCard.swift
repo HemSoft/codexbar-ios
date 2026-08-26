@@ -1243,10 +1243,15 @@ struct ProviderUsageCard: View {
         case let .usageBar(index):
             if result.providerID == .greptile,
                result.bars.indices.contains(index),
-               result.bars[index].stableKey == GreptileUsageIdentity.completedReviewsStableKey {
+               let stableKey = result.bars[index].stableKey,
+               stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+                   || stableKey == GreptileUsageIdentity.completedReviewsStableKey {
+                let seriesID = stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+                    ? GreptileUsageIdentity.reviewQuotaHistorySeriesID
+                    : GreptileUsageIdentity.completedReviewsHistorySeriesID
                 return historySeriesOptionsProvider()
                     .first(where: {
-                        $0.id == GreptileUsageIdentity.completedReviewsHistorySeriesID
+                        $0.id == seriesID
                     })?
                     .series
             }

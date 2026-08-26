@@ -118,6 +118,8 @@ final class ProviderParsingTests: XCTestCase {
         let bar = try XCTUnwrap(result.bars.first)
         XCTAssertEqual(result.subtitle, "Current billing period")
         XCTAssertEqual(result.plan?.accessibilityLabel, "Starter")
+        XCTAssertEqual(bar.stableKey, GreptileUsageIdentity.reviewQuotaStableKey)
+        XCTAssertEqual(result.availableMetrics.first?.id, GreptileUsageIdentity.reviewQuotaMetricID)
         XCTAssertEqual(bar.label, "Reviews used")
         XCTAssertEqual(bar.used, 50)
         XCTAssertEqual(bar.limit, 50)
