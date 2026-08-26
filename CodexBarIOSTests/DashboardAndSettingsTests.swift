@@ -260,6 +260,25 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(item?.recoveryAction, .reauthenticate)
     }
 
+    func testDashboardAuthenticationRecoveryRoutesNonClaudeProvidersToSettings() {
+        XCTAssertEqual(
+            DashboardRecoveryRoute.resolve(action: .signIn, providerID: .greptile),
+            .accountSettings
+        )
+        XCTAssertEqual(
+            DashboardRecoveryRoute.resolve(action: .reauthenticate, providerID: .greptile),
+            .accountSettings
+        )
+        XCTAssertEqual(
+            DashboardRecoveryRoute.resolve(action: .reauthenticate, providerID: .claude),
+            .claudeSignIn
+        )
+        XCTAssertEqual(
+            DashboardRecoveryRoute.resolve(action: .retryRefresh, providerID: .greptile),
+            .retryRefresh
+        )
+    }
+
     @MainActor
     func testDashboardClaudeSignInReplacesAndRefreshesOnlyInitiatingAccount() async throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"

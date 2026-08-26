@@ -831,13 +831,18 @@ struct ContentView: View {
     }
 
     private func performRecovery(for item: DashboardProviderCardItem) {
-        switch item.recoveryAction {
+        switch DashboardRecoveryRoute.resolve(
+            action: item.recoveryAction,
+            providerID: item.configuration.providerID
+        ) {
         case .retryRefresh:
             Task {
                 await orchestrator.refreshAccount(item.configuration)
             }
-        case .signIn, .reauthenticate:
+        case .claudeSignIn:
             claudeAuthenticationController.startSignIn(for: item.configuration)
+        case .accountSettings:
+            accountConfigurationNavigation.present(accountID: item.configuration.id)
         }
     }
 
@@ -1141,6 +1146,24 @@ struct DashboardAccountConfigurationNavigationState: Equatable {
             accountIDAwaitingDismissalRefresh = nil
         }
         return accountIDAwaitingDismissalRefresh
+    }
+}
+
+enum DashboardRecoveryRoute: Equatable {
+    case retryRefresh
+    case claudeSignIn
+    case accountSettings
+
+    static func resolve(
+        action: ProviderUsageRecoveryAction,
+        providerID: ProviderID
+    ) -> Self {
+        switch action {
+        case .retryRefresh:
+            .retryRefresh
+        case .signIn, .reauthenticate:
+            providerID == .claude ? .claudeSignIn : .accountSettings
+        }
     }
 }
 

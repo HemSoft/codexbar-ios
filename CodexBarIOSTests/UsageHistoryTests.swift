@@ -1947,6 +1947,27 @@ final class UsageHistoryTests: XCTestCase {
             retryCard.recoveryAccessibilityHint,
             "Retries refreshing usage for \(result.title)"
         )
+
+        let greptileResult = ProviderUsageResult(
+            accountID: "greptile.team",
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "API key required",
+            bars: [],
+            fetchedAt: Date()
+        )
+        let greptileCard = ProviderUsageCard(
+            result: greptileResult,
+            statusText: "API key required",
+            history: UsageHistorySeries(accountID: greptileResult.accountID, points: [], isBalance: false),
+            refreshErrorMessage: "Greptile needs an organization API key.",
+            recoveryAction: .signIn
+        )
+        XCTAssertEqual(greptileCard.recoveryActionTitle, "Open account settings")
+        XCTAssertEqual(
+            greptileCard.recoveryAccessibilityHint,
+            "Opens account settings for Greptile"
+        )
     }
 
     @MainActor
