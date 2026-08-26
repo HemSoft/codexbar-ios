@@ -492,7 +492,7 @@ public final class GreptileUsageProvider: UsageProvider {
 
         return keys.lazy.compactMap { key in
             if let timestamp = doubleValue(values[key]) {
-                guard timestamp >= 0 else {
+                guard timestamp > 0 else {
                     return nil
                 }
                 let seconds = abs(timestamp) >= 100_000_000_000 ? timestamp / 1_000 : timestamp

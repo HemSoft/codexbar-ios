@@ -213,8 +213,13 @@ private enum GreptileMetricPreferenceCompatibility {
             return
         }
 
-        if let sourcePreference = layout.preferences.removeValue(forKey: sourceMetricID),
-           !hasCustomPresentation(layout.preferences[destinationMetricID]) {
+        let destinationPreference = layout.preferences[destinationMetricID]
+        if var sourcePreference = layout.preferences.removeValue(forKey: sourceMetricID),
+           !hasCustomPresentation(destinationPreference) {
+            if let destinationPreference {
+                sourcePreference.isNewlyDiscovered = sourcePreference.isNewlyDiscovered
+                    && destinationPreference.isNewlyDiscovered
+            }
             layout.preferences[destinationMetricID] = sourcePreference
         }
         var seenMetricIDs = Set<String>()

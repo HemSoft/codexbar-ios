@@ -164,7 +164,7 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(bar.resetsAt, Date(timeIntervalSince1970: 1_788_220_800))
     }
 
-    func testGreptileProviderRejectsNegativeNumericBillingPeriodTimestamps() async throws {
+    func testGreptileProviderRejectsNonPositiveNumericBillingPeriodTimestamps() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
         try secretStore.saveSecret(
@@ -180,7 +180,7 @@ final class ProviderParsingTests: XCTestCase {
                     headerFields: nil
                 )!,
                 Data(
-                    #"{"result":{"codeReviews":[],"total":0,"billingUsage":{"reviewsUsed":1,"includedReviews":50,"periodStart":-1785542400,"resetsAt":-1788220800000,"123":"ignored","---":"ignored"}}}"#.utf8
+                    #"{"result":{"codeReviews":[],"total":0,"billingUsage":{"reviewsUsed":1,"includedReviews":50,"periodStart":0,"resetsAt":-1788220800000,"123":"ignored","---":"ignored"}}}"#.utf8
                 )
             )
         }

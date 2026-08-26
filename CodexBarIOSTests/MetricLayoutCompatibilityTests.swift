@@ -78,4 +78,31 @@ final class MetricLayoutCompatibilityTests: XCTestCase {
         XCTAssertEqual(preference.width, .half)
         XCTAssertEqual(preference.watchVisibility, .show)
     }
+
+    @MainActor
+    func testGreptilePreferenceMigrationPreservesSeenDestinationState() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let accountID = "greptile.team"
+        let completedID = GreptileUsageIdentity.completedReviewsMetricID
+        let quotaID = GreptileUsageIdentity.reviewQuotaMetricID
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        _ = store.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: [completedID, quotaID]
+        )
+        store.markMetricsSeen([quotaID], accountID: accountID)
+
+        let migrated = store.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: [quotaID]
+        )
+
+        XCTAssertFalse(try XCTUnwrap(migrated.preferences[quotaID]).isNewlyDiscovered)
+    }
 }
