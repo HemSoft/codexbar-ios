@@ -2,6 +2,7 @@ import XCTest
 @testable import CodexBarIOS
 
 final class DashboardAndSettingsTests: XCTestCase {
+    @MainActor
     func testProviderSettingsRowAccessibilityDescribesStatusAndGroupOnce() {
         var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
 
