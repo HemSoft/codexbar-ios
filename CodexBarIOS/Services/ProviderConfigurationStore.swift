@@ -193,6 +193,109 @@ struct MetricLayoutUndoHistory {
     }
 }
 
+private enum GreptileMetricPreferenceCompatibility {
+    static func matchingMetrics(
+        _ sourceMetricIDs: [String],
+        destinationAvailableMetricIDs: [String],
+        destinationLayout: AccountMetricLayout
+    ) -> [(sourceMetricID: String, destinationMetricID: String)] {
+        let availableMetricIDs = Set(destinationAvailableMetricIDs)
+        let destinationMetricIDs = Set(destinationLayout.orderedMetricIDs)
+            .union(destinationLayout.preferences.keys)
+        var seenSourceMetricIDs = Set<String>()
+        var seenDestinationMetricIDs = Set<String>()
+        return sourceMetricIDs.compactMap { sourceMetricID in
+            guard
+                !sourceMetricID.isEmpty,
+                seenSourceMetricIDs.insert(sourceMetricID).inserted,
+                let destinationMetricID = matchingDestinationMetricID(
+                    for: sourceMetricID,
+                    destinationAvailableMetricIDs: availableMetricIDs,
+                    destinationMetricIDs: destinationMetricIDs
+                ),
+                seenDestinationMetricIDs.insert(destinationMetricID).inserted
+            else {
+                return nil
+            }
+            return (sourceMetricID, destinationMetricID)
+        }
+    }
+
+    static func matchingDestinationMetricID(
+        for sourceMetricID: String,
+        destinationAvailableMetricIDs: Set<String>,
+        destinationMetricIDs: Set<String>
+    ) -> String? {
+        matchingDestinationMetricID(
+            for: sourceMetricID,
+            destinationMetricIDs: destinationAvailableMetricIDs
+        ) ?? matchingDestinationMetricID(
+            for: sourceMetricID,
+            destinationMetricIDs: destinationMetricIDs
+        )
+    }
+
+    private static func matchingDestinationMetricID(
+        for sourceMetricID: String,
+        destinationMetricIDs: Set<String>
+    ) -> String? {
+        if destinationMetricIDs.contains(sourceMetricID) {
+            return sourceMetricID
+        }
+        if sourceMetricID == GreptileUsageIdentity.completedReviewsMetricID,
+           destinationMetricIDs.contains(GreptileUsageIdentity.reviewQuotaMetricID) {
+            return GreptileUsageIdentity.reviewQuotaMetricID
+        }
+        if sourceMetricID == GreptileUsageIdentity.reviewQuotaMetricID,
+           destinationMetricIDs.contains(GreptileUsageIdentity.completedReviewsMetricID) {
+            return GreptileUsageIdentity.completedReviewsMetricID
+        }
+        return nil
+    }
+
+    static func migrate(
+        layout: inout AccountMetricLayout,
+        availableMetricIDs: [String]
+    ) {
+        let availableMetricIDSet = Set(availableMetricIDs)
+        let sourceMetricID: String
+        let destinationMetricID: String
+        if availableMetricIDSet.contains(GreptileUsageIdentity.reviewQuotaMetricID),
+           !availableMetricIDSet.contains(GreptileUsageIdentity.completedReviewsMetricID) {
+            sourceMetricID = GreptileUsageIdentity.completedReviewsMetricID
+            destinationMetricID = GreptileUsageIdentity.reviewQuotaMetricID
+        } else if availableMetricIDSet.contains(GreptileUsageIdentity.completedReviewsMetricID),
+                  !availableMetricIDSet.contains(GreptileUsageIdentity.reviewQuotaMetricID) {
+            sourceMetricID = GreptileUsageIdentity.reviewQuotaMetricID
+            destinationMetricID = GreptileUsageIdentity.completedReviewsMetricID
+        } else {
+            return
+        }
+
+        let destinationPreference = layout.preferences[destinationMetricID]
+        if !hasCustomPresentation(destinationPreference),
+           var sourcePreference = layout.preferences.removeValue(forKey: sourceMetricID) {
+            if let destinationPreference {
+                sourcePreference.isNewlyDiscovered = sourcePreference.isNewlyDiscovered
+                    && destinationPreference.isNewlyDiscovered
+            }
+            layout.preferences[destinationMetricID] = sourcePreference
+        }
+        var seenMetricIDs = Set<String>()
+        layout.orderedMetricIDs = layout.orderedMetricIDs
+            .map { $0 == sourceMetricID ? destinationMetricID : $0 }
+            .filter { !$0.isEmpty && seenMetricIDs.insert($0).inserted }
+    }
+
+    private static func hasCustomPresentation(_ preference: MetricTilePreference?) -> Bool {
+        guard let preference else { return false }
+        return !preference.isVisible
+            || preference.visualizationStyle != nil
+            || preference.width != .automatic
+            || preference.watchVisibility != .inherit
+    }
+}
+
 enum CodexAccountIdentityValidation: Equatable {
     case available
     case duplicate(accountName: String)
@@ -855,6 +958,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         let availableMetricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
         var layout = metricLayouts[accountID] ?? AccountMetricLayout()
         let originalLayout = layout
+        GreptileMetricPreferenceCompatibility.migrate(layout: &layout, availableMetricIDs: availableMetricIDs)
         var orderedMetricIDs = Self.uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
         let orderedMetricIDSet = Set(orderedMetricIDs)
 
@@ -990,22 +1094,23 @@ public final class ProviderConfigurationStore: ObservableObject {
             accountID: destinationAccountID,
             availableMetricIDs: destinationMetricIDs
         )
-        let destinationMetricIDSet = Set(destinationLayout.orderedMetricIDs)
-            .union(destinationLayout.preferences.keys)
-        let copiedOrder = Self.uniqueNonemptyMetricIDs(sourceLayout.orderedMetricIDs)
-            .filter { destinationMetricIDSet.contains($0) }
-        var seen = Set(copiedOrder)
+        let copiedMetrics = GreptileMetricPreferenceCompatibility.matchingMetrics(
+            sourceLayout.orderedMetricIDs,
+            destinationAvailableMetricIDs: destinationMetricIDs,
+            destinationLayout: destinationLayout
+        )
+        var seen = Set(copiedMetrics.map(\.destinationMetricID))
         let destinationOnlyOrder = Self.uniqueNonemptyMetricIDs(destinationLayout.orderedMetricIDs)
             .filter { seen.insert($0).inserted }
 
         destinationLayout.version = AccountMetricLayout.currentVersion
-        destinationLayout.orderedMetricIDs = copiedOrder + destinationOnlyOrder
-        for metricID in copiedOrder {
-            guard var preference = sourceLayout.preferences[metricID] else {
+        destinationLayout.orderedMetricIDs = copiedMetrics.map(\.destinationMetricID) + destinationOnlyOrder
+        for metric in copiedMetrics {
+            guard var preference = sourceLayout.preferences[metric.sourceMetricID] else {
                 continue
             }
             preference.isNewlyDiscovered = false
-            destinationLayout.preferences[metricID] = preference
+            destinationLayout.preferences[metric.destinationMetricID] = preference
         }
         for metricID in destinationOnlyOrder where destinationLayout.preferences[metricID] == nil {
             destinationLayout.preferences[metricID] = MetricTilePreference()

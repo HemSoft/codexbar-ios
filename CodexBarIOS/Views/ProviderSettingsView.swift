@@ -319,6 +319,11 @@ struct ProviderSettingsView: View {
                 if let credentialError = viewModel.credentialError {
                     Text(credentialError)
                         .foregroundStyle(.red)
+                        .accessibilityIdentifier("credential-error")
+                } else if let credentialMessage = viewModel.credentialMessage {
+                    Label(credentialMessage, systemImage: viewModel.credentialMessageSystemImage)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("credential-message")
                 }
             } header: {
                 Text(viewModel.credentialPresentation.sectionTitle)

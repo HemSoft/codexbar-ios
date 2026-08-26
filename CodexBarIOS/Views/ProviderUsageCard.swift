@@ -1016,9 +1016,9 @@ struct ProviderUsageCard: View {
         case .retryRefresh:
             "Retry"
         case .signIn:
-            "Sign in with Claude"
+            result.providerID == .claude ? "Sign in with Claude" : "Open account settings"
         case .reauthenticate:
-            "Sign in again"
+            result.providerID == .claude ? "Sign in again" : "Update credentials"
         }
     }
 
@@ -1036,9 +1036,13 @@ struct ProviderUsageCard: View {
         case .retryRefresh:
             "Retries refreshing usage for \(result.title)"
         case .signIn:
-            "Starts Claude sign-in for \(result.title)"
+            result.providerID == .claude
+                ? "Starts Claude sign-in for \(result.title)"
+                : "Opens account settings for \(result.title)"
         case .reauthenticate:
-            "Replaces the rejected Claude credential for \(result.title)"
+            result.providerID == .claude
+                ? "Replaces the rejected Claude credential for \(result.title)"
+                : "Opens account settings to replace credentials for \(result.title)"
         }
     }
 
@@ -1243,10 +1247,15 @@ struct ProviderUsageCard: View {
         case let .usageBar(index):
             if result.providerID == .greptile,
                result.bars.indices.contains(index),
-               result.bars[index].stableKey == GreptileUsageIdentity.completedReviewsStableKey {
+               let stableKey = result.bars[index].stableKey,
+               stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+                   || stableKey == GreptileUsageIdentity.completedReviewsStableKey {
+                let seriesID = stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+                    ? GreptileUsageIdentity.reviewQuotaHistorySeriesID
+                    : GreptileUsageIdentity.completedReviewsHistorySeriesID
                 return historySeriesOptionsProvider()
                     .first(where: {
-                        $0.id == GreptileUsageIdentity.completedReviewsHistorySeriesID
+                        $0.id == seriesID
                     })?
                     .series
             }
@@ -1806,9 +1815,9 @@ struct ProviderUsagePlaceholderCard: View {
         case .retryRefresh:
             "Retry"
         case .signIn:
-            "Sign in with Claude"
+            configuration.providerID == .claude ? "Sign in with Claude" : "Open account settings"
         case .reauthenticate:
-            "Sign in again"
+            configuration.providerID == .claude ? "Sign in again" : "Update credentials"
         }
     }
 
@@ -1821,9 +1830,13 @@ struct ProviderUsagePlaceholderCard: View {
         case .retryRefresh:
             "Retries refreshing usage for \(configuration.displayName)"
         case .signIn:
-            "Starts Claude sign-in for \(configuration.displayName)"
+            configuration.providerID == .claude
+                ? "Starts Claude sign-in for \(configuration.displayName)"
+                : "Opens account settings for \(configuration.displayName)"
         case .reauthenticate:
-            "Replaces the rejected Claude credential for \(configuration.displayName)"
+            configuration.providerID == .claude
+                ? "Replaces the rejected Claude credential for \(configuration.displayName)"
+                : "Opens account settings to replace credentials for \(configuration.displayName)"
         }
     }
 

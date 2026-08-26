@@ -74,7 +74,7 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(completed.severity, .normal)
         XCTAssertEqual(result.availableMetrics.first?.id, GreptileUsageIdentity.completedReviewsMetricID)
         XCTAssertTrue(result.usageMessages.contains {
-            $0.contains("does not currently expose billing-credit usage")
+            $0.contains("did not return billing allowance data")
         })
 
         let statusItems = try XCTUnwrap(result.cardInformationSections.first).items
@@ -85,6 +85,191 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(counts["Failed"], "1")
         XCTAssertEqual(counts["Skipped"], "1")
         XCTAssertEqual(counts["Other statuses"], "1")
+    }
+
+    func testGreptileProviderUsesReturnedBillingPeriodReviewQuota() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"result":{"codeReviews":[{"id":"r1","status":"COMPLETED"}],"total":1,"billingUsage":{"reviewsUsed":50,"includedReviews":50,"billingPeriodStart":"2026-08-01T00:00:00Z","billingPeriodEnd":"2026-09-01T00:00:00Z","plan":"Starter"}}}"#.utf8
+                )
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+
+        let bar = try XCTUnwrap(result.bars.first)
+        XCTAssertEqual(result.subtitle, "Current billing period")
+        XCTAssertEqual(result.plan?.accessibilityLabel, "Starter")
+        XCTAssertEqual(bar.stableKey, GreptileUsageIdentity.reviewQuotaStableKey)
+        XCTAssertEqual(result.availableMetrics.first?.id, GreptileUsageIdentity.reviewQuotaMetricID)
+        XCTAssertEqual(bar.label, "Reviews used")
+        XCTAssertEqual(bar.used, 50)
+        XCTAssertEqual(bar.limit, 50)
+        XCTAssertEqual(bar.resetsAt, ISO8601DateFormatter().date(from: "2026-09-01T00:00:00Z"))
+        XCTAssertEqual(
+            bar.projectionPeriodStart,
+            ISO8601DateFormatter().date(from: "2026-08-01T00:00:00Z")
+        )
+        XCTAssertTrue(result.usageMessages.contains("Greptile reports 50 of 50 reviews used for this billing period."))
+    }
+
+    func testGreptileProviderParsesNumericBillingPeriodTimestamps() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"result":{"codeReviews":[],"total":0,"billingUsage":{"reviewsUsed":1,"includedReviews":50,"periodStart":1785542400,"resetsAt":1788220800000}}}"#.utf8
+                )
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+        let bar = try XCTUnwrap(result.bars.first)
+
+        XCTAssertEqual(bar.projectionPeriodStart, Date(timeIntervalSince1970: 1_785_542_400))
+        XCTAssertEqual(bar.resetsAt, Date(timeIntervalSince1970: 1_788_220_800))
+    }
+
+    func testGreptileProviderRejectsNonPositiveNumericBillingPeriodTimestamps() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"result":{"codeReviews":[],"total":0,"billingUsage":{"reviewsUsed":1,"includedReviews":50,"periodStart":0,"resetsAt":-1788220800000,"123":"ignored","---":"ignored"}}}"#.utf8
+                )
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+        let bar = try XCTUnwrap(result.bars.first)
+
+        XCTAssertNil(bar.projectionPeriodStart)
+        XCTAssertNil(bar.resetsAt)
+    }
+
+    func testGreptileProviderRejectsBooleanAndNonFiniteReviewQuotaValues() async throws {
+        for billingUsage in [
+            #"{"reviewsUsed":true,"includedReviews":50}"#,
+            #"{"reviewsUsed":1,"includedReviews":false}"#,
+            #"{"reviewsUsed":"nan","includedReviews":50}"#,
+            #"{"reviewsUsed":1,"includedReviews":"infinity"}"#,
+        ] {
+            let secretStore = MemorySecretStore()
+            let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+            try secretStore.saveSecret(
+                "greptile-test-key",
+                account: ProviderConfigurationStore.keychainAccount(for: configuration)
+            )
+            let sessionFixture = IsolatedTestURLSession { request in
+                (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(
+                        """
+                        {"result":{"codeReviews":[{"id":"r1","status":"COMPLETED"}],"total":1,"billingUsage":\(billingUsage)}}
+                        """.utf8
+                    )
+                )
+            }
+
+            let provider = GreptileUsageProvider(
+                secretStore: secretStore,
+                session: sessionFixture.session
+            )
+            let result = try await provider.fetchUsage(for: configuration)
+            sessionFixture.invalidate()
+
+            XCTAssertEqual(result.subtitle, "All available review history")
+            XCTAssertEqual(result.bars.first?.stableKey, GreptileUsageIdentity.completedReviewsStableKey)
+            XCTAssertTrue(result.usageMessages.contains { $0.contains("did not return billing allowance data") })
+        }
+    }
+
+    func testGreptileProviderDoesNotPresentMissingReviewDataAsZero() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"result":{"codeReviews":[],"total":0}}"#.utf8)
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertTrue(result.bars.isEmpty)
+        XCTAssertNil(result.failureMessage)
+        XCTAssertTrue(result.usageMessages.contains {
+            $0.contains("no completed review activity and no billing allowance")
+        })
     }
 
     func testGreptileProviderRejectsIncompleteOrMalformedPagination() async throws {

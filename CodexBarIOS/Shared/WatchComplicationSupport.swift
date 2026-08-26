@@ -403,12 +403,30 @@ struct WatchComplicationResolver {
         }
 
         if let metricID = selection.metricID {
-            guard let metric = account.metrics.first(where: { $0.id == metricID }) else {
+            let metric = account.metrics.first(where: { $0.id == metricID })
+                ?? replacementGreptileMetric(in: account, for: metricID)
+            guard let metric else {
                 return nil
             }
             return (account, metric)
         }
         return (account, account.metrics[0])
+    }
+
+    private func replacementGreptileMetric(
+        in account: WatchAccountSnapshot,
+        for metricID: String
+    ) -> WatchMetricSnapshot? {
+        let replacementID: String
+        switch metricID {
+        case GreptileUsageIdentity.completedReviewsMetricID:
+            replacementID = GreptileUsageIdentity.reviewQuotaMetricID
+        case GreptileUsageIdentity.reviewQuotaMetricID:
+            replacementID = GreptileUsageIdentity.completedReviewsMetricID
+        default:
+            return nil
+        }
+        return account.metrics.first { $0.id == replacementID }
     }
 
     private static func isStale(

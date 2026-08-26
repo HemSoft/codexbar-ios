@@ -97,6 +97,81 @@ final class WidgetConfigurationTests: XCTestCase {
     }
 
     @MainActor
+    func testSavedGreptileWidgetTileSurvivesQuotaModeChanges() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .greptile)
+        XCTAssertTrue(store.saveSecret("greptile-widget-key", for: configuration))
+        let completedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                    label: "Completed reviews",
+                    used: 27,
+                    limit: 0,
+                    fractionlessUsageText: "27"
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_788_475_200)
+        )
+        WidgetSnapshotPublisher.publish(
+            results: [completedResult],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let completedSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        let savedCompletedTileID = try XCTUnwrap(
+            completedSnapshot.builderTiles.first { $0.id.hasPrefix("bar.") }?.id
+        )
+        let quotaResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Current billing period",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.reviewQuotaStableKey,
+                    label: "Reviews used",
+                    used: 12,
+                    limit: 50
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_788_561_600)
+        )
+        WidgetSnapshotPublisher.publish(
+            results: [quotaResult],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let quotaSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        let quotaTile = try XCTUnwrap(quotaSnapshot.builderTiles.first { $0.id.hasPrefix("bar.") })
+        XCTAssertEqual(
+            quotaSnapshot.builderTile(resolvingSavedID: savedCompletedTileID)?.id,
+            quotaTile.id
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [completedResult],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let restoredCompletedSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        XCTAssertEqual(
+            restoredCompletedSnapshot.builderTile(resolvingSavedID: quotaTile.id)?.id,
+            savedCompletedTileID
+        )
+    }
+
+    @MainActor
     func testWidgetSnapshotPublisherKeepsMetricTileIDAcrossLabelChanges() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
