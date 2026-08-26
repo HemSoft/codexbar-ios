@@ -1,14 +1,5 @@
 import Foundation
 
-enum GreptileUsageIdentity {
-    static let completedReviewsStableKey = "completed-reviews"
-    static let completedReviewsMetricID = "greptile.\(completedReviewsStableKey)"
-    static let completedReviewsHistorySeriesID = "usage.\(completedReviewsStableKey)"
-    static let reviewQuotaStableKey = "review-quota"
-    static let reviewQuotaMetricID = "greptile.\(reviewQuotaStableKey)"
-    static let reviewQuotaHistorySeriesID = "usage.\(reviewQuotaStableKey)"
-}
-
 public final class GreptileUsageProvider: UsageProvider {
     struct ReviewQuota: Equatable {
         let reviewsUsed: Double
@@ -475,6 +466,9 @@ public final class GreptileUsageProvider: UsageProvider {
     private static func normalizedValues(in dictionary: [String: Any]) -> [String: Any] {
         dictionary.reduce(into: [:]) { values, entry in
             let normalizedKey = entry.key.lowercased().filter(\.isLetter)
+            guard !normalizedKey.isEmpty else {
+                return
+            }
             if values[normalizedKey] == nil {
                 values[normalizedKey] = entry.value
             }
@@ -498,6 +492,9 @@ public final class GreptileUsageProvider: UsageProvider {
 
         return keys.lazy.compactMap { key in
             if let timestamp = doubleValue(values[key]) {
+                guard timestamp >= 0 else {
+                    return nil
+                }
                 let seconds = abs(timestamp) >= 100_000_000_000 ? timestamp / 1_000 : timestamp
                 return Date(timeIntervalSince1970: seconds)
             }

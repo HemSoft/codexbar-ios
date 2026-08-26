@@ -68,28 +68,6 @@ final class UsageHistoryTests: XCTestCase {
             "Changed +3"
         )
 
-        let failedQuotaResult = ProviderUsageResult(
-            accountID: "greptile.team",
-            providerID: .greptile,
-            title: "Greptile",
-            subtitle: "Greptile rate limit reached.",
-            bars: [
-                UsageBar(
-                    stableKey: GreptileUsageIdentity.reviewQuotaStableKey,
-                    label: "Reviews used",
-                    used: 1,
-                    limit: 50
-                ),
-            ],
-            barsFetchedAt: dates[0],
-            failureMessage: "Greptile rate limit reached.",
-            preserveCachedBarsOnFailure: true,
-            fetchedAt: dates[1]
-        )
-        XCTAssertEqual(
-            store.historySeriesOptions(for: failedQuotaResult).map(\.id),
-            [GreptileUsageIdentity.completedReviewsHistorySeriesID]
-        )
     }
 
     @MainActor
@@ -166,6 +144,21 @@ final class UsageHistoryTests: XCTestCase {
             store.trendSummary(for: quotaResult, now: dates.last!)?.valueDescription,
             "Changed +1"
         )
+
+        let combinedResult = ProviderUsageResult(
+            accountID: quotaResult.accountID,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Current billing period",
+            bars: completedResult.bars + quotaResult.bars,
+            fetchedAt: dates[2]
+        )
+        XCTAssertEqual(UsageHistorySnapshot(result: combinedResult).primaryValue, 2)
+        XCTAssertEqual(
+            store.historySeriesOptions(for: combinedResult).first?.id,
+            GreptileUsageIdentity.reviewQuotaHistorySeriesID
+        )
+        XCTAssertEqual(store.historySeries(for: combinedResult).points.map(\.value), [1, 2])
 
         let currentCompletedResult = ProviderUsageResult(
             accountID: completedResult.accountID,

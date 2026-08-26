@@ -164,6 +164,39 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(bar.resetsAt, Date(timeIntervalSince1970: 1_788_220_800))
     }
 
+    func testGreptileProviderRejectsNegativeNumericBillingPeriodTimestamps() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"result":{"codeReviews":[],"total":0,"billingUsage":{"reviewsUsed":1,"includedReviews":50,"periodStart":-1785542400,"resetsAt":-1788220800000,"123":"ignored","---":"ignored"}}}"#.utf8
+                )
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+        let bar = try XCTUnwrap(result.bars.first)
+
+        XCTAssertNil(bar.projectionPeriodStart)
+        XCTAssertNil(bar.resetsAt)
+    }
+
     func testGreptileProviderRejectsBooleanAndNonFiniteReviewQuotaValues() async throws {
         for billingUsage in [
             #"{"reviewsUsed":true,"includedReviews":50}"#,

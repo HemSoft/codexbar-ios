@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A22600000000000000000001 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
+		A22600000000000000000002 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
+		A22600000000000000000003 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
+		A22600000000000000000004 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
 		G10000000000000000000244 /* GitHubStatusMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = G20000000000000000000244 /* GitHubStatusMonitor.swift */; };
 		100000000000000000000001 /* CodexBarIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* CodexBarIOSApp.swift */; };
 		100000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* ContentView.swift */; };
@@ -198,6 +202,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A22600000000000000000005 /* GreptileUsageIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreptileUsageIdentity.swift; sourceTree = "<group>"; };
 		G20000000000000000000244 /* GitHubStatusMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubStatusMonitor.swift; sourceTree = "<group>"; };
 		200000000000000000000001 /* CodexBarIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarIOSApp.swift; sourceTree = "<group>"; };
 		200000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -522,6 +527,7 @@
 		70000000000000000000000A /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				A22600000000000000000005 /* GreptileUsageIdentity.swift */,
 				200000000000000000000048 /* CodexBarDeepLink.swift */,
 				20000000000000000000003E /* UserFacingDateTimeFormatter.swift */,
 				20000000000000000000002B /* WidgetSnapshotStore.swift */,
@@ -812,6 +818,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A22600000000000000000001 /* GreptileUsageIdentity.swift in Sources */,
 				G10000000000000000000244 /* GitHubStatusMonitor.swift in Sources */,
 				F10000000000000000000002 /* DiagnosticReportView.swift in Sources */,
 				100000000000000000000001 /* CodexBarIOSApp.swift in Sources */,
@@ -904,6 +911,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A22600000000000000000002 /* GreptileUsageIdentity.swift in Sources */,
 				10000000000000000000002B /* CodexBarIOSWidgetBundle.swift in Sources */,
 				100000000000000000000046 /* CodexBarWidgetConfiguration.swift in Sources */,
 				10000000000000000000002C /* CodexBarWidgetViews.swift in Sources */,
@@ -922,6 +930,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A22600000000000000000003 /* GreptileUsageIdentity.swift in Sources */,
 				D10000000000000000000001 /* CodexBarWatchApp.swift in Sources */,
 				D10000000000000000000002 /* WatchDashboardState.swift in Sources */,
 				D10000000000000000000003 /* WatchDashboardView.swift in Sources */,
@@ -945,6 +954,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A22600000000000000000004 /* GreptileUsageIdentity.swift in Sources */,
 				F31000000000000000000003 /* CodexBarWatchWidgetBundle.swift in Sources */,
 				F31000000000000000000004 /* WatchComplicationConfiguration.swift in Sources */,
 				F31000000000000000000005 /* WatchComplicationViews.swift in Sources */,

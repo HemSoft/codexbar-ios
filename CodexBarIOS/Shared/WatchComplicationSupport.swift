@@ -227,9 +227,6 @@ struct WatchComplicationSample: Equatable, Sendable {
 }
 
 struct WatchComplicationResolver {
-    private static let greptileCompletedReviewsMetricID = "greptile.completed-reviews"
-    private static let greptileReviewQuotaMetricID = "greptile.review-quota"
-
     func resolve(
         snapshot: WatchDashboardSnapshot?,
         selection: WatchComplicationSelection,
@@ -422,10 +419,10 @@ struct WatchComplicationResolver {
     ) -> WatchMetricSnapshot? {
         let replacementID: String
         switch metricID {
-        case Self.greptileCompletedReviewsMetricID:
-            replacementID = Self.greptileReviewQuotaMetricID
-        case Self.greptileReviewQuotaMetricID:
-            replacementID = Self.greptileCompletedReviewsMetricID
+        case GreptileUsageIdentity.completedReviewsMetricID:
+            replacementID = GreptileUsageIdentity.reviewQuotaMetricID
+        case GreptileUsageIdentity.reviewQuotaMetricID:
+            replacementID = GreptileUsageIdentity.completedReviewsMetricID
         default:
             return nil
         }

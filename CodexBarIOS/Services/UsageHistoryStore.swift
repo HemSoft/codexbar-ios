@@ -324,7 +324,8 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         if providerID == .greptile,
            let reviews = bars.first(where: {
                $0.stableKey == GreptileUsageIdentity.reviewQuotaStableKey
-                   || $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey
+           }) ?? bars.first(where: {
+               $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey
            }) {
             return reviews.used
         }
@@ -803,12 +804,17 @@ public final class UsageHistoryStore: ObservableObject {
         result: ProviderUsageResult,
         snapshots: [UsageHistorySnapshot]
     ) -> String {
-        if result.hasCurrentBars,
-           let currentKey = result.bars.lazy.compactMap(\.stableKey).first(where: {
-            $0 == GreptileUsageIdentity.reviewQuotaStableKey
-                || $0 == GreptileUsageIdentity.completedReviewsStableKey
-        }) {
-            return currentKey
+        if result.hasCurrentBars {
+            if result.bars.contains(where: {
+                $0.stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+            }) {
+                return GreptileUsageIdentity.reviewQuotaStableKey
+            }
+            if result.bars.contains(where: {
+                $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey
+            }) {
+                return GreptileUsageIdentity.completedReviewsStableKey
+            }
         }
         if snapshots.contains(where: { snapshot in
             snapshot.bars.contains(where: {
@@ -1050,15 +1056,22 @@ public final class UsageHistoryStore: ObservableObject {
                         "Completed reviews"
                     ),
                 ]
-                let preferredStableKey = result.hasCurrentBars
-                    ? result.bars.first(where: { bar in
-                        seriesIdentities.contains(where: { $0.0 == bar.stableKey })
-                    })?.stableKey
-                    : accountSnapshots.reversed().lazy.compactMap { snapshot in
-                        snapshot.bars.first(where: { bar in
-                            seriesIdentities.contains(where: { $0.0 == bar.stableKey })
-                        })?.stableKey
+                let preferredStableKey: String?
+                if result.hasCurrentBars {
+                    preferredStableKey = seriesIdentities.lazy.compactMap { identity in
+                        result.bars.contains(where: { $0.stableKey == identity.0 })
+                            ? identity.0
+                            : nil
                     }.first
+                } else {
+                    preferredStableKey = accountSnapshots.reversed().lazy.compactMap { snapshot in
+                        seriesIdentities.lazy.compactMap { identity in
+                            snapshot.bars.contains(where: { $0.stableKey == identity.0 })
+                                ? identity.0
+                                : nil
+                        }.first
+                    }.first
+                }
                 if let preferredStableKey,
                    let preferredIndex = seriesIdentities.firstIndex(where: { $0.0 == preferredStableKey }),
                    preferredIndex != seriesIdentities.startIndex {
