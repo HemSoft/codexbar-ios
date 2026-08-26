@@ -2855,6 +2855,31 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testGreptileCredentialRemovalWithoutRefreshResultDoesNotClaimKeyWasSaved() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let configuration = store.addAccount(for: .greptile)
+        XCTAssertTrue(store.saveSecret("greptile-key", for: configuration))
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialRefresh: { _ in nil }
+        )
+
+        viewModel.removeSavedCredential()
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+
+        XCTAssertNil(viewModel.credentialMessage)
+        XCTAssertNil(viewModel.credentialError)
+        XCTAssertFalse(store.hasSecret(for: configuration))
+    }
+
+    @MainActor
     func testAccountSettingsReplaceCachedMetricsAfterCredentialChange() async {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

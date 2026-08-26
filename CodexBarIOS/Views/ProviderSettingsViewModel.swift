@@ -276,7 +276,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
         guard credentialRevision == metricsCredentialRevision else { return }
         guard let result else {
-            if requiresFreshRequest, providerID == .greptile {
+            if requiresFreshRequest, providerID == .greptile, showsGreptileValidationFeedback {
                 credentialMessage = "API key saved in Keychain. Greptile validation did not complete; refresh to try again."
             }
             return

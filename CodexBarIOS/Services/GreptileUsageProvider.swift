@@ -492,7 +492,11 @@ public final class GreptileUsageProvider: UsageProvider {
     }
 
     private static func firstDate(in values: [String: Any], keys: [String]) -> Date? {
-        keys.lazy.compactMap { key in
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let standardFormatter = ISO8601DateFormatter()
+
+        return keys.lazy.compactMap { key in
             if let timestamp = doubleValue(values[key]) {
                 let seconds = abs(timestamp) >= 100_000_000_000 ? timestamp / 1_000 : timestamp
                 return Date(timeIntervalSince1970: seconds)
@@ -500,9 +504,7 @@ public final class GreptileUsageProvider: UsageProvider {
             guard let value = stringValue(values[key]) else {
                 return nil
             }
-            let fractionalFormatter = ISO8601DateFormatter()
-            fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return fractionalFormatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+            return fractionalFormatter.date(from: value) ?? standardFormatter.date(from: value)
         }.first
     }
 
