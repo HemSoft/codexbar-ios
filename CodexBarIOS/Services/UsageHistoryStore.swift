@@ -229,7 +229,6 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
             if let matchingIndex = mergedMonetaryMetrics.firstIndex(where: {
                 $0.kind == metric.kind
                     && $0.currencyCode == metric.currencyCode
-                    && $0.decimalPlaces == metric.decimalPlaces
             }) {
                 mergedMonetaryMetrics[matchingIndex] = metric
             } else {

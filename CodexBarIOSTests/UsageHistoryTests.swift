@@ -374,9 +374,9 @@ final class UsageHistoryTests: XCTestCase {
                 ProviderMonetaryMetric(
                     kind: .spent,
                     label: spent.label,
-                    minorUnits: 500,
+                    minorUnits: 5_000,
                     currencyCode: spent.currencyCode,
-                    decimalPlaces: spent.decimalPlaces
+                    decimalPlaces: 3
                 ),
             ],
             fetchedAt: fetchedAt
@@ -388,6 +388,7 @@ final class UsageHistoryTests: XCTestCase {
         let spentSeries = options.first(where: { $0.label == spent.label })?.series
 
         XCTAssertEqual(spentSeries?.points.map(\.value), [5])
+        XCTAssertEqual(spentSeries?.decimalPlaces, 3)
         XCTAssertEqual(spentSeries?.points.first?.severity, .critical)
         XCTAssertEqual(store.snapshots.count, 1)
     }
