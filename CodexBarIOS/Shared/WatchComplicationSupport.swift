@@ -227,6 +227,9 @@ struct WatchComplicationSample: Equatable, Sendable {
 }
 
 struct WatchComplicationResolver {
+    private static let greptileCompletedReviewsMetricID = "greptile.completed-reviews"
+    private static let greptileReviewQuotaMetricID = "greptile.review-quota"
+
     func resolve(
         snapshot: WatchDashboardSnapshot?,
         selection: WatchComplicationSelection,
@@ -403,12 +406,30 @@ struct WatchComplicationResolver {
         }
 
         if let metricID = selection.metricID {
-            guard let metric = account.metrics.first(where: { $0.id == metricID }) else {
+            let metric = account.metrics.first(where: { $0.id == metricID })
+                ?? replacementGreptileMetric(in: account, for: metricID)
+            guard let metric else {
                 return nil
             }
             return (account, metric)
         }
         return (account, account.metrics[0])
+    }
+
+    private func replacementGreptileMetric(
+        in account: WatchAccountSnapshot,
+        for metricID: String
+    ) -> WatchMetricSnapshot? {
+        let replacementID: String
+        switch metricID {
+        case Self.greptileCompletedReviewsMetricID:
+            replacementID = Self.greptileReviewQuotaMetricID
+        case Self.greptileReviewQuotaMetricID:
+            replacementID = Self.greptileCompletedReviewsMetricID
+        default:
+            return nil
+        }
+        return account.metrics.first { $0.id == replacementID }
     }
 
     private static func isStale(

@@ -106,6 +106,7 @@
 		D10000000000000000000004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000004 /* Assets.xcassets */; };
 		D10000000000000000000005 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000006 /* PrivacyInfo.xcprivacy */; };
 		D10000000000000000000006 /* WatchDashboardStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000009 /* WatchDashboardStateTests.swift */; };
+		D10000000000000000000008 /* WatchComplicationCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000000000000000000000B /* WatchComplicationCompatibilityTests.swift */; };
 		D10000000000000000000007 /* CodexBarWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = D20000000000000000000008 /* CodexBarWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E10000000000000000000001 /* WatchDashboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* WatchDashboardSnapshot.swift */; };
 		E10000000000000000000002 /* WatchDashboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* WatchDashboardSnapshot.swift */; };
@@ -294,6 +295,7 @@
 		D20000000000000000000008 /* CodexBarWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodexBarWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D20000000000000000000009 /* WatchDashboardStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardStateTests.swift; sourceTree = "<group>"; };
 		D2000000000000000000000A /* CodexBarWatchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexBarWatchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D2000000000000000000000B /* WatchComplicationCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchComplicationCompatibilityTests.swift; sourceTree = "<group>"; };
 		E20000000000000000000001 /* WatchDashboardSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardSnapshot.swift; sourceTree = "<group>"; };
 		E20000000000000000000002 /* WatchSnapshotCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSnapshotCoordinator.swift; sourceTree = "<group>"; };
 		E20000000000000000000003 /* WatchConnectivityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityStore.swift; sourceTree = "<group>"; };
@@ -554,6 +556,7 @@
 		D70000000000000000000003 /* CodexBarWatchTests */ = {
 			isa = PBXGroup;
 			children = (
+				D2000000000000000000000B /* WatchComplicationCompatibilityTests.swift */,
 				D20000000000000000000009 /* WatchDashboardStateTests.swift */,
 			);
 			path = CodexBarWatchTests;
@@ -929,6 +932,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D10000000000000000000008 /* WatchComplicationCompatibilityTests.swift in Sources */,
 				D10000000000000000000006 /* WatchDashboardStateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
