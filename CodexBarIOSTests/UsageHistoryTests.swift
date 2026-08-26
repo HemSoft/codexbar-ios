@@ -336,6 +336,63 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testUsageHistorySameTimestampPreservesSpendLimitStateForPartialMetrics() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let spent = ProviderMonetaryMetric(
+            kind: .spent,
+            label: "Usage credits spent",
+            minorUnits: 1_500,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let spendLimit = ProviderMonetaryMetric(
+            kind: .spendLimit,
+            label: "Spend limit",
+            minorUnits: 1_000,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let storedResult = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Spend",
+            bars: [],
+            monetaryMetrics: [spent, spendLimit],
+            fetchedAt: fetchedAt
+        )
+        let partialResult = ProviderUsageResult(
+            accountID: storedResult.accountID,
+            providerID: storedResult.providerID,
+            title: storedResult.title,
+            subtitle: "Partial spend",
+            bars: [],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: spent.label,
+                    minorUnits: 500,
+                    currencyCode: spent.currencyCode,
+                    decimalPlaces: spent.decimalPlaces
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [storedResult], now: fetchedAt)
+
+        let options = store.historySeriesOptions(for: partialResult)
+        let spentSeries = options.first(where: { $0.label == spent.label })?.series
+
+        XCTAssertEqual(spentSeries?.points.map(\.value), [5])
+        XCTAssertEqual(spentSeries?.points.first?.severity, .critical)
+        XCTAssertEqual(store.snapshots.count, 1)
+    }
+
+    @MainActor
     func testUsageHistoryUsesStableMetricForEphemeralMultiBarResult() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

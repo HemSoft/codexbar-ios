@@ -223,10 +223,31 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         preservingMissingValuesFrom stored: UsageHistorySnapshot
     ) {
         let bars = current.bars.isEmpty ? stored.bars : current.bars
-        let monetaryMetrics = current.monetaryMetrics?.isEmpty == false
-            ? current.monetaryMetrics
-            : stored.monetaryMetrics
-        let hasReachedSpendLimit = current.monetaryMetrics?.isEmpty == false
+        let currentMonetaryMetrics = current.monetaryMetrics ?? []
+        var mergedMonetaryMetrics = stored.monetaryMetrics ?? []
+        for metric in currentMonetaryMetrics {
+            if let matchingIndex = mergedMonetaryMetrics.firstIndex(where: {
+                $0.kind == metric.kind
+                    && $0.currencyCode == metric.currencyCode
+                    && $0.decimalPlaces == metric.decimalPlaces
+            }) {
+                mergedMonetaryMetrics[matchingIndex] = metric
+            } else {
+                mergedMonetaryMetrics.append(metric)
+            }
+        }
+        let monetaryMetrics = mergedMonetaryMetrics.isEmpty ? nil : mergedMonetaryMetrics
+        let currentDeterminesSpendLimit = currentMonetaryMetrics.contains { metric in
+            guard metric.kind == .spent else {
+                return false
+            }
+            return currentMonetaryMetrics.contains {
+                $0.kind == .spendLimit
+                    && $0.currencyCode == metric.currencyCode
+                    && $0.decimalPlaces == metric.decimalPlaces
+            }
+        }
+        let hasReachedSpendLimit = currentDeterminesSpendLimit
             ? current.hasReachedSpendLimit
             : stored.hasReachedSpendLimit
 
