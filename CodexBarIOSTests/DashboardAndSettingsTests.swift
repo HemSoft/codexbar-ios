@@ -2704,9 +2704,16 @@ final class DashboardAndSettingsTests: XCTestCase {
             fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
         )
         var credentialRefreshCount = 0
+        var dismissalRefreshState = SettingsDismissalRefreshState()
         let viewModel = ProviderSettingsViewModel(
             configurationStore: store,
             accountID: configuration.id,
+            onCredentialsChanged: {
+                dismissalRefreshState.credentialsChanged(accountID: configuration.id)
+            },
+            onRefreshInputsChanged: {
+                dismissalRefreshState.refreshInputsChanged(accountID: configuration.id)
+            },
             onCredentialRefresh: { _ in
                 credentialRefreshCount += 1
                 return validatedResult
@@ -2732,6 +2739,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(credentialRefreshCount, 1)
         XCTAssertEqual(viewModel.credentialMessage, "API key saved in Keychain and validated by Greptile.")
         XCTAssertNil(viewModel.credentialError)
+        XCTAssertEqual(dismissalRefreshState.finishDismissal(), .none)
     }
 
     @MainActor

@@ -735,6 +735,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             }
         }
         if shouldValidateSavedGreptileCredential {
+            onCredentialsChanged()
             credentialError = nil
             credentialMessage = "API key saved in Keychain. Validating with Greptile..."
             requestCredentialMetricsRefresh()
