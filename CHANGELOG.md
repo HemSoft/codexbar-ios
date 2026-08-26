@@ -18,6 +18,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Recovered safely from saved account lists with duplicate account IDs,
+  preserving account data and credentials until explicit replacement.
+  ([#277](https://github.com/HemSoft/codexbar-ios/issues/277))
 - Recovered safely from saved History entries with duplicate snapshot IDs,
   preserving the damaged data until reset instead of crashing after a refresh.
   ([#276](https://github.com/HemSoft/codexbar-ios/issues/276))
