@@ -196,8 +196,12 @@ struct MetricLayoutUndoHistory {
 private enum GreptileMetricPreferenceCompatibility {
     static func matchingMetrics(
         _ sourceMetricIDs: [String],
-        destinationMetricIDs: Set<String>
+        destinationAvailableMetricIDs: [String],
+        destinationLayout: AccountMetricLayout
     ) -> [(sourceMetricID: String, destinationMetricID: String)] {
+        let availableMetricIDs = Set(destinationAvailableMetricIDs)
+        let destinationMetricIDs = Set(destinationLayout.orderedMetricIDs)
+            .union(destinationLayout.preferences.keys)
         var seenSourceMetricIDs = Set<String>()
         var seenDestinationMetricIDs = Set<String>()
         return sourceMetricIDs.compactMap { sourceMetricID in
@@ -206,6 +210,7 @@ private enum GreptileMetricPreferenceCompatibility {
                 seenSourceMetricIDs.insert(sourceMetricID).inserted,
                 let destinationMetricID = matchingDestinationMetricID(
                     for: sourceMetricID,
+                    destinationAvailableMetricIDs: availableMetricIDs,
                     destinationMetricIDs: destinationMetricIDs
                 ),
                 seenDestinationMetricIDs.insert(destinationMetricID).inserted
@@ -217,6 +222,20 @@ private enum GreptileMetricPreferenceCompatibility {
     }
 
     static func matchingDestinationMetricID(
+        for sourceMetricID: String,
+        destinationAvailableMetricIDs: Set<String>,
+        destinationMetricIDs: Set<String>
+    ) -> String? {
+        matchingDestinationMetricID(
+            for: sourceMetricID,
+            destinationMetricIDs: destinationAvailableMetricIDs
+        ) ?? matchingDestinationMetricID(
+            for: sourceMetricID,
+            destinationMetricIDs: destinationMetricIDs
+        )
+    }
+
+    private static func matchingDestinationMetricID(
         for sourceMetricID: String,
         destinationMetricIDs: Set<String>
     ) -> String? {
@@ -1075,17 +1094,17 @@ public final class ProviderConfigurationStore: ObservableObject {
             accountID: destinationAccountID,
             availableMetricIDs: destinationMetricIDs
         )
-        let destinationMetricIDSet = Set(destinationLayout.orderedMetricIDs).union(destinationLayout.preferences.keys)
         let copiedMetrics = GreptileMetricPreferenceCompatibility.matchingMetrics(
-            sourceLayout.orderedMetricIDs, destinationMetricIDs: destinationMetricIDSet
+            sourceLayout.orderedMetricIDs,
+            destinationAvailableMetricIDs: destinationMetricIDs,
+            destinationLayout: destinationLayout
         )
-        let copiedOrder = copiedMetrics.map(\.destinationMetricID)
-        var seen = Set(copiedOrder)
+        var seen = Set(copiedMetrics.map(\.destinationMetricID))
         let destinationOnlyOrder = Self.uniqueNonemptyMetricIDs(destinationLayout.orderedMetricIDs)
             .filter { seen.insert($0).inserted }
 
         destinationLayout.version = AccountMetricLayout.currentVersion
-        destinationLayout.orderedMetricIDs = copiedOrder + destinationOnlyOrder
+        destinationLayout.orderedMetricIDs = copiedMetrics.map(\.destinationMetricID) + destinationOnlyOrder
         for metric in copiedMetrics {
             guard var preference = sourceLayout.preferences[metric.sourceMetricID] else {
                 continue

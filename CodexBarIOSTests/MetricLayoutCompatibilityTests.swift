@@ -166,8 +166,14 @@ final class MetricLayoutCompatibilityTests: XCTestCase {
             store.updateWatchMetricVisibility(.show, accountID: sourceAccountID, metricID: metricPair.0)
             _ = store.reconcileMetricLayout(
                 accountID: destinationAccountID,
+                availableMetricIDs: [metricPair.0, metricPair.1]
+            )
+            store.updateMetricWidth(.full, accountID: destinationAccountID, metricID: metricPair.1)
+            let retainedDestination = store.reconcileMetricLayout(
+                accountID: destinationAccountID,
                 availableMetricIDs: [metricPair.1]
             )
+            XCTAssertNotNil(retainedDestination.preferences[metricPair.0])
 
             store.copyMetricLayout(
                 from: sourceAccountID,
