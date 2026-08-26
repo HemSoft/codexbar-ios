@@ -2605,6 +2605,98 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testGreptileCredentialSaveReportsStoredThenValidated() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .greptile)
+        let validatedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: [],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let gate = UsageProviderGate()
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialRefresh: { _ in
+                await gate.wait()
+                return validatedResult
+            }
+        )
+        viewModel.secret = "greptile-key"
+
+        viewModel.saveGenericCredential()
+        await gate.waitUntilBlocked()
+
+        XCTAssertEqual(
+            viewModel.credentialMessage,
+            "API key saved in Keychain. Validating with Greptile..."
+        )
+        XCTAssertNil(viewModel.credentialError)
+
+        await gate.release()
+        for _ in 0..<100 where viewModel.credentialMessage?.contains("validated") != true {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(
+            viewModel.credentialMessage,
+            "API key saved in Keychain and validated by Greptile."
+        )
+        XCTAssertNil(viewModel.credentialError)
+    }
+
+    @MainActor
+    func testGreptileCredentialSaveReportsValidationFailureWithoutClaimingSuccess() async {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .greptile)
+        let rejectedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Greptile rejected this organization API key.",
+            bars: [],
+            failureMessage: "Greptile rejected this organization API key.",
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            onCredentialRefresh: { _ in rejectedResult }
+        )
+        viewModel.secret = "expired-greptile-key"
+
+        viewModel.saveGenericCredential()
+        for _ in 0..<100 where viewModel.credentialError == nil {
+            await Task.yield()
+        }
+
+        XCTAssertNil(viewModel.credentialMessage)
+        XCTAssertEqual(
+            viewModel.credentialError,
+            "API key saved in Keychain, but Greptile validation failed. "
+                + "Greptile rejected this organization API key."
+        )
+        XCTAssertTrue(store.hasSecret(for: configuration))
+    }
+
+    @MainActor
     func testAccountSettingsReplaceCachedMetricsAfterCredentialChange() async {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

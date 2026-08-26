@@ -18,6 +18,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Made Greptile API-key saves report whether the key was stored or validated,
+  show rejected-key errors, and display server-reported review allowances and
+  reset dates without turning missing quota data into zero usage.
+  ([#281](https://github.com/HemSoft/codexbar-ios/issues/281))
 - Made each provider row in Settings selectable across its full visible width
   while keeping one clear VoiceOver action.
   ([#280](https://github.com/HemSoft/codexbar-ios/issues/280))

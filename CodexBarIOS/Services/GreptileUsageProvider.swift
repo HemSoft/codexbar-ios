@@ -7,6 +7,14 @@ enum GreptileUsageIdentity {
 }
 
 public final class GreptileUsageProvider: UsageProvider {
+    struct ReviewQuota: Equatable {
+        let reviewsUsed: Double
+        let reviewAllowance: Double
+        let periodStart: Date?
+        let resetsAt: Date?
+        let plan: String?
+    }
+
     struct ReviewPage: Equatable {
         struct Review: Equatable {
             let id: String
@@ -15,6 +23,7 @@ public final class GreptileUsageProvider: UsageProvider {
 
         let reviews: [Review]
         let total: Int?
+        let quota: ReviewQuota?
     }
 
     private enum PageResponse {
@@ -100,6 +109,7 @@ public final class GreptileUsageProvider: UsageProvider {
         var offset = 0
         var pageCount = 0
         var expectedTotal: Int?
+        var quota: ReviewQuota?
         var seenReviewIDs = Set<String>()
         var counts = StatusCounts()
 
@@ -136,6 +146,7 @@ public final class GreptileUsageProvider: UsageProvider {
                 if let total = page.total {
                     expectedTotal = max(expectedTotal ?? 0, total)
                 }
+                quota = quota ?? page.quota
 
                 for review in page.reviews {
                     guard seenReviewIDs.insert(review.id).inserted else {
@@ -150,18 +161,27 @@ public final class GreptileUsageProvider: UsageProvider {
                         expectedTotal: expectedTotal,
                         uniqueReviewCount: seenReviewIDs.count,
                         counts: counts,
+                        quota: quota,
                         configuration: configuration
                     )
                 }
                 if page.reviews.isEmpty {
                     if expectedTotal == nil || offset >= expectedTotal ?? 0 {
-                        return successResult(counts: counts, configuration: configuration)
+                        return successResult(
+                            counts: counts,
+                            quota: quota,
+                            configuration: configuration
+                        )
                     }
                     return incompletePaginationFailure(configuration: configuration)
                 }
                 if page.reviews.count < pageSize {
                     if expectedTotal == nil {
-                        return successResult(counts: counts, configuration: configuration)
+                        return successResult(
+                            counts: counts,
+                            quota: quota,
+                            configuration: configuration
+                        )
                     }
                     return incompletePaginationFailure(configuration: configuration)
                 }
@@ -266,7 +286,13 @@ public final class GreptileUsageProvider: UsageProvider {
         guard total.map({ $0 >= 0 }) != false else {
             return .malformed
         }
-        return .page(ReviewPage(reviews: reviews, total: total))
+        return .page(
+            ReviewPage(
+                reviews: reviews,
+                total: total,
+                quota: reviewQuota(in: payload)
+            )
+        )
     }
 
     private static func responseObjects(in data: Data) -> [[String: Any]] {
@@ -375,6 +401,92 @@ public final class GreptileUsageProvider: UsageProvider {
         }
     }
 
+    private static func doubleValue(_ value: Any?) -> Double? {
+        switch value {
+        case let number as NSNumber:
+            number.doubleValue
+        case let string as String:
+            Double(string)
+        default:
+            nil
+        }
+    }
+
+    private static func reviewQuota(in payload: [String: Any]) -> ReviewQuota? {
+        // Billing fields are not part of Greptile's published MCP response schema. Only accept
+        // explicit used-and-allowance pairs so unrelated response metadata cannot become a gauge.
+        let containers = [
+            payload["reviewUsage"],
+            payload["billingUsage"],
+            payload["usage"],
+            payload["quota"],
+        ].compactMap { $0 as? [String: Any] }
+
+        for container in containers {
+            let values = normalizedValues(in: container)
+            guard
+                let reviewsUsed = firstDouble(
+                    in: values,
+                    keys: ["reviewsused", "usedreviews", "completedreviewsused"]
+                ),
+                let reviewAllowance = firstDouble(
+                    in: values,
+                    keys: ["includedreviews", "reviewallowance", "reviewlimit", "reviewslimit"]
+                ),
+                reviewsUsed >= 0,
+                reviewAllowance > 0
+            else {
+                continue
+            }
+
+            return ReviewQuota(
+                reviewsUsed: reviewsUsed,
+                reviewAllowance: reviewAllowance,
+                periodStart: firstDate(
+                    in: values,
+                    keys: ["billingperiodstart", "periodstart"]
+                ),
+                resetsAt: firstDate(
+                    in: values,
+                    keys: ["billingperiodend", "periodend", "resetat", "resetsat"]
+                ),
+                plan: firstString(in: values, keys: ["plan", "planname", "tier"])
+            )
+        }
+
+        return nil
+    }
+
+    private static func normalizedValues(in dictionary: [String: Any]) -> [String: Any] {
+        dictionary.reduce(into: [:]) { values, entry in
+            let normalizedKey = entry.key.lowercased().filter(\.isLetter)
+            if values[normalizedKey] == nil {
+                values[normalizedKey] = entry.value
+            }
+        }
+    }
+
+    private static func firstDouble(in values: [String: Any], keys: [String]) -> Double? {
+        keys.lazy.compactMap { doubleValue(values[$0]) }.first
+    }
+
+    private static func firstString(in values: [String: Any], keys: [String]) -> String? {
+        keys.lazy.compactMap { key in
+            stringValue(values[key])?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.first(where: { !$0.isEmpty })
+    }
+
+    private static func firstDate(in values: [String: Any], keys: [String]) -> Date? {
+        keys.lazy.compactMap { key in
+            guard let value = stringValue(values[key]) else {
+                return nil
+            }
+            let fractionalFormatter = ISO8601DateFormatter()
+            fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return fractionalFormatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+        }.first
+    }
+
     private static func rateLimitMessage(response: HTTPURLResponse) -> String {
         guard
             let rawValue = response.value(forHTTPHeaderField: "Retry-After"),
@@ -423,6 +535,7 @@ public final class GreptileUsageProvider: UsageProvider {
 
     private func successResult(
         counts: StatusCounts,
+        quota: ReviewQuota?,
         configuration: ProviderAccountConfiguration,
         fetchedAt: Date = Date()
     ) -> ProviderUsageResult {
@@ -444,23 +557,51 @@ public final class GreptileUsageProvider: UsageProvider {
             )
         }
 
+        let bar = quota.map { quota in
+            UsageBar(
+                stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                label: "Reviews used",
+                used: quota.reviewsUsed,
+                limit: quota.reviewAllowance,
+                resetsAt: quota.resetsAt,
+                projectionCurrent: quota.reviewsUsed,
+                projectionLimit: quota.reviewAllowance,
+                projectionPeriodStart: quota.periodStart,
+                projectionPeriodEnd: quota.resetsAt,
+                showProjectionOnCurrentBar: quota.periodStart != nil && quota.resetsAt != nil
+            )
+        } ?? (counts.completed > 0
+            ? UsageBar(
+                stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                label: "Completed reviews",
+                used: Double(counts.completed),
+                limit: 0,
+                fractionlessUsageText: counts.completed.formatted()
+            )
+            : nil)
+
+        let usageMessages: [String]
+        if let quota {
+            usageMessages = [
+                "Greptile reports \(formattedCount(quota.reviewsUsed)) of "
+                    + "\(formattedCount(quota.reviewAllowance)) reviews used for this billing period.",
+            ]
+        } else {
+            usageMessages = [
+                counts.completed > 0
+                    ? "Greptile did not return billing allowance data for this request."
+                    : "Greptile returned no completed review activity and no billing allowance.",
+            ]
+        }
+
         return ProviderUsageResult(
             accountID: configuration.id,
             providerID: .greptile,
             title: configuration.displayName,
-            subtitle: "All available review history",
-            bars: [
-                UsageBar(
-                    stableKey: GreptileUsageIdentity.completedReviewsStableKey,
-                    label: "Completed reviews",
-                    used: Double(counts.completed),
-                    limit: 0,
-                    fractionlessUsageText: counts.completed.formatted()
-                ),
-            ],
-            usageMessages: [
-                "Greptile's API does not currently expose billing-credit usage.",
-            ],
+            plan: quota?.plan.flatMap(Self.planDescriptor),
+            subtitle: quota == nil ? "All available review history" : "Current billing period",
+            bars: bar.map { [$0] } ?? [],
+            usageMessages: usageMessages,
             cardInformationSections: [
                 ProviderCardInformationSection(
                     id: "greptile.review-statuses",
@@ -485,12 +626,36 @@ public final class GreptileUsageProvider: UsageProvider {
         expectedTotal: Int,
         uniqueReviewCount: Int,
         counts: StatusCounts,
+        quota: ReviewQuota?,
         configuration: ProviderAccountConfiguration
     ) -> ProviderUsageResult {
         guard uniqueReviewCount >= expectedTotal else {
             return incompletePaginationFailure(configuration: configuration)
         }
-        return successResult(counts: counts, configuration: configuration)
+        return successResult(
+            counts: counts,
+            quota: quota,
+            configuration: configuration
+        )
+    }
+
+    private func formattedCount(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(value.rounded() == value ? 0 : 2)))
+    }
+
+    private static func planDescriptor(_ plan: String) -> ProviderPlanDescriptor? {
+        let trimmed = plan.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+        let identifier = trimmed.lowercased().map { character in
+            character.isLetter || character.isNumber ? character : "-"
+        }
+        return ProviderPlanDescriptor.make(
+            providerPrefix: "greptile",
+            identifier: String(identifier),
+            label: trimmed
+        )
     }
 
     private func pageLimit(expectedTotal: Int?) -> Int {
