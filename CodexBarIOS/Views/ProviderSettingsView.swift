@@ -321,7 +321,7 @@ struct ProviderSettingsView: View {
                         .foregroundStyle(.red)
                         .accessibilityIdentifier("credential-error")
                 } else if let credentialMessage = viewModel.credentialMessage {
-                    Label(credentialMessage, systemImage: "checkmark.circle")
+                    Label(credentialMessage, systemImage: viewModel.credentialMessageSystemImage)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("credential-message")
                 }

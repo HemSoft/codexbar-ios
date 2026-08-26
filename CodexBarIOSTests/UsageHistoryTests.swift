@@ -67,6 +67,29 @@ final class UsageHistoryTests: XCTestCase {
             store.trendSummary(for: result, now: dates.last!)?.valueDescription,
             "Changed +3"
         )
+
+        let failedQuotaResult = ProviderUsageResult(
+            accountID: "greptile.team",
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Greptile rate limit reached.",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.reviewQuotaStableKey,
+                    label: "Reviews used",
+                    used: 1,
+                    limit: 50
+                ),
+            ],
+            barsFetchedAt: dates[0],
+            failureMessage: "Greptile rate limit reached.",
+            preserveCachedBarsOnFailure: true,
+            fetchedAt: dates[1]
+        )
+        XCTAssertEqual(
+            store.historySeriesOptions(for: failedQuotaResult).map(\.id),
+            [GreptileUsageIdentity.completedReviewsHistorySeriesID]
+        )
     }
 
     @MainActor

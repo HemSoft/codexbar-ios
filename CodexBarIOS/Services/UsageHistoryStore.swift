@@ -1051,7 +1051,7 @@ public final class UsageHistoryStore: ObservableObject {
                     ),
                 ]
                 for (stableKey, seriesID, label) in seriesIdentities where
-                    result.bars.contains(where: { $0.stableKey == stableKey })
+                    (result.hasCurrentBars && result.bars.contains(where: { $0.stableKey == stableKey }))
                         || accountSnapshots.contains(where: { snapshot in
                             snapshot.bars.contains(where: { $0.stableKey == stableKey })
                         }) {

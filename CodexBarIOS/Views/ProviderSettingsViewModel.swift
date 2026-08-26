@@ -62,6 +62,12 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var isCredentialRefreshPending = false
     private var showsGreptileValidationFeedback = false
 
+    var credentialMessageSystemImage: String {
+        credentialMessage == "API key saved in Keychain and validated by Greptile."
+            ? "checkmark.circle"
+            : "clock"
+    }
+
     init(
         configurationStore: ProviderConfigurationStore,
         accountID: String,

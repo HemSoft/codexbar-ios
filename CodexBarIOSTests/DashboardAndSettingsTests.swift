@@ -2650,6 +2650,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             viewModel.credentialMessage,
             "API key saved in Keychain. Validating with Greptile..."
         )
+        XCTAssertEqual(viewModel.credentialMessageSystemImage, "clock")
         XCTAssertNil(viewModel.credentialError)
 
         await gate.release()
@@ -2661,6 +2662,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             viewModel.credentialMessage,
             "API key saved in Keychain and validated by Greptile."
         )
+        XCTAssertEqual(viewModel.credentialMessageSystemImage, "checkmark.circle")
         XCTAssertNil(viewModel.credentialError)
     }
 
@@ -2766,6 +2768,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         }
         XCTAssertNil(viewModel.credentialError)
         XCTAssertTrue(viewModel.credentialMessage?.contains("could not validate it right now") == true)
+        XCTAssertEqual(viewModel.credentialMessageSystemImage, "clock")
 
         await viewModel.refreshMetrics()
         XCTAssertEqual(viewModel.credentialMessage, "API key saved in Keychain and validated by Greptile.")
