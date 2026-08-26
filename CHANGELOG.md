@@ -18,6 +18,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Kept History's latest value in sync with a successful dashboard refresh
+  without saving extra samples inside the configured sampling interval.
+  ([#274](https://github.com/HemSoft/codexbar-ios/issues/274))
 - Kept the Settings **Done** button visible at the root and throughout nested
   screens while preserving standard Back navigation and pending-edit validation.
   ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))

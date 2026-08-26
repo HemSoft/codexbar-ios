@@ -120,7 +120,7 @@ enum AppStoreScreenshotFixtures {
             return store
         }
 
-        let fractions = [0.22, 0.29, 0.35, 0.41, 0.48, 0.56, 0.63, 0.68]
+        let fractions = [0.22, 0.29, 0.35, 0.41, 0.48, 0.52, 0.56, 0.60]
         let latestDate = Date(timeIntervalSince1970: 1_783_680_000)
         for (index, fraction) in fractions.enumerated() {
             let capturedAt = latestDate.addingTimeInterval(TimeInterval(index - fractions.count + 1) * 24 * 60 * 60)
