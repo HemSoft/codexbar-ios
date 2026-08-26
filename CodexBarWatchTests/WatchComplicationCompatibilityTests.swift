@@ -6,7 +6,7 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let resolver = WatchComplicationResolver()
 
-        let savedCompleted = resolver.resolve(
+        let quotaForSavedCompletedSelection = resolver.resolve(
             snapshot: snapshot(metricID: "greptile.review-quota", fraction: 1, at: now),
             selection: WatchComplicationSelection(
                 accountID: "greptile.team",
@@ -14,7 +14,7 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
             ),
             at: now
         )
-        let savedQuota = resolver.resolve(
+        let completedForSavedQuotaSelection = resolver.resolve(
             snapshot: snapshot(metricID: "greptile.completed-reviews", fraction: 0.5, at: now),
             selection: WatchComplicationSelection(
                 accountID: "greptile.team",
@@ -23,10 +23,10 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
             at: now
         )
 
-        XCTAssertEqual(savedCompleted.availability, .value)
-        XCTAssertEqual(savedCompleted.exactValue, "100%")
-        XCTAssertEqual(savedQuota.availability, .value)
-        XCTAssertEqual(savedQuota.exactValue, "50%")
+        XCTAssertEqual(quotaForSavedCompletedSelection.availability, .value)
+        XCTAssertEqual(quotaForSavedCompletedSelection.exactValue, "100%")
+        XCTAssertEqual(completedForSavedQuotaSelection.availability, .value)
+        XCTAssertEqual(completedForSavedQuotaSelection.exactValue, "50%")
     }
 
     private func snapshot(

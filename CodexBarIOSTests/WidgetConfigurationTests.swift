@@ -94,8 +94,44 @@ final class WidgetConfigurationTests: XCTestCase {
         XCTAssertNil(watchMetric.usedFraction)
         XCTAssertEqual(watchMetric.exactValue, "27")
         XCTAssertEqual(watchMetric.visualizationStyle, .largeNumeric)
+    }
 
-        let savedCompletedTileID = tile.id
+    @MainActor
+    func testSavedGreptileWidgetTileSurvivesQuotaModeChanges() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .greptile)
+        XCTAssertTrue(store.saveSecret("greptile-widget-key", for: configuration))
+        let completedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                    label: "Completed reviews",
+                    used: 27,
+                    limit: 0,
+                    fractionlessUsageText: "27"
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_788_475_200)
+        )
+        WidgetSnapshotPublisher.publish(
+            results: [completedResult],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let completedSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        let savedCompletedTileID = try XCTUnwrap(
+            completedSnapshot.builderTiles.first { $0.id.hasPrefix("bar.") }?.id
+        )
         let quotaResult = ProviderUsageResult(
             accountID: configuration.id,
             providerID: .greptile,
@@ -124,13 +160,13 @@ final class WidgetConfigurationTests: XCTestCase {
         )
 
         WidgetSnapshotPublisher.publish(
-            results: [result],
+            results: [completedResult],
             configurationStore: store,
             snapshotDefaults: defaults
         )
-        let completedSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        let restoredCompletedSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
         XCTAssertEqual(
-            completedSnapshot.builderTile(resolvingSavedID: quotaTile.id)?.id,
+            restoredCompletedSnapshot.builderTile(resolvingSavedID: quotaTile.id)?.id,
             savedCompletedTileID
         )
     }
