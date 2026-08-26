@@ -134,4 +134,55 @@ final class MetricLayoutCompatibilityTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(migrated.preferences[completedID]).isVisible)
         XCTAssertEqual(try XCTUnwrap(migrated.preferences[quotaID]).width, .half)
     }
+
+    @MainActor
+    func testCopyMetricLayoutMapsGreptileIdentityAcrossQuotaModes() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let metricPairs = [
+            (
+                GreptileUsageIdentity.completedReviewsMetricID,
+                GreptileUsageIdentity.reviewQuotaMetricID
+            ),
+            (
+                GreptileUsageIdentity.reviewQuotaMetricID,
+                GreptileUsageIdentity.completedReviewsMetricID
+            ),
+        ]
+
+        for (index, metricPair) in metricPairs.enumerated() {
+            let sourceAccountID = "greptile.source.\(index)"
+            let destinationAccountID = "greptile.destination.\(index)"
+            _ = store.reconcileMetricLayout(
+                accountID: sourceAccountID,
+                availableMetricIDs: [metricPair.0]
+            )
+            store.updateMetricVisibility(false, accountID: sourceAccountID, metricID: metricPair.0)
+            store.updateVisualizationStyle(.circularRing, accountID: sourceAccountID, metricID: metricPair.0)
+            store.updateMetricWidth(.half, accountID: sourceAccountID, metricID: metricPair.0)
+            store.updateWatchMetricVisibility(.show, accountID: sourceAccountID, metricID: metricPair.0)
+            _ = store.reconcileMetricLayout(
+                accountID: destinationAccountID,
+                availableMetricIDs: [metricPair.1]
+            )
+
+            store.copyMetricLayout(
+                from: sourceAccountID,
+                to: destinationAccountID,
+                destinationAvailableMetricIDs: [metricPair.1]
+            )
+
+            let copied = try XCTUnwrap(store.metricLayouts[destinationAccountID])
+            XCTAssertEqual(copied.orderedMetricIDs, [metricPair.1])
+            let preference = try XCTUnwrap(copied.preferences[metricPair.1])
+            XCTAssertFalse(preference.isVisible)
+            XCTAssertEqual(preference.visualizationStyle, .circularRing)
+            XCTAssertEqual(preference.width, .half)
+            XCTAssertEqual(preference.watchVisibility, .show)
+            XCTAssertFalse(preference.isNewlyDiscovered)
+        }
+    }
 }
