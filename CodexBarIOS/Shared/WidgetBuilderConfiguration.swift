@@ -268,6 +268,9 @@ public extension CodexBarWidgetUsageBarSnapshot {
     }
 
     private static func canonicalIdentitySuffix(_ suffix: String) -> String {
+        if suffix == "greptile.completed-reviews" || suffix == "greptile.review-quota" {
+            return "greptile.review-usage"
+        }
         let oldScopedWeeklySuffix = "-weekly-limit"
         guard suffix.hasSuffix(oldScopedWeeklySuffix) else {
             return suffix

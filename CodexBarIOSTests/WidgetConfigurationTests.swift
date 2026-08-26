@@ -94,6 +94,45 @@ final class WidgetConfigurationTests: XCTestCase {
         XCTAssertNil(watchMetric.usedFraction)
         XCTAssertEqual(watchMetric.exactValue, "27")
         XCTAssertEqual(watchMetric.visualizationStyle, .largeNumeric)
+
+        let savedCompletedTileID = tile.id
+        let quotaResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Current billing period",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.reviewQuotaStableKey,
+                    label: "Reviews used",
+                    used: 12,
+                    limit: 50
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_788_561_600)
+        )
+        WidgetSnapshotPublisher.publish(
+            results: [quotaResult],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let quotaSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        let quotaTile = try XCTUnwrap(quotaSnapshot.builderTiles.first { $0.id.hasPrefix("bar.") })
+        XCTAssertEqual(
+            quotaSnapshot.builderTile(resolvingSavedID: savedCompletedTileID)?.id,
+            quotaTile.id
+        )
+
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let completedSnapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        XCTAssertEqual(
+            completedSnapshot.builderTile(resolvingSavedID: quotaTile.id)?.id,
+            savedCompletedTileID
+        )
     }
 
     @MainActor
