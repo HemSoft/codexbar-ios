@@ -696,7 +696,8 @@ public final class UsageHistoryStore: ObservableObject {
         )
         let hasUsageHistory = accountSnapshots.contains { !$0.bars.isEmpty }
         if (result.hasFreshBars && !result.bars.isEmpty)
-            || (!result.bars.isEmpty && hasUsageHistory) {
+            || (!result.bars.isEmpty && hasUsageHistory)
+            || (result.providerID == .greptile && hasUsageHistory) {
             return usageSeries(
                 for: result,
                 snapshots: accountSnapshots,

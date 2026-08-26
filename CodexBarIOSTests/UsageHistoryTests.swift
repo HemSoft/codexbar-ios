@@ -212,6 +212,20 @@ final class UsageHistoryTests: XCTestCase {
                 GreptileUsageIdentity.reviewQuotaHistorySeriesID,
             ]
         )
+
+        let emptyResult = ProviderUsageResult(
+            accountID: quotaResult.accountID,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "No review history returned",
+            bars: [],
+            fetchedAt: dates[3]
+        )
+        XCTAssertEqual(store.historySeries(for: emptyResult).points.map(\.value), [50, 50])
+        XCTAssertEqual(
+            store.historySeriesOptions(for: emptyResult).first?.id,
+            GreptileUsageIdentity.completedReviewsHistorySeriesID
+        )
     }
 
     @MainActor
