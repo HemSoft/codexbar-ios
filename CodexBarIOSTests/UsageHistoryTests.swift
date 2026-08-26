@@ -167,6 +167,22 @@ final class UsageHistoryTests: XCTestCase {
             "Changed +1"
         )
 
+        let currentCompletedResult = ProviderUsageResult(
+            accountID: completedResult.accountID,
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "All available review history",
+            bars: completedResult.bars,
+            fetchedAt: dates[2]
+        )
+        XCTAssertEqual(
+            store.historySeriesOptions(for: currentCompletedResult).map(\.id),
+            [
+                GreptileUsageIdentity.completedReviewsHistorySeriesID,
+                GreptileUsageIdentity.reviewQuotaHistorySeriesID,
+            ]
+        )
+
         let failedResult = ProviderUsageResult(
             accountID: "greptile.team",
             providerID: .greptile,
@@ -180,6 +196,13 @@ final class UsageHistoryTests: XCTestCase {
         )
         XCTAssertFalse(failedResult.hasCurrentBars)
         XCTAssertEqual(store.historySeries(for: failedResult).points.map(\.value), [1, 2])
+        XCTAssertEqual(
+            store.historySeriesOptions(for: failedResult).map(\.id),
+            [
+                GreptileUsageIdentity.reviewQuotaHistorySeriesID,
+                GreptileUsageIdentity.completedReviewsHistorySeriesID,
+            ]
+        )
     }
 
     @MainActor

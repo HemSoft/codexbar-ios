@@ -1038,7 +1038,7 @@ public final class UsageHistoryStore: ObservableObject {
                     severityThresholds: severityThresholds
                 ))
             } else if result.providerID == .greptile {
-                let seriesIdentities = [
+                var seriesIdentities = [
                     (
                         GreptileUsageIdentity.reviewQuotaStableKey,
                         GreptileUsageIdentity.reviewQuotaHistorySeriesID,
@@ -1050,6 +1050,21 @@ public final class UsageHistoryStore: ObservableObject {
                         "Completed reviews"
                     ),
                 ]
+                let preferredStableKey = result.hasCurrentBars
+                    ? result.bars.first(where: { bar in
+                        seriesIdentities.contains(where: { $0.0 == bar.stableKey })
+                    })?.stableKey
+                    : accountSnapshots.reversed().lazy.compactMap { snapshot in
+                        snapshot.bars.first(where: { bar in
+                            seriesIdentities.contains(where: { $0.0 == bar.stableKey })
+                        })?.stableKey
+                    }.first
+                if let preferredStableKey,
+                   let preferredIndex = seriesIdentities.firstIndex(where: { $0.0 == preferredStableKey }),
+                   preferredIndex != seriesIdentities.startIndex {
+                    let preferredIdentity = seriesIdentities.remove(at: preferredIndex)
+                    seriesIdentities.insert(preferredIdentity, at: seriesIdentities.startIndex)
+                }
                 for (stableKey, seriesID, label) in seriesIdentities where
                     (result.hasCurrentBars && result.bars.contains(where: { $0.stableKey == stableKey }))
                         || accountSnapshots.contains(where: { snapshot in
