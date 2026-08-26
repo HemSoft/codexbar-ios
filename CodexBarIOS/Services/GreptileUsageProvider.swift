@@ -493,6 +493,10 @@ public final class GreptileUsageProvider: UsageProvider {
 
     private static func firstDate(in values: [String: Any], keys: [String]) -> Date? {
         keys.lazy.compactMap { key in
+            if let timestamp = doubleValue(values[key]) {
+                let seconds = abs(timestamp) >= 100_000_000_000 ? timestamp / 1_000 : timestamp
+                return Date(timeIntervalSince1970: seconds)
+            }
             guard let value = stringValue(values[key]) else {
                 return nil
             }
