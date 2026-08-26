@@ -133,6 +133,100 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testIdenticalDuplicateUsageHistorySnapshotsRequireRecovery() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let snapshot = UsageHistorySnapshot(
+            result: makeHistoryResult(
+                accountID: "codex.duplicate-history",
+                fetchedAt: fetchedAt,
+                used: 42
+            )
+        )
+        let damagedData = try JSONEncoder().encode([snapshot, snapshot])
+        defaults.set(damagedData, forKey: "usageHistorySnapshots")
+
+        let store = UsageHistoryStore(defaults: defaults)
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+        XCTAssertEqual(
+            store.lastError,
+            "Saved usage history could not be read. Reset history to resume recording."
+        )
+        XCTAssertTrue(store.requiresRecovery)
+        XCTAssertEqual(defaults.data(forKey: "usageHistorySnapshots"), damagedData)
+    }
+
+    @MainActor
+    func testConflictingDuplicateUsageHistorySnapshotsPreserveDataUntilReset() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let accountID = "codex.conflicting-history"
+        let firstSnapshot = UsageHistorySnapshot(
+            result: makeHistoryResult(
+                accountID: accountID,
+                fetchedAt: fetchedAt,
+                used: 20
+            )
+        )
+        let conflictingSnapshot = UsageHistorySnapshot(
+            result: makeHistoryResult(
+                accountID: accountID,
+                fetchedAt: fetchedAt,
+                used: 80
+            )
+        )
+        XCTAssertEqual(firstSnapshot.id, conflictingSnapshot.id)
+        XCTAssertNotEqual(firstSnapshot, conflictingSnapshot)
+        let damagedData = try JSONEncoder().encode([firstSnapshot, conflictingSnapshot])
+        defaults.set(damagedData, forKey: "usageHistorySnapshots")
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(
+            results: [
+                makeHistoryResult(
+                    accountID: accountID,
+                    fetchedAt: fetchedAt.addingTimeInterval(60),
+                    used: 60
+                ),
+            ],
+            now: fetchedAt.addingTimeInterval(60)
+        )
+        store.removeSnapshotsForMissingAccounts(validAccountIDs: [], now: fetchedAt)
+
+        XCTAssertTrue(store.requiresRecovery)
+        XCTAssertTrue(store.snapshots.isEmpty)
+        XCTAssertNotNil(store.lastError)
+        XCTAssertEqual(defaults.data(forKey: "usageHistorySnapshots"), damagedData)
+
+        store.discardCorruptedHistory()
+
+        XCTAssertFalse(store.requiresRecovery)
+        XCTAssertNil(store.lastError)
+        XCTAssertNil(defaults.object(forKey: "usageHistorySnapshots"))
+
+        let recoveredResult = makeHistoryResult(
+            accountID: accountID,
+            fetchedAt: fetchedAt.addingTimeInterval(120),
+            used: 65
+        )
+        store.record(results: [recoveredResult], now: recoveredResult.fetchedAt)
+
+        XCTAssertEqual(store.snapshots.map(\.accountID), [accountID])
+        XCTAssertEqual(store.snapshots.first?.bars.first?.used, 65)
+        XCTAssertNotNil(defaults.data(forKey: "usageHistorySnapshots"))
+        XCTAssertNil(store.lastError)
+    }
+
+    @MainActor
     func testNonDataUsageHistoryIsPreservedUntilExplicitlyReset() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

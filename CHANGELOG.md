@@ -18,6 +18,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Recovered safely from saved History entries with duplicate snapshot IDs,
+  preserving the damaged data until reset instead of crashing after a refresh.
+  ([#276](https://github.com/HemSoft/codexbar-ios/issues/276))
 - Kept History's latest value in sync with a successful dashboard refresh
   without saving extra samples inside the configured sampling interval.
   ([#274](https://github.com/HemSoft/codexbar-ios/issues/274))
