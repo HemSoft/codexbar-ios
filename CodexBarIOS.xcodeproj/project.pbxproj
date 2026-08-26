@@ -21,6 +21,7 @@
 		10000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000B /* Assets.xcassets */; };
 		10000000000000000000000C /* AppAndWidgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000E /* AppAndWidgetTests.swift */; };
 		A30000000000000000000227 /* ProviderUsageCardHiddenSeverityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000227 /* ProviderUsageCardHiddenSeverityTests.swift */; };
+		A50000000000000000000281 /* MetricLayoutCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000281 /* MetricLayoutCompatibilityTests.swift */; };
 		100000000000000000000051 /* UsageAlertTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004A /* UsageAlertTests.swift */; };
 		10000000000000000000004B /* ConfigurationAndAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004B /* ConfigurationAndAuthTests.swift */; };
 		10000000000000000000004C /* ProviderParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004C /* ProviderParsingTests.swift */; };
@@ -213,6 +214,7 @@
 		20000000000000000000000D /* CodexBarIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexBarIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		20000000000000000000000E /* AppAndWidgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAndWidgetTests.swift; sourceTree = "<group>"; };
 		A40000000000000000000227 /* ProviderUsageCardHiddenSeverityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderUsageCardHiddenSeverityTests.swift; sourceTree = "<group>"; };
+		A60000000000000000000281 /* MetricLayoutCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricLayoutCompatibilityTests.swift; sourceTree = "<group>"; };
 		20000000000000000000004A /* UsageAlertTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageAlertTests.swift; sourceTree = "<group>"; };
 		20000000000000000000004B /* ConfigurationAndAuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationAndAuthTests.swift; sourceTree = "<group>"; };
 		20000000000000000000004C /* ProviderParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderParsingTests.swift; sourceTree = "<group>"; };
@@ -475,6 +477,7 @@
 			isa = PBXGroup;
 			children = (
 				20000000000000000000000E /* AppAndWidgetTests.swift */,
+				A60000000000000000000281 /* MetricLayoutCompatibilityTests.swift */,
 				A40000000000000000000227 /* ProviderUsageCardHiddenSeverityTests.swift */,
 				20000000000000000000004B /* ConfigurationAndAuthTests.swift */,
 				20000000000000000000004F /* DashboardAndSettingsTests.swift */,
@@ -884,6 +887,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				10000000000000000000000C /* AppAndWidgetTests.swift in Sources */,
+				A50000000000000000000281 /* MetricLayoutCompatibilityTests.swift in Sources */,
 				A30000000000000000000227 /* ProviderUsageCardHiddenSeverityTests.swift in Sources */,
 				10000000000000000000004B /* ConfigurationAndAuthTests.swift in Sources */,
 				10000000000000000000004F /* DashboardAndSettingsTests.swift in Sources */,

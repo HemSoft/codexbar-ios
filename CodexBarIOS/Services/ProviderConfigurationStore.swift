@@ -193,6 +193,37 @@ struct MetricLayoutUndoHistory {
     }
 }
 
+private enum GreptileMetricPreferenceCompatibility {
+    static func migrate(
+        layout: inout AccountMetricLayout,
+        availableMetricIDs: [String]
+    ) {
+        let availableMetricIDSet = Set(availableMetricIDs)
+        let sourceMetricID: String
+        let destinationMetricID: String
+        if availableMetricIDSet.contains(GreptileUsageIdentity.reviewQuotaMetricID),
+           !availableMetricIDSet.contains(GreptileUsageIdentity.completedReviewsMetricID) {
+            sourceMetricID = GreptileUsageIdentity.completedReviewsMetricID
+            destinationMetricID = GreptileUsageIdentity.reviewQuotaMetricID
+        } else if availableMetricIDSet.contains(GreptileUsageIdentity.completedReviewsMetricID),
+                  !availableMetricIDSet.contains(GreptileUsageIdentity.reviewQuotaMetricID) {
+            sourceMetricID = GreptileUsageIdentity.reviewQuotaMetricID
+            destinationMetricID = GreptileUsageIdentity.completedReviewsMetricID
+        } else {
+            return
+        }
+
+        if let sourcePreference = layout.preferences.removeValue(forKey: sourceMetricID),
+           layout.preferences[destinationMetricID]?.isNewlyDiscovered != false {
+            layout.preferences[destinationMetricID] = sourcePreference
+        }
+        var seenMetricIDs = Set<String>()
+        layout.orderedMetricIDs = layout.orderedMetricIDs
+            .map { $0 == sourceMetricID ? destinationMetricID : $0 }
+            .filter { !$0.isEmpty && seenMetricIDs.insert($0).inserted }
+    }
+}
+
 enum CodexAccountIdentityValidation: Equatable {
     case available
     case duplicate(accountName: String)
@@ -855,6 +886,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         let availableMetricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
         var layout = metricLayouts[accountID] ?? AccountMetricLayout()
         let originalLayout = layout
+        GreptileMetricPreferenceCompatibility.migrate(layout: &layout, availableMetricIDs: availableMetricIDs)
         var orderedMetricIDs = Self.uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
         let orderedMetricIDSet = Set(orderedMetricIDs)
 
