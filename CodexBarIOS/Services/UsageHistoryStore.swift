@@ -157,8 +157,40 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         capturedAt: Date? = nil,
         severityThresholds: UsageSeverityThresholds = .default
     ) {
-        let capturedAt = capturedAt ?? result.fetchedAt
-        let recordableBars = result.hasFreshBars ? result.bars : []
+        self.init(
+            result: result,
+            capturedAt: capturedAt ?? result.fetchedAt,
+            severityThresholds: severityThresholds,
+            includesBars: result.hasFreshBars,
+            includesCredits: result.hasFreshCredits,
+            includesMonetaryMetrics: true
+        )
+    }
+
+    fileprivate init(
+        presenting result: ProviderUsageResult,
+        severityThresholds: UsageSeverityThresholds
+    ) {
+        self.init(
+            result: result,
+            capturedAt: result.fetchedAt,
+            severityThresholds: severityThresholds,
+            includesBars: result.hasCurrentBars,
+            includesCredits: result.hasCurrentCredits,
+            includesMonetaryMetrics: result.failureMessage == nil
+        )
+    }
+
+    private init(
+        result: ProviderUsageResult,
+        capturedAt: Date,
+        severityThresholds: UsageSeverityThresholds,
+        includesBars: Bool,
+        includesCredits: Bool,
+        includesMonetaryMetrics: Bool
+    ) {
+        let recordableBars = includesBars ? result.bars : []
+        let monetaryMetrics = includesMonetaryMetrics ? result.monetaryMetrics : []
         self.id = "\(result.accountID).\(capturedAt.timeIntervalSince1970)"
         self.accountID = result.accountID
         self.providerID = result.providerID
@@ -172,9 +204,9 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
                 severityThresholds: severityThresholds
             )
         }
-        self.creditsRemaining = result.freshCreditsRemaining
-        self.monetaryMetrics = result.monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
-        self.hasReachedSpendLimit = result.hasReachedSpendLimit
+        self.creditsRemaining = includesCredits ? result.creditsRemaining : nil
+        self.monetaryMetrics = monetaryMetrics.map(UsageHistoryMonetaryMetricSnapshot.init)
+        self.hasReachedSpendLimit = includesMonetaryMetrics ? result.hasReachedSpendLimit : nil
         self.highestSeverity = max(
             recordableBars.map {
                 $0.effectiveSeverity(
@@ -182,8 +214,56 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
                     thresholds: severityThresholds
                 )
             }.max() ?? .normal,
-            result.hasReachedSpendLimit ? .critical : .normal
+            includesMonetaryMetrics && result.hasReachedSpendLimit ? .critical : .normal
         )
+    }
+
+    fileprivate init(
+        presenting current: UsageHistorySnapshot,
+        preservingMissingValuesFrom stored: UsageHistorySnapshot
+    ) {
+        let bars = current.bars.isEmpty ? stored.bars : current.bars
+        let currentMonetaryMetrics = current.monetaryMetrics ?? []
+        var mergedMonetaryMetrics = stored.monetaryMetrics ?? []
+        for metric in currentMonetaryMetrics {
+            if let matchingIndex = mergedMonetaryMetrics.firstIndex(where: {
+                $0.kind == metric.kind
+                    && $0.currencyCode == metric.currencyCode
+            }) {
+                mergedMonetaryMetrics[matchingIndex] = metric
+            } else {
+                mergedMonetaryMetrics.append(metric)
+            }
+        }
+        let monetaryMetrics = mergedMonetaryMetrics.isEmpty ? nil : mergedMonetaryMetrics
+        let currentDeterminesSpendLimit = currentMonetaryMetrics.contains { metric in
+            guard metric.kind == .spent else {
+                return false
+            }
+            return currentMonetaryMetrics.contains {
+                $0.kind == .spendLimit
+                    && $0.currencyCode == metric.currencyCode
+                    && $0.decimalPlaces == metric.decimalPlaces
+            }
+        }
+        let hasReachedSpendLimit = currentDeterminesSpendLimit
+            ? current.hasReachedSpendLimit
+            : stored.hasReachedSpendLimit
+
+        self.id = current.id
+        self.accountID = current.accountID
+        self.providerID = current.providerID
+        self.title = current.title
+        self.subtitle = current.subtitle
+        self.capturedAt = current.capturedAt
+        self.bars = bars
+        self.creditsRemaining = current.creditsRemaining ?? stored.creditsRemaining
+        self.monetaryMetrics = monetaryMetrics
+        self.highestSeverity = max(
+            bars.map(\.effectiveSeverity).max() ?? .normal,
+            hasReachedSpendLimit == true ? .critical : .normal
+        )
+        self.hasReachedSpendLimit = hasReachedSpendLimit
     }
 
     public func highestSeverity(
@@ -607,7 +687,11 @@ public final class UsageHistoryStore: ObservableObject {
         since start: Date? = nil,
         severityThresholds: UsageSeverityThresholds = .default
     ) -> UsageHistorySeries {
-        let accountSnapshots = snapshots(for: result.accountID, since: start)
+        let accountSnapshots = presentationSnapshots(
+            for: result,
+            since: start,
+            severityThresholds: severityThresholds
+        )
         let hasUsageHistory = accountSnapshots.contains { !$0.bars.isEmpty }
         if (result.hasFreshBars && !result.bars.isEmpty)
             || (!result.bars.isEmpty && hasUsageHistory) {
@@ -915,7 +999,11 @@ public final class UsageHistoryStore: ObservableObject {
         since start: Date? = nil,
         severityThresholds: UsageSeverityThresholds = .default
     ) -> [UsageHistorySeriesOption] {
-        let accountSnapshots = snapshots(for: result.accountID, since: start)
+        let accountSnapshots = presentationSnapshots(
+            for: result,
+            since: start,
+            severityThresholds: severityThresholds
+        )
         var options: [UsageHistorySeriesOption] = []
 
         if (result.hasFreshBars && !result.bars.isEmpty)
@@ -1004,6 +1092,44 @@ public final class UsageHistoryStore: ObservableObject {
                 ),
             ]
             : options
+    }
+
+    private func presentationSnapshots(
+        for result: ProviderUsageResult,
+        since start: Date?,
+        severityThresholds: UsageSeverityThresholds
+    ) -> [UsageHistorySnapshot] {
+        var accountSnapshots = snapshots(for: result.accountID, since: start)
+        guard
+            start.map({ result.fetchedAt >= $0 }) != false,
+            accountSnapshots.last.map({ result.fetchedAt >= $0.capturedAt }) != false
+        else {
+            return accountSnapshots
+        }
+
+        let currentSnapshot = UsageHistorySnapshot(
+            presenting: result,
+            severityThresholds: severityThresholds
+        )
+        guard
+            !currentSnapshot.bars.isEmpty
+                || currentSnapshot.creditsRemaining != nil
+                || currentSnapshot.monetaryMetrics?.isEmpty == false
+        else {
+            return accountSnapshots
+        }
+
+        if let matchingIndex = accountSnapshots.lastIndex(where: {
+            $0.capturedAt == currentSnapshot.capturedAt
+        }) {
+            accountSnapshots[matchingIndex] = UsageHistorySnapshot(
+                presenting: currentSnapshot,
+                preservingMissingValuesFrom: accountSnapshots[matchingIndex]
+            )
+        } else {
+            accountSnapshots.append(currentSnapshot)
+        }
+        return accountSnapshots
     }
 
     public func trendSummary(

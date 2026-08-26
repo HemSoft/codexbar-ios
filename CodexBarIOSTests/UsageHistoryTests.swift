@@ -236,6 +236,305 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testUsageHistoryPresentsFreshResultInsideSamplingIntervalWithoutPersistingIt() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let storedResult = makeHistoryResult(
+            accountID: "codex.personal",
+            fetchedAt: firstFetch,
+            used: 8
+        )
+        let freshResult = makeHistoryResult(
+            accountID: storedResult.accountID,
+            fetchedAt: firstFetch.addingTimeInterval(101 * 60),
+            used: 43
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(
+            results: [storedResult],
+            now: storedResult.fetchedAt,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [freshResult],
+            now: freshResult.fetchedAt,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+
+        XCTAssertEqual(store.snapshots.count, 1)
+        XCTAssertEqual(store.snapshots.first?.bars.first?.used, 8)
+        XCTAssertEqual(store.historySeries(for: freshResult).points.map(\.value), [0.08, 0.43])
+        XCTAssertEqual(
+            store.historySeriesOptions(for: freshResult).first?.series.points.map(\.value),
+            [0.08, 0.43]
+        )
+        XCTAssertEqual(store.snapshots.count, 1)
+    }
+
+    @MainActor
+    func testUsageHistoryReplacesMatchingCurrentTimestampWithoutDuplicate() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let storedResult = makeHistoryResult(
+            accountID: "codex.personal",
+            fetchedAt: fetchedAt,
+            used: 8
+        )
+        let currentResult = makeHistoryResult(
+            accountID: storedResult.accountID,
+            fetchedAt: fetchedAt,
+            used: 43
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [storedResult], now: fetchedAt)
+
+        XCTAssertEqual(store.historySeries(for: currentResult).points.map(\.value), [0.43])
+        XCTAssertEqual(store.snapshots.count, 1)
+        XCTAssertEqual(store.snapshots.first?.bars.first?.used, 8)
+    }
+
+    @MainActor
+    func testUsageHistorySameTimestampPreservesStoredComponentsMissingFromCurrentResult() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let storedResult = ProviderUsageResult(
+            accountID: "opencode.personal",
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Usage and balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage", used: 8, limit: 100)],
+            creditsRemaining: 12,
+            fetchedAt: fetchedAt
+        )
+        let currentResult = ProviderUsageResult(
+            accountID: storedResult.accountID,
+            providerID: storedResult.providerID,
+            title: storedResult.title,
+            subtitle: "Fresh usage with cached balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage", used: 43, limit: 100)],
+            creditsRemaining: 12,
+            creditsFetchedAt: fetchedAt.addingTimeInterval(-60),
+            fetchedAt: fetchedAt
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [storedResult], now: fetchedAt)
+
+        let options = store.historySeriesOptions(for: currentResult)
+
+        XCTAssertEqual(options.first(where: { $0.id == "usage" })?.series.points.map(\.value), [0.43])
+        XCTAssertEqual(options.first(where: { $0.id == "balance" })?.series.points.map(\.value), [12])
+        XCTAssertEqual(store.snapshots.count, 1)
+        XCTAssertEqual(store.snapshots.first?.bars.first?.used, 8)
+        XCTAssertEqual(store.snapshots.first?.creditsRemaining, 12)
+    }
+
+    @MainActor
+    func testUsageHistorySameTimestampPreservesSpendLimitStateForPartialMetrics() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fetchedAt = Date(timeIntervalSince1970: 1_788_475_200)
+        let spent = ProviderMonetaryMetric(
+            kind: .spent,
+            label: "Usage credits spent",
+            minorUnits: 1_500,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let spendLimit = ProviderMonetaryMetric(
+            kind: .spendLimit,
+            label: "Spend limit",
+            minorUnits: 1_000,
+            currencyCode: "USD",
+            decimalPlaces: 2
+        )
+        let storedResult = ProviderUsageResult(
+            accountID: "claude.personal",
+            providerID: .claude,
+            title: "Claude",
+            subtitle: "Spend",
+            bars: [],
+            monetaryMetrics: [spent, spendLimit],
+            fetchedAt: fetchedAt
+        )
+        let partialResult = ProviderUsageResult(
+            accountID: storedResult.accountID,
+            providerID: storedResult.providerID,
+            title: storedResult.title,
+            subtitle: "Partial spend",
+            bars: [],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: spent.label,
+                    minorUnits: 5_000,
+                    currencyCode: spent.currencyCode,
+                    decimalPlaces: 3
+                ),
+            ],
+            fetchedAt: fetchedAt
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [storedResult], now: fetchedAt)
+
+        let options = store.historySeriesOptions(for: partialResult)
+        let spentSeries = options.first(where: { $0.label == spent.label })?.series
+
+        XCTAssertEqual(spentSeries?.points.map(\.value), [5])
+        XCTAssertEqual(spentSeries?.decimalPlaces, 3)
+        XCTAssertEqual(spentSeries?.points.first?.severity, .critical)
+        XCTAssertEqual(store.snapshots.count, 1)
+    }
+
+    @MainActor
+    func testUsageHistoryUsesStableMetricForEphemeralMultiBarResult() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let storedResult = ProviderUsageResult(
+            accountID: "cursor.personal",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Stored usage",
+            bars: [
+                UsageBar(stableKey: "total", label: "Total", used: 8, limit: 100),
+                UsageBar(stableKey: "api", label: "API", used: 90, limit: 100),
+            ],
+            fetchedAt: firstFetch
+        )
+        let currentResult = ProviderUsageResult(
+            accountID: storedResult.accountID,
+            providerID: storedResult.providerID,
+            title: storedResult.title,
+            subtitle: "Fresh usage",
+            bars: [
+                UsageBar(stableKey: "api", label: "API requests", used: 100, limit: 100),
+                UsageBar(stableKey: "total", label: "Overall plan", used: 43, limit: 100),
+            ],
+            fetchedAt: firstFetch.addingTimeInterval(101 * 60)
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(
+            results: [storedResult],
+            now: firstFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [currentResult],
+            now: currentResult.fetchedAt,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+
+        XCTAssertEqual(store.historySeries(for: currentResult).points.map(\.value), [0.08, 0.43])
+        XCTAssertEqual(
+            store.historySeriesOptions(for: currentResult)
+                .first(where: { $0.id == "usage.total" })?
+                .series.points.map(\.value),
+            [0.08, 0.43]
+        )
+        XCTAssertEqual(
+            store.historySeriesOptions(for: currentResult)
+                .first(where: { $0.id == "usage.api" })?
+                .series.points.map(\.value),
+            [0.9, 1]
+        )
+        XCTAssertEqual(store.snapshots.count, 1)
+    }
+
+    @MainActor
+    func testUsageHistoryDoesNotPresentStaleOrFailedCurrentBars() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let storedResult = makeHistoryResult(
+            accountID: "codex.personal",
+            fetchedAt: firstFetch,
+            used: 8
+        )
+        let currentFetch = firstFetch.addingTimeInterval(101 * 60)
+        let staleResult = ProviderUsageResult(
+            accountID: storedResult.accountID,
+            providerID: storedResult.providerID,
+            title: storedResult.title,
+            subtitle: "Cached usage",
+            bars: [UsageBar(label: "Weekly usage", used: 43, limit: 100)],
+            barsFetchedAt: firstFetch,
+            fetchedAt: currentFetch
+        )
+        let failedResult = ProviderUsageResult(
+            accountID: storedResult.accountID,
+            providerID: storedResult.providerID,
+            title: storedResult.title,
+            subtitle: "Refresh failed",
+            bars: [UsageBar(label: "Weekly usage", used: 43, limit: 100)],
+            failureMessage: "Refresh failed",
+            fetchedAt: currentFetch
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(results: [storedResult], now: firstFetch)
+
+        XCTAssertEqual(store.historySeries(for: staleResult).points.map(\.value), [0.08])
+        XCTAssertEqual(store.historySeries(for: failedResult).points.map(\.value), [0.08])
+    }
+
+    @MainActor
+    func testUsageHistoryPresentsCurrentComponentFromPartialOpenCodeRefresh() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let storedResult = ProviderUsageResult(
+            accountID: "opencode.personal",
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Usage and balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage", used: 8, limit: 100)],
+            creditsRemaining: 12,
+            fetchedAt: firstFetch
+        )
+        let partialResult = ProviderUsageResult(
+            accountID: storedResult.accountID,
+            providerID: storedResult.providerID,
+            title: storedResult.title,
+            subtitle: "Fresh usage with unavailable balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage", used: 43, limit: 100)],
+            creditsRemaining: 12,
+            creditsFetchedAt: firstFetch,
+            failureMessage: "Zen balance refresh failed",
+            preserveCachedCreditsOnFailure: true,
+            fetchedAt: firstFetch.addingTimeInterval(101 * 60)
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+        store.record(
+            results: [storedResult],
+            now: firstFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [partialResult],
+            now: partialResult.fetchedAt,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+
+        let options = store.historySeriesOptions(for: partialResult)
+
+        XCTAssertTrue(partialResult.hasCurrentBars)
+        XCTAssertFalse(partialResult.hasCurrentCredits)
+        XCTAssertEqual(options.first(where: { $0.id == "usage" })?.series.points.map(\.value), [0.08, 0.43])
+        XCTAssertEqual(options.first(where: { $0.id == "balance" })?.series.points.map(\.value), [12])
+        XCTAssertEqual(store.snapshots.count, 1)
+    }
+
+    @MainActor
     func testUsageHistoryStoreAppliesChangedIntervalOnlyToFutureSamples() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -344,6 +643,7 @@ final class UsageHistoryTests: XCTestCase {
             title: "Cursor",
             subtitle: "Current",
             bars: [UsageBar(stableKey: "total", label: "Total", used: 40, limit: 100)],
+            failureMessage: "Current usage unavailable",
             fetchedAt: Date()
         )
 
@@ -545,7 +845,7 @@ final class UsageHistoryTests: XCTestCase {
 
         XCTAssertEqual(
             store.historySeries(for: reorderedAndRelabeledResult).points.map(\.value),
-            [0.38]
+            [0.38, 0.38]
         )
         XCTAssertEqual(
             store.historySeriesOptions(for: reorderedAndRelabeledResult).map(\.id),
@@ -1052,9 +1352,17 @@ final class UsageHistoryTests: XCTestCase {
         }
         let now = Date(timeIntervalSince1970: 1_788_475_200)
         let result = makeHistoryResult(accountID: "codex.personal", fetchedAt: now, used: 42)
+        let emptyResult = ProviderUsageResult(
+            accountID: result.accountID,
+            providerID: result.providerID,
+            title: result.title,
+            subtitle: "No usage",
+            bars: [],
+            fetchedAt: now
+        )
         let store = UsageHistoryStore(defaults: defaults)
 
-        let emptySeries = store.historySeries(for: result)
+        let emptySeries = store.historySeries(for: emptyResult)
         XCTAssertTrue(emptySeries.points.isEmpty)
         XCTAssertEqual(emptySeries.latestValueDescription, "No data")
         XCTAssertEqual(emptySeries.rangeDescription, "No range yet")
