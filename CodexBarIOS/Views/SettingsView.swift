@@ -629,8 +629,20 @@ struct SettingsView: View {
                                         .foregroundStyle(.tertiary)
                                         .accessibilityHidden(true)
                                 }
+                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(ProviderSettingsRowButtonStyle())
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(configuration.displayName)
+                            .accessibilityValue(
+                                ProviderSettingsRow.accessibilityValue(
+                                    configuration: configuration,
+                                    isConfigured: configurationStore.isConfigured(configuration),
+                                    groupName: configurationStore.group(
+                                        for: configuration.groupID
+                                    )?.name
+                                )
+                            )
                             .accessibilityHint("Opens account settings.")
                         }
                     }
@@ -1377,7 +1389,7 @@ struct SettingsView: View {
     }
 }
 
-private struct ProviderSettingsRow: View {
+struct ProviderSettingsRow: View {
     let configuration: ProviderAccountConfiguration
     let isConfigured: Bool
     let groupName: String?
@@ -1419,12 +1431,39 @@ private struct ProviderSettingsRow: View {
     }
 
     private var statusText: String {
+        Self.statusText(configuration: configuration, isConfigured: isConfigured)
+    }
+
+    static func accessibilityValue(
+        configuration: ProviderAccountConfiguration,
+        isConfigured: Bool,
+        groupName: String?
+    ) -> String {
+        let status = statusText(configuration: configuration, isConfigured: isConfigured)
+        guard let groupName else {
+            return status
+        }
+
+        return "\(status), \(groupName) group"
+    }
+
+    private static func statusText(
+        configuration: ProviderAccountConfiguration,
+        isConfigured: Bool
+    ) -> String {
         if !configuration.isEnabled {
             return "Disabled"
         }
 
         let provider = configuration.providerID.displayName
         return isConfigured ? "\(provider) configured" : "\(provider) needs setup"
+    }
+}
+
+private struct ProviderSettingsRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.55 : 1)
     }
 }
 

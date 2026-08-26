@@ -18,6 +18,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Made each provider row in Settings selectable across its full visible width
+  while keeping one clear VoiceOver action.
+  ([#280](https://github.com/HemSoft/codexbar-ios/issues/280))
 - Recovered safely from saved account lists with duplicate account IDs,
   preserving account data and credentials until explicit replacement.
   ([#277](https://github.com/HemSoft/codexbar-ios/issues/277))
