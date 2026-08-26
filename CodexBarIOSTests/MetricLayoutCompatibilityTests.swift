@@ -42,4 +42,40 @@ final class MetricLayoutCompatibilityTests: XCTestCase {
         XCTAssertEqual(completedLayout.preferences[completedID], quotaPreference)
         XCTAssertNil(completedLayout.preferences[quotaID])
     }
+
+    @MainActor
+    func testGreptilePreferenceMigrationDoesNotTreatViewingDestinationAsCustomization() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let accountID = "greptile.team"
+        let completedID = GreptileUsageIdentity.completedReviewsMetricID
+        let quotaID = GreptileUsageIdentity.reviewQuotaMetricID
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+        _ = store.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: [completedID, quotaID]
+        )
+        store.updateMetricVisibility(false, accountID: accountID, metricID: completedID)
+        store.updateVisualizationStyle(.circularRing, accountID: accountID, metricID: completedID)
+        store.updateMetricWidth(.half, accountID: accountID, metricID: completedID)
+        store.updateWatchMetricVisibility(.show, accountID: accountID, metricID: completedID)
+        store.markMetricsSeen([quotaID], accountID: accountID)
+
+        let migrated = store.reconcileMetricLayout(
+            accountID: accountID,
+            availableMetricIDs: [quotaID]
+        )
+        let preference = try XCTUnwrap(migrated.preferences[quotaID])
+
+        XCTAssertNil(migrated.preferences[completedID])
+        XCTAssertFalse(preference.isVisible)
+        XCTAssertEqual(preference.visualizationStyle, .circularRing)
+        XCTAssertEqual(preference.width, .half)
+        XCTAssertEqual(preference.watchVisibility, .show)
+    }
 }

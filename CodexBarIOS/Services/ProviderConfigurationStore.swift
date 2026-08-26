@@ -214,13 +214,21 @@ private enum GreptileMetricPreferenceCompatibility {
         }
 
         if let sourcePreference = layout.preferences.removeValue(forKey: sourceMetricID),
-           layout.preferences[destinationMetricID]?.isNewlyDiscovered != false {
+           !hasCustomPresentation(layout.preferences[destinationMetricID]) {
             layout.preferences[destinationMetricID] = sourcePreference
         }
         var seenMetricIDs = Set<String>()
         layout.orderedMetricIDs = layout.orderedMetricIDs
             .map { $0 == sourceMetricID ? destinationMetricID : $0 }
             .filter { !$0.isEmpty && seenMetricIDs.insert($0).inserted }
+    }
+
+    private static func hasCustomPresentation(_ preference: MetricTilePreference?) -> Bool {
+        guard let preference else { return false }
+        return !preference.isVisible
+            || preference.visualizationStyle != nil
+            || preference.width != .automatic
+            || preference.watchVisibility != .inherit
     }
 }
 
