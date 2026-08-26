@@ -602,6 +602,10 @@ public final class ProviderConfigurationStore: ObservableObject {
 
     @discardableResult
     public func resetAccounts() -> Bool {
+        guard allowConfigurationMutation() else {
+            return false
+        }
+
         let knownAccountIDs = Set(configurations.map(\.id))
         var accountsToDelete: [String] = []
         var seenKeychainAccounts = Set<String>()
@@ -1798,6 +1802,10 @@ public final class ProviderConfigurationStore: ObservableObject {
                 configurations: [],
                 error: configurationLoadErrorMessage
             )
+        }
+
+        guard Set(decoded.map(\.id)).count == decoded.count else {
+            return ConfigurationLoadResult(configurations: [], error: configurationLoadErrorMessage)
         }
 
         return ConfigurationLoadResult(

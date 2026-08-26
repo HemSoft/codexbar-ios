@@ -251,6 +251,160 @@ final class ConfigurationAndAuthTests: XCTestCase {
     }
 
     @MainActor
+    func testProviderConfigurationStoreRequiresRecoveryForIdenticalDuplicateAccountIDs() throws {
+        for isEnabled in [true, false] {
+            let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suiteName)!
+            defer {
+                defaults.removePersistentDomain(forName: suiteName)
+            }
+            let configuration = ProviderAccountConfiguration(
+                id: "openRouter.duplicate",
+                providerID: .openRouter,
+                isEnabled: isEnabled,
+                accountLabel: "Saved OpenRouter",
+                authMethod: .apiKey
+            )
+            let damagedData = try JSONEncoder().encode([configuration, configuration])
+            defaults.set(damagedData, forKey: "providerConfigurations")
+
+            let store = ProviderConfigurationStore(
+                defaults: defaults,
+                secretStore: EmptySecretStore()
+            )
+
+            XCTAssertTrue(store.configurations.isEmpty)
+            XCTAssertTrue(store.isConfigurationRecoveryRequired)
+            XCTAssertEqual(
+                store.lastError,
+                "Saved account data couldn't be read. Replace the damaged account list in Settings to resume saving configurations."
+            )
+            XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), damagedData)
+        }
+    }
+
+    @MainActor
+    func testConflictingDuplicateAccountIDsRemainPreservedUntilExplicitReplacement() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let secretStore = MemorySecretStore()
+        let savedGroup = ProviderAccountGroup(id: "saved-group", name: "Saved Group")
+        let first = ProviderAccountConfiguration(
+            id: "duplicate.account",
+            providerID: .openRouter,
+            accountLabel: "Primary",
+            groupID: savedGroup.id,
+            authMethod: .apiKey
+        )
+        let conflicting = ProviderAccountConfiguration(
+            id: first.id,
+            providerID: .moonshot,
+            isEnabled: false,
+            accountLabel: "Conflicting",
+            authMethod: .apiKey
+        )
+        let damagedData = try JSONEncoder().encode([first, conflicting])
+        let keychainAccount = ProviderConfigurationStore.keychainAccount(for: first)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(damagedData, forKey: "providerConfigurations")
+        defaults.set(try JSONEncoder().encode([savedGroup]), forKey: "providerAccountGroups")
+        try secretStore.saveSecret("preserved-secret", account: keychainAccount)
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+        let refreshService = UsageRefreshService(providers: [])
+        let orchestrator = DashboardOrchestrator(
+            refreshService: refreshService,
+            configurationStore: store,
+            historyStore: UsageHistoryStore(defaults: defaults),
+            usageAlertNotifier: StubUsageAlertNotifier(),
+            appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                refreshService: refreshService,
+                configurationStore: store,
+                publishSnapshot: { _, _ in },
+                publishSettings: { _ in }
+            ),
+            watchSnapshotCoordinator: WatchSnapshotCoordinator(
+                refreshService: refreshService,
+                configurationStore: store,
+                publishSnapshot: { _, _, _ in }
+            )
+        )
+
+        XCTAssertTrue(orchestrator.dashboardSections.isEmpty)
+        _ = await orchestrator.refreshNow()
+        XCTAssertTrue(refreshService.results.isEmpty)
+        XCTAssertNil(store.addGroup(named: "Blocked Group"))
+        XCTAssertFalse(store.update(first))
+        XCTAssertFalse(store.saveSecret("replacement-secret", for: first))
+        XCTAssertFalse(store.resetAccounts())
+        XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertEqual(store.groups, [savedGroup])
+        XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), damagedData)
+        XCTAssertEqual(try secretStore.readSecret(account: keychainAccount), "preserved-secret")
+
+        XCTAssertTrue(store.replaceCorruptedConfigurations())
+        XCTAssertFalse(store.isConfigurationRecoveryRequired)
+        XCTAssertNil(store.lastError)
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                [ProviderAccountConfiguration].self,
+                from: try XCTUnwrap(defaults.data(forKey: "providerConfigurations"))
+            ),
+            []
+        )
+        XCTAssertEqual(try secretStore.readSecret(account: keychainAccount), "preserved-secret")
+
+        let replacement = store.addAccount(for: .claude)
+        XCTAssertTrue(store.saveSecret("recovered-secret", for: replacement))
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
+
+        XCTAssertEqual(reloadedStore.configurations, [replacement])
+        XCTAssertTrue(reloadedStore.hasSecret(for: replacement))
+        XCTAssertFalse(reloadedStore.isConfigurationRecoveryRequired)
+        XCTAssertNil(reloadedStore.lastError)
+    }
+
+    @MainActor
+    func testProviderConfigurationStoreLoadsUniqueAccountIDsNormally() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let savedGroup = ProviderAccountGroup(id: "saved-group", name: "Saved Group")
+        let grouped = ProviderAccountConfiguration(
+            id: "openRouter.grouped",
+            providerID: .openRouter,
+            groupID: savedGroup.id,
+            authMethod: .apiKey
+        )
+        let ungrouped = ProviderAccountConfiguration(
+            id: "moonshot.ungrouped",
+            providerID: .moonshot,
+            groupID: "missing-group",
+            authMethod: .apiKey
+        )
+        let savedData = try JSONEncoder().encode([grouped, ungrouped])
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(savedData, forKey: "providerConfigurations")
+        defaults.set(try JSONEncoder().encode([savedGroup]), forKey: "providerAccountGroups")
+
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: EmptySecretStore()
+        )
+
+        XCTAssertEqual(Set(store.configurations.map(\.id)), [grouped.id, ungrouped.id])
+        XCTAssertEqual(store.configuration(accountID: grouped.id)?.groupID, savedGroup.id)
+        XCTAssertNil(store.configuration(accountID: ungrouped.id)?.groupID)
+        XCTAssertFalse(store.isConfigurationRecoveryRequired)
+        XCTAssertNil(store.lastError)
+        XCTAssertEqual(defaults.data(forKey: "providerConfigurations"), savedData)
+    }
+
+    @MainActor
     func testProviderConfigurationStoreReplacesMalformedDataThenSavesNormally() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
