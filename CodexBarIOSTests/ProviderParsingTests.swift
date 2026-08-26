@@ -131,6 +131,48 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertTrue(result.usageMessages.contains("Greptile reports 50 of 50 reviews used for this billing period."))
     }
 
+    func testGreptileProviderRejectsBooleanAndNonFiniteReviewQuotaValues() async throws {
+        for billingUsage in [
+            #"{"reviewsUsed":true,"includedReviews":50}"#,
+            #"{"reviewsUsed":1,"includedReviews":false}"#,
+            #"{"reviewsUsed":"nan","includedReviews":50}"#,
+            #"{"reviewsUsed":1,"includedReviews":"infinity"}"#,
+        ] {
+            let secretStore = MemorySecretStore()
+            let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+            try secretStore.saveSecret(
+                "greptile-test-key",
+                account: ProviderConfigurationStore.keychainAccount(for: configuration)
+            )
+            let sessionFixture = IsolatedTestURLSession { request in
+                (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    Data(
+                        """
+                        {"result":{"codeReviews":[{"id":"r1","status":"COMPLETED"}],"total":1,"billingUsage":\(billingUsage)}}
+                        """.utf8
+                    )
+                )
+            }
+
+            let provider = GreptileUsageProvider(
+                secretStore: secretStore,
+                session: sessionFixture.session
+            )
+            let result = try await provider.fetchUsage(for: configuration)
+            sessionFixture.invalidate()
+
+            XCTAssertEqual(result.subtitle, "All available review history")
+            XCTAssertEqual(result.bars.first?.stableKey, GreptileUsageIdentity.completedReviewsStableKey)
+            XCTAssertTrue(result.usageMessages.contains { $0.contains("did not return billing allowance data") })
+        }
+    }
+
     func testGreptileProviderDoesNotPresentMissingReviewDataAsZero() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)

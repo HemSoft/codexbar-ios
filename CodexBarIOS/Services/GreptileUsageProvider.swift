@@ -407,11 +407,20 @@ public final class GreptileUsageProvider: UsageProvider {
     private static func doubleValue(_ value: Any?) -> Double? {
         switch value {
         case let number as NSNumber:
-            number.doubleValue
+            guard
+                CFGetTypeID(number) != CFBooleanGetTypeID(),
+                number.doubleValue.isFinite
+            else {
+                return nil
+            }
+            return number.doubleValue
         case let string as String:
-            Double(string)
+            guard let parsed = Double(string), parsed.isFinite else {
+                return nil
+            }
+            return parsed
         default:
-            nil
+            return nil
         }
     }
 

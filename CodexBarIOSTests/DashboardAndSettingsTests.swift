@@ -2605,7 +2605,7 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
-    func testGreptileCredentialSaveReportsStoredThenValidated() async {
+    func testGreptileCredentialSaveReportsStoredThenValidated() async throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -2635,7 +2635,16 @@ final class DashboardAndSettingsTests: XCTestCase {
         viewModel.secret = "greptile-key"
 
         viewModel.saveGenericCredential()
-        await gate.waitUntilBlocked()
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "Greptile credential validation did not block within five seconds.",
+            onTimeout: {
+                Task { await gate.release() }
+            },
+            operation: {
+                await gate.waitUntilBlocked()
+            }
+        )
 
         XCTAssertEqual(
             viewModel.credentialMessage,
