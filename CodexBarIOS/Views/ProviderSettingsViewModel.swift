@@ -14,6 +14,8 @@ struct ProviderCredentialPresentation: Equatable {
 
 @MainActor
 final class ProviderSettingsViewModel: ObservableObject {
+    private static let greptileValidatedMessage = "API key saved in Keychain and validated by Greptile."
+
     enum PersistenceBehavior {
         case immediate
         case debounced
@@ -63,7 +65,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var showsGreptileValidationFeedback = false
 
     var credentialMessageSystemImage: String {
-        credentialMessage == "API key saved in Keychain and validated by Greptile."
+        credentialMessage == Self.greptileValidatedMessage
             ? "checkmark.circle"
             : "clock"
     }
@@ -596,7 +598,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             }
         } else {
             credentialError = nil
-            credentialMessage = "API key saved in Keychain and validated by Greptile."
+            credentialMessage = Self.greptileValidatedMessage
         }
     }
 
