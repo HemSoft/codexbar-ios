@@ -2,6 +2,38 @@ import XCTest
 @testable import CodexBarIOS
 
 final class DashboardAndSettingsTests: XCTestCase {
+    @MainActor
+    func testProviderSettingsRowAccessibilityDescribesStatusAndGroupOnce() {
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .claude)
+
+        XCTAssertEqual(
+            ProviderSettingsRow.accessibilityValue(
+                configuration: configuration,
+                isConfigured: true,
+                groupName: "Work"
+            ),
+            "Claude configured, Work group"
+        )
+        XCTAssertEqual(
+            ProviderSettingsRow.accessibilityValue(
+                configuration: configuration,
+                isConfigured: false,
+                groupName: nil
+            ),
+            "Claude needs setup"
+        )
+
+        configuration.isEnabled = false
+        XCTAssertEqual(
+            ProviderSettingsRow.accessibilityValue(
+                configuration: configuration,
+                isConfigured: true,
+                groupName: "Work"
+            ),
+            "Disabled, Work group"
+        )
+    }
+
     func testSettingsDismissalConsumesCredentialRefreshExactlyOnce() {
         var state = SettingsDismissalRefreshState()
 
