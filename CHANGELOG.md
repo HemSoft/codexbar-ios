@@ -18,6 +18,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Kept incomplete Greptile review scans from replacing the last complete usage
+  result or skipping reviews during pagination.
+  ([#284](https://github.com/HemSoft/codexbar-ios/issues/284))
 - Made Greptile API-key saves report whether the key was stored or validated,
   show rejected-key errors, and display server-reported review allowances and
   reset dates without turning missing quota data into zero usage.

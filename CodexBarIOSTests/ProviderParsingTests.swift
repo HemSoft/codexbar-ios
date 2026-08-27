@@ -310,7 +310,7 @@ final class ProviderParsingTests: XCTestCase {
         let sessionFixture = IsolatedTestURLSession { request in
             let payload = """
             event: message
-            data: {"jsonrpc":"2.0","id":"sse","result":{"codeReviews":[{"id":"r1","status":"COMPLETED"}],"total":1}}
+            data: {"jsonrpc":"2.0","id":"sse","result":{"codeReviews":[{"id":"r1","status":"COMPLETED"}],"total":1,"truncated":false}}
 
             """
             return (
@@ -335,7 +335,108 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertNil(result.failureMessage)
     }
 
-    func testGreptileProviderExpandsPaginationLimitForReportedTotal() async throws {
+    func testGreptileProviderRejectsEveryTruncatedPageShapeWithoutAdvancing() async throws {
+        let scenarios: [(name: String, reviewCount: Int, total: Int?)] = [
+            ("empty without total", 0, nil),
+            ("empty with total", 0, 0),
+            ("short without total", 1, nil),
+            ("short with total", 1, 1),
+            ("full without total", 2, nil),
+            ("full with total", 2, 2),
+        ]
+
+        for scenario in scenarios {
+            let secretStore = MemorySecretStore()
+            let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+            try secretStore.saveSecret(
+                "greptile-test-key",
+                account: ProviderConfigurationStore.keychainAccount(for: configuration)
+            )
+            let requestLock = NSLock()
+            var requestedOffsets: [Int] = []
+            let sessionFixture = IsolatedTestURLSession { request in
+                let body = try XCTUnwrap(requestBodyData(from: request))
+                let root = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                let params = try XCTUnwrap(root["params"] as? [String: Any])
+                let arguments = try XCTUnwrap(params["arguments"] as? [String: Any])
+                let offset = try XCTUnwrap(arguments["offset"] as? Int)
+                requestLock.withLock {
+                    requestedOffsets.append(offset)
+                }
+
+                let reviews = (0..<scenario.reviewCount).map { index in
+                    ["id": "review-\(index)", "status": "COMPLETED"]
+                }
+                var payload: [String: Any] = [
+                    "codeReviews": reviews,
+                    "truncated": true,
+                ]
+                if let total = scenario.total {
+                    payload["total"] = total
+                }
+                return (
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!,
+                    try JSONSerialization.data(withJSONObject: ["result": payload])
+                )
+            }
+
+            let provider = GreptileUsageProvider(
+                secretStore: secretStore,
+                session: sessionFixture.session,
+                pageSize: 2
+            )
+            let result = try await provider.fetchUsage(for: configuration)
+            sessionFixture.invalidate()
+
+            XCTAssertEqual(
+                result.failureMessage,
+                "Greptile returned incomplete paginated review activity. Try again later.",
+                scenario.name
+            )
+            XCTAssertTrue(result.bars.isEmpty, scenario.name)
+            XCTAssertNotEqual(result.subtitle, "All available review history", scenario.name)
+            XCTAssertEqual(requestLock.withLock { requestedOffsets }, [0], scenario.name)
+        }
+    }
+
+    func testGreptileProviderRejectsMalformedTruncatedFlag() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let sessionFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"result":{"codeReviews":[],"total":0,"truncated":"true"}}"#.utf8
+                )
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.failureMessage, "Could not parse Greptile review activity.")
+        XCTAssertTrue(result.bars.isEmpty)
+    }
+
+    func testGreptileProviderEnforcesConfiguredPaginationLimit() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
         try secretStore.saveSecret(
@@ -348,7 +449,7 @@ final class ProviderParsingTests: XCTestCase {
             let params = try XCTUnwrap(root["params"] as? [String: Any])
             let arguments = try XCTUnwrap(params["arguments"] as? [String: Any])
             let offset = try XCTUnwrap(arguments["offset"] as? Int)
-            guard (0...2).contains(offset) else {
+            guard (0...1).contains(offset) else {
                 XCTFail("Unexpected Greptile pagination offset \(offset)")
                 throw URLError(.badServerResponse)
             }
@@ -373,8 +474,65 @@ final class ProviderParsingTests: XCTestCase {
         )
         let result = try await provider.fetchUsage(for: configuration)
 
-        XCTAssertEqual(result.bars.first?.used, 3)
-        XCTAssertNil(result.failureMessage)
+        XCTAssertEqual(
+            result.failureMessage,
+            "Greptile returned incomplete paginated review activity. Try again later."
+        )
+        XCTAssertTrue(result.bars.isEmpty)
+    }
+
+    func testGreptileProviderNeverRequestsOffsetAbovePublishedMaximum() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let requestLock = NSLock()
+        var requestedOffsets: [Int] = []
+        let sessionFixture = IsolatedTestURLSession { request in
+            let body = try XCTUnwrap(requestBodyData(from: request))
+            let root = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let params = try XCTUnwrap(root["params"] as? [String: Any])
+            let arguments = try XCTUnwrap(params["arguments"] as? [String: Any])
+            let offset = try XCTUnwrap(arguments["offset"] as? Int)
+            requestLock.withLock {
+                requestedOffsets.append(offset)
+            }
+
+            let reviews = (0..<100).map { index in
+                ["id": "review-\(offset + index)", "status": "COMPLETED"]
+            }
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                try JSONSerialization.data(withJSONObject: [
+                    "result": [
+                        "codeReviews": reviews,
+                        "total": 1_200,
+                    ],
+                ])
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let provider = GreptileUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session
+        )
+        let result = try await provider.fetchUsage(for: configuration)
+        let offsets = requestLock.withLock { requestedOffsets }
+
+        XCTAssertEqual(
+            result.failureMessage,
+            "Greptile returned incomplete paginated review activity. Try again later."
+        )
+        XCTAssertEqual(offsets, Array(stride(from: 0, through: 1_000, by: 100)))
+        XCTAssertEqual(offsets.max(), 1_000)
     }
 
     func testGreptileProviderRejectsOverlappingPagesThatMissReportedReviews() async throws {
@@ -545,6 +703,66 @@ final class ProviderParsingTests: XCTestCase {
         let service = UsageRefreshService(
             providers: [
                 GreptileUsageProvider(secretStore: secretStore, session: failureFixture.session),
+            ],
+            initialResults: [successfulResult]
+        )
+
+        _ = await service.refresh(configuration: configuration)
+
+        let preserved = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(preserved.accountID, configuration.id)
+        XCTAssertEqual(preserved.bars.first?.used, 1)
+        XCTAssertNotNil(preserved.failureMessage)
+        XCTAssertFalse(preserved.hasCurrentBars)
+        XCTAssertTrue(preserved.subtitle.contains("last known data"))
+    }
+
+    @MainActor
+    func testGreptileTruncatedPagePreservesStaleSameAccountSnapshot() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration(
+            id: "greptile.truncated-team",
+            providerID: .greptile,
+            authMethod: .apiKey
+        )
+        try secretStore.saveSecret(
+            "greptile-test-key",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+        let successFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"result":{"codeReviews":[{"id":"r1","status":"COMPLETED"}],"total":1}}"#.utf8)
+            )
+        }
+        let successfulResult = try await GreptileUsageProvider(
+            secretStore: secretStore,
+            session: successFixture.session
+        ).fetchUsage(for: configuration)
+        successFixture.invalidate()
+
+        let truncatedFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(
+                    #"{"result":{"codeReviews":[{"id":"partial","status":"COMPLETED"}],"truncated":true}}"#.utf8
+                )
+            )
+        }
+        defer { truncatedFixture.invalidate() }
+        let service = UsageRefreshService(
+            providers: [
+                GreptileUsageProvider(secretStore: secretStore, session: truncatedFixture.session),
             ],
             initialResults: [successfulResult]
         )
