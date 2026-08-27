@@ -18,6 +18,7 @@ public final class GreptileUsageProvider: UsageProvider {
         let reviews: [Review]
         let total: Int?
         let quota: ReviewQuota?
+        let isTruncated: Bool
     }
 
     private enum PageResponse {
@@ -60,6 +61,8 @@ public final class GreptileUsageProvider: UsageProvider {
     private let endpoint: URL
     private let pageSize: Int
     private let maximumPageCount: Int
+
+    private static let maximumReviewOffset = 1_000
 
     public let providerID = ProviderID.greptile
 
@@ -137,10 +140,11 @@ public final class GreptileUsageProvider: UsageProvider {
 
             switch Self.parseReviewPage(data) {
             case .page(let page):
-                pageCount += 1
-                if let total = page.total {
-                    expectedTotal = max(expectedTotal ?? 0, total)
+                guard !page.isTruncated else {
+                    return incompletePaginationFailure(configuration: configuration)
                 }
+                pageCount += 1
+                expectedTotal = Self.updatedExpectedTotal(expectedTotal, pageTotal: page.total)
                 quota = quota ?? page.quota
 
                 for review in page.reviews {
@@ -283,11 +287,21 @@ public final class GreptileUsageProvider: UsageProvider {
         guard total.map({ $0 >= 0 }) != false else {
             return .malformed
         }
+        let isTruncated: Bool
+        if payload.keys.contains("truncated") {
+            guard let truncated = booleanValue(payload["truncated"]) else {
+                return .malformed
+            }
+            isTruncated = truncated
+        } else {
+            isTruncated = false
+        }
         return .page(
             ReviewPage(
                 reviews: reviews,
                 total: total,
-                quota: reviewQuota(in: payload)
+                quota: reviewQuota(in: payload),
+                isTruncated: isTruncated
             )
         )
     }
@@ -396,6 +410,23 @@ public final class GreptileUsageProvider: UsageProvider {
         default:
             nil
         }
+    }
+
+    private static func booleanValue(_ value: Any?) -> Bool? {
+        guard
+            let number = value as? NSNumber,
+            CFGetTypeID(number) == CFBooleanGetTypeID()
+        else {
+            return nil
+        }
+        return number.boolValue
+    }
+
+    private static func updatedExpectedTotal(_ current: Int?, pageTotal: Int?) -> Int? {
+        guard let pageTotal else {
+            return current
+        }
+        return max(current ?? 0, pageTotal)
     }
 
     private static func doubleValue(_ value: Any?) -> Double? {
@@ -679,12 +710,13 @@ public final class GreptileUsageProvider: UsageProvider {
     }
 
     private func pageLimit(expectedTotal: Int?) -> Int {
+        let offsetPageLimit = Self.maximumReviewOffset / pageSize + 1
         guard let expectedTotal else {
-            return maximumPageCount
+            return min(maximumPageCount, offsetPageLimit)
         }
         let completePageCount = expectedTotal / pageSize
         let requiredPageCount = completePageCount + (expectedTotal.isMultiple(of: pageSize) ? 0 : 1)
-        return max(maximumPageCount, requiredPageCount)
+        return min(maximumPageCount, offsetPageLimit, requiredPageCount)
     }
 
     private func failureResult(
