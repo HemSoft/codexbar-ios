@@ -2732,6 +2732,7 @@ final class ProviderParsingTests: XCTestCase {
         let usagePayload = #"{"planUsage":{"totalPercentUsed":25}}"#
         let unavailablePayloads = [
             #"{"usagePercent":0,"hasNonZeroIncludedLimit":false}"#,
+            #"{"usage_percent":0,"has_non_zero_included_limit":false}"#,
             #"{"usage_percent":0,"included_limit_zero":true}"#,
         ]
 
