@@ -5,6 +5,7 @@ public final class CursorUsageProvider: UsageProvider {
     private let session: URLSession
     private let usageEndpoint: URL
     private let grokBotUsageEndpoint: URL
+    private let grokBotRequestTimeout: Duration
 
     public let providerID = ProviderID.cursor
 
@@ -12,12 +13,14 @@ public final class CursorUsageProvider: UsageProvider {
         secretStore: SecretStore = KeychainService(),
         session: URLSession = .shared,
         usageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")!,
-        grokBotUsageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus")!
+        grokBotUsageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus")!,
+        grokBotRequestTimeout: Duration = .seconds(2)
     ) {
         self.secretStore = secretStore
         self.session = session
         self.usageEndpoint = usageEndpoint
         self.grokBotUsageEndpoint = grokBotUsageEndpoint
+        self.grokBotRequestTimeout = grokBotRequestTimeout
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
@@ -30,14 +33,8 @@ public final class CursorUsageProvider: UsageProvider {
         }
 
         do {
-            async let grokBotResponse = try? session.data(
-                for: makeUsageRequest(
-                    endpoint: grokBotUsageEndpoint,
-                    accessToken: accessToken
-                )
-            )
+            async let grokBotData = fetchGrokBotUsage(accessToken: accessToken)
             let (data, response) = try await session.data(for: makeUsageRequest(accessToken: accessToken))
-            let grokBotData = Self.successfulResponseData(await grokBotResponse)
             guard let httpResponse = response as? HTTPURLResponse else {
                 return failureResult("Cursor usage returned an invalid response.", configuration: configuration)
             }
@@ -46,7 +43,7 @@ public final class CursorUsageProvider: UsageProvider {
             case 200..<300:
                 return Self.parseUsage(
                     data,
-                    grokBotUsageData: grokBotData,
+                    grokBotUsageData: await grokBotData,
                     configuration: configuration
                 )
                     ?? failureResult("Could not parse Cursor usage.", configuration: configuration)
@@ -59,6 +56,27 @@ public final class CursorUsageProvider: UsageProvider {
             }
         } catch {
             return failureResult(error.localizedDescription, configuration: configuration)
+        }
+    }
+
+    private func fetchGrokBotUsage(accessToken: String) async -> Data? {
+        let session = session
+        let request = makeUsageRequest(endpoint: grokBotUsageEndpoint, accessToken: accessToken)
+        let timeout = grokBotRequestTimeout
+
+        return await withTaskGroup(of: Data?.self) { group in
+            group.addTask {
+                let response = try? await session.data(for: request)
+                return Self.successfulResponseData(response)
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return nil
+            }
+
+            let data = await group.next() ?? nil
+            group.cancelAll()
+            return data
         }
     }
 

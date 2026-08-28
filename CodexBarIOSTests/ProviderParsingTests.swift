@@ -2823,6 +2823,37 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.bars.first?.usageText, "25%")
     }
 
+    func testCursorProviderDoesNotWaitForStalledOptionalGrokBotUsage() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .cursor)
+        try secretStore.saveSecret(
+            "cursor-token",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [StalledCursorGrokBotURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        defer { session.invalidateAndCancel() }
+        let provider = CursorUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            grokBotRequestTimeout: .milliseconds(25)
+        )
+
+        let result = try await withTestWatchdog(
+            timeout: .seconds(1),
+            failureMessage: "Cursor usage waited for the stalled optional Grok Bot request.",
+            onTimeout: {},
+            operation: {
+                try await provider.fetchUsage(for: configuration)
+            }
+        )
+
+        XCTAssertEqual(result.bars.map(\.label), ["Total"])
+        XCTAssertEqual(result.bars.first?.usageText, "25%")
+    }
+
     func testCursorProviderWithoutCredentialIsNotDemoData() async throws {
         let provider = CursorUsageProvider(secretStore: EmptySecretStore())
         let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .cursor)
@@ -4694,4 +4725,40 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(bar.fractionUsed, 1)
     }
 
+}
+
+private final class StalledCursorGrokBotURLProtocol: URLProtocol, @unchecked Sendable {
+    // URLProtocol requires overridable class methods.
+    // swiftlint:disable:next static_over_final_class
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    // URLProtocol requires overridable class methods.
+    // swiftlint:disable:next static_over_final_class
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard request.url?.lastPathComponent == "GetCurrentPeriodUsage" else {
+            return
+        }
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"planUsage":{"totalPercentUsed":25}}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
