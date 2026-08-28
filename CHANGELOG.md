@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added Cursor's separate Grok Bot weekly usage metric, shown by default with
+  its own reset window and hideable from the account's Metrics settings.
+  ([#286](https://github.com/HemSoft/codexbar-ios/issues/286))
 - Added account-aware Codex limit tracking for every usage window the service
   reports, including separate GPT-5.3-Codex-Spark limits. Each discovered
   metric can be shown, hidden, and arranged in Customize Card.

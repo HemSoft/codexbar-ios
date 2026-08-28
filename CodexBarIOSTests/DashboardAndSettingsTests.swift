@@ -2583,6 +2583,47 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testCursorGrokBotMetricDefaultsVisibleAndCanBeHidden() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .cursor)
+        let metricID = "cursor.grok-bot-weekly"
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Cursor plan usage",
+            bars: [
+                UsageBar(
+                    stableKey: "grok-bot-weekly",
+                    label: "Grok Bot weekly",
+                    used: 38,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: Date()
+        )
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            initialUsageResult: result
+        )
+
+        XCTAssertEqual(viewModel.availableMetrics.map(\.id), [metricID])
+        XCTAssertTrue(viewModel.isMetricVisible(metricID))
+
+        viewModel.setMetricVisibility(false, metricID: metricID)
+
+        XCTAssertFalse(viewModel.isMetricVisible(metricID))
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        XCTAssertFalse(reloadedStore.isMetricVisible(accountID: configuration.id, metricID: metricID))
+    }
+
+    @MainActor
     func testAccountSettingsLoadMetricsAfterFirstCredentialSave() async {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

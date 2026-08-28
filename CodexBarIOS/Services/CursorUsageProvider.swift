@@ -4,17 +4,20 @@ public final class CursorUsageProvider: UsageProvider {
     private let secretStore: SecretStore
     private let session: URLSession
     private let usageEndpoint: URL
+    private let grokBotUsageEndpoint: URL
 
     public let providerID = ProviderID.cursor
 
     public init(
         secretStore: SecretStore = KeychainService(),
         session: URLSession = .shared,
-        usageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")!
+        usageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")!,
+        grokBotUsageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus")!
     ) {
         self.secretStore = secretStore
         self.session = session
         self.usageEndpoint = usageEndpoint
+        self.grokBotUsageEndpoint = grokBotUsageEndpoint
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
@@ -27,14 +30,25 @@ public final class CursorUsageProvider: UsageProvider {
         }
 
         do {
+            async let grokBotResponse = try? session.data(
+                for: makeUsageRequest(
+                    endpoint: grokBotUsageEndpoint,
+                    accessToken: accessToken
+                )
+            )
             let (data, response) = try await session.data(for: makeUsageRequest(accessToken: accessToken))
+            let grokBotData = Self.successfulResponseData(await grokBotResponse)
             guard let httpResponse = response as? HTTPURLResponse else {
                 return failureResult("Cursor usage returned an invalid response.", configuration: configuration)
             }
 
             switch httpResponse.statusCode {
             case 200..<300:
-                return Self.parseUsage(data, configuration: configuration)
+                return Self.parseUsage(
+                    data,
+                    grokBotUsageData: grokBotData,
+                    configuration: configuration
+                )
                     ?? failureResult("Could not parse Cursor usage.", configuration: configuration)
             case 401, 403:
                 return failureResult("Cursor rejected this session token. Sign in again.", configuration: configuration)
@@ -49,7 +63,11 @@ public final class CursorUsageProvider: UsageProvider {
     }
 
     func makeUsageRequest(accessToken: String) -> URLRequest {
-        var request = URLRequest(url: usageEndpoint)
+        makeUsageRequest(endpoint: usageEndpoint, accessToken: accessToken)
+    }
+
+    private func makeUsageRequest(endpoint: URL, accessToken: String) -> URLRequest {
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.httpBody = Data("{}".utf8)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -62,6 +80,7 @@ public final class CursorUsageProvider: UsageProvider {
 
     static func parseUsage(
         _ data: Data,
+        grokBotUsageData: Data? = nil,
         configuration: ProviderAccountConfiguration,
         fetchedAt: Date = Date()
     ) -> ProviderUsageResult? {
@@ -69,7 +88,11 @@ public final class CursorUsageProvider: UsageProvider {
             return nil
         }
 
-        let bars = buildUsageBars(usage, fetchedAt: fetchedAt)
+        var bars = buildUsageBars(usage, fetchedAt: fetchedAt)
+        if let grokBotUsageData,
+           let grokBotBar = buildGrokBotUsageBar(grokBotUsageData, fetchedAt: fetchedAt) {
+            bars.append(grokBotBar)
+        }
         guard !bars.isEmpty else {
             return nil
         }
@@ -83,6 +106,20 @@ public final class CursorUsageProvider: UsageProvider {
             cardInformationSections: buildUsageInformationSections(usage.planUsage),
             fetchedAt: fetchedAt
         )
+    }
+
+    private static func successfulResponseData(_ response: (Data, URLResponse)?) -> Data? {
+        guard let response else {
+            return nil
+        }
+        let (data, urlResponse) = response
+        guard
+            let httpResponse = urlResponse as? HTTPURLResponse,
+            (200..<300).contains(httpResponse.statusCode)
+        else {
+            return nil
+        }
+        return data
     }
 
     static func normalizedAccessToken(from storedSecret: String?) -> String? {
@@ -175,6 +212,40 @@ public final class CursorUsageProvider: UsageProvider {
         }
 
         return bars
+    }
+
+    private static func buildGrokBotUsageBar(_ data: Data, fetchedAt: Date) -> UsageBar? {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard
+            let usage = try? decoder.decode(CursorGrokBotUsage.self, from: data),
+            usage.usesPooledEnterpriseAllowance != true,
+            let percent = usage.usagePercent,
+            percent.isFinite
+        else {
+            return nil
+        }
+
+        let usedPercent = min(max(percent, 0), 100)
+        let periodStart = parseTimestamp(usage.currentPeriodStart)
+        let reset = parseTimestamp(usage.nextResetTimestampUtc)
+        let hasCurrentPeriod = periodStart.map { $0 < fetchedAt } == true
+            && reset.map { fetchedAt < $0 } == true
+
+        return UsageBar(
+            stableKey: "grok-bot-weekly",
+            label: "Grok Bot weekly",
+            used: usedPercent,
+            limit: 100,
+            resetDescription: reset.map { formatReset($0, now: fetchedAt) },
+            resetsAt: reset,
+            resetDisplayStyle: .shortLocalDate,
+            projectionCurrent: hasCurrentPeriod ? usedPercent / 100 : nil,
+            projectionLimit: hasCurrentPeriod ? 1 : nil,
+            projectionPeriodStart: hasCurrentPeriod ? periodStart : nil,
+            projectionPeriodEnd: hasCurrentPeriod ? reset : nil,
+            showProjectionOnCurrentBar: hasCurrentPeriod
+        )
     }
 
     private static func usageBar(
@@ -278,6 +349,19 @@ public final class CursorUsageProvider: UsageProvider {
         return Date(timeIntervalSince1970: milliseconds / 1000)
     }
 
+    private static func parseTimestamp(_ value: String?) -> Date? {
+        guard let value else {
+            return nil
+        }
+        if let unixTimestamp = parseUnixMilliseconds(value) {
+            return unixTimestamp
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+
     private static func formatReset(_ resetAt: Date, now _: Date) -> String {
         "Resets \(UserFacingDateTimeFormatter.current.shortDate(resetAt))"
     }
@@ -338,4 +422,11 @@ private struct CursorPlanUsage: Decodable {
 private struct CursorSpendLimitUsage: Decodable {
     let individualLimit: Double?
     let individualRemaining: Double?
+}
+
+private struct CursorGrokBotUsage: Decodable {
+    let currentPeriodStart: String?
+    let nextResetTimestampUtc: String?
+    let usagePercent: Double?
+    let usesPooledEnterpriseAllowance: Bool?
 }
