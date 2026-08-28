@@ -2683,6 +2683,51 @@ final class ProviderParsingTests: XCTestCase {
         ))
     }
 
+    func testCursorUsageParserReadsGrokBotWeeklyUsage() throws {
+        let fetchedAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-08-22T12:00:00Z"))
+        let usagePayload = #"{"planUsage":{"totalPercentUsed":25}}"#
+        let grokBotPayload = """
+        {
+          "currentPeriodStart": "2026-08-19T21:37:33.239Z",
+          "nextResetTimestampUtc": "2026-08-26T21:37:33.239Z",
+          "usagePercent": 38.059383,
+          "usesPooledEnterpriseAllowance": false
+        }
+        """
+
+        let result = try XCTUnwrap(CursorUsageProvider.parseUsage(
+            Data(usagePayload.utf8),
+            grokBotUsageData: Data(grokBotPayload.utf8),
+            configuration: .defaultConfiguration(for: .cursor),
+            fetchedAt: fetchedAt
+        ))
+        let grokBot = try XCTUnwrap(result.bars.last)
+
+        XCTAssertEqual(result.bars.map(\.label), ["Total", "Grok Bot weekly"])
+        XCTAssertEqual(grokBot.stableKey, "grok-bot-weekly")
+        XCTAssertEqual(grokBot.usageText, "38%")
+        XCTAssertEqual(
+            try XCTUnwrap(grokBot.resetsAt).timeIntervalSince1970,
+            1_787_780_253.239,
+            accuracy: 0.001
+        )
+        XCTAssertTrue(grokBot.showProjectionOnCurrentBar)
+        XCTAssertEqual(grokBot.metricIdentifier(providerID: .cursor, index: 1), "cursor.grok-bot-weekly")
+    }
+
+    func testCursorUsageParserOmitsUnavailableGrokBotUsage() throws {
+        let usagePayload = #"{"planUsage":{"totalPercentUsed":25}}"#
+        let pooledGrokBotPayload = #"{"usage_percent":38,"uses_pooled_enterprise_allowance":true}"#
+
+        let result = try XCTUnwrap(CursorUsageProvider.parseUsage(
+            Data(usagePayload.utf8),
+            grokBotUsageData: Data(pooledGrokBotPayload.utf8),
+            configuration: .defaultConfiguration(for: .cursor)
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), ["Total"])
+    }
+
     func testCursorUsageParserSuppressesPredictionsWithoutValidCurrentBillingPeriod() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
         let invalidPeriods = [
@@ -2733,13 +2778,28 @@ final class ProviderParsingTests: XCTestCase {
         urlSessionConfiguration.protocolClasses = [ProviderParsingMockURLProtocol.self]
         let session = URLSession(configuration: urlSessionConfiguration)
         let provider = CursorUsageProvider(secretStore: secretStore, session: session)
+        let currentUsageRequest = expectation(description: "Current Cursor usage requested")
+        let grokBotUsageRequest = expectation(description: "Grok Bot usage requested")
 
         ProviderParsingMockURLProtocol.handler = { request in
-            XCTAssertEqual(request.url?.absoluteString, "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cursor-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Connect-Protocol-Version"), "1")
             XCTAssertEqual(requestBodyData(from: request), Data("{}".utf8))
+            let responseData: Data
+            switch request.url?.lastPathComponent {
+            case "GetCurrentPeriodUsage":
+                currentUsageRequest.fulfill()
+                responseData = Data(
+                    #"{"planUsage":{"totalPercentUsed":25,"autoPercentUsed":10,"apiPercentUsed":5}}"#.utf8
+                )
+            case "GetSandUsageStatus":
+                grokBotUsageRequest.fulfill()
+                responseData = Data(#"{"usagePercent":12.4}"#.utf8)
+            default:
+                XCTFail("Unexpected Cursor usage URL: \(request.url?.absoluteString ?? "nil")")
+                responseData = Data()
+            }
             return (
                 HTTPURLResponse(
                     url: try XCTUnwrap(request.url),
@@ -2747,7 +2807,7 @@ final class ProviderParsingTests: XCTestCase {
                     httpVersion: nil,
                     headerFields: nil
                 )!,
-                Data(#"{"planUsage":{"totalPercentUsed":25,"autoPercentUsed":10,"apiPercentUsed":5}}"#.utf8)
+                responseData
             )
         }
         defer {
@@ -2755,10 +2815,42 @@ final class ProviderParsingTests: XCTestCase {
         }
 
         let result = try await provider.fetchUsage(for: configuration)
+        await fulfillment(of: [currentUsageRequest, grokBotUsageRequest], timeout: 1)
 
         XCTAssertEqual(result.providerID, .cursor)
         XCTAssertEqual(result.title, "Cursor")
-        XCTAssertEqual(result.bars.map(\.label), ["Total", "Auto", "API"])
+        XCTAssertEqual(result.bars.map(\.label), ["Total", "Auto", "API", "Grok Bot weekly"])
+        XCTAssertEqual(result.bars.first?.usageText, "25%")
+    }
+
+    func testCursorProviderDoesNotWaitForStalledOptionalGrokBotUsage() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .cursor)
+        try secretStore.saveSecret(
+            "cursor-token",
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [StalledCursorGrokBotURLProtocol.self]
+        let session = URLSession(configuration: urlSessionConfiguration)
+        defer { session.invalidateAndCancel() }
+        let provider = CursorUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            grokBotRequestTimeout: .milliseconds(25)
+        )
+
+        let result = try await withTestWatchdog(
+            timeout: .seconds(1),
+            failureMessage: "Cursor usage waited for the stalled optional Grok Bot request.",
+            onTimeout: {},
+            operation: {
+                try await provider.fetchUsage(for: configuration)
+            }
+        )
+
+        XCTAssertEqual(result.bars.map(\.label), ["Total"])
         XCTAssertEqual(result.bars.first?.usageText, "25%")
     }
 
@@ -4633,4 +4725,40 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(bar.fractionUsed, 1)
     }
 
+}
+
+private final class StalledCursorGrokBotURLProtocol: URLProtocol, @unchecked Sendable {
+    // URLProtocol requires overridable class methods.
+    // swiftlint:disable:next static_over_final_class
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    // URLProtocol requires overridable class methods.
+    // swiftlint:disable:next static_over_final_class
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard request.url?.lastPathComponent == "GetCurrentPeriodUsage" else {
+            return
+        }
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"planUsage":{"totalPercentUsed":25}}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
