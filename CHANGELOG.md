@@ -21,6 +21,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Hid Cursor's Grok Bot weekly metric when the account explicitly has no
+  included allowance, while preserving genuine 0% readings for entitled users.
+  ([#288](https://github.com/HemSoft/codexbar-ios/issues/288))
 - Kept incomplete Greptile review scans from replacing the last complete usage
   result or skipping reviews during pagination.
   ([#284](https://github.com/HemSoft/codexbar-ios/issues/284))

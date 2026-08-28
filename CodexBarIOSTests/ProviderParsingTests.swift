@@ -2728,6 +2728,49 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.label), ["Total"])
     }
 
+    func testCursorUsageParserOmitsGrokBotUsageWithoutIncludedAllowance() throws {
+        let usagePayload = #"{"planUsage":{"totalPercentUsed":25}}"#
+        let unavailablePayloads = [
+            #"{"usagePercent":0,"hasNonZeroIncludedLimit":false}"#,
+            #"{"usage_percent":0,"included_limit_zero":true}"#,
+        ]
+
+        for grokBotPayload in unavailablePayloads {
+            let result = try XCTUnwrap(CursorUsageProvider.parseUsage(
+                Data(usagePayload.utf8),
+                grokBotUsageData: Data(grokBotPayload.utf8),
+                configuration: .defaultConfiguration(for: .cursor)
+            ))
+
+            XCTAssertEqual(result.bars.map(\.label), ["Total"])
+            XCTAssertEqual(
+                result.bars.map { $0.metricIdentifier(providerID: .cursor, index: 0) },
+                ["cursor.total"]
+            )
+        }
+    }
+
+    func testCursorUsageParserKeepsEntitledZeroPercentGrokBotUsage() throws {
+        let usagePayload = #"{"planUsage":{"totalPercentUsed":25}}"#
+        let grokBotPayload = """
+        {
+          "usagePercent": 0,
+          "hasNonZeroIncludedLimit": true,
+          "includedLimitZero": false,
+          "usesPooledEnterpriseAllowance": false
+        }
+        """
+
+        let result = try XCTUnwrap(CursorUsageProvider.parseUsage(
+            Data(usagePayload.utf8),
+            grokBotUsageData: Data(grokBotPayload.utf8),
+            configuration: .defaultConfiguration(for: .cursor)
+        ))
+
+        XCTAssertEqual(result.bars.map(\.label), ["Total", "Grok Bot weekly"])
+        XCTAssertEqual(result.bars.last?.usageText, "0%")
+    }
+
     func testCursorUsageParserSuppressesPredictionsWithoutValidCurrentBillingPeriod() throws {
         let fetchedAt = Date(timeIntervalSince1970: 1_783_667_520)
         let invalidPeriods = [
