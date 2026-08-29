@@ -1476,6 +1476,87 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testDailyHistoryKeepsSeparateBarIdentitiesFromSameDay() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let completedResult = ProviderUsageResult(
+            accountID: "greptile.personal",
+            providerID: .greptile,
+            title: "Greptile",
+            subtitle: "Completed reviews",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.completedReviewsStableKey,
+                    label: "Completed reviews",
+                    used: 4,
+                    limit: 4
+                ),
+            ],
+            fetchedAt: firstFetch
+        )
+        let quotaResult = ProviderUsageResult(
+            accountID: completedResult.accountID,
+            providerID: completedResult.providerID,
+            title: completedResult.title,
+            subtitle: "Review quota",
+            bars: [
+                UsageBar(
+                    stableKey: GreptileUsageIdentity.reviewQuotaStableKey,
+                    label: "Reviews used",
+                    used: 1,
+                    limit: 10
+                ),
+            ],
+            fetchedAt: firstFetch.addingTimeInterval(60 * 60)
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(
+            results: [completedResult],
+            now: firstFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [quotaResult],
+            now: quotaResult.fetchedAt,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.removeSnapshotsForMissingAccounts(
+            validAccountIDs: [completedResult.accountID],
+            now: firstFetch.addingTimeInterval(31 * 24 * 60 * 60)
+        )
+
+        let emptyCurrentResult = ProviderUsageResult(
+            accountID: completedResult.accountID,
+            providerID: completedResult.providerID,
+            title: completedResult.title,
+            subtitle: "No current usage",
+            bars: [],
+            fetchedAt: quotaResult.fetchedAt
+        )
+        let options = store.historySeriesOptions(for: emptyCurrentResult)
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+        XCTAssertEqual(store.dailySnapshots.count, 2)
+        XCTAssertEqual(
+            options.first(where: {
+                $0.id == GreptileUsageIdentity.reviewQuotaHistorySeriesID
+            })?.series.points.map(\.value),
+            [1]
+        )
+        XCTAssertEqual(
+            options.first(where: {
+                $0.id == GreptileUsageIdentity.completedReviewsHistorySeriesID
+            })?.series.points.map(\.value),
+            [4]
+        )
+    }
+
+    @MainActor
     func testUsageHistoryStoreKeepsNinetyDailyPointsBeyondDenseRetention() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

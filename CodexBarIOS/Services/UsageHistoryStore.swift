@@ -277,8 +277,8 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         self.subtitle = snapshot.subtitle
         self.capturedAt = snapshot.capturedAt
         switch component {
-        case .bars:
-            self.bars = snapshot.bars
+        case let .bar(bar):
+            self.bars = [bar]
             self.creditsRemaining = nil
             self.monetaryMetrics = nil
         case .credits:
@@ -422,19 +422,23 @@ public struct UsageHistoryPoint: Identifiable, Equatable, Sendable {
 }
 
 enum DailyUsageHistoryComponent {
-    case bars
+    case bar(UsageHistoryBarSnapshot)
     case credits
     case monetaryMetric(UsageHistoryMonetaryMetricSnapshot)
 
     var id: String {
         switch self {
-        case .bars:
-            "bars"
+        case let .bar(bar):
+            "bar.\(Self.barIdentity(bar))"
         case .credits:
             "credits"
         case let .monetaryMetric(metric):
             "money.\(metric.kind.rawValue).\(metric.currencyCode)"
         }
+    }
+
+    static func barIdentity(_ bar: UsageHistoryBarSnapshot) -> String {
+        bar.stableKey ?? "legacy.\(bar.label.lowercased())"
     }
 }
 
@@ -970,17 +974,25 @@ public final class UsageHistoryStore: ObservableObject {
         snapshots: [UsageHistorySnapshot],
         severityThresholds: UsageSeverityThresholds
     ) -> UsageHistorySeries {
-        UsageHistorySeries(
+        var pointsByTimestamp: [Date: UsageHistoryPoint] = [:]
+        for snapshot in snapshots {
+            guard let value = snapshot.bars.map(\.historyFractionUsed).max() else {
+                continue
+            }
+            let point = UsageHistoryPoint(
+                snapshot: snapshot,
+                value: value,
+                severityThresholds: severityThresholds
+            )
+            if let existingPoint = pointsByTimestamp[snapshot.capturedAt],
+               existingPoint.value >= value {
+                continue
+            }
+            pointsByTimestamp[snapshot.capturedAt] = point
+        }
+        return UsageHistorySeries(
             accountID: accountID,
-            points: snapshots.compactMap { snapshot in
-                snapshot.bars.map(\.historyFractionUsed).max().map {
-                    UsageHistoryPoint(
-                        snapshot: snapshot,
-                        value: $0,
-                        severityThresholds: severityThresholds
-                    )
-                }
-            },
+            points: Array(pointsByTimestamp.values),
             isBalance: false
         )
     }
@@ -990,28 +1002,33 @@ public final class UsageHistoryStore: ObservableObject {
         snapshots: [UsageHistorySnapshot],
         severityThresholds: UsageSeverityThresholds
     ) -> UsageHistorySeries {
-        UsageHistorySeries(
-            accountID: accountID,
-            points: snapshots.compactMap { snapshot in
-                let total = snapshot.bars.first(where: {
-                    $0.stableKey == "total"
-                        || ($0.stableKey == nil
-                            && Self.matchesLegacyCursorBar($0, stableKey: "total"))
-                })
-                let selectedBar = total
-                    ?? snapshot.bars.max(by: { $0.historyFractionUsed < $1.historyFractionUsed })
-                return selectedBar.map {
-                    UsageHistoryPoint(
-                        id: snapshot.id,
-                        capturedAt: snapshot.capturedAt,
-                        value: $0.historyFractionUsed,
-                        severity: snapshot.effectiveSeverity(
-                            for: $0,
-                            using: severityThresholds
-                        )
+        let snapshotsByTimestamp = Dictionary(grouping: snapshots, by: \.capturedAt)
+        let points = snapshotsByTimestamp.compactMap { capturedAt, matchingSnapshots in
+            let bars = matchingSnapshots.flatMap { snapshot in
+                snapshot.bars.map { (snapshot, $0) }
+            }
+            let selected = bars.first(where: { _, bar in
+                bar.stableKey == "total"
+                    || (bar.stableKey == nil
+                        && Self.matchesLegacyCursorBar(bar, stableKey: "total"))
+            }) ?? bars.max(by: { lhs, rhs in
+                lhs.1.historyFractionUsed < rhs.1.historyFractionUsed
+            })
+            return selected.map { snapshot, bar in
+                UsageHistoryPoint(
+                    id: snapshot.id,
+                    capturedAt: capturedAt,
+                    value: bar.historyFractionUsed,
+                    severity: snapshot.effectiveSeverity(
+                        for: bar,
+                        using: severityThresholds
                     )
-                }
-            },
+                )
+            }
+        }
+        return UsageHistorySeries(
+            accountID: accountID,
+            points: points,
             isBalance: false
         )
     }
@@ -1097,9 +1114,11 @@ public final class UsageHistoryStore: ObservableObject {
         }
 
         guard !metricOptions.contains(where: { $0.id == "usage.total" }) else {
-            let hasFallbackSamples = snapshots.contains(where: { snapshot in
-                !snapshot.bars.isEmpty
-                    && !snapshot.bars.contains(where: {
+            let snapshotsByTimestamp = Dictionary(grouping: snapshots, by: \.capturedAt)
+            let hasFallbackSamples = snapshotsByTimestamp.values.contains(where: { matchingSnapshots in
+                let bars = matchingSnapshots.flatMap(\.bars)
+                return !bars.isEmpty
+                    && !bars.contains(where: {
                         $0.stableKey == "total"
                             || ($0.stableKey == nil
                                 && Self.matchesLegacyCursorBar($0, stableKey: "total"))
@@ -1420,9 +1439,7 @@ public final class UsageHistoryStore: ObservableObject {
 
     private func updateDailySnapshots(from snapshot: UsageHistorySnapshot) {
         var components: [DailyUsageHistoryComponent] = []
-        if !snapshot.bars.isEmpty {
-            components.append(.bars)
-        }
+        components.append(contentsOf: snapshot.bars.map { .bar($0) })
         if snapshot.creditsRemaining != nil {
             components.append(.credits)
         }
@@ -1462,8 +1479,8 @@ public final class UsageHistoryStore: ObservableObject {
     }
 
     private static func dailyComponentID(for snapshot: UsageHistorySnapshot) -> String {
-        if !snapshot.bars.isEmpty {
-            return "bars"
+        if let bar = snapshot.bars.first {
+            return "bar.\(DailyUsageHistoryComponent.barIdentity(bar))"
         }
         if snapshot.creditsRemaining != nil {
             return "credits"
