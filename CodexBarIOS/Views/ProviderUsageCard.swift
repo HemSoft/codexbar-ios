@@ -2058,6 +2058,7 @@ struct ProviderUsageHistoryDetailView: View {
 
     @State private var selectedDate: Date?
     @State private var selectedSeriesID: String
+    @State private var selectedRange = UsageHistoryRange.sevenDays
 
     init(result: ProviderUsageResult, seriesOptions: [UsageHistorySeriesOption]) {
         self.result = result
@@ -2083,11 +2084,25 @@ struct ProviderUsageHistoryDetailView: View {
                         }
                     }
 
+                    Picker("History range", selection: $selectedRange) {
+                        ForEach(UsageHistoryRange.allCases) { range in
+                            Text(range.compactTitle)
+                                .accessibilityLabel(range.title)
+                                .tag(range)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: selectedRange) {
+                        selectedDate = nil
+                    }
+
                     if series.points.isEmpty {
                         ContentUnavailableView(
-                            "No History Yet",
+                            "No History in This Range",
                             systemImage: "chart.xyaxis.line",
-                            description: Text("A history graph will appear after usage has been refreshed.")
+                            description: Text(
+                                "Choose a longer range or refresh usage to collect another sample."
+                            )
                         )
                         .frame(maxWidth: .infinity, minHeight: 320)
                     } else {
@@ -2114,9 +2129,10 @@ struct ProviderUsageHistoryDetailView: View {
     }
 
     private var series: UsageHistorySeries {
-        seriesOptions.first(where: { $0.id == selectedSeriesID })?.series
+        let unfilteredSeries = seriesOptions.first(where: { $0.id == selectedSeriesID })?.series
             ?? seriesOptions.first?.series
             ?? UsageHistorySeries(accountID: result.accountID, points: [], isBalance: false)
+        return unfilteredSeries.filtered(to: selectedRange)
     }
 
     private var accountHeader: some View {

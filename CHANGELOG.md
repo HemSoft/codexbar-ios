@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added 90 days of daily usage history alongside existing frequent samples,
+  with History controls for today, 3 days, 7 days, a month, and 3 months.
+  ([#290](https://github.com/HemSoft/codexbar-ios/issues/290))
 - Added Cursor's separate Grok Bot weekly usage metric, shown by default with
   its own reset window and hideable from the account's Metrics settings.
   ([#286](https://github.com/HemSoft/codexbar-ios/issues/286))
