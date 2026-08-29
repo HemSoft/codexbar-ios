@@ -1375,6 +1375,184 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testUsageHistoryStoreUpdatesDailyPointInsideDenseSamplingInterval() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let latestFetch = firstFetch.addingTimeInterval(60 * 60)
+        let firstResult = makeHistoryResult(
+            accountID: "codex.personal",
+            fetchedAt: firstFetch,
+            used: 20
+        )
+        let latestResult = makeHistoryResult(
+            accountID: "codex.personal",
+            fetchedAt: latestFetch,
+            used: 35
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(
+            results: [firstResult],
+            now: firstFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [latestResult],
+            now: latestFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+
+        XCTAssertEqual(store.snapshots.compactMap { $0.bars.first?.used }, [20])
+        XCTAssertEqual(store.dailySnapshots.compactMap { $0.bars.first?.used }, [35])
+        XCTAssertEqual(
+            store.historySeries(for: latestResult).points.map(\.value),
+            [0.2, 0.35]
+        )
+
+        let reloadedStore = UsageHistoryStore(defaults: defaults)
+        XCTAssertEqual(reloadedStore.dailySnapshots.count, 1)
+        XCTAssertEqual(reloadedStore.dailySnapshots.first?.capturedAt, latestFetch)
+    }
+
+    @MainActor
+    func testDailyHistoryKeepsComponentsFromPartialRefreshes() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let fullResult = ProviderUsageResult(
+            accountID: "opencode.personal",
+            providerID: .openCodeZen,
+            title: "OpenCode",
+            subtitle: "Usage and balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage", used: 20, limit: 100)],
+            creditsRemaining: 12,
+            fetchedAt: firstFetch
+        )
+        let partialResult = ProviderUsageResult(
+            accountID: fullResult.accountID,
+            providerID: fullResult.providerID,
+            title: fullResult.title,
+            subtitle: "Fresh usage with cached balance",
+            bars: [UsageBar(stableKey: "go.weekly", label: "Weekly usage", used: 40, limit: 100)],
+            creditsRemaining: 12,
+            creditsFetchedAt: firstFetch,
+            fetchedAt: firstFetch.addingTimeInterval(60 * 60)
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(
+            results: [fullResult],
+            now: firstFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [partialResult],
+            now: partialResult.fetchedAt,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.removeSnapshotsForMissingAccounts(
+            validAccountIDs: [fullResult.accountID],
+            now: firstFetch.addingTimeInterval(31 * 24 * 60 * 60)
+        )
+
+        XCTAssertTrue(store.snapshots.isEmpty)
+        XCTAssertEqual(store.dailySnapshots.count, 2)
+        let options = store.historySeriesOptions(for: partialResult)
+        XCTAssertEqual(
+            options.first(where: { $0.id == "usage" })?.series.points.map(\.value),
+            [0.4]
+        )
+        XCTAssertEqual(
+            options.first(where: { $0.id == "balance" })?.series.points.map(\.value),
+            [12]
+        )
+    }
+
+    @MainActor
+    func testUsageHistoryStoreKeepsNinetyDailyPointsBeyondDenseRetention() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 29, hour: 12))
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        for daysAgo in (0..<95).reversed() {
+            let fetchedAt = try XCTUnwrap(
+                calendar.date(byAdding: .day, value: -daysAgo, to: now)
+            )
+            store.record(
+                results: [
+                    makeHistoryResult(
+                        accountID: "codex.personal",
+                        fetchedAt: fetchedAt,
+                        used: Double(daysAgo)
+                    ),
+                ],
+                now: now,
+                samplingInterval: HistorySamplingInterval.twoHours.seconds
+            )
+        }
+
+        XCTAssertEqual(store.dailySnapshots.count, 90)
+        XCTAssertEqual(store.snapshots.count, 31)
+
+        let currentResult = makeHistoryResult(
+            accountID: "codex.personal",
+            fetchedAt: now,
+            used: 0
+        )
+        let series = UsageHistoryStore(defaults: defaults).historySeries(for: currentResult)
+        XCTAssertEqual(series.points.count, 90)
+        XCTAssertEqual(
+            series.points.first?.capturedAt,
+            calendar.date(byAdding: .day, value: -89, to: now)
+        )
+    }
+
+    func testUsageHistoryRangesUseInclusiveLocalCalendarDays() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 29, hour: 20))
+        )
+        let offsets = [0, -2, -3, -6, -7, -29, -30, -89, -90]
+        let points = try offsets.enumerated().map { index, offset in
+            UsageHistoryPoint(
+                id: "point-\(index)",
+                capturedAt: try XCTUnwrap(
+                    calendar.date(byAdding: .day, value: offset, to: now)
+                ),
+                value: Double(index),
+                severity: .normal
+            )
+        }
+        let series = UsageHistorySeries(
+            accountID: "codex.personal",
+            points: points.sorted { $0.capturedAt < $1.capturedAt },
+            isBalance: false
+        )
+
+        XCTAssertEqual(series.filtered(to: .today, now: now, calendar: calendar).points.count, 1)
+        XCTAssertEqual(series.filtered(to: .threeDays, now: now, calendar: calendar).points.count, 2)
+        XCTAssertEqual(series.filtered(to: .sevenDays, now: now, calendar: calendar).points.count, 4)
+        XCTAssertEqual(series.filtered(to: .month, now: now, calendar: calendar).points.count, 6)
+        XCTAssertEqual(series.filtered(to: .threeMonths, now: now, calendar: calendar).points.count, 8)
+    }
+
+    @MainActor
     func testUsageHistoryStoreRemovesDeletedAccounts() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
