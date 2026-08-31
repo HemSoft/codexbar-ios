@@ -222,6 +222,18 @@ final class WidgetConfigurationTests: XCTestCase {
             )?.id,
             "bar.\(configuration.id).cursor.other-models"
         )
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).1.auto"
+            )?.id,
+            "bar.\(configuration.id).cursor.cursor-models"
+        )
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).2.api"
+            )?.id,
+            "bar.\(configuration.id).cursor.other-models"
+        )
     }
 
     @MainActor
