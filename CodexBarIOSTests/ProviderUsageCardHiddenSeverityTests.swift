@@ -9,12 +9,22 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
             title: "Cursor",
             subtitle: "Usage",
             bars: [
-                UsageBar(stableKey: "total", label: "Total", used: 38, limit: 100),
-                UsageBar(stableKey: "api", label: "API", used: 100, limit: 100),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                    label: "Cursor Models",
+                    used: 38,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
+                    used: 100,
+                    limit: 100
+                ),
             ],
             fetchedAt: Date()
         )
-        let hiddenMetricID = "cursor.api"
+        let hiddenMetricID = CursorUsageIdentity.otherModelsMetricID
         let alert = try XCTUnwrap(
             ProviderUsageCard.hiddenSeverityAlert(
                 for: result,
@@ -24,7 +34,7 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
         )
 
         XCTAssertEqual(alert.title, "Critical status from hidden metric")
-        XCTAssertEqual(alert.message, "Hidden metric API is currently at 100%.")
+        XCTAssertEqual(alert.message, "Hidden metric Other Models is currently at 100%.")
         XCTAssertNil(
             ProviderUsageCard.hiddenSeverityAlert(
                 for: result,
@@ -41,7 +51,7 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
                 severity: .critical,
                 severitySource: alert.message
             ),
-            "Cursor, Current, Critical status, Hidden metric API is currently at 100%."
+            "Cursor, Current, Critical status, Hidden metric Other Models is currently at 100%."
         )
     }
 
@@ -54,8 +64,8 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
             subtitle: "Usage",
             bars: [
                 UsageBar(
-                    stableKey: "api",
-                    label: "API",
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
                     used: 40,
                     limit: 100,
                     projectionCurrent: 40,
@@ -77,7 +87,7 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
 
         XCTAssertEqual(
             alert.message,
-            "Hidden metric API is currently at 40% and projected to reach 100%."
+            "Hidden metric Other Models is currently at 40% and projected to reach 100%."
         )
 
         let cachedResult = ProviderUsageResult(
@@ -101,7 +111,7 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
 
         XCTAssertEqual(
             cachedAlert.message,
-            "Hidden metric API was last known at 40% and was projected to reach 100%."
+            "Hidden metric Other Models was last known at 40% and was projected to reach 100%."
         )
     }
 
@@ -180,7 +190,14 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
             providerID: .cursor,
             title: "Cursor",
             subtitle: "Refresh failed. Showing last known data.",
-            bars: [UsageBar(stableKey: "api", label: "API", used: 100, limit: 100)],
+            bars: [
+                UsageBar(
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
+                    used: 100,
+                    limit: 100
+                ),
+            ],
             barsFetchedAt: fetchedAt,
             failureMessage: "Refresh failed",
             fetchedAt: fetchedAt
@@ -195,7 +212,7 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
 
         XCTAssertTrue(result.hasFreshBars)
         XCTAssertFalse(result.hasCurrentBars)
-        XCTAssertEqual(alert.message, "Hidden metric API was last known at 100%.")
+        XCTAssertEqual(alert.message, "Hidden metric Other Models was last known at 100%.")
     }
 
     func testHiddenSpendExplainsReachedLimitSeverity() throws {

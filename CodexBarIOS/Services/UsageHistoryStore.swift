@@ -1008,9 +1008,7 @@ public final class UsageHistoryStore: ObservableObject {
                 snapshot.bars.map { (snapshot, $0) }
             }
             let selected = bars.first(where: { _, bar in
-                bar.stableKey == "total"
-                    || (bar.stableKey == nil
-                        && Self.matchesLegacyCursorBar(bar, stableKey: "total"))
+                Self.matchesCursorBar(bar, stableKey: "total")
             }) ?? bars.max(by: { lhs, rhs in
                 lhs.1.historyFractionUsed < rhs.1.historyFractionUsed
             })
@@ -1043,8 +1041,7 @@ public final class UsageHistoryStore: ObservableObject {
             accountID: accountID,
             points: snapshots.compactMap { snapshot in
                 snapshot.bars.first(where: {
-                    $0.stableKey == stableKey
-                        || ($0.stableKey == nil && Self.matchesLegacyCursorBar($0, stableKey: stableKey))
+                    Self.matchesCursorBar($0, stableKey: stableKey)
                 }).map {
                     UsageHistoryPoint(
                         id: snapshot.id,
@@ -1066,15 +1063,43 @@ public final class UsageHistoryStore: ObservableObject {
         switch stableKey {
         case "total":
             return label.caseInsensitiveCompare("Total") == .orderedSame
-        case "auto":
-            return label.caseInsensitiveCompare("Auto") == .orderedSame
-        case "api":
-            return label.caseInsensitiveCompare("API") == .orderedSame
+        case CursorUsageIdentity.cursorModelsStableKey:
+            return label.caseInsensitiveCompare("Cursor Models") == .orderedSame
+                || label.caseInsensitiveCompare("Auto") == .orderedSame
+        case CursorUsageIdentity.otherModelsStableKey:
+            return label.caseInsensitiveCompare("Other Models") == .orderedSame
+                || label.caseInsensitiveCompare("API") == .orderedSame
         case "on-demand":
             return label.lowercased().hasPrefix("on-demand")
         default:
             return false
         }
+    }
+
+    private static func matchesCursorBar(
+        _ bar: UsageHistoryBarSnapshot,
+        stableKey: String
+    ) -> Bool {
+        let acceptedStableKeys: Set<String>
+        switch stableKey {
+        case CursorUsageIdentity.cursorModelsStableKey:
+            acceptedStableKeys = [
+                CursorUsageIdentity.cursorModelsStableKey,
+                CursorUsageIdentity.legacyCursorModelsStableKey,
+            ]
+        case CursorUsageIdentity.otherModelsStableKey:
+            acceptedStableKeys = [
+                CursorUsageIdentity.otherModelsStableKey,
+                CursorUsageIdentity.legacyOtherModelsStableKey,
+            ]
+        default:
+            acceptedStableKeys = [stableKey]
+        }
+
+        if let storedStableKey = bar.stableKey {
+            return acceptedStableKeys.contains(storedStableKey)
+        }
+        return matchesLegacyCursorBar(bar, stableKey: stableKey)
     }
 
     private func cursorUsageSeriesOptions(
@@ -1085,16 +1110,31 @@ public final class UsageHistoryStore: ObservableObject {
     ) -> [UsageHistorySeriesOption] {
         let metricOptions: [UsageHistorySeriesOption] = [
             ("total", "Total"),
-            ("auto", "Auto"),
-            ("api", "API"),
+            (CursorUsageIdentity.cursorModelsStableKey, "Cursor Models"),
+            (CursorUsageIdentity.otherModelsStableKey, "Other Models"),
             ("on-demand", "On-demand"),
         ].compactMap { stableKey, label in
-            let isAvailable = currentBars.contains(where: { $0.stableKey == stableKey })
+            let acceptedCurrentStableKeys: Set<String>
+            switch stableKey {
+            case CursorUsageIdentity.cursorModelsStableKey:
+                acceptedCurrentStableKeys = [
+                    CursorUsageIdentity.cursorModelsStableKey,
+                    CursorUsageIdentity.legacyCursorModelsStableKey,
+                ]
+            case CursorUsageIdentity.otherModelsStableKey:
+                acceptedCurrentStableKeys = [
+                    CursorUsageIdentity.otherModelsStableKey,
+                    CursorUsageIdentity.legacyOtherModelsStableKey,
+                ]
+            default:
+                acceptedCurrentStableKeys = [stableKey]
+            }
+            let isAvailable = currentBars.contains(where: {
+                $0.stableKey.map(acceptedCurrentStableKeys.contains) == true
+            })
                 || snapshots.contains(where: { snapshot in
                     snapshot.bars.contains(where: {
-                        $0.stableKey == stableKey
-                            || ($0.stableKey == nil
-                                && Self.matchesLegacyCursorBar($0, stableKey: stableKey))
+                        Self.matchesCursorBar($0, stableKey: stableKey)
                     })
                 })
             guard isAvailable else {

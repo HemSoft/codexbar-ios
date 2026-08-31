@@ -1,5 +1,17 @@
 import Foundation
 
+enum CursorUsageIdentity {
+    static let cursorModelsStableKey = "cursor-models"
+    static let otherModelsStableKey = "other-models"
+    static let cursorModelsMetricID = "cursor.\(cursorModelsStableKey)"
+    static let otherModelsMetricID = "cursor.\(otherModelsStableKey)"
+
+    static let legacyCursorModelsStableKey = "auto"
+    static let legacyOtherModelsStableKey = "api"
+    static let legacyCursorModelsMetricID = "cursor.\(legacyCursorModelsStableKey)"
+    static let legacyOtherModelsMetricID = "cursor.\(legacyOtherModelsStableKey)"
+}
+
 public final class CursorUsageProvider: UsageProvider {
     private let secretStore: SecretStore
     private let session: URLSession
@@ -181,24 +193,16 @@ public final class CursorUsageProvider: UsageProvider {
         if let plan = usage.planUsage {
             bars.append(contentsOf: [
                 usageBar(
-                    stableKey: "total",
-                    label: "Total",
-                    percent: plan.totalPercentUsed,
-                    reset: reset,
-                    resetDescription: resetDescription,
-                    billingPeriod: billingPeriod
-                ),
-                usageBar(
-                    stableKey: "auto",
-                    label: "Auto",
+                    stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                    label: "Cursor Models",
                     percent: plan.autoPercentUsed,
                     reset: reset,
                     resetDescription: resetDescription,
                     billingPeriod: billingPeriod
                 ),
                 usageBar(
-                    stableKey: "api",
-                    label: "API",
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
                     percent: plan.apiPercentUsed,
                     reset: reset,
                     resetDescription: resetDescription,
@@ -276,7 +280,7 @@ public final class CursorUsageProvider: UsageProvider {
         resetDescription: String?,
         billingPeriod: CursorBillingPeriod?
     ) -> UsageBar? {
-        guard let percent else {
+        guard let percent, percent.isFinite else {
             return nil
         }
 
@@ -323,22 +327,15 @@ public final class CursorUsageProvider: UsageProvider {
         let items = [
             plan.autoPercentUsed.map {
                 ProviderCardInformationItem(
-                    id: "cursor.included-usage.auto",
-                    label: "Auto",
+                    id: "cursor.included-usage.cursor-models",
+                    label: "Cursor Models",
                     detail: formatPercent($0)
                 )
             },
             plan.apiPercentUsed.map {
                 ProviderCardInformationItem(
-                    id: "cursor.included-usage.api",
-                    label: "API",
-                    detail: formatPercent($0)
-                )
-            },
-            plan.totalPercentUsed.map {
-                ProviderCardInformationItem(
-                    id: "cursor.included-usage.total",
-                    label: "Total",
+                    id: "cursor.included-usage.other-models",
+                    label: "Other Models",
                     detail: formatPercent($0)
                 )
             },
@@ -436,7 +433,27 @@ private struct CursorBillingPeriod {
 private struct CursorPlanUsage: Decodable {
     let autoPercentUsed: Double?
     let apiPercentUsed: Double?
-    let totalPercentUsed: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case autoPercentUsed
+        case apiPercentUsed
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        autoPercentUsed = Self.decodeFinitePercent(.autoPercentUsed, from: container)
+        apiPercentUsed = Self.decodeFinitePercent(.apiPercentUsed, from: container)
+    }
+
+    private static func decodeFinitePercent(
+        _ key: CodingKeys,
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) -> Double? {
+        guard let value = try? container.decode(Double.self, forKey: key), value.isFinite else {
+            return nil
+        }
+        return value
+    }
 }
 
 private struct CursorSpendLimitUsage: Decodable {

@@ -8,6 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Split Cursor's included usage into separate Cursor Models and Other Models
+  metrics, each with its own saved dashboard, widget, and Watch visibility.
+  ([#292](https://github.com/HemSoft/codexbar-ios/issues/292))
 - Added 90 days of daily usage history alongside existing frequent samples,
   with History controls for today, 3 days, 7 days, a month, and 3 months.
   ([#290](https://github.com/HemSoft/codexbar-ios/issues/290))

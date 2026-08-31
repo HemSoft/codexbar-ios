@@ -934,7 +934,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(cursorResult?.subtitle, "Cursor plan usage")
         XCTAssertEqual(
             cursorResult?.cardInformationSections.first?.items.map(\.label),
-            ["Auto", "API"]
+            ["Cursor Models", "Other Models"]
         )
         for providerID in [ProviderID.cursor, .openCodeZen, .copilot] {
             let safeProjection = results

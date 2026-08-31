@@ -2630,62 +2630,90 @@ final class ProviderParsingTests: XCTestCase {
                     title: "Included usage",
                     items: [
                         ProviderCardInformationItem(
-                            id: "cursor.included-usage.auto",
-                            label: "Auto",
+                            id: "cursor.included-usage.cursor-models",
+                            label: "Cursor Models",
                             detail: "42%"
                         ),
                         ProviderCardInformationItem(
-                            id: "cursor.included-usage.api",
-                            label: "API",
+                            id: "cursor.included-usage.other-models",
+                            label: "Other Models",
                             detail: "18%"
-                        ),
-                        ProviderCardInformationItem(
-                            id: "cursor.included-usage.total",
-                            label: "Total",
-                            detail: "63%"
                         ),
                     ]
                 ),
             ]
         )
         XCTAssertEqual(result.bars.map(\.label), [
-            "Total",
-            "Auto",
-            "API",
+            "Cursor Models",
+            "Other Models",
             "On-demand $12.00 / $20.00",
         ])
-        XCTAssertEqual(result.bars.map(\.usageText), ["63%", "42%", "18%", "60%"])
+        XCTAssertEqual(
+            result.bars.enumerated().map {
+                $0.element.metricIdentifier(providerID: .cursor, index: $0.offset)
+            },
+            ["cursor.cursor-models", "cursor.other-models", "cursor.on-demand"]
+        )
+        XCTAssertEqual(result.bars.map(\.usageText), ["42%", "18%", "60%"])
         XCTAssertTrue(result.bars.allSatisfy(\.showProjectionOnCurrentBar))
         XCTAssertEqual(
             result.bars.compactMap(\.projectionPeriodStart),
-            Array(repeating: Date(timeIntervalSince1970: 1_783_036_800), count: 4)
+            Array(repeating: Date(timeIntervalSince1970: 1_783_036_800), count: 3)
         )
         XCTAssertEqual(
             result.bars.compactMap(\.projectionPeriodEnd),
-            Array(repeating: Date(timeIntervalSince1970: 1_784_332_800), count: 4)
+            Array(repeating: Date(timeIntervalSince1970: 1_784_332_800), count: 3)
         )
-        XCTAssertEqual(try XCTUnwrap(result.bars[0].projectionCurrent), 0.626, accuracy: 0.000_001)
-        XCTAssertEqual(try XCTUnwrap(result.bars[1].projectionCurrent), 0.424, accuracy: 0.000_001)
-        XCTAssertEqual(try XCTUnwrap(result.bars[2].projectionCurrent), 0.182, accuracy: 0.000_001)
-        XCTAssertEqual(result.bars[3].projectionCurrent, 1_200)
-        XCTAssertEqual(result.bars.compactMap(\.projectionLimit), [1, 1, 1, 2_000])
-        XCTAssertTrue(try XCTUnwrap(result.bars[0].projectionDescription(at: fetchedAt)).hasPrefix(
+        XCTAssertEqual(try XCTUnwrap(result.bars[0].projectionCurrent), 0.424, accuracy: 0.000_001)
+        XCTAssertEqual(try XCTUnwrap(result.bars[1].projectionCurrent), 0.182, accuracy: 0.000_001)
+        XCTAssertEqual(result.bars[2].projectionCurrent, 1_200)
+        XCTAssertEqual(result.bars.compactMap(\.projectionLimit), [1, 1, 2_000])
+        XCTAssertEqual(result.bars[0].projectionDescription(at: fetchedAt), "Projected to stay under limit")
+        XCTAssertEqual(result.bars[1].projectionDescription(at: fetchedAt), "Projected to stay under limit")
+        XCTAssertNil(result.bars[0].dashboardProjectionDescription(at: fetchedAt))
+        XCTAssertNil(result.bars[1].dashboardProjectionDescription(at: fetchedAt))
+        XCTAssertTrue(try XCTUnwrap(result.bars[2].projectionDescription(at: fetchedAt)).hasPrefix(
             "Projected 100% at current pace - Limit hit "
         ))
-        XCTAssertEqual(result.bars[2].projectionDescription(at: fetchedAt), "Projected to stay under limit")
-        XCTAssertTrue(
-            try XCTUnwrap(result.bars[0].dashboardProjectionDescription(at: fetchedAt))
-                .hasPrefix("Projected 100% at current pace - Limit hit ")
-        )
-        XCTAssertNil(result.bars[2].dashboardProjectionDescription(at: fetchedAt))
-        XCTAssertTrue(try XCTUnwrap(result.bars[3].projectionDescription(at: fetchedAt)).hasPrefix(
-            "Projected 100% at current pace - Limit hit "
+    }
+
+    func testCursorUsageParserHandlesMissingBoundaryAndMalformedCategoryValues() throws {
+        let fixtures: [(payload: String, labels: [String], usage: [String])] = [
+            (
+                #"{"planUsage":{"autoPercentUsed":0,"apiPercentUsed":100}}"#,
+                ["Cursor Models", "Other Models"],
+                ["0%", "100%"]
+            ),
+            (
+                #"{"planUsage":{"apiPercentUsed":37.4}}"#,
+                ["Other Models"],
+                ["37%"]
+            ),
+            (
+                #"{"planUsage":{"autoPercentUsed":"invalid","apiPercentUsed":24}}"#,
+                ["Other Models"],
+                ["24%"]
+            ),
+        ]
+
+        for fixture in fixtures {
+            let result = try XCTUnwrap(CursorUsageProvider.parseUsage(
+                Data(fixture.payload.utf8),
+                configuration: .defaultConfiguration(for: .cursor)
+            ))
+            XCTAssertEqual(result.bars.map(\.label), fixture.labels)
+            XCTAssertEqual(result.bars.map(\.usageText), fixture.usage)
+        }
+
+        XCTAssertNil(CursorUsageProvider.parseUsage(
+            Data(#"{"planUsage":{"totalPercentUsed":99}}"#.utf8),
+            configuration: .defaultConfiguration(for: .cursor)
         ))
     }
 
     func testCursorUsageParserReadsGrokBotWeeklyUsage() throws {
         let fetchedAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-08-22T12:00:00Z"))
-        let usagePayload = #"{"planUsage":{"totalPercentUsed":25}}"#
+        let usagePayload = #"{"planUsage":{"autoPercentUsed":25}}"#
         let grokBotPayload = """
         {
           "currentPeriodStart": "2026-08-19T21:37:33.239Z",
@@ -2703,7 +2731,7 @@ final class ProviderParsingTests: XCTestCase {
         ))
         let grokBot = try XCTUnwrap(result.bars.last)
 
-        XCTAssertEqual(result.bars.map(\.label), ["Total", "Grok Bot weekly"])
+        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models", "Grok Bot weekly"])
         XCTAssertEqual(grokBot.stableKey, "grok-bot-weekly")
         XCTAssertEqual(grokBot.usageText, "38%")
         XCTAssertEqual(
@@ -2716,7 +2744,7 @@ final class ProviderParsingTests: XCTestCase {
     }
 
     func testCursorUsageParserOmitsUnavailableGrokBotUsage() throws {
-        let usagePayload = #"{"planUsage":{"totalPercentUsed":25}}"#
+        let usagePayload = #"{"planUsage":{"autoPercentUsed":25}}"#
         let pooledGrokBotPayload = #"{"usage_percent":38,"uses_pooled_enterprise_allowance":true}"#
 
         let result = try XCTUnwrap(CursorUsageProvider.parseUsage(
@@ -2725,11 +2753,11 @@ final class ProviderParsingTests: XCTestCase {
             configuration: .defaultConfiguration(for: .cursor)
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Total"])
+        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models"])
     }
 
     func testCursorUsageParserOmitsGrokBotUsageWithoutIncludedAllowance() throws {
-        let usagePayload = #"{"planUsage":{"totalPercentUsed":25}}"#
+        let usagePayload = #"{"planUsage":{"autoPercentUsed":25}}"#
         let unavailablePayloads = [
             #"{"usagePercent":0,"hasNonZeroIncludedLimit":false}"#,
             #"{"usage_percent":0,"has_non_zero_included_limit":false}"#,
@@ -2743,16 +2771,16 @@ final class ProviderParsingTests: XCTestCase {
                 configuration: .defaultConfiguration(for: .cursor)
             ))
 
-            XCTAssertEqual(result.bars.map(\.label), ["Total"])
+            XCTAssertEqual(result.bars.map(\.label), ["Cursor Models"])
             XCTAssertEqual(
                 result.bars.map { $0.metricIdentifier(providerID: .cursor, index: 0) },
-                ["cursor.total"]
+                ["cursor.cursor-models"]
             )
         }
     }
 
     func testCursorUsageParserKeepsEntitledZeroPercentGrokBotUsage() throws {
-        let usagePayload = #"{"planUsage":{"totalPercentUsed":25}}"#
+        let usagePayload = #"{"planUsage":{"autoPercentUsed":25}}"#
         let grokBotPayload = """
         {
           "usagePercent": 0,
@@ -2768,7 +2796,7 @@ final class ProviderParsingTests: XCTestCase {
             configuration: .defaultConfiguration(for: .cursor)
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Total", "Grok Bot weekly"])
+        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models", "Grok Bot weekly"])
         XCTAssertEqual(result.bars.last?.usageText, "0%")
     }
 
@@ -2803,7 +2831,7 @@ final class ProviderParsingTests: XCTestCase {
                 fetchedAt: fetchedAt
             ))
 
-            XCTAssertEqual(result.bars.count, 4)
+            XCTAssertEqual(result.bars.count, 3)
             XCTAssertTrue(result.bars.allSatisfy { !$0.showProjectionOnCurrentBar })
             XCTAssertTrue(result.bars.allSatisfy { $0.projectionDescription(at: fetchedAt) == nil })
         }
@@ -2863,8 +2891,11 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertEqual(result.providerID, .cursor)
         XCTAssertEqual(result.title, "Cursor")
-        XCTAssertEqual(result.bars.map(\.label), ["Total", "Auto", "API", "Grok Bot weekly"])
-        XCTAssertEqual(result.bars.first?.usageText, "25%")
+        XCTAssertEqual(
+            result.bars.map(\.label),
+            ["Cursor Models", "Other Models", "Grok Bot weekly"]
+        )
+        XCTAssertEqual(result.bars.first?.usageText, "10%")
     }
 
     func testCursorProviderDoesNotWaitForStalledOptionalGrokBotUsage() async throws {
@@ -2894,7 +2925,7 @@ final class ProviderParsingTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(result.bars.map(\.label), ["Total"])
+        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models"])
         XCTAssertEqual(result.bars.first?.usageText, "25%")
     }
 
@@ -4800,7 +4831,7 @@ private final class StalledCursorGrokBotURLProtocol: URLProtocol, @unchecked Sen
             headerFields: nil
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(#"{"planUsage":{"totalPercentUsed":25}}"#.utf8))
+        client?.urlProtocol(self, didLoad: Data(#"{"planUsage":{"autoPercentUsed":25}}"#.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
 
