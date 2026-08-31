@@ -11,6 +11,17 @@ enum CursorUsageIdentity {
     static let legacyOtherModelsMetricID = "cursor.\(legacyOtherModelsStableKey)"
     static let legacyTotalMetricID = "cursor.\(legacyTotalStableKey)"
 
+    static func canonicalStableKey(_ stableKey: String) -> String {
+        switch stableKey {
+        case legacyCursorModelsStableKey:
+            cursorModelsStableKey
+        case legacyOtherModelsStableKey:
+            otherModelsStableKey
+        default:
+            stableKey
+        }
+    }
+
     static func replacementMetricID(for metricID: String) -> String? {
         switch metricID {
         case legacyCursorModelsMetricID:

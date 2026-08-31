@@ -277,7 +277,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         self.subtitle = snapshot.subtitle
         self.capturedAt = snapshot.capturedAt
         switch component {
-        case let .bar(bar):
+        case let .bar(bar, _):
             self.bars = [bar]
             self.creditsRemaining = nil
             self.monetaryMetrics = nil
@@ -422,14 +422,14 @@ public struct UsageHistoryPoint: Identifiable, Equatable, Sendable {
 }
 
 enum DailyUsageHistoryComponent {
-    case bar(UsageHistoryBarSnapshot)
+    case bar(UsageHistoryBarSnapshot, providerID: ProviderID)
     case credits
     case monetaryMetric(UsageHistoryMonetaryMetricSnapshot)
 
     var id: String {
         switch self {
-        case let .bar(bar):
-            "bar.\(Self.barIdentity(bar))"
+        case let .bar(bar, providerID):
+            "bar.\(Self.barIdentity(bar, providerID: providerID))"
         case .credits:
             "credits"
         case let .monetaryMetric(metric):
@@ -437,8 +437,16 @@ enum DailyUsageHistoryComponent {
         }
     }
 
-    static func barIdentity(_ bar: UsageHistoryBarSnapshot) -> String {
-        bar.stableKey ?? "legacy.\(bar.label.lowercased())"
+    static func barIdentity(
+        _ bar: UsageHistoryBarSnapshot,
+        providerID: ProviderID
+    ) -> String {
+        guard let stableKey = bar.stableKey else {
+            return "legacy.\(bar.label.lowercased())"
+        }
+        return providerID == .cursor
+            ? CursorUsageIdentity.canonicalStableKey(stableKey)
+            : stableKey
     }
 }
 
@@ -1479,7 +1487,9 @@ public final class UsageHistoryStore: ObservableObject {
 
     private func updateDailySnapshots(from snapshot: UsageHistorySnapshot) {
         var components: [DailyUsageHistoryComponent] = []
-        components.append(contentsOf: snapshot.bars.map { .bar($0) })
+        components.append(contentsOf: snapshot.bars.map {
+            .bar($0, providerID: snapshot.providerID)
+        })
         if snapshot.creditsRemaining != nil {
             components.append(.credits)
         }
@@ -1520,7 +1530,11 @@ public final class UsageHistoryStore: ObservableObject {
 
     private static func dailyComponentID(for snapshot: UsageHistorySnapshot) -> String {
         if let bar = snapshot.bars.first {
-            return "bar.\(DailyUsageHistoryComponent.barIdentity(bar))"
+            let identity = DailyUsageHistoryComponent.barIdentity(
+                bar,
+                providerID: snapshot.providerID
+            )
+            return "bar.\(identity)"
         }
         if snapshot.creditsRemaining != nil {
             return "credits"

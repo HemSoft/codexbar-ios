@@ -1458,6 +1458,70 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
+    func testDailyHistoryReplacesLegacyCursorBucketsWithSemanticBuckets() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let legacyResult = ProviderUsageResult(
+            accountID: "cursor.personal",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Legacy model buckets",
+            bars: [
+                UsageBar(stableKey: "auto", label: "Auto", used: 20, limit: 100),
+                UsageBar(stableKey: "api", label: "API", used: 40, limit: 100),
+            ],
+            fetchedAt: firstFetch
+        )
+        let semanticResult = ProviderUsageResult(
+            accountID: legacyResult.accountID,
+            providerID: legacyResult.providerID,
+            title: legacyResult.title,
+            subtitle: "Semantic model buckets",
+            bars: [
+                UsageBar(
+                    stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                    label: "Cursor Models",
+                    used: 35,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
+                    used: 65,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: firstFetch.addingTimeInterval(60 * 60)
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(
+            results: [legacyResult],
+            now: firstFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [semanticResult],
+            now: semanticResult.fetchedAt,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+
+        XCTAssertEqual(store.dailySnapshots.count, 2)
+        XCTAssertEqual(
+            store.dailySnapshots.compactMap { $0.bars.first?.stableKey },
+            [
+                CursorUsageIdentity.cursorModelsStableKey,
+                CursorUsageIdentity.otherModelsStableKey,
+            ]
+        )
+        XCTAssertEqual(store.dailySnapshots.compactMap { $0.bars.first?.used }, [35, 65])
+    }
+
+    @MainActor
     func testDailyHistoryKeepsComponentsFromPartialRefreshes() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
