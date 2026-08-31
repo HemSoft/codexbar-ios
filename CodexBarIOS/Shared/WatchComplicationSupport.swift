@@ -404,7 +404,7 @@ struct WatchComplicationResolver {
 
         if let metricID = selection.metricID {
             let metric = account.metrics.first(where: { $0.id == metricID })
-                ?? replacementGreptileMetric(in: account, for: metricID)
+                ?? replacementMetric(in: account, for: metricID)
             guard let metric else {
                 return nil
             }
@@ -413,10 +413,14 @@ struct WatchComplicationResolver {
         return (account, account.metrics[0])
     }
 
-    private func replacementGreptileMetric(
+    private func replacementMetric(
         in account: WatchAccountSnapshot,
         for metricID: String
     ) -> WatchMetricSnapshot? {
+        if let replacementID = CursorUsageIdentity.replacementMetricID(for: metricID) {
+            return account.metrics.first { $0.id == replacementID }
+        }
+
         let replacementID: String
         switch metricID {
         case GreptileUsageIdentity.completedReviewsMetricID:

@@ -268,6 +268,14 @@ public extension CodexBarWidgetUsageBarSnapshot {
     }
 
     private static func canonicalIdentitySuffix(_ suffix: String) -> String {
+        let suffix = switch suffix {
+        case CursorUsageIdentity.legacyCursorModelsStableKey:
+            CursorUsageIdentity.cursorModelsMetricID
+        case CursorUsageIdentity.legacyOtherModelsStableKey:
+            CursorUsageIdentity.otherModelsMetricID
+        default:
+            CursorUsageIdentity.canonicalMetricID(suffix)
+        }
         if suffix == GreptileUsageIdentity.completedReviewsMetricID
             || suffix == GreptileUsageIdentity.reviewQuotaMetricID {
             return GreptileUsageIdentity.canonicalReviewUsageMetricID

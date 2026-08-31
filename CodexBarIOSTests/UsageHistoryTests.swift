@@ -695,7 +695,7 @@ final class UsageHistoryTests: XCTestCase {
         )
         XCTAssertEqual(
             store.historySeriesOptions(for: currentResult)
-                .first(where: { $0.id == "usage.api" })?
+                .first(where: { $0.id == "usage.other-models" })?
                 .series.points.map(\.value),
             [0.9, 1]
         )
@@ -914,7 +914,7 @@ final class UsageHistoryTests: XCTestCase {
         )
         XCTAssertEqual(
             store.historySeriesOptions(for: result)
-                .first(where: { $0.id == "usage.auto" })?
+                .first(where: { $0.id == "usage.cursor-models" })?
                 .series.points.map(\.severity),
             [.critical]
         )
@@ -1027,7 +1027,7 @@ final class UsageHistoryTests: XCTestCase {
     }
 
     @MainActor
-    func testCursorHistoryUsesStableTotalAndExposesDistinctMetricSeries() throws {
+    func testCursorHistoryPreservesLegacySeriesUnderCurrentModelBucketIdentities() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -1064,11 +1064,14 @@ final class UsageHistoryTests: XCTestCase {
         let options = store.historySeriesOptions(for: result)
         XCTAssertEqual(options.map(\.id), [
             "usage.total",
-            "usage.auto",
-            "usage.api",
+            "usage.cursor-models",
+            "usage.other-models",
             "usage.on-demand",
         ])
-        XCTAssertEqual(options.map(\.label), ["Total", "Auto", "API", "On-demand"])
+        XCTAssertEqual(
+            options.map(\.label),
+            ["Total", "Cursor Models", "Other Models", "On-demand"]
+        )
         XCTAssertEqual(options.map { $0.series.points.map(\.value) }, [
             [0.38],
             [0.29],
@@ -1088,9 +1091,19 @@ final class UsageHistoryTests: XCTestCase {
             title: result.title,
             subtitle: result.subtitle,
             bars: [
-                UsageBar(stableKey: "api", label: "API requests", used: 100, limit: 100),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
+                    used: 100,
+                    limit: 100
+                ),
                 UsageBar(stableKey: "on-demand", label: "On-demand spend", used: 0, limit: 2_000),
-                UsageBar(stableKey: "auto", label: "Included Auto", used: 29, limit: 100),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                    label: "Cursor Models",
+                    used: 29,
+                    limit: 100
+                ),
                 UsageBar(stableKey: "total", label: "Overall plan", used: 38, limit: 100),
             ],
             fetchedAt: fetchedAt.addingTimeInterval(60)
@@ -1111,8 +1124,18 @@ final class UsageHistoryTests: XCTestCase {
             title: "Cursor",
             subtitle: "Current without Total",
             bars: [
-                UsageBar(stableKey: "auto", label: "Auto", used: 29, limit: 100),
-                UsageBar(stableKey: "api", label: "API", used: 100, limit: 100),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                    label: "Cursor Models",
+                    used: 29,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
+                    used: 100,
+                    limit: 100
+                ),
             ],
             fetchedAt: fetchedAt
         )
@@ -1122,8 +1145,14 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(partialSnapshot.primaryValue, 1)
         XCTAssertEqual(store.historySeries(for: resultWithoutTotal).points.map(\.value), [1])
         let partialOptions = store.historySeriesOptions(for: resultWithoutTotal)
-        XCTAssertEqual(partialOptions.map(\.id), ["usage", "usage.auto", "usage.api"])
-        XCTAssertEqual(partialOptions.map(\.label), ["Highest usage", "Auto", "API"])
+        XCTAssertEqual(
+            partialOptions.map(\.id),
+            ["usage", "usage.cursor-models", "usage.other-models"]
+        )
+        XCTAssertEqual(
+            partialOptions.map(\.label),
+            ["Highest usage", "Cursor Models", "Other Models"]
+        )
         XCTAssertEqual(partialOptions.first?.series.points.map(\.value), [1])
         XCTAssertEqual(partialOptions.first?.series, store.historySeries(for: resultWithoutTotal))
 
@@ -1133,8 +1162,18 @@ final class UsageHistoryTests: XCTestCase {
             title: "Cursor",
             subtitle: "Current without Total",
             bars: [
-                UsageBar(stableKey: "auto", label: "Auto", used: 45, limit: 100),
-                UsageBar(stableKey: "api", label: "API", used: 90, limit: 100),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                    label: "Cursor Models",
+                    used: 45,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
+                    used: 90,
+                    limit: 100
+                ),
             ],
             fetchedAt: fetchedAt.addingTimeInterval(120)
         )
@@ -1416,6 +1455,70 @@ final class UsageHistoryTests: XCTestCase {
         let reloadedStore = UsageHistoryStore(defaults: defaults)
         XCTAssertEqual(reloadedStore.dailySnapshots.count, 1)
         XCTAssertEqual(reloadedStore.dailySnapshots.first?.capturedAt, latestFetch)
+    }
+
+    @MainActor
+    func testDailyHistoryReplacesLegacyCursorBucketsWithSemanticBuckets() {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let firstFetch = Date(timeIntervalSince1970: 1_788_475_200)
+        let legacyResult = ProviderUsageResult(
+            accountID: "cursor.personal",
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Legacy model buckets",
+            bars: [
+                UsageBar(stableKey: "auto", label: "Auto", used: 20, limit: 100),
+                UsageBar(stableKey: "api", label: "API", used: 40, limit: 100),
+            ],
+            fetchedAt: firstFetch
+        )
+        let semanticResult = ProviderUsageResult(
+            accountID: legacyResult.accountID,
+            providerID: legacyResult.providerID,
+            title: legacyResult.title,
+            subtitle: "Semantic model buckets",
+            bars: [
+                UsageBar(
+                    stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                    label: "Cursor Models",
+                    used: 35,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
+                    used: 65,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: firstFetch.addingTimeInterval(60 * 60)
+        )
+        let store = UsageHistoryStore(defaults: defaults)
+
+        store.record(
+            results: [legacyResult],
+            now: firstFetch,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+        store.record(
+            results: [semanticResult],
+            now: semanticResult.fetchedAt,
+            samplingInterval: HistorySamplingInterval.twoHours.seconds
+        )
+
+        XCTAssertEqual(store.dailySnapshots.count, 2)
+        XCTAssertEqual(
+            store.dailySnapshots.compactMap { $0.bars.first?.stableKey },
+            [
+                CursorUsageIdentity.cursorModelsStableKey,
+                CursorUsageIdentity.otherModelsStableKey,
+            ]
+        )
+        XCTAssertEqual(store.dailySnapshots.compactMap { $0.bars.first?.used }, [35, 65])
     }
 
     @MainActor

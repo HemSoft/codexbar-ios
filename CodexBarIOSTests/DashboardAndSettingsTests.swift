@@ -2583,6 +2583,118 @@ final class DashboardAndSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testCursorModelBucketPreferencesPersistIndependentlyThroughTemporaryAbsence() async throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let configuration = store.addAccount(for: .cursor)
+        let otherConfiguration = store.addAccount(for: .cursor)
+        let cursorModelsID = CursorUsageIdentity.cursorModelsMetricID
+        let otherModelsID = CursorUsageIdentity.otherModelsMetricID
+        let grokBotID = "cursor.grok-bot-weekly"
+        let fullResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Cursor plan usage",
+            bars: [
+                UsageBar(
+                    stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                    label: "Cursor Models",
+                    used: 20,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
+                    used: 40,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: "grok-bot-weekly",
+                    label: "Grok Bot weekly",
+                    used: 10,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: Date()
+        )
+        let viewModel = ProviderSettingsViewModel(
+            configurationStore: store,
+            accountID: configuration.id,
+            initialUsageResult: fullResult
+        )
+
+        await viewModel.prepare()
+
+        XCTAssertEqual(
+            viewModel.availableMetrics.map(\.id),
+            [cursorModelsID, otherModelsID, grokBotID]
+        )
+        XCTAssertEqual(
+            viewModel.availableMetrics.map(\.label),
+            ["Cursor Models", "Other Models", "Grok Bot weekly"]
+        )
+        XCTAssertTrue(viewModel.isMetricVisible(cursorModelsID))
+        XCTAssertTrue(viewModel.isMetricVisible(otherModelsID))
+
+        viewModel.setMetricVisibility(false, metricID: cursorModelsID)
+        store.updateVisualizationStyle(.circularRing, accountID: configuration.id, metricID: otherModelsID)
+        store.updateWatchMetricVisibility(.show, accountID: configuration.id, metricID: otherModelsID)
+        _ = store.reconcileMetricLayout(
+            accountID: otherConfiguration.id,
+            availableMetricIDs: [cursorModelsID, otherModelsID]
+        )
+
+        XCTAssertFalse(viewModel.isMetricVisible(cursorModelsID))
+        XCTAssertTrue(viewModel.isMetricVisible(otherModelsID))
+        XCTAssertTrue(store.isMetricVisible(accountID: otherConfiguration.id, metricID: cursorModelsID))
+
+        let partialResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Cursor plan usage",
+            bars: [fullResult.bars[0], fullResult.bars[2]],
+            fetchedAt: Date().addingTimeInterval(60)
+        )
+        viewModel.synchronizeUsageResult(partialResult)
+
+        XCTAssertEqual(viewModel.availableMetrics.map(\.id), [cursorModelsID, grokBotID])
+        XCTAssertEqual(
+            store.visualizationStyle(accountID: configuration.id, metricID: otherModelsID),
+            .circularRing
+        )
+        XCTAssertEqual(
+            store.watchVisibilityPolicy(accountID: configuration.id, metricID: otherModelsID),
+            .show
+        )
+
+        let reloadedStore = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let reloadedViewModel = ProviderSettingsViewModel(
+            configurationStore: reloadedStore,
+            accountID: configuration.id,
+            initialUsageResult: fullResult
+        )
+        await reloadedViewModel.prepare()
+
+        XCTAssertFalse(reloadedViewModel.isMetricVisible(cursorModelsID))
+        XCTAssertTrue(reloadedViewModel.isMetricVisible(otherModelsID))
+        XCTAssertEqual(
+            reloadedStore.visualizationStyle(accountID: configuration.id, metricID: otherModelsID),
+            .circularRing
+        )
+        XCTAssertEqual(
+            reloadedStore.watchVisibilityPolicy(accountID: configuration.id, metricID: otherModelsID),
+            .show
+        )
+    }
+
+    @MainActor
     func testCursorGrokBotMetricDefaultsVisibleAndCanBeHidden() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

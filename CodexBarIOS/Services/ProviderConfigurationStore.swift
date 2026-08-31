@@ -296,6 +296,75 @@ private enum GreptileMetricPreferenceCompatibility {
     }
 }
 
+private enum CursorMetricPreferenceCompatibility {
+    private static let replacements = [
+        (
+            CursorUsageIdentity.legacyCursorModelsMetricID,
+            CursorUsageIdentity.cursorModelsMetricID
+        ),
+        (
+            CursorUsageIdentity.legacyOtherModelsMetricID,
+            CursorUsageIdentity.otherModelsMetricID
+        ),
+    ]
+
+    static func migrate(
+        layout: inout AccountMetricLayout,
+        availableMetricIDs: [String]
+    ) {
+        let availableMetricIDs = Set(availableMetricIDs)
+        for (sourceMetricID, destinationMetricID) in replacements
+        where availableMetricIDs.contains(destinationMetricID)
+            && !availableMetricIDs.contains(sourceMetricID) {
+            let destinationPreference = layout.preferences[destinationMetricID]
+            if !hasCustomPresentation(destinationPreference),
+               var sourcePreference = layout.preferences.removeValue(forKey: sourceMetricID) {
+                if let destinationPreference {
+                    sourcePreference.isNewlyDiscovered = sourcePreference.isNewlyDiscovered
+                        && destinationPreference.isNewlyDiscovered
+                }
+                layout.preferences[destinationMetricID] = sourcePreference
+            }
+            layout.orderedMetricIDs = layout.orderedMetricIDs.map {
+                $0 == sourceMetricID ? destinationMetricID : $0
+            }
+        }
+
+        layout.preferences.removeValue(forKey: CursorUsageIdentity.legacyTotalMetricID)
+        layout.orderedMetricIDs.removeAll {
+            $0 == CursorUsageIdentity.legacyTotalMetricID
+        }
+        var seenMetricIDs = Set<String>()
+        layout.orderedMetricIDs = layout.orderedMetricIDs.filter {
+            !$0.isEmpty && seenMetricIDs.insert($0).inserted
+        }
+    }
+
+    private static func hasCustomPresentation(_ preference: MetricTilePreference?) -> Bool {
+        guard let preference else { return false }
+        return !preference.isVisible
+            || preference.visualizationStyle != nil
+            || preference.width != .automatic
+            || preference.watchVisibility != .inherit
+    }
+}
+
+private enum MetricPreferenceCompatibility {
+    static func migrate(
+        layout: inout AccountMetricLayout,
+        availableMetricIDs: [String]
+    ) {
+        GreptileMetricPreferenceCompatibility.migrate(
+            layout: &layout,
+            availableMetricIDs: availableMetricIDs
+        )
+        CursorMetricPreferenceCompatibility.migrate(
+            layout: &layout,
+            availableMetricIDs: availableMetricIDs
+        )
+    }
+}
+
 enum CodexAccountIdentityValidation: Equatable {
     case available
     case duplicate(accountName: String)
@@ -958,7 +1027,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         let availableMetricIDs = Self.uniqueNonemptyMetricIDs(availableMetricIDs)
         var layout = metricLayouts[accountID] ?? AccountMetricLayout()
         let originalLayout = layout
-        GreptileMetricPreferenceCompatibility.migrate(layout: &layout, availableMetricIDs: availableMetricIDs)
+        MetricPreferenceCompatibility.migrate(layout: &layout, availableMetricIDs: availableMetricIDs)
         var orderedMetricIDs = Self.uniqueNonemptyMetricIDs(layout.orderedMetricIDs)
         let orderedMetricIDSet = Set(orderedMetricIDs)
 

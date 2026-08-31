@@ -172,6 +172,71 @@ final class WidgetConfigurationTests: XCTestCase {
     }
 
     @MainActor
+    func testSavedCursorWidgetTilesSurviveSemanticIdentityUpgrade() throws {
+        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .cursor)
+        XCTAssertTrue(store.saveSecret("cursor-widget-key", for: configuration))
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Cursor plan usage",
+            bars: [
+                UsageBar(
+                    stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                    label: "Cursor Models",
+                    used: 25,
+                    limit: 100
+                ),
+                UsageBar(
+                    stableKey: CursorUsageIdentity.otherModelsStableKey,
+                    label: "Other Models",
+                    used: 50,
+                    limit: 100
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_788_475_200)
+        )
+        WidgetSnapshotPublisher.publish(
+            results: [result],
+            configurationStore: store,
+            snapshotDefaults: defaults
+        )
+        let snapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).cursor.auto"
+            )?.id,
+            "bar.\(configuration.id).cursor.cursor-models"
+        )
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).cursor.api"
+            )?.id,
+            "bar.\(configuration.id).cursor.other-models"
+        )
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).1.auto"
+            )?.id,
+            "bar.\(configuration.id).cursor.cursor-models"
+        )
+        XCTAssertEqual(
+            snapshot.builderTile(
+                resolvingSavedID: "bar.\(configuration.id).2.api"
+            )?.id,
+            "bar.\(configuration.id).cursor.other-models"
+        )
+    }
+
+    @MainActor
     func testWidgetSnapshotPublisherKeepsMetricTileIDAcrossLabelChanges() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

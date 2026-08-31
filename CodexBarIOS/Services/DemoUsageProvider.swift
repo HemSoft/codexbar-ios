@@ -233,13 +233,20 @@ public extension DemoUsageProvider {
                 providerID: .cursor,
                 bars: [
                     UsageBar(
-                        stableKey: "total",
-                        label: "Monthly included usage",
-                        used: 51,
+                        stableKey: CursorUsageIdentity.cursorModelsStableKey,
+                        label: "Cursor Models",
+                        used: 34,
                         limit: 100,
                         resetDescription: "Resets Aug 1",
                         projectionDescriptionOverride: "Projected to stay under limit",
                         projectionSignificanceOverride: .benign
+                    ),
+                    UsageBar(
+                        stableKey: CursorUsageIdentity.otherModelsStableKey,
+                        label: "Other Models",
+                        used: 17,
+                        limit: 100,
+                        resetDescription: "Resets Aug 1"
                     ),
                 ],
                 cardInformationSections: [
@@ -248,13 +255,13 @@ public extension DemoUsageProvider {
                         title: "Included usage",
                         items: [
                             ProviderCardInformationItem(
-                                id: "cursor.included-usage.auto",
-                                label: "Auto",
+                                id: "cursor.included-usage.cursor-models",
+                                label: "Cursor Models",
                                 detail: "34%"
                             ),
                             ProviderCardInformationItem(
-                                id: "cursor.included-usage.api",
-                                label: "API",
+                                id: "cursor.included-usage.other-models",
+                                label: "Other Models",
                                 detail: "17%"
                             ),
                         ]
