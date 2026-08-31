@@ -6,8 +6,10 @@ enum CursorUsageIdentity {
 
     static let legacyCursorModelsStableKey = "auto"
     static let legacyOtherModelsStableKey = "api"
+    static let legacyTotalStableKey = "total"
     static let legacyCursorModelsMetricID = "cursor.\(legacyCursorModelsStableKey)"
     static let legacyOtherModelsMetricID = "cursor.\(legacyOtherModelsStableKey)"
+    static let legacyTotalMetricID = "cursor.\(legacyTotalStableKey)"
 
     static func replacementMetricID(for metricID: String) -> String? {
         switch metricID {

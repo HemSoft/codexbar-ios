@@ -330,6 +330,10 @@ private enum CursorMetricPreferenceCompatibility {
             }
         }
 
+        layout.preferences.removeValue(forKey: CursorUsageIdentity.legacyTotalMetricID)
+        layout.orderedMetricIDs.removeAll {
+            $0 == CursorUsageIdentity.legacyTotalMetricID
+        }
         var seenMetricIDs = Set<String>()
         layout.orderedMetricIDs = layout.orderedMetricIDs.filter {
             !$0.isEmpty && seenMetricIDs.insert($0).inserted

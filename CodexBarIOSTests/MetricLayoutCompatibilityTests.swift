@@ -13,6 +13,7 @@ final class MetricLayoutCompatibilityTests: XCTestCase {
         _ = store.reconcileMetricLayout(
             accountID: accountID,
             availableMetricIDs: [
+                CursorUsageIdentity.legacyTotalMetricID,
                 CursorUsageIdentity.legacyCursorModelsMetricID,
                 CursorUsageIdentity.legacyOtherModelsMetricID,
             ]
@@ -47,6 +48,7 @@ final class MetricLayoutCompatibilityTests: XCTestCase {
         )
         XCTAssertNil(migrated.preferences[CursorUsageIdentity.legacyCursorModelsMetricID])
         XCTAssertNil(migrated.preferences[CursorUsageIdentity.legacyOtherModelsMetricID])
+        XCTAssertNil(migrated.preferences[CursorUsageIdentity.legacyTotalMetricID])
         XCTAssertFalse(try XCTUnwrap(
             migrated.preferences[CursorUsageIdentity.cursorModelsMetricID]
         ).isVisible)
