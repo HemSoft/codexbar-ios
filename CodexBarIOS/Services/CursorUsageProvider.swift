@@ -1,17 +1,5 @@
 import Foundation
 
-enum CursorUsageIdentity {
-    static let cursorModelsStableKey = "cursor-models"
-    static let otherModelsStableKey = "other-models"
-    static let cursorModelsMetricID = "cursor.\(cursorModelsStableKey)"
-    static let otherModelsMetricID = "cursor.\(otherModelsStableKey)"
-
-    static let legacyCursorModelsStableKey = "auto"
-    static let legacyOtherModelsStableKey = "api"
-    static let legacyCursorModelsMetricID = "cursor.\(legacyCursorModelsStableKey)"
-    static let legacyOtherModelsMetricID = "cursor.\(legacyOtherModelsStableKey)"
-}
-
 public final class CursorUsageProvider: UsageProvider {
     private let secretStore: SecretStore
     private let session: URLSession
