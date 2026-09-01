@@ -97,6 +97,36 @@ final class WidgetConfigurationTests: XCTestCase {
     }
 
     @MainActor
+    func testWatchSnapshotPreservesRawOverageAndCapsRemainingFraction() throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer { defaults.removePersistentDomain(forName: #function) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults,
+            secretStore: MemorySecretStore()
+        )
+        let configuration = store.addAccount(for: .cursor)
+        let result = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .cursor,
+            title: "Cursor",
+            subtitle: "Cursor plan usage",
+            bars: [UsageBar(label: "Cursor Models", used: 137.4, limit: 100)],
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+
+        let metric = try XCTUnwrap(
+            WatchSnapshotPublisher.makeSnapshot(
+                results: [result],
+                configurationStore: store
+            ).accounts.first?.metrics.first
+        )
+
+        XCTAssertEqual(try XCTUnwrap(metric.usedFraction), 1.374, accuracy: 0.000_001)
+        XCTAssertEqual(metric.remainingFraction, 0)
+        XCTAssertEqual(metric.exactValue, "137%")
+    }
+
+    @MainActor
     func testSavedGreptileWidgetTileSurvivesQuotaModeChanges() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

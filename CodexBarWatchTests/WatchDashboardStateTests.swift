@@ -117,7 +117,7 @@ final class WatchDashboardStateTests: XCTestCase {
             accountLabel: "Primary",
             metricLabel: "5-hour limit",
             exactValue: "137%",
-            usedFraction: 1,
+            usedFraction: 1.374,
             severity: .warning,
             resetText: "Resets in 2h",
             visualizationStyle: .semicircularDial,

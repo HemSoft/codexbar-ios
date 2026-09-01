@@ -85,8 +85,8 @@ enum WatchSnapshotPublisher {
                     let severityThresholds =
                         configurationStore.usageAlertSettings.severityThresholds
                     let metricID = bar.metricIdentifier(providerID: result.providerID, index: index)
-                    let fraction = bar.fractionUsed
                     let hasKnownLimit = bar.limit > 0
+                    let fraction = hasKnownLimit ? max(bar.used / bar.limit, 0) : nil
                     let localizedResetText = bar.localizedResetDescription(
                         at: now,
                         dateTimeFormatter: dateTimeFormatter
@@ -94,8 +94,8 @@ enum WatchSnapshotPublisher {
                     return WatchMetricSnapshot(
                         id: metricID,
                         label: bar.label,
-                        usedFraction: hasKnownLimit ? fraction : nil,
-                        remainingFraction: hasKnownLimit ? 1 - fraction : nil,
+                        usedFraction: fraction,
+                        remainingFraction: fraction.map { 1 - $0 },
                         exactValue: hasKnownLimit
                             ? bar.usageText
                             : (bar.fractionlessUsageText ?? bar.used.formatted()),
