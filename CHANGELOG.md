@@ -27,6 +27,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Preserved Cursor Models and Other Models usage above 100% in dashboard,
+  widget, Watch, projection inputs, alert, and History values while keeping gauges
+  visually capped at full. ([#294](https://github.com/HemSoft/codexbar-ios/issues/294))
 - Hid Cursor's Grok Bot weekly metric when the account explicitly has no
   included allowance, while preserving genuine 0% readings for entitled users.
   ([#288](https://github.com/HemSoft/codexbar-ios/issues/288))

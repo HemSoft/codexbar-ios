@@ -146,7 +146,7 @@ public struct WatchMetricSnapshot: Codable, Equatable, Identifiable, Sendable {
         self.id = id
         self.label = label
         self.scope = scope
-        self.usedFraction = usedFraction.map { min(max($0, 0), 1) }
+        self.usedFraction = usedFraction.map { max($0, 0) }
         self.remainingFraction = remainingFraction.map { min(max($0, 0), 1) }
         self.exactValue = exactValue
         self.severity = severity

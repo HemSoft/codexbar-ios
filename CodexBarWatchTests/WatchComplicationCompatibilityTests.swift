@@ -38,7 +38,7 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
                 accountID: "cursor.personal",
                 providerName: "Cursor",
                 metricID: "cursor.cursor-models",
-                fraction: 0.25,
+                fraction: 1.374,
                 at: now
             ),
             selection: WatchComplicationSelection(
@@ -52,7 +52,7 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
                 accountID: "cursor.personal",
                 providerName: "Cursor",
                 metricID: "cursor.other-models",
-                fraction: 0.5,
+                fraction: 1.18,
                 at: now
             ),
             selection: WatchComplicationSelection(
@@ -63,9 +63,31 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
         )
 
         XCTAssertEqual(cursorModels.availability, .value)
-        XCTAssertEqual(cursorModels.exactValue, "25%")
+        XCTAssertEqual(cursorModels.exactValue, "137%")
+        XCTAssertEqual(cursorModels.usedFraction, 1.374)
+        XCTAssertEqual(cursorModels.clampedUsedFraction, 1)
         XCTAssertEqual(otherModels.availability, .value)
-        XCTAssertEqual(otherModels.exactValue, "50%")
+        XCTAssertEqual(otherModels.exactValue, "118%")
+        XCTAssertEqual(otherModels.usedFraction, 1.18)
+        XCTAssertEqual(otherModels.clampedUsedFraction, 1)
+    }
+
+    func testWatchGaugeTextNormalizesNegativeFractions() {
+        let sample = WatchUsageSample(
+            id: "negative",
+            providerName: "Provider",
+            accountLabel: "Account",
+            metricLabel: "Usage",
+            exactValue: "-5%",
+            usedFraction: -0.05,
+            severity: .normal,
+            resetText: nil,
+            visualizationStyle: .circularRing,
+            freshnessText: "Updated just now"
+        )
+
+        XCTAssertEqual(sample.percentageText, "0%")
+        XCTAssertEqual(sample.clampedUsedFraction, 0)
     }
 
     private func snapshot(
