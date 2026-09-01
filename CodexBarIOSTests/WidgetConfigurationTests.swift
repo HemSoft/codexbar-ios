@@ -105,6 +105,7 @@ final class WidgetConfigurationTests: XCTestCase {
             secretStore: MemorySecretStore()
         )
         let configuration = store.addAccount(for: .cursor)
+        XCTAssertTrue(store.saveSecret("cursor-watch-key", for: configuration))
         let result = ProviderUsageResult(
             accountID: configuration.id,
             providerID: .cursor,
