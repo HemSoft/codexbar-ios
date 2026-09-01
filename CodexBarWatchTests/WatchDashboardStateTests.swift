@@ -116,18 +116,19 @@ final class WatchDashboardStateTests: XCTestCase {
             providerName: "Codex",
             accountLabel: "Primary",
             metricLabel: "5-hour limit",
-            exactValue: "72%",
-            usedFraction: 0.724,
+            exactValue: "137%",
+            usedFraction: 1,
             severity: .warning,
             resetText: "Resets in 2h",
             visualizationStyle: .semicircularDial,
             freshnessText: "Updated 3m ago"
         )
 
-        XCTAssertEqual(sample.percentageText, "72%")
+        XCTAssertEqual(sample.percentageText, "137%")
+        XCTAssertEqual(sample.clampedUsedFraction, 1)
         XCTAssertEqual(
             sample.accessibilitySummary,
-            "Codex, Primary, 5-hour limit, 72%, Warning, Resets in 2h, Updated 3m ago"
+            "Codex, Primary, 5-hour limit, 137%, Warning, Resets in 2h, Updated 3m ago"
         )
     }
 

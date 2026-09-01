@@ -114,7 +114,11 @@ private struct WatchMetricVisualization: View {
                 .tint(tint)
                 .frame(height: 48)
             case .semicircularDial:
-                SemicircularMetricView(fraction: sample.clampedUsedFraction, tint: tint)
+                SemicircularMetricView(
+                    fraction: sample.clampedUsedFraction,
+                    valueText: sample.percentageText,
+                    tint: tint
+                )
                     .frame(height: 34)
             case .largeNumeric:
                 Text(sample.exactValue)
@@ -149,6 +153,7 @@ private struct WatchMetricVisualization: View {
 
 private struct SemicircularMetricView: View {
     let fraction: Double
+    let valueText: String
     let tint: Color
 
     var body: some View {
@@ -166,7 +171,7 @@ private struct SemicircularMetricView: View {
             }
             .rotationEffect(.degrees(180))
 
-            Text("\(Int((fraction * 100).rounded()))%")
+            Text(valueText)
                 .font(.caption2.monospacedDigit())
                 .offset(y: 8)
         }

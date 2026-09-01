@@ -38,7 +38,7 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
                 accountID: "cursor.personal",
                 providerName: "Cursor",
                 metricID: "cursor.cursor-models",
-                fraction: 0.25,
+                fraction: 1.374,
                 at: now
             ),
             selection: WatchComplicationSelection(
@@ -52,7 +52,7 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
                 accountID: "cursor.personal",
                 providerName: "Cursor",
                 metricID: "cursor.other-models",
-                fraction: 0.5,
+                fraction: 1.18,
                 at: now
             ),
             selection: WatchComplicationSelection(
@@ -63,9 +63,11 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
         )
 
         XCTAssertEqual(cursorModels.availability, .value)
-        XCTAssertEqual(cursorModels.exactValue, "25%")
+        XCTAssertEqual(cursorModels.exactValue, "137%")
+        XCTAssertEqual(cursorModels.usedFraction, 1)
         XCTAssertEqual(otherModels.availability, .value)
-        XCTAssertEqual(otherModels.exactValue, "50%")
+        XCTAssertEqual(otherModels.exactValue, "118%")
+        XCTAssertEqual(otherModels.usedFraction, 1)
     }
 
     private func snapshot(

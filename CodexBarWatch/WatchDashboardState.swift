@@ -44,7 +44,7 @@ struct WatchUsageSample: Equatable, Identifiable, Sendable {
     }
 
     var percentageText: String {
-        usedFraction.map { "\(Int((min(max($0, 0), 1) * 100).rounded()))%" } ?? exactValue
+        exactValue
     }
 
     var severityText: String? {
