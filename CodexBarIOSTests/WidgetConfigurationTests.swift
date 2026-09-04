@@ -14,6 +14,7 @@ final class WidgetConfigurationTests: XCTestCase {
             (.openCodeZen, "openCodeZen"),
             (.openRouter, "openRouter"),
             (.greptile, "greptile"),
+            (.gemini, "gemini"),
         ]
 
         for (focus, providerID) in mappings {
