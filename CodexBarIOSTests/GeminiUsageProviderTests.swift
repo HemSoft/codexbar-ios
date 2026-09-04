@@ -29,6 +29,21 @@ final class GeminiUsageProviderTests: XCTestCase {
         )
     }
 
+    func testCredentialParserAcceptsJSONAndKeepsOnlySupportedValues() throws {
+        let stored = try GeminiSessionCredentialsParser.storedCredential(
+            from: #"{"__Secure-1PSID":"primary-value","__Secure-1PSIDTS":"rotating-value","SID":"discard"}"#
+        )
+
+        XCTAssertEqual(
+            try GeminiSessionCredentialsParser.parse(stored),
+            GeminiSessionCredentials(
+                securePSID: "primary-value",
+                securePSIDTS: "rotating-value"
+            )
+        )
+        XCTAssertFalse(stored.contains("discard"))
+    }
+
     func testProviderFetchesFiveHourAndWeeklyUsage() async throws {
         let secretStore = MemorySecretStore()
         let configuration = ProviderAccountConfiguration(
@@ -133,6 +148,50 @@ final class GeminiUsageProviderTests: XCTestCase {
         let parsed = try XCTUnwrap(GeminiUsageProvider.parseUsageResponse(makeGeminiBatchResponse(payload)))
         XCTAssertEqual(parsed.fiveHour?.fractionUsed, 0.25)
         XCTAssertEqual(parsed.weekly?.fractionUsed, 0.5)
+    }
+
+    func testUsageParserRejectsFractionalAndOutOfRangePeriods() throws {
+        let payload: [Any] = [
+            2,
+            [
+                [2_400, 0.75, 1.5, [[1_781_135_233, 0]]],
+                [2_400, 0.5, 1e300, [[1_781_135_233, 0]]],
+                [48_106, 0.25, 2, [[1_781_646_433, 0]]],
+            ],
+            false,
+        ]
+
+        let parsed = try XCTUnwrap(GeminiUsageProvider.parseUsageResponse(makeGeminiBatchResponse(payload)))
+        XCTAssertNil(parsed.fiveHour)
+        XCTAssertEqual(parsed.weekly?.fractionUsed, 0.25)
+    }
+
+    func testProviderPropagatesCancelledRequests() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration(
+            id: "gemini.cancelled",
+            providerID: .gemini,
+            authMethod: .apiKey
+        )
+        try secretStore.saveSecret(
+            GeminiSessionCredentialsParser.storedCredential(from: "__Secure-1PSID=session-value"),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+
+        let sessionFixture = IsolatedTestURLSession { _ in
+            throw URLError(.cancelled)
+        }
+        defer { sessionFixture.invalidate() }
+
+        do {
+            _ = try await GeminiUsageProvider(
+                secretStore: secretStore,
+                session: sessionFixture.session
+            ).fetchUsage(for: configuration)
+            XCTFail("Expected cancellation to propagate")
+        } catch is CancellationError {
+            // Expected.
+        }
     }
 
     func testProviderTreatsSignInRedirectAsExpiredCredentials() async throws {

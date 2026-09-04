@@ -207,6 +207,7 @@ public final class GeminiUsageProvider: UsageProvider {
             }
             bootstrapResponse = httpResponse
         } catch {
+            try Self.rethrowCancellation(error)
             return failureResult(
                 "Could not reach Gemini. Check the connection and try again.",
                 configuration: configuration
@@ -239,6 +240,7 @@ public final class GeminiUsageProvider: UsageProvider {
             }
             usageResponse = httpResponse
         } catch {
+            try Self.rethrowCancellation(error)
             return failureResult(
                 "Could not refresh Gemini usage. Check the connection and try again.",
                 configuration: configuration
@@ -372,9 +374,12 @@ public final class GeminiUsageProvider: UsageProvider {
             number(tuple[0]).map({ $0 > 0 }) == true,
             let fraction = number(tuple[1]), (0...1.5).contains(fraction),
             let periodValue = number(tuple[2]),
+            periodValue.isFinite,
+            periodValue == periodValue.rounded(),
+            (1...2).contains(periodValue),
             let resetWrapper = tuple[3] as? [Any],
             let reset = resetWrapper.first as? [Any],
-            let epoch = reset.first.flatMap(number), epoch >= 1_600_000_000
+            let epoch = reset.first.flatMap(number), epoch.isFinite, epoch >= 1_600_000_000
         else {
             return nil
         }
@@ -499,6 +504,14 @@ public final class GeminiUsageProvider: UsageProvider {
 
     private static func requestID() -> Int {
         100_000 + Int(Date().timeIntervalSince1970 * 1_000) % 800_000
+    }
+
+    private static func rethrowCancellation(_ error: Error) throws {
+        if error is CancellationError
+            || Task.isCancelled
+            || (error as? URLError)?.code == .cancelled {
+            throw CancellationError()
+        }
     }
 
     private static func makeSession() -> URLSession {
