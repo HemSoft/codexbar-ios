@@ -112,7 +112,7 @@ submission unless a version-specific note says otherwise.
 
 | Product-page claim | Verified source or constraint | App Store wording guidance |
 | --- | --- | --- |
-| Tracks ChatGPT / Codex, GitHub Copilot, Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), and Greptile | Current provider list used by the app and screenshot plan | Name exactly these providers; do not imply official affiliation. |
+| Tracks ChatGPT / Codex, GitHub Copilot, Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), Greptile, and Google Gemini | Current provider list used by the app and screenshot plan | Name exactly these providers; do not imply official affiliation. |
 | Shows usage, limits, balances, reset timing, refresh state, alerts, and history | Provider data varies by API/account type | Say metrics appear where each provider makes them available. |
 | Supports multiple accounts and provider groups | Current app configuration model | Say multiple accounts/groups, not team management or shared org administration. |
 | Offers Home Screen and Lock Screen widgets | Widget extension and configurable widget surfaces | Say configurable widgets; do not promise real-time refresh because iOS controls widget timing. |
@@ -245,7 +245,8 @@ to the App Store Connect version 1.1 submission on 2026-07-11:
   neutral in-app icon.
 - [ ] Re-check non-affiliation disclaimers before the next submission.
 - [ ] Re-confirm provider-name wording (Codex, Copilot, Claude, Cursor,
-  OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), Greptile) before the next submission.
+  OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), Greptile, Google Gemini)
+  before the next submission.
 
 The completed content-rights declaration in Final Submission records the 1.1
 submission. These unchecked items are a broader future-release brand audit.
@@ -374,6 +375,12 @@ Version 1.2 submission status:
 
 - Provider integrations depend on third-party services that may return different data by account type or region.
 - Some providers may block automation-like auth flows. Review notes should clarify that CodexBar uses user-supplied credentials/API keys to fetch the user's own account data.
+- Google Gemini's consumer usage meters currently require user-supplied browser
+  session credentials and an undocumented `gemini.google.com` web contract.
+  Before submission, confirm the current Google terms and App Review position,
+  disclose the credential sensitivity clearly, and live-verify the request and
+  response contract. The integration must remain read-only and fail closed when
+  that contract changes.
 - Brand asset permissions need a careful pass before submission.
 - Widgets must continue to show useful stale/error states because iOS controls refresh timing.
 - The OpenCode Zen balance path is currently viable for this development environment because the needed values were recovered from an existing working setup. Before the next release, confirm a clean setup path for new Mac-only or iPhone-only users.

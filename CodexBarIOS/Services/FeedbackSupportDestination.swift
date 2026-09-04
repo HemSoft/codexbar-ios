@@ -396,6 +396,8 @@ extension ProviderID {
             "Cursor"
         case .greptile:
             "Greptile"
+        case .gemini:
+            "Google Gemini"
         }
     }
 }

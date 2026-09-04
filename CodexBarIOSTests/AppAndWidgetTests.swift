@@ -1511,6 +1511,7 @@ final class AppAndWidgetTests: XCTestCase {
                 .openCodeZen: "OpenCode Go / Zen",
                 .moonshot: "Moonshot (Kimi)",
                 .greptile: "Greptile",
+                .gemini: "Google Gemini",
             ]
         )
     }

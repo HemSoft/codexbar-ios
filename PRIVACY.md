@@ -1,6 +1,6 @@
 # CodexBar Privacy Policy
 
-Effective date: August 18, 2026
+Effective date: September 3, 2026
 
 CodexBar Usage Monitor is a local dashboard for monitoring AI provider usage, limits, and API balances. It does not require a CodexBar account and does not send your provider credentials or usage data to HemSoft servers.
 
@@ -31,9 +31,15 @@ snapshot locally so it can remain useful during a temporary disconnection.
 
 ## Third-Party Provider Requests
 
-When you connect a provider, CodexBar uses the credentials you provide to request usage, balance, or review-activity data for the configured account or organization directly from that provider. Depending on what you configure, this may include services such as OpenAI/ChatGPT, Anthropic Claude, GitHub Copilot, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot AI (Kimi), and Greptile.
+When you connect a provider, CodexBar uses the credentials you provide to request usage, balance, or review-activity data for the configured account or organization directly from that provider. Depending on what you configure, this may include services such as OpenAI/ChatGPT, Anthropic Claude, GitHub Copilot, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot AI (Kimi), Greptile, and Google Gemini.
 
 Those requests are made to the provider's own APIs or web endpoints. The provider may process the request according to its own terms and privacy policy.
+
+For Google Gemini, CodexBar accepts a pasted browser Cookie header and retains
+only the `__Secure-1PSID` and optional `__Secure-1PSIDTS` session values. Other
+pasted cookies are discarded. The retained values are stored in iOS Keychain
+and sent only to `gemini.google.com` for read-only consumer Gemini Apps usage
+requests. They are never included in widget or Watch snapshots.
 
 GitHub Status monitoring is independently configurable and off by default. If
 you enable it, CodexBar periodically requests GitHub's public

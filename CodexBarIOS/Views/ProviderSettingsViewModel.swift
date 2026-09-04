@@ -15,6 +15,7 @@ struct ProviderCredentialPresentation: Equatable {
 @MainActor
 final class ProviderSettingsViewModel: ObservableObject {
     private static let greptileValidatedMessage = "API key saved in Keychain and validated by Greptile."
+    private static let geminiValidatedMessage = "Session credentials saved in Keychain and validated by Gemini."
 
     enum PersistenceBehavior {
         case immediate
@@ -63,9 +64,11 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var metricsCredentialRevision = 0
     private var isCredentialRefreshPending = false
     private var showsGreptileValidationFeedback = false
+    private var showsGeminiValidationFeedback = false
 
     var credentialMessageSystemImage: String {
         credentialMessage == Self.greptileValidatedMessage
+            || credentialMessage == Self.geminiValidatedMessage
             ? "checkmark.circle"
             : "clock"
     }
@@ -113,7 +116,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             [.browserSession]
         case .copilot:
             [.browserSession, .cliToken]
-        case .openRouter, .openCodeZen, .moonshot, .greptile:
+        case .openRouter, .openCodeZen, .moonshot, .greptile, .gemini:
             [.apiKey]
         }
     }
@@ -145,6 +148,22 @@ final class ProviderSettingsViewModel: ObservableObject {
                 setupURL: URL(string: "https://app.greptile.com/settings/api"),
                 securityMessage: "CodexBar stores this credential only in Keychain. "
                     + "When Greptile omits review allowance data, CodexBar leaves quota usage unknown."
+            )
+        }
+
+        if providerID == .gemini {
+            return ProviderCredentialPresentation(
+                sectionTitle: "Gemini Session Credentials",
+                unsavedPlaceholder: "Paste Gemini Cookie header or credential JSON",
+                savedPlaceholder: "Gemini session credentials saved",
+                saveButtonTitle: "Save and Validate Session",
+                setupMessage: "Sign in to Gemini in a browser, then copy a Cookie header containing "
+                    + "__Secure-1PSID and, when present, __Secure-1PSIDTS.",
+                setupLinkTitle: "Open Gemini Usage",
+                setupURL: URL(string: "https://gemini.google.com/usage"),
+                securityMessage: "These Google session credentials are sensitive and may grant broader account "
+                    + "access. CodexBar discards every other pasted cookie, stores the selected values only in "
+                    + "Keychain, and uses them only for read-only Gemini usage requests."
             )
         }
 
@@ -282,6 +301,11 @@ final class ProviderSettingsViewModel: ObservableObject {
                 credentialError = nil
                 credentialMessage = "API key saved in Keychain. Greptile validation did not complete; refresh to try again."
             }
+            if requiresFreshRequest, providerID == .gemini, showsGeminiValidationFeedback {
+                credentialError = nil
+                credentialMessage = "Session credentials saved in Keychain. "
+                    + "Validation did not complete; refresh to try again."
+            }
             return
         }
         acceptUsageResult(result)
@@ -289,6 +313,12 @@ final class ProviderSettingsViewModel: ObservableObject {
             updateGreptileCredentialFeedback(with: result)
             if result.failureMessage == nil {
                 showsGreptileValidationFeedback = false
+            }
+        }
+        if showsGeminiValidationFeedback {
+            updateGeminiCredentialFeedback(with: result)
+            if result.failureMessage == nil {
+                showsGeminiValidationFeedback = false
             }
         }
     }
@@ -325,11 +355,23 @@ final class ProviderSettingsViewModel: ObservableObject {
         credentialError = nil
         credentialMessage = nil
         showsGreptileValidationFeedback = false
+        showsGeminiValidationFeedback = false
         guard persist(configuration) else {
             credentialError = configurationStore.lastError
             return
         }
-        guard persistSecret(secret) else {
+        let credentialToStore: String
+        if providerID == .gemini {
+            do {
+                credentialToStore = try GeminiSessionCredentialsParser.storedCredential(from: secret)
+            } catch {
+                credentialError = error.localizedDescription
+                return
+            }
+        } else {
+            credentialToStore = secret
+        }
+        guard persistSecret(credentialToStore) else {
             credentialError = configurationStore.lastError
             return
         }
@@ -340,6 +382,12 @@ final class ProviderSettingsViewModel: ObservableObject {
                 ? "API key saved in Keychain. Validating with Greptile..."
                 : "API key saved in Keychain. Enable this account to validate it with Greptile."
         }
+        if providerID == .gemini {
+            showsGeminiValidationFeedback = true
+            credentialMessage = configuration.isEnabled
+                ? "Session credentials saved in Keychain. Validating with Gemini..."
+                : "Session credentials saved in Keychain. Enable this account to validate them with Gemini."
+        }
         credentialsDidChange()
     }
 
@@ -347,6 +395,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         credentialError = nil
         credentialMessage = nil
         showsGreptileValidationFeedback = false
+        showsGeminiValidationFeedback = false
         flushPendingChanges()
         guard persistSecret("") else {
             credentialError = configurationStore.lastError
@@ -603,6 +652,24 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
     }
 
+    private func updateGeminiCredentialFeedback(with result: ProviderUsageResult) {
+        guard providerID == .gemini else { return }
+        if let failureMessage = result.failureMessage {
+            if result.recoveryAction == .reauthenticate || result.recoveryAction == .signIn {
+                credentialMessage = nil
+                credentialError = "Session credentials saved in Keychain, but Gemini validation failed. "
+                    + failureMessage
+            } else {
+                credentialError = nil
+                credentialMessage = "Session credentials saved in Keychain. "
+                    + "Gemini could not validate them right now. \(failureMessage)"
+            }
+        } else {
+            credentialError = nil
+            credentialMessage = Self.geminiValidatedMessage
+        }
+    }
+
     func saveCopilotCredential() async {
         isSigningInWithCopilot = true
         credentialError = nil
@@ -712,6 +779,10 @@ final class ProviderSettingsViewModel: ObservableObject {
             && !configuration.isEnabled
             && updated.isEnabled
             && showsGreptileValidationFeedback
+        let shouldValidateSavedGeminiCredential = providerID == .gemini
+            && !configuration.isEnabled
+            && updated.isEnabled
+            && showsGeminiValidationFeedback
         let didChangeRefreshInputs = refreshInputsChanged(from: configuration, to: updated)
         configuration = updated
         if didChangeRefreshInputs {
@@ -739,6 +810,12 @@ final class ProviderSettingsViewModel: ObservableObject {
             onCredentialsChanged()
             credentialError = nil
             credentialMessage = "API key saved in Keychain. Validating with Greptile..."
+            requestCredentialMetricsRefresh()
+        }
+        if shouldValidateSavedGeminiCredential {
+            onCredentialsChanged()
+            credentialError = nil
+            credentialMessage = "Session credentials saved in Keychain. Validating with Gemini..."
             requestCredentialMetricsRefresh()
         }
     }

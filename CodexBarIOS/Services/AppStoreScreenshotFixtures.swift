@@ -21,6 +21,7 @@ enum AppStoreScreenshotFixtureID {
     static let openCodeZenAccount = "app-store-screenshots.opencodzen"
     static let moonshotAccount = "app-store-screenshots.moonshot"
     static let greptileAccount = "app-store-screenshots.greptile"
+    static let geminiAccount = "app-store-screenshots.gemini"
 }
 
 struct AppStoreScreenshotConfiguration {
