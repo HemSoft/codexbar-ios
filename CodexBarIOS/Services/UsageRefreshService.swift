@@ -637,6 +637,7 @@ public extension UsageRefreshService {
                 MoonshotUsageProvider(),
                 CursorUsageProvider(),
                 GreptileUsageProvider(),
+                GeminiUsageProvider(),
             ]
         )
     }

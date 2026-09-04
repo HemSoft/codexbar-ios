@@ -11,13 +11,16 @@ The Windows reference implementation is checked out beside this repo at:
 ## Current Scope
 
 - SwiftUI dashboard with account-scoped usage cards for Codex, GitHub Copilot,
-  Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), and Greptile
+  Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), Greptile,
+  and Google Gemini
 - Live provider adapters and settings for enabling accounts, choosing supported
   authentication methods, labeling accounts, and storing credentials in Keychain
 - Usage history and charts, configurable usage alerts, and home-screen and
   lock-screen widgets
 - Read-only Greptile review-activity tracking through an organization API key,
   with completed reviews kept distinct from pull requests and billing credits
+- Read-only consumer Gemini Apps usage tracking through user-supplied Google
+  session credentials, with separate 5-hour and weekly meters and reset times
 - An embedded watchOS companion with a live, read-only dashboard that mirrors
   presentation-ready account metrics, visualization choices, ordering, and
   freshness from iPhone; provider setup, credentials, and provider networking
@@ -48,6 +51,20 @@ Developers can replace the bundled values in debug builds with the
 `CODEXBAR_COPILOT_OAUTH_CLIENT_SECRET` environment variables. Release builds
 ignore process-environment overrides and use values from the app bundle or the
 documented defaults in `CopilotWebAuthService.swift`.
+
+## Google Gemini Session Credentials
+
+Google does not currently publish an OAuth scope or API for the consumer Gemini
+Apps usage meters. CodexBar therefore accepts a Cookie header copied from a
+signed-in `gemini.google.com` session. It extracts only `__Secure-1PSID` and the
+optional rotating `__Secure-1PSIDTS` value, discards every other pasted cookie,
+and stores the selected values in iOS Keychain.
+
+Gemini session credentials are more sensitive than an API key and may grant
+broader access to the Google account. CodexBar sends them only to
+`gemini.google.com`, rejects cross-origin redirects, and performs read-only
+requests to Gemini's Usage page. This integration depends on an undocumented
+web contract and will fail closed if the page tokens or quota response change.
 
 ## Open Locally
 

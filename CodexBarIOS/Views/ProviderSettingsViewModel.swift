@@ -14,7 +14,14 @@ struct ProviderCredentialPresentation: Equatable {
 
 @MainActor
 final class ProviderSettingsViewModel: ObservableObject {
-    private static let greptileValidatedMessage = "API key saved in Keychain and validated by Greptile."
+    private struct CredentialValidationFeedback {
+        let validatingMessage: String
+        let disabledMessage: String
+        let incompleteMessage: String
+        let authenticationFailurePrefix: String
+        let transientFailurePrefix: String
+        let validatedMessage: String
+    }
 
     enum PersistenceBehavior {
         case immediate
@@ -62,10 +69,10 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var needsCredentialMetricsRefresh = false
     private var metricsCredentialRevision = 0
     private var isCredentialRefreshPending = false
-    private var showsGreptileValidationFeedback = false
+    private var validationFeedbackProviderID: ProviderID?
 
     var credentialMessageSystemImage: String {
-        credentialMessage == Self.greptileValidatedMessage
+        credentialMessage == credentialValidationFeedback?.validatedMessage
             ? "checkmark.circle"
             : "clock"
     }
@@ -107,13 +114,48 @@ final class ProviderSettingsViewModel: ObservableObject {
         configuration.providerID
     }
 
+    private var credentialValidationFeedback: CredentialValidationFeedback? {
+        switch providerID {
+        case .greptile:
+            CredentialValidationFeedback(
+                validatingMessage: "API key saved in Keychain. Validating with Greptile...",
+                disabledMessage: "API key saved in Keychain. Enable this account to validate it with Greptile.",
+                incompleteMessage: "API key saved in Keychain. "
+                    + "Greptile validation did not complete; refresh to try again.",
+                authenticationFailurePrefix: "API key saved in Keychain, but Greptile validation failed. ",
+                transientFailurePrefix: "API key saved in Keychain. "
+                    + "Greptile could not validate it right now. ",
+                validatedMessage: "API key saved in Keychain and validated by Greptile."
+            )
+        case .gemini:
+            CredentialValidationFeedback(
+                validatingMessage: "Session credentials saved in Keychain. Validating with Gemini...",
+                disabledMessage: "Session credentials saved in Keychain. "
+                    + "Enable this account to validate them with Gemini.",
+                incompleteMessage: "Session credentials saved in Keychain. "
+                    + "Validation did not complete; refresh to try again.",
+                authenticationFailurePrefix: "Session credentials saved in Keychain, "
+                    + "but Gemini validation failed. ",
+                transientFailurePrefix: "Session credentials saved in Keychain. "
+                    + "Gemini could not validate them right now. ",
+                validatedMessage: "Session credentials saved in Keychain and validated by Gemini."
+            )
+        default:
+            nil
+        }
+    }
+
+    private var showsCredentialValidationFeedback: Bool {
+        validationFeedbackProviderID == providerID
+    }
+
     var availableAuthMethods: [ProviderAuthMethod] {
         switch providerID {
         case .codex, .claude, .cursor:
             [.browserSession]
         case .copilot:
             [.browserSession, .cliToken]
-        case .openRouter, .openCodeZen, .moonshot, .greptile:
+        case .openRouter, .openCodeZen, .moonshot, .greptile, .gemini:
             [.apiKey]
         }
     }
@@ -145,6 +187,22 @@ final class ProviderSettingsViewModel: ObservableObject {
                 setupURL: URL(string: "https://app.greptile.com/settings/api"),
                 securityMessage: "CodexBar stores this credential only in Keychain. "
                     + "When Greptile omits review allowance data, CodexBar leaves quota usage unknown."
+            )
+        }
+
+        if providerID == .gemini {
+            return ProviderCredentialPresentation(
+                sectionTitle: "Gemini Session Credentials",
+                unsavedPlaceholder: "Paste Gemini Cookie header or credential JSON",
+                savedPlaceholder: "Gemini session credentials saved",
+                saveButtonTitle: "Save and Validate Session",
+                setupMessage: "Sign in to Gemini in a browser, then copy a Cookie header containing "
+                    + "__Secure-1PSID and, when present, __Secure-1PSIDTS.",
+                setupLinkTitle: "Open Gemini Usage",
+                setupURL: URL(string: "https://gemini.google.com/usage"),
+                securityMessage: "These Google session credentials are sensitive and may grant broader account "
+                    + "access. CodexBar discards every other pasted cookie, stores the selected values only in "
+                    + "Keychain, and uses them only for read-only Gemini usage requests."
             )
         }
 
@@ -278,17 +336,19 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
         guard credentialRevision == metricsCredentialRevision else { return }
         guard let result else {
-            if requiresFreshRequest, providerID == .greptile, showsGreptileValidationFeedback {
+            if requiresFreshRequest,
+               showsCredentialValidationFeedback,
+               let feedback = credentialValidationFeedback {
                 credentialError = nil
-                credentialMessage = "API key saved in Keychain. Greptile validation did not complete; refresh to try again."
+                credentialMessage = feedback.incompleteMessage
             }
             return
         }
         acceptUsageResult(result)
-        if showsGreptileValidationFeedback {
-            updateGreptileCredentialFeedback(with: result)
+        if showsCredentialValidationFeedback {
+            updateCredentialValidationFeedback(with: result)
             if result.failureMessage == nil {
-                showsGreptileValidationFeedback = false
+                validationFeedbackProviderID = nil
             }
         }
     }
@@ -324,21 +384,32 @@ final class ProviderSettingsViewModel: ObservableObject {
     func saveGenericCredential() {
         credentialError = nil
         credentialMessage = nil
-        showsGreptileValidationFeedback = false
+        validationFeedbackProviderID = nil
         guard persist(configuration) else {
             credentialError = configurationStore.lastError
             return
         }
-        guard persistSecret(secret) else {
+        let credentialToStore: String
+        if providerID == .gemini {
+            do {
+                credentialToStore = try GeminiSessionCredentialsParser.storedCredential(from: secret)
+            } catch {
+                credentialError = error.localizedDescription
+                return
+            }
+        } else {
+            credentialToStore = secret
+        }
+        guard persistSecret(credentialToStore) else {
             credentialError = configurationStore.lastError
             return
         }
         secret = ""
-        if providerID == .greptile {
-            showsGreptileValidationFeedback = true
+        if let feedback = credentialValidationFeedback {
+            validationFeedbackProviderID = providerID
             credentialMessage = configuration.isEnabled
-                ? "API key saved in Keychain. Validating with Greptile..."
-                : "API key saved in Keychain. Enable this account to validate it with Greptile."
+                ? feedback.validatingMessage
+                : feedback.disabledMessage
         }
         credentialsDidChange()
     }
@@ -346,7 +417,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     func removeSavedCredential(message: String? = nil) {
         credentialError = nil
         credentialMessage = nil
-        showsGreptileValidationFeedback = false
+        validationFeedbackProviderID = nil
         flushPendingChanges()
         guard persistSecret("") else {
             credentialError = configurationStore.lastError
@@ -585,21 +656,19 @@ final class ProviderSettingsViewModel: ObservableObject {
         )
     }
 
-    private func updateGreptileCredentialFeedback(with result: ProviderUsageResult) {
-        guard providerID == .greptile else {
-            return
-        }
+    private func updateCredentialValidationFeedback(with result: ProviderUsageResult) {
+        guard let feedback = credentialValidationFeedback else { return }
         if let failureMessage = result.failureMessage {
             if result.recoveryAction == .reauthenticate || result.recoveryAction == .signIn {
                 credentialMessage = nil
-                credentialError = "API key saved in Keychain, but Greptile validation failed. \(failureMessage)"
+                credentialError = feedback.authenticationFailurePrefix + failureMessage
             } else {
                 credentialError = nil
-                credentialMessage = "API key saved in Keychain. Greptile could not validate it right now. \(failureMessage)"
+                credentialMessage = feedback.transientFailurePrefix + failureMessage
             }
         } else {
             credentialError = nil
-            credentialMessage = Self.greptileValidatedMessage
+            credentialMessage = feedback.validatedMessage
         }
     }
 
@@ -708,10 +777,10 @@ final class ProviderSettingsViewModel: ObservableObject {
         _ updated: ProviderAccountConfiguration,
         persistence: PersistenceBehavior
     ) {
-        let shouldValidateSavedGreptileCredential = providerID == .greptile
+        let shouldValidateSavedCredential = credentialValidationFeedback != nil
             && !configuration.isEnabled
             && updated.isEnabled
-            && showsGreptileValidationFeedback
+            && showsCredentialValidationFeedback
         let didChangeRefreshInputs = refreshInputsChanged(from: configuration, to: updated)
         configuration = updated
         if didChangeRefreshInputs {
@@ -735,10 +804,10 @@ final class ProviderSettingsViewModel: ObservableObject {
                 self?.flushPendingChanges()
             }
         }
-        if shouldValidateSavedGreptileCredential {
+        if shouldValidateSavedCredential, let feedback = credentialValidationFeedback {
             onCredentialsChanged()
             credentialError = nil
-            credentialMessage = "API key saved in Keychain. Validating with Greptile..."
+            credentialMessage = feedback.validatingMessage
             requestCredentialMetricsRefresh()
         }
     }

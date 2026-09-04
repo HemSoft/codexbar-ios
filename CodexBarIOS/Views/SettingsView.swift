@@ -1670,6 +1670,8 @@ extension ProviderID {
             "cursorarrow"
         case .greptile:
             "checkmark.bubble"
+        case .gemini:
+            "diamond.fill"
         }
     }
 }

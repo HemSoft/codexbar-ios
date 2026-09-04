@@ -427,6 +427,9 @@ struct ProviderSettingsView: View {
         if providerID == .openCodeZen, method == .apiKey {
             return "Dashboard Session"
         }
+        if providerID == .gemini, method == .apiKey {
+            return "Session Credentials"
+        }
         return method.displayName
     }
 

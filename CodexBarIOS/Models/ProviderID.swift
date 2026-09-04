@@ -9,6 +9,7 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
     case moonshot
     case cursor
     case greptile
+    case gemini
 
     public var id: String {
         rawValue
@@ -32,6 +33,8 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
             "Cursor"
         case .greptile:
             "Greptile"
+        case .gemini:
+            "Google Gemini"
         }
     }
 
@@ -39,7 +42,7 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
         switch self {
         case .codex, .copilot, .claude:
             true
-        case .openRouter, .openCodeZen, .moonshot, .cursor, .greptile:
+        case .openRouter, .openCodeZen, .moonshot, .cursor, .greptile, .gemini:
             false
         }
     }

@@ -2338,7 +2338,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             normalized.authMethod = .browserSession
         case .cursor:
             normalized.authMethod = .browserSession
-        case .copilot, .claude, .openRouter, .openCodeZen, .moonshot, .greptile:
+        case .copilot, .claude, .openRouter, .openCodeZen, .moonshot, .greptile, .gemini:
             break
         }
         return normalized
@@ -2496,6 +2496,13 @@ public extension ProviderConfigurationStore {
                 id: AppStoreScreenshotFixtureID.greptileAccount,
                 providerID: .greptile,
                 accountLabel: "Greptile Reviews",
+                groupID: usageGroup.id,
+                authMethod: .apiKey
+            ),
+            ProviderAccountConfiguration(
+                id: AppStoreScreenshotFixtureID.geminiAccount,
+                providerID: .gemini,
+                accountLabel: "Google AI Pro",
                 groupID: usageGroup.id,
                 authMethod: .apiKey
             ),

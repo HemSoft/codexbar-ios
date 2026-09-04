@@ -303,6 +303,26 @@ public extension DemoUsageProvider {
                 ],
                 subtitle: "All available review history"
             ),
+            DemoUsageProvider(
+                providerID: .gemini,
+                bars: [
+                    UsageBar(
+                        stableKey: "five-hour",
+                        label: "5-hour usage limit",
+                        used: 27,
+                        limit: 100,
+                        resetDescription: "Resets in 3h 40m"
+                    ),
+                    UsageBar(
+                        stableKey: "weekly",
+                        label: "Weekly usage limit",
+                        used: 54,
+                        limit: 100,
+                        resetDescription: "Resets Monday"
+                    ),
+                ],
+                subtitle: "Gemini Apps usage"
+            ),
         ]
     }
 }
