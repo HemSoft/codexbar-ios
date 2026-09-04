@@ -134,6 +134,41 @@ final class GeminiUsageProviderTests: XCTestCase {
         XCTAssertEqual(parsed.fiveHour?.fractionUsed, 0.25)
         XCTAssertEqual(parsed.weekly?.fractionUsed, 0.5)
     }
+
+    func testProviderTreatsSignInRedirectAsExpiredCredentials() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration(
+            id: "gemini.expired",
+            providerID: .gemini,
+            authMethod: .apiKey
+        )
+        try secretStore.saveSecret(
+            GeminiSessionCredentialsParser.storedCredential(from: "__Secure-1PSID=expired-value"),
+            account: ProviderConfigurationStore.keychainAccount(for: configuration)
+        )
+
+        let sessionFixture = IsolatedTestURLSession { request in
+            (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 302,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data()
+            )
+        }
+        defer { sessionFixture.invalidate() }
+
+        let result = try await GeminiUsageProvider(
+            secretStore: secretStore,
+            session: sessionFixture.session
+        ).fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.recoveryAction, .reauthenticate)
+        XCTAssertTrue(result.failureMessage?.contains("sign in") == true)
+        XCTAssertTrue(result.preserveCachedBarsOnFailure)
+    }
 }
 
 private func makeGeminiBatchResponse(_ payload: [Any]) throws -> Data {

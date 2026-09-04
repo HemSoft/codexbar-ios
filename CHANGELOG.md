@@ -8,9 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
-- Added Google Gemini accounts backed by user-provided session credentials,
-  with live 5-hour and weekly usage limits and exact reset times from Gemini's
-  Usage page. ([#296](https://github.com/HemSoft/codexbar-ios/issues/296))
+- Added an experimental Google Gemini account option backed by user-provided
+  session credentials. It displays the 5-hour and weekly usage values and reset
+  times returned by Gemini's current Usage page contract; live-account parity
+  remains a pre-release gate. ([#296](https://github.com/HemSoft/codexbar-ios/issues/296))
 - Split Cursor's included usage into separate Cursor Models and Other Models
   metrics, each with its own saved dashboard, widget, and Watch visibility.
   ([#292](https://github.com/HemSoft/codexbar-ios/issues/292))

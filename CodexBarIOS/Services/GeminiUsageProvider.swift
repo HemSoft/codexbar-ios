@@ -520,6 +520,12 @@ public final class GeminiUsageProvider: UsageProvider {
         switch response.statusCode {
         case 200..<300:
             nil
+        case 300..<400:
+            failureResult(
+                "Gemini redirected this session to sign in. Enter fresh session credentials.",
+                configuration: configuration,
+                recoveryAction: .reauthenticate
+            )
         case 401, 403:
             failureResult(
                 "Gemini rejected these session credentials. Enter fresh credentials.",
