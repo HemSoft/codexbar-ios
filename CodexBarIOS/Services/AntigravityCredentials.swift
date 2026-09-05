@@ -46,7 +46,10 @@ struct AntigravityCredentials: Codable, Equatable, Sendable {
     func encoded() throws -> String {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        return String(decoding: try encoder.encode(self), as: UTF8.self)
+        guard let value = String(bytes: try encoder.encode(self), encoding: .utf8) else {
+            throw CredentialError.invalid
+        }
+        return value
     }
 
     private static func field(_ key: String, in object: [String: Any]) throws -> String? {

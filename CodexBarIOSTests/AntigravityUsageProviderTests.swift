@@ -118,7 +118,7 @@ final class AntigravityUsageProviderTests: XCTestCase {
         try secrets.saveSecret(Self.expiredCredential, account: account)
         let fixture = IsolatedTestURLSession { request in
             if request.url == AntigravityUsageProvider.tokenURL {
-                let body = String(decoding: requestBodyData(from: request) ?? Data(), as: UTF8.self)
+                let body = String(bytes: requestBodyData(from: request) ?? Data(), encoding: .utf8) ?? ""
                 XCTAssertTrue(body.contains("grant_type=refresh_token"))
                 XCTAssertTrue(body.contains("client_secret=secret%2Bvalue"))
                 XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
