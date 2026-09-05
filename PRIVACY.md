@@ -1,6 +1,6 @@
 # CodexBar Privacy Policy
 
-Effective date: September 3, 2026
+Effective date: September 4, 2026
 
 CodexBar Usage Monitor is a local dashboard for monitoring AI provider usage, limits, and API balances. It does not require a CodexBar account and does not send your provider credentials or usage data to HemSoft servers.
 
@@ -35,11 +35,20 @@ When you connect a provider, CodexBar uses the credentials you provide to reques
 
 Those requests are made to the provider's own APIs or web endpoints. The provider may process the request according to its own terms and privacy policy.
 
-For Google Gemini, CodexBar accepts a pasted browser Cookie header and retains
-only the `__Secure-1PSID` and optional `__Secure-1PSIDTS` session values. Other
-pasted cookies are discarded. The retained values are stored in iOS Keychain
-and sent only to `gemini.google.com` for read-only consumer Gemini Apps usage
-requests. They are never included in widget or Watch snapshots.
+For Google Gemini, CodexBar opens Google's website in a new nonpersistent
+browser store for each sign-in attempt. You enter your password on Google's
+page; CodexBar does not inspect the page, password fields, or JavaScript.
+It reads only secure `.google.com` root-path `__Secure-1PSID` and optional
+`__Secure-1PSIDTS` cookies. After verifying consumer usage, it stores those
+session values in the selected account's iOS Keychain entry. Other browser data
+is discarded when the sign-in window closes. Existing manually connected
+accounts can use the same browser flow to renew their session.
+
+These session values may grant broader Google account access. CodexBar sends
+its retained values only to `gemini.google.com` for read-only consumer Gemini
+Apps usage requests. They are never written to app settings, logs, diagnostics,
+widgets, or Watch snapshots. Disconnecting one Gemini entry removes its saved
+credential without affecting other entries or your Safari session.
 
 GitHub Status monitoring is independently configurable and off by default. If
 you enable it, CodexBar periodically requests GitHub's public

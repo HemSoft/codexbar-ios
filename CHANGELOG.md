@@ -8,10 +8,10 @@ building, testing, or releasing the app.
 
 ### Added
 
-- Added an experimental Google Gemini account option backed by user-provided
-  session credentials. It displays the 5-hour and weekly usage values and reset
-  times returned by Gemini's current Usage page contract; live-account parity
-  remains a pre-release gate. ([#296](https://github.com/HemSoft/codexbar-ios/issues/296))
+- Added an experimental Google Gemini account option that displays five-hour
+  and weekly consumer usage with reset times. Connected-iPhone live-account
+  parity remains a pre-release gate.
+  ([#296](https://github.com/HemSoft/codexbar-ios/issues/296))
 - Split Cursor's included usage into separate Cursor Models and Other Models
   metrics, each with its own saved dashboard, widget, and Watch visibility.
   ([#292](https://github.com/HemSoft/codexbar-ios/issues/292))
@@ -28,6 +28,14 @@ building, testing, or releasing the app.
 - Added per-metric dashboard visibility controls to each account's Settings
   screen, using the same saved choices as Customize Card.
   ([#272](https://github.com/HemSoft/codexbar-ios/issues/272))
+
+### Changed
+
+- Connect and reconnect Google Gemini through a private Google website sign-in
+  window with automatic return, verified usage, and separate account storage.
+  Existing Gemini accounts retain their labels, groups, history, and display
+  preferences without copying credentials.
+  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
 
 ### Fixed
 

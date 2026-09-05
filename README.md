@@ -19,8 +19,7 @@ The Windows reference implementation is checked out beside this repo at:
   lock-screen widgets
 - Read-only Greptile review-activity tracking through an organization API key,
   with completed reviews kept distinct from pull requests and billing credits
-- Read-only consumer Gemini Apps usage tracking through user-supplied Google
-  session credentials, with separate 5-hour and weekly meters and reset times
+- Read-only consumer Gemini Apps usage tracking through Google website sign-in, with separate 5-hour and weekly meters and reset times
 - An embedded watchOS companion with a live, read-only dashboard that mirrors
   presentation-ready account metrics, visualization choices, ordering, and
   freshness from iPhone; provider setup, credentials, and provider networking
@@ -52,19 +51,42 @@ Developers can replace the bundled values in debug builds with the
 ignore process-environment overrides and use values from the app bundle or the
 documented defaults in `CopilotWebAuthService.swift`.
 
-## Google Gemini Session Credentials
+## Google Gemini sign-in
 
-Google does not currently publish an OAuth scope or API for the consumer Gemini
-Apps usage meters. CodexBar therefore accepts a Cookie header copied from a
-signed-in `gemini.google.com` session. It extracts only `__Secure-1PSID` and the
-optional rotating `__Secure-1PSIDTS` value, discards every other pasted cookie,
-and stores the selected values in iOS Keychain.
+Choose **Add Account → Google Gemini → Sign in with Google** and sign in to the
+Google account you want to track. Each attempt opens a private website window
+without reusing Safari or another CodexBar account's session. After sign-in,
+CodexBar returns from Google Account to Gemini Usage automatically, verifies
+both the five-hour and weekly meters with reset times, and saves the session
+in that account's iOS Keychain entry. You can also use the window's **Back** and
+**Gemini Usage** controls.
 
-Gemini session credentials are more sensitive than an API key and may grant
-broader access to the Google account. CodexBar sends them only to
-`gemini.google.com`, rejects cross-origin redirects, and performs read-only
-requests to Gemini's Usage page. This integration depends on an undocumented
-web contract and will fail closed if the page tokens or quota response change.
+Use **Sign in Again with Google** to renew an expired session. Existing accounts
+created by pasting credentials keep their saved session, label, group, history,
+and display preferences. Reconnecting replaces only their credential. Add a
+separate Gemini entry for another Google account. **Disconnect Google Account**
+removes only the selected entry's saved session and does not sign you out of
+Google in Safari or disconnect another CodexBar entry.
+
+Cancellation, a failed usage check, and a failed Keychain save leave the existing
+credential unchanged. If Google denies access, cancel and retry with an eligible
+account. If the sign-in page cannot load, check your connection and retry.
+
+The integration uses ordinary Google website sign-in in a nonpersistent
+`WKWebView` with its default user agent. It does not use a Google OAuth grant,
+copy another application's OAuth registration, export Safari cookies, or require
+a desktop CLI. Only secure `.google.com` root-path `__Secure-1PSID` and optional
+`__Secure-1PSIDTS` cookies are retained. The app does not inspect page contents,
+password fields, or JavaScript. Other website data exists only in the temporary
+browser store and is discarded when that window closes.
+
+Google session credentials are sensitive and may grant broader account access.
+CodexBar uses the retained values only for read-only requests to
+`gemini.google.com`, rejects cross-origin usage redirects, and never includes
+them in diagnostics, settings, widgets, or Watch snapshots. This depends on an
+undocumented consumer web contract. If Google changes or blocks it, sign-in or
+refresh will report failure. See [Gemini sign-in evidence](GEMINI-SIGN-IN.md) for
+the desktop reference, platform mechanism, and sanitized feasibility results.
 
 ## Open Locally
 

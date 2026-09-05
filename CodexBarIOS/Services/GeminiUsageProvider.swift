@@ -27,7 +27,7 @@ enum GeminiSessionCredentialsParser {
         var errorDescription: String? {
             switch self {
             case .missingSecurePSID:
-                "Paste a Gemini Cookie header or JSON containing __Secure-1PSID."
+                "Sign in with Google to connect Gemini."
             case .invalidValue:
                 "The Gemini session credential contains an invalid cookie value."
             case .encodingFailed:
@@ -180,7 +180,7 @@ public final class GeminiUsageProvider: UsageProvider {
 
         guard let storedSecret, !storedSecret.isEmpty else {
             return failureResult(
-                "Not configured - enter Gemini session credentials.",
+                "Not configured - sign in with Google.",
                 configuration: configuration,
                 recoveryAction: .signIn
             )
@@ -191,7 +191,7 @@ public final class GeminiUsageProvider: UsageProvider {
             credentials = try GeminiSessionCredentialsParser.parse(storedSecret)
         } catch {
             return failureResult(
-                "Saved Gemini session credentials are invalid. Enter them again.",
+                "Saved Gemini session credentials are invalid. Sign in again with Google.",
                 configuration: configuration,
                 recoveryAction: .reauthenticate
             )
@@ -222,7 +222,7 @@ public final class GeminiUsageProvider: UsageProvider {
             let tokens = Self.parseBootstrapTokens(html)
         else {
             return failureResult(
-                "Gemini did not accept this session or its Usage page changed. Enter fresh session credentials.",
+                "Gemini did not accept this session or its Usage page changed. Sign in again with Google.",
                 configuration: configuration,
                 recoveryAction: .reauthenticate
             )
@@ -535,13 +535,13 @@ public final class GeminiUsageProvider: UsageProvider {
             nil
         case 300..<400:
             failureResult(
-                "Gemini redirected this session to sign in. Enter fresh session credentials.",
+                "Gemini redirected this session to sign in. Sign in again with Google.",
                 configuration: configuration,
                 recoveryAction: .reauthenticate
             )
         case 401, 403:
             failureResult(
-                "Gemini rejected these session credentials. Enter fresh credentials.",
+                "Gemini rejected these session credentials. Sign in again with Google.",
                 configuration: configuration,
                 recoveryAction: .reauthenticate
             )
