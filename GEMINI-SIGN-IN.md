@@ -24,7 +24,8 @@ undocumented integration, with no claim of a public OAuth grant.
 The return path is local to the browser sheet. Main-frame Google navigation and
 cookie-store changes prompt inspection through [WKHTTPCookieStore](https://developer.apple.com/documentation/webkit/wkhttpcookiestore/getallcookies(_:)).
 After Google sign-in finishes, an authenticated `myaccount.google.com` landing
-returns to the exact Gemini Usage URL once. Google links that request a new
+returns to the exact Gemini Usage URL once per fresh session credential. A
+repeat landing keeps the window open with a Gemini Usage retry action. Google links that request a new
 window open in the same temporary view. Browser controls allow Back, Gemini
 Usage, and Cancel. Only secure HTTPS Google website navigation is allowed;
 unsafe or external links remain blocked with a visible explanation.

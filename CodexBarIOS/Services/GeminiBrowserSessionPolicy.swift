@@ -11,6 +11,10 @@ enum GeminiBrowserSessionPolicy {
         return host == "google.com" || host.hasSuffix(".google.com")
     }
 
+    static func shouldExplainBlockedNavigation(isMainFrame: Bool?, url: URL?) -> Bool {
+        isMainFrame != false && url?.absoluteString != "about:blank"
+    }
+
     static func isUsagePage(_ url: URL?) -> Bool {
         allowsNavigation(to: url) && url?.host?.lowercased() == "gemini.google.com"
             && url?.path == "/usage"
@@ -91,5 +95,15 @@ private struct GeminiValidationSecretStore: SecretStore {
 
     func deleteSecret(account: String) throws {
         throw GeminiSignInError.validationFailed
+    }
+}
+
+struct GeminiBrowserReturnState {
+    private var lastReturnedCredential: String?
+
+    mutating func shouldReturn(for credential: String) -> Bool {
+        guard credential != lastReturnedCredential else { return false }
+        lastReturnedCredential = credential
+        return true
     }
 }

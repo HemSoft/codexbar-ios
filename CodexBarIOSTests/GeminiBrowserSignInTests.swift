@@ -41,6 +41,22 @@ final class GeminiBrowserSignInTests: XCTestCase {
         XCTAssertTrue(GeminiBrowserSessionPolicy.isUsagePage(GeminiBrowserSessionPolicy.usageURL))
     }
 
+    func testRepeatedAccountLandingOnlyReturnsAutomaticallyForFreshCredentials() {
+        var state = GeminiBrowserReturnState()
+        XCTAssertTrue(state.shouldReturn(for: "first-session"))
+        XCTAssertFalse(state.shouldReturn(for: "first-session"))
+        XCTAssertTrue(state.shouldReturn(for: "refreshed-session"))
+        XCTAssertFalse(state.shouldReturn(for: "refreshed-session"))
+    }
+
+    func testBlockedMainFrameAndPopupExplainFailureWithoutAlarmingForSubframes() {
+        let external = URL(string: "https://external.example/signin")
+        XCTAssertTrue(GeminiBrowserSessionPolicy.shouldExplainBlockedNavigation(isMainFrame: true, url: external))
+        XCTAssertTrue(GeminiBrowserSessionPolicy.shouldExplainBlockedNavigation(isMainFrame: nil, url: external))
+        XCTAssertFalse(GeminiBrowserSessionPolicy.shouldExplainBlockedNavigation(isMainFrame: false, url: external))
+        XCTAssertFalse(GeminiBrowserSessionPolicy.shouldExplainBlockedNavigation(isMainFrame: nil, url: URL(string: "about:blank")))
+    }
+
     @MainActor
     func testEveryAttemptHasAnIsolatedNonpersistentStoreAndCancellationCompletesOnce() {
         var completions = 0
@@ -95,6 +111,7 @@ final class GeminiBrowserSignInTests: XCTestCase {
         model.geminiBrowserSession?.finish(.success("__Secure-1PSID=new-first"))
         await waitForSignIn(model)
         XCTAssertNil(model.credentialError)
+        XCTAssertEqual(model.credentialMessageSystemImage, "checkmark.circle")
         let saved = try XCTUnwrap(fixture.store.configuration(accountID: first.id))
         XCTAssertEqual(saved.accountLabel, first.accountLabel)
         XCTAssertEqual(saved.showsHistory, first.showsHistory)
@@ -155,17 +172,21 @@ final class GeminiBrowserSignInTests: XCTestCase {
     }
 
     @MainActor
-    func testCancelDuringValidationIgnoresLateSuccessAfterDisconnect() async {
+    func testCancelDuringValidationIgnoresLateSuccessAfterDisconnect() async throws {
         let fixture = Fixture()
         let account = fixture.store.addAccount(for: .gemini)
-        let validator = SuspendedValidator()
+        let validator = SuspendedValidator(result: validResult(for: account))
         let model = ProviderSettingsViewModel(configurationStore: fixture.store, accountID: account.id)
         model.geminiSessionValidator = validator
+        defer {
+            model.cancelAuthentication()
+            Task { await validator.finish() }
+        }
         model.startGeminiSignIn()
         model.geminiBrowserSession?.finish(.success("__Secure-1PSID=late"))
-        while !(await validator.hasStarted) { await Task.yield() }
+        try await validator.waitUntilStarted()
         model.removeSavedCredential()
-        await validator.finish(validResult(for: account))
+        await validator.finish()
         for _ in 0..<30 { await Task.yield() }
         XCTAssertFalse(fixture.store.hasSecret(for: account))
         XCTAssertFalse(model.isSigningInWithGemini)
@@ -223,12 +244,49 @@ private struct StubValidator: GeminiSessionValidating {
 }
 
 private actor SuspendedValidator: GeminiSessionValidating {
-    private var continuation: CheckedContinuation<ProviderUsageResult, Never>?
-    var hasStarted: Bool { continuation != nil }
+    private let result: ProviderUsageResult
+    private let started = TestSignal()
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isReleased = false
+
+    init(result: ProviderUsageResult) { self.result = result }
+
     func validate(credential: String, configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
-        await withCheckedContinuation { continuation = $0 }
+        // The detached gate deliberately ignores the caller's cancellation so the
+        // test exercises late success, while its own watchdog still bounds the wait.
+        try await Task.detached { [self] in
+            try await withTestWatchdog(
+                timeout: .seconds(5),
+                failureMessage: "Gemini validation was not released within five seconds.",
+                onTimeout: { Task { await self.finish() } },
+                operation: { await self.waitForRelease() }
+            )
+        }.value
+        return result
     }
-    func finish(_ result: ProviderUsageResult) { continuation?.resume(returning: result) }
+
+    func waitUntilStarted() async throws {
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "Gemini validation did not start within five seconds.",
+            onTimeout: { Task { await self.finish() } },
+            operation: { [started] in await started.wait() }
+        )
+    }
+
+    private func waitForRelease() async {
+        guard !isReleased else { return }
+        await withCheckedContinuation {
+            continuation = $0
+            started.signal()
+        }
+    }
+
+    func finish() {
+        isReleased = true
+        continuation?.resume()
+        continuation = nil
+    }
 }
 
 @MainActor

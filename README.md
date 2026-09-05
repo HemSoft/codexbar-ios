@@ -53,6 +53,12 @@ documented defaults in `CopilotWebAuthService.swift`.
 
 ## Google Gemini sign-in
 
+This experimental website integration is implemented for testing. The earlier
+simulator probe verified consumer usage, but production live sign-in, account
+switching, and reconnect on a connected iPhone remain a pre-release gate. The
+steps below describe the intended workflow; see the current verification
+boundaries in [Gemini sign-in evidence](GEMINI-SIGN-IN.md).
+
 Choose **Add Account → Google Gemini → Sign in with Google** and sign in to the
 Google account you want to track. Each attempt opens a private website window
 without reusing Safari or another CodexBar account's session. After sign-in,

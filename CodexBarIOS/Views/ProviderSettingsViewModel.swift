@@ -143,7 +143,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                     + "but Gemini validation failed. ",
                 transientFailurePrefix: "Session credentials saved in Keychain. "
                     + "Gemini could not validate them right now. ",
-                validatedMessage: "Session credentials saved in Keychain and validated by Gemini."
+                validatedMessage: "Google session saved in Keychain and Gemini usage verified."
             )
         default:
             nil
@@ -497,7 +497,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             }
             secret = ""
             credentialError = nil
-            credentialMessage = "Google session saved in Keychain and Gemini usage verified."
+            credentialMessage = credentialValidationFeedback?.validatedMessage
             credentialsDidChange()
             acceptUsageResult(result)
         } catch {

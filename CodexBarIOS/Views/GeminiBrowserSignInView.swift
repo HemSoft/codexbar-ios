@@ -12,7 +12,7 @@ final class GeminiBrowserSignInSession: NSObject, ObservableObject, Identifiable
     private var completion: ((Result<String, Error>) -> Void)?
     private var isReadingCookies = false
     private var didStart = false
-    private var didReturnToUsage = false
+    private var returnState = GeminiBrowserReturnState()
     private var navigationRevision = 0
 
     init(completion: @escaping (Result<String, Error>) -> Void) {
@@ -83,11 +83,10 @@ final class GeminiBrowserSignInSession: NSObject, ObservableObject, Identifiable
                 guard let credential = try GeminiBrowserSessionPolicy.storedCredential(from: cookies) else { return }
                 if GeminiBrowserSessionPolicy.isUsagePage(self.webView.url) {
                     self.finish(.success(credential))
-                } else if !self.didReturnToUsage {
-                    self.didReturnToUsage = true
+                } else if self.returnState.shouldReturn(for: credential) {
                     self.openUsage()
                 } else {
-                    self.finish(.failure(GeminiSignInError.validationFailed))
+                    self.message = "Google returned to your account page. Finish signing in, then choose Gemini Usage to retry."
                 }
             } catch {
                 self.finish(.failure(GeminiSignInError.ambiguousSession))
@@ -100,7 +99,7 @@ final class GeminiBrowserSignInSession: NSObject, ObservableObject, Identifiable
         decidePolicyFor navigationAction: WKNavigationAction
     ) async -> WKNavigationActionPolicy {
         guard GeminiBrowserSessionPolicy.allowsNavigation(to: navigationAction.request.url) else {
-            message = "This sign-in window only opens secure Google pages. Return to Gemini Usage or cancel to retry."
+            explainBlockedNavigation(navigationAction)
             return .cancel
         }
         return .allow
@@ -112,11 +111,21 @@ final class GeminiBrowserSignInSession: NSObject, ObservableObject, Identifiable
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        if navigationAction.targetFrame == nil,
-           GeminiBrowserSessionPolicy.allowsNavigation(to: navigationAction.request.url) {
-            webView.load(navigationAction.request)
+        guard navigationAction.targetFrame == nil else { return nil }
+        guard GeminiBrowserSessionPolicy.allowsNavigation(to: navigationAction.request.url) else {
+            explainBlockedNavigation(navigationAction)
+            return nil
         }
+        webView.load(navigationAction.request)
         return nil
+    }
+
+    private func explainBlockedNavigation(_ action: WKNavigationAction) {
+        guard GeminiBrowserSessionPolicy.shouldExplainBlockedNavigation(
+            isMainFrame: action.targetFrame?.isMainFrame,
+            url: action.request.url
+        ) else { return }
+        message = "This sign-in window only opens secure Google pages. Return to Gemini Usage or cancel to retry."
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
