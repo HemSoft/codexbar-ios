@@ -899,10 +899,6 @@ final class AppAndWidgetTests: XCTestCase {
         let results = AppStoreScreenshotFixtures.results(for: configurationStore)
 
         XCTAssertEqual(Set(results.map(\.providerID)), Set(ProviderID.allCases))
-        XCTAssertEqual(
-            results.first { $0.providerID == .antigravity }?.bars.map(\.stableKey),
-            ["gemini-5h", "gemini-weekly", "3p-5h", "3p-weekly"]
-        )
         XCTAssertTrue(results.allSatisfy { $0.accountID.hasPrefix("app-store-screenshots.") })
         XCTAssertGreaterThanOrEqual(
             configurationStore.configurations.filter {

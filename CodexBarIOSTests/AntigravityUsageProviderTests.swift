@@ -220,6 +220,16 @@ final class AntigravityUsageProviderTests: XCTestCase {
         XCTAssertEqual(model.secret, "")
     }
 
+    @MainActor
+    func testScreenshotFixtureIncludesAllAntigravityBuckets() {
+        let store = ProviderConfigurationStore.appStoreScreenshotDemo()
+        let results = AppStoreScreenshotFixtures.results(for: store)
+        XCTAssertEqual(
+            results.first { $0.providerID == .antigravity }?.bars.map(\.stableKey),
+            ["gemini-5h", "gemini-weekly", "3p-5h", "3p-weekly"]
+        )
+    }
+
     private static let expiredCredential = #"{"access_token":"old","refresh_token":"refresh","client_id":"client","client_secret":"secret+value","expiry":"2020-01-01T00:00:00Z"}"#
 
     private static func response(_ request: URLRequest, status: Int) throws -> HTTPURLResponse {
