@@ -97,15 +97,13 @@ final class GeminiBrowserSignInSession: NSObject, ObservableObject, Identifiable
 
     func webView(
         _ webView: WKWebView,
-        decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
-    ) {
+        decidePolicyFor navigationAction: WKNavigationAction
+    ) async -> WKNavigationActionPolicy {
         guard GeminiBrowserSessionPolicy.allowsNavigation(to: navigationAction.request.url) else {
             message = "This sign-in window only opens secure Google pages. Return to Gemini Usage or cancel to retry."
-            decisionHandler(.cancel)
-            return
+            return .cancel
         }
-        decisionHandler(.allow)
+        return .allow
     }
 
     func webView(
