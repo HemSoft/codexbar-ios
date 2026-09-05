@@ -2951,27 +2951,103 @@ final class ProviderParsingTests: XCTestCase {
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
         )
 
+        let events = StalledCursorRequestEvents()
+        let host = UUID().uuidString.lowercased() + ".test"
+        StalledCursorGrokBotURLProtocol.register(events, for: host)
         let urlSessionConfiguration = URLSessionConfiguration.ephemeral
         urlSessionConfiguration.protocolClasses = [StalledCursorGrokBotURLProtocol.self]
         let session = URLSession(configuration: urlSessionConfiguration)
-        defer { session.invalidateAndCancel() }
+        defer {
+            session.invalidateAndCancel()
+            StalledCursorGrokBotURLProtocol.unregister(host: host)
+        }
         let provider = CursorUsageProvider(
             secretStore: secretStore,
             session: session,
+            usageEndpoint: try XCTUnwrap(URL(string: "https://\(host)/GetCurrentPeriodUsage")),
+            grokBotUsageEndpoint: try XCTUnwrap(URL(string: "https://\(host)/GetSandUsageStatus")),
+            grokBotRequestTimeout: .seconds(2),
+            waitForGrokBotTimeout: { duration in
+                XCTAssertEqual(duration, .seconds(2))
+                events.record(.timeoutStarted)
+                await events.primaryCompleted.wait()
+                await events.optionalStarted.wait()
+                try Task.checkCancellation()
+                events.record(.timeoutFired)
+            }
+        )
+
+        // This guard only breaks a deadlock. Request events drive the timeout and assertions.
+        let result = try await withTestWatchdog(
+            timeout: .seconds(30),
+            failureMessage: "Cursor usage waited for the stalled optional Grok Bot request.",
+            onTimeout: { session.invalidateAndCancel() },
+            operation: {
+                let result = try await provider.fetchUsage(for: configuration)
+                events.record(.fetchReturned)
+                // URLSession may dispatch stopLoading after resuming data(for:).
+                await events.optionalCancelled.wait()
+                return result
+            }
+        )
+
+        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models", "Other Models"])
+        XCTAssertEqual(result.bars.first?.usageText, "25%")
+        let recorded = events.recorded
+        XCTAssertEqual(recorded.count, 6)
+        let timeoutIndex = try XCTUnwrap(recorded.firstIndex(of: .timeoutFired))
+        for event in [StalledCursorRequestEvents.Event.primaryCompleted, .optionalStarted, .timeoutStarted] {
+            XCTAssertLessThan(try XCTUnwrap(recorded.firstIndex(of: event)), timeoutIndex)
+        }
+        for event in [StalledCursorRequestEvents.Event.optionalCancelled, .fetchReturned] {
+            XCTAssertGreaterThan(try XCTUnwrap(recorded.firstIndex(of: event)), timeoutIndex)
+        }
+    }
+
+    func testCursorProviderDefaultTimeoutCancelsStalledOptionalGrokBotUsage() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .cursor)
+        try secretStore.saveSecret("cursor-token", account: ProviderConfigurationStore.keychainAccount(for: configuration))
+
+        let events = StalledCursorRequestEvents()
+        let host = UUID().uuidString.lowercased() + ".test"
+        StalledCursorGrokBotURLProtocol.register(events, for: host)
+        let observer = StalledCursorTaskObserver()
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [StalledCursorGrokBotURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration, delegate: observer, delegateQueue: nil)
+        defer {
+            session.invalidateAndCancel()
+            StalledCursorGrokBotURLProtocol.unregister(host: host)
+        }
+        let provider = CursorUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            usageEndpoint: try XCTUnwrap(URL(string: "https://\(host)/GetCurrentPeriodUsage")),
+            grokBotUsageEndpoint: try XCTUnwrap(URL(string: "https://\(host)/GetSandUsageStatus")),
             grokBotRequestTimeout: .milliseconds(25)
         )
 
         let result = try await withTestWatchdog(
-            timeout: .seconds(1),
-            failureMessage: "Cursor usage waited for the stalled optional Grok Bot request.",
-            onTimeout: {},
+            timeout: .seconds(30),
+            failureMessage: "Cursor's default timeout did not cancel the optional Grok Bot task.",
+            onTimeout: { session.invalidateAndCancel() },
             operation: {
-                try await provider.fetchUsage(for: configuration)
+                let result = try await provider.fetchUsage(for: configuration)
+                await events.primaryCompleted.wait()
+                return result
             }
         )
 
-        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models"])
+        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models", "Other Models"])
         XCTAssertEqual(result.bars.first?.usageText, "25%")
+        XCTAssertTrue(events.recorded.contains(.primaryCompleted))
+        // The real timeout may cancel the child before URLSession creates a task.
+        // When one was created, fetchUsage waits for that child to finish too.
+        if let optionalTask = observer.optionalTask {
+            XCTAssertEqual(optionalTask.state, .completed)
+            XCTAssertEqual((optionalTask.error as? URLError)?.code, .cancelled)
+        }
     }
 
     func testCursorProviderWithoutCredentialIsNotDemoData() async throws {
@@ -4845,40 +4921,4 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(bar.fractionUsed, 1)
     }
 
-}
-
-private final class StalledCursorGrokBotURLProtocol: URLProtocol, @unchecked Sendable {
-    // URLProtocol requires overridable class methods.
-    // swiftlint:disable:next static_over_final_class
-    override class func canInit(with request: URLRequest) -> Bool {
-        true
-    }
-
-    // URLProtocol requires overridable class methods.
-    // swiftlint:disable:next static_over_final_class
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        guard request.url?.lastPathComponent == "GetCurrentPeriodUsage" else {
-            return
-        }
-        guard let url = request.url else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
-            return
-        }
-
-        let response = HTTPURLResponse(
-            url: url,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(#"{"planUsage":{"autoPercentUsed":25}}"#.utf8))
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
 }
