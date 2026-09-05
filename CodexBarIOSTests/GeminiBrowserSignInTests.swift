@@ -1,0 +1,309 @@
+import XCTest
+import WebKit
+@testable import CodexBarIOS
+
+final class GeminiBrowserSignInTests: XCTestCase {
+    func testCookieSelectionRejectsWrongDomainsScopesExpiredAndInsecureValues() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let cookies = try [
+            cookie("__Secure-1PSID", value: "good-primary"),
+            cookie("__Secure-1PSIDTS", value: "good-rotating"),
+            cookie("SID", value: "discard"),
+            cookie("__Secure-1PSIDTS", value: "host-only", domain: "google.com"),
+            cookie("__Secure-1PSID", value: "wrong-domain", domain: ".google.com.evil.example"),
+            cookie("__Secure-1PSID", value: "subdomain", domain: "accounts.google.com"),
+            cookie("__Secure-1PSIDTS", value: "wrong-path", path: "/accounts"),
+            cookie("__Secure-1PSID", value: "insecure", secure: false),
+            cookie("__Secure-1PSID", value: "expired", expires: now.addingTimeInterval(-1)),
+        ]
+        let stored = try XCTUnwrap(GeminiBrowserSessionPolicy.storedCredential(from: cookies, now: now))
+        XCTAssertEqual(
+            try GeminiSessionCredentialsParser.parse(stored),
+            GeminiSessionCredentials(securePSID: "good-primary", securePSIDTS: "good-rotating")
+        )
+        XCTAssertNil(try GeminiBrowserSessionPolicy.storedCredential(from: [cookie("SID", value: "discard")]))
+        XCTAssertThrowsError(try GeminiBrowserSessionPolicy.storedCredential(from: [
+            cookie("__Secure-1PSID", value: "one"),
+            cookie("__Secure-1PSID", value: "two"),
+        ]))
+    }
+
+    func testNavigationAndReturnPolicyRejectsImpersonationAndWaitsForGoogleSignIn() {
+        for url in ["https://accounts.google.com/signin", "https://myaccount.google.com/", "https://gemini.google.com/usage?pli=1"] {
+            XCTAssertTrue(GeminiBrowserSessionPolicy.allowsNavigation(to: URL(string: url)))
+        }
+        for url in ["http://google.com", "https://google.com.evil.example", "https://evilgoogle.com", "https://google.com:8443", "https://user@google.com", "file:///tmp/test", "javascript:alert(1)"] {
+            XCTAssertFalse(GeminiBrowserSessionPolicy.allowsNavigation(to: URL(string: url)))
+        }
+        XCTAssertFalse(GeminiBrowserSessionPolicy.canReturnToUsage(from: URL(string: "https://accounts.google.com/signin/challenge")))
+        XCTAssertTrue(GeminiBrowserSessionPolicy.canReturnToUsage(from: URL(string: "https://myaccount.google.com/")))
+        XCTAssertFalse(GeminiBrowserSessionPolicy.isUsagePage(URL(string: "https://myaccount.google.com/usage")))
+        XCTAssertTrue(GeminiBrowserSessionPolicy.isUsagePage(GeminiBrowserSessionPolicy.usageURL))
+    }
+
+    func testRepeatedAccountLandingOnlyReturnsAutomaticallyForFreshCredentials() {
+        var state = GeminiBrowserReturnState()
+        XCTAssertTrue(state.shouldReturn(for: "first-session"))
+        XCTAssertFalse(state.shouldReturn(for: "first-session"))
+        XCTAssertTrue(state.shouldReturn(for: "refreshed-session"))
+        XCTAssertFalse(state.shouldReturn(for: "refreshed-session"))
+    }
+
+    func testBlockedMainFrameAndPopupExplainFailureWithoutAlarmingForSubframes() {
+        let external = URL(string: "https://external.example/signin")
+        XCTAssertTrue(GeminiBrowserSessionPolicy.shouldExplainBlockedNavigation(isMainFrame: true, url: external))
+        XCTAssertTrue(GeminiBrowserSessionPolicy.shouldExplainBlockedNavigation(isMainFrame: nil, url: external))
+        XCTAssertFalse(GeminiBrowserSessionPolicy.shouldExplainBlockedNavigation(isMainFrame: false, url: external))
+        XCTAssertFalse(GeminiBrowserSessionPolicy.shouldExplainBlockedNavigation(isMainFrame: nil, url: URL(string: "about:blank")))
+    }
+
+    @MainActor
+    func testEveryAttemptHasAnIsolatedNonpersistentStoreAndCancellationCompletesOnce() {
+        var completions = 0
+        let first = GeminiBrowserSignInSession { _ in completions += 1 }
+        let second = GeminiBrowserSignInSession { _ in completions += 1 }
+        XCTAssertFalse(first.webView.configuration.websiteDataStore.isPersistent)
+        XCTAssertFalse(second.webView.configuration.websiteDataStore.isPersistent)
+        XCTAssertFalse(first.webView.configuration.websiteDataStore === second.webView.configuration.websiteDataStore)
+        first.cancel()
+        first.cancel()
+        XCTAssertEqual(completions, 1)
+        second.invalidate()
+    }
+
+    @MainActor
+    func testLabelWithoutSavedSessionIsNotConfiguredAfterMigration() throws {
+        let fixture = Fixture()
+        var account = fixture.store.addAccount(for: .gemini)
+        account.accountLabel = "Personal Gemini"
+        account.authMethod = .apiKey
+        XCTAssertTrue(fixture.store.update(account))
+        let reloaded = try XCTUnwrap(fixture.store.configuration(accountID: account.id))
+        XCTAssertEqual(reloaded.authMethod, .browserSession)
+        XCTAssertFalse(fixture.store.isConfigured(reloaded))
+        XCTAssertEqual(fixture.store.statusText(for: reloaded), "Not configured - sign in with Google")
+    }
+
+    @MainActor
+    func testReconnectPreservesMetadataAndOtherAccountAndDisconnectIsScoped() async throws {
+        let fixture = Fixture()
+        var first = fixture.store.addAccount(for: .gemini)
+        first.accountLabel = "Personal"
+        first.groupID = try XCTUnwrap(fixture.store.addGroup(named: "Personal accounts")).id
+        first.showsHistory = false
+        first.authMethod = .apiKey
+        XCTAssertTrue(fixture.store.update(first))
+        let originalResult = validResult(for: first)
+        let metricID = try XCTUnwrap(originalResult.availableMetrics.first?.id)
+        fixture.store.reconcileMetricLayout(accountID: first.id, availableMetricIDs: originalResult.availableMetrics.map(\.id))
+        fixture.store.updateMetricVisibility(false, accountID: first.id, metricID: metricID)
+        fixture.store.updateDashboardCardCollapsed(true, accountID: first.id)
+        let history = UsageHistoryStore(defaults: fixture.defaults)
+        history.record(results: [originalResult], now: originalResult.fetchedAt)
+        let originalHistory = history.snapshots(for: first.id)
+        XCTAssertFalse(originalHistory.isEmpty)
+        let second = fixture.store.addAccount(for: .gemini)
+        XCTAssertTrue(fixture.store.saveSecret("__Secure-1PSID=old-first", for: first))
+        XCTAssertTrue(fixture.store.saveSecret("__Secure-1PSID=second", for: second))
+        let model = ProviderSettingsViewModel(configurationStore: fixture.store, accountID: first.id)
+        model.geminiSessionValidator = StubValidator(result: validResult(for: first))
+        model.startGeminiSignIn()
+        model.geminiBrowserSession?.finish(.success("__Secure-1PSID=new-first"))
+        await waitForSignIn(model)
+        XCTAssertNil(model.credentialError)
+        XCTAssertEqual(model.credentialMessageSystemImage, "checkmark.circle")
+        let saved = try XCTUnwrap(fixture.store.configuration(accountID: first.id))
+        XCTAssertEqual(saved.accountLabel, first.accountLabel)
+        XCTAssertEqual(saved.showsHistory, first.showsHistory)
+        XCTAssertEqual(saved.groupID, first.groupID)
+        XCTAssertEqual(saved.id, first.id)
+        XCTAssertEqual(saved.authMethod, .browserSession)
+        XCTAssertTrue(try XCTUnwrap(fixture.secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: first))).contains("new-first"))
+        let reloaded = ProviderConfigurationStore(defaults: fixture.defaults, secretStore: fixture.secrets)
+        XCTAssertTrue(reloaded.hasSecret(for: saved))
+        XCTAssertFalse(reloaded.isMetricVisible(accountID: first.id, metricID: metricID))
+        XCTAssertTrue(reloaded.isDashboardCardCollapsed(accountID: first.id))
+        XCTAssertEqual(reloaded.configuration(accountID: first.id)?.groupID, first.groupID)
+        XCTAssertEqual(UsageHistoryStore(defaults: fixture.defaults).snapshots(for: first.id), originalHistory)
+        model.removeSavedCredential()
+        XCTAssertFalse(fixture.store.hasSecret(for: saved))
+        XCTAssertEqual(try fixture.secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: second)), "__Secure-1PSID=second")
+        XCTAssertFalse(String(describing: fixture.defaults.dictionaryRepresentation()).contains("new-first"))
+    }
+
+    @MainActor
+    func testCanceledOrFailedBrowserSignInPreservesExistingCredentialAndAllowsRetry() async throws {
+        let fixture = Fixture()
+        let account = fixture.store.addAccount(for: .gemini)
+        XCTAssertTrue(fixture.store.saveSecret("__Secure-1PSID=original", for: account))
+        let model = ProviderSettingsViewModel(configurationStore: fixture.store, accountID: account.id)
+        model.startGeminiSignIn()
+        model.geminiBrowserSession?.cancel()
+        XCTAssertFalse(model.isSigningInWithGemini)
+        XCTAssertTrue(model.credentialError?.contains("canceled") == true)
+        model.startGeminiSignIn()
+        model.geminiBrowserSession?.finish(.failure(NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet, userInfo: [NSLocalizedDescriptionKey: "secret-cookie-value"])))
+        XCTAssertFalse(model.isSigningInWithGemini)
+        XCTAssertFalse(model.credentialError?.contains("secret-cookie-value") == true)
+        XCTAssertEqual(try fixture.secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)), "__Secure-1PSID=original")
+        model.startGeminiSignIn()
+        XCTAssertTrue(model.isSigningInWithGemini)
+        model.cancelAuthentication()
+    }
+
+    @MainActor
+    func testMissingMetersResetOrWrongAccountNeverPersistsCredentials() async {
+        let fixture = Fixture()
+        let account = fixture.store.addAccount(for: .gemini)
+        let model = ProviderSettingsViewModel(configurationStore: fixture.store, accountID: account.id)
+        for result in [
+            validResult(for: account, keys: []),
+            validResult(for: account, keys: ["five-hour"]),
+            validResult(for: account, reset: nil),
+            validResult(for: ProviderAccountConfiguration(id: "other", providerID: .gemini, authMethod: .browserSession)),
+        ] {
+            model.geminiSessionValidator = StubValidator(result: result)
+            model.startGeminiSignIn()
+            model.geminiBrowserSession?.finish(.success("__Secure-1PSID=unverified"))
+            await waitForSignIn(model)
+            XCTAssertNotNil(model.credentialError)
+            XCTAssertFalse(fixture.store.hasSecret(for: account))
+        }
+    }
+
+    @MainActor
+    func testCancelDuringValidationIgnoresLateSuccessAfterDisconnect() async throws {
+        let fixture = Fixture()
+        let account = fixture.store.addAccount(for: .gemini)
+        let validator = SuspendedValidator(result: validResult(for: account))
+        let model = ProviderSettingsViewModel(configurationStore: fixture.store, accountID: account.id)
+        model.geminiSessionValidator = validator
+        defer {
+            model.cancelAuthentication()
+            Task { await validator.finish() }
+        }
+        model.startGeminiSignIn()
+        model.geminiBrowserSession?.finish(.success("__Secure-1PSID=late"))
+        try await validator.waitUntilStarted()
+        model.removeSavedCredential()
+        await validator.finish()
+        for _ in 0..<30 { await Task.yield() }
+        XCTAssertFalse(fixture.store.hasSecret(for: account))
+        XCTAssertFalse(model.isSigningInWithGemini)
+    }
+
+    @MainActor
+    func testKeychainFailureDoesNotReportSuccessOrReplaceAccount() async throws {
+        let fixture = Fixture()
+        let failingSecrets = GeminiFailingWriteSecretStore()
+        let store = ProviderConfigurationStore(defaults: fixture.defaults, secretStore: failingSecrets)
+        let account = store.addAccount(for: .gemini)
+        let model = ProviderSettingsViewModel(configurationStore: store, accountID: account.id)
+        model.geminiSessionValidator = StubValidator(result: validResult(for: account))
+        model.startGeminiSignIn()
+        model.geminiBrowserSession?.finish(.success("__Secure-1PSID=unsaved"))
+        await waitForSignIn(model)
+        XCTAssertTrue(model.credentialError?.contains("could not be saved in Keychain") == true)
+        XCTAssertNil(model.credentialMessage)
+        XCTAssertFalse(store.hasSecret(for: account))
+        XCTAssertEqual(store.configuration(accountID: account.id), account)
+    }
+
+    @MainActor
+    private func waitForSignIn(_ model: ProviderSettingsViewModel) async {
+        for _ in 0..<200 where model.isSigningInWithGemini { await Task.yield() }
+        XCTAssertFalse(model.isSigningInWithGemini)
+    }
+
+    private func validResult(
+        for account: ProviderAccountConfiguration,
+        keys: [String] = ["five-hour", "weekly"],
+        reset: Date? = Date(timeIntervalSince1970: 2_000_000_000)
+    ) -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: account.id, providerID: .gemini, title: "Gemini", subtitle: "Gemini Apps usage",
+            bars: keys.map { UsageBar(stableKey: $0, label: $0, used: 1, limit: 100, resetsAt: reset) },
+            fetchedAt: Date()
+        )
+    }
+
+    private func cookie(
+        _ name: String, value: String, domain: String = ".google.com", path: String = "/",
+        secure: Bool = true, expires: Date? = nil
+    ) throws -> HTTPCookie {
+        var properties: [HTTPCookiePropertyKey: Any] = [.name: name, .value: value, .domain: domain, .path: path]
+        if secure { properties[.secure] = "TRUE" }
+        if let expires { properties[.expires] = expires }
+        return try XCTUnwrap(HTTPCookie(properties: properties))
+    }
+}
+
+private struct StubValidator: GeminiSessionValidating {
+    let result: ProviderUsageResult
+    func validate(credential: String, configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult { result }
+}
+
+private actor SuspendedValidator: GeminiSessionValidating {
+    private let result: ProviderUsageResult
+    private let started = TestSignal()
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isReleased = false
+
+    init(result: ProviderUsageResult) { self.result = result }
+
+    func validate(credential: String, configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        // The detached gate deliberately ignores the caller's cancellation so the
+        // test exercises late success, while its own watchdog still bounds the wait.
+        try await Task.detached { [self] in
+            try await withTestWatchdog(
+                timeout: .seconds(5),
+                failureMessage: "Gemini validation was not released within five seconds.",
+                onTimeout: { Task { await self.finish() } },
+                operation: { await self.waitForRelease() }
+            )
+        }.value
+        return result
+    }
+
+    func waitUntilStarted() async throws {
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "Gemini validation did not start within five seconds.",
+            onTimeout: { Task { await self.finish() } },
+            operation: { [started] in await started.wait() }
+        )
+    }
+
+    private func waitForRelease() async {
+        guard !isReleased else { return }
+        await withCheckedContinuation {
+            continuation = $0
+            started.signal()
+        }
+    }
+
+    func finish() {
+        isReleased = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+@MainActor
+private final class Fixture {
+    let suiteName = "CodexBarIOSTests.Gemini.\(UUID().uuidString)"
+    let defaults: UserDefaults
+    let secrets = MemorySecretStore()
+    let store: ProviderConfigurationStore
+    init() {
+        defaults = UserDefaults(suiteName: suiteName)!
+        store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+    }
+    deinit { defaults.removePersistentDomain(forName: suiteName) }
+}
+
+private struct GeminiFailingWriteSecretStore: SecretStore {
+    func readSecret(account: String) throws -> String? { nil }
+    func saveSecret(_ secret: String, account: String) throws { throw GeminiSignInError.validationFailed }
+    func deleteSecret(account: String) throws {}
+}

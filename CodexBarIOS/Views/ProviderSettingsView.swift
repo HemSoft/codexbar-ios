@@ -227,6 +227,27 @@ struct ProviderSettingsView: View {
                         Text(cursorAuthError)
                             .foregroundStyle(.red)
                     }
+                } else if providerID == .gemini {
+                    Button(configurationStore.hasSecret(for: configuration) ? "Sign in Again with Google" : "Sign in with Google") {
+                        viewModel.startGeminiSignIn()
+                    }
+                    .disabled(viewModel.isSigningInWithGemini)
+                    if viewModel.isSigningInWithGemini {
+                        ProgressView("Connecting Google Gemini")
+                        Button("Cancel Sign-In") { viewModel.cancelGeminiSignIn() }
+                    }
+                    Text("Choose your Google account in a private sign-in window. CodexBar returns automatically after reading your Gemini session.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text("Google session credentials may grant broader account access. "
+                        + "CodexBar saves only the session values needed for usage in this account's Keychain entry.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    if configurationStore.hasSecret(for: configuration) {
+                        Button("Disconnect Google Account", role: .destructive) {
+                            viewModel.removeSavedCredential()
+                        }
+                    }
                 } else if providerID == .openCodeZen {
                     SecureField(secretPlaceholder, text: $viewModel.secret)
                         .textContentType(.password)
@@ -391,6 +412,9 @@ struct ProviderSettingsView: View {
             viewModel.flushPendingChanges()
             viewModel.cancelAuthentication()
         }
+        .sheet(item: $viewModel.geminiBrowserSession) { session in
+            GeminiBrowserSignInView(session: session)
+        }
         .sheet(item: $viewModel.authURL) { authURL in
             SafariAuthSheet(url: authURL.url)
         }
@@ -426,9 +450,6 @@ struct ProviderSettingsView: View {
     private func authMethodDisplayName(_ method: ProviderAuthMethod) -> String {
         if providerID == .openCodeZen, method == .apiKey {
             return "Dashboard Session"
-        }
-        if providerID == .gemini, method == .apiKey {
-            return "Session Credentials"
         }
         return method.displayName
     }

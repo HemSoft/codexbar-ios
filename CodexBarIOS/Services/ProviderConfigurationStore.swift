@@ -1633,10 +1633,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 && !configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
-        if configuration.requiresSecret
-            || configuration.providerID == .codex
-            || configuration.providerID == .claude
-            || configuration.providerID == .cursor {
+        if configuration.requiresSecret || [.codex, .claude, .cursor, .gemini].contains(configuration.providerID) {
             return hasSecret(for: configuration)
         }
 
@@ -1752,10 +1749,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         if isConfigurationReady(configuration) {
             let label = configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-            if configuration.providerID == .codex
-                || configuration.providerID == .copilot
-                || configuration.providerID == .claude
-                || configuration.providerID == .cursor {
+            if [.codex, .copilot, .claude, .cursor, .gemini].contains(configuration.providerID) {
                 return label.isEmpty ? "Configured - live usage enabled" : "\(label) - live usage enabled"
             }
 
@@ -1779,8 +1773,9 @@ public final class ProviderConfigurationStore: ObservableObject {
             return "Not configured - sign in with Claude"
         }
 
-        if configuration.providerID == .cursor {
-            return "Not configured - sign in with Cursor"
+        if [.cursor, .gemini].contains(configuration.providerID) {
+            return configuration.providerID == .gemini
+                ? "Not configured - sign in with Google" : "Not configured - sign in with Cursor"
         }
 
         if configuration.providerID == .openCodeZen {
@@ -2334,11 +2329,9 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         switch configuration.providerID {
-        case .codex:
+        case .codex, .cursor, .gemini:
             normalized.authMethod = .browserSession
-        case .cursor:
-            normalized.authMethod = .browserSession
-        case .copilot, .claude, .openRouter, .openCodeZen, .moonshot, .greptile, .gemini:
+        case .copilot, .claude, .openRouter, .openCodeZen, .moonshot, .greptile:
             break
         }
         return normalized

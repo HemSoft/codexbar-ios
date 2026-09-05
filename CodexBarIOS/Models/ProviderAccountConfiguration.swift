@@ -262,7 +262,9 @@ public extension ProviderAccountConfiguration {
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .claude:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
-        case .openRouter, .gemini:
+        case .gemini:
+            ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
+        case .openRouter:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .apiKey)
         case .openCodeZen:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .apiKey)

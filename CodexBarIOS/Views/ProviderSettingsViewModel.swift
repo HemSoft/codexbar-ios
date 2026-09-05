@@ -34,6 +34,11 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published private(set) var isSigningInWithCopilot = false
     @Published private(set) var isSigningInWithClaude = false
     @Published private(set) var isSigningInWithCursor = false
+    @Published var geminiBrowserSession: GeminiBrowserSignInSession?
+    @Published private(set) var isSigningInWithGemini = false
+    var geminiSessionValidator: any GeminiSessionValidating = GeminiSessionValidator()
+    private var geminiAttemptID: UUID?
+    private var geminiValidationTask: Task<Void, Never>?
     @Published private(set) var codexAuthError: String?
     @Published private(set) var copilotAuthError: String?
     @Published private(set) var claudeAuthError: String?
@@ -138,7 +143,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                     + "but Gemini validation failed. ",
                 transientFailurePrefix: "Session credentials saved in Keychain. "
                     + "Gemini could not validate them right now. ",
-                validatedMessage: "Session credentials saved in Keychain and validated by Gemini."
+                validatedMessage: "Google session saved in Keychain and Gemini usage verified."
             )
         default:
             nil
@@ -151,11 +156,11 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     var availableAuthMethods: [ProviderAuthMethod] {
         switch providerID {
-        case .codex, .claude, .cursor:
+        case .codex, .claude, .cursor, .gemini:
             [.browserSession]
         case .copilot:
             [.browserSession, .cliToken]
-        case .openRouter, .openCodeZen, .moonshot, .greptile, .gemini:
+        case .openRouter, .openCodeZen, .moonshot, .greptile:
             [.apiKey]
         }
     }
@@ -192,17 +197,14 @@ final class ProviderSettingsViewModel: ObservableObject {
 
         if providerID == .gemini {
             return ProviderCredentialPresentation(
-                sectionTitle: "Gemini Session Credentials",
-                unsavedPlaceholder: "Paste Gemini Cookie header or credential JSON",
-                savedPlaceholder: "Gemini session credentials saved",
-                saveButtonTitle: "Save and Validate Session",
-                setupMessage: "Sign in to Gemini in a browser, then copy a Cookie header containing "
-                    + "__Secure-1PSID and, when present, __Secure-1PSIDTS.",
-                setupLinkTitle: "Open Gemini Usage",
-                setupURL: URL(string: "https://gemini.google.com/usage"),
-                securityMessage: "These Google session credentials are sensitive and may grant broader account "
-                    + "access. CodexBar discards every other pasted cookie, stores the selected values only in "
-                    + "Keychain, and uses them only for read-only Gemini usage requests."
+                sectionTitle: "Google Sign-In",
+                unsavedPlaceholder: "Sign in with Google",
+                savedPlaceholder: "Google session saved",
+                saveButtonTitle: "Sign in with Google",
+                setupMessage: nil,
+                setupLinkTitle: nil,
+                setupURL: nil,
+                securityMessage: nil
             )
         }
 
@@ -367,6 +369,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func cancelAuthentication() {
+        cancelGeminiSignIn()
         codexSignInTask?.cancel()
         codexAuthPresenter.finish()
         cursorSignInTask?.cancel()
@@ -415,6 +418,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func removeSavedCredential(message: String? = nil) {
+        if providerID == .gemini { cancelGeminiSignIn() }
         credentialError = nil
         credentialMessage = nil
         validationFeedbackProviderID = nil
@@ -425,6 +429,89 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
         openCodeCredentialMessage = message
         credentialsDidChange()
+    }
+
+    func startGeminiSignIn() {
+        guard !isSigningInWithGemini else { return }
+        credentialError = nil
+        credentialMessage = nil
+        validationFeedbackProviderID = nil
+        isSigningInWithGemini = true
+        let attemptID = UUID()
+        geminiAttemptID = attemptID
+        geminiBrowserSession = GeminiBrowserSignInSession { [weak self] result in
+            self?.completeGeminiBrowserSignIn(result, attemptID: attemptID)
+        }
+    }
+
+    func cancelGeminiSignIn() {
+        guard geminiAttemptID != nil else { return }
+        geminiAttemptID = nil
+        geminiValidationTask?.cancel()
+        geminiValidationTask = nil
+        geminiBrowserSession?.invalidate()
+        geminiBrowserSession = nil
+        isSigningInWithGemini = false
+        credentialMessage = nil
+        credentialError = GeminiSignInError.canceled.localizedDescription
+    }
+
+    private func completeGeminiBrowserSignIn(_ result: Result<String, Error>, attemptID: UUID) {
+        guard geminiAttemptID == attemptID else { return }
+        geminiBrowserSession?.invalidate()
+        geminiBrowserSession = nil
+        switch result {
+        case .failure(let error):
+            finishGeminiAttempt(attemptID)
+            credentialError = (error as? GeminiSignInError ?? .browserFailed).localizedDescription
+        case .success(let credential):
+            credentialMessage = "Verifying your Gemini usage..."
+            geminiValidationTask = Task { [weak self] in
+                await self?.validateGeminiSession(credential, attemptID: attemptID)
+            }
+        }
+    }
+
+    private func validateGeminiSession(_ credential: String, attemptID: UUID) async {
+        defer { finishGeminiAttempt(attemptID) }
+        do {
+            let storedCredential = try GeminiSessionCredentialsParser.storedCredential(from: credential)
+            let result = try await geminiSessionValidator.validate(credential: storedCredential, configuration: configuration)
+            guard !Task.isCancelled, geminiAttemptID == attemptID else { return }
+            guard result.accountID == accountID, result.providerID == .gemini,
+                  result.failureMessage == nil,
+                  ["five-hour", "weekly"].allSatisfy({ key in
+                      result.bars.contains { $0.stableKey == key && $0.resetsAt != nil && $0.used.isFinite && $0.limit > 0 }
+                  }) else {
+                credentialMessage = nil
+                credentialError = result.failureMessage.map { "Gemini usage could not be verified. " + $0 }
+                    ?? "Gemini did not return both usage meters and reset times. Your saved account was not changed."
+                return
+            }
+            var updated = configuration
+            updated.authMethod = .browserSession
+            guard persistCredential(storedCredential, with: updated) else {
+                credentialMessage = nil
+                credentialError = "Google sign-in completed, but the session could not be saved in Keychain. Try again."
+                return
+            }
+            secret = ""
+            credentialError = nil
+            credentialMessage = credentialValidationFeedback?.validatedMessage
+            credentialsDidChange()
+            acceptUsageResult(result)
+        } catch {
+            guard !Task.isCancelled, geminiAttemptID == attemptID else { return }
+            credentialMessage = nil
+            credentialError = GeminiSignInError.validationFailed.localizedDescription
+        }
+    }
+
+    private func finishGeminiAttempt(_ attemptID: UUID) {
+        guard geminiAttemptID == attemptID else { return }
+        geminiAttemptID = nil
+        geminiValidationTask = nil
+        isSigningInWithGemini = false
     }
 
     func startCodexSignIn() {
@@ -839,7 +926,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
         var normalized = configuration
-        if [.codex, .claude, .cursor].contains(configuration.providerID) {
+        if [.codex, .claude, .cursor, .gemini].contains(configuration.providerID) {
             normalized.authMethod = .browserSession
         }
         return normalized
