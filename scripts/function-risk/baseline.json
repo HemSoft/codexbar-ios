@@ -1,0 +1,80 @@
+{
+  "audit_issue": "https://github.com/HemSoft/codexbar-ios/issues/306",
+  "change_policy": "Review baseline edits in the PR. Record evidence and rationale in FUNCTION-RISK.md. Never regenerate automatically in CI.",
+  "complexity_basis": "SwiftLint 0.65.1 decision count starts at zero",
+  "coverage_basis": "xccov function executable lines",
+  "measured_at": "2026-09-05",
+  "measured_source_revision": "78b6a213c53ae4a90e61cd4802d31aafbeb91e35",
+  "platforms": {
+    "ios": {
+      "high_risk": {
+        "CodexBarIOS/Services/GreptileUsageProvider.swift::GreptileUsageProvider.public func fetchUsage ( for configuration : ProviderAccountConfiguration ) async throws -> ProviderUsageResult": {
+          "complexity": 20,
+          "covered_lines": 96,
+          "crap_exact": "78995460/2571353",
+          "executable_lines": 137,
+          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
+          "target": "CodexBarIOS.app"
+        },
+        "CodexBarIOS/Views/GeminiBrowserSignInView.swift::GeminiBrowserSignInSession.private func inspectSession ( )": {
+          "complexity": 7,
+          "covered_lines": 0,
+          "crap_exact": "56/1",
+          "executable_lines": 24,
+          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
+          "target": "CodexBarIOS.app"
+        },
+        "CodexBarIOS/Views/ProviderUsageCard.swift::ProviderUsageCard.private func metricTile ( _ item : ProviderMetricTileGridItem ) -> some View": {
+          "complexity": 12,
+          "covered_lines": 0,
+          "crap_exact": "156/1",
+          "executable_lines": 95,
+          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
+          "target": "CodexBarIOS.app"
+        },
+        "CodexBarIOS/Views/SettingsView.swift::SettingsView.@ ViewBuilder private func settingsDestinationView ( _ destination : SettingsDestination ) -> some View": {
+          "complexity": 6,
+          "covered_lines": 0,
+          "crap_exact": "42/1",
+          "executable_lines": 16,
+          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
+          "target": "CodexBarIOS.app"
+        },
+        "CodexBarIOS/Views/SettingsView.swift::SettingsView.private func summary ( for destination : SettingsDestination ) -> String": {
+          "complexity": 6,
+          "covered_lines": 0,
+          "crap_exact": "42/1",
+          "executable_lines": 32,
+          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
+          "target": "CodexBarIOS.app"
+        },
+        "CodexBarIOS/Views/SettingsView.swift::SettingsView.private func updateGitHubStatusNotificationSetting ( isEnabled : Bool , recovery : Bool )": {
+          "complexity": 7,
+          "covered_lines": 0,
+          "crap_exact": "56/1",
+          "executable_lines": 46,
+          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
+          "target": "CodexBarIOS.app"
+        }
+      },
+      "unmatched": {
+        "CodexBarIOS/Services/WatchSnapshotCoordinator.swift::PhoneWatchConnectivityCoordinator.func activate ( onSnapshotNeeded : @ escaping @ MainActor ( _ force : Bool ) -> Void )::alternative-2": {
+          "complexity": 0,
+          "reason": "Non-iOS #else fallback, excluded by the iOS compiler. Exact source hash prevents changed fallback code from inheriting this exception.",
+          "source_sha256": "28384ae30417670a98c163f5d4399939ddda785dc0ada1c3ef1ab4082998600c"
+        },
+        "CodexBarIOS/Services/WatchSnapshotCoordinator.swift::PhoneWatchConnectivityCoordinator.func publish ( _ snapshot : WatchDashboardSnapshot , force : Bool ) -> Bool": {
+          "complexity": 0,
+          "reason": "Non-iOS #else fallback, excluded by the iOS compiler. Exact source hash prevents changed fallback code from inheriting this exception.",
+          "source_sha256": "30dc16796249318e3eb29f86fb8480b243e41588e75729446369f89718cec86c"
+        }
+      }
+    },
+    "watch": {
+      "high_risk": {},
+      "unmatched": {}
+    }
+  },
+  "schema": 1,
+  "toolchain": "Xcode 26.6 (17F113)"
+}

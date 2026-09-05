@@ -76,6 +76,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added per-function iOS and watchOS coverage and risk reports to the required
+  test checks, with explicit instrumentation gaps and a gate against new or
+  increased uncovered complexity.
+  ([#306](https://github.com/HemSoft/codexbar-ios/issues/306))
+
 - Made the stalled Cursor optional-request regression test coordinate response,
   timeout, and cancellation events so busy test runners do not cause false failures.
   ([#304](https://github.com/HemSoft/codexbar-ios/issues/304))

@@ -91,9 +91,28 @@ jobs:
             -scheme CodexBarIOS \
             -skipPackagePluginValidation \
             -destination "platform=iOS Simulator,id=${{ steps.ios-destination.outputs.id }}" \
+            -enableCodeCoverage YES \
             -resultBundlePath "$RUNNER_TEMP/CodexBarIOSTests.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             test
+
+      - name: Verify function risk failure fixtures
+        run: python3 -m unittest discover -s scripts/tests -p 'test_function_risk.py' -v
+
+      - name: Enforce iOS function risk baseline
+        run: >-
+          python3 scripts/function-risk/measure.py --platform ios
+          --result "$RUNNER_TEMP/CodexBarIOSTests.xcresult"
+          --output "$RUNNER_TEMP/function-risk-ios"
+
+      - name: Publish iOS function risk
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: function-risk-ios
+          path: ${{ runner.temp }}/function-risk-ios
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Preserve iOS test diagnostics
         if: ${{ failure() && steps.ios-tests.outcome == 'failure' }}
@@ -131,6 +150,7 @@ jobs:
           echo "id=$device_id" >> "$GITHUB_OUTPUT"
 
       - name: Run watchOS unit tests
+        id: watch-tests
         run: |
           set -o pipefail
           xcodebuild \
@@ -138,8 +158,34 @@ jobs:
             -scheme CodexBarWatchTests \
             -skipPackagePluginValidation \
             -destination "platform=watchOS Simulator,id=${{ steps.watch-destination.outputs.id }}" \
+            -enableCodeCoverage YES \
+            -resultBundlePath "$RUNNER_TEMP/CodexBarWatchTests.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             test
+
+      - name: Enforce watchOS function risk baseline
+        run: >-
+          python3 scripts/function-risk/measure.py --platform watch
+          --result "$RUNNER_TEMP/CodexBarWatchTests.xcresult"
+          --output "$RUNNER_TEMP/function-risk-watch"
+
+      - name: Publish watchOS function risk
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: function-risk-watch
+          path: ${{ runner.temp }}/function-risk-watch
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Preserve watchOS test diagnostics
+        if: ${{ failure() && steps.watch-tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: CodexBarWatchTests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/CodexBarWatchTests.xcresult
+          if-no-files-found: warn
+          retention-days: 14
 
   smoke-tests:
     name: SwiftPM smoke tests

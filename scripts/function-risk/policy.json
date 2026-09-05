@@ -1,0 +1,23 @@
+{
+  "tools": {
+    "xcode": "Xcode 26.6\nBuild version 17F113",
+    "swiftlint": "0.65.1"
+  },
+  "source_roots": ["CodexBarIOS", "CodexBarIOSWidget", "CodexBarWatch", "CodexBarWatchWidget"],
+  "platforms": {
+    "ios": {
+      "source_targets": ["CodexBarIOS", "CodexBarIOSWidget"],
+      "coverage_targets": ["CodexBarIOS.app", "CodexBarIOSWidget.appex"]
+    },
+    "watch": {
+      "source_targets": ["CodexBarWatch", "CodexBarWatchWidget"],
+      "coverage_targets": ["CodexBarWatch.app", "CodexBarWatchWidget.appex"]
+    }
+  },
+  "excluded_files": {
+    "CodexBarIOS/Services/AppStoreScreenshotFixtures.swift": "DEBUG-only deterministic App Store screenshot data; never used for live accounts. Measured counters remain visible."
+  },
+  "excluded_symbols": {
+    "CodexBarIOS/CodexBarIOSApp.swift::CodexBarIOSApp.@ ViewBuilder private func screenshotRootView ( for scene : AppStoreScreenshotScene ) -> some View": "DEBUG-only screenshot scene routing, enabled only by the explicit screenshot launch argument."
+  }
+}
