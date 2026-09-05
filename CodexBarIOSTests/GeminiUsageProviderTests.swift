@@ -520,7 +520,8 @@ final class GeminiSessionLifetimeTests: XCTestCase {
     private func assertReleased(_ references: [GeminiLifetimeReferences]) async throws {
         // Also clean up sessions when the regression fails against the old implementation.
         defer { references.forEach { $0.session?.invalidateAndCancel() } }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        // URL-loading cleanup runs asynchronously; allow scheduling headroom on CI.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while references.contains(where: { !$0.isReleased }), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
