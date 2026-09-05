@@ -39,6 +39,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Expose the selected account group as a separate accessibility value in account
+  settings. ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
+
 - Release temporary Gemini network sessions after connection checks complete,
   fail, or are canceled, preventing repeated sign-in attempts from retaining them.
   ([#303](https://github.com/HemSoft/codexbar-ios/issues/303))
