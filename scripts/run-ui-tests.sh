@@ -75,8 +75,7 @@ preserve_failure_attachments() {
   if [[ $exit_status -ne 0 && -d "$result_bundle" ]]; then
     xcrun xcresulttool export attachments \
       --path "$result_bundle" \
-      --output-path "$run_dir/failure-attachments" \
-      --only-failures || true
+      --output-path "$run_dir/failure-attachments" || true
   fi
   exit "$exit_status"
 }

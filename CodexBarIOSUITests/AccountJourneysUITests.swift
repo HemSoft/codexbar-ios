@@ -18,15 +18,8 @@ final class AccountJourneysUITests: XCTestCase {
         tap(app.buttons["dashboard-add-account"], in: app)
         tap(app.buttons["OpenRouter"], in: app)
         let accountLabel = app.textFields["account-label"]
-        tap(accountLabel, in: app)
-        accountLabel.press(forDuration: 1.1)
-        if app.menuItems["Select All"].waitForExistence(timeout: 2) {
-            app.menuItems["Select All"].tap()
-        } else {
-            let count = (accountLabel.value as? String ?? "").count
-            accountLabel.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: count))
-        }
-        accountLabel.typeText("Fixture Account")
+        reveal(accountLabel, in: app)
+        XCTAssertEqual(accountLabel.value as? String, "OpenRouter 1")
         let groupPicker = app.descendants(matching: .any)["account-group-picker"].firstMatch
         tap(groupPicker, in: app)
         tap(app.buttons["Fixture Team"], in: app)
@@ -39,7 +32,7 @@ final class AccountJourneysUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Remove Saved Credential"].waitForExistence(timeout: 5))
         tap(app.buttons["Done"], in: app)
         assertBalance("60.00", freshness: "fresh", in: app)
-        XCTAssertTrue(app.buttons["More options for Fixture Account"].exists)
+        XCTAssertTrue(app.buttons["More options for OpenRouter 1"].exists)
 
         app.terminate()
         app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
@@ -47,11 +40,11 @@ final class AccountJourneysUITests: XCTestCase {
         assertBalance("25.00", freshness: "fresh", in: app)
         tap(app.buttons["Open settings"], in: app)
         tap(app.descendants(matching: .any)["settings-accountsAndGroups"].firstMatch, in: app)
-        let savedAccount = app.buttons["Fixture Account"]
+        let savedAccount = app.otherElements["OpenRouter 1"]
         reveal(savedAccount, in: app)
         XCTAssertEqual(savedAccount.value as? String, "OpenRouter configured, Fixture Team group")
         tap(savedAccount, in: app)
-        XCTAssertEqual(app.textFields["account-label"].value as? String, "Fixture Account")
+        XCTAssertEqual(app.textFields["account-label"].value as? String, "OpenRouter 1")
         XCTAssertEqual(app.descendants(matching: .any)["account-group-picker"].firstMatch.value as? String, "Fixture Team")
         reveal(app.buttons["Remove Saved Credential"], in: app)
         XCTAssertTrue(app.buttons["Remove Saved Credential"].isHittable)
@@ -84,7 +77,7 @@ final class AccountJourneysUITests: XCTestCase {
 
         // Dispatch a real system URL while History covers the dashboard. A broken
         // onOpenURL handler leaves the sheet visible and fails these assertions.
-        app.open(URL(string: "codexbar://provider?account=ui-recovery-account")!)
+        XCUIDevice.shared.system.open(URL(string: "codexbar://provider?account=ui-recovery-account")!)
         XCTAssertTrue(app.navigationBars["History"].waitForNonExistence(timeout: 5))
         let accountMenu = app.buttons["More options for Recovery Account"]
         XCTAssertTrue(accountMenu.waitForExistence(timeout: 5))
@@ -109,7 +102,7 @@ final class AccountJourneysUITests: XCTestCase {
         addTeardownBlock { [weak self] in
             guard let self else { return }
             await MainActor.run {
-                guard self.testRun?.hasSucceeded == false else { return }
+                guard (self.testRun?.failureCount ?? 0) > 0 else { return }
                 let screenshot = XCTAttachment(screenshot: app.screenshot())
                 screenshot.name = "Failed journey"
                 screenshot.lifetime = .keepAlways

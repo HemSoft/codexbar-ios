@@ -23,7 +23,7 @@ size 2, English labels, and the US locale.
 
 - `testAccountSetupPersistsGroupAndCredentialAtAccessibilitySize` starts with
   no accounts or groups, adds a group through Settings, opens Add Account,
-  chooses OpenRouter, changes its label and group, and saves a synthetic key.
+  chooses OpenRouter, selects its group, and saves a synthetic key.
   It checks the dashboard balance, terminates and relaunches the app in the
   same namespace, then reopens Settings and checks the saved label, selected
   group, and credential availability.
