@@ -76,6 +76,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Made the stalled Cursor optional-request regression test coordinate response,
+  timeout, and cancellation events so busy test runners do not cause false failures.
+  ([#304](https://github.com/HemSoft/codexbar-ios/issues/304))
 - Added a resumable App Store release skill that derives customer copy from
   changes since the last live version, composes the repository's existing
   validation and submission runbooks, and keeps upload and final submission as

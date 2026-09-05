@@ -6,21 +6,41 @@ public final class CursorUsageProvider: UsageProvider {
     private let usageEndpoint: URL
     private let grokBotUsageEndpoint: URL
     private let grokBotRequestTimeout: Duration
+    private let waitForGrokBotTimeout: @Sendable (Duration) async throws -> Void
 
     public let providerID = ProviderID.cursor
 
-    public init(
+    public convenience init(
         secretStore: SecretStore = KeychainService(),
         session: URLSession = .shared,
         usageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")!,
         grokBotUsageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus")!,
         grokBotRequestTimeout: Duration = .seconds(2)
     ) {
+        self.init(
+            secretStore: secretStore,
+            session: session,
+            usageEndpoint: usageEndpoint,
+            grokBotUsageEndpoint: grokBotUsageEndpoint,
+            grokBotRequestTimeout: grokBotRequestTimeout,
+            waitForGrokBotTimeout: { try await Task.sleep(for: $0) }
+        )
+    }
+
+    init(
+        secretStore: SecretStore,
+        session: URLSession,
+        usageEndpoint: URL,
+        grokBotUsageEndpoint: URL,
+        grokBotRequestTimeout: Duration,
+        waitForGrokBotTimeout: @escaping @Sendable (Duration) async throws -> Void
+    ) {
         self.secretStore = secretStore
         self.session = session
         self.usageEndpoint = usageEndpoint
         self.grokBotUsageEndpoint = grokBotUsageEndpoint
         self.grokBotRequestTimeout = grokBotRequestTimeout
+        self.waitForGrokBotTimeout = waitForGrokBotTimeout
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
@@ -63,6 +83,7 @@ public final class CursorUsageProvider: UsageProvider {
         let session = session
         let request = makeUsageRequest(endpoint: grokBotUsageEndpoint, accessToken: accessToken)
         let timeout = grokBotRequestTimeout
+        let waitForTimeout = waitForGrokBotTimeout
 
         return await withTaskGroup(of: Data?.self) { group in
             group.addTask {
@@ -70,7 +91,7 @@ public final class CursorUsageProvider: UsageProvider {
                 return Self.successfulResponseData(response)
             }
             group.addTask {
-                try? await Task.sleep(for: timeout)
+                try? await waitForTimeout(timeout)
                 return nil
             }
 
