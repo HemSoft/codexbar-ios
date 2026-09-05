@@ -228,6 +228,174 @@ final class GeminiUsageProviderTests: XCTestCase {
         XCTAssertTrue(result.failureMessage?.contains("sign in") == true)
         XCTAssertTrue(result.preserveCachedBarsOnFailure)
     }
+
+    func testProviderTreatsUsageRPCPermissionDeniedAsExpiredCredentials() async throws {
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .gemini)
+        let (provider, sessionFixture) = try makeGeminiFixtureProvider(
+            responseData: geminiPermissionDeniedFixture,
+            configuration: configuration
+        )
+        defer { sessionFixture.invalidate() }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.recoveryAction, .reauthenticate)
+        XCTAssertEqual(
+            result.failureMessage,
+            "Gemini rejected these session credentials. Sign in again with Google."
+        )
+        XCTAssertEqual(result.subtitle, result.failureMessage)
+        XCTAssertTrue(result.bars.isEmpty)
+        XCTAssertTrue(result.preserveCachedBarsOnFailure)
+        for marker in ["fixture-account", "fixture-cookie", "fixture-token", "fixture-trace", "__Secure-1PSID"] {
+            XCTAssertFalse(result.failureMessage?.contains(marker) == true)
+        }
+    }
+
+    @MainActor
+    func testUsageRPCPermissionDeniedPreservesStaleCachedBars() async throws {
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .gemini)
+        let (provider, sessionFixture) = try makeGeminiFixtureProvider(
+            responseData: geminiPermissionDeniedFixture,
+            configuration: configuration
+        )
+        defer { sessionFixture.invalidate() }
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .gemini,
+            title: configuration.displayName,
+            subtitle: "Gemini Apps usage",
+            bars: [
+                UsageBar(stableKey: "five-hour", label: "5-hour usage limit", used: 25, limit: 100),
+                UsageBar(stableKey: "weekly", label: "Weekly usage limit", used: 50, limit: 100),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_781_000_000)
+        )
+        let service = UsageRefreshService(providers: [provider], initialResults: [cachedResult])
+
+        _ = await service.refresh(configuration: configuration)
+
+        let preserved = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(preserved.bars, cachedResult.bars)
+        XCTAssertEqual(preserved.barsFetchedAt, cachedResult.barsFetchedAt)
+        XCTAssertFalse(preserved.hasFreshBars)
+        XCTAssertEqual(preserved.recoveryAction, .reauthenticate)
+        XCTAssertNotNil(preserved.failureMessage)
+    }
+
+    func testUnknownAndMalformedRPCEnvelopesFailClosedWithoutReauthentication() async throws {
+        let responses = [
+            #"[["wrb.fr","otherRPC",null,null,null,[7],"generic"]]"#,
+            #"[["wrb.fr","jSf9Qc",null,null,null,[6],"generic"]]"#,
+            #"[["wrb.fr","jSf9Qc",null,null,null,[7.5],"generic"]]"#,
+            #"[["wrb.fr","jSf9Qc",null,null,null,["7"],"generic"]]"#,
+            #"[["wrb.fr","jSf9Qc",null,null,null,[true],"generic"]]"#,
+            #"[["wrb.fr","jSf9Qc",null,null,null,7,"generic"]]"#,
+            #"[["wrb.fr","jSf9Qc",null,null,null,[],"generic"]]"#,
+            #"[["wrb.fr","jSf9Qc",null,null,null,null,"generic"]]"#,
+            #"[["wrb.fr","jSf9Qc",null]]"#,
+            #"[["wrb.fr","jSf9Qc"]]"#,
+            #"[["wrb.fr","jSf9Qc",null],["unknown","jSf9Qc",null,null,null,[7]]]"#,
+            #"[["wrb.fr","jSf9Qc",null,null,null,[7],"generic"]"#,
+            #"[["wrb.fr","jSf9Qc","{}",null,null,null,"generic"]]"#,
+            "[]",
+        ]
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .gemini)
+        for response in responses {
+            let (provider, sessionFixture) = try makeGeminiFixtureProvider(
+                responseData: Data(response.utf8),
+                configuration: configuration
+            )
+            defer { sessionFixture.invalidate() }
+
+            let result = try await provider.fetchUsage(for: configuration)
+
+            XCTAssertEqual(result.recoveryAction, .retryRefresh, response)
+            XCTAssertEqual(
+                result.failureMessage,
+                "Gemini's usage response format changed. No limit values were saved.",
+                response
+            )
+            XCTAssertTrue(result.bars.isEmpty, response)
+            XCTAssertTrue(result.preserveCachedBarsOnFailure, response)
+        }
+    }
+
+    func testUnrelatedRPCRejectionDoesNotDiscardValidUsage() async throws {
+        let payload: [Any] = [
+            2,
+            [[2_400, 0.25, 1, [[1_781_135_233, 0]]], [48_106, 0.5, 2, [[1_781_646_433, 0]]]],
+            false,
+        ]
+        let unrelatedRejection = #"[["wrb.fr","otherRPC",null,null,null,[7],"generic"]]"#
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .gemini)
+        let (provider, sessionFixture) = try makeGeminiFixtureProvider(
+            responseData: Data(unrelatedRejection.utf8) + makeGeminiBatchResponse(payload),
+            configuration: configuration
+        )
+        defer { sessionFixture.invalidate() }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertNil(result.failureMessage)
+        XCTAssertEqual(result.bars.map(\.stableKey), ["five-hour", "weekly"])
+        XCTAssertEqual(result.bars.map(\.used), [25, 50])
+    }
+
+    func testUsageRPCPermissionDeniedTakesPrecedenceOverValidUsage() async throws {
+        let payload: [Any] = [2, [[2_400, 0.25, 1, [[1_781_135_233, 0]]]], false]
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .gemini)
+        let (provider, sessionFixture) = try makeGeminiFixtureProvider(
+            responseData: makeGeminiBatchResponse(payload) + geminiPermissionDeniedFixture,
+            configuration: configuration
+        )
+        defer { sessionFixture.invalidate() }
+
+        let result = try await provider.fetchUsage(for: configuration)
+
+        XCTAssertEqual(result.recoveryAction, .reauthenticate)
+        XCTAssertNotNil(result.failureMessage)
+        XCTAssertTrue(result.bars.isEmpty)
+        XCTAssertTrue(result.preserveCachedBarsOnFailure)
+    }
+}
+
+// Synthetic account, credential, and trace markers exercise response privacy.
+private let geminiPermissionDeniedFixture = Data(
+    """
+    )]}'
+
+    [["wrb.fr","jSf9Qc",null,null,null,[7,null,["fixture-account@example.invalid","__Secure-1PSID=fixture-cookie","fixture-token","fixture-trace"]],"generic"],["di",199]]
+    """.utf8
+)
+
+private func makeGeminiFixtureProvider(
+    responseData: Data,
+    configuration: ProviderAccountConfiguration
+) throws -> (GeminiUsageProvider, IsolatedTestURLSession) {
+    let secretStore = MemorySecretStore()
+    try secretStore.saveSecret(
+        GeminiSessionCredentialsParser.storedCredential(from: "__Secure-1PSID=fixture-cookie"),
+        account: ProviderConfigurationStore.keychainAccount(for: configuration)
+    )
+    let sessionFixture = IsolatedTestURLSession { request in
+        let data = request.url?.path == "/usage"
+            ? Data(#"<script>window.WIZ_global_data={"SNlM0e":"fixture-token"};</script>"#.utf8)
+            : responseData
+        return (
+            HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!,
+            data
+        )
+    }
+    return (
+        GeminiUsageProvider(secretStore: secretStore, session: sessionFixture.session),
+        sessionFixture
+    )
 }
 
 private func makeGeminiBatchResponse(_ payload: [Any]) throws -> Data {

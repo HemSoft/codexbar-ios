@@ -250,7 +250,15 @@ public final class GeminiUsageProvider: UsageProvider {
         if let failure = httpFailureResult(response: usageResponse, configuration: configuration) {
             return failure
         }
-        guard let payload = Self.parseUsageResponse(responseData) else {
+        let rows = Self.batchRows(from: responseData)
+        if Self.hasAuthenticationRejection(in: rows) {
+            return failureResult(
+                "Gemini rejected these session credentials. Sign in again with Google.",
+                configuration: configuration,
+                recoveryAction: .reauthenticate
+            )
+        }
+        guard let payload = Self.parseUsageResponse(rows) else {
             return failureResult(
                 "Gemini's usage response format changed. No limit values were saved.",
                 configuration: configuration
@@ -315,8 +323,11 @@ public final class GeminiUsageProvider: UsageProvider {
     }
 
     static func parseUsageResponse(_ data: Data) -> UsagePayload? {
-        guard let text = String(data: data, encoding: .utf8) else { return nil }
-        for (rpcID, payload) in batchPayloads(from: text) where rpcID == Self.rpcID {
+        parseUsageResponse(batchRows(from: data))
+    }
+
+    private static func parseUsageResponse(_ rows: [[Any]]) -> UsagePayload? {
+        for (rpcID, payload) in batchPayloads(from: rows) where rpcID == Self.rpcID {
             guard let metrics = usageMetrics(in: payload) else { continue }
             let fiveHour = metrics.first { $0.period == 1 }
             let weekly = metrics.first { $0.period == 2 }
@@ -390,10 +401,39 @@ public final class GeminiUsageProvider: UsageProvider {
         )
     }
 
-    private static func batchPayloads(from text: String) -> [(String, Any)] {
+    private static func batchPayloads(from rows: [[Any]]) -> [(String, Any)] {
+        rows.compactMap { row in
+            guard
+                let rpcID = row[1] as? String,
+                let payloadText = row[2] as? String,
+                let payloadData = payloadText.data(using: .utf8),
+                let payload = try? JSONSerialization.jsonObject(with: payloadData)
+            else {
+                return nil
+            }
+            return (rpcID, payload)
+        }
+    }
+
+    private static func hasAuthenticationRejection(in rows: [[Any]]) -> Bool {
+        rows.contains { row in
+            guard
+                row[1] as? String == Self.rpcID,
+                row.count > 5,
+                let rejection = row[5] as? [Any],
+                let code = rejection.first as? Int
+            else {
+                return false
+            }
+            return code == 7
+        }
+    }
+
+    private static func batchRows(from data: Data) -> [[Any]] {
+        guard let text = String(data: data, encoding: .utf8) else { return [] }
         let bytes = Array(text.utf8)
         let anchor = Array("[[\"wrb.fr\"".utf8)
-        var results: [(String, Any)] = []
+        var results: [[Any]] = []
         var searchIndex = 0
 
         while let start = index(of: anchor, in: bytes, from: searchIndex) {
@@ -401,16 +441,8 @@ public final class GeminiUsageProvider: UsageProvider {
             let chunk = Data(bytes[start...end])
             if let rows = try? JSONSerialization.jsonObject(with: chunk) as? [Any] {
                 for case let row as [Any] in rows where row.count >= 3 {
-                    guard
-                        row[0] as? String == "wrb.fr",
-                        let rpcID = row[1] as? String,
-                        let payloadText = row[2] as? String,
-                        let payloadData = payloadText.data(using: .utf8),
-                        let payload = try? JSONSerialization.jsonObject(with: payloadData)
-                    else {
-                        continue
-                    }
-                    results.append((rpcID, payload))
+                    guard row[0] as? String == "wrb.fr" else { continue }
+                    results.append(row)
                 }
             }
             searchIndex = end + 1
