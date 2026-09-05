@@ -18,3 +18,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output/
+
+# Local Python quality-gate bytecode
+scripts/**/__pycache__/
