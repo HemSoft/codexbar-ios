@@ -2495,6 +2495,13 @@ public extension ProviderConfigurationStore {
                 authMethod: .apiKey
             ),
             ProviderAccountConfiguration(
+                id: AppStoreScreenshotFixtureID.antigravityAccount,
+                providerID: .antigravity,
+                accountLabel: "Antigravity demo",
+                groupID: usageGroup.id,
+                authMethod: .cliToken
+            ),
+            ProviderAccountConfiguration(
                 id: AppStoreScreenshotFixtureID.geminiAccount,
                 providerID: .gemini,
                 accountLabel: "Google AI Pro",
