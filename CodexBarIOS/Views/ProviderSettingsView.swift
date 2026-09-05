@@ -56,11 +56,7 @@ struct ProviderSettingsView: View {
                 }
 
                 .accessibilityIdentifier("account-group-picker")
-                .accessibilityLabel("Group")
-                .accessibilityValue(
-                    configurationStore.group(for: configuration.groupID)?.name
-                        ?? ProviderAccountGroup.ungroupedDisplayName
-                )
+                .accessibilityValue(configurationStore.groupName(for: configuration.groupID))
 
                 Picker("Auth method", selection: viewModel.binding(for: \.authMethod)) {
                     ForEach(availableAuthMethods) { method in

@@ -34,8 +34,11 @@ size 2, English labels, and the US locale.
   the failed fetch preserves a stale $25 balance, reads the error, and retries
   to obtain a fresh $60 balance. It opens History, selects Today and 7 days,
   checks that the chart's accessible value changes, then delivers an actual
-  `codexbar://provider?account=ui-recovery-account` URL while History is open.
-  The dashboard must dismiss History and expose the requested account.
+  `codexbar://provider?account=ui-navigation-5` URL while History is open.
+  Five additional accounts put this distinct destination outside the viewport.
+  Without helper scrolling, the dashboard must dismiss History and reveal the
+  requested account. A second URL returns to the recovered account and verifies
+  its fresh $60 balance remains intact.
 
 The tests assert accessible names, values, selection state, and reachable tap
 targets. They cover app-owned account and usage navigation. Live website sign-in,
@@ -48,7 +51,9 @@ UUID in `CODEXBAR_UI_TEST_RUN_ID`. Invalid IDs fail immediately. This creates
 `com.hemsoft.CodexBarIOS.ui-tests.<UUID>`, never an arbitrary defaults domain.
 `CODEXBAR_UI_TEST_RESET=1` clears only that namespace; `0` preserves it for
 relaunch. `CODEXBAR_UI_TEST_SCENARIO=empty` begins with no accounts, while
-`recovery` seeds an account and three history samples. Test runs generate their
+`recovery` seeds a recovery account, five navigation accounts, and three history
+samples per account. Only the recovery account fails its first refresh; the
+navigation accounts retain a distinct $90 balance. Test runs generate their
 own UUIDs, so separate tests and devices cannot reuse each other's state.
 
 The fixture supplies this suite to account configuration, history, app review,

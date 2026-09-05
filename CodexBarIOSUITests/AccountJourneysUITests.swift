@@ -60,6 +60,8 @@ final class AccountJourneysUITests: XCTestCase {
         tap(app.buttons["Retry"], in: app)
         assertBalance("60.00", freshness: "fresh", in: app)
         XCTAssertFalse(app.buttons["Retry"].exists)
+        let targetMenu = app.buttons["More options for Target Account"]
+        XCTAssertFalse(targetMenu.isHittable, "The URL destination must start outside the viewport")
 
         let history = app.otherElements.matching(NSPredicate(format: "label BEGINSWITH %@", "Usage history.")).firstMatch
         tap(history, in: app)
@@ -75,13 +77,14 @@ final class AccountJourneysUITests: XCTestCase {
         XCTAssertTrue(app.buttons["7 days"].isSelected)
         XCTAssertEqual(chart.value as? String, sevenDayValue)
 
-        // Dispatch a real system URL while History covers the dashboard. A broken
-        // onOpenURL handler leaves the sheet visible and fails these assertions.
-        XCUIDevice.shared.system.open(URL(string: "codexbar://provider?account=ui-recovery-account")!)
+        // Only URL navigation may reveal the initially offscreen destination.
+        XCUIDevice.shared.system.open(URL(string: "codexbar://provider?account=ui-navigation-5")!)
         XCTAssertTrue(app.navigationBars["History"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(targetMenu.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        XCTAssertEqual(targetMenu.label, "More options for Target Account")
+        XCUIDevice.shared.system.open(URL(string: "codexbar://provider?account=ui-recovery-account")!)
         let accountMenu = app.buttons["More options for Recovery Account"]
-        XCTAssertTrue(accountMenu.waitForExistence(timeout: 5))
-        XCTAssertTrue(accountMenu.isHittable)
+        XCTAssertTrue(accountMenu.wait(for: \.isHittable, toEqual: true, timeout: 5))
         assertBalance("60.00", freshness: "fresh", in: app)
     }
 

@@ -28,6 +28,19 @@ final class UITestFixtures {
     let statusMonitor: GitHubStatusMonitor
     let appUpdateController: AppUpdateController
 
+    private lazy var widgetSnapshotCoordinator = WidgetSnapshotCoordinator(
+        refreshService: refreshService,
+        configurationStore: configurationStore,
+        publishSnapshot: { _, _ in },
+        publishSettings: { _ in }
+    )
+    private lazy var watchSnapshotCoordinator = WatchSnapshotCoordinator(
+        refreshService: refreshService,
+        configurationStore: configurationStore,
+        sender: UITestWatchSender(),
+        publishSnapshot: { _, _, _ in }
+    )
+
     private init(runID: UUID, environment: [String: String]) {
         let suite = "com.hemsoft.CodexBarIOS.ui-tests.\(runID.uuidString)"
         guard let defaults = UserDefaults(suiteName: suite) else {
@@ -54,7 +67,7 @@ final class UITestFixtures {
         }
         let results = configurationStore.configurations
             .filter(configurationStore.isConfigured)
-            .map { Self.result(for: $0, balance: 25) }
+            .map { Self.result(for: $0, balance: $0.id.hasPrefix("ui-navigation-") ? 90 : 25) }
         refreshService = UsageRefreshService(
             providers: [UITestUsageProvider(failsFirstRefresh: recovery)],
             initialResults: results
@@ -75,18 +88,8 @@ final class UITestFixtures {
             usageAlertNotifier: notifier,
             appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
             performsLifecycleWork: false,
-            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
-                refreshService: refreshService,
-                configurationStore: configurationStore,
-                publishSnapshot: { _, _ in },
-                publishSettings: { _ in }
-            ),
-            watchSnapshotCoordinator: WatchSnapshotCoordinator(
-                refreshService: refreshService,
-                configurationStore: configurationStore,
-                sender: UITestWatchSender(),
-                publishSnapshot: { _, _, _ in }
-            )
+            widgetSnapshotCoordinator: widgetSnapshotCoordinator,
+            watchSnapshotCoordinator: watchSnapshotCoordinator
         )
         .dynamicTypeSize(.accessibility2)
     }
@@ -102,13 +105,29 @@ final class UITestFixtures {
         )
         _ = configurationStore.update(account)
         _ = configurationStore.saveSecret("ui-test-credential", for: account)
+        // Place a distinct URL destination beyond the viewport on either device family.
+        for index in 1...5 {
+            let navigationAccount = ProviderAccountConfiguration(
+                id: "ui-navigation-\(index)",
+                providerID: .openRouter,
+                accountLabel: index == 5 ? "Target Account" : "Scroll Account \(index)",
+                groupID: group?.id,
+                authMethod: .apiKey
+            )
+            _ = configurationStore.update(navigationAccount)
+            _ = configurationStore.saveSecret("ui-test-credential", for: navigationAccount)
+        }
     }
 
     private func seedHistory() {
         let now = Date()
         for hoursAgo in [48.0, 1.0, 0.0] {
             let results = configurationStore.configurations.map {
-                Self.result(for: $0, balance: 25, fetchedAt: now.addingTimeInterval(-hoursAgo * 3_600))
+                Self.result(
+                    for: $0,
+                    balance: $0.id.hasPrefix("ui-navigation-") ? 90 : 25,
+                    fetchedAt: now.addingTimeInterval(-hoursAgo * 3_600)
+                )
             }
             historyStore.record(results: results, now: now)
         }
@@ -157,7 +176,10 @@ private actor UITestUsageProvider: UsageProvider {
     }
 
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
-        if failsNextRefresh {
+        if configuration.id.hasPrefix("ui-navigation-") {
+            return UITestFixtures.result(for: configuration, balance: 90)
+        }
+        if failsNextRefresh && configuration.id == "ui-recovery-account" {
             failsNextRefresh = false
             throw UITestFixtureError.refreshFailed
         }
