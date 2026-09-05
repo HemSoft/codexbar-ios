@@ -8,6 +8,11 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added experimental Antigravity session import with separate Gemini and
+  Claude/GPT five-hour and weekly quotas. Missing quota stays unavailable;
+  native iPhone sign-in and device comparison remain release follow-ups.
+  ([#314](https://github.com/HemSoft/codexbar-ios/issues/314))
+
 - Added an experimental Google Gemini account option that displays five-hour
   and weekly consumer usage with reset times. Connected-iPhone live-account
   parity remains a pre-release gate.

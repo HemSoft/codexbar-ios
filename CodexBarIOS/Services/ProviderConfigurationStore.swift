@@ -2331,6 +2331,8 @@ public final class ProviderConfigurationStore: ObservableObject {
         switch configuration.providerID {
         case .codex, .cursor, .gemini:
             normalized.authMethod = .browserSession
+        case .antigravity:
+            normalized.authMethod = .cliToken
         case .copilot, .claude, .openRouter, .openCodeZen, .moonshot, .greptile:
             break
         }

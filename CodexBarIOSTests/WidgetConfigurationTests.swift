@@ -15,6 +15,7 @@ final class WidgetConfigurationTests: XCTestCase {
             (.openRouter, "openRouter"),
             (.greptile, "greptile"),
             (.gemini, "gemini"),
+            (.antigravity, "antigravity"),
         ]
 
         for (focus, providerID) in mappings {

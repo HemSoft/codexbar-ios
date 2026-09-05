@@ -1673,6 +1673,8 @@ extension ProviderID {
             "checkmark.bubble"
         case .gemini:
             "diamond.fill"
+        case .antigravity:
+            "arrow.up.circle"
         }
     }
 }

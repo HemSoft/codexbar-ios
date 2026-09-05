@@ -638,6 +638,7 @@ public extension UsageRefreshService {
                 CursorUsageProvider(),
                 GreptileUsageProvider(),
                 GeminiUsageProvider(),
+                AntigravityUsageProvider(),
             ]
         )
     }
