@@ -250,14 +250,15 @@ public final class GeminiUsageProvider: UsageProvider {
         if let failure = httpFailureResult(response: usageResponse, configuration: configuration) {
             return failure
         }
-        if Self.hasAuthenticationRejection(responseData) {
+        let rows = Self.batchRows(from: responseData)
+        if Self.hasAuthenticationRejection(in: rows) {
             return failureResult(
                 "Gemini rejected these session credentials. Sign in again with Google.",
                 configuration: configuration,
                 recoveryAction: .reauthenticate
             )
         }
-        guard let payload = Self.parseUsageResponse(responseData) else {
+        guard let payload = Self.parseUsageResponse(rows) else {
             return failureResult(
                 "Gemini's usage response format changed. No limit values were saved.",
                 configuration: configuration
@@ -322,8 +323,11 @@ public final class GeminiUsageProvider: UsageProvider {
     }
 
     static func parseUsageResponse(_ data: Data) -> UsagePayload? {
-        guard let text = String(data: data, encoding: .utf8) else { return nil }
-        for (rpcID, payload) in batchPayloads(from: text) where rpcID == Self.rpcID {
+        parseUsageResponse(batchRows(from: data))
+    }
+
+    private static func parseUsageResponse(_ rows: [[Any]]) -> UsagePayload? {
+        for (rpcID, payload) in batchPayloads(from: rows) where rpcID == Self.rpcID {
             guard let metrics = usageMetrics(in: payload) else { continue }
             let fiveHour = metrics.first { $0.period == 1 }
             let weekly = metrics.first { $0.period == 2 }
@@ -397,8 +401,8 @@ public final class GeminiUsageProvider: UsageProvider {
         )
     }
 
-    private static func batchPayloads(from text: String) -> [(String, Any)] {
-        batchRows(from: text).compactMap { row in
+    private static func batchPayloads(from rows: [[Any]]) -> [(String, Any)] {
+        rows.compactMap { row in
             guard
                 let rpcID = row[1] as? String,
                 let payloadText = row[2] as? String,
@@ -411,9 +415,8 @@ public final class GeminiUsageProvider: UsageProvider {
         }
     }
 
-    private static func hasAuthenticationRejection(_ data: Data) -> Bool {
-        guard let text = String(data: data, encoding: .utf8) else { return false }
-        return batchRows(from: text).contains { row in
+    private static func hasAuthenticationRejection(in rows: [[Any]]) -> Bool {
+        rows.contains { row in
             guard
                 row[1] as? String == Self.rpcID,
                 row.count > 5,
@@ -426,7 +429,8 @@ public final class GeminiUsageProvider: UsageProvider {
         }
     }
 
-    private static func batchRows(from text: String) -> [[Any]] {
+    private static func batchRows(from data: Data) -> [[Any]] {
+        guard let text = String(data: data, encoding: .utf8) else { return [] }
         let bytes = Array(text.utf8)
         let anchor = Array("[[\"wrb.fr\"".utf8)
         var results: [[Any]] = []
