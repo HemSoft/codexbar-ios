@@ -250,6 +250,13 @@ public final class GeminiUsageProvider: UsageProvider {
         if let failure = httpFailureResult(response: usageResponse, configuration: configuration) {
             return failure
         }
+        if Self.hasAuthenticationRejection(responseData) {
+            return failureResult(
+                "Gemini rejected these session credentials. Sign in again with Google.",
+                configuration: configuration,
+                recoveryAction: .reauthenticate
+            )
+        }
         guard let payload = Self.parseUsageResponse(responseData) else {
             return failureResult(
                 "Gemini's usage response format changed. No limit values were saved.",
@@ -391,9 +398,38 @@ public final class GeminiUsageProvider: UsageProvider {
     }
 
     private static func batchPayloads(from text: String) -> [(String, Any)] {
+        batchRows(from: text).compactMap { row in
+            guard
+                let rpcID = row[1] as? String,
+                let payloadText = row[2] as? String,
+                let payloadData = payloadText.data(using: .utf8),
+                let payload = try? JSONSerialization.jsonObject(with: payloadData)
+            else {
+                return nil
+            }
+            return (rpcID, payload)
+        }
+    }
+
+    private static func hasAuthenticationRejection(_ data: Data) -> Bool {
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+        return batchRows(from: text).contains { row in
+            guard
+                row[1] as? String == Self.rpcID,
+                row.count > 5,
+                let rejection = row[5] as? [Any],
+                let code = rejection.first as? Int
+            else {
+                return false
+            }
+            return code == 7
+        }
+    }
+
+    private static func batchRows(from text: String) -> [[Any]] {
         let bytes = Array(text.utf8)
         let anchor = Array("[[\"wrb.fr\"".utf8)
-        var results: [(String, Any)] = []
+        var results: [[Any]] = []
         var searchIndex = 0
 
         while let start = index(of: anchor, in: bytes, from: searchIndex) {
@@ -401,16 +437,8 @@ public final class GeminiUsageProvider: UsageProvider {
             let chunk = Data(bytes[start...end])
             if let rows = try? JSONSerialization.jsonObject(with: chunk) as? [Any] {
                 for case let row as [Any] in rows where row.count >= 3 {
-                    guard
-                        row[0] as? String == "wrb.fr",
-                        let rpcID = row[1] as? String,
-                        let payloadText = row[2] as? String,
-                        let payloadData = payloadText.data(using: .utf8),
-                        let payload = try? JSONSerialization.jsonObject(with: payloadData)
-                    else {
-                        continue
-                    }
-                    results.append((rpcID, payload))
+                    guard row[0] as? String == "wrb.fr" else { continue }
+                    results.append(row)
                 }
             }
             searchIndex = end + 1

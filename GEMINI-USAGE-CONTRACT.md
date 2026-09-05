@@ -8,10 +8,10 @@ Vertex AI, or Antigravity quotas.
 
 ## Authentication and storage
 
-The user pastes a Cookie header or JSON object through Google Gemini's Add
-Account screen. CodexBar extracts `__Secure-1PSID` and the optional rotating
-`__Secure-1PSIDTS` value, rejects malformed values, discards every other pasted
-cookie, and stores only those selected values in iOS Keychain.
+The user signs in with Google through a private website window in Gemini's Add
+Account screen. CodexBar reads `__Secure-1PSID` and the optional rotating
+`__Secure-1PSIDTS` value, validates usage, and stores only those selected values
+in iOS Keychain. Existing saved Cookie-header and JSON credentials remain readable.
 
 These are high-value Google session credentials, not a limited Gemini API key.
 They may grant broader access to the Google account. CodexBar sends them only
@@ -56,6 +56,25 @@ weekly window. CodexBar uses the period field rather than reset ordering, maps
 Unknown sibling buckets are ignored. A missing known bucket stays unavailable;
 it does not become zero. Malformed or changed payloads fail closed and preserve
 the last complete cached bars.
+
+An HTTP-200 response can instead contain a usage RPC rejection:
+
+```text
+["wrb.fr", "jSf9Qc", null, null, null, [7, ...], "generic"]
+```
+
+CodexBar recognizes numeric code `7` at `row[5][0]` only on a `wrb.fr` row
+for `jSf9Qc`. It asks the user to sign in again with Google and keeps cached
+bars available as stale data. The failure message is fixed text and includes
+no response details. A rejection takes precedence over any usage payload in
+the same response. Other RPC IDs, unknown codes, and malformed rejection
+fields do not trigger reauthentication. Responses without valid known usage
+still fail closed with the existing format-change failure.
+
+The code-7 mapping follows the public
+[`HanaokaYuzu/Gemini-API` client at commit 8c5b1dc](https://github.com/HanaokaYuzu/Gemini-API/blob/8c5b1dcbf54ecf093551cc20bd25cef438190ba8/src/gemini_webapi/client.py#L493-L508),
+which treats the matching RPC's rejection as permission denied or unauthenticated.
+The regression fixture uses synthetic account, credential, and trace markers.
 
 The current RPC does not include a verified account plan. CodexBar therefore
 does not show a Gemini plan badge or infer a plan from prices, limits, page

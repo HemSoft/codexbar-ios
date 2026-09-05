@@ -39,6 +39,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Show Sign In Again when Gemini rejects an expired session in a usage response,
+  while retaining the last known usage as stale data.
+  ([#301](https://github.com/HemSoft/codexbar-ios/issues/301))
 - Preserved Cursor Models and Other Models usage above 100% in dashboard,
   widget, Watch, projection inputs, alert, and History values while keeping gauges
   visually capped at full. ([#294](https://github.com/HemSoft/codexbar-ios/issues/294))
