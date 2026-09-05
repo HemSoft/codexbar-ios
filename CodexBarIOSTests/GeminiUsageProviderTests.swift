@@ -409,3 +409,176 @@ private func makeGeminiBatchResponse(_ payload: [Any]) throws -> Data {
     let rowsString = try XCTUnwrap(String(bytes: rowsData, encoding: .utf8))
     return Data(")]}'\n\n\(rowsString)\n".utf8)
 }
+
+final class GeminiSessionLifetimeTests: XCTestCase {
+    func testReleasingFiftyProvidersReleasesOwnedSessionsAndDelegates() async throws {
+        let references = try (0..<50).map { _ in
+            try autoreleasepool {
+                try GeminiLifetimeReferences(GeminiUsageProvider(secretStore: EmptySecretStore()))
+            }
+        }
+
+        try await assertReleased(references)
+    }
+
+    func testOwnedSessionIsReleasedAfterSuccessfulFetch() async throws {
+        try await assertReleased([fetchAndReleaseProvider(outcome: "success")])
+    }
+
+    func testOwnedSessionIsReleasedAfterFailedFetch() async throws {
+        try await assertReleased([fetchAndReleaseProvider(outcome: "failure")])
+    }
+
+    func testOwnedSessionIsReleasedAfterCancelledFetch() async throws {
+        try await assertReleased([fetchAndReleaseProvider(outcome: "cancel")])
+    }
+
+    func testInjectedSessionRemainsUsableAfterProviderIsReleased() async throws {
+        let fixture = IsolatedTestURLSession { request in
+            (HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("owner request".utf8))
+        }
+        defer { fixture.invalidate() }
+        weak var provider: GeminiUsageProvider?
+        autoreleasepool {
+            let value = GeminiUsageProvider(secretStore: EmptySecretStore(), session: fixture.session)
+            provider = value
+        }
+        XCTAssertNil(provider)
+
+        let (data, response) = try await fixture.session.data(from: XCTUnwrap(URL(string: "https://example.invalid/owner")))
+
+        XCTAssertEqual(data, Data("owner request".utf8))
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+    }
+
+    func testOwnedSessionDisablesCookieStorageAndAutomaticCookies() throws {
+        let provider = GeminiUsageProvider(secretStore: EmptySecretStore())
+        let session = try ownedSession(of: provider)
+        let configuration = session.configuration
+        XCTAssertNil(configuration.httpCookieStorage)
+        XCTAssertEqual(configuration.httpCookieAcceptPolicy, .never)
+        XCTAssertFalse(configuration.httpShouldSetCookies)
+        let request = provider.makeBootstrapRequest(credentials: GeminiSessionCredentials(securePSID: "fixture-cookie", securePSIDTS: nil))
+        XCTAssertFalse(request.httpShouldHandleCookies)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "__Secure-1PSID=fixture-cookie")
+    }
+
+    func testOwnedSessionRedirectDelegateOnlyAllowsGeminiHTTPSOrigin() async throws {
+        let provider = GeminiUsageProvider(secretStore: EmptySecretStore())
+        let session = try ownedSession(of: provider)
+        let delegate = try XCTUnwrap(session.delegate as? URLSessionTaskDelegate)
+        let origin = try XCTUnwrap(URL(string: "https://gemini.google.com/usage"))
+        let task = session.dataTask(with: origin)
+        defer { task.cancel() }
+        let response = try XCTUnwrap(HTTPURLResponse(url: origin, statusCode: 302, httpVersion: nil, headerFields: nil))
+        let destinations = [
+            ("https://gemini.google.com/usage?pli=1", true),
+            ("https://gemini.google.com:443/usage", true),
+            ("http://gemini.google.com/usage", false),
+            ("https://accounts.google.com/signin", false),
+            ("https://gemini.google.com.attacker.invalid/usage", false),
+            ("https://gemini.google.com:444/usage", false),
+        ]
+        for (destination, allowed) in destinations {
+            let request = URLRequest(url: try XCTUnwrap(URL(string: destination)))
+            let completion = expectation(description: "Redirect decision for \(destination)")
+            delegate.urlSession?(session, task: task, willPerformHTTPRedirection: response, newRequest: request) {
+                XCTAssertEqual($0?.url, allowed ? request.url : nil, destination)
+                completion.fulfill()
+            }
+            await fulfillment(of: [completion], timeout: 3)
+        }
+    }
+
+    private func fetchAndReleaseProvider(outcome: String) async throws -> GeminiLifetimeReferences {
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .gemini)
+        let store = MemorySecretStore()
+        try store.saveSecret("__Secure-1PSID=fixture-cookie", account: ProviderConfigurationStore.keychainAccount(for: configuration))
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [GeminiLifetimeURLProtocol.self]
+        let provider = GeminiUsageProvider(
+            secretStore: store,
+            sessionConfiguration: sessionConfiguration,
+            usageURL: try XCTUnwrap(URL(string: "https://\(outcome).gemini-lifetime.invalid/usage"))
+        )
+        let references = try GeminiLifetimeReferences(provider)
+        do {
+            let result = try await provider.fetchUsage(for: configuration)
+            XCTAssertNotEqual(outcome, "cancel", "Cancellation must propagate")
+            if outcome == "success" {
+                XCTAssertNil(result.failureMessage)
+                XCTAssertEqual(result.bars.map(\.used), [25])
+            } else {
+                XCTAssertNotNil(result.failureMessage)
+            }
+        } catch is CancellationError {
+            XCTAssertEqual(outcome, "cancel")
+        }
+        return references
+    }
+
+    private func assertReleased(_ references: [GeminiLifetimeReferences]) async throws {
+        // Also clean up sessions when the regression fails against the old implementation.
+        defer { references.forEach { $0.session?.invalidateAndCancel() } }
+        // URL-loading cleanup runs asynchronously; allow scheduling headroom on CI.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while references.contains(where: { !$0.isReleased }), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(references.filter { $0.provider != nil }.count, 0, "Providers must be released")
+        XCTAssertEqual(references.filter { $0.session != nil }.count, 0, "Owned sessions must be released")
+        XCTAssertEqual(references.filter { $0.delegate != nil }.count, 0, "Owned delegates must be released")
+    }
+}
+
+private final class GeminiLifetimeReferences {
+    weak var provider: GeminiUsageProvider?
+    weak var session: URLSession?
+    weak var delegate: AnyObject?
+
+    var isReleased: Bool { provider == nil && session == nil && delegate == nil }
+
+    init(_ provider: GeminiUsageProvider) throws {
+        self.provider = provider
+        let session = try ownedSession(of: provider)
+        self.session = session
+        self.delegate = try XCTUnwrap(session.delegate)
+    }
+}
+
+private func ownedSession(of provider: GeminiUsageProvider) throws -> URLSession {
+    try XCTUnwrap(Mirror(reflecting: provider).children.first { $0.label == "session" }?.value as? URLSession)
+}
+
+// Each owned session installs this protocol without any process-wide registration.
+private final class GeminiLifetimeURLProtocol: URLProtocol, @unchecked Sendable {
+    // URLProtocol requires overridable class methods.
+    // swiftlint:disable:next static_over_final_class
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host?.hasSuffix(".gemini-lifetime.invalid") == true
+    }
+
+    // swiftlint:disable:next static_over_final_class
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        if request.url?.host == "cancel.gemini-lifetime.invalid" {
+            client?.urlProtocol(self, didFailWithError: URLError(.cancelled))
+            return
+        }
+        do {
+            let status = request.url?.host == "failure.gemini-lifetime.invalid" ? 503 : 200
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: status, httpVersion: nil, headerFields: nil))
+            let data = request.url?.path == "/usage"
+                ? Data(#"<script>window.WIZ_global_data={"SNlM0e":"fixture-token"};</script>"#.utf8)
+                : try makeGeminiBatchResponse([2, [[2_400, 0.25, 1, [[1_781_135_233, 0]]]], false])
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}

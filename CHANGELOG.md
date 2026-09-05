@@ -39,6 +39,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Release temporary Gemini network sessions after connection checks complete,
+  fail, or are canceled, preventing repeated sign-in attempts from retaining them.
+  ([#303](https://github.com/HemSoft/codexbar-ios/issues/303))
 - Show Sign In Again when Gemini rejects an expired session in a usage response,
   while retaining the last known usage as stale data.
   ([#301](https://github.com/HemSoft/codexbar-ios/issues/301))
