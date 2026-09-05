@@ -6,7 +6,9 @@ comparison fails that existing required status. Both jobs publish artifacts name
 `function-risk-ios` and `function-risk-watch`, including raw xccov coverage,
 SwiftLint output, source declarations, the full JSON report and a Markdown review
 queue. Artifacts remain available for 14 days. A collection failure produces
-`failure.txt`; absent artifacts also fail the upload step.
+`failure.txt`; absent artifacts after collection was attempted also fail the
+upload step. If a test suite fails before collection, the job preserves its
+xcresult diagnostics and skips the risk upload.
 
 ## Measurement contract
 

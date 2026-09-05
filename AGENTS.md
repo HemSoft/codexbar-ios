@@ -166,8 +166,9 @@ watchOS test CI jobs. Run both suites with `-enableCodeCoverage YES` and separat
 `-resultBundlePath` values, then run `scripts/function-risk/measure.py` for each
 platform. See [FUNCTION-RISK.md](FUNCTION-RISK.md) for the pinned tools, exact
 line-coverage basis, baseline policy, exclusions, failure fixtures, and complete
-reproduction commands. New production CRAP scores above 30, baseline increases,
-or unexplained measurement gaps fail the corresponding required test status.
+reproduction commands. New production CRAP scores above 30, increases above
+existing high-risk ceilings, or unexplained measurement gaps fail the
+corresponding required test status.
 
 There is no separate typecheck tool beyond Xcode/Swift compiler warnings and
 the test targets above.

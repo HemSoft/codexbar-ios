@@ -100,13 +100,14 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p 'test_function_risk.py' -v
 
       - name: Enforce iOS function risk baseline
+        id: ios-risk
         run: >-
           python3 scripts/function-risk/measure.py --platform ios
           --result "$RUNNER_TEMP/CodexBarIOSTests.xcresult"
           --output "$RUNNER_TEMP/function-risk-ios"
 
       - name: Publish iOS function risk
-        if: ${{ always() }}
+        if: ${{ always() && (steps.ios-risk.outcome == 'success' || steps.ios-risk.outcome == 'failure') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: function-risk-ios
@@ -164,13 +165,14 @@ jobs:
             test
 
       - name: Enforce watchOS function risk baseline
+        id: watch-risk
         run: >-
           python3 scripts/function-risk/measure.py --platform watch
           --result "$RUNNER_TEMP/CodexBarWatchTests.xcresult"
           --output "$RUNNER_TEMP/function-risk-watch"
 
       - name: Publish watchOS function risk
-        if: ${{ always() }}
+        if: ${{ always() && (steps.watch-risk.outcome == 'success' || steps.watch-risk.outcome == 'failure') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: function-risk-watch

@@ -90,7 +90,9 @@ class FunctionRiskTests(unittest.TestCase):
         self.baseline['platforms']['ios']['unmatched'][row['id']] = dict(source_sha256=row['source_sha256'], complexity=6, reason='Fixture unavailable on this platform')
         self.assertEqual(METRICS.gate(report, self.baseline), [])
         (self.root / 'Example.swift').write_text('func uncovered(_ value: Int) { fatalError() }')
-        self.assertTrue(METRICS.gate(self.measure(), self.baseline))
+        self.assertEqual(METRICS.gate(self.measure(), self.baseline), [
+            'Unmatched production declaration needs reviewed evidence: ' + row['id'],
+        ])
 
     def test_removed_high_risk_symbol_requires_baseline_review(self):
         self.baseline['platforms']['ios']['high_risk']['deleted'] = dict(complexity=6, covered_lines=0, executable_lines=8)
