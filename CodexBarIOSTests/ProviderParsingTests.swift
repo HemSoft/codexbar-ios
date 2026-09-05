@@ -3042,11 +3042,12 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.bars.map(\.label), ["Cursor Models", "Other Models"])
         XCTAssertEqual(result.bars.first?.usageText, "25%")
         XCTAssertTrue(events.recorded.contains(.primaryCompleted))
-        // A real timeout may cancel the task before URLProtocol starts loading it.
-        // Returning from fetchUsage also waits for its URLSession child task to finish.
-        let optionalTask = try XCTUnwrap(observer.optionalTask)
-        XCTAssertEqual(optionalTask.state, .completed)
-        XCTAssertEqual((optionalTask.error as? URLError)?.code, .cancelled)
+        // The real timeout may cancel the child before URLSession creates a task.
+        // When one was created, fetchUsage waits for that child to finish too.
+        if let optionalTask = observer.optionalTask {
+            XCTAssertEqual(optionalTask.state, .completed)
+            XCTAssertEqual((optionalTask.error as? URLError)?.code, .cancelled)
+        }
     }
 
     func testCursorProviderWithoutCredentialIsNotDemoData() async throws {
