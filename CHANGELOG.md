@@ -76,6 +76,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Require isolated iPhone and iPad UI journeys for account setup, saved group
+  selection, dashboard recovery, History, and account deep links in pull requests.
+  Failure screenshots and result bundles are retained for diagnosis.
+  ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
+
 - Added per-function iOS and watchOS coverage and risk reports to the required
   test checks, with explicit instrumentation gaps and a gate against new or
   increased uncovered complexity.

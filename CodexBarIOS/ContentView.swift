@@ -41,7 +41,9 @@ struct ContentView: View {
         githubStatusMonitor: GitHubStatusMonitor,
         usageAlertNotifier: (any UsageAlertNotifying)? = nil,
         appReviewPromptPolicy: AppReviewPromptPolicy = AppReviewPromptPolicy(),
-        performsLifecycleWork: Bool = true
+        performsLifecycleWork: Bool = true,
+        widgetSnapshotCoordinator: WidgetSnapshotCoordinator? = nil,
+        watchSnapshotCoordinator: WatchSnapshotCoordinator? = nil
     ) {
         self.refreshService = refreshService
         self.configurationStore = configurationStore
@@ -55,7 +57,9 @@ struct ContentView: View {
             configurationStore: configurationStore,
             historyStore: historyStore,
             usageAlertNotifier: usageAlertNotifier ?? LocalUsageAlertNotifier.shared,
-            appReviewPromptPolicy: appReviewPromptPolicy
+            appReviewPromptPolicy: appReviewPromptPolicy,
+            widgetSnapshotCoordinator: widgetSnapshotCoordinator,
+            watchSnapshotCoordinator: watchSnapshotCoordinator
         )
         self._orchestrator = StateObject(
             wrappedValue: orchestrator

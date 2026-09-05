@@ -524,6 +524,7 @@ struct SettingsView: View {
             .accessibilityHint("Opens \(destination.title) settings.")
         }
         .tag(destination)
+        .accessibilityIdentifier("settings-\(destination.rawValue)")
     }
 
     private func categoryTint(for destination: SettingsDestination) -> Color {

@@ -6,7 +6,7 @@ struct CodexBarIOSApp: App {
     @StateObject private var refreshService: UsageRefreshService
     @StateObject private var configurationStore: ProviderConfigurationStore
     @StateObject private var historyStore: UsageHistoryStore
-    @StateObject private var appUpdateController = AppUpdateController()
+    @StateObject private var appUpdateController: AppUpdateController
     @StateObject private var githubStatusPreferences: GitHubStatusPreferences
     @StateObject private var githubStatusMonitor: GitHubStatusMonitor
     #if DEBUG
@@ -15,6 +15,18 @@ struct CodexBarIOSApp: App {
     #endif
 
     init() {
+        #if DEBUG
+        if let fixtures = UITestFixtures.current {
+            _refreshService = StateObject(wrappedValue: fixtures.refreshService)
+            _configurationStore = StateObject(wrappedValue: fixtures.configurationStore)
+            _historyStore = StateObject(wrappedValue: fixtures.historyStore)
+            _appUpdateController = StateObject(wrappedValue: fixtures.appUpdateController)
+            _githubStatusPreferences = StateObject(wrappedValue: fixtures.statusPreferences)
+            _githubStatusMonitor = StateObject(wrappedValue: fixtures.statusMonitor)
+            return
+        }
+        #endif
+        _appUpdateController = StateObject(wrappedValue: AppUpdateController())
         let statusPreferences = GitHubStatusPreferences()
         _githubStatusPreferences = StateObject(wrappedValue: statusPreferences)
         _githubStatusMonitor = StateObject(
@@ -73,6 +85,7 @@ struct CodexBarIOSApp: App {
                 .preferredColorScheme(configurationStore.appAppearance.colorScheme)
                 .task {
                     #if DEBUG
+                    if UITestFixtures.current != nil { return }
                     if let screenshotConfiguration {
                         let settleNanoseconds = UInt64(
                             screenshotConfiguration.settleDelay * 1_000_000_000
@@ -97,7 +110,9 @@ struct CodexBarIOSApp: App {
     @ViewBuilder
     private var rootView: some View {
         #if DEBUG
-        if let screenshotConfiguration {
+        if let fixtures = UITestFixtures.current {
+            fixtures.contentView()
+        } else if let screenshotConfiguration {
             screenshotRootView(for: screenshotConfiguration.scene)
         } else if let providerID = debugProviderSettingsProviderID {
             NavigationStack {
