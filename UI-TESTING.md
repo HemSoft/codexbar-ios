@@ -9,7 +9,9 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/run-ui-tests.
 
 Pass `iphone` or `ipad` to run one family. The runner selects the newest
 installed iOS runtime compatible with the active simulator SDK. Set
-`UI_TEST_DEVICE_NAME` or `UI_TEST_DEVICE_ID` to choose an available simulator.
+`UI_TEST_DEVICE_NAME` or `UI_TEST_DEVICE_ID` to choose an available simulator
+when running a single family. The default `all` mode rejects these overrides
+before launching either destination.
 `UI_TEST_RESULTS_DIR` changes the output directory, which defaults to
 `build/ui-tests`. Each invocation creates a fresh result directory and retains
 the build log, result bundle, and summary. On failure it also exports screenshot

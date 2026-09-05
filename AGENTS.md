@@ -4,10 +4,11 @@ CodexBar for iOS is a native SwiftUI companion app (bundle ID
 `com.hemsoft.CodexBarIOS`, scheme `CodexBarIOS`, Xcode project
 `CodexBarIOS.xcodeproj`). Xcode targets: `CodexBarIOS` (app),
 `CodexBarIOSWidget` (widget), `CodexBarIOSTests` (unit tests),
+`CodexBarIOSUITests` (isolated iPhone and iPad UI tests),
 `CodexBarWatch` (embedded watchOS 10 companion), `CodexBarWatchWidget`
 (WidgetKit complication extension), and `CodexBarWatchTests` (watchOS unit
-tests). Shared schemes are `CodexBarIOS`, `CodexBarWatch`, and
-`CodexBarWatchTests`. `Package.swift` also exposes the
+tests). Shared schemes are `CodexBarIOS`, `CodexBarIOSUITests`,
+`CodexBarWatch`, and `CodexBarWatchTests`. `Package.swift` also exposes the
 `CodexBarIOSSmokeTests` executable smoke harness. See
 `README.md` for scope and the Windows reference repo, `APP-STORE.md` for store
 metadata, `PRIVACY.md` for the privacy policy, `SUPPORT.md` for support flow,
@@ -105,6 +106,16 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
     -project CodexBarIOS.xcodeproj -scheme CodexBarIOS \
     -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' test
   ```
+
+- Run both isolated UI-test journeys on iPhone and iPad simulators:
+
+  ```sh
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/run-ui-tests.sh
+  ```
+
+  See [UI-TESTING.md](UI-TESTING.md) for fixture startup, storage isolation,
+  single-family runs, and failure artifacts. Both destinations are enforced
+  inside the required iOS test CI job.
 
 - Run the SwiftPM smoke harness:
 

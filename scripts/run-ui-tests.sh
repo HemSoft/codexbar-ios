@@ -15,6 +15,10 @@ fi
 
 case "$device_family" in
   all)
+    if [[ -n "${UI_TEST_DEVICE_NAME:-}" || -n "${UI_TEST_DEVICE_ID:-}" ]]; then
+      echo "Pass iphone or ipad when setting a device override." >&2
+      exit 2
+    fi
     exit_status=0
     for family in iphone ipad; do
       "$repo_root/scripts/run-ui-tests.sh" "$family" || exit_status=1
