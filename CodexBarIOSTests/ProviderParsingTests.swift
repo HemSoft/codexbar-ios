@@ -2991,7 +2991,7 @@ final class ProviderParsingTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models"])
+        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models", "Other Models"])
         XCTAssertEqual(result.bars.first?.usageText, "25%")
         let recorded = events.recorded
         XCTAssertEqual(recorded.count, 6)
@@ -3002,6 +3002,51 @@ final class ProviderParsingTests: XCTestCase {
         for event in [StalledCursorRequestEvents.Event.optionalCancelled, .fetchReturned] {
             XCTAssertGreaterThan(try XCTUnwrap(recorded.firstIndex(of: event)), timeoutIndex)
         }
+    }
+
+    func testCursorProviderDefaultTimeoutCancelsStalledOptionalGrokBotUsage() async throws {
+        let secretStore = MemorySecretStore()
+        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .cursor)
+        try secretStore.saveSecret("cursor-token", account: ProviderConfigurationStore.keychainAccount(for: configuration))
+
+        let events = StalledCursorRequestEvents()
+        let host = UUID().uuidString.lowercased() + ".test"
+        StalledCursorGrokBotURLProtocol.register(events, for: host)
+        let observer = StalledCursorTaskObserver()
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [StalledCursorGrokBotURLProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration, delegate: observer, delegateQueue: nil)
+        defer {
+            session.invalidateAndCancel()
+            StalledCursorGrokBotURLProtocol.unregister(host: host)
+        }
+        let provider = CursorUsageProvider(
+            secretStore: secretStore,
+            session: session,
+            usageEndpoint: try XCTUnwrap(URL(string: "https://\(host)/GetCurrentPeriodUsage")),
+            grokBotUsageEndpoint: try XCTUnwrap(URL(string: "https://\(host)/GetSandUsageStatus")),
+            grokBotRequestTimeout: .milliseconds(25)
+        )
+
+        let result = try await withTestWatchdog(
+            timeout: .seconds(30),
+            failureMessage: "Cursor's default timeout did not cancel the optional Grok Bot task.",
+            onTimeout: { session.invalidateAndCancel() },
+            operation: {
+                let result = try await provider.fetchUsage(for: configuration)
+                await events.primaryCompleted.wait()
+                return result
+            }
+        )
+
+        XCTAssertEqual(result.bars.map(\.label), ["Cursor Models", "Other Models"])
+        XCTAssertEqual(result.bars.first?.usageText, "25%")
+        XCTAssertTrue(events.recorded.contains(.primaryCompleted))
+        // A real timeout may cancel the task before URLProtocol starts loading it.
+        // Returning from fetchUsage also waits for its URLSession child task to finish.
+        let optionalTask = try XCTUnwrap(observer.optionalTask)
+        XCTAssertEqual(optionalTask.state, .completed)
+        XCTAssertEqual((optionalTask.error as? URLError)?.code, .cancelled)
     }
 
     func testCursorProviderWithoutCredentialIsNotDemoData() async throws {
@@ -4875,89 +4920,4 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(bar.fractionUsed, 1)
     }
 
-}
-
-private final class StalledCursorRequestEvents: @unchecked Sendable {
-    enum Event {
-        case primaryCompleted, optionalStarted, timeoutStarted, timeoutFired, optionalCancelled, fetchReturned
-    }
-
-    let primaryCompleted = TestSignal()
-    let optionalStarted = TestSignal()
-    let optionalCancelled = TestSignal()
-    private let lock = NSLock()
-    private var events: [Event] = []
-
-    var recorded: [Event] { lock.withLock { events } }
-
-    func record(_ event: Event) {
-        lock.withLock { events.append(event) }
-        switch event {
-        case .primaryCompleted: primaryCompleted.signal()
-        case .optionalStarted: optionalStarted.signal()
-        case .optionalCancelled: optionalCancelled.signal()
-        default: break
-        }
-    }
-}
-
-private final class StalledCursorGrokBotURLProtocol: URLProtocol, @unchecked Sendable {
-    private static let lock = NSLock()
-    private static var requests: [String: StalledCursorRequestEvents] = [:]
-
-    static func register(_ events: StalledCursorRequestEvents, for host: String) {
-        lock.withLock { requests[host] = events }
-    }
-
-    static func unregister(host: String) {
-        _ = lock.withLock { requests.removeValue(forKey: host) }
-    }
-
-    private var events: StalledCursorRequestEvents? {
-        Self.lock.withLock { Self.requests[request.url?.host ?? ""] }
-    }
-
-    // URLProtocol requires overridable class methods.
-    // swiftlint:disable:next static_over_final_class
-    override class func canInit(with request: URLRequest) -> Bool {
-        true
-    }
-
-    // URLProtocol requires overridable class methods.
-    // swiftlint:disable:next static_over_final_class
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        guard let events else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
-            return
-        }
-        guard request.url?.lastPathComponent == "GetCurrentPeriodUsage" else {
-            events.record(.optionalStarted)
-            return
-        }
-        guard let url = request.url else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
-            return
-        }
-
-        let response = HTTPURLResponse(
-            url: url,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(#"{"planUsage":{"autoPercentUsed":25}}"#.utf8))
-        client?.urlProtocolDidFinishLoading(self)
-        events.record(.primaryCompleted)
-    }
-
-    override func stopLoading() {
-        if request.url?.lastPathComponent == "GetSandUsageStatus" {
-            events?.record(.optionalCancelled)
-        }
-    }
 }

@@ -985,3 +985,102 @@ extension String {
             .replacingOccurrences(of: "=", with: "")
     }
 }
+
+final class StalledCursorRequestEvents: @unchecked Sendable {
+    enum Event {
+        case primaryCompleted, optionalStarted, timeoutStarted, timeoutFired, optionalCancelled, fetchReturned
+    }
+
+    let primaryCompleted = TestSignal()
+    let optionalStarted = TestSignal()
+    let optionalCancelled = TestSignal()
+    private let lock = NSLock()
+    private var events: [Event] = []
+
+    var recorded: [Event] { lock.withLock { events } }
+
+    func record(_ event: Event) {
+        lock.withLock { events.append(event) }
+        switch event {
+        case .primaryCompleted: primaryCompleted.signal()
+        case .optionalStarted: optionalStarted.signal()
+        case .optionalCancelled: optionalCancelled.signal()
+        default: break
+        }
+    }
+}
+
+final class StalledCursorTaskObserver: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: URLSessionTask?
+
+    var optionalTask: URLSessionTask? { lock.withLock { task } }
+
+    func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+        if task.originalRequest?.url?.lastPathComponent == "GetSandUsageStatus" {
+            lock.withLock { self.task = task }
+        }
+    }
+
+}
+
+final class StalledCursorGrokBotURLProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    private static var requests: [String: StalledCursorRequestEvents] = [:]
+
+    static func register(_ events: StalledCursorRequestEvents, for host: String) {
+        lock.withLock { requests[host] = events }
+    }
+
+    static func unregister(host: String) {
+        _ = lock.withLock { requests.removeValue(forKey: host) }
+    }
+
+    private var events: StalledCursorRequestEvents? {
+        Self.lock.withLock { Self.requests[request.url?.host ?? ""] }
+    }
+
+    // URLProtocol requires overridable class methods.
+    // swiftlint:disable:next static_over_final_class
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    // URLProtocol requires overridable class methods.
+    // swiftlint:disable:next static_over_final_class
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let events else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        guard request.url?.lastPathComponent == "GetCurrentPeriodUsage" else {
+            events.record(.optionalStarted)
+            return
+        }
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"planUsage":{"autoPercentUsed":25,"apiPercentUsed":5}}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+        events.record(.primaryCompleted)
+    }
+
+    override func stopLoading() {
+        if request.url?.lastPathComponent == "GetSandUsageStatus" {
+            events?.record(.optionalCancelled)
+        }
+    }
+}
