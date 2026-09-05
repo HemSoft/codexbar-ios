@@ -149,20 +149,38 @@ public final class GeminiUsageProvider: UsageProvider {
 
     private let secretStore: SecretStore
     private let session: URLSession
+    private let ownsSession: Bool
     private let usageURL: URL
 
     private static let rpcID = "jSf9Qc"
 
     public let providerID = ProviderID.gemini
 
-    public init(
+    public convenience init(
         secretStore: SecretStore = KeychainService(),
         session: URLSession? = nil,
         usageURL: URL = URL(string: "https://gemini.google.com/usage")!
     ) {
+        self.init(secretStore: secretStore, session: session, sessionConfiguration: .ephemeral, usageURL: usageURL)
+    }
+
+    init(
+        secretStore: SecretStore,
+        session: URLSession? = nil,
+        sessionConfiguration: URLSessionConfiguration,
+        usageURL: URL
+    ) {
         self.secretStore = secretStore
-        self.session = session ?? Self.makeSession()
+        self.session = session ?? Self.makeSession(configuration: sessionConfiguration)
+        self.ownsSession = session == nil
         self.usageURL = usageURL
+    }
+
+    deinit {
+        // Delegated sessions retain their delegate until explicitly invalidated.
+        if ownsSession {
+            session.invalidateAndCancel()
+        }
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
@@ -546,8 +564,7 @@ public final class GeminiUsageProvider: UsageProvider {
         }
     }
 
-    private static func makeSession() -> URLSession {
-        let configuration = URLSessionConfiguration.ephemeral
+    private static func makeSession(configuration: URLSessionConfiguration) -> URLSession {
         configuration.httpCookieStorage = nil
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpShouldSetCookies = false
