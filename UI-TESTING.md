@@ -21,7 +21,10 @@ attachments and the accessibility hierarchy from the result bundle. Open the
 ## Journeys
 
 Both tests start with a new UUID storage namespace and use accessibility text
-size 2, English labels, and the US locale.
+size 2, English labels, and the US locale. Navigation uses the real views and
+actions. Tests wait for settings destinations, keep text fields inside the
+visible form below its navigation bar, and wait for the keyboard before
+entering text. Animations retain the normal app behavior.
 
 - `testAccountSetupPersistsGroupAndCredentialAtAccessibilitySize` starts with
   no accounts or groups, adds a group through Settings, opens Add Account,

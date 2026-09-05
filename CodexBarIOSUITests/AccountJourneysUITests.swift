@@ -6,11 +6,9 @@ final class AccountJourneysUITests: XCTestCase {
         let app = launch(scenario: "empty")
         XCTAssertTrue(app.buttons["dashboard-add-account"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons["dashboard-add-account"].label, "Add Account")
-        tap(app.buttons["Open settings"], in: app)
-        tap(app.descendants(matching: .any)["settings-accountsAndGroups"].firstMatch, in: app)
+        openAccountsAndGroups(in: app)
         let groupName = app.textFields["New group"]
-        tap(groupName, in: app)
-        groupName.typeText("Fixture Team")
+        enter("Fixture Team", into: groupName, in: app)
         tap(app.buttons["Add group"], in: app)
         XCTAssertEqual(app.textFields["Group name"].value as? String, "Fixture Team")
         tap(app.buttons["Done"], in: app)
@@ -26,8 +24,7 @@ final class AccountJourneysUITests: XCTestCase {
         XCTAssertTrue(groupPicker.label.contains("Group"))
         XCTAssertEqual(groupPicker.value as? String, "Fixture Team")
         let credential = app.secureTextFields["Paste OpenRouter Management API Key"]
-        tap(credential, in: app)
-        credential.typeText("ui-test-credential")
+        enter("ui-test-credential", into: credential, in: app)
         tap(app.buttons["Save Management API Key"], in: app)
         XCTAssertTrue(app.buttons["Remove Saved Credential"].waitForExistence(timeout: 5))
         tap(app.buttons["Done"], in: app)
@@ -38,8 +35,7 @@ final class AccountJourneysUITests: XCTestCase {
         app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
         app.launch()
         assertBalance("25.00", freshness: "fresh", in: app)
-        tap(app.buttons["Open settings"], in: app)
-        tap(app.descendants(matching: .any)["settings-accountsAndGroups"].firstMatch, in: app)
+        openAccountsAndGroups(in: app)
         let savedAccount = app.otherElements["OpenRouter 1"]
         reveal(savedAccount, in: app)
         XCTAssertEqual(savedAccount.value as? String, "OpenRouter configured, Fixture Team group")
@@ -130,10 +126,56 @@ final class AccountJourneysUITests: XCTestCase {
         XCTAssertTrue(balance.label.lowercased().contains("balance"), balance.label)
     }
 
+    private func openAccountsAndGroups(in app: XCUIApplication) {
+        tap(app.buttons["Open settings"], in: app)
+        let category = app.descendants(matching: .any)["settings-accountsAndGroups"].firstMatch
+        XCTAssertTrue(category.waitForExistence(timeout: 10), app.debugDescription)
+        tap(category, in: app)
+        XCTAssertTrue(app.navigationBars["Accounts & Groups"].waitForExistence(timeout: 10), app.debugDescription)
+    }
+
     private func tap(_ element: XCUIElement, in app: XCUIApplication) {
         reveal(element, in: app)
+        XCTAssertTrue(element.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         XCTAssertTrue(element.isHittable, app.debugDescription)
         element.tap()
+    }
+
+    private func enter(_ text: String, into field: XCUIElement, in app: XCUIApplication) {
+        reveal(field, in: app)
+        revealField(field, in: app)
+        tap(field, in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        field.typeText(text)
+    }
+
+    private func revealField(_ field: XCUIElement, in app: XCUIApplication) {
+        XCTAssertTrue(field.waitForExistence(timeout: 5), app.debugDescription)
+        let identifier = field.identifier.isEmpty ? (field.placeholderValue ?? field.label) : field.identifier
+        let form = app.collectionViews.containing(field.elementType, identifier: identifier).firstMatch
+        XCTAssertTrue(form.waitForExistence(timeout: 5), "Expected the form containing \(identifier)")
+        for _ in 0..<12 {
+            let viewport = fieldViewport(form: form, in: app)
+            if viewport.contains(field.frame) && field.isHittable { return }
+            // Short drags keep a field from jumping behind a sheet's navigation bar.
+            let upward = field.frame.midY > viewport.midY
+            let start = form.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.65 : 0.35))
+            let end = form.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.4 : 0.6))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTFail("Field is outside the visible form: \(field).\n\(app.debugDescription)")
+    }
+
+    private func fieldViewport(form: XCUIElement, in app: XCUIApplication) -> CGRect {
+        let frame = form.frame
+        let bars = app.navigationBars.allElementsBoundByIndex.map(\.frame).filter {
+            $0.width <= frame.width + 1 && $0.intersects(frame)
+        }
+        let top = max(frame.minY, bars.map(\.maxY).max() ?? frame.minY)
+        let keyboard = app.keyboards.firstMatch
+        let bottom = keyboard.exists ? min(frame.maxY, keyboard.frame.minY) : frame.maxY
+        return CGRect(x: frame.minX, y: top, width: frame.width, height: max(0, bottom - top))
+            .insetBy(dx: 4, dy: 4)
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
