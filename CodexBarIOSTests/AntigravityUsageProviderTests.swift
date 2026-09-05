@@ -89,6 +89,40 @@ final class AntigravityUsageProviderTests: XCTestCase {
         XCTAssertNil(try? AntigravityCredentials.parse("not JSON"))
     }
 
+    func testNullExpiryFallsBackToMillisecondsOrRemainsAbsent() throws {
+        let fallback = try AntigravityCredentials.parse(#"{"access_token":"token","expiry":null,"expiry_date":1900000000000}"#)
+        XCTAssertEqual(fallback.expiry, Date(timeIntervalSince1970: 1_900_000_000))
+        let missing = try AntigravityCredentials.parse(#"{"access_token":"token","expiry":null,"expiry_date":null}"#)
+        XCTAssertNil(missing.expiry)
+    }
+
+    func testRejectedTokenWithoutExpiryRenewsOnce() async throws {
+        let secrets = MemorySecretStore()
+        let account = ProviderConfigurationStore.keychainAccount(for: Self.configuration)
+        var imported = try AntigravityCredentials.parse(Self.expiredCredential)
+        imported.expiry = nil
+        let original = try imported.encoded()
+        try secrets.saveSecret(original, account: account)
+        let rejected = LockedFlag()
+        let fixture = IsolatedTestURLSession { request in
+            if request.url == AntigravityUsageProvider.tokenURL {
+                XCTAssertTrue(rejected.currentValue())
+                return (try Self.response(request, status: 200), Data(#"{"access_token":"renewed","expires_in":3600}"#.utf8))
+            }
+            if request.value(forHTTPHeaderField: "Authorization") == "Bearer old" {
+                rejected.set()
+                return (try Self.response(request, status: 401), Data())
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer renewed")
+            return (try Self.response(request, status: 200), try Self.payload())
+        }
+        defer { fixture.invalidate() }
+        let provider = AntigravityUsageProvider(secretStore: secrets, sessionConfiguration: fixture.session.configuration)
+        let result = try await provider.fetchUsage(for: Self.configuration)
+        XCTAssertNil(result.failureMessage)
+        XCTAssertTrue(rejected.currentValue())
+    }
+
     func testRequestUsesVerifiedBackendAndOnlyThisAccountsToken() async throws {
         let secrets = MemorySecretStore()
         try secrets.saveSecret(#"{"access_token":"account-one"}"#, account: ProviderConfigurationStore.keychainAccount(for: Self.configuration))

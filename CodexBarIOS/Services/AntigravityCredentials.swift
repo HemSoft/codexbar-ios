@@ -63,13 +63,13 @@ struct AntigravityCredentials: Codable, Equatable, Sendable {
     }
 
     private static func expiryDate(in token: [String: Any]) throws -> Date? {
-        if let raw = token["expiry"] {
+        if let raw = token["expiry"], !(raw is NSNull) {
             guard let string = raw as? String, let date = AntigravityQuotaParser.date(string) else {
                 throw CredentialError.invalid
             }
             return date
         }
-        if let raw = token["expiry_date"] {
+        if let raw = token["expiry_date"], !(raw is NSNull) {
             guard let number = raw as? NSNumber,
                   CFGetTypeID(number) != CFBooleanGetTypeID(),
                   number.doubleValue.isFinite, number.doubleValue > 0 else { throw CredentialError.invalid }

@@ -135,6 +135,9 @@ public final class AntigravityUsageProvider: UsageProvider {
         return request
     }
 
+    // Account replacement and disconnect run on MainActor in ProviderSettingsViewModel.
+    // Keep this synchronous compare-and-save on the same actor so logout cannot
+    // interleave between the two Keychain operations. Network I/O stays off actor.
     @MainActor
     private func saveRenewedCredential(_ encoded: String, account: String, original: String) throws {
         guard try secretStore.readSecret(account: account) == original else { throw FetchError.changedCredential }
