@@ -39,6 +39,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Expose the selected account group as a separate accessibility value in account
+  settings. ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
+
 - Release temporary Gemini network sessions after connection checks complete,
   fail, or are canceled, preventing repeated sign-in attempts from retaining them.
   ([#303](https://github.com/HemSoft/codexbar-ios/issues/303))
@@ -75,6 +78,11 @@ building, testing, or releasing the app.
   ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))
 
 ### Developer Experience
+
+- Require isolated iPhone and iPad UI journeys for account setup, saved group
+  selection, dashboard recovery, History, and account deep links in pull requests.
+  Failure screenshots and result bundles are retained for diagnosis.
+  ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
 
 - Added per-function iOS and watchOS coverage and risk reports to the required
   test checks, with explicit instrumentation gaps and a gate against new or

@@ -51,7 +51,7 @@ jobs:
   ios-tests:
     name: iOS tests
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 50
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -121,6 +121,42 @@ jobs:
         with:
           name: CodexBarIOSTests-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/CodexBarIOSTests.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Run iPhone UI journeys
+        id: ui-iphone
+        if: ${{ !cancelled() }}
+        env:
+          UI_TEST_RESULTS_DIR: ${{ runner.temp }}/ui-tests
+          UI_TEST_DERIVED_DATA_DIR: ${{ runner.temp }}/DerivedData-UI
+        run: ./scripts/run-ui-tests.sh iphone
+
+      - name: Run iPad UI journeys
+        id: ui-ipad
+        if: ${{ !cancelled() }}
+        env:
+          UI_TEST_RESULTS_DIR: ${{ runner.temp }}/ui-tests
+          UI_TEST_DERIVED_DATA_DIR: ${{ runner.temp }}/DerivedData-UI
+        run: ./scripts/run-ui-tests.sh ipad
+
+      - name: Require both UI destinations
+        if: ${{ always() }}
+        env:
+          IPHONE_OUTCOME: ${{ steps.ui-iphone.outcome }}
+          IPAD_OUTCOME: ${{ steps.ui-ipad.outcome }}
+        run: |
+          if [[ "$IPHONE_OUTCOME" != success || "$IPAD_OUTCOME" != success ]]; then
+            echo "Both UI destinations must pass. iPhone=$IPHONE_OUTCOME iPad=$IPAD_OUTCOME" >&2
+            exit 1
+          fi
+
+      - name: Preserve UI test results and failure screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: CodexBarIOSUITests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ui-tests
           if-no-files-found: warn
           retention-days: 14
 

@@ -134,6 +134,8 @@
 		F31000000000000000000006 /* WatchDashboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* WatchDashboardSnapshot.swift */; };
 		F31000000000000000000007 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F32000000000000000000006 /* PrivacyInfo.xcprivacy */; };
 		F31000000000000000000008 /* CodexBarWatchWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F32000000000000000000008 /* CodexBarWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A30700000000000000000001 /* AccountJourneysUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30700000000000000000011 /* AccountJourneysUITests.swift */; };
+		A30700000000000000000002 /* UITestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30700000000000000000012 /* UITestFixtures.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -171,6 +173,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = F35000000000000000000001;
 			remoteInfo = CodexBarWatchWidget;
+		};
+		A30700000000000000000021 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 400000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 500000000000000000000001;
+			remoteInfo = CodexBarIOS;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -329,6 +338,9 @@
 		F32000000000000000000006 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F32000000000000000000007 /* CodexBarWatchWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodexBarWatchWidget.entitlements; sourceTree = "<group>"; };
 		F32000000000000000000008 /* CodexBarWatchWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CodexBarWatchWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30700000000000000000011 /* AccountJourneysUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountJourneysUITests.swift; sourceTree = "<group>"; };
+		A30700000000000000000012 /* UITestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFixtures.swift; sourceTree = "<group>"; };
+		A30700000000000000000013 /* CodexBarIOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexBarIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -374,6 +386,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A30700000000000000000031 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -385,6 +404,7 @@
 				D70000000000000000000001 /* CodexBarWatch */,
 				F37000000000000000000001 /* CodexBarWatchWidget */,
 				700000000000000000000007 /* CodexBarIOSTests */,
+				A30700000000000000000041 /* CodexBarIOSUITests */,
 				D70000000000000000000003 /* CodexBarWatchTests */,
 				700000000000000000000008 /* Products */,
 			);
@@ -443,6 +463,7 @@
 				200000000000000000000042 /* DashboardOrchestrator.swift */,
 				20000000000000000000003C /* AppUpdateService.swift */,
 				20000000000000000000003D /* AppStoreScreenshotFixtures.swift */,
+				A30700000000000000000012 /* UITestFixtures.swift */,
 				E20000000000000000000002 /* WatchSnapshotCoordinator.swift */,
 				200000000000000000000034 /* UsageAlertEvaluator.swift */,
 				200000000000000000000035 /* LocalUsageAlertNotifier.swift */,
@@ -521,6 +542,7 @@
 			children = (
 				20000000000000000000000C /* CodexBarIOS.app */,
 				20000000000000000000000D /* CodexBarIOSTests.xctest */,
+				A30700000000000000000013 /* CodexBarIOSUITests.xctest */,
 				200000000000000000000031 /* CodexBarIOSWidget.appex */,
 				D20000000000000000000008 /* CodexBarWatch.app */,
 				F32000000000000000000008 /* CodexBarWatchWidget.appex */,
@@ -603,6 +625,14 @@
 				F32000000000000000000007 /* CodexBarWatchWidget.entitlements */,
 			);
 			path = CodexBarWatchWidget;
+			sourceTree = "<group>";
+		};
+		A30700000000000000000041 /* CodexBarIOSUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A30700000000000000000011 /* AccountJourneysUITests.swift */,
+			);
+			path = CodexBarIOSUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -724,6 +754,25 @@
 			productReference = F32000000000000000000008 /* CodexBarWatchWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		A30700000000000000000051 /* CodexBarIOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A30700000000000000000061 /* Build configuration list for PBXNativeTarget "CodexBarIOSUITests" */;
+			buildPhases = (
+				A30700000000000000000033 /* Sources */,
+				A30700000000000000000031 /* Frameworks */,
+				A30700000000000000000032 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A30700000000000000000071 /* PBXTargetDependency */,
+				A30700000000000000000072 /* PBXTargetDependency */,
+			);
+			name = CodexBarIOSUITests;
+			productName = CodexBarIOSUITests;
+			productReference = A30700000000000000000013 /* CodexBarIOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -739,6 +788,10 @@
 					};
 					500000000000000000000002 = {
 						CreatedOnToolsVersion = 16.0;
+						TestTargetID = 500000000000000000000001;
+					};
+					A30700000000000000000051 = {
+						CreatedOnToolsVersion = 26.0;
 						TestTargetID = 500000000000000000000001;
 					};
 					500000000000000000000003 = {
@@ -774,6 +827,7 @@
 			targets = (
 				500000000000000000000001 /* CodexBarIOS */,
 				500000000000000000000002 /* CodexBarIOSTests */,
+				A30700000000000000000051 /* CodexBarIOSUITests */,
 				500000000000000000000003 /* CodexBarIOSWidget */,
 				D50000000000000000000001 /* CodexBarWatch */,
 				D50000000000000000000002 /* CodexBarWatchTests */,
@@ -829,6 +883,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				F31000000000000000000007 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A30700000000000000000032 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -897,6 +958,7 @@
 				100000000000000000000042 /* DashboardOrchestrator.swift in Sources */,
 				10000000000000000000003B /* AppUpdateService.swift in Sources */,
 				10000000000000000000003C /* AppStoreScreenshotFixtures.swift in Sources */,
+				A30700000000000000000002 /* UITestFixtures.swift in Sources */,
 				10000000000000000000003D /* UserFacingDateTimeFormatter.swift in Sources */,
 				100000000000000000000028 /* WidgetRefreshInterval.swift in Sources */,
 				100000000000000000000029 /* WidgetSnapshotStore.swift in Sources */,
@@ -994,6 +1056,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A30700000000000000000033 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A30700000000000000000001 /* AccountJourneysUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -1045,6 +1115,15 @@
 		210000000000000000000026 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			productRef = 210000000000000000000016 /* SwiftLintBuildToolPlugin */;
+		};
+		A30700000000000000000071 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 500000000000000000000001 /* CodexBarIOS */;
+			targetProxy = A30700000000000000000021 /* PBXContainerItemProxy */;
+		};
+		A30700000000000000000072 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = A30700000000000000000073 /* SwiftLintBuildToolPlugin */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1483,6 +1562,50 @@
 			};
 			name = Release;
 		};
+		A30700000000000000000081 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = W2A23PX5BP;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodexBarIOS;
+			};
+			name = Debug;
+		};
+		A30700000000000000000082 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = W2A23PX5BP;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hemsoft.CodexBarIOSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodexBarIOS;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1549,6 +1672,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A30700000000000000000061 /* Build configuration list for PBXNativeTarget "CodexBarIOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A30700000000000000000081 /* Debug */,
+				A30700000000000000000082 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1589,6 +1721,11 @@
 			productName = "plugin:SwiftLintBuildToolPlugin";
 		};
 		210000000000000000000016 /* SwiftLintBuildToolPlugin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 210000000000000000000001 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */;
+			productName = "plugin:SwiftLintBuildToolPlugin";
+		};
+		A30700000000000000000073 /* SwiftLintBuildToolPlugin */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 210000000000000000000001 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */;
 			productName = "plugin:SwiftLintBuildToolPlugin";

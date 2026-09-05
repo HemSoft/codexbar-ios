@@ -24,11 +24,12 @@ The Windows reference implementation is checked out beside this repo at:
   presentation-ready account metrics, visualization choices, ordering, and
   freshness from iPhone; provider setup, credentials, and provider networking
   remain iPhone-only
-- Demo data limited to previews, smoke tests, widget galleries, and screenshots
+- Demo data limited to previews, smoke and isolated UI tests, widget galleries, and screenshots
 - Simulator unit tests spanning configuration and authentication, provider
   parsing and networking, dashboard and settings, widgets, history, and alerts,
   plus watchOS foundation tests and a SwiftPM smoke harness; see
-  [Build and Test](AGENTS.md#build-and-test)
+  [Build and Test](AGENTS.md#build-and-test) and the isolated iPhone/iPad
+  [account UI journeys](UI-TESTING.md)
 
 ## Requirements
 

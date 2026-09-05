@@ -15,6 +15,7 @@
     }
   },
   "excluded_files": {
+    "CodexBarIOS/Services/UITestFixtures.swift": "DEBUG-only simulator UI fixtures, activated by explicit UUID-scoped launch contract; synthetic data and no live provider networking. Exercised by required UI journeys, excluded from production risk budgets.",
     "CodexBarIOS/Services/AppStoreScreenshotFixtures.swift": "DEBUG-only deterministic App Store screenshot data; never used for live accounts. Measured counters remain visible."
   },
   "excluded_symbols": {

@@ -35,6 +35,7 @@ let package = Package(
                 "Info.plist",
                 "PrivacyInfo.xcprivacy",
                 "Resources",
+                "Services/UITestFixtures.swift",
                 "Views",
             ],
             plugins: [

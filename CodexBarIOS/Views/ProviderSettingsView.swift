@@ -46,12 +46,17 @@ struct ProviderSettingsView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
+                .accessibilityIdentifier("account-label")
+
                 Picker("Group", selection: viewModel.binding(for: \.groupID)) {
                     Text(ProviderAccountGroup.ungroupedDisplayName).tag(Optional<String>.none)
                     ForEach(configurationStore.groups) { group in
                         Text(group.name).tag(Optional(group.id))
                     }
                 }
+
+                .accessibilityIdentifier("account-group-picker")
+                .accessibilityValue(configurationStore.groupName(for: configuration.groupID))
 
                 Picker("Auth method", selection: viewModel.binding(for: \.authMethod)) {
                     ForEach(availableAuthMethods) { method in
