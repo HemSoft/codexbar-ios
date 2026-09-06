@@ -1,4 +1,4 @@
-"""Exercise the audit CLI with command doubles, without launching Xcode."""
+"""Exercise the audit CLI on macOS with command doubles, without launching Xcode."""
 
 import json
 import os

@@ -58,7 +58,8 @@ The runner:
 - exits successfully only when every selected gate passes.
 
 Override simulator selection only when the task requires a particular
-destination:
+destination for the iOS/watchOS build and unit-test gates. The canonical
+strict-concurrency script retains its generic simulator build destinations:
 
 ```sh
 PERFECTION_IOS_DESTINATION='platform=iOS Simulator,name=iPhone 17,OS=latest' \
@@ -108,7 +109,8 @@ Treat status as historical evidence, not proof about the current worktree. Run
 a fresh audit before declaring the current revision ready. The score counts
 only selected gates, and the summary names the separate checks it did not run.
 
-Verify runner selection and failure reporting without invoking Xcode:
+Verify runner selection and failure reporting on macOS without invoking Xcode.
+The tests exercise the existing macOS shell helpers and run in the macOS CI job:
 
 ```sh
 python3 -m unittest discover -s scripts/tests -p 'test_perfection_runner.py' -v
