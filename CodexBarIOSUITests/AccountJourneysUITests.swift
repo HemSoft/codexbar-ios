@@ -145,6 +145,12 @@ final class AccountJourneysUITests: XCTestCase {
         assertGoogleMetric("antigravity.gemini-weekly", contains: "Unavailable", in: app)
         assertGoogleMetric("antigravity.3p-5h", contains: "Disabled", in: app)
         assertGoogleMetric("antigravity.gemini-5h", contains: "0%", in: app)
+        openCodingCustomizer(in: app)
+        for id in Self.codingMetricIDs {
+            reveal(app.buttons["customize-metric-\(id)"], in: app)
+            XCTAssertTrue(app.buttons["customize-metric-\(id)"].isHittable)
+        }
+        tap(app.buttons["Done"], in: app)
         openGoogleAccount("Coding Fixture", in: app)
         for (id, reason) in [("antigravity.gemini-weekly", "Unavailable"), ("antigravity.3p-5h", "Disabled")] {
             let toggle = app.switches["account-metric-visibility-\(id)"]
@@ -153,13 +159,7 @@ final class AccountJourneysUITests: XCTestCase {
             XCTAssertEqual(toggle.value as? String, "1")
         }
         dismissAccountSettings(in: app)
-        openCodingCustomizer(in: app)
-        for id in Self.codingMetricIDs {
-            reveal(app.buttons["customize-metric-\(id)"], in: app)
-            XCTAssertTrue(app.buttons["customize-metric-\(id)"].isHittable)
-        }
-        tap(app.buttons["Done"], in: app)
-        tap(app.buttons["Refresh usage"], in: app)
+        // Dismissing account settings refreshes the account and consumes the failure stage.
         assertGoogleMetric("antigravity.gemini-5h", contains: "stale", in: app)
         assertGoogleMetric("antigravity.gemini-weekly", contains: "Unavailable", in: app)
         tap(app.buttons["Refresh usage"], in: app)
