@@ -1,0 +1,7 @@
+{
+  "revision": "3395ee6094ce8e4199577f7ede493e3a50ee1269",
+  "maximumLatencyRatio": 1.25,
+  "maximumRunCV": 0.15,
+  "maximumSerializedRatio": 1.0,
+  "maximumGrowthBytesPerAccount": 0
+}

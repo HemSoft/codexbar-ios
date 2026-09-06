@@ -17,6 +17,10 @@ let package = Package(
             name: "CodexBarIOSSmokeTests",
             targets: ["CodexBarIOSSmokeTests"]
         ),
+        .executable(
+            name: "UsageHistoryBenchmark",
+            targets: ["UsageHistoryBenchmark"]
+        ),
     ],
     dependencies: [
         .package(
@@ -25,6 +29,14 @@ let package = Package(
         ),
     ],
     targets: [
+        .executableTarget(
+            name: "UsageHistoryBenchmark",
+            dependencies: ["CodexBarIOS"],
+            path: "PerformanceBenchmarks",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
+            ]
+        ),
         .target(
             name: "CodexBarIOS",
             path: "CodexBarIOS",

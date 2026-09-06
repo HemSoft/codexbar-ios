@@ -30,12 +30,25 @@ The Windows reference implementation is checked out beside this repo at:
   plus watchOS foundation tests and a SwiftPM smoke harness; see
   [Build and Test](AGENTS.md#build-and-test) and the isolated iPhone/iPad
   [account UI journeys](UI-TESTING.md)
+- A measured Release [usage-history performance budget](USAGE-HISTORY-PERFORMANCE.md)
+  with retained-data limits and a weekly regression gate
 
 ## Requirements
 
 - Xcode 16 or later
 - iOS 17 or later
 - watchOS 10 or later for the companion app
+
+## Local validation
+
+For a local readiness audit, run
+`./.agents/skills/perfection/scripts/run-perfection.sh`. Its seven gates cover
+pinned repository-wide SwiftLint, complete strict concurrency, iOS build and
+unit tests, SwiftPM smoke tests, and watchOS build and unit tests. Use `--list`
+for gate names or `--status` for the most recent historical summary. See the
+[perfection skill](.agents/skills/perfection/SKILL.md) for focused runs and the
+separate UI, function-risk, security, and performance checks that still need
+verification before merge or release.
 
 ## GitHub Copilot Sign-In
 

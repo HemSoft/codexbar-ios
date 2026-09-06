@@ -90,9 +90,21 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Include pinned repository-wide SwiftLint and complete strict-concurrency
+  checks in the local perfection audit. Report failures alongside every
+  selected gate and identify separate readiness checks outside its score.
+  ([#311](https://github.com/HemSoft/codexbar-ios/issues/311))
+
+- Measure usage-history recording and chart generation against a frozen Release
+  baseline, with a regression gate for latency, serialized size, and retained
+  history growth on relevant pull requests and a weekly schedule.
+  ([#310](https://github.com/HemSoft/codexbar-ios/issues/310))
+
 - Add Swift security analysis of the app, widgets, watch companion, and shared
   code on pull requests, main, and a weekly schedule, with published findings
-  and a gate for high-severity findings or incomplete extraction.
+  and a gate for unreviewed high-severity findings or incomplete extraction.
+  Pull requests analyze unchanged source too, with three documented
+  non-actionable findings that require re-review after production changes.
   ([#309](https://github.com/HemSoft/codexbar-ios/issues/309))
 
 - Require isolated iPhone and iPad UI journeys for account setup, saved group

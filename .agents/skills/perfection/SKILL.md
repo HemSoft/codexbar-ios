@@ -1,27 +1,37 @@
 ---
 name: perfection
-description: Run and repair the complete CodexBar iOS quality-gate suite. Use when asked for a perfection audit, full repository validation, merge or release readiness, all supported builds and tests, quality-gate status, or systematic repair of failing iOS, SwiftPM, or watchOS checks.
+description: Run and repair the seven local CodexBar iOS lint, concurrency, build, and test gates. Use when asked for a perfection audit, full repository validation, merge or release readiness, quality-gate status, or systematic repair of failing iOS, SwiftPM, or watchOS checks. Report separate readiness checks outside this runner.
 ---
 
 # Perfection
 
-Audit every quality gate that CodexBar iOS actually supports, report all
-failures together, and drive the repository back to a fully passing state.
+Audit the seven local gates below, report all failures together, and repair
+failures without weakening the repository's thresholds.
 
 ## Gates
 
 | Gate | Target |
 | --- | --- |
+| SwiftLint | The pinned SwiftPM plugin lints the repository with `.swiftlint.yml` strict mode |
+| Strict concurrency | `scripts/check-strict-concurrency.sh` runs complete checking and its existing diagnostic policy |
 | iOS build | `CodexBarIOS` builds for an available iPhone simulator with warnings treated as errors |
 | iOS tests | All `CodexBarIOSTests` pass |
 | SwiftPM smoke | `CodexBarIOSSmokeTests` exits successfully |
 | watchOS build | `CodexBarWatch` builds for an available Apple Watch simulator with warnings treated as errors |
 | watchOS tests | All `CodexBarWatchTests` pass |
 
-Do not invent gates for formatting, linting, dependency vulnerabilities, code
-coverage, or complexity. The repository does not currently configure supported
-tools or thresholds for them. Add a gate only when the repository adopts the
-corresponding tool and documents it in `AGENTS.md`.
+The standalone lint command is
+`xcrun swift package plugin --allow-writing-to-package-directory swiftlint lint --reporter xcode .`.
+Use the resolved `SwiftLintPlugins` version and preserve all lint/compiler
+thresholds. Target-level build plugins do not replace this repository-wide gate.
+
+This runner does not run the separate [UI journeys](../../../UI-TESTING.md),
+[function coverage and risk analysis](../../../FUNCTION-RISK.md),
+[security analysis](../../../SECURITY-ANALYSIS.md), or
+[performance budgets](../../../USAGE-HISTORY-PERFORMANCE.md). These checks are
+supported elsewhere in the repository. Verify the applicable checks and live
+GitHub requirements before declaring merge or release readiness. Do not count
+an unrun or unavailable analyzer as passing or invent unsupported gates.
 
 ## Audit
 
@@ -34,17 +44,22 @@ Run the deterministic audit from the repository root:
 The runner:
 
 - selects the first available iPhone simulator and an Apple Watch simulator
-  compatible with the active Xcode SDK, matching CI;
+  compatible with the active Xcode SDK, matching CI; `jq` is required only when
+  a selected gate needs to discover a simulator destination;
 - uses `/Applications/Xcode.app/Contents/Developer` unless `DEVELOPER_DIR` is
-  already set;
-- disables code signing and treats Swift and Clang warnings as errors;
+  already set; the existing strict-concurrency script pins that Xcode path;
+- disables code signing and treats Swift and Clang warnings as errors for
+  simulator build/test gates; lint and concurrency retain their existing policies;
 - runs all gates even when an earlier gate fails;
-- stores complete logs, result bundles, and a summary under the ignored
-  `DerivedData/Perfection/` directory;
+- stores each gate's complete log, simulator test result bundles, and a summary
+  under the ignored `DerivedData/Perfection/` directory; strict concurrency uses
+  its own DerivedData inside the run directory, so its clean build cannot remove
+  developer build products; the lint command retains its standard package cache;
 - exits successfully only when every selected gate passes.
 
 Override simulator selection only when the task requires a particular
-destination:
+destination for the iOS/watchOS build and unit-test gates. The canonical
+strict-concurrency script retains its generic simulator build destinations:
 
 ```sh
 PERFECTION_IOS_DESTINATION='platform=iOS Simulator,name=iPhone 17,OS=latest' \
@@ -58,8 +73,8 @@ Run one gate while diagnosing or verifying a focused fix:
 ./.agents/skills/perfection/scripts/run-perfection.sh --gate ios-tests
 ```
 
-Valid gate names are `ios-build`, `ios-tests`, `swiftpm-smoke`, `watch-build`,
-and `watch-tests`. Use `--list` to print them.
+Valid gate names are `swiftlint`, `strict-concurrency`, `ios-build`, `ios-tests`,
+`swiftpm-smoke`, `watch-build`, and `watch-tests`. Use `--list` to print them.
 
 Report the final score, each failing gate, and the audit artifact directory.
 Summarize the root cause from the complete gate log rather than relying only on
@@ -91,7 +106,15 @@ Print the most recent local summary without rerunning gates:
 ```
 
 Treat status as historical evidence, not proof about the current worktree. Run
-a fresh audit before declaring the current revision ready.
+a fresh audit before declaring the current revision ready. The score counts
+only selected gates, and the summary names the separate checks it did not run.
+
+Verify runner selection and failure reporting on macOS without invoking Xcode.
+The tests exercise the existing macOS shell helpers and run in the macOS CI job:
+
+```sh
+python3 -m unittest discover -s scripts/tests -p 'test_perfection_runner.py' -v
+```
 
 ## Boundaries
 
