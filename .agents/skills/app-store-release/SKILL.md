@@ -71,8 +71,9 @@ revocation, account roles, or a material release-policy choice.
 - Treat `CHANGELOG.md` as release history and `APP-STORE.md` as the release
   tracker. Check `PRIVACY.md`, `SUPPORT.md`, `DEVICE-DEPLOYMENT.md`, Fastlane
   metadata, Xcode settings, and the signing/export scripts as applicable.
-- Invoke the repository `perfection` skill for supported builds and tests, and
-  run the strict SwiftLint command documented in `AGENTS.md`.
+- Invoke the repository `perfection` skill for its seven local lint,
+  strict-concurrency, build, and test gates. Verify separate readiness checks
+  documented by the skill and the live repository requirements.
 - Invoke `issue-to-mergeable-pr` for release-tracker changes and
   `pr-processor` when resuming their review gate. Do not bypass checks,
   reviews, or merge protections.
@@ -162,8 +163,10 @@ intended version differs from the ledger.
    to be empty. The full status may contain only the inspected History entry
    required by this skill's hooks; record that diff in the ledger. Stop if any
    other tracked or untracked repository content could alter the build. Run
-   strict SwiftLint and invoke `perfection` for the complete current suite: iOS
-   build and tests, SwiftPM smoke, watchOS build and tests.
+   `perfection` for its seven local gates: pinned repository-wide SwiftLint,
+   complete strict concurrency, iOS build and tests, SwiftPM smoke, and watchOS
+   build and tests. The score excludes separate UI, function-risk, security,
+   and performance checks; verify applicable results before archive creation.
 2. Record exact commands, start/end timestamps, candidate SHA, results, and
    artifact locations. Retry an infrastructure or simulator flake only after
    preserving its evidence and explaining why it is non-product; never use a

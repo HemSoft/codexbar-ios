@@ -84,6 +84,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Include pinned repository-wide SwiftLint and complete strict-concurrency
+  checks in the local perfection audit. Report failures alongside every
+  selected gate and identify separate readiness checks outside its score.
+  ([#311](https://github.com/HemSoft/codexbar-ios/issues/311))
+
 - Measure usage-history recording and chart generation against a frozen Release
   baseline, with a regression gate for latency, serialized size, and retained
   history growth on relevant pull requests and a weekly schedule.

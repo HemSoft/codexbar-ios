@@ -17,11 +17,11 @@ usage() {
   cat <<'EOF'
 Usage: run-perfection.sh [--gate NAME | --list | --status]
 
-Run all CodexBar iOS quality gates, or one selected gate.
+Run the seven local CodexBar iOS audit gates, or one selected gate.
 
 Options:
-  --gate NAME  Run one gate: ios-build, ios-tests, swiftpm-smoke,
-               watch-build, or watch-tests.
+  --gate NAME  Run one gate: swiftlint, strict-concurrency, ios-build,
+               ios-tests, swiftpm-smoke, watch-build, or watch-tests.
   --list       List supported gate names.
   --status     Print the most recent local audit summary.
   -h, --help   Show this help.
@@ -36,6 +36,8 @@ EOF
 
 list_gates() {
   cat <<'EOF'
+swiftlint
+strict-concurrency
 ios-build
 ios-tests
 swiftpm-smoke
@@ -46,7 +48,7 @@ EOF
 
 is_valid_gate() {
   case "$1" in
-    ios-build|ios-tests|swiftpm-smoke|watch-build|watch-tests) return 0 ;;
+    swiftlint|strict-concurrency|ios-build|ios-tests|swiftpm-smoke|watch-build|watch-tests) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -199,6 +201,19 @@ run_gate() {
 }
 
 run_gate \
+  "swiftlint" \
+  "Repository SwiftLint" \
+  xcrun swift package plugin \
+    --allow-writing-to-package-directory \
+    swiftlint lint \
+    --reporter xcode .
+
+run_gate \
+  "strict-concurrency" \
+  "Complete strict concurrency" \
+  "$repo_root/scripts/check-strict-concurrency.sh"
+
+run_gate \
   "ios-build" \
   "iOS simulator build" \
   xcodebuild \
@@ -270,6 +285,7 @@ summary_path="$run_dir/summary.md"
   echo "- Revision: \`$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\`"
   echo "- Worktree: \`$(git status --porcelain | wc -l | tr -d ' ')\` changed path(s)"
   echo "- Artifacts: \`$run_dir\`"
+  echo "- Selection: \`${selected_gate:-all seven local gates}\`"
   echo
   echo "| Gate | Status | Log |"
   echo "| --- | --- | --- |"
@@ -279,7 +295,10 @@ summary_path="$run_dir/summary.md"
     index=$((index + 1))
   done
   echo
-  echo "**Perfection score: $pass_count / ${#gate_keys[@]} gates passing.**"
+  echo "**Perfection score: $pass_count / ${#gate_keys[@]} selected gates passing.**"
+  echo
+  echo "This audit does not run UI journeys, function coverage/risk analysis, security analysis, or performance budgets."
+  echo "Verify those separate checks before declaring merge or release readiness; they are not counted as passing here."
 } >"$summary_path"
 
 cp "$summary_path" "$output_root/latest-summary.md"
