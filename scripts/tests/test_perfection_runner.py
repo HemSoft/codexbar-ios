@@ -120,7 +120,7 @@ sys.exit(23 if os.environ.get("PERFECTION_TEST_FAIL") == gate else 0)
         (self.commands / "jq").unlink()
         for command in [
             "bash", "python3", "dirname", "date", "mkdir", "cat", "tail",
-            "wc", "tr", "cp", "env", "mktemp", "rm",
+            "wc", "tr", "cp", "env", "mktemp", "rm", "grep",
         ]:
             target = shutil.which(command)
             self.assertIsNotNone(target, command)
@@ -136,6 +136,7 @@ sys.exit(23 if os.environ.get("PERFECTION_TEST_FAIL") == gate else 0)
             log = Path(row.split("`")[1])
             self.assertTrue(log.is_file(), log)
             self.assertIn("command fixture:", log.read_text())
+            self.assertNotIn("command not found", log.read_text())
         self.assertIn("does not run UI journeys, function coverage/risk analysis", summary)
         self.assertIn("not counted as passing here", summary)
         self.assertIn(summary, result.stdout)
