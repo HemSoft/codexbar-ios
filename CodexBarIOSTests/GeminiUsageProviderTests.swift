@@ -463,7 +463,7 @@ final class GeminiSessionLifetimeTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "__Secure-1PSID=fixture-cookie")
     }
 
-    func testOwnedSessionRedirectDelegateOnlyAllowsGeminiHTTPSOrigin() async throws {
+    func testOwnedSessionRedirectDelegateOnlyAllowsGeminiHTTPSOrigin() throws {
         let provider = GeminiUsageProvider(secretStore: EmptySecretStore())
         let session = try ownedSession(of: provider)
         let delegate = try XCTUnwrap(session.delegate as? URLSessionTaskDelegate)
@@ -486,7 +486,7 @@ final class GeminiSessionLifetimeTests: XCTestCase {
                 XCTAssertEqual($0?.url, allowed ? request.url : nil, destination)
                 completion.fulfill()
             }
-            await fulfillment(of: [completion], timeout: 3)
+            wait(for: [completion], timeout: 3)
         }
     }
 
