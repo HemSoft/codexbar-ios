@@ -117,3 +117,10 @@ findings, survivor triage, and reproducible local command.
 ## Reference Repo
 
 The current Windows app is a C# / WPF / .NET 9 system tray app with shared provider logic in `src/CodexBar.Core`. The iOS implementation should port behavior from there deliberately instead of sharing project structure directly.
+
+## Antigravity quotas
+
+Antigravity session import tracks separate Gemini and Claude/GPT five-hour and
+weekly quotas. It does not replace Google Gemini Apps accounts. See
+[Antigravity setup](ANTIGRAVITY-SETUP.md) for the experimental import flow, token
+renewal requirements, and deferred connected-iPhone validation.

@@ -398,6 +398,8 @@ extension ProviderID {
             "Greptile"
         case .gemini:
             "Google Gemini"
+        case .antigravity:
+            "Antigravity"
         }
     }
 }

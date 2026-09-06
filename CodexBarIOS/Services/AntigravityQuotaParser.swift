@@ -1,0 +1,81 @@
+import Foundation
+
+enum AntigravityQuotaParser {
+    struct Metric: Sendable {
+        let key: String
+        let label: String
+        let window: String
+    }
+
+    static let metrics: [Metric] = [
+        Metric(key: "gemini-5h", label: "Gemini five-hour", window: "5h"),
+        Metric(key: "gemini-weekly", label: "Gemini weekly", window: "weekly"),
+        Metric(key: "3p-5h", label: "Claude/GPT five-hour", window: "5h"),
+        Metric(key: "3p-weekly", label: "Claude/GPT weekly", window: "weekly"),
+    ]
+
+    private struct Summary: Decodable {
+        let groups: [Group]
+    }
+
+    private struct Group: Decodable {
+        let buckets: [Bucket]
+    }
+
+    private struct Bucket: Decodable {
+        let bucketId: String
+        let window: String?
+        let remainingFraction: Double?
+        let resetTime: String?
+        let disabled: Bool?
+    }
+
+    static func result(
+        from data: Data,
+        configuration: ProviderAccountConfiguration,
+        fetchedAt: Date = Date()
+    ) throws -> ProviderUsageResult {
+        let summary = try JSONDecoder().decode(Summary.self, from: data)
+        let buckets = summary.groups.flatMap(\.buckets)
+        let bars = metrics.compactMap { metric -> UsageBar? in
+            let matches = buckets.filter { $0.bucketId == metric.key }
+            guard matches.count == 1, let bucket = matches.first else { return nil }
+            return bar(for: metric, bucket: bucket, fetchedAt: fetchedAt)
+        }
+        let missing = metrics.filter { metric in !bars.contains { $0.stableKey == metric.key } }
+        let message = missing.isEmpty ? nil : "Unavailable: " + missing.map(\.label).joined(separator: ", ") + "."
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .antigravity,
+            title: configuration.displayName,
+            subtitle: "Antigravity quota groups",
+            bars: bars,
+            usageMessages: message.map { [$0] } ?? [],
+            failureMessage: bars.isEmpty ? message : nil,
+            fetchedAt: fetchedAt
+        )
+    }
+
+    private static func bar(for metric: Metric, bucket: Bucket, fetchedAt: Date) -> UsageBar? {
+        guard bucket.window == metric.window, bucket.disabled != true,
+              let remaining = bucket.remainingFraction,
+              remaining.isFinite, (0...1).contains(remaining) else { return nil }
+        let reset = bucket.resetTime.flatMap(date)
+        // A malformed or elapsed supplied reset cannot establish a current allowance.
+        if bucket.resetTime != nil && (reset == nil || reset! <= fetchedAt) { return nil }
+        return UsageBar(
+            stableKey: metric.key,
+            label: metric.label,
+            used: 100 * (1 - remaining),
+            limit: 100,
+            resetsAt: reset
+        )
+    }
+
+    static func date(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: value) { return date }
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value)
+    }
+}

@@ -1512,6 +1512,7 @@ final class AppAndWidgetTests: XCTestCase {
                 .moonshot: "Moonshot (Kimi)",
                 .greptile: "Greptile",
                 .gemini: "Google Gemini",
+                .antigravity: "Antigravity",
             ]
         )
     }
