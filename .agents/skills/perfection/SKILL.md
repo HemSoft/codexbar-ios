@@ -44,7 +44,8 @@ Run the deterministic audit from the repository root:
 The runner:
 
 - selects the first available iPhone simulator and an Apple Watch simulator
-  compatible with the active Xcode SDK, matching CI;
+  compatible with the active Xcode SDK, matching CI; `jq` is required only when
+  a selected gate needs to discover a simulator destination;
 - uses `/Applications/Xcode.app/Contents/Developer` unless `DEVELOPER_DIR` is
   already set; the existing strict-concurrency script pins that Xcode path;
 - disables code signing and treats Swift and Clang warnings as errors for

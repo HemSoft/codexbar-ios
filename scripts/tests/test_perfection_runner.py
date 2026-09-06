@@ -37,6 +37,7 @@ class PerfectionRunnerTests(unittest.TestCase):
 
         commands = self.root / "bin"
         commands.mkdir()
+        self.commands = commands
         command_double = r'''#!/usr/bin/env python3
 import json
 import os
@@ -115,6 +116,17 @@ sys.exit(23 if os.environ.get("PERFECTION_TEST_FAIL") == gate else 0)
     def read_calls(self):
         return [json.loads(line) for line in self.calls.read_text().splitlines()]
 
+    def remove_jq_from_path(self):
+        (self.commands / "jq").unlink()
+        for command in [
+            "bash", "python3", "dirname", "date", "mkdir", "cat", "tail",
+            "wc", "tr", "cp", "env", "mktemp", "rm",
+        ]:
+            target = shutil.which(command)
+            self.assertIsNotNone(target, command)
+            (self.commands / command).symlink_to(target)
+        self.env["PATH"] = str(self.commands)
+
     def assert_summary(self, result, passing, labels=LABELS):
         summary = (self.output / "latest-summary.md").read_text()
         self.assertIn(f"{passing} / {len(labels)} selected gates passing", summary)
@@ -164,6 +176,33 @@ sys.exit(23 if os.environ.get("PERFECTION_TEST_FAIL") == gate else 0)
             "strict-build", "strict-ios-tests", "strict-watch-tests",
         ])
         self.assertTrue(all("-derivedDataPath" not in call["args"] for call in self.read_calls()))
+
+    def test_non_simulator_gates_do_not_require_jq(self):
+        self.remove_jq_from_path()
+        self.env["PERFECTION_IOS_DESTINATION"] = ""
+        self.env["PERFECTION_WATCH_DESTINATION"] = ""
+        for gate in ["swiftlint", "strict-concurrency", "swiftpm-smoke"]:
+            with self.subTest(gate=gate):
+                result = self.run_audit("--gate", gate)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assert_summary(result, 1, [LABELS[GATES.index(gate)]])
+
+    def test_explicit_destinations_do_not_require_jq(self):
+        self.remove_jq_from_path()
+        result = self.run_audit()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assert_summary(result, 7)
+
+    def test_simulator_discovery_requires_jq(self):
+        self.remove_jq_from_path()
+        self.env["PERFECTION_IOS_DESTINATION"] = ""
+        self.env["PERFECTION_WATCH_DESTINATION"] = ""
+        for gate in ["ios-build", "watch-build"]:
+            with self.subTest(gate=gate):
+                result = self.run_audit("--gate", gate)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("jq is required to select available simulators", result.stderr)
+        self.assertFalse(self.calls.exists())
 
     def test_each_gate_can_run_alone(self):
         for gate, label in zip(GATES, LABELS):

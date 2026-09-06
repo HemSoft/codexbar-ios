@@ -111,11 +111,6 @@ if [[ ! -d "$developer_dir" ]]; then
   exit 1
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "jq is required to select available simulators." >&2
-  exit 1
-fi
-
 export DEVELOPER_DIR="$developer_dir"
 cd "$repo_root"
 
@@ -145,6 +140,14 @@ if [[ -z "$selected_gate" || "$selected_gate" == ios-* ]]; then
 fi
 if [[ -z "$selected_gate" || "$selected_gate" == watch-* ]]; then
   needs_watch=true
+fi
+
+if [[ ( "$needs_ios" == true && -z "$ios_destination" ) ||
+      ( "$needs_watch" == true && -z "$watch_destination" ) ]]; then
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "jq is required to select available simulators." >&2
+    exit 1
+  fi
 fi
 
 if [[ "$needs_ios" == true && -z "$ios_destination" ]]; then
