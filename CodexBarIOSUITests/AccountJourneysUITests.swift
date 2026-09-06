@@ -93,10 +93,10 @@ final class AccountJourneysUITests: XCTestCase {
         }
         openGoogleAccount("Apps Fixture", in: app)
         assertMetricSwitches(["gemini.five-hour", "gemini.weekly"], in: app)
-        tap(app.buttons["Done"], in: app)
+        dismissAccountSettings(in: app)
         openGoogleAccount("Coding Fixture", in: app)
         assertMetricSwitches(Self.codingMetricIDs, in: app)
-        tap(app.buttons["Done"], in: app)
+        dismissAccountSettings(in: app)
 
         openCodingCustomizer(in: app)
         let weekly = "antigravity.gemini-weekly"
@@ -189,6 +189,11 @@ final class AccountJourneysUITests: XCTestCase {
         tap(app.buttons["More options for Coding Fixture"], in: app)
         tap(app.buttons["Customize Card…"], in: app)
         XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
+    }
+
+    private func dismissAccountSettings(in app: XCUIApplication) {
+        tap(app.navigationBars.buttons["Done"], in: app)
+        XCTAssertTrue(app.collectionViews["provider-account-settings-form"].waitForNonExistence(timeout: 5), app.debugDescription)
     }
 
     private func launch(scenario: String) -> XCUIApplication {
