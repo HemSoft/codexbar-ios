@@ -102,6 +102,10 @@ class PerformanceGateTests(unittest.TestCase):
             samples = value["experiments"][0]["runs"][0]["reference"]["scenarios"][0]["recordMilliseconds"]
             samples[0] = 9999
 
+        def remove_trial_and_declaration(value):
+            value["experiments"].pop(0)
+            value["experimentNames"].pop(0)
+
         mutations = [
             lambda value: value["experiments"].clear(),
             lambda value: value["experiments"].pop(),
@@ -110,6 +114,7 @@ class PerformanceGateTests(unittest.TestCase):
             lambda value: value["experiments"][0]["result"]["timings"][0].update(medianRatio=0),
             lambda value: value["experiments"][0]["runs"].pop(),
             change_warmup,
+            remove_trial_and_declaration,
         ]
         for index, mutate in enumerate(mutations):
             with self.subTest(index=index):

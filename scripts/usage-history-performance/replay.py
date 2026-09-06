@@ -9,6 +9,15 @@ from pathlib import Path
 from run import evaluate, validate
 
 SUMMARY_ROUNDOFF = 1e-12
+# Keep the complete study manifest outside its mutable measurement recording.
+STUDY_EXPERIMENT_NAMES = (
+    "usage-history-performance-34046485812-1",
+    "usage-history-performance-34046485812-2",
+    "usage-history-performance-34051802297-1",
+    "usage-history-performance-34054447047-1",
+    "unchanged-1", "unchanged-2", "unchanged-3", "slowdown",
+    "quiet-1", "quiet-2", "quiet-3", "quiet-slowdown",
+)
 
 
 def same_timing_summary(stored, computed):
@@ -46,7 +55,7 @@ def replay_study(study, policy):
         raise ValueError("unsupported study format or changed study policy")
     declared = study["experimentNames"]
     names = [recording["name"] for recording in study["experiments"]]
-    if not declared or len(declared) != len(set(declared)) or names != declared:
+    if tuple(declared) != STUDY_EXPERIMENT_NAMES or names != declared:
         raise ValueError("missing, duplicated or reordered study experiments")
     results = []
     for recording in study["experiments"]:
