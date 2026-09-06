@@ -127,6 +127,7 @@ public struct ProviderMonetaryMetric: Identifiable, Codable, Equatable, Sendable
 
 public enum ProviderUsageMetricKind: Equatable, Sendable {
     case usageBar(index: Int)
+    case unavailableUsage(String)
     case creditsRemaining
     case monetary(index: Int)
 }
@@ -212,6 +213,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let creditsRemaining: Double?
     public let creditsFetchedAt: Date?
     public let monetaryMetrics: [ProviderMonetaryMetric]
+    public let unavailableUsageMetrics: [String: String]
     public let usageMessages: [String]
     public let dashboardUsageMessages: [String]
     public let cardInformationSections: [ProviderCardInformationSection]
@@ -237,6 +239,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         creditsRemaining: Double? = nil,
         creditsFetchedAt: Date? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
+        unavailableUsageMetrics: [String: String] = [:],
         usageMessages: [String] = [],
         dashboardUsageMessages: [String]? = nil,
         cardInformationSections: [ProviderCardInformationSection] = [],
@@ -261,6 +264,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.creditsRemaining = creditsRemaining
         self.creditsFetchedAt = creditsRemaining == nil ? nil : (creditsFetchedAt ?? fetchedAt)
         self.monetaryMetrics = monetaryMetrics
+        self.unavailableUsageMetrics = unavailableUsageMetrics
         self.usageMessages = usageMessages
         self.dashboardUsageMessages = dashboardUsageMessages ?? usageMessages
         self.cardInformationSections = cardInformationSections.filter { !$0.items.isEmpty }
@@ -294,8 +298,16 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
             )
     }
 
+    /// Preserve cached observations in `bars`, but do not publish provider-disabled quotas.
+    public var enabledBarIndices: [Int] {
+        bars.indices.filter { index in
+            let metricID = bars[index].metricIdentifier(providerID: providerID, index: index)
+            return unavailableUsageMetrics[metricID] != GoogleUsageMetricCatalog.disabledReason
+        }
+    }
+
     public var freshBars: [UsageBar] {
-        hasFreshBars ? bars : []
+        hasFreshBars ? enabledBarIndices.map { bars[$0] } : []
     }
 
     public var hasFreshCredits: Bool {
@@ -314,9 +326,14 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         hasFreshCredits ? creditsRemaining : nil
     }
 
+    public var configurableMetrics: [ProviderUsageMetric] {
+        GoogleUsageMetricCatalog.metrics(for: providerID, result: self, missingReason: "Unavailable")
+    }
+
     public var availableMetrics: [ProviderUsageMetric] {
-        let usageMetrics = bars.enumerated().map { index, bar in
-            ProviderUsageMetric(
+        let usageMetrics = enabledBarIndices.map { index in
+            let bar = bars[index]
+            return ProviderUsageMetric(
                 id: bar.metricIdentifier(providerID: providerID, index: index),
                 label: bar.label,
                 kind: .usageBar(index: index)

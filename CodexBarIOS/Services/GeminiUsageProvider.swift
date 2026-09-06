@@ -362,7 +362,7 @@ public final class GeminiUsageProvider: UsageProvider {
             bars.append(
                 UsageBar(
                     stableKey: "five-hour",
-                    label: "5-hour usage limit",
+                    label: "Gemini Apps five-hour",
                     used: fiveHour.fractionUsed * 100,
                     limit: 100,
                     resetsAt: fiveHour.resetsAt,
@@ -374,7 +374,7 @@ public final class GeminiUsageProvider: UsageProvider {
             bars.append(
                 UsageBar(
                     stableKey: "weekly",
-                    label: "Weekly usage limit",
+                    label: "Gemini Apps weekly",
                     used: weekly.fractionUsed * 100,
                     limit: 100,
                     resetsAt: weekly.resetsAt,

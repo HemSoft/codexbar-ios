@@ -47,8 +47,10 @@ pinned repository-wide SwiftLint, complete strict concurrency, iOS build and
 unit tests, SwiftPM smoke tests, and watchOS build and unit tests. Use `--list`
 for gate names or `--status` for the most recent historical summary. See the
 [perfection skill](.agents/skills/perfection/SKILL.md) for focused runs and the
-separate UI, function-risk, security, and performance checks that still need
-verification before merge or release.
+separate UI and function-risk checks required by CI. Security analysis and the
+performance budget run manually for relevant changes and release preparation;
+see [security analysis](SECURITY-ANALYSIS.md) and
+[performance verification](USAGE-HISTORY-PERFORMANCE.md).
 
 The [CI policy](CI-POLICY.md) records measured runtimes, the five required
 correctness checks, and manual security/performance dispatch and failure

@@ -5,10 +5,37 @@ the shared Gemini pool, including Flash, and the separate Claude/GPT pool. Each
 has a five-hour and weekly metric. Gemini Apps history is never relabeled.
 
 This experimental integration requires an imported desktop Antigravity session.
-It does not offer Google sign-in directly on iPhone. Native sign-in and a final
-connected-iPhone comparison are deferred for Franz's Mac follow-up, as authorized
-on September 5, 2026 while implementing [#314](https://github.com/HemSoft/codexbar-ios/issues/314).
-This is an unofficial API integration, not a Google-supported iPhone grant.
+It does not offer Google sign-in directly on iPhone. This is an unofficial API
+integration, not a Google-supported iPhone grant. The connected-iPhone import
+and comparison are completion gates for [#319](https://github.com/HemSoft/codexbar-ios/issues/319).
+
+## Six independent choices
+
+Start from Add Account. Google Gemini connects Gemini Apps' two consumer
+limits; Antigravity connects the four coding limits shown by CLI `/usage`.
+Use the same Google identity when comparing with the desktop references.
+
+| Account source | Metric label | Saved identity |
+| --- | --- | --- |
+| Google Gemini | Gemini Apps five-hour | `gemini.five-hour` |
+| Google Gemini | Gemini Apps weekly | `gemini.weekly` |
+| Antigravity | Gemini Models five-hour | `antigravity.gemini-5h` |
+| Antigravity | Gemini Models weekly | `antigravity.gemini-weekly` |
+| Antigravity | Other models five-hour | `antigravity.3p-5h` |
+| Antigravity | Other models weekly | `antigravity.3p-weekly` |
+
+Other models means Claude/GPT. Each account's Metrics settings lists its known
+choices and visibility controls before a successful fetch. Customize Card is
+available after an account returns a result, including an unavailable result.
+It retains unavailable choices with the existing hide, order, width and
+visualization controls.
+Preferences survive missing data and relaunches. A missing or disabled bucket
+has a status instead of a fabricated percentage. A failed refresh labels cached
+values as last known. Histories and shared snapshots retain their original
+metric identities and contain only observed values.
+
+You can leave Google Gemini unconnected or hide its two metrics and use all
+four Antigravity choices independently.
 
 ## Setup
 
@@ -65,10 +92,10 @@ windows, not translated display names or model lists:
 
 | Bucket | Window | CodexBar metric |
 | --- | --- | --- |
-| `gemini-5h` | `5h` | Gemini five-hour |
-| `gemini-weekly` | `weekly` | Gemini weekly |
-| `3p-5h` | `5h` | Claude/GPT five-hour |
-| `3p-weekly` | `weekly` | Claude/GPT weekly |
+| `gemini-5h` | `5h` | Gemini Models five-hour |
+| `gemini-weekly` | `weekly` | Gemini Models weekly |
+| `3p-5h` | `5h` | Other models five-hour |
+| `3p-weekly` | `weekly` | Other models weekly |
 
 Percent used is `100 * (1 - remainingFraction)`. Thus `0` remaining is 100%
 used and `0.69` remaining is 31% used. Reset timestamps come only from supplied
@@ -89,11 +116,44 @@ Requests reject redirects, disable automatic cookies and caching, and never
 include raw server errors in user-facing messages. Quotas go only to the daily
 backend; renewal credentials go only to `oauth2.googleapis.com/token`.
 
-## Mac follow-up before release
+## Live validation for issue #319
 
-- Verify import, renewal when client fields are available, and all four quotas
-  on the connected iPhone against the same account's current `/usage`.
-- Establish a supported native iPhone authorization path before adding an
-  in-app sign-in button. Desktop success does not prove an iPhone grant.
-- Exercise both exhausted and partial quotas. The earlier exhausted five-hour
-  and approximately 31%-weekly report was no longer present during investigation.
+The September 5, 2026 baseline inspection found CodexBar 1.3 build 3 on the
+connected iPhone 17 Pro Max running iOS 27.0, build 24A5418b. Its saved account
+configuration included Google Gemini and no Antigravity account. Gemini Apps
+showed 0% five-hour and 1% weekly usage on both the phone and the desktop Usage
+limits page. The displayed resets were 11:44 p.m. EDT and September 8 at
+7:44 p.m. EDT, respectively. The installed app's source commit is unknown.
+
+On September 6, the PR app was installed and launched on the same phone.
+Mirroring verified all four coding visibility switches and their persistence.
+The two live Gemini Apps values still matched the consumer reference; their
+visibility, order, width and visualization changes survived relaunch and the
+original layout was restored. No Antigravity credential has been imported.
+
+Franz took ownership of the remaining live iPhone testing on September 6 and
+directed that it no longer block PR #320. He reported Gemini Models weekly at
+71% remaining and the other three coding buckets at 100% remaining. These are
+reference values, not a successful phone fetch. Coding values and reset parity,
+import/reimport and coding-card customization remain his acceptance checks in
+#319. They are not claimed as passed.
+
+To complete the comparison:
+
+1. Unlock the phone and use a signed-in CLI session for the same Google account.
+   Record `agy --version`, interactive `/usage`, and
+   `agy -p "/usage" --output-format json`. Do not publish identity or tokens.
+2. Complete session export and import, then follow `DEVICE-DEPLOYMENT.md` to
+   build, install and launch the PR commit on the rediscovered device.
+3. Refresh both sources in the same comparison interval. Record used versus
+   remaining semantics, values and supplied resets for all six metrics.
+4. Toggle and customize each choice, relaunch, then hide or disconnect Apps
+   and verify all four coding metrics. Keep before/after screenshots locally
+   and publish only evidence without identity or credentials.
+5. Record renewal if matching client fields are available, or exercise and
+   document reimport. Saving a credential without a successful quota refresh
+   does not prove access.
+
+A native iPhone authorization flow remains separate work. Verify an appropriate
+Google iOS grant before adding a sign-in button; desktop success alone does not
+establish that grant.

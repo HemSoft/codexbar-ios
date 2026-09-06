@@ -6,7 +6,7 @@ is unchanged. The budget compares Release binaries built on the same machine
 against frozen source revision `3395ee6094ce8e4199577f7ede493e3a50ee1269`.
 It does not turn a Mac measurement into an iPhone responsiveness target.
 
-## Run the gate
+## Run the benchmark
 
 From the repository root on a Mac with Xcode installed:
 
@@ -382,3 +382,9 @@ The separate `repeatability-manifest.json` pins every original report digest and
 expected verdict. Replay rejects coordinated edits to samples, embedded hashes
 and results, including edits to warm-up values. Changes to this manifest require
 review against the original artifacts; it is never regenerated during replay.
+
+The issue branch later incorporated main commit
+`ad8e89be9a4e8dc428c5b7fe1b2cb4cdca898cae`, which includes the Google quota
+changes from PR #320. The study remains evidence about its recorded source
+checkpoints; it does not measure that later application tree. The replay verifier
+checks historical evidence without presenting it as a new benchmark run.

@@ -356,6 +356,11 @@ struct ProviderSettingsView: View {
             }
 
             Section {
+                if let description = GoogleUsageMetricCatalog.setupDescription(for: providerID) {
+                    Text(description)
+                        .font(.subheadline)
+                        .accessibilityIdentifier("google-quota-source-guide")
+                }
                 if viewModel.isLoadingMetrics {
                     HStack(spacing: 10) {
                         ProgressView()
@@ -379,14 +384,23 @@ struct ProviderSettingsView: View {
                     }
                 } else {
                     ForEach(viewModel.availableMetrics) { metric in
-                        Toggle(
-                            metric.label,
-                            isOn: Binding(
+                        let accessibilityStatus = if case let .unavailableUsage(reason) = metric.kind {
+                            ". \(reason)"
+                        } else {
+                            ""
+                        }
+                        Toggle(isOn: Binding(
                                 get: { viewModel.isMetricVisible(metric.id) },
                                 set: { viewModel.setMetricVisibility($0, metricID: metric.id) }
-                            )
-                        )
-                        .accessibilityLabel("Show \(metric.label) on dashboard")
+                        )) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(metric.label)
+                                if case let .unavailableUsage(reason) = metric.kind {
+                                    Text(reason).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .accessibilityLabel("Show \(metric.label) on dashboard\(accessibilityStatus)")
                         .accessibilityIdentifier("account-metric-visibility-\(metric.id)")
                     }
                 }
@@ -405,6 +419,7 @@ struct ProviderSettingsView: View {
                 Text("Current Status")
             }
         }
+        .accessibilityIdentifier("provider-account-settings-form")
         .navigationTitle(configuration.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .task {

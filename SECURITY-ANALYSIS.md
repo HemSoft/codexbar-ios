@@ -47,7 +47,7 @@ The [CodeQL support matrix](https://codeql.github.com/docs/codeql-overview/suppo
 covers Swift 5.4-6.3. [CodeQL 2.26.2 added Swift 6.3.3 extraction](https://codeql.github.com/docs/codeql-overview/codeql-changelog/codeql-cli-2.26.2/),
 which matches this repository's Xcode 26.6 compiler at setup. The check records
 the actual Xcode, Swift, and CodeQL versions on every run; an unsupported upgrade
-must produce working extraction evidence before merging a toolchain change.
+needs working manual extraction evidence before its analyzer support is claimed.
 
 Swift requires a [traced build](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages).
 `scripts/security-analysis/build.sh` uses a new Derived Data directory and the
@@ -162,12 +162,37 @@ findings. Review found these specific contexts non-actionable:
 | [#3, cleartext preference storage](https://github.com/HemSoft/codexbar-ios/security/code-scanning/3) | `saveCollapsedDashboardAccountIDs` writes collapsed-state identifiers already present in saved configurations. Account IDs are local provider names or provider-plus-UUID values. The updater rejects IDs absent from configurations. These IDs are not credentials or provider account identities. |
 | [#4, cleartext preference storage](https://github.com/HemSoft/codexbar-ios/security/code-scanning/4) | The private `UITestSecretStore` rejects every value except the literal `ui-test-credential`. Its DEBUG simulator launch contract uses a UUID-isolated defaults suite and blocks provider networking. The stored marker has no authentication authority. |
 
-Before merging the follow-up, require a successful full-source PR analysis with
-all current production files extracted and no extraction errors. Record its
-analyzed commit, three reviewed findings, zero blocking findings, and check
-result in the PR. The old filtered PR results and local SARIF replay do not
-prove this new hosted workflow. After merge, verify the corresponding `main`
-analysis before recording the default-branch baseline as passing.
+This rollout predates the manual-only policy. The old filtered PR results and
+local SARIF replay do not establish a current hosted baseline. To report a new
+baseline as passing, manually analyze the reviewed branch and record its commit,
+complete source reach, extraction errors, reviewed findings, blocking findings
+and final job result. Dispatch against `main` when default-branch evidence is
+needed; a merge no longer starts that analysis automatically.
+
+## Review for the six Google quota choices
+
+For [#319](https://github.com/HemSoft/codexbar-ios/issues/319), the
+[full hosted analysis](https://github.com/HemSoft/codexbar-ios/actions/runs/34046485826)
+analyzed test merge `cc4e381faeb9f96a66e2841cabb3a67736e7b5cd`, containing PR head
+`ecd331d10cae0c35635f137f41c72c827ed607c5`. Analysis `1732313795` reported the
+same three findings, complete source reach, and no extraction errors. The gate
+rejected the changed production snapshot as designed.
+
+Re-review of that head confirmed the existing boundaries: `cacheIdentity` is
+still used only for in-memory cache equality, `ProviderUsageResult` remains
+non-Codable, and collapsed-state IDs remain configuration-validated local IDs.
+The new Google UI fixtures save only the same literal `ui-test-credential`.
+Their DEBUG simulator guard, isolated defaults suite, network blocker and
+private secret-store validation remain intact. The fixture diagnostic moved
+from line 162 to 209; its current raw SARIF was reviewed before updating its
+exact identity. The other two diagnostic identities are unchanged.
+
+The reviewed baseline pins that source snapshot. Replaying its hosted SARIF
+and source-reach CSV accepted exactly those three findings and reported zero
+blocking findings. Later Google fixture changes moved the diagnostic again and
+changed the source snapshot. The subsequent extraction build timed out, so the
+current source still needs a fresh manual analysis and baseline review under
+issue #325. The older replay is not a passing analysis of the current tree.
 
 ## Maintaining reviewed findings
 
@@ -189,8 +214,10 @@ not change that source snapshot.
 When the snapshot changes, review each finding's source and consumers against
 the boundaries above. Fix actionable findings. If the contexts remain
 non-actionable, update the reviewed commit and source digest in the issue-linked
-PR, explain the review, and require the full hosted analysis again. Update
-exact diagnostic identities only after reviewing the newly produced raw SARIF.
+PR, explain the review, and dispatch the full hosted analysis manually. A
+successful result is needed before reporting the updated baseline as passing;
+this is not a required merge check. Update exact diagnostic identities only
+after reviewing the newly produced raw SARIF.
 Remove entries for resolved findings through review; their disappearance is
 not silently accepted. A new exception needs its own explicit finding,
 evidence, and rationale. Never add path-wide or rule-wide exclusions.
@@ -278,7 +305,8 @@ python3 scripts/security-analysis/gate.py --sarif /tmp/codexbar-security.sarif \
 
 Use unused database/build paths. Some local Macs cannot execute the tracer's
 copied system shell; `Bad CPU type in executable` is an extraction failure, not
-a finding-free scan. The hosted workflow remains the required evidence.
+a finding-free scan. Use the manual hosted workflow to obtain extraction
+evidence when the local tracer cannot run.
 
 The CLI's [rule-grouping option](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-analyze#--no-sarif-group-rules-by-pack)
 retains the pack metadata required by the baseline. Local CLI findings can still
