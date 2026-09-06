@@ -25,6 +25,8 @@ jobs:
       security-events: write
     env:
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+      # The custom gate requires all findings, including unchanged PR source.
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,12 +77,13 @@ jobs:
           "$CODEQL" bqrs decode "$SECURITY_OUTPUT/source-reach.bqrs" \
             --format=csv --output="$SECURITY_OUTPUT/source-reach.csv"
 
-      - name: Require complete extraction and no high-severity findings
+      - name: Require complete extraction and no unreviewed high-severity findings
         run: >-
           python3 scripts/security-analysis/gate.py
           --sarif "$SECURITY_OUTPUT/sarif/swift.sarif"
           --reach "$SECURITY_OUTPUT/source-reach.csv"
           --output "$SECURITY_OUTPUT/gate.json"
+          --baseline scripts/security-analysis/reviewed-baseline.json
 
       - name: Preserve findings and extraction evidence
         if: ${{ always() }}

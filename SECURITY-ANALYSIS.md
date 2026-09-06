@@ -12,6 +12,15 @@ The workflow pins CodeQL Action 4.37.9 to a commit and the CodeQL bundle to
 6.8.2. It runs the `security-extended` suite, including the default security
 queries. No security queries or production paths are excluded.
 
+The job sets `CODEQL_ACTION_DIFF_INFORMED_QUERIES=false`. The pinned Action
+[enables diff-informed queries by default](https://github.com/github/codeql-action/blob/cdf488f595d80d6e07e03d4674febd5ab45fa938/src/feature-flags.ts#L240)
+on pull requests and limits their results to changed lines. That is unsuitable
+for this full-source baseline gate: the same source tree previously returned
+zero findings on a PR and three on `main`. Disabling the feature makes the PR
+gate examine unchanged code too. Verify the hosted analysis log contains no
+`--extension-packs=codeql-action/pr-diff-range` option after Action upgrades.
+File extraction counts alone cannot detect result filtering.
+
 The [CodeQL support matrix](https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/)
 covers Swift 5.4-6.3. [CodeQL 2.26.2 added Swift 6.3.3 extraction](https://codeql.github.com/docs/codeql-overview/codeql-changelog/codeql-cli-2.26.2/),
 which matches this repository's Xcode 26.6 compiler at setup. The check records
@@ -69,11 +78,17 @@ artifact for 14 days. The job has only `contents: read` and
 use `pull_request`, never privileged `pull_request_target` execution.
 
 `scripts/security-analysis/gate.py` fails on any security severity of 7.0 or
-higher, including existing or suppressed findings. Lower-severity findings are
+higher unless it exactly matches a reviewed non-actionable finding in
+`scripts/security-analysis/reviewed-baseline.json`. Lower-severity findings are
 still published for triage. Missing, failed, or malformed analysis, empty query
 metadata, incomplete source reach, and extraction errors also fail the job.
-There are no accepted high-severity findings or automatic baseline refreshes.
-Fix the cause rather than dismissing an alert to bypass the check.
+GitHub alert dismissals and SARIF suppressions do not grant an exception.
+
+The raw SARIF remains intact and is uploaded before the gate. `gate.json`
+separately reports all `findings`, `accepted_findings` with their review rationale,
+and `blocking_findings`. A passing analysis with three reviewed findings means
+three findings and zero actionable high-severity findings, never a clean scan
+with zero findings. No baseline is refreshed automatically.
 
 The active default-branch ruleset requires the GitHub Actions check
 `Swift security analysis` alongside the five existing required checks. This
@@ -102,15 +117,75 @@ Swift files, with zero compiler errors and zero extraction diagnostics. Its
 only finding was `swift/insecure-tls`, severity 7.5, at line 7 of the temporary
 fixture. All analysis steps succeeded, and the required severity gate failed
 with exit code 1 solely because of that finding. Replaying the downloaded SARIF
-and source-reach CSV produced the same gate result. No production findings,
-exclusions, or accepted high-severity findings were present in this analysis.
+and source-reach CSV produced the same gate result. No other findings appeared
+in that PR analysis. It used diff-informed queries, so its zero production
+finding count did not establish a full production baseline.
 
-The fixture was removed after that proof. The final candidate includes the
-subsequent main-branch changes and has 87 tracked production Swift files.
-Before merge, require a successful fixture-free analysis that covers every
-current production file with no extraction errors. Its analyzed commit, source
-reach, findings, and required-check result belong in the PR's verification
-evidence. The earlier 84-file analysis does not prove this newer candidate.
+The fixture was removed after that proof. The final PR analysis extracted all
+87 production files and reported zero findings, but its diff-informed result
+filter omitted unchanged code. The [first merged `main` run](https://github.com/HemSoft/codexbar-ios/actions/runs/34008831770)
+analyzed commit `3395ee6094ce8e4199577f7ede493e3a50ee1269`, the same source tree
+as the PR test merge, and failed on three severity-7.5 findings. That failure
+invalidated the proposed zero-finding baseline and reopened
+[issue #309](https://github.com/HemSoft/codexbar-ios/issues/309).
+
+The [next full `main` analysis](https://github.com/HemSoft/codexbar-ios/actions/runs/34019023090)
+for `cbc0d0031a0e07d4f3ed3f6e588bf578928690cc`, analysis `1731293117`, confirmed
+all 87 production files extracted, no extraction errors, and the same three
+findings. Review found these specific contexts non-actionable:
+
+| Finding | Reviewed evidence and boundary |
+| --- | --- |
+| [#2, weak password hashing](https://github.com/HemSoft/codexbar-ios/security/code-scanning/2) | `OpenCodeZenUsageProvider.cacheIdentity` hashes the workspace and session values for ephemeral cache equality in `UsageRefreshService`. `ProviderUsageResult` is not Codable. The digest is neither persisted nor used as a password verifier. Persisting, exposing, or authenticating with it requires another review. |
+| [#3, cleartext preference storage](https://github.com/HemSoft/codexbar-ios/security/code-scanning/3) | `saveCollapsedDashboardAccountIDs` writes collapsed-state identifiers already present in saved configurations. Account IDs are local provider names or provider-plus-UUID values. The updater rejects IDs absent from configurations. These IDs are not credentials or provider account identities. |
+| [#4, cleartext preference storage](https://github.com/HemSoft/codexbar-ios/security/code-scanning/4) | The private `UITestSecretStore` rejects every value except the literal `ui-test-credential`. Its DEBUG simulator launch contract uses a UUID-isolated defaults suite and blocks provider networking. The stored marker has no authentication authority. |
+
+Before merging the follow-up, require a successful full-source PR analysis with
+all current production files extracted and no extraction errors. Record its
+analyzed commit, three reviewed findings, zero blocking findings, and check
+result in the PR. The old filtered PR results and local SARIF replay do not
+prove this new hosted workflow. After merge, verify the corresponding `main`
+analysis before recording the default-branch baseline as passing.
+
+## Maintaining reviewed findings
+
+Each exception pins the exact rule, severity, message, primary location, and a
+SHA256 of the full SARIF diagnostic, including data flows, related locations,
+and fingerprints. Only rule-table and artifact-table positions are omitted
+because they can reorder between runs. A changed diagnostic, duplicate match,
+missing reviewed finding, or changed CodeQL/query-pack version fails the gate.
+An additional high-severity finding always blocks, including one in unchanged
+source or on another line of a reviewed file.
+
+The baseline also pins the names and contents of **every tracked production
+Swift file**. This intentionally requires re-review after any production Swift
+change, including new downstream consumers outside the original finding files.
+It avoids carrying a false-positive classification forward after the security
+context changes. Editing only the workflow, gate tests, or documentation does
+not change that source snapshot.
+
+When the snapshot changes, review each finding's source and consumers against
+the boundaries above. Fix actionable findings. If the contexts remain
+non-actionable, update the reviewed commit and source digest in the issue-linked
+PR, explain the review, and require the full hosted analysis again. Update
+exact diagnostic identities only after reviewing the newly produced raw SARIF.
+Remove entries for resolved findings through review; their disappearance is
+not silently accepted. A new exception needs its own explicit finding,
+evidence, and rationale. Never add path-wide or rule-wide exclusions.
+
+This read-only helper prints the source digest for a reviewed checkout. It does
+not edit the baseline or classify findings:
+
+```sh
+python3 - <<'PYCODE'
+import importlib.util
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("security_gate", "scripts/security-analysis/gate.py")
+gate = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gate)
+print(gate.source_snapshot(Path.cwd()))
+PYCODE
+```
 
 To inspect a completed analysis, use both APIs, checking its analyzed commit and
 `error` field before interpreting an empty alert list:
@@ -166,14 +241,25 @@ codeql database create /tmp/codexbar-security-db --language=swift \
   --source-root=. --command=./scripts/security-analysis/build.sh
 codeql database analyze /tmp/codexbar-security-db \
   codeql/swift-queries:codeql-suites/swift-security-extended.qls \
-  --format=sarif-latest --output=/tmp/codexbar-security.sarif
+  --format=sarif-latest --sarif-group-rules-by-pack \
+  --output=/tmp/codexbar-security.sarif
 codeql query run scripts/security-analysis/queries/source-reach.ql \
   --database=/tmp/codexbar-security-db --output=/tmp/codexbar-reach.bqrs
 codeql bqrs decode /tmp/codexbar-reach.bqrs --format=csv --output=/tmp/codexbar-reach.csv
 python3 scripts/security-analysis/gate.py --sarif /tmp/codexbar-security.sarif \
-  --reach /tmp/codexbar-reach.csv --output /tmp/codexbar-security-gate.json
+  --reach /tmp/codexbar-reach.csv --output /tmp/codexbar-security-gate.json \
+  --baseline scripts/security-analysis/reviewed-baseline.json
 ```
 
 Use unused database/build paths. Some local Macs cannot execute the tracer's
 copied system shell; `Bad CPU type in executable` is an extraction failure, not
 a finding-free scan. The hosted workflow remains the required evidence.
+
+The CLI's [rule-grouping option](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-analyze#--no-sarif-group-rules-by-pack)
+retains the pack metadata required by the baseline. Local CLI findings can still
+have different diagnostic details or fingerprints from the Action's SARIF;
+those differences correctly require review and may fail exact matching. Do
+not loosen the matching contract to make local output pass. To replay an
+existing hosted baseline exactly, download its `swift-security-*` artifact
+and pass the original `sarif/swift.sarif` and `source-reach.csv` to the gate
+from a checkout whose production snapshot matches the reviewed source.
