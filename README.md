@@ -30,6 +30,8 @@ The Windows reference implementation is checked out beside this repo at:
   plus watchOS foundation tests and a SwiftPM smoke harness; see
   [Build and Test](AGENTS.md#build-and-test) and the isolated iPhone/iPad
   [account UI journeys](UI-TESTING.md)
+- A measured Release [usage-history performance budget](USAGE-HISTORY-PERFORMANCE.md)
+  with retained-data limits and a weekly regression gate
 
 ## Requirements
 

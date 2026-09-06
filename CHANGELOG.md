@@ -84,6 +84,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Measure usage-history recording and chart generation against a frozen Release
+  baseline, with a regression gate for latency, serialized size, and retained
+  history growth on relevant pull requests and a weekly schedule.
+  ([#310](https://github.com/HemSoft/codexbar-ios/issues/310))
+
 - Add Swift security analysis of the app, widgets, watch companion, and shared
   code on pull requests, main, and a weekly schedule, with published findings
   and a gate for high-severity findings or incomplete extraction.
