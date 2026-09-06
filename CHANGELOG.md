@@ -44,6 +44,13 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Show all six Google usage metrics on the dashboard when either Google source
+  is added. Missing sources and incomplete accounts keep their metrics visible
+  with Setup required, without borrowing values or resets from another source.
+  Customize Card works before setup and retains selections after refresh and
+  relaunch. Existing hidden metrics and disabled accounts stay hidden.
+  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+
 - Stop publishing cached Google quotas to alerts, widgets and Apple Watch when
   the provider explicitly disables them, while retaining observed History data.
   ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))

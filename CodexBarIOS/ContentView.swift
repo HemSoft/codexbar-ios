@@ -677,7 +677,7 @@ struct ContentView: View {
                 onShowHistory: { selectedHistoryResult = result },
                 onToggleExpansion: { toggleDashboardCardExpansion(result.accountID) },
                 onConfigureAccount: {
-                    accountConfigurationNavigation.present(accountID: result.accountID)
+                    configureDashboardAccount(item.configuration)
                 },
                 onRetry: {
                     performRecovery(for: item)
@@ -847,8 +847,13 @@ struct ContentView: View {
         case .claudeSignIn:
             claudeAuthenticationController.startSignIn(for: item.configuration)
         case .accountSettings:
-            accountConfigurationNavigation.present(accountID: item.configuration.id)
+            configureDashboardAccount(item.configuration)
         }
+    }
+
+    private func configureDashboardAccount(_ configuration: ProviderAccountConfiguration) {
+        guard let saved = configurationStore.prepareDashboardAccountForSetup(configuration) else { return }
+        accountConfigurationNavigation.present(accountID: saved.id)
     }
 
     private func toggleDashboardCardExpansion(_ accountID: String) {

@@ -226,7 +226,7 @@ final class AntigravityUsageProviderTests: XCTestCase {
         let other = store.addAccount(for: .antigravity)
         XCTAssertEqual(account.authMethod, .cliToken)
         XCTAssertTrue(account.requiresSecret)
-        XCTAssertFalse(store.shouldDisplayOnDashboard(account))
+        XCTAssertTrue(store.shouldDisplayOnDashboard(account))
         XCTAssertTrue(store.saveSecret(#"{"access_token":"test"}"#, for: account))
         XCTAssertTrue(store.shouldDisplayOnDashboard(account))
         XCTAssertFalse(store.hasSecret(for: other))
@@ -499,6 +499,132 @@ final class AntigravityUsageProviderTests: XCTestCase {
         XCTAssertTrue(GoogleUsageMetricCatalog.metrics(for: .gemini, result: other).allSatisfy {
             $0.kind == .unavailableUsage("Setup required")
         })
+    }
+
+    @MainActor
+    func testGeminiOnlyDashboardIncludesCodingSetupWithoutChangingAccounts() async throws {
+        let suite = "GoogleDashboard.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+        let apps = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveSecret("apps-session", for: apps))
+        let observed = ProviderUsageResult(
+            accountID: apps.id, providerID: .gemini, title: apps.displayName, subtitle: "Gemini Apps usage",
+            bars: [
+                UsageBar(stableKey: "five-hour", label: "Five-hour", used: 12, limit: 100),
+                UsageBar(stableKey: "weekly", label: "Weekly", used: 45, limit: 100, resetsAt: Self.now.addingTimeInterval(3600)),
+            ], fetchedAt: Self.now
+        )
+        let service = UsageRefreshService(providers: [], initialResults: [observed])
+        let dashboard = googleDashboard(store: store, service: service, defaults: defaults)
+        let coding = try XCTUnwrap(dashboard.dashboardCardItems.first { $0.configuration.providerID == .antigravity })
+        let result = try XCTUnwrap(coding.result)
+        let ids = AntigravityQuotaParser.metrics.map { "antigravity.\($0.key)" }
+
+        XCTAssertEqual(dashboard.dashboardCardItems.flatMap { $0.result?.configurableMetrics ?? [] }.count, 6)
+        XCTAssertEqual(result.configurableMetrics.map(\.id), ids)
+        XCTAssertTrue(result.configurableMetrics.allSatisfy { $0.kind == .unavailableUsage("Setup required") })
+        XCTAssertTrue(result.bars.isEmpty)
+        XCTAssertFalse(result.hasSuccessfulRefreshHistory)
+        XCTAssertEqual(coding.recoveryAction, .signIn)
+        XCTAssertEqual(store.configurations, [apps])
+        XCTAssertEqual(service.results, [observed])
+        XCTAssertEqual(dashboard.dashboardCardItems.first { $0.id == apps.id }?.result, observed)
+
+        store.reconcileMetricLayout(accountID: coding.id, availableMetricIDs: ids)
+        store.updateMetricVisibility(false, accountID: coding.id, metricID: ids[1])
+        store.updateMetricWidth(.half, accountID: coding.id, metricID: ids[1])
+        store.updateVisualizationStyle(.circularRing, accountID: coding.id, metricID: ids[1])
+        store.updateMetricOrder(Array(ids.reversed()), accountID: coding.id)
+        let layout = store.metricLayouts[coding.id]
+        await service.refresh(configurations: store.configurations)
+        XCTAssertEqual(dashboard.dashboardCardItems.first { $0.id == coding.id }?.result, result)
+        XCTAssertEqual(store.metricLayouts[coding.id], layout)
+
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+        let relaunched = googleDashboard(store: restored, service: service, defaults: defaults)
+        XCTAssertEqual(restored.configurations, [apps])
+        XCTAssertEqual(relaunched.dashboardCardItems.first { $0.id == coding.id }?.result, result)
+        XCTAssertEqual(restored.metricLayouts[coding.id], layout)
+        XCTAssertFalse(restored.isMetricVisible(accountID: coding.id, metricID: ids[1]))
+        restored.updateMetricVisibility(true, accountID: coding.id, metricID: ids[1])
+        XCTAssertTrue(ids.allSatisfy { restored.isMetricVisible(accountID: coding.id, metricID: $0) })
+
+        let promoted = try XCTUnwrap(restored.prepareDashboardAccountForSetup(coding.configuration))
+        XCTAssertEqual(promoted.id, coding.id)
+        XCTAssertEqual(restored.configurations.count, 2)
+        XCTAssertFalse(restored.hasSecret(for: promoted))
+        XCTAssertEqual(restored.metricWidth(accountID: coding.id, metricID: ids[1]), .half)
+        XCTAssertEqual(restored.metricOrder(accountID: coding.id, availableMetricIDs: ids), Array(ids.reversed()))
+        XCTAssertEqual(restored.visualizationStyle(accountID: coding.id, metricID: ids[1]), .circularRing)
+        XCTAssertEqual(relaunched.dashboardCardItems.filter { $0.configuration.providerID == .antigravity }.count, 1)
+    }
+
+    @MainActor
+    func testIncompleteAndDisabledGoogleAccountsKeepExplicitDashboardChoices() throws {
+        let suite = "GoogleDashboard.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore(), widgetSnapshotDefaults: defaults)
+        let apps = store.addAccount(for: .gemini)
+        var coding = store.addAccount(for: .antigravity)
+        let service = UsageRefreshService(providers: [])
+        let dashboard = googleDashboard(store: store, service: service, defaults: defaults)
+        XCTAssertEqual(Set(dashboard.dashboardCardItems.map(\.id)), [apps.id, coding.id])
+        XCTAssertEqual(dashboard.dashboardCardItems.flatMap { $0.result?.configurableMetrics ?? [] }.count, 6)
+        XCTAssertTrue(dashboard.dashboardCardItems.allSatisfy {
+            $0.result?.configurableMetrics.allSatisfy { $0.kind == .unavailableUsage("Setup required") } == true
+        })
+        coding.isEnabled = false
+        XCTAssertTrue(store.update(coding))
+        XCTAssertEqual(dashboard.dashboardCardItems.map(\.id), [apps.id])
+        XCTAssertTrue(GoogleUsageMetricCatalog.missingSourceConfigurations(in: store.configurations).isEmpty)
+        let secondApps = store.addAccount(for: .gemini)
+        XCTAssertEqual(Set(dashboard.dashboardCardItems.map(\.id)), [apps.id, secondApps.id])
+    }
+
+    func testGoogleDashboardLoadingFailureAndObservedResultsRetainSourceIdentity() throws {
+        let apps = ProviderAccountConfiguration.defaultConfiguration(for: .gemini)
+        let coding = Self.configuration
+        let observed = try Self.result(Self.payload())
+        let states: [(Bool, String?, String)] = [(true, nil, "Loading"), (false, "Refresh failed", "Unavailable")]
+        for (isRefreshing, error, expected) in states {
+            let items = DashboardProviderCardItem.items(
+                configurations: [apps, coding], results: [observed],
+                refreshingAccountIDs: isRefreshing ? [apps.id] : [],
+                errorsByAccountID: error.map { [apps.id: $0] } ?? [:],
+                orderingMode: .manual, manualOrder: []
+            )
+            let appsResult = try XCTUnwrap(items.first { $0.id == apps.id }?.result)
+            XCTAssertTrue(appsResult.bars.isEmpty)
+            XCTAssertEqual(appsResult.configurableMetrics.map(\.id), ["gemini.five-hour", "gemini.weekly"])
+            XCTAssertTrue(appsResult.configurableMetrics.allSatisfy { $0.kind == .unavailableUsage(expected) })
+            XCTAssertEqual(items.first { $0.id == coding.id }?.result, observed)
+        }
+        XCTAssertTrue(GoogleUsageMetricCatalog.missingSourceConfigurations(in: []).isEmpty)
+        XCTAssertEqual(GoogleUsageMetricCatalog.missingSourceConfigurations(in: [apps, apps.withNewAccountID()]).count, 1)
+        XCTAssertEqual(GoogleUsageMetricCatalog.missingSourceConfigurations(in: [coding]).map(\.providerID), [.gemini])
+    }
+
+    @MainActor
+    private func googleDashboard(
+        store: ProviderConfigurationStore,
+        service: UsageRefreshService,
+        defaults: UserDefaults
+    ) -> DashboardOrchestrator {
+        DashboardOrchestrator(
+            refreshService: service, configurationStore: store,
+            historyStore: UsageHistoryStore(defaults: defaults),
+            usageAlertNotifier: StubUsageAlertNotifier(), appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                refreshService: service, configurationStore: store, publishSnapshot: { _, _ in }, publishSettings: { _ in }
+            ),
+            watchSnapshotCoordinator: WatchSnapshotCoordinator(
+                refreshService: service, configurationStore: store, publishSnapshot: { _, _, _ in }
+            )
+        )
     }
 
     private static let expiredCredential = #"{"access_token":"old","refresh_token":"refresh","client_id":"client","client_secret":"secret+value","expiry":"2020-01-01T00:00:00Z"}"#

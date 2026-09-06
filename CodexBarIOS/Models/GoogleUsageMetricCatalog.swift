@@ -64,4 +64,23 @@ public enum GoogleUsageMetricCatalog {
             nil
         }
     }
+
+    /// Dashboard-only sources do not create accounts or enter provider refreshes.
+    public static func missingSourceConfigurations(
+        in configurations: [ProviderAccountConfiguration]
+    ) -> [ProviderAccountConfiguration] {
+        let sources: [ProviderID] = [.gemini, .antigravity]
+        guard configurations.contains(where: { $0.isEnabled && sources.contains($0.providerID) }) else {
+            return []
+        }
+        return sources.filter { source in
+            !configurations.contains { $0.providerID == source }
+        }.map { source in
+            ProviderAccountConfiguration(
+                id: "dashboard.setup.\(source.rawValue)",
+                providerID: source,
+                authMethod: source == .gemini ? .browserSession : .cliToken
+            )
+        }
+    }
 }

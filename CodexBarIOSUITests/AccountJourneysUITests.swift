@@ -134,10 +134,44 @@ final class AccountJourneysUITests: XCTestCase {
         app.tap()
     }
 
+    func testGeminiOnlyDashboardShowsCodingSetupAndKeepsSelectionOnRelaunch() throws {
+        let app = launch(scenario: "google-apps-only")
+        assertGoogleMetric("gemini.five-hour", contains: "12%", in: app)
+        assertGoogleMetric("gemini.weekly", contains: "45%", in: app)
+        for id in Self.codingMetricIDs {
+            assertGoogleMetric(id, contains: "Setup required", in: app)
+        }
+        tap(app.buttons["More options for Antigravity"], in: app)
+        tap(app.buttons["Customize Card…"], in: app)
+        let hiddenID = "antigravity.gemini-weekly"
+        tap(app.buttons["customize-metric-\(hiddenID)"], in: app)
+        tap(app.buttons["Hide"], in: app)
+        tap(app.buttons["Done"], in: app)
+        tap(app.buttons["Refresh usage"], in: app)
+        assertGoogleMetric("antigravity.3p-weekly", contains: "Setup required", in: app)
+        XCTAssertTrue(app.buttons["dashboard-metric-\(hiddenID)"].waitForNonExistence(timeout: 5))
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launch()
+        assertGoogleMetric("antigravity.3p-weekly", contains: "Setup required", in: app)
+        XCTAssertTrue(app.buttons["dashboard-metric-\(hiddenID)"].waitForNonExistence(timeout: 5))
+        openGoogleAccount("Antigravity", in: app)
+        let toggle = app.switches["account-metric-visibility-\(hiddenID)"]
+        reveal(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "0")
+        tap(toggle, in: app)
+        dismissAccountSettings(in: app)
+        for id in Self.codingMetricIDs {
+            assertGoogleMetric(id, contains: "Setup required", in: app)
+        }
+    }
+
     func testAntigravityOnlyChoicesSurvivePartialAndFailedRefresh() throws {
         let app = launch(scenario: "google-antigravity")
         XCTAssertTrue(app.buttons["More options for Coding Fixture"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["More options for Apps Fixture"].waitForNonExistence(timeout: 5))
+        assertGoogleMetric("gemini.five-hour", contains: "Setup required", in: app)
+        assertGoogleMetric("gemini.weekly", contains: "Setup required", in: app)
         for (id, value) in zip(Self.codingMetricIDs, ["0%", "31%", "0%", "0%"]) {
             assertGoogleMetric(id, contains: value, in: app)
         }

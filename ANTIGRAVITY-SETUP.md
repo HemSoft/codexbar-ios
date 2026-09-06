@@ -6,10 +6,12 @@ has a five-hour and weekly metric. Gemini Apps history is never relabeled.
 
 This experimental integration requires an imported desktop Antigravity session.
 It does not offer Google sign-in directly on iPhone. This is an unofficial API
-integration, not a Google-supported iPhone grant. The connected-iPhone import
-and comparison are completion gates for [#319](https://github.com/HemSoft/codexbar-ios/issues/319).
+integration, not a Google-supported iPhone grant. Franz owns live iPhone
+verification for [#319](https://github.com/HemSoft/codexbar-ios/issues/319).
+Phone comparisons, import, and renewal checks are follow-ups and do not block
+implementation or merge of the dashboard display fix.
 
-## Six independent choices
+## Six dashboard metrics
 
 Start from Add Account. Google Gemini connects Gemini Apps' two consumer
 limits; Antigravity connects the four coding limits shown by CLI `/usage`.
@@ -24,18 +26,26 @@ Use the same Google identity when comparing with the desktop references.
 | Antigravity | Other models five-hour | `antigravity.3p-5h` |
 | Antigravity | Other models weekly | `antigravity.3p-weekly` |
 
-Other models means Claude/GPT. Each account's Metrics settings lists its known
-choices and visibility controls before a successful fetch. Customize Card is
-available after an account returns a result, including an unavailable result.
-It retains unavailable choices with the existing hide, order, width and
-visualization controls.
+Other models means Claude/GPT. With either Google source added, the dashboard
+shows all six metrics across separate Google Gemini and Antigravity cards. A
+source without an account shows a setup card. An account without credentials
+also keeps its metrics visible with Setup required. These cards contain no
+percentages or resets until their own source supplies values.
+
+Customize Card offers hide, order, width, and visualization controls before a
+successful fetch. Each saved account's Metrics settings exposes visibility
+controls for the same metrics.
+Choosing Configure account on a setup card creates that source's account and
+retains the card preferences. The setup card does not create an account, copy
+credentials, or fetch usage before that action. A saved, disabled source stays
+hidden, and existing explicit metric visibility choices are respected.
 Preferences survive missing data and relaunches. A missing or disabled bucket
 has a status instead of a fabricated percentage. A failed refresh labels cached
 values as last known. Histories and shared snapshots retain their original
 metric identities and contain only observed values.
 
-You can leave Google Gemini unconnected or hide its two metrics and use all
-four Antigravity choices independently.
+You can leave Google Gemini unconnected and hide its two setup metrics, or
+disable its saved account, to show only the four Antigravity metrics.
 
 ## Setup
 
@@ -116,7 +126,7 @@ Requests reject redirects, disable automatic cookies and caching, and never
 include raw server errors in user-facing messages. Quotas go only to the daily
 backend; renewal credentials go only to `oauth2.googleapis.com/token`.
 
-## Live validation for issue #319
+## Live verification follow-up for issue #319
 
 The September 5, 2026 baseline inspection found CodexBar 1.3 build 3 on the
 connected iPhone 17 Pro Max running iOS 27.0, build 24A5418b. Its saved account
@@ -135,10 +145,10 @@ Franz took ownership of the remaining live iPhone testing on September 6 and
 directed that it no longer block PR #320. He reported Gemini Models weekly at
 71% remaining and the other three coding buckets at 100% remaining. These are
 reference values, not a successful phone fetch. Coding values and reset parity,
-import/reimport and coding-card customization remain his acceptance checks in
-#319. They are not claimed as passed.
+import/reimport and coding-card customization remain his follow-up checks in
+#319. They are not claimed as passed and do not block delivery of the display fix.
 
-To complete the comparison:
+Franz can use these optional checks after receiving the updated build:
 
 1. Unlock the phone and use a signed-in CLI session for the same Google account.
    Record `agy --version`, interactive `/usage`, and

@@ -1610,7 +1610,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 || !configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
-        if configuration.providerID == .claude {
+        if [.claude, .gemini, .antigravity].contains(configuration.providerID) {
             return true
         }
 
@@ -2533,3 +2533,19 @@ private struct AppStoreScreenshotSecretStore: SecretStore {
     func deleteSecret(account: String) throws {}
 }
 #endif
+
+public extension ProviderConfigurationStore {
+    /// Save a missing Google source only when the user opens its setup controls.
+    func prepareDashboardAccountForSetup(
+        _ configuration: ProviderAccountConfiguration
+    ) -> ProviderAccountConfiguration? {
+        if let saved = self.configuration(accountID: configuration.id) {
+            return saved
+        }
+        guard GoogleUsageMetricCatalog.missingSourceConfigurations(in: configurations).contains(configuration),
+              update(configuration) else {
+            return nil
+        }
+        return self.configuration(accountID: configuration.id)
+    }
+}
