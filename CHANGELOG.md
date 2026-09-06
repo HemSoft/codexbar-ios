@@ -44,6 +44,20 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Stop publishing cached Google quotas to alerts, widgets and Apple Watch when
+  the provider explicitly disables them, while retaining observed History data.
+  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+
+- Keep all six Google usage choices available in each account's Metrics
+  settings before setup, with independent visibility controls. After an account
+  returns a result, Customize Card also retains unavailable choices. Gemini Apps
+  and Antigravity model families have distinct labels, and each choice keeps its
+  saved visibility, order, width, and visualization after refreshes and relaunches.
+  If a refresh returns no usable quotas, retain observed percentages as last-known
+  data while keeping explicitly disabled quotas unavailable. VoiceOver also
+  announces unavailable and disabled states in Metrics settings.
+  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+
 - Expose the selected account group as a separate accessibility value in account
   settings. ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
 
@@ -84,6 +98,16 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Run Swift security analysis and the usage-history Release budget manually,
+  preserving their diagnostic artifacts and failure checks while removing them
+  from automatic PR runs and merge requirements. Broader CI runtime and benchmark
+  reliability work remains tracked separately.
+  ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
+
+- Re-review the three accepted security findings after the Google quota changes,
+  preserving the full-source snapshot and exact diagnostic checks.
+  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+
 - Include pinned repository-wide SwiftLint and complete strict-concurrency
   checks in the local perfection audit. Report failures alongside every
   selected gate and identify separate readiness checks outside its score.
@@ -91,13 +115,13 @@ building, testing, or releasing the app.
 
 - Measure usage-history recording and chart generation against a frozen Release
   baseline, with a regression gate for latency, serialized size, and retained
-  history growth on relevant pull requests and a weekly schedule.
+  history growth through manual workflow runs.
   ([#310](https://github.com/HemSoft/codexbar-ios/issues/310))
 
 - Add Swift security analysis of the app, widgets, watch companion, and shared
-  code on pull requests, main, and a weekly schedule, with published findings
-  and a gate for unreviewed high-severity findings or incomplete extraction.
-  Pull requests analyze unchanged source too, with three documented
+  code through manual workflow runs, with published findings
+  and failure checks for unreviewed high-severity findings or incomplete extraction.
+  Analysis covers unchanged source too, with three documented
   non-actionable findings that require re-review after production changes.
   ([#309](https://github.com/HemSoft/codexbar-ios/issues/309))
 

@@ -33,7 +33,8 @@ enum WidgetSnapshotPublisher {
                     planAccessibilityLabel: plan?.accessibilityLabel,
                     groupID: configuration?.groupID,
                     groupName: configurationStore.group(for: configuration?.groupID)?.name,
-                    bars: result.bars.enumerated().map { index, bar in
+                    bars: result.enabledBarIndices.map { index in
+                        let bar = result.bars[index]
                         let metricID = bar.metricIdentifier(
                             providerID: result.providerID,
                             index: index

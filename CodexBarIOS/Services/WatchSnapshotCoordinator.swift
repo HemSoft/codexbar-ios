@@ -81,7 +81,8 @@ enum WatchSnapshotPublisher {
                     return nil
                 }
 
-                let barMetrics: [WatchMetricSnapshot] = result.bars.enumerated().map { index, bar in
+                let barMetrics: [WatchMetricSnapshot] = result.enabledBarIndices.map { index in
+                    let bar = result.bars[index]
                     let severityThresholds =
                         configurationStore.usageAlertSettings.severityThresholds
                     let metricID = bar.metricIdentifier(providerID: result.providerID, index: index)

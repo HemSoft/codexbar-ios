@@ -626,6 +626,22 @@ struct ContentView: View {
         }
     }
 
+    static func metricLayoutCopyDestination(
+        _ destination: DashboardProviderCardItem,
+        from source: ProviderUsageResult,
+        configurationStore: ProviderConfigurationStore
+    ) -> MetricLayoutCopyDestination? {
+        guard destination.id != source.accountID, destination.configuration.providerID == source.providerID else { return nil }
+        let metricIDs = GoogleUsageMetricCatalog.metrics(
+            for: destination.configuration.providerID, result: destination.result
+        ).map(\.id)
+        guard !metricIDs.isEmpty else { return nil }
+        return MetricLayoutCopyDestination(
+            id: destination.id, title: destination.configuration.displayName, availableMetricIDs: metricIDs,
+            hasCustomLayout: configurationStore.isMetricLayoutCustomized(accountID: destination.id, availableMetricIDs: metricIDs)
+        )
+    }
+
     @ViewBuilder
     private func dashboardCard(
         for item: DashboardProviderCardItem,
@@ -771,23 +787,8 @@ struct ContentView: View {
                 },
                 copyLayoutDestinations: {
                     orchestrator.dashboardCardItems.compactMap { destination in
-                        guard
-                            destination.id != result.accountID,
-                            destination.configuration.providerID == result.providerID,
-                            let destinationResult = destination.result,
-                            !destinationResult.availableMetrics.isEmpty
-                        else {
-                            return nil
-                        }
-                        let metricIDs = destinationResult.availableMetrics.map(\.id)
-                        return MetricLayoutCopyDestination(
-                            id: destination.id,
-                            title: destination.configuration.displayName,
-                            availableMetricIDs: metricIDs,
-                            hasCustomLayout: configurationStore.isMetricLayoutCustomized(
-                                accountID: destination.id,
-                                availableMetricIDs: metricIDs
-                            )
+                        Self.metricLayoutCopyDestination(
+                            destination, from: result, configurationStore: configurationStore
                         )
                     }
                 },

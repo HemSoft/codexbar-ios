@@ -105,7 +105,7 @@ enum ProviderMetricTileGridResolver {
         switch kind {
         case .creditsRemaining, .monetary:
             return .half
-        case .usageBar:
+        case .usageBar, .unavailableUsage:
             switch visualizationStyle {
             case .circularRing, .semicircularDial, .largeNumeric:
                 return .half
@@ -427,8 +427,8 @@ struct ProviderUsageCard: View {
                 )
             }
         }
-        .task(id: result.availableMetrics.map(\.id)) {
-            onMetricsDiscovered(result.availableMetrics.map(\.id))
+        .task(id: result.configurableMetrics.map(\.id)) {
+            onMetricsDiscovered(result.configurableMetrics.map(\.id))
         }
         .onChange(of: result.fetchedAt) {
             resetInventoryPresentation = Self.reconciledResetInventoryPresentation(
@@ -440,7 +440,7 @@ struct ProviderUsageCard: View {
             isResetActionUnavailable = false
             resetFeedback = nil
         }
-        .onChange(of: result.availableMetrics.map(\.id)) {
+        .onChange(of: result.configurableMetrics.map(\.id)) {
             guard let metricID = metricDetailPresentation?.metricID else {
                 return
             }
@@ -812,7 +812,7 @@ struct ProviderUsageCard: View {
             cardSeverity == .critical,
             strongestVisibleSeverity < .critical,
             result.hasReachedSpendLimit,
-            let spentMetric = result.availableMetrics.first(where: { metric in
+            let spentMetric = result.configurableMetrics.first(where: { metric in
                 guard case let .monetary(index) = metric.kind else {
                     return false
                 }
@@ -846,7 +846,7 @@ struct ProviderUsageCard: View {
             let balanceAlert = alerts.first(where: {
                 $0.kind == .balance && $0.severity == cardSeverity
             }),
-            let creditMetric = result.availableMetrics.first(where: { metric in
+            let creditMetric = result.configurableMetrics.first(where: { metric in
                 guard case .creditsRemaining = metric.kind else {
                     return false
                 }
@@ -933,7 +933,7 @@ struct ProviderUsageCard: View {
         if !informationSections(for: result, alerts: alerts).isEmpty {
             actions.append(.moreInformation)
         }
-        if result.availableMetrics.isEmpty {
+        if result.configurableMetrics.isEmpty {
             actions.append(.configureAccount)
             return actions
         }
@@ -973,8 +973,8 @@ struct ProviderUsageCard: View {
         for result: ProviderUsageResult,
         isMetricVisible: (String) -> Bool
     ) -> Bool {
-        result.availableMetrics.count > 1
-            || result.availableMetrics.contains { !isMetricVisible($0.id) }
+        result.configurableMetrics.count > 1
+            || result.configurableMetrics.contains { !isMetricVisible($0.id) }
     }
 
     static func metricVisibilityAccessibilityValue(isVisible: Bool) -> String {
@@ -1109,7 +1109,7 @@ struct ProviderUsageCard: View {
 
     private var metricGridRows: [ProviderMetricTileGridRow] {
         ProviderMetricTileGridResolver.rows(
-            metrics: result.availableMetrics.filter { isMetricVisible($0.id) },
+            metrics: result.configurableMetrics.filter { isMetricVisible($0.id) },
             orderedMetricIDs: metricOrder,
             widthForMetric: metricWidthForMetric,
             visualizationStyleForMetric: { metricID in
@@ -1131,37 +1131,15 @@ struct ProviderUsageCard: View {
                 switch item.metric.kind {
                 case let .usageBar(index):
                     if result.bars.indices.contains(index) {
-                        let bar = result.bars[index]
-                        Text(bar.label)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        let visualizationStyle = resolvedVisualizationStyle(for: item.metric)
-                        if visualizationStyle.showsStandaloneMetricTileValue && !bar.isUnboundedNumeric {
-                            Text(bar.usageText)
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .monospacedDigit()
-                        }
-
-                        MetricVisualizationView(
-                            bar: bar,
-                            style: visualizationStyle,
-                            showsSeverity: result.hasCurrentBars
-                        )
-
-                        if item.width == .full {
-                            if let resetDescription = bar.localizedResetDescription() {
-                                supportingText(resetDescription)
-                            }
-                            if result.hasCurrentBars,
-                               let projectionDescription = bar.dashboardProjectionDescription() {
-                                supportingText(projectionDescription)
-                            }
-                        }
+                        usageTileContent(item, bar: result.bars[index])
                     }
+                case let .unavailableUsage(reason):
+                    Text(item.metric.label)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(reason)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 case .creditsRemaining:
                     if let creditsRemaining = result.creditsRemaining {
                         Text(item.metric.label)
@@ -1214,9 +1192,40 @@ struct ProviderUsageCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("dashboard-metric-\(item.metric.id)")
         .accessibilityLabel(metricAccessibilityLabel(item.metric))
         .accessibilityHint(Self.metricDetailAccessibilityHint)
         .accessibilityAddTraits(.isButton)
+    }
+
+    private func usageTileContent(_ item: ProviderMetricTileGridItem, bar: UsageBar) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(item.metric.label)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            let visualizationStyle = resolvedVisualizationStyle(for: item.metric)
+            if visualizationStyle.showsStandaloneMetricTileValue && !bar.isUnboundedNumeric {
+                Text(bar.usageText)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .monospacedDigit()
+            }
+            MetricVisualizationView(bar: bar, style: visualizationStyle, showsSeverity: result.hasCurrentBars)
+            if result.providerID == .gemini || result.providerID == .antigravity {
+                supportingText(result.hasCurrentBars ? "Percent used · Current" : "Percent used · Last known value")
+            }
+            if item.width == .full {
+                if let resetDescription = bar.localizedResetDescription() {
+                    supportingText(resetDescription)
+                }
+                if result.hasCurrentBars, let projectionDescription = bar.dashboardProjectionDescription() {
+                    supportingText(projectionDescription)
+                }
+            }
+        }
     }
 
     private func resolvedVisualizationStyle(
@@ -1271,6 +1280,8 @@ struct ProviderUsageCard: View {
             return historySeriesOptionsProvider()
                 .first(where: { $0.id == "usage.\(stableKey)" })?
                 .series
+        case .unavailableUsage:
+            return nil
         case .creditsRemaining:
             preferredOptionID = "balance"
         case let .monetary(index):
@@ -1287,7 +1298,7 @@ struct ProviderUsageCard: View {
         withID metricID: String,
         in result: ProviderUsageResult
     ) -> ProviderUsageMetric? {
-        result.availableMetrics.first { $0.id == metricID }
+        result.configurableMetrics.first { $0.id == metricID }
     }
 
     private func metricAccessibilityLabel(_ metric: ProviderUsageMetric) -> String {
@@ -1298,6 +1309,8 @@ struct ProviderUsageCard: View {
                 in: result,
                 thresholds: severityThresholds
             )
+        case let .unavailableUsage(reason):
+            return "\(metric.label), \(reason)"
         case .creditsRemaining:
             return [
                 metric.label,
@@ -1339,7 +1352,7 @@ struct ProviderUsageCard: View {
         return [
             bar.label,
             bar.usageText,
-            "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit))",
+            "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit)) used",
             result.hasCurrentBars
                 ? bar.effectiveSeverity(thresholds: thresholds).accessibilityName
                 : "status unavailable",
@@ -2528,6 +2541,9 @@ private struct ProviderMetricTileDetailView: View {
                 detailRow("Projection", projectionDescription)
             }
             detailRow("Account status", statusText)
+        case let .unavailableUsage(reason):
+            detailRow("Availability", reason)
+            detailRow("Account status", statusText)
         case .creditsRemaining:
             detailRow("Balance", valueText)
             detailRow("Freshness", result.hasCurrentCredits ? "Current" : "Last known value")
@@ -2606,6 +2622,8 @@ private struct ProviderMetricTileDetailView: View {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
             return result.bars[index].usageText
+        case let .unavailableUsage(reason):
+            return reason
         case .creditsRemaining:
             return result.creditsRemaining.map { CodexBarCurrencyText.format($0) } ?? "Unavailable"
         case let .monetary(index) where result.monetaryMetrics.indices.contains(index):
@@ -2788,6 +2806,7 @@ private struct MetricVisualizationCustomizationView: View {
                 }
                 .padding(16)
             }
+            .accessibilityIdentifier("metric-customization-scroll")
             .navigationTitle("Customize Card")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -2848,12 +2867,12 @@ private struct MetricVisualizationCustomizationView: View {
     }
 
     private var availableMetricIDs: [String] {
-        result.availableMetrics.map(\.id)
+        result.configurableMetrics.map(\.id)
     }
 
     private var orderedMetrics: [ProviderUsageMetric] {
         let metricsByID = Dictionary(
-            result.availableMetrics.map { ($0.id, $0) },
+            result.configurableMetrics.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
         var seen = Set<String>()
@@ -2862,7 +2881,7 @@ private struct MetricVisualizationCustomizationView: View {
                 return nil
             }
             return metricsByID[metricID]
-        } + result.availableMetrics.filter { seen.insert($0.id).inserted }
+        } + result.configurableMetrics.filter { seen.insert($0.id).inserted }
     }
 
     private var visibleMetrics: [ProviderUsageMetric] {
@@ -2973,9 +2992,10 @@ private struct MetricVisualizationCustomizationView: View {
                 }
             }
 
-            if let bar = usageBar(for: metric) {
+            let styles = supportedStyles(for: metric)
+            if !styles.isEmpty {
                 Menu("Visualization") {
-                    ForEach(bar.supportedVisualizationStyles) { style in
+                    ForEach(styles) { style in
                         Button {
                             performChange {
                                 onUpdateVisualizationStyle(metric.id, style)
@@ -3005,6 +3025,7 @@ private struct MetricVisualizationCustomizationView: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
+        .accessibilityIdentifier("customize-metric-\(metric.id)")
         .accessibilityLabel("Actions for \(metric.label)")
         .accessibilityHint("Move, resize, restyle, or hide this metric")
     }
@@ -3044,20 +3065,7 @@ private struct MetricVisualizationCustomizationView: View {
     private func previewValue(for metric: ProviderUsageMetric) -> some View {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
-            let bar = result.bars[index]
-            let visualizationStyle = resolvedVisualizationStyle(for: metric)
-            VStack(alignment: .leading, spacing: 8) {
-                if visualizationStyle.showsStandaloneMetricTileValue && !bar.isUnboundedNumeric {
-                    Text(bar.usageText)
-                        .font(.title3.weight(.semibold))
-                        .monospacedDigit()
-                }
-                MetricVisualizationView(
-                    bar: bar,
-                    style: visualizationStyle,
-                    showsSeverity: showsSeverity
-                )
-            }
+            usagePreview(for: metric, bar: result.bars[index])
         case .creditsRemaining:
             Text(result.creditsRemaining.map { CodexBarCurrencyText.format($0) } ?? "Unavailable")
                 .font(.title3.weight(.semibold))
@@ -3066,10 +3074,24 @@ private struct MetricVisualizationCustomizationView: View {
             Text(result.monetaryMetrics[index].formattedAmount())
                 .font(.title3.weight(.semibold))
                 .monospacedDigit()
+        case let .unavailableUsage(reason):
+            Text(reason).font(.subheadline).foregroundStyle(.secondary)
         default:
             Text("Unavailable")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func usagePreview(for metric: ProviderUsageMetric, bar: UsageBar) -> some View {
+        let visualizationStyle = resolvedVisualizationStyle(for: metric)
+        return VStack(alignment: .leading, spacing: 8) {
+            if visualizationStyle.showsStandaloneMetricTileValue && !bar.isUnboundedNumeric {
+                Text(bar.usageText)
+                    .font(.title3.weight(.semibold))
+                    .monospacedDigit()
+            }
+            MetricVisualizationView(bar: bar, style: visualizationStyle, showsSeverity: showsSeverity)
         }
     }
 
@@ -3153,12 +3175,18 @@ private struct MetricVisualizationCustomizationView: View {
     }
 
     private var styleMetricIDs: [String] {
-        result.availableMetrics.compactMap { metric in
+        result.configurableMetrics.compactMap { metric in
+            if case .unavailableUsage = metric.kind { return metric.id }
             guard let bar = usageBar(for: metric), !bar.isUnboundedNumeric else {
                 return nil
             }
             return metric.id
         }
+    }
+
+    private func supportedStyles(for metric: ProviderUsageMetric) -> [MetricVisualizationStyle] {
+        if case .unavailableUsage = metric.kind { return MetricVisualizationStyle.allCases }
+        return usageBar(for: metric)?.supportedVisualizationStyles ?? []
     }
 
     private func usageBar(for metric: ProviderUsageMetric) -> UsageBar? {
@@ -3502,7 +3530,7 @@ private struct MetricCustomizationPreview: View {
     @State private var layout: AccountMetricLayout
 
     init() {
-        let metricIDs = Self.result.availableMetrics.map(\.id)
+        let metricIDs = Self.result.configurableMetrics.map(\.id)
         let preferences = Dictionary(
             uniqueKeysWithValues: metricIDs.enumerated().map { index, metricID in
                 (
@@ -3586,7 +3614,7 @@ private struct MetricCustomizationPreview: View {
                     MetricLayoutCopyDestination(
                         id: "codex.work",
                         title: "Work Codex",
-                        availableMetricIDs: Self.result.availableMetrics.map(\.id),
+                        availableMetricIDs: Self.result.configurableMetrics.map(\.id),
                         hasCustomLayout: true
                     ),
                 ]
