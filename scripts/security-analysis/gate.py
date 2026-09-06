@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Fail closed on incomplete CodeQL evidence or high-severity Swift findings."""
+"""Fail closed on incomplete CodeQL evidence or unreviewed high-severity findings."""
 
 import argparse
 import csv
+import hashlib
 import json
 import math
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -18,6 +20,92 @@ def production_sources(root):
         ["git", "ls-files", "-z", "--", "*.swift"], cwd=root
     ).decode().split("\0")
     return {path for path in paths if path.startswith(PRODUCTION_ROOTS)}
+
+
+def source_snapshot(root):
+    """Bind review to all production sources, including their names and consumers."""
+    sources = [{"path": path, "sha256": hashlib.sha256((root / path).read_bytes()).hexdigest()}
+               for path in sorted(production_sources(root))]
+    if not sources:
+        raise ValueError("No production source snapshot")
+    return hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()
+
+
+def diagnostic_digest(result):
+    """Retain complete diagnostic/data-flow identity without SARIF table offsets."""
+    def normalize(value):
+        if isinstance(value, list):
+            return [normalize(item) for item in value]
+        if isinstance(value, dict):
+            normalized = {key: normalize(item) for key, item in value.items()}
+            if "artifactLocation" in normalized:
+                normalized["artifactLocation"].pop("index", None)
+            return normalized
+        return value
+
+    diagnostic = normalize(result)
+    # Rule references index the run's metadata, already validated by result_rule.
+    diagnostic.pop("rule", None)
+    diagnostic.pop("ruleIndex", None)
+    return hashlib.sha256(json.dumps(diagnostic, sort_keys=True).encode()).hexdigest()
+
+
+def apply_reviewed_baseline(sarif, findings, baseline, root):
+    """Accept only exact, still-reviewed false positives; never refresh implicitly."""
+    if (not isinstance(baseline, dict)
+            or set(baseline) != {"schema", "reviewed_commit", "source_snapshot_sha256",
+                                 "codeql_version", "query_pack_version", "findings"}
+            or type(baseline["schema"]) is not int or baseline["schema"] != 1):
+        raise ValueError("Invalid reviewed baseline schema")
+    if (not isinstance(baseline["reviewed_commit"], str)
+            or not re.fullmatch(r"[0-9a-f]{40}", baseline["reviewed_commit"])):
+        raise ValueError("Invalid baseline review commit")
+    if (not isinstance(baseline["source_snapshot_sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", baseline["source_snapshot_sha256"])):
+        raise ValueError("Invalid baseline source snapshot")
+    if any(not isinstance(baseline[key], str) or not baseline[key].strip()
+           for key in ("codeql_version", "query_pack_version")):
+        raise ValueError("Invalid baseline analyzer version")
+    if baseline["source_snapshot_sha256"] != source_snapshot(root):
+        raise ValueError("Production sources changed; re-review the non-actionable baseline")
+    tool = sarif["runs"][0]["tool"]
+    packs = [item for item in tool.get("extensions", []) if item.get("name") == "codeql/swift-queries"]
+    if (tool["driver"].get("semanticVersion") != baseline["codeql_version"]
+            or len(packs) != 1
+            or packs[0].get("semanticVersion") != baseline["query_pack_version"]):
+        raise ValueError("Analyzer changed; re-review the non-actionable baseline")
+    entries = baseline["findings"]
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("Reviewed baseline must contain explicit findings")
+    accepted = []
+    seen = set()
+    for entry in entries:
+        if (not isinstance(entry, dict)
+                or set(entry) != {"finding", "alert", "rationale"}
+                or not isinstance(entry["rationale"], str) or not entry["rationale"].strip()
+                or not isinstance(entry["alert"], str)
+                or not re.fullmatch(r"https://github.com/HemSoft/codexbar-ios/security/code-scanning/[0-9]+",
+                                    entry["alert"])):
+            raise ValueError("Invalid reviewed baseline entry")
+        expected = entry["finding"]
+        if (not isinstance(expected, dict)
+                or set(expected) != {"rule", "severity", "path", "line", "message", "diagnostic_sha256"}
+                or any(not isinstance(expected[key], str) or not expected[key]
+                       for key in ("rule", "path", "message", "diagnostic_sha256"))
+                or type(expected["line"]) is not int or expected["line"] <= 0
+                or type(expected["severity"]) not in (int, float)
+                or not re.fullmatch(r"[0-9a-f]{64}", expected["diagnostic_sha256"])
+                or not 7 <= expected["severity"] <= 10):
+            raise ValueError("Invalid reviewed finding identity")
+        identity = expected["diagnostic_sha256"]
+        if identity in seen:
+            raise ValueError("Duplicate reviewed baseline finding")
+        seen.add(identity)
+        matches = [finding for finding in findings if finding == expected]
+        if len(matches) != 1:
+            raise ValueError("Reviewed finding missing, changed, or duplicated; re-review the baseline")
+        accepted.append({**expected, "alert": entry["alert"], "rationale": entry["rationale"]})
+    return accepted
 
 
 def check_reach(rows, expected):
@@ -83,7 +171,7 @@ def security_severity(rule):
     return score
 
 
-def check_findings(sarif):
+def check_findings(sarif, baseline=None, source_root=None):
     if sarif.get("version") != "2.1.0" or len(sarif.get("runs", [])) != 1:
         raise ValueError("Expected one complete CodeQL SARIF 2.1.0 run")
     run = sarif["runs"][0]
@@ -128,10 +216,13 @@ def check_findings(sarif):
         findings.append({"rule": rule["id"], "severity": score,
                          "path": location["artifactLocation"]["uri"],
                          "line": location.get("region", {}).get("startLine"),
-                         "message": result["message"]["text"]})
-    # No accepted high-severity baseline or suppression exists. A dismissed or
-    # suppressed alert still fails until a reviewed fix removes the finding.
-    return {"findings": findings, "blocking_findings": [item for item in findings if item["severity"] >= 7]}
+                         "message": result["message"]["text"],
+                         "diagnostic_sha256": diagnostic_digest(result)})
+    accepted = apply_reviewed_baseline(sarif, findings, baseline, source_root) if baseline is not None else []
+    accepted_ids = {item["diagnostic_sha256"] for item in accepted}
+    return {"findings": findings, "accepted_findings": accepted,
+            "blocking_findings": [item for item in findings
+                                  if item["severity"] >= 7 and item["diagnostic_sha256"] not in accepted_ids]}
 
 
 def main():
@@ -139,6 +230,7 @@ def main():
     parser.add_argument("--sarif", required=True, type=Path)
     parser.add_argument("--reach", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--baseline", type=Path)
     args = parser.parse_args()
     report = {}
     try:
@@ -147,7 +239,8 @@ def main():
             next(rows)  # CodeQL's CSV column headings.
             root = Path(__file__).resolve().parents[2]
             report["reach"] = check_reach(rows, production_sources(root))
-        report.update(check_findings(json.loads(args.sarif.read_text())))
+        baseline = json.loads(args.baseline.read_text()) if args.baseline else None
+        report.update(check_findings(json.loads(args.sarif.read_text()), baseline, root))
         report["passed"] = not report["reach"]["errors"] and not report["blocking_findings"]
     except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.CalledProcessError) as error:
         report.update(passed=False, error=str(error))

@@ -91,7 +91,9 @@ building, testing, or releasing the app.
 
 - Add Swift security analysis of the app, widgets, watch companion, and shared
   code on pull requests, main, and a weekly schedule, with published findings
-  and a gate for high-severity findings or incomplete extraction.
+  and a gate for unreviewed high-severity findings or incomplete extraction.
+  Pull requests analyze unchanged source too, with three documented
+  non-actionable findings that require re-review after production changes.
   ([#309](https://github.com/HemSoft/codexbar-ios/issues/309))
 
 - Require isolated iPhone and iPad UI journeys for account setup, saved group
