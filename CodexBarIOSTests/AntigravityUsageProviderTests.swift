@@ -369,6 +369,40 @@ final class AntigravityUsageProviderTests: XCTestCase {
         XCTAssertTrue(result.hasSuccessfulRefreshHistory)
     }
 
+    @MainActor
+    func testCopyLayoutIncludesMissingDisabledAndUnfetchedGoogleQuotas() throws {
+        let suite = "GoogleCopyLayout.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let source = store.addAccount(for: .antigravity)
+        let destination = store.addAccount(for: .antigravity)
+        let result = try AntigravityQuotaParser.result(from: Self.payload(), configuration: source, fetchedAt: Self.now)
+        let ids = result.configurableMetrics.map(\.id)
+        store.reconcileMetricLayout(accountID: source.id, availableMetricIDs: ids)
+        store.updateMetricVisibility(false, accountID: source.id, metricID: ids[1])
+        store.updateMetricWidth(.half, accountID: source.id, metricID: ids[1])
+        store.updateVisualizationStyle(.circularRing, accountID: source.id, metricID: ids[1])
+        store.updateMetricOrder(Array(ids.reversed()), accountID: source.id)
+        var partial = Self.buckets()
+        partial[1]["disabled"] = true
+        for payload in [nil, try Self.payload([]), try Self.payload(partial)] {
+            let observed = try payload.map { try AntigravityQuotaParser.result(from: $0, configuration: destination, fetchedAt: Self.now) }
+            let item = DashboardProviderCardItem(configuration: destination, result: observed, isRefreshing: false, errorMessage: nil)
+            let copy = try XCTUnwrap(ContentView.metricLayoutCopyDestination(item, from: result, configurationStore: store))
+            XCTAssertEqual(copy.availableMetricIDs, ids)
+            store.copyMetricLayout(from: source.id, to: copy.id, destinationAvailableMetricIDs: copy.availableMetricIDs)
+            XCTAssertEqual(store.metricLayouts[destination.id]?.orderedMetricIDs, Array(ids.reversed()))
+            XCTAssertFalse(store.isMetricVisible(accountID: destination.id, metricID: ids[1]))
+            XCTAssertEqual(store.metricWidth(accountID: destination.id, metricID: ids[1]), .half)
+            XCTAssertEqual(store.visualizationStyle(accountID: destination.id, metricID: ids[1]), .circularRing)
+        }
+        let sameAccount = DashboardProviderCardItem(configuration: source, result: result, isRefreshing: false, errorMessage: nil)
+        XCTAssertNil(ContentView.metricLayoutCopyDestination(sameAccount, from: result, configurationStore: store))
+        let apps = DashboardProviderCardItem(configuration: store.addAccount(for: .gemini), result: nil, isRefreshing: false, errorMessage: nil)
+        XCTAssertNil(ContentView.metricLayoutCopyDestination(apps, from: result, configurationStore: store))
+    }
+
     func testCatalogKeepsOtherProvidersAndRejectsWrongSourceResults() throws {
         let other = ProviderUsageResult(providerID: .openRouter, title: "Other", subtitle: "", bars: [], creditsRemaining: 12, fetchedAt: Self.now)
         XCTAssertEqual(other.configurableMetrics, other.availableMetrics)

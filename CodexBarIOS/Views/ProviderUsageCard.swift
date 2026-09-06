@@ -2806,6 +2806,7 @@ private struct MetricVisualizationCustomizationView: View {
                 }
                 .padding(16)
             }
+            .accessibilityIdentifier("metric-customization-scroll")
             .navigationTitle("Customize Card")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

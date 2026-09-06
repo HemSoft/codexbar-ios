@@ -290,21 +290,33 @@ final class AccountJourneysUITests: XCTestCase {
             .insetBy(dx: 4, dy: 4)
     }
 
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        if element.waitForExistence(timeout: 3) && element.isHittable { return }
+    private func scrollContainer(for element: XCUIElement, in app: XCUIApplication) -> XCUIElement? {
+        let customizer = app.scrollViews["metric-customization-scroll"]
+        if customizer.exists { return customizer }
+        let settings = app.collectionViews["provider-account-settings-form"]
+        if settings.exists { return settings }
+        guard element.exists else { return nil }
         let identifier = element.identifier.isEmpty ? element.label : element.identifier
         let scroll = app.scrollViews.containing(element.elementType, identifier: identifier).firstMatch
-        if scroll.exists {
-            // App-wide swipes can start outside an iPad sheet and scroll the dashboard underneath it.
-            for _ in 0..<18 {
-                let viewport = fieldViewport(form: scroll, in: app)
-                if element.isHittable && viewport.contains(element.frame) { return }
-                let upward = element.frame.midY > viewport.midY
-                let origin = app.coordinate(withNormalizedOffset: .zero)
-                let start = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * (upward ? 0.75 : 0.3)))
-                let end = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * (upward ? 0.35 : 0.7)))
-                start.press(forDuration: 0.05, thenDragTo: end)
+        return scroll.exists ? scroll : nil
+    }
+
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        if element.waitForExistence(timeout: 3) && element.isHittable { return }
+        if let scroll = scrollContainer(for: element, in: app) {
+            for defaultUpward in [true, false] {
+                for _ in 0..<12 {
+                    let viewport = fieldViewport(form: scroll, in: app)
+                    if element.exists && element.isHittable && viewport.contains(element.frame) { return }
+                    let upward = element.exists ? element.frame.midY > viewport.midY : defaultUpward
+                    let origin = app.coordinate(withNormalizedOffset: .zero)
+                    let start = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * (upward ? 0.75 : 0.3)))
+                    let end = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * (upward ? 0.35 : 0.7)))
+                    start.press(forDuration: 0.05, thenDragTo: end)
+                }
             }
+            XCTFail("Control is unreachable in its scroll view: \(element).\n\(app.debugDescription)")
+            return
         }
         for _ in 0..<8 {
             app.swipeUp()

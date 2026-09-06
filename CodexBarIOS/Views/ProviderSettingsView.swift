@@ -414,6 +414,7 @@ struct ProviderSettingsView: View {
                 Text("Current Status")
             }
         }
+        .accessibilityIdentifier("provider-account-settings-form")
         .navigationTitle(configuration.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .task {
