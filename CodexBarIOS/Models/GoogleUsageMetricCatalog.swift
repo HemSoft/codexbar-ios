@@ -38,9 +38,14 @@ public enum GoogleUsageMetricCatalog {
         let knownIDs = Set(definitions.map { "\(providerID.rawValue).\($0.key)" })
         return definitions.map { definition in
             let metricID = "\(providerID.rawValue).\(definition.key)"
-            let kind = matchingResult?.unavailableUsageMetrics[metricID].map { ProviderUsageMetricKind.unavailableUsage($0) }
-                ?? observed.first { $0.id == metricID }?.kind
-                ?? .unavailableUsage(missingReason)
+            let unavailableReason = matchingResult?.unavailableUsageMetrics[metricID]
+            let kind: ProviderUsageMetricKind
+            if unavailableReason == "Disabled" {
+                kind = .unavailableUsage("Disabled")
+            } else {
+                kind = observed.first { $0.id == metricID }?.kind
+                    ?? .unavailableUsage(unavailableReason ?? missingReason)
+            }
             return ProviderUsageMetric(id: metricID, label: definition.label, kind: kind)
         } + observed.filter { !knownIDs.contains($0.id) }
     }

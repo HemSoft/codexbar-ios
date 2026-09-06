@@ -48,7 +48,9 @@ building, testing, or releasing the app.
   including before setup or when a quota is unavailable. Gemini Apps and
   Antigravity model families have distinct labels, and each choice keeps its
   visibility, order, width, and visualization preferences after refreshes and
-  relaunches. ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+  relaunches. If a refresh returns no usable quotas, retain observed percentages
+  as last-known data while keeping explicitly disabled quotas unavailable.
+  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
 
 - Expose the selected account group as a separate accessibility value in account
   settings. ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))

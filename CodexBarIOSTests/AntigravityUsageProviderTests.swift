@@ -342,6 +342,35 @@ final class AntigravityUsageProviderTests: XCTestCase {
     }
 
     @MainActor
+    func testUnavailableResponseKeepsObservedQuotasAsLastKnownData() async throws {
+        let secrets = MemorySecretStore()
+        try secrets.saveSecret(#"{"access_token":"test"}"#, account: ProviderConfigurationStore.keychainAccount(for: Self.configuration))
+        let fixture = IsolatedTestURLSession { request in
+            (try Self.response(request, status: 200), try Self.payload([]))
+        }
+        defer { fixture.invalidate() }
+        var buckets = Array(Self.buckets().prefix(2))
+        buckets[0]["remainingFraction"] = 1.0
+        let initial = try Self.result(Self.payload(buckets))
+        let service = UsageRefreshService(
+            providers: [AntigravityUsageProvider(secretStore: secrets, sessionConfiguration: fixture.session.configuration)],
+            initialResults: [initial]
+        )
+        await service.refresh(configurations: [Self.configuration])
+        let result = try XCTUnwrap(service.results.first)
+        XCTAssertFalse(result.hasCurrentBars)
+        XCTAssertNotNil(result.failureMessage)
+        XCTAssertTrue(result.subtitle.contains("Showing last known data"))
+        XCTAssertEqual(result.bars, initial.bars)
+        XCTAssertEqual(result.barsFetchedAt, initial.barsFetchedAt)
+        XCTAssertEqual(result.bars.map(\.usageText), ["0%", "31%"])
+        XCTAssertEqual(result.configurableMetrics.map(\.kind), [
+            .usageBar(index: 0), .usageBar(index: 1),
+            .unavailableUsage("Unavailable"), .unavailableUsage("Unavailable"),
+        ])
+    }
+
+    @MainActor
     func testExplicitlyDisabledBucketsOverrideCachedValuesWithoutLosingHistory() async throws {
         let secrets = MemorySecretStore()
         try secrets.saveSecret(#"{"access_token":"test"}"#, account: ProviderConfigurationStore.keychainAccount(for: Self.configuration))
