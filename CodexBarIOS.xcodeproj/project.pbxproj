@@ -34,6 +34,7 @@
 		10000000000000000000004B /* ConfigurationAndAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004B /* ConfigurationAndAuthTests.swift */; };
 		10000000000000000000004C /* ProviderParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004C /* ProviderParsingTests.swift */; };
 		A29600000000000000000003 /* GeminiUsageProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29600000000000000000004 /* GeminiUsageProviderTests.swift */; };
+		A31400000000000000000401 /* AntigravityUsageProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000402 /* AntigravityUsageProviderTests.swift */; };
 		A29900000000000000000201 /* GeminiBrowserSignInTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29900000000000000000202 /* GeminiBrowserSignInTests.swift */; };
 		10000000000000000000004D /* UsageHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004D /* UsageHistoryTests.swift */; };
 		10000000000000000000004E /* ProviderNetworkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000004E /* ProviderNetworkTests.swift */; };
@@ -70,6 +71,9 @@
 		100000000000000000000023 /* OpenRouterUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* OpenRouterUsageProvider.swift */; };
 		A22500000000000000000001 /* GreptileUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22500000000000000000002 /* GreptileUsageProvider.swift */; };
 		A29600000000000000000001 /* GeminiUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29600000000000000000002 /* GeminiUsageProvider.swift */; };
+		A31400000000000000000301 /* AntigravityUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000302 /* AntigravityUsageProvider.swift */; };
+		A31400000000000000000201 /* AntigravityQuotaParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000202 /* AntigravityQuotaParser.swift */; };
+		A31400000000000000000101 /* AntigravityCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000102 /* AntigravityCredentials.swift */; };
 		A29900000000000000000001 /* GeminiBrowserSessionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */; };
 		10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003F /* MoonshotUsageProvider.swift */; };
 		100000000000000000000040 /* TokenEndpointErrorFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000040 /* TokenEndpointErrorFormatter.swift */; };
@@ -243,6 +247,7 @@
 		20000000000000000000004B /* ConfigurationAndAuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationAndAuthTests.swift; sourceTree = "<group>"; };
 		20000000000000000000004C /* ProviderParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderParsingTests.swift; sourceTree = "<group>"; };
 		A29600000000000000000004 /* GeminiUsageProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiUsageProviderTests.swift; sourceTree = "<group>"; };
+		A31400000000000000000402 /* AntigravityUsageProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityUsageProviderTests.swift; sourceTree = "<group>"; };
 		A29900000000000000000202 /* GeminiBrowserSignInTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiBrowserSignInTests.swift; sourceTree = "<group>"; };
 		20000000000000000000004D /* UsageHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageHistoryTests.swift; sourceTree = "<group>"; };
 		20000000000000000000004E /* ProviderNetworkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderNetworkTests.swift; sourceTree = "<group>"; };
@@ -274,6 +279,9 @@
 		200000000000000000000025 /* OpenRouterUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterUsageProvider.swift; sourceTree = "<group>"; };
 		A22500000000000000000002 /* GreptileUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreptileUsageProvider.swift; sourceTree = "<group>"; };
 		A29600000000000000000002 /* GeminiUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiUsageProvider.swift; sourceTree = "<group>"; };
+		A31400000000000000000302 /* AntigravityUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityUsageProvider.swift; sourceTree = "<group>"; };
+		A31400000000000000000202 /* AntigravityQuotaParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityQuotaParser.swift; sourceTree = "<group>"; };
+		A31400000000000000000102 /* AntigravityCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityCredentials.swift; sourceTree = "<group>"; };
 		A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiBrowserSessionPolicy.swift; sourceTree = "<group>"; };
 		20000000000000000000003F /* MoonshotUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonshotUsageProvider.swift; sourceTree = "<group>"; };
 		200000000000000000000040 /* TokenEndpointErrorFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEndpointErrorFormatter.swift; sourceTree = "<group>"; };
@@ -482,6 +490,9 @@
 				200000000000000000000025 /* OpenRouterUsageProvider.swift */,
 				A22500000000000000000002 /* GreptileUsageProvider.swift */,
 				A29600000000000000000002 /* GeminiUsageProvider.swift */,
+				A31400000000000000000302 /* AntigravityUsageProvider.swift */,
+				A31400000000000000000202 /* AntigravityQuotaParser.swift */,
+				A31400000000000000000102 /* AntigravityCredentials.swift */,
 				A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */,
 				20000000000000000000003F /* MoonshotUsageProvider.swift */,
 				200000000000000000000040 /* TokenEndpointErrorFormatter.swift */,
@@ -528,6 +539,7 @@
 				20000000000000000000004E /* ProviderNetworkTests.swift */,
 				20000000000000000000004C /* ProviderParsingTests.swift */,
 				A29600000000000000000004 /* GeminiUsageProviderTests.swift */,
+				A31400000000000000000402 /* AntigravityUsageProviderTests.swift */,
 				A29900000000000000000202 /* GeminiBrowserSignInTests.swift */,
 				200000000000000000000050 /* TestSupport.swift */,
 				20000000000000000000004A /* UsageAlertTests.swift */,
@@ -946,6 +958,9 @@
 				100000000000000000000023 /* OpenRouterUsageProvider.swift in Sources */,
 				A22500000000000000000001 /* GreptileUsageProvider.swift in Sources */,
 				A29600000000000000000001 /* GeminiUsageProvider.swift in Sources */,
+				A31400000000000000000301 /* AntigravityUsageProvider.swift in Sources */,
+				A31400000000000000000201 /* AntigravityQuotaParser.swift in Sources */,
+				A31400000000000000000101 /* AntigravityCredentials.swift in Sources */,
 				A29900000000000000000001 /* GeminiBrowserSessionPolicy.swift in Sources */,
 				10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */,
 				100000000000000000000040 /* TokenEndpointErrorFormatter.swift in Sources */,
@@ -988,6 +1003,7 @@
 				10000000000000000000004E /* ProviderNetworkTests.swift in Sources */,
 				10000000000000000000004C /* ProviderParsingTests.swift in Sources */,
 				A29600000000000000000003 /* GeminiUsageProviderTests.swift in Sources */,
+				A31400000000000000000401 /* AntigravityUsageProviderTests.swift in Sources */,
 				A29900000000000000000201 /* GeminiBrowserSignInTests.swift in Sources */,
 				100000000000000000000050 /* TestSupport.swift in Sources */,
 				100000000000000000000051 /* UsageAlertTests.swift in Sources */,

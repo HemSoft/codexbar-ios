@@ -2331,6 +2331,8 @@ public final class ProviderConfigurationStore: ObservableObject {
         switch configuration.providerID {
         case .codex, .cursor, .gemini:
             normalized.authMethod = .browserSession
+        case .antigravity:
+            normalized.authMethod = .cliToken
         case .copilot, .claude, .openRouter, .openCodeZen, .moonshot, .greptile:
             break
         }
@@ -2491,6 +2493,13 @@ public extension ProviderConfigurationStore {
                 accountLabel: "Greptile Reviews",
                 groupID: usageGroup.id,
                 authMethod: .apiKey
+            ),
+            ProviderAccountConfiguration(
+                id: AppStoreScreenshotFixtureID.antigravityAccount,
+                providerID: .antigravity,
+                accountLabel: "Antigravity demo",
+                groupID: usageGroup.id,
+                authMethod: .cliToken
             ),
             ProviderAccountConfiguration(
                 id: AppStoreScreenshotFixtureID.geminiAccount,

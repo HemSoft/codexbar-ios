@@ -132,6 +132,15 @@ final class ProviderSettingsViewModel: ObservableObject {
                     + "Greptile could not validate it right now. ",
                 validatedMessage: "API key saved in Keychain and validated by Greptile."
             )
+        case .antigravity:
+            CredentialValidationFeedback(
+                validatingMessage: "Session saved in Keychain. Validating Antigravity quotas...",
+                disabledMessage: "Session saved in Keychain. Enable this account to validate it.",
+                incompleteMessage: "Session saved in Keychain. Refresh to finish validation.",
+                authenticationFailurePrefix: "Antigravity session validation failed. ",
+                transientFailurePrefix: "Antigravity quotas could not be validated. ",
+                validatedMessage: "Antigravity session saved and quotas verified."
+            )
         case .gemini:
             CredentialValidationFeedback(
                 validatingMessage: "Session credentials saved in Keychain. Validating with Gemini...",
@@ -158,6 +167,8 @@ final class ProviderSettingsViewModel: ObservableObject {
         switch providerID {
         case .codex, .claude, .cursor, .gemini:
             [.browserSession]
+        case .antigravity:
+            [.cliToken]
         case .copilot:
             [.browserSession, .cliToken]
         case .openRouter, .openCodeZen, .moonshot, .greptile:
@@ -166,6 +177,22 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     var credentialPresentation: ProviderCredentialPresentation {
+        if providerID == .antigravity {
+            return ProviderCredentialPresentation(
+                sectionTitle: "Antigravity Session Import",
+                unsavedPlaceholder: "Paste Antigravity session JSON",
+                savedPlaceholder: "Antigravity session saved",
+                saveButtonTitle: "Save and Validate Session",
+                setupMessage: "Import a session from your signed-in Antigravity desktop. "
+                    + "Without renewal credentials, import again when the access token expires. "
+                    + "Sign-in directly on iPhone is not available yet.",
+                setupLinkTitle: "Antigravity import instructions",
+                setupURL: URL(string: "https://github.com/HemSoft/codexbar-ios/blob/main/ANTIGRAVITY-SETUP.md"),
+                securityMessage: "Session tokens may grant broader Google account access. "
+                    + "They stay in this account's Keychain entry. This integration uses an unofficial quota API."
+            )
+        }
+
         if providerID == .openRouter {
             return ProviderCredentialPresentation(
                 sectionTitle: "OpenRouter Management API Key",
@@ -398,6 +425,13 @@ final class ProviderSettingsViewModel: ObservableObject {
                 credentialToStore = try GeminiSessionCredentialsParser.storedCredential(from: secret)
             } catch {
                 credentialError = error.localizedDescription
+                return
+            }
+        } else if providerID == .antigravity {
+            do {
+                credentialToStore = try AntigravityCredentials.parse(secret).encoded()
+            } catch {
+                credentialError = AntigravityCredentials.CredentialError.invalid.localizedDescription
                 return
             }
         } else {

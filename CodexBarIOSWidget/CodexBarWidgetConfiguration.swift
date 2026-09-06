@@ -188,6 +188,7 @@ enum CodexBarWidgetFocus: String, AppEnum {
     case openRouter
     case greptile
     case gemini
+    case antigravity
 
     static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Focus")
     static let caseDisplayRepresentations: [CodexBarWidgetFocus: DisplayRepresentation] = [
@@ -201,6 +202,7 @@ enum CodexBarWidgetFocus: String, AppEnum {
         .openRouter: "OpenRouter",
         .greptile: "Greptile",
         .gemini: "Google Gemini",
+        .antigravity: "Antigravity",
     ]
 
     var providerID: String? {
@@ -225,6 +227,8 @@ enum CodexBarWidgetFocus: String, AppEnum {
             "greptile"
         case .gemini:
             "gemini"
+        case .antigravity:
+            "antigravity"
         }
     }
 }

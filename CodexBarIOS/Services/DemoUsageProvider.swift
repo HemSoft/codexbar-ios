@@ -304,6 +304,16 @@ public extension DemoUsageProvider {
                 subtitle: "All available review history"
             ),
             DemoUsageProvider(
+                providerID: .antigravity,
+                bars: [
+                    UsageBar(stableKey: "gemini-5h", label: "Gemini five-hour", used: 100, limit: 100),
+                    UsageBar(stableKey: "gemini-weekly", label: "Gemini weekly", used: 31, limit: 100),
+                    UsageBar(stableKey: "3p-5h", label: "Claude/GPT five-hour", used: 20, limit: 100),
+                    UsageBar(stableKey: "3p-weekly", label: "Claude/GPT weekly", used: 60, limit: 100),
+                ],
+                subtitle: "Antigravity quota groups"
+            ),
+            DemoUsageProvider(
                 providerID: .gemini,
                 bars: [
                     UsageBar(

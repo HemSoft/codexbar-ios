@@ -262,6 +262,8 @@ public extension ProviderAccountConfiguration {
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .claude:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
+        case .antigravity:
+            ProviderAccountConfiguration(providerID: providerID, authMethod: .cliToken)
         case .gemini:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .openRouter:
