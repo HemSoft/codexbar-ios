@@ -142,9 +142,6 @@ final class AccountJourneysUITests: XCTestCase {
         assertGoogleMetric("antigravity.gemini-weekly", contains: "Unavailable", in: app)
         assertGoogleMetric("antigravity.3p-5h", contains: "Disabled", in: app)
         assertGoogleMetric("antigravity.gemini-5h", contains: "0%", in: app)
-        openGoogleAccount("Coding Fixture", in: app)
-        assertMetricSwitches(Self.codingMetricIDs, in: app)
-        tap(app.buttons["Done"], in: app)
         openCodingCustomizer(in: app)
         for id in Self.codingMetricIDs {
             reveal(app.buttons["customize-metric-\(id)"], in: app)
@@ -159,6 +156,9 @@ final class AccountJourneysUITests: XCTestCase {
             assertGoogleMetric(id, contains: value, in: app)
             XCTAssertTrue(app.buttons["dashboard-metric-\(id)"].label.contains("fresh"))
         }
+        openGoogleAccount("Coding Fixture", in: app)
+        assertMetricSwitches(Self.codingMetricIDs, in: app)
+        tap(app.buttons["Done"], in: app)
     }
 
     private static let codingMetricIDs = [
@@ -252,6 +252,11 @@ final class AccountJourneysUITests: XCTestCase {
         reveal(field, in: app)
         revealField(field, in: app)
         tap(field, in: app)
+        if !app.keyboards.firstMatch.waitForExistence(timeout: 5) {
+            // The first iPad split-view tap can activate the detail pane without focusing its field.
+            revealField(field, in: app)
+            field.tap()
+        }
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), app.debugDescription)
         field.typeText(text)
     }
@@ -287,6 +292,20 @@ final class AccountJourneysUITests: XCTestCase {
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         if element.waitForExistence(timeout: 3) && element.isHittable { return }
+        let identifier = element.identifier.isEmpty ? element.label : element.identifier
+        let scroll = app.scrollViews.containing(element.elementType, identifier: identifier).firstMatch
+        if scroll.exists {
+            // App-wide swipes can start outside an iPad sheet and scroll the dashboard underneath it.
+            for _ in 0..<18 {
+                let viewport = fieldViewport(form: scroll, in: app)
+                if element.isHittable && viewport.contains(element.frame) { return }
+                let upward = element.frame.midY > viewport.midY
+                let origin = app.coordinate(withNormalizedOffset: .zero)
+                let start = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * (upward ? 0.75 : 0.3)))
+                let end = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * (upward ? 0.35 : 0.7)))
+                start.press(forDuration: 0.05, thenDragTo: end)
+            }
+        }
         for _ in 0..<8 {
             app.swipeUp()
             if element.exists && element.isHittable { return }

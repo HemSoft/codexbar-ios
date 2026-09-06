@@ -24,7 +24,10 @@ All four tests start with a new UUID storage namespace and use accessibility tex
 size 2, English labels, and the US locale. Navigation uses the real views and
 actions. Tests wait for settings destinations, keep text fields inside the
 visible form below its navigation bar, and wait for the keyboard before
-entering text. Animations retain the normal app behavior.
+entering text. An unfocused iPad detail field gets one additional tap, and the
+keyboard must still appear before typing. Scroll gestures stay inside the
+containing scroll view so an iPad sheet scrolls instead of the dashboard behind
+it. Animations retain the normal app behavior.
 
 - `testAccountSetupPersistsGroupAndCredentialAtAccessibilitySize` starts with
   no accounts or groups, adds a group through Settings, opens Add Account,
@@ -50,9 +53,9 @@ entering text. Animations retain the normal app behavior.
   restores that choice through Customize Card.
 - `testAntigravityOnlyChoicesSurvivePartialAndFailedRefresh` runs without
   Gemini Apps. A partial refresh makes one quota unavailable and another
-  disabled, while both choices remain in settings and Customize Card. A
-  subsequent failure preserves stale values; recovery displays 100%, 31%,
-  20%, and 60% used with fresh status.
+  disabled, while both choices remain in Customize Card. A subsequent failure
+  preserves stale values; recovery displays 100%, 31%, 20%, and 60% used with
+  fresh status. All four settings switches remain reachable after recovery.
 
 The tests assert accessible names, values, selection state, and reachable tap
 targets. They cover app-owned account and usage navigation. Live website sign-in,
