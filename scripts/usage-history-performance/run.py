@@ -62,6 +62,37 @@ def reference_tree(revision, destination):
         manifest.write_text(content)
 
 
+def machine_snapshot(output, name):
+    """Record diagnostic context without treating a missing probe as a timing result."""
+    snapshot = dict(capturedAt=datetime.now(timezone.utc).isoformat(),
+                    loadAverage=os.getloadavg(), logicalCPUs=os.cpu_count())
+    for label, args in (("thermal", ["pmset", "-g", "therm"]),
+                        ("memory", ["vm_stat"]),
+                        ("processes", ["ps", "-axo", "pid,ppid,%cpu,%mem,etime,comm", "-r"])):
+        try:
+            result = subprocess.run(args, env=ENV, text=True, capture_output=True, timeout=5, check=False)
+            # Executable names expose competing work without capturing command arguments or secrets.
+            stdout = "\n".join(result.stdout.splitlines()[:21]) if label == "processes" else result.stdout
+            snapshot[label] = dict(exitCode=result.returncode, stdout=stdout, stderr=result.stderr)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            snapshot[label] = dict(error=str(error))
+    (output / f"{name}-machine.json").write_text(json.dumps(snapshot, indent=2) + "\n")
+
+
+def measure(binary, output, name):
+    machine_snapshot(output, f"{name}-before")
+    try:
+        # Keep stdout/stderr even when the process, JSON parser, or fixture assertion fails.
+        with (output / f"{name}.json").open("w") as stdout, (output / f"{name}.stderr.log").open("w") as stderr:
+            subprocess.run([str(binary)], cwd=ROOT, env=ENV, text=True,
+                           stdout=stdout, stderr=stderr, check=True)
+    finally:
+        machine_snapshot(output, f"{name}-after")
+    report = json.loads((output / f"{name}.json").read_text())
+    validate(report)
+    return report
+
+
 def validate(report):
     if (report["configuration"] != "release" or report["fixtureVersion"] != 1 or report["timeZone"] != "UTC"
             or report["warmupBatches"] != 2 or report["measuredBatches"] != 5
@@ -162,10 +193,7 @@ def main():
             order = ("reference", "candidate") if index % 2 == 0 else ("candidate", "reference")
             for side in order:
                 print(f"Pair {index + 1}/{args.pairs}: {side}", flush=True)
-                report = json.loads(command([str(binaries[side])]))
-                validate(report)
-                pair[side] = report
-                (args.output / f"{index + 1}-{side}.json").write_text(json.dumps(report, indent=2) + "\n")
+                pair[side] = measure(binaries[side], args.output, f"{index + 1}-{side}")
             runs.append(pair)
         result = evaluate(runs, policy)
         result["metadata"] = metadata

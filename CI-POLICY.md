@@ -72,8 +72,10 @@ The six security failures include extraction/setup and findings-gate failures
 during development; they must not all be classified as infrastructure noise.
 The single strict-concurrency failure occurred in its compiler-check step.
 
-The Release budget's three failures all occurred in the paired comparison
-step. The
+The Release budget's three failed workflow runs produced four retained failed
+attempts, including a rerun. All four artifacts report only inconclusive noise
+findings, with no latency or retained-data regression. Their failed step was
+the paired comparison. The
 [latest noisy result](https://github.com/HemSoft/codexbar-ios/actions/runs/34054447047/job/101543620434)
 had a 20.06% run CV for one-account recording and 16.90% for 25-account series
 generation, exceeding the unchanged 15% limit. Its six median latency ratios
