@@ -25,8 +25,10 @@ Use the same Google identity when comparing with the desktop references.
 | Antigravity | Other models weekly | `antigravity.3p-weekly` |
 
 Other models means Claude/GPT. Each account's Metrics settings lists its known
-choices before a successful fetch. Customize Card also includes unavailable
-choices, with the existing hide, order, width and visualization controls.
+choices and visibility controls before a successful fetch. Customize Card is
+available after an account returns a result, including an unavailable result.
+It retains unavailable choices with the existing hide, order, width and
+visualization controls.
 Preferences survive missing data and relaunches. A missing or disabled bucket
 has a status instead of a fabricated percentage. A failed refresh labels cached
 values as last known. Histories and shared snapshots retain their original
@@ -123,11 +125,18 @@ showed 0% five-hour and 1% weekly usage on both the phone and the desktop Usage
 limits page. The displayed resets were 11:44 p.m. EDT and September 8 at
 7:44 p.m. EDT, respectively. The installed app's source commit is unknown.
 
-Home has Antigravity CLI 1.1.27. During this follow-up, a new `/usage` invocation
-requested authentication and no existing CLI process was running. The iPhone
-subsequently locked. No Antigravity credential has been imported to the phone,
-and current coding quotas, renewal or reimport, and phone customization remain
-unverified. These are open completion gates for #319, not a new deferral.
+On September 6, the PR app was installed and launched on the same phone.
+Mirroring verified all four coding visibility switches and their persistence.
+The two live Gemini Apps values still matched the consumer reference; their
+visibility, order, width and visualization changes survived relaunch and the
+original layout was restored. No Antigravity credential has been imported.
+
+Franz took ownership of the remaining live iPhone testing on September 6 and
+directed that it no longer block PR #320. He reported Gemini Models weekly at
+71% remaining and the other three coding buckets at 100% remaining. These are
+reference values, not a successful phone fetch. Coding values and reset parity,
+import/reimport and coding-card customization remain his acceptance checks in
+#319. They are not claimed as passed.
 
 To complete the comparison:
 
