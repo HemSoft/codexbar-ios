@@ -39,9 +39,9 @@ The analysis build also passes `-Xfrontend -enable-cross-import-overlays`.
 whereas Xcode enables overlays. [CodeQL's pinned extractor](https://github.com/github/codeql/blob/codeql-cli/v2.26.4/swift/extractor/main.cpp)
 invokes that frontend without changing the option. A minimal `requestReview` view reproduces the
 reported initializer and key-path errors with overlays disabled and compiles
-with them enabled. The next hosted run must prove complete extraction; local
-compiler success is not analyzer evidence. The job allows 60 minutes after the
-first traced build took about 39 minutes.
+with them enabled. The [third hosted run](https://github.com/HemSoft/codexbar-ios/actions/runs/34003751678)
+confirmed complete extraction with no compiler or extraction errors. The job
+allows 60 minutes after the first traced build took about 39 minutes.
 
 An evidence-only CodeQL query counts extracted syntax nodes and compiler errors
 for each Swift file. The gate requires syntax for every tracked `.swift` file in
@@ -83,29 +83,34 @@ rollout so the old required name does not leave pull requests waiting forever.
 
 ## Initial baseline
 
-Before issue #309, the code-scanning API returned `no analysis found`. That was
-missing evidence. The [first hosted run](https://github.com/HemSoft/codexbar-ios/actions/runs/33998745093)
-published analysis `1730518784` at 8:08 PM EDT on September 5, 2026 for test merge
-commit `72a45350deb24d2d40ad94fa1f0b080f0b86de7a`. CodeQL 2.26.4 found the
-temporary TLS fixture at severity 7.5 and no other findings. All 84 tracked
-production Swift files had extracted syntax, but 422 extraction diagnostics
-included incompatible SDK modules and compiler errors in `ContentView.swift`
-and `SettingsView.swift`. This is incomplete extraction, so a clean production
-baseline remains pending. No exclusions or accepted findings were added.
+Before [issue #309](https://github.com/HemSoft/codexbar-ios/issues/309), the
+code-scanning API returned `no analysis found`. The
+[first hosted run](https://github.com/HemSoft/codexbar-ios/actions/runs/33998745093)
+found the temporary TLS fixture at severity 7.5 and no other findings, but 422
+extraction diagnostics included incompatible SDK modules and app compiler
+errors. Its required job failed on grouped SARIF metadata handling. The
+[second hosted run](https://github.com/HemSoft/codexbar-ios/actions/runs/34000819436)
+removed the SDK errors but retained 12 extraction diagnostics. The corrected
+gate rejected them. Neither run established a complete baseline or the intended
+severity-driven failure proof.
 
-The [second hosted run](https://github.com/HemSoft/codexbar-ios/actions/runs/34000819436)
-again extracted syntax from all 84 production files and found only the temporary
-severity-7.5 TLS fixture. Implicit modules removed the SDK compatibility errors.
-The 12 remaining extraction diagnostics concern `requestReview` initialization
-and key-path inference, plus a `ContentView` expression type-check failure.
-The corrected gate rejected those diagnostics. This is still incomplete
-extraction and does not establish the required severity-driven failure proof.
+The [third hosted run](https://github.com/HemSoft/codexbar-ios/actions/runs/34003751678)
+published analysis `1730704365` at 9:56 PM EDT on September 5, 2026 for test merge
+commit `3019a50d3deabaac0899d0bbc4cb1035baf58ed0`, combining base `99cc12a` and PR
+head `1f5bd75`. CodeQL 2.26.4 extracted syntax from all 84 tracked production
+Swift files, with zero compiler errors and zero extraction diagnostics. Its
+only finding was `swift/insecure-tls`, severity 7.5, at line 7 of the temporary
+fixture. All analysis steps succeeded, and the required severity gate failed
+with exit code 1 solely because of that finding. Replaying the downloaded SARIF
+and source-reach CSV produced the same gate result. No production findings,
+exclusions, or accepted high-severity findings were present in this analysis.
 
-The first required job failed on unsupported grouped SARIF metadata. Its
-published fixture alert proves query detection, but the required-check positive
-test still needs a failure caused by severity 7.5 with complete extraction.
-After that proof, remove the temporary fixture and require a clean run before
-merging.
+The fixture was removed after that proof. The final candidate includes the
+subsequent main-branch changes and has 87 tracked production Swift files.
+Before merge, require a successful fixture-free analysis that covers every
+current production file with no extraction errors. Its analyzed commit, source
+reach, findings, and required-check result belong in the PR's verification
+evidence. The earlier 84-file analysis does not prove this newer candidate.
 
 To inspect a completed analysis, use both APIs, checking its analyzed commit and
 `error` field before interpreting an empty alert list:
@@ -121,15 +126,16 @@ to the workflow run; do not claim it analyzed a different commit.
 
 ## Reproduce the positive test
 
-The temporary fixture `scripts/security-analysis/fixtures/Positive.swift`
-configures TLS 1.0 in an uncalled function. It creates no network request and uses
-no credentials. `build.sh` compiles the fixture separately when it exists; it
-never links the fixture into a production target. CodeQL's
+The positive test uses `scripts/security-analysis/fixtures/Positive.swift` to
+configure TLS 1.0 in an uncalled function. It creates no network request and uses
+no credentials. The fixture is absent from the final tree. `build.sh` compiles
+it separately when it exists; it never links the fixture into a production
+target. CodeQL's
 [`swift/insecure-tls`](https://codeql.github.com/codeql-query-help/swift/swift-insecure-tls/)
 query has security severity 7.5 and must fail the same required job.
 
-For future analyzer upgrades, add this fixture on an issue branch, observe the
-authentic finding and failed `Swift security analysis` status, then remove it
+For future analyzer upgrades, create that path on an issue branch with the
+following contents, observe the authentic finding and failed `Swift security analysis` status, then remove it
 and require the next analysis to pass:
 
 ```swift
