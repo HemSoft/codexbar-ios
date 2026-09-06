@@ -159,7 +159,10 @@ final class AccountJourneysUITests: XCTestCase {
         let toggle = app.switches["account-metric-visibility-\(hiddenID)"]
         reveal(toggle, in: app)
         XCTAssertEqual(toggle.value as? String, "0")
-        tap(toggle, in: app)
+        // SwiftUI exposes the whole row as a switch; tap its trailing control.
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: toggle)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed)
         dismissAccountSettings(in: app)
         for id in Self.codingMetricIDs {
             assertGoogleMetric(id, contains: "Setup required", in: app)

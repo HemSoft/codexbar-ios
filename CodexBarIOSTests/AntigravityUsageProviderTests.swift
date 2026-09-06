@@ -226,7 +226,7 @@ final class AntigravityUsageProviderTests: XCTestCase {
         let other = store.addAccount(for: .antigravity)
         XCTAssertEqual(account.authMethod, .cliToken)
         XCTAssertTrue(account.requiresSecret)
-        XCTAssertTrue(store.shouldDisplayOnDashboard(account))
+        XCTAssertFalse(store.shouldDisplayOnDashboard(account))
         XCTAssertTrue(store.saveSecret(#"{"access_token":"test"}"#, for: account))
         XCTAssertTrue(store.shouldDisplayOnDashboard(account))
         XCTAssertFalse(store.hasSecret(for: other))
@@ -583,6 +583,65 @@ final class AntigravityUsageProviderTests: XCTestCase {
         XCTAssertTrue(GoogleUsageMetricCatalog.missingSourceConfigurations(in: store.configurations).isEmpty)
         let secondApps = store.addAccount(for: .gemini)
         XCTAssertEqual(Set(dashboard.dashboardCardItems.map(\.id)), [apps.id, secondApps.id])
+    }
+
+    @MainActor
+    func testUnconfiguredGoogleCachedValuesStayOutOfWidgetAndWatchSnapshots() throws {
+        let suite = "GoogleSnapshot.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore(), widgetSnapshotDefaults: defaults)
+        let apps = store.addAccount(for: .gemini)
+        let coding = store.addAccount(for: .antigravity)
+        let cached = [
+            ProviderUsageResult(
+                accountID: apps.id, providerID: .gemini, title: apps.displayName, subtitle: "Cached Apps usage",
+                bars: [UsageBar(stableKey: "weekly", label: "Weekly", used: 45, limit: 100)], fetchedAt: Self.now
+            ),
+            try AntigravityQuotaParser.result(from: Self.payload(), configuration: coding, fetchedAt: Self.now),
+        ]
+        let service = UsageRefreshService(providers: [], initialResults: cached)
+        let dashboard = googleDashboard(store: store, service: service, defaults: defaults)
+
+        XCTAssertEqual(dashboard.dashboardCardItems.flatMap { $0.result?.configurableMetrics ?? [] }.count, 6)
+        XCTAssertTrue(dashboard.dashboardCardItems.allSatisfy {
+            $0.result?.bars.isEmpty == true
+                && $0.result?.configurableMetrics.allSatisfy { $0.kind == .unavailableUsage("Setup required") } == true
+        })
+        WidgetSnapshotPublisher.publish(results: cached, configurationStore: store, snapshotDefaults: defaults)
+        XCTAssertTrue(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.isEmpty)
+        XCTAssertTrue(WatchSnapshotPublisher.makeSnapshot(results: cached, configurationStore: store, now: Self.now).accounts.isEmpty)
+    }
+
+    @MainActor
+    func testGoogleSetupPromotionAvoidsGlobalNameCollisionsAndRetainsLayout() throws {
+        for source in [ProviderID.gemini, .antigravity] {
+            let suite = "GoogleSetup.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore(), widgetSnapshotDefaults: defaults)
+            store.addAccount(for: source == .gemini ? .antigravity : .gemini)
+            for name in [source.displayName, "\(source.displayName) 1"] {
+                var other = store.addAccount(for: .codex)
+                other.accountLabel = name
+                XCTAssertTrue(store.update(other))
+            }
+            let placeholder = try XCTUnwrap(GoogleUsageMetricCatalog.missingSourceConfigurations(in: store.configurations).first)
+            let metricID = "\(source.rawValue).\(try XCTUnwrap(GoogleUsageMetricCatalog.definitions(for: source).first).key)"
+            store.updateMetricVisibility(false, accountID: placeholder.id, metricID: metricID)
+            store.updateMetricWidth(.half, accountID: placeholder.id, metricID: metricID)
+            let layout = store.metricLayouts[placeholder.id]
+
+            let promoted = try XCTUnwrap(store.prepareDashboardAccountForSetup(placeholder))
+
+            XCTAssertEqual(promoted.id, placeholder.id)
+            XCTAssertEqual(promoted.providerID, source)
+            XCTAssertEqual(promoted.accountLabel, "\(source.displayName) 2")
+            XCTAssertEqual(store.metricLayouts[promoted.id], layout)
+            XCTAssertEqual(store.configuration(accountID: promoted.id), promoted)
+            XCTAssertFalse(store.hasSecret(for: promoted))
+            XCTAssertNil(store.lastError)
+        }
     }
 
     func testGoogleDashboardLoadingFailureAndObservedResultsRetainSourceIdentity() throws {

@@ -1610,7 +1610,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 || !configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
-        if [.claude, .gemini, .antigravity].contains(configuration.providerID) {
+        if configuration.providerID == .claude {
             return true
         }
 
@@ -2542,10 +2542,14 @@ public extension ProviderConfigurationStore {
         if let saved = self.configuration(accountID: configuration.id) {
             return saved
         }
-        guard GoogleUsageMetricCatalog.missingSourceConfigurations(in: configurations).contains(configuration),
-              update(configuration) else {
+        guard GoogleUsageMetricCatalog.missingSourceConfigurations(in: configurations).contains(configuration) else {
             return nil
         }
-        return self.configuration(accountID: configuration.id)
+        var account = configuration
+        if !isAccountNameUnique(account) {
+            account.accountLabel = suggestedAccountLabel(for: account.providerID)
+        }
+        guard update(account) else { return nil }
+        return self.configuration(accountID: account.id)
     }
 }

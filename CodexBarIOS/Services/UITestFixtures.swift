@@ -63,9 +63,10 @@ final class UITestFixtures {
 
         let scenario = environment["CODEXBAR_UI_TEST_SCENARIO"]
         let recovery = scenario == "recovery"
-        let google = ["google-six", "google-antigravity", "google-apps-only"].contains(scenario)
+        let googleSources = Self.googleSources(for: scenario)
+        let google = !googleSources.isEmpty
         if google && configurationStore.configurations.isEmpty {
-            Self.seedGoogleAccounts(in: configurationStore, scenario: scenario)
+            Self.seedGoogleAccounts(in: configurationStore, sources: googleSources)
         }
         if recovery && configurationStore.configurations.isEmpty {
             Self.seedRecoveryAccount(in: configurationStore)
@@ -129,9 +130,16 @@ final class UITestFixtures {
         }
     }
 
-    private static func seedGoogleAccounts(in store: ProviderConfigurationStore, scenario: String?) {
-        let sources: [ProviderID] = scenario == "google-apps-only" ? [.gemini]
-            : (scenario == "google-six" ? [.gemini, .antigravity] : [.antigravity])
+    private static func googleSources(for scenario: String?) -> [ProviderID] {
+        switch scenario {
+        case "google-six": [.gemini, .antigravity]
+        case "google-antigravity": [.antigravity]
+        case "google-apps-only": [.gemini]
+        default: []
+        }
+    }
+
+    private static func seedGoogleAccounts(in store: ProviderConfigurationStore, sources: [ProviderID]) {
         for source in sources {
             let account = ProviderAccountConfiguration(
                 id: "ui-google-\(source.rawValue)",

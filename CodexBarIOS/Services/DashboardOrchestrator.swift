@@ -69,8 +69,10 @@ final class DashboardOrchestrator: ObservableObject {
     }
 
     var dashboardCardItems: [DashboardProviderCardItem] {
-        let configurations = configurationStore.configurations.filter(configurationStore.shouldDisplayOnDashboard)
-            + GoogleUsageMetricCatalog.missingSourceConfigurations(in: configurationStore.configurations)
+        let configurations = configurationStore.configurations.filter {
+            configurationStore.shouldDisplayOnDashboard($0)
+                || ($0.isEnabled && !GoogleUsageMetricCatalog.definitions(for: $0.providerID).isEmpty)
+        } + GoogleUsageMetricCatalog.missingSourceConfigurations(in: configurationStore.configurations)
         return DashboardProviderCardItem.items(
             configurations: configurations,
             results: displayedResults,

@@ -64,6 +64,30 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertEqual(addAccountState.finishDismissal(), "openCodeZen.team")
     }
 
+    func testGoogleSetupDismissalWaitsForChangedRefreshInputs() {
+        var navigation = DashboardAccountConfigurationNavigationState()
+        let accountID = "dashboard.setup.antigravity"
+
+        navigation.present(accountID: accountID, refreshOnDismiss: false)
+        // A repeated sheet binding write must not arm an unrequested refresh.
+        navigation.present(accountID: accountID)
+        navigation.clearPresentation()
+        XCTAssertNil(navigation.finishDismissal())
+
+        navigation.present(accountID: accountID, refreshOnDismiss: false)
+        navigation.refreshInputsChanged()
+        XCTAssertEqual(navigation.finishDismissal(), accountID)
+        XCTAssertNil(navigation.finishDismissal())
+
+        navigation.present(accountID: accountID, refreshOnDismiss: false)
+        navigation.refreshInputsChanged()
+        navigation.credentialsChanged()
+        XCTAssertNil(navigation.finishDismissal())
+
+        navigation.present(accountID: "configured.account")
+        XCTAssertEqual(navigation.finishDismissal(), "configured.account")
+    }
+
     @MainActor
     func testAccountSettingsReportsOnlyProviderRefreshInputChanges() {
         let defaults = UserDefaults(suiteName: #function)!

@@ -853,7 +853,9 @@ struct ContentView: View {
 
     private func configureDashboardAccount(_ configuration: ProviderAccountConfiguration) {
         guard let saved = configurationStore.prepareDashboardAccountForSetup(configuration) else { return }
-        accountConfigurationNavigation.present(accountID: saved.id)
+        let needsGoogleSetup = [.gemini, .antigravity].contains(saved.providerID)
+            && !configurationStore.isConfigured(saved)
+        accountConfigurationNavigation.present(accountID: saved.id, refreshOnDismiss: !needsGoogleSetup)
     }
 
     private func toggleDashboardCardExpansion(_ accountID: String) {
@@ -1133,9 +1135,10 @@ struct DashboardAccountConfigurationNavigationState: Equatable {
     private(set) var presentation: DashboardAccountConfigurationPresentation?
     private var accountIDAwaitingDismissalRefresh: String?
 
-    mutating func present(accountID: String) {
+    mutating func present(accountID: String, refreshOnDismiss: Bool = true) {
+        guard presentation?.accountID != accountID else { return }
         presentation = DashboardAccountConfigurationPresentation(accountID: accountID)
-        accountIDAwaitingDismissalRefresh = accountID
+        accountIDAwaitingDismissalRefresh = refreshOnDismiss ? accountID : nil
     }
 
     mutating func clearPresentation() {
