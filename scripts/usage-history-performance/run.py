@@ -74,7 +74,7 @@ def machine_snapshot(output, name):
             # Executable names expose competing work without capturing command arguments or secrets.
             stdout = "\n".join(result.stdout.splitlines()[:21]) if label == "processes" else result.stdout
             snapshot[label] = dict(exitCode=result.returncode, stdout=stdout, stderr=result.stderr)
-        except (OSError, subprocess.TimeoutExpired) as error:
+        except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError) as error:
             snapshot[label] = dict(error=str(error))
     (output / f"{name}-machine.json").write_text(json.dumps(snapshot, indent=2) + "\n")
 

@@ -61,14 +61,17 @@ class PerformanceGateTests(unittest.TestCase):
                 self.assertFalse((output / "result.json").exists())
 
     def test_unavailable_machine_probes_remain_visible_diagnostics(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary)
-            with mock.patch.object(GATE.subprocess, "run", side_effect=OSError("probe unavailable")):
-                GATE.machine_snapshot(output, "before")
-            snapshot = json.loads((output / "before-machine.json").read_text())
-            self.assertIn("capturedAt", snapshot)
-            for probe in ("thermal", "memory", "processes"):
-                self.assertEqual(snapshot[probe], {"error": "probe unavailable"})
+        errors = (OSError("probe unavailable"),
+                  UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte"))
+        for error in errors:
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary)
+                with mock.patch.object(GATE.subprocess, "run", side_effect=error):
+                    GATE.machine_snapshot(output, "before")
+                snapshot = json.loads((output / "before-machine.json").read_text())
+                self.assertIn("capturedAt", snapshot)
+                for probe in ("thermal", "memory", "processes"):
+                    self.assertEqual(snapshot[probe], {"error": str(error)})
 
     def test_committed_recordings_expand_and_replay(self):
         for name, expected_pass in (("calibration", True), ("slowdown-proof", False)):
@@ -110,7 +113,8 @@ class PerformanceGateTests(unittest.TestCase):
             lambda value: value["experiments"].clear(),
             lambda value: value["experiments"].pop(),
             lambda value: value["experiments"].append(copy.deepcopy(value["experiments"][0])),
-            lambda value: value["experiments"][0]["result"].update(passed=True),
+            lambda value: value["experiments"][0]["result"].update(
+                passed=not value["experiments"][0]["result"]["passed"]),
             lambda value: value["experiments"][0]["result"]["timings"][0].update(medianRatio=0),
             lambda value: value["experiments"][0]["runs"].pop(),
             change_warmup,
