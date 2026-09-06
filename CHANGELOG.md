@@ -84,6 +84,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Run security analysis and the usage-history Release budget manually, with
+  measured CI runtimes and explicit failure ownership. Preserve machine-load
+  diagnostics and process errors alongside performance samples.
+  ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
+
 - Include pinned repository-wide SwiftLint and complete strict-concurrency
   checks in the local perfection audit. Report failures alongside every
   selected gate and identify separate readiness checks outside its score.
@@ -91,13 +96,13 @@ building, testing, or releasing the app.
 
 - Measure usage-history recording and chart generation against a frozen Release
   baseline, with a regression gate for latency, serialized size, and retained
-  history growth on relevant pull requests and a weekly schedule.
+  history growth through manual workflow runs.
   ([#310](https://github.com/HemSoft/codexbar-ios/issues/310))
 
 - Add Swift security analysis of the app, widgets, watch companion, and shared
-  code on pull requests, main, and a weekly schedule, with published findings
-  and a gate for unreviewed high-severity findings or incomplete extraction.
-  Pull requests analyze unchanged source too, with three documented
+  code through manual workflow runs, with published findings
+  and failure checks for unreviewed high-severity findings or incomplete extraction.
+  Analysis covers unchanged source too, with three documented
   non-actionable findings that require re-review after production changes.
   ([#309](https://github.com/HemSoft/codexbar-ios/issues/309))
 

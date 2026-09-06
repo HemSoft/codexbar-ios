@@ -31,7 +31,7 @@ The Windows reference implementation is checked out beside this repo at:
   [Build and Test](AGENTS.md#build-and-test) and the isolated iPhone/iPad
   [account UI journeys](UI-TESTING.md)
 - A measured Release [usage-history performance budget](USAGE-HISTORY-PERFORMANCE.md)
-  with retained-data limits and a weekly regression gate
+  with retained-data limits and manual workflow runs
 
 ## Requirements
 
@@ -49,6 +49,10 @@ for gate names or `--status` for the most recent historical summary. See the
 [perfection skill](.agents/skills/perfection/SKILL.md) for focused runs and the
 separate UI, function-risk, security, and performance checks that still need
 verification before merge or release.
+
+The [CI policy](CI-POLICY.md) records measured runtimes, the five required
+correctness checks, and manual security/performance dispatch and failure
+ownership. Manual analysis keeps its existing failure rules and artifacts.
 
 ## GitHub Copilot Sign-In
 
