@@ -1,18 +1,7 @@
 import Foundation
 
 enum AntigravityQuotaParser {
-    struct Metric: Sendable {
-        let key: String
-        let label: String
-        let window: String
-    }
-
-    static let metrics: [Metric] = [
-        Metric(key: "gemini-5h", label: "Gemini five-hour", window: "5h"),
-        Metric(key: "gemini-weekly", label: "Gemini weekly", window: "weekly"),
-        Metric(key: "3p-5h", label: "Claude/GPT five-hour", window: "5h"),
-        Metric(key: "3p-weekly", label: "Claude/GPT weekly", window: "weekly"),
-    ]
+    static let metrics = GoogleUsageMetricCatalog.definitions(for: .antigravity)
 
     private struct Summary: Decodable {
         let groups: [Group]
@@ -43,6 +32,11 @@ enum AntigravityQuotaParser {
             return bar(for: metric, bucket: bucket, fetchedAt: fetchedAt)
         }
         let missing = metrics.filter { metric in !bars.contains { $0.stableKey == metric.key } }
+        let unavailable = Dictionary(uniqueKeysWithValues: missing.map { metric in
+            let matches = buckets.filter { $0.bucketId == metric.key }
+            let reason = matches.count == 1 && matches.first?.disabled == true ? "Disabled" : "Unavailable"
+            return ("antigravity.\(metric.key)", reason)
+        })
         let message = missing.isEmpty ? nil : "Unavailable: " + missing.map(\.label).joined(separator: ", ") + "."
         return ProviderUsageResult(
             accountID: configuration.id,
@@ -50,13 +44,14 @@ enum AntigravityQuotaParser {
             title: configuration.displayName,
             subtitle: "Antigravity quota groups",
             bars: bars,
+            unavailableUsageMetrics: unavailable,
             usageMessages: message.map { [$0] } ?? [],
             failureMessage: bars.isEmpty ? message : nil,
             fetchedAt: fetchedAt
         )
     }
 
-    private static func bar(for metric: Metric, bucket: Bucket, fetchedAt: Date) -> UsageBar? {
+    private static func bar(for metric: GoogleUsageMetricCatalog.Definition, bucket: Bucket, fetchedAt: Date) -> UsageBar? {
         guard bucket.window == metric.window, bucket.disabled != true,
               let remaining = bucket.remainingFraction,
               remaining.isFinite, (0...1).contains(remaining) else { return nil }

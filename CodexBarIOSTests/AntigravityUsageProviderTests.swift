@@ -26,7 +26,7 @@ final class AntigravityUsageProviderTests: XCTestCase {
             let result = try Self.result(Self.payload(buckets))
             XCTAssertEqual(result.bars.count, 3)
             XCTAssertFalse(result.bars.contains { $0.stableKey == "gemini-5h" })
-            XCTAssertEqual(result.usageMessages, ["Unavailable: Gemini five-hour."])
+            XCTAssertEqual(result.usageMessages, ["Unavailable: Gemini Models five-hour."])
         }
         for mutation in ["disabled", "window", "resetTime", "duplicate", "missing"] {
             var buckets = Self.buckets()
@@ -262,6 +262,125 @@ final class AntigravityUsageProviderTests: XCTestCase {
             results.first { $0.providerID == .antigravity }?.bars.map(\.stableKey),
             ["gemini-5h", "gemini-weekly", "3p-5h", "3p-weekly"]
         )
+    }
+
+    @MainActor
+    func testAllSixMetricChoicesExistBeforeCredentialsOrResults() throws {
+        let suite = "GoogleMetricChoices.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let apps = store.addAccount(for: .gemini)
+        let coding = store.addAccount(for: .antigravity)
+        let appsModel = ProviderSettingsViewModel(configurationStore: store, accountID: apps.id)
+        let codingModel = ProviderSettingsViewModel(configurationStore: store, accountID: coding.id)
+        let metrics = appsModel.availableMetrics + codingModel.availableMetrics
+        XCTAssertEqual(metrics.map(\.id), [
+            "gemini.five-hour", "gemini.weekly", "antigravity.gemini-5h",
+            "antigravity.gemini-weekly", "antigravity.3p-5h", "antigravity.3p-weekly",
+        ])
+        XCTAssertTrue(metrics.allSatisfy { $0.kind == .unavailableUsage("Setup required") })
+        XCTAssertNotNil(GoogleUsageMetricCatalog.setupDescription(for: .gemini))
+        XCTAssertNotNil(GoogleUsageMetricCatalog.setupDescription(for: .antigravity))
+        XCTAssertNil(GoogleUsageMetricCatalog.setupDescription(for: .codex))
+    }
+
+    func testMissingDisabledAndZeroHaveDistinctConfigurableStates() throws {
+        var buckets = Self.buckets()
+        buckets[0]["remainingFraction"] = 1.0
+        buckets[1].removeValue(forKey: "remainingFraction")
+        buckets[2]["disabled"] = true
+        let result = try Self.result(Self.payload(buckets))
+        XCTAssertEqual(result.availableMetrics.count, 2)
+        XCTAssertEqual(result.configurableMetrics.count, 4)
+        XCTAssertEqual(result.bars.first?.usageText, "0%")
+        XCTAssertEqual(result.configurableMetrics[0].kind, .usageBar(index: 0))
+        XCTAssertEqual(result.configurableMetrics[1].kind, .unavailableUsage("Unavailable"))
+        XCTAssertEqual(result.configurableMetrics[2].kind, .unavailableUsage("Disabled"))
+        XCTAssertEqual(result.configurableMetrics[3].kind, .usageBar(index: 1))
+        XCTAssertEqual(result.bars[1].usageText, "60%")
+        XCTAssertEqual(ProviderUsageCard.menuActions(for: try Self.result(Self.payload([]))), [
+            .configureAccount, .customizeMetrics,
+        ])
+    }
+
+    @MainActor
+    func testGoogleChoicesPreserveIndependentLayoutThroughMissingResultsAndRelaunch() throws {
+        let suite = "GoogleMetricPersistence.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let apps = store.addAccount(for: .gemini)
+        let account = store.addAccount(for: .antigravity)
+        let model = ProviderSettingsViewModel(configurationStore: store, accountID: account.id)
+        let ids = model.availableMetrics.map(\.id)
+        store.reconcileMetricLayout(accountID: account.id, availableMetricIDs: ids)
+        model.setMetricVisibility(false, metricID: ids[1])
+        store.updateMetricWidth(.half, accountID: account.id, metricID: ids[1])
+        store.updateVisualizationStyle(.circularRing, accountID: account.id, metricID: ids[1])
+        store.updateMetricOrder(Array(ids.reversed()), accountID: account.id)
+        let layout = store.metricLayouts[account.id]
+        let missing = try AntigravityQuotaParser.result(from: Self.payload([]), configuration: account, fetchedAt: Self.now)
+        model.synchronizeUsageResult(missing)
+        XCTAssertEqual(model.availableMetrics.map(\.id), ids)
+        XCTAssertEqual(store.metricLayouts[account.id], layout)
+        model.synchronizeUsageResult(nil)
+        XCTAssertEqual(model.availableMetrics.count, 4)
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        XCTAssertEqual(restored.metricLayouts[account.id], layout)
+        XCTAssertFalse(restored.isMetricVisible(accountID: account.id, metricID: ids[1]))
+        XCTAssertTrue(restored.isMetricVisible(accountID: account.id, metricID: ids[0]))
+        XCTAssertTrue(restored.isMetricVisible(accountID: apps.id, metricID: "gemini.weekly"))
+        XCTAssertEqual(restored.metricWidth(accountID: account.id, metricID: ids[1]), .half)
+        XCTAssertEqual(restored.visualizationStyle(accountID: account.id, metricID: ids[1]), .circularRing)
+        XCTAssertEqual(restored.visualizationStyle(accountID: account.id, metricID: ids[0]), .linearBar)
+        let recovered = try AntigravityQuotaParser.result(from: Self.payload(), configuration: account, fetchedAt: Self.now)
+        model.synchronizeUsageResult(recovered)
+        XCTAssertEqual(model.availableMetrics.map(\.id), ids)
+        XCTAssertEqual(store.metricLayouts[account.id], layout)
+    }
+
+    @MainActor
+    func testExplicitlyDisabledBucketsOverrideCachedValuesWithoutLosingHistory() async throws {
+        let secrets = MemorySecretStore()
+        try secrets.saveSecret(#"{"access_token":"test"}"#, account: ProviderConfigurationStore.keychainAccount(for: Self.configuration))
+        let fixture = IsolatedTestURLSession { request in
+            let disabled = Self.buckets().map { bucket in
+                var bucket = bucket
+                bucket["disabled"] = true
+                return bucket
+            }
+            return (try Self.response(request, status: 200), try Self.payload(disabled))
+        }
+        defer { fixture.invalidate() }
+        let initial = try Self.result(Self.payload())
+        let service = UsageRefreshService(
+            providers: [AntigravityUsageProvider(secretStore: secrets, sessionConfiguration: fixture.session.configuration)],
+            initialResults: [initial]
+        )
+        await service.refresh(configurations: [Self.configuration])
+        let result = try XCTUnwrap(service.results.first)
+        XCTAssertFalse(result.hasCurrentBars)
+        XCTAssertEqual(result.bars, initial.bars)
+        XCTAssertEqual(result.barsFetchedAt, initial.barsFetchedAt)
+        XCTAssertEqual(result.configurableMetrics.map(\.id), initial.configurableMetrics.map(\.id))
+        XCTAssertTrue(result.configurableMetrics.allSatisfy { $0.kind == .unavailableUsage("Disabled") })
+        XCTAssertTrue(result.hasSuccessfulRefreshHistory)
+    }
+
+    func testCatalogKeepsOtherProvidersAndRejectsWrongSourceResults() throws {
+        let other = ProviderUsageResult(providerID: .openRouter, title: "Other", subtitle: "", bars: [], creditsRemaining: 12, fetchedAt: Self.now)
+        XCTAssertEqual(other.configurableMetrics, other.availableMetrics)
+        XCTAssertTrue(GoogleUsageMetricCatalog.metrics(for: .gemini, result: other).allSatisfy {
+            $0.kind == .unavailableUsage("Setup required")
+        })
+        let result = try Self.result(Self.payload([]))
+        XCTAssertEqual(ProviderMetricTileGridResolver.resolvedWidth(
+            preference: .automatic, kind: result.configurableMetrics[0].kind,
+            visualizationStyle: .circularRing, usesRegularHorizontalSizeClass: false,
+            collapsesToSingleColumn: false
+        ), .half)
     }
 
     private static let expiredCredential = #"{"access_token":"old","refresh_token":"refresh","client_id":"client","client_secret":"secret+value","expiry":"2020-01-01T00:00:00Z"}"#

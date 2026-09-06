@@ -44,6 +44,12 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Keep all six Google usage choices available in Settings and Customize Card,
+  including before setup or when a quota is unavailable. Gemini Apps and
+  Antigravity model families have distinct labels, and each choice keeps its
+  visibility, order, width, and visualization preferences after refreshes and
+  relaunches. ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+
 - Expose the selected account group as a separate accessibility value in account
   settings. ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
 

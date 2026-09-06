@@ -61,15 +61,25 @@ final class UITestFixtures {
         statusMonitor = GitHubStatusMonitor(preferences: statusPreferences, notifier: notifier)
         appUpdateController = AppUpdateController(defaults: defaults)
 
-        let recovery = environment["CODEXBAR_UI_TEST_SCENARIO"] == "recovery"
+        let scenario = environment["CODEXBAR_UI_TEST_SCENARIO"]
+        let recovery = scenario == "recovery"
+        let google = scenario == "google-six" || scenario == "google-antigravity"
+        if google && configurationStore.configurations.isEmpty {
+            Self.seedGoogleAccounts(in: configurationStore, includesApps: scenario == "google-six")
+        }
         if recovery && configurationStore.configurations.isEmpty {
             Self.seedRecoveryAccount(in: configurationStore)
         }
         let results = configurationStore.configurations
             .filter(configurationStore.isConfigured)
-            .map { Self.result(for: $0, balance: $0.id.hasPrefix("ui-navigation-") ? 90 : 25) }
+            .map { configuration in
+                google ? Self.googleResult(for: configuration, stage: 0)
+                    : Self.result(for: configuration, balance: configuration.id.hasPrefix("ui-navigation-") ? 90 : 25)
+            }
         refreshService = UsageRefreshService(
-            providers: [UITestUsageProvider(failsFirstRefresh: recovery)],
+            providers: google
+                ? [UITestGoogleProvider(providerID: .gemini), UITestGoogleProvider(providerID: .antigravity)]
+                : [UITestUsageProvider(failsFirstRefresh: recovery)],
             initialResults: results
         )
         if recovery && historyStore.snapshots.isEmpty {
@@ -117,6 +127,43 @@ final class UITestFixtures {
             _ = configurationStore.update(navigationAccount)
             _ = configurationStore.saveSecret("ui-test-credential", for: navigationAccount)
         }
+    }
+
+    private static func seedGoogleAccounts(in store: ProviderConfigurationStore, includesApps: Bool) {
+        let sources: [ProviderID] = includesApps ? [.gemini, .antigravity] : [.antigravity]
+        for source in sources {
+            let account = ProviderAccountConfiguration(
+                id: "ui-google-\(source.rawValue)",
+                providerID: source,
+                accountLabel: source == .gemini ? "Apps Fixture" : "Coding Fixture",
+                authMethod: source == .gemini ? .browserSession : .cliToken
+            )
+            _ = store.update(account)
+            _ = store.saveSecret("ui-test-credential", for: account)
+        }
+    }
+
+    nonisolated static func googleResult(for account: ProviderAccountConfiguration, stage: Int) -> ProviderUsageResult {
+        let definitions = GoogleUsageMetricCatalog.definitions(for: account.providerID)
+        let used: [Double] = account.providerID == .gemini ? [12, 45] : (stage >= 3 ? [100, 31, 20, 60] : [0, 31, 0, 0])
+        let partial = account.providerID == .antigravity && stage == 1
+        let bars = definitions.enumerated().compactMap { index, definition -> UsageBar? in
+            if partial && (index == 1 || index == 2) { return nil }
+            return UsageBar(
+                stableKey: definition.key, label: definition.label, used: used[index], limit: 100,
+                resetsAt: Date().addingTimeInterval(definition.window == "5h" ? 18_000 : 604_800),
+                resetDisplayStyle: .relativeWithLocalTime
+            )
+        }
+        return ProviderUsageResult(
+            accountID: account.id, providerID: account.providerID, title: account.displayName,
+            subtitle: account.providerID == .gemini ? "Gemini Apps usage" : "Antigravity quota groups",
+            bars: bars,
+            unavailableUsageMetrics: partial ? [
+                "antigravity.gemini-weekly": "Unavailable", "antigravity.3p-5h": "Disabled",
+            ] : [:],
+            fetchedAt: Date()
+        )
     }
 
     private func seedHistory() {
@@ -184,6 +231,19 @@ private actor UITestUsageProvider: UsageProvider {
             throw UITestFixtureError.refreshFailed
         }
         return UITestFixtures.result(for: configuration, balance: 60)
+    }
+}
+
+private actor UITestGoogleProvider: UsageProvider {
+    nonisolated let providerID: ProviderID
+    private var stage = 0
+
+    init(providerID: ProviderID) { self.providerID = providerID }
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        stage += 1
+        if stage == 2 && providerID == .antigravity { throw UITestFixtureError.refreshFailed }
+        return UITestFixtures.googleResult(for: configuration, stage: stage)
     }
 }
 

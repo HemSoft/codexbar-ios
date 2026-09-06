@@ -84,6 +84,113 @@ final class AccountJourneysUITests: XCTestCase {
         assertBalance("60.00", freshness: "fresh", in: app)
     }
 
+    func testSixGoogleChoicesAndIndependentCustomizationPersist() throws {
+        let app = launch(scenario: "google-six")
+        assertGoogleMetric("gemini.five-hour", contains: "12%", in: app)
+        assertGoogleMetric("gemini.weekly", contains: "45%", in: app)
+        for (id, value) in zip(Self.codingMetricIDs, ["0%", "31%", "0%", "0%"]) {
+            assertGoogleMetric(id, contains: value, in: app)
+        }
+        openGoogleAccount("Apps Fixture", in: app)
+        assertMetricSwitches(["gemini.five-hour", "gemini.weekly"], in: app)
+        tap(app.buttons["Done"], in: app)
+        openGoogleAccount("Coding Fixture", in: app)
+        assertMetricSwitches(Self.codingMetricIDs, in: app)
+        tap(app.buttons["Done"], in: app)
+
+        openCodingCustomizer(in: app)
+        let weekly = "antigravity.gemini-weekly"
+        tap(app.buttons["customize-metric-\(weekly)"], in: app)
+        tap(app.buttons["Move Earlier"], in: app)
+        let first = app.buttons["customize-metric-\(weekly)"]
+        let second = app.buttons["customize-metric-antigravity.gemini-5h"]
+        XCTAssertLessThan(first.frame.minY, second.frame.minY)
+        tap(first, in: app)
+        tap(app.buttons["Tile Width"], in: app)
+        tap(app.buttons["Half"], in: app)
+        tap(first, in: app)
+        tap(app.buttons["Visualization"], in: app)
+        tap(app.buttons["Circular ring"], in: app)
+        tap(first, in: app)
+        tap(app.buttons["Hide"], in: app)
+        XCTAssertTrue(app.buttons["Show Gemini Models weekly"].exists)
+        tap(app.buttons["Done"], in: app)
+        XCTAssertFalse(app.buttons["dashboard-metric-\(weekly)"].exists)
+        assertGoogleMetric("gemini.weekly", contains: "45%", in: app)
+        assertGoogleMetric("antigravity.3p-weekly", contains: "0%", in: app)
+
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launch()
+        XCTAssertFalse(app.buttons["dashboard-metric-\(weekly)"].exists)
+        openCodingCustomizer(in: app)
+        tap(app.buttons["Show Gemini Models weekly"], in: app)
+        XCTAssertLessThan(first.frame.minY, second.frame.minY)
+        tap(first, in: app)
+        tap(app.buttons["Visualization"], in: app)
+        XCTAssertTrue(app.buttons["Circular ring"].isSelected, app.debugDescription)
+        app.tap()
+    }
+
+    func testAntigravityOnlyChoicesSurvivePartialAndFailedRefresh() throws {
+        let app = launch(scenario: "google-antigravity")
+        XCTAssertFalse(app.buttons["More options for Apps Fixture"].exists)
+        for (id, value) in zip(Self.codingMetricIDs, ["0%", "31%", "0%", "0%"]) {
+            assertGoogleMetric(id, contains: value, in: app)
+        }
+        tap(app.buttons["Refresh usage"], in: app)
+        assertGoogleMetric("antigravity.gemini-weekly", contains: "Unavailable", in: app)
+        assertGoogleMetric("antigravity.3p-5h", contains: "Disabled", in: app)
+        assertGoogleMetric("antigravity.gemini-5h", contains: "0%", in: app)
+        openGoogleAccount("Coding Fixture", in: app)
+        assertMetricSwitches(Self.codingMetricIDs, in: app)
+        tap(app.buttons["Done"], in: app)
+        openCodingCustomizer(in: app)
+        for id in Self.codingMetricIDs {
+            reveal(app.buttons["customize-metric-\(id)"], in: app)
+            XCTAssertTrue(app.buttons["customize-metric-\(id)"].isHittable)
+        }
+        tap(app.buttons["Done"], in: app)
+        tap(app.buttons["Refresh usage"], in: app)
+        assertGoogleMetric("antigravity.gemini-5h", contains: "stale", in: app)
+        assertGoogleMetric("antigravity.gemini-weekly", contains: "Unavailable", in: app)
+        tap(app.buttons["Refresh usage"], in: app)
+        for (id, value) in zip(Self.codingMetricIDs, ["100%", "31%", "20%", "60%"]) {
+            assertGoogleMetric(id, contains: value, in: app)
+            XCTAssertTrue(app.buttons["dashboard-metric-\(id)"].label.contains("fresh"))
+        }
+    }
+
+    private static let codingMetricIDs = [
+        "antigravity.gemini-5h", "antigravity.gemini-weekly", "antigravity.3p-5h", "antigravity.3p-weekly",
+    ]
+
+    private func assertGoogleMetric(_ id: String, contains value: String, in app: XCUIApplication) {
+        let metric = app.buttons["dashboard-metric-\(id)"]
+        reveal(metric, in: app)
+        let matches = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", value), object: metric)
+        XCTAssertEqual(XCTWaiter.wait(for: [matches], timeout: 10), .completed, metric.label)
+    }
+
+    private func assertMetricSwitches(_ ids: [String], in app: XCUIApplication) {
+        for id in ids {
+            let toggle = app.switches["account-metric-visibility-\(id)"]
+            reveal(toggle, in: app)
+            XCTAssertEqual(toggle.value as? String, "1")
+        }
+    }
+
+    private func openGoogleAccount(_ name: String, in app: XCUIApplication) {
+        tap(app.buttons["More options for \(name)"], in: app)
+        tap(app.buttons["Configure account \(name)"], in: app)
+    }
+
+    private func openCodingCustomizer(in app: XCUIApplication) {
+        tap(app.buttons["More options for Coding Fixture"], in: app)
+        tap(app.buttons["Customize Card…"], in: app)
+        XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
+    }
+
     private func launch(scenario: String) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()

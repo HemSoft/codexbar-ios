@@ -1612,10 +1612,12 @@ struct AddAccountSetupFlow: View {
                     Button {
                         select(providerID)
                     } label: {
-                        Label(
-                            providerID.displayName,
-                            systemImage: providerID.addAccountIconName
-                        )
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(providerID.displayName, systemImage: providerID.addAccountIconName)
+                            if let description = GoogleUsageMetricCatalog.setupDescription(for: providerID) {
+                                Text(description).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
                     }
                     .accessibilityHint("Creates this account and opens its setup screen.")
                 }

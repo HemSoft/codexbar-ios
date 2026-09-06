@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A31900000000000000000001 /* GoogleUsageMetricCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */; };
 		A22600000000000000000001 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
 		A22600000000000000000002 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
 		A22600000000000000000003 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
@@ -224,6 +225,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleUsageMetricCatalog.swift; sourceTree = "<group>"; };
 		A22600000000000000000005 /* GreptileUsageIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreptileUsageIdentity.swift; sourceTree = "<group>"; };
 		A22700000000000000000005 /* CursorUsageIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorUsageIdentity.swift; sourceTree = "<group>"; };
 		G20000000000000000000244 /* GitHubStatusMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubStatusMonitor.swift; sourceTree = "<group>"; };
@@ -440,6 +442,7 @@
 			children = (
 				200000000000000000000003 /* ProviderID.swift */,
 				200000000000000000000004 /* ProviderUsageResult.swift */,
+				A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */,
 				200000000000000000000005 /* UsageBar.swift */,
 				200000000000000000000006 /* UsageSeverity.swift */,
 				200000000000000000000019 /* AppAppearance.swift */,
@@ -920,6 +923,7 @@
 				100000000000000000000002 /* ContentView.swift in Sources */,
 				100000000000000000000003 /* ProviderID.swift in Sources */,
 				100000000000000000000004 /* ProviderUsageResult.swift in Sources */,
+				A31900000000000000000001 /* GoogleUsageMetricCatalog.swift in Sources */,
 				100000000000000000000005 /* UsageBar.swift in Sources */,
 				100000000000000000000006 /* UsageSeverity.swift in Sources */,
 				100000000000000000000007 /* UsageProvider.swift in Sources */,

@@ -287,7 +287,12 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     var availableMetrics: [ProviderUsageMetric] {
-        usageResult?.availableMetrics ?? []
+        GoogleUsageMetricCatalog.metrics(
+            for: providerID,
+            result: !GoogleUsageMetricCatalog.definitions(for: providerID).isEmpty && !canRefreshMetrics ? nil : usageResult,
+            missingReason: configuration.isEnabled
+                ? (canRefreshMetrics ? "Unavailable" : "Setup required") : "Account disabled"
+        )
     }
 
     var canRefreshMetrics: Bool {
@@ -773,7 +778,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         usageResult = result
         configurationStore.reconcileMetricLayout(
             accountID: accountID,
-            availableMetricIDs: result.availableMetrics.map(\.id)
+            availableMetricIDs: result.configurableMetrics.map(\.id)
         )
     }
 

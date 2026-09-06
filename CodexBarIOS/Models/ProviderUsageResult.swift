@@ -127,6 +127,7 @@ public struct ProviderMonetaryMetric: Identifiable, Codable, Equatable, Sendable
 
 public enum ProviderUsageMetricKind: Equatable, Sendable {
     case usageBar(index: Int)
+    case unavailableUsage(String)
     case creditsRemaining
     case monetary(index: Int)
 }
@@ -212,6 +213,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let creditsRemaining: Double?
     public let creditsFetchedAt: Date?
     public let monetaryMetrics: [ProviderMonetaryMetric]
+    public let unavailableUsageMetrics: [String: String]
     public let usageMessages: [String]
     public let dashboardUsageMessages: [String]
     public let cardInformationSections: [ProviderCardInformationSection]
@@ -237,6 +239,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         creditsRemaining: Double? = nil,
         creditsFetchedAt: Date? = nil,
         monetaryMetrics: [ProviderMonetaryMetric] = [],
+        unavailableUsageMetrics: [String: String] = [:],
         usageMessages: [String] = [],
         dashboardUsageMessages: [String]? = nil,
         cardInformationSections: [ProviderCardInformationSection] = [],
@@ -261,6 +264,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.creditsRemaining = creditsRemaining
         self.creditsFetchedAt = creditsRemaining == nil ? nil : (creditsFetchedAt ?? fetchedAt)
         self.monetaryMetrics = monetaryMetrics
+        self.unavailableUsageMetrics = unavailableUsageMetrics
         self.usageMessages = usageMessages
         self.dashboardUsageMessages = dashboardUsageMessages ?? usageMessages
         self.cardInformationSections = cardInformationSections.filter { !$0.items.isEmpty }
@@ -312,6 +316,10 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
 
     public var freshCreditsRemaining: Double? {
         hasFreshCredits ? creditsRemaining : nil
+    }
+
+    public var configurableMetrics: [ProviderUsageMetric] {
+        GoogleUsageMetricCatalog.metrics(for: providerID, result: self, missingReason: "Unavailable")
     }
 
     public var availableMetrics: [ProviderUsageMetric] {

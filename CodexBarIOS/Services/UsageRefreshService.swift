@@ -413,6 +413,7 @@ public final class UsageRefreshService: ObservableObject {
             creditsRemaining: creditsResult.creditsRemaining,
             creditsFetchedAt: creditsResult.creditsFetchedAt,
             monetaryMetrics: dataResult.monetaryMetrics,
+            unavailableUsageMetrics: dataResult.unavailableUsageMetrics.merging(failureResult.unavailableUsageMetrics) { _, latest in latest },
             usageMessages: dataResult.usageMessages,
             dashboardUsageMessages: dataResult.dashboardUsageMessages,
             cardInformationSections: dataResult.cardInformationSections,
