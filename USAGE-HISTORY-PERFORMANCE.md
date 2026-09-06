@@ -377,3 +377,8 @@ for every operation and account count. The existing
 only after verifying that all are equal. Build and stderr log hashes identify
 the full external artifacts. The historical calibration and slowdown records
 remain unchanged.
+
+The separate `repeatability-manifest.json` pins every original report digest and
+expected verdict. Replay rejects coordinated edits to samples, embedded hashes
+and results, including edits to warm-up values. Changes to this manifest require
+review against the original artifacts; it is never regenerated during replay.

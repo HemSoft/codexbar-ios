@@ -1,0 +1,285 @@
+{
+  "usage-history-performance-34046485812-1": {
+    "reportSHA256": [
+      {
+        "reference": "73e9324e448a694dee2d842ea3decbf6e9183dbb1e28067b5c385b1a577d5f76",
+        "candidate": "640ecc7173edaab884850f6beb40586536505ac84fe515a51459a1b1c09a5087"
+      },
+      {
+        "reference": "e23b2e8b2aa62253bd6e587e9158a61abc1a4dfd6032a1d64f59b0103a3e2b66",
+        "candidate": "36989d11816d265d83abc74906743caf54bdb658475d7afa5721172f28f42bb2"
+      },
+      {
+        "reference": "05d59f17ce32922a7d52b1b4cab3adaf5a9e889d680d030b8c6e272fd9d02b34",
+        "candidate": "3a6e6ef658509e67390d47029167484b340b694adb04c232abecf19e699b410d"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "INCONCLUSIVE 1 accounts seriesMilliseconds: run CV 0.312",
+        "INCONCLUSIVE 10 accounts recordMilliseconds: run CV 0.231",
+        "INCONCLUSIVE 10 accounts seriesMilliseconds: run CV 0.153"
+      ]
+    }
+  },
+  "usage-history-performance-34046485812-2": {
+    "reportSHA256": [
+      {
+        "reference": "44b326195b401a56cdac37f4d8cea42bff12956fb1a0f663cc4dc13c24206a4b",
+        "candidate": "98df1605b82733ad59d92acb1da6c16c770aa0f8ed3e847a86c9d6fbb30c6b5c"
+      },
+      {
+        "reference": "3979e12ebe1ced5bb78612b2d175dfcc857b7ccfe7858335c914ab190063b6c2",
+        "candidate": "c8df7b6516860c174227ff3c37d527266094979c57676759f1dd61612faa9660"
+      },
+      {
+        "reference": "06c8d180c0ad28838332ab5f32393893322ae877c2293552fda463985fe7abec",
+        "candidate": "e25abb4af804a1bca76cfe23cbf1b1f9fc8a31a22d71d3f2c8e038eb44052502"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "INCONCLUSIVE 10 accounts recordMilliseconds: run CV 0.197",
+        "INCONCLUSIVE 10 accounts seriesMilliseconds: run CV 0.157"
+      ]
+    }
+  },
+  "usage-history-performance-34051802297-1": {
+    "reportSHA256": [
+      {
+        "reference": "11cc1ab228039b28dddbd4698bb12d53ac9fc9ec8dbc02473f939ff2513f17ef",
+        "candidate": "5835a1002120a3a29e472c786e85cdfc4ef0f8943ae71d8620557c72b528ec29"
+      },
+      {
+        "reference": "fd1a882b05ab0ee4a1acf413642325a4d1908c0cc702cf1529ec14532a624d10",
+        "candidate": "780991e694b611cf016663db3e78c49d16bf7e7da636c8429a34d8ef18af89ae"
+      },
+      {
+        "reference": "6175773cca454a8cd92d852c1e5b34a431c575230b6badd5847c8ffd3b07a35a",
+        "candidate": "171a53dce0c36b64b48dc0a258f93eb752c8e96dacb5b04d5778b511ac7a1b5a"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "INCONCLUSIVE 1 accounts seriesMilliseconds: run CV 0.163",
+        "INCONCLUSIVE 10 accounts recordMilliseconds: run CV 0.160",
+        "INCONCLUSIVE 25 accounts recordMilliseconds: run CV 0.274",
+        "INCONCLUSIVE 25 accounts seriesMilliseconds: run CV 0.350"
+      ]
+    }
+  },
+  "usage-history-performance-34054447047-1": {
+    "reportSHA256": [
+      {
+        "reference": "a0ff0ea46e97cee81e0a9a14552fc481ecffe200be02e84e7ed521e43a6e1914",
+        "candidate": "b0f0d6cebbfad35be9ca206e529e461d4449308a0053ee035ff8d992ea06d13f"
+      },
+      {
+        "reference": "bbfb5353cfdf41053e85185f11f484d9e4dba3fcb695ea74dab02094f595edf2",
+        "candidate": "455e6435298e9e4c09bc01d00f43396e9013bb8194fedb919c0d408e2337b040"
+      },
+      {
+        "reference": "b578f9e4748d008674556f484d01ccc6ce2d0ab37b20d4914401fd43969c1c4c",
+        "candidate": "ba42e89afb660ecb23b93bee1fa3edef16541b95a6ccb43b3db47a6d55213151"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "INCONCLUSIVE 1 accounts recordMilliseconds: run CV 0.201",
+        "INCONCLUSIVE 25 accounts seriesMilliseconds: run CV 0.169"
+      ]
+    }
+  },
+  "unchanged-1": {
+    "reportSHA256": [
+      {
+        "reference": "323a285177e911f1b2b0b1393f8054f46aae70217cc249983cf5c353e57ab256",
+        "candidate": "9b489b85d344f58de22d4301c26585b32d405d690fb895f203a3ea3ca335633a"
+      },
+      {
+        "reference": "a67df4d3c5b63dd238ee7e24aa3cb2614b56a0d6af447a597cba9de921e752ca",
+        "candidate": "298f6d2015eafade64612afe90b819d3850cc071a7509d33001fae68ef6a34c0"
+      },
+      {
+        "reference": "463bdf709846296350437c406ccf3685fa196c8a4b5b075671055bf909433d11",
+        "candidate": "546f8f7de3fa29c3c6420b3fa347b4e530d7e6e36d6c6458242e4ee166816613"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "INCONCLUSIVE 1 accounts recordMilliseconds: run CV 0.520",
+        "INCONCLUSIVE 1 accounts seriesMilliseconds: run CV 0.523",
+        "INCONCLUSIVE 10 accounts recordMilliseconds: run CV 0.426",
+        "INCONCLUSIVE 10 accounts seriesMilliseconds: run CV 0.424",
+        "INCONCLUSIVE 25 accounts recordMilliseconds: run CV 0.573",
+        "INCONCLUSIVE 25 accounts seriesMilliseconds: run CV 0.647"
+      ]
+    }
+  },
+  "unchanged-2": {
+    "reportSHA256": [
+      {
+        "reference": "16fef1add263e0a9066377dd276596e398f3d4f2ce1be94ea05f34cc3b983e14",
+        "candidate": "11be2c59b082242ecb4dee791cc1aa82b9aa97e7c8eca27eb8fcfbb81a2cf747"
+      },
+      {
+        "reference": "243d50d5eb5147ae0adededd34b4f5f514ebced35eb1a065986b89c652a8dad1",
+        "candidate": "03753061d4ddac75955c02ef8d7ab45c1e83f731e92284dc8fb05821d9bbd90a"
+      },
+      {
+        "reference": "1dd63da5cc73667557cd53499ed848c114b311fe4b057cdcaaecb7f229e2866d",
+        "candidate": "055bf70a7bf0bd69df65badf8831c5180879ed7cd73ea9e19316ed5fbf0109ea"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "INCONCLUSIVE 1 accounts recordMilliseconds: run CV 1.015",
+        "INCONCLUSIVE 1 accounts seriesMilliseconds: run CV 0.822",
+        "INCONCLUSIVE 10 accounts recordMilliseconds: run CV 0.596",
+        "INCONCLUSIVE 10 accounts seriesMilliseconds: run CV 0.635",
+        "INCONCLUSIVE 25 accounts recordMilliseconds: run CV 0.617",
+        "INCONCLUSIVE 25 accounts seriesMilliseconds: run CV 0.770"
+      ]
+    }
+  },
+  "unchanged-3": {
+    "reportSHA256": [
+      {
+        "reference": "6e011b8deba01dd2c02ae71350004d7cc3a999a35ad1f0ac6a87242c535ab6fa",
+        "candidate": "2600db9f473cdea4dca8eba142c3240e11a2a02ff3c3fefdc4a13464ec8bcf1a"
+      },
+      {
+        "reference": "732a41f4de14911c46d5f6a6a5b58a9b47b170d0169760ea2ce14398c864bbbc",
+        "candidate": "066c1b2ec098be1b6366b613836048bdb238252c6fab9dd5540d745b08c77520"
+      },
+      {
+        "reference": "87128062601ddec1e2d5cddad2a35f62f3e81e08fbfc5b54d069499257e1aea1",
+        "candidate": "dc7d81f9c540fffa36157ac7d9703e99af06ad2237970d99310a27878b1009cb"
+      }
+    ],
+    "verdict": {
+      "passed": true,
+      "findings": []
+    }
+  },
+  "slowdown": {
+    "reportSHA256": [
+      {
+        "reference": "9bd7b2932001d371223c14bd41cde71887b86bc72bf7b8dbb9bdef374cc6135a",
+        "candidate": "22b087c4ead72f81a6b9297f92c75336460782e80aef5c44a7198ee5f73fa063"
+      },
+      {
+        "reference": "00039b8312b3b54ee33d2a9e9e625304914da66d1fccc14d44d4fa72416eef77",
+        "candidate": "43fd5f1f6803897b5f1c88bfd236280df5b095487c85e66056e481c3fb01a7ad"
+      },
+      {
+        "reference": "c3541a625e061241a5d04a580c14c787e400d72d48dac84e6e4d916cffe1e443",
+        "candidate": "b68a048d936ac107aaeac2d99c92b5cba7df25a0378f224349b98b5206238bb5"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "INCONCLUSIVE 1 accounts seriesMilliseconds: run CV 0.169",
+        "REGRESSION 1 accounts recordMilliseconds: ratio 34.442",
+        "REGRESSION 1 accounts seriesMilliseconds: ratio 2.219",
+        "REGRESSION 10 accounts recordMilliseconds: ratio 4.464",
+        "REGRESSION 25 accounts recordMilliseconds: ratio 2.468"
+      ]
+    }
+  },
+  "quiet-1": {
+    "reportSHA256": [
+      {
+        "reference": "96453f7cb30f25964173d1bb4448d10e425d274dcebe67406af1ea01839ca793",
+        "candidate": "6aeaf85357ec019938bb0b8993981c60cee9161f68771b19c4cdeabfbd3196bd"
+      },
+      {
+        "reference": "b2ef58b0a9ddb9d55d8d3ff6adf78ac97ef66707b3a0dccc9778ee475e63aed6",
+        "candidate": "08acef80ff80a25b7023526039dbf2a25283c2acb1c26f7f6c36e09f249fa1e7"
+      },
+      {
+        "reference": "5bc9c93a45b2bc73f95dd4586caa571915323e4721ab96eb2cc3220c8e6e5dda",
+        "candidate": "657a3b767ceaf41b67341efaafc63d01a7e7efe1342b97bdafd65b6e704bd4af"
+      }
+    ],
+    "verdict": {
+      "passed": true,
+      "findings": []
+    }
+  },
+  "quiet-2": {
+    "reportSHA256": [
+      {
+        "reference": "b0429ceec5b2b0e3651363f74beb033c4e9139347e9fcf205d6c439849adb7fd",
+        "candidate": "faae8f7e10c98cf38200ab10cc24fba749a37dad1397da84cdf829e265032c62"
+      },
+      {
+        "reference": "43b1a36bfbd2d9dfdfc308a70a18f9c4025e7778876c854f997007811e5217ad",
+        "candidate": "cc05c44e80b725576d3d2a56a418cdeb949fadf5cb89be27c37f6bb042c41228"
+      },
+      {
+        "reference": "bccd16393866582930a358b7187de4981c2d520197cba0813b313d96b1f55539",
+        "candidate": "96139742f8d4b83607e4b26bd3dc1d314d59e269a86a226d7743cfc0c55b317c"
+      }
+    ],
+    "verdict": {
+      "passed": true,
+      "findings": []
+    }
+  },
+  "quiet-3": {
+    "reportSHA256": [
+      {
+        "reference": "5720dac26393ae2647ce2fdda0ced5528fb8c7e9e93cbf342507e28a456da7f9",
+        "candidate": "1fb7a031366bd225d186ad0c556ef1b7858de690b5fd590261f55bb0b3c5f8be"
+      },
+      {
+        "reference": "b2ca8b306571fcc90e47b0eb146c784dc180bc2e3d6e7e46348f165bdc14abbc",
+        "candidate": "6ad901704d484c0643c83fdaaae91345647d95e9e43e7d57758408ea1f91c966"
+      },
+      {
+        "reference": "5094af66086472ead20f2591b8e4c3cb1b2443655de33c605e396756c9475646",
+        "candidate": "5217371a6b37373347b447204ab81ebb7a2ba74a54656074eebf1e89aa874ac6"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "INCONCLUSIVE 1 accounts recordMilliseconds: run CV 0.190",
+        "INCONCLUSIVE 1 accounts seriesMilliseconds: run CV 0.200"
+      ]
+    }
+  },
+  "quiet-slowdown": {
+    "reportSHA256": [
+      {
+        "reference": "7e6193be6e8999d119f4f6283968ef1a7c240f6dcc0e8106bf8076368a96dba5",
+        "candidate": "34bc3bd53fb5270ea36d4949e1ce6f51809c5984013caace5fb59c53a06a2c11"
+      },
+      {
+        "reference": "f4c6a565b819b8885f1c6f13b8744f77fadd4a7002d7c23a9df08ac0f2c1c5ab",
+        "candidate": "e203ff88c66ac4454f22f957f208f5d6d41fc990ec42cee6538cbbc2082548c2"
+      },
+      {
+        "reference": "d3e797b1d684ad081387c4876ce3b153bd0cf01c73ccbad719167040aa8487ab",
+        "candidate": "b463c407b02649e732c2b74266eca5e88199e9b94280ceb1a45f934c23a0f903"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "REGRESSION 1 accounts recordMilliseconds: ratio 34.731",
+        "REGRESSION 1 accounts seriesMilliseconds: ratio 2.278",
+        "REGRESSION 10 accounts recordMilliseconds: ratio 4.423",
+        "REGRESSION 25 accounts recordMilliseconds: ratio 2.394"
+      ]
+    }
+  }
+}

@@ -1,6 +1,7 @@
 """Exercise the performance gate's failure policy without timing unit tests."""
 import copy
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -126,6 +127,26 @@ class PerformanceGateTests(unittest.TestCase):
                 mutate(invalid)
                 with self.assertRaises(ValueError):
                     REPLAY.replay_study(invalid, POLICY)
+
+    def test_coordinated_report_hash_and_verdict_edits_are_rejected(self):
+        original = json.loads(SCRIPT.with_name("repeatability-study.json").read_text())
+        for sample_index in (0, 2):
+            with self.subTest(sample_index=sample_index):
+                study = copy.deepcopy(original)
+                recording = study["experiments"][0]
+                samples = recording["runs"][0]["reference"]["scenarios"][0]["recordMilliseconds"]
+                if sample_index == 0:
+                    samples[0] = 9999
+                else:
+                    samples[2:] = [9999] * len(samples[2:])
+                runs = REPLAY.expand_runs(recording)
+                recording["reportSHA256"] = [
+                    {side: hashlib.sha256(json.dumps(pair[side], sort_keys=True,
+                        separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+                     for side in ("reference", "candidate")} for pair in runs]
+                recording["result"] = GATE.evaluate(runs, POLICY)
+                with self.assertRaises(ValueError):
+                    REPLAY.replay_study(study, POLICY)
 
     def test_invalid_compressed_recording_is_rejected(self):
         recording = json.loads(SCRIPT.with_name("calibration.json").read_text())
