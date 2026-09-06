@@ -39,6 +39,17 @@ The Windows reference implementation is checked out beside this repo at:
 - iOS 17 or later
 - watchOS 10 or later for the companion app
 
+## Local validation
+
+For a local readiness audit, run
+`./.agents/skills/perfection/scripts/run-perfection.sh`. Its seven gates cover
+pinned repository-wide SwiftLint, complete strict concurrency, iOS build and
+unit tests, SwiftPM smoke tests, and watchOS build and unit tests. Use `--list`
+for gate names or `--status` for the most recent historical summary. See the
+[perfection skill](.agents/skills/perfection/SKILL.md) for focused runs and the
+separate UI, function-risk, security, and performance checks that still need
+verification before merge or release.
+
 ## GitHub Copilot Sign-In
 
 CodexBar bundles the public OAuth client ID and client secret used by
