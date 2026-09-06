@@ -1,17 +1,6 @@
 name: Usage history performance
 
 on:
-  pull_request:
-    paths:
-      - 'CodexBarIOS/**'
-      - 'PerformanceBenchmarks/**'
-      - 'Package.swift'
-      - 'Package.resolved'
-      - 'scripts/usage-history-performance/**'
-      - 'scripts/tests/test_usage_history_performance.py'
-      - '.github/workflows/usage-history-performance.yml'
-  schedule:
-    - cron: '17 7 * * 1'
   workflow_dispatch:
 
 permissions:

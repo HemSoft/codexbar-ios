@@ -6,7 +6,7 @@ is unchanged. The budget compares Release binaries built on the same machine
 against frozen source revision `3395ee6094ce8e4199577f7ede493e3a50ee1269`.
 It does not turn a Mac measurement into an iPhone responsiveness target.
 
-## Run the gate
+## Run the benchmark
 
 From the repository root on a Mac with Xcode installed:
 
@@ -85,15 +85,31 @@ repeatable user journey for a separate memory investigation, following Apple's
 | Environment | Configuration | Role |
 | --- | --- | --- |
 | Mac17,4, Apple M5, 16 GiB, macOS 26.5.2 build 25F84, Xcode 26.6 build 17F113, Swift 6.3.3 | SwiftPM Release, arm64 | Committed calibration and disposable slowdown experiment |
-| GitHub `macos-26` runner, actual model, architecture, OS, Xcode and Swift captured in each artifact | SwiftPM Release | Relevant pull requests, weekly Monday schedule, and manual dispatch |
+| GitHub `macos-26` runner, actual model, architecture, OS, Xcode and Swift captured in each artifact | SwiftPM Release | Manual dispatch only |
 | iPhone and iPad simulators in existing CI | Existing Xcode correctness/UI configurations | Correctness coverage, no latency budget |
 | Physical iPhone/iPad and watchOS | Not benchmarked here | No inferred performance result or device latency claim |
 
-The workflow `Usage history performance` fails the `Usage history Release budget`
-job on any gate failure. It runs on relevant source/tooling pull requests and
-weekly at 07:17 UTC on Monday, as well as manual dispatch. It does not alter
-branch protection; the weekly job is the selected maintained failure policy.
-Existing required correctness checks remain applicable.
+The workflow `Usage history performance` runs only by manual dispatch. Its
+`Usage history Release budget` job is not a required merge check. Automatic PR
+and scheduled runs are disabled while
+[issue #325](https://github.com/HemSoft/codexbar-ios/issues/325) investigates
+measurement variability and evaluates CI policy. Existing correctness checks
+remain required.
+
+Select a reviewed branch in Actions > Usage history performance > Run workflow,
+or run:
+
+```sh
+gh workflow run usage-history-performance.yml --repo HemSoft/codexbar-ios --ref <reviewed-branch>
+```
+
+Run it when reviewing history storage, chart generation or benchmark changes,
+and during release preparation. The requesting maintainer owns reviewing
+`result.json`, raw samples, machine metadata and logs in the
+`usage-history-performance-<run-id>-<attempt>` artifact. Record the tested commit
+and distinguish regression, inconclusive measurements and execution failure in
+the related issue or PR. The job still fails on any budget or measurement-policy
+failure; manual dispatch does not relax thresholds or turn noise into a pass.
 
 Reference and candidate processes run sequentially in alternating order on the
 same host. Stop other local builds and heavy foreground work while measuring.

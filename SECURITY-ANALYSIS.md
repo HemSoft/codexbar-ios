@@ -1,9 +1,31 @@
 # Swift security analysis
 
-The `Swift security analysis` check builds and analyzes the iOS app, its widget,
-the embedded watch app, and its complication. It runs on every pull request,
-every push to `main`, and Mondays at 4:23 AM EDT / 3:23 AM EST, 08:23 UTC. Maintainers
-can also run the `Swift security` workflow manually.
+The `Swift security analysis` job builds and analyzes the iOS app, its widget,
+the embedded watch app, and its complication. The `Swift security` workflow runs
+only by manual dispatch and is not a required merge check. Automatic PR, `main`
+push, and scheduled runs are disabled while
+[issue #325](https://github.com/HemSoft/codexbar-ios/issues/325) evaluates CI runtime
+and reliability.
+
+## Run and review manually
+
+Select the reviewed branch in Actions > Swift security > Run workflow, or run:
+
+```sh
+gh workflow run security-analysis.yml --repo HemSoft/codexbar-ios --ref <reviewed-branch>
+```
+
+Run this analysis when reviewing authentication, networking, credential storage,
+security tooling or toolchain changes, and during release preparation. The
+maintainer requesting the run owns reviewing its findings and the
+`swift-security-<run-id>-<attempt>` artifact. Record the analyzed commit, extraction
+coverage, reviewed and blocking findings, and the final job result in the related
+issue or PR. A timeout or missing report is incomplete evidence.
+
+The manual job still fails on incomplete extraction, stale reviewed baselines,
+or unreviewed high-severity findings. Removing it from branch protection does
+not change those checks or mark earlier cancelled analyses as passing. Follow
+`Maintaining reviewed findings` below when production source changes.
 
 ## Analyzer and source reach
 
@@ -16,8 +38,8 @@ The job sets `CODEQL_ACTION_DIFF_INFORMED_QUERIES=false`. The pinned Action
 [enables diff-informed queries by default](https://github.com/github/codeql-action/blob/cdf488f595d80d6e07e03d4674febd5ab45fa938/src/feature-flags.ts#L240)
 on pull requests and limits their results to changed lines. That is unsuitable
 for this full-source baseline gate: the same source tree previously returned
-zero findings on a PR and three on `main`. Disabling the feature makes the PR
-gate examine unchanged code too. Verify the hosted analysis log contains no
+zero findings on a PR and three on `main`. Disabling the feature preserves
+full-source analysis if PR triggers are restored later. Verify the hosted analysis log contains no
 `--extension-packs=codeql-action/pr-diff-range` option after Action upgrades.
 File extraction counts alone cannot detect result filtering.
 
