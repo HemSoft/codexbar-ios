@@ -38,9 +38,8 @@ The job sets `CODEQL_ACTION_DIFF_INFORMED_QUERIES=false`. The pinned Action
 [enables diff-informed queries by default](https://github.com/github/codeql-action/blob/cdf488f595d80d6e07e03d4674febd5ab45fa938/src/feature-flags.ts#L240)
 on pull requests and limits their results to changed lines. That is unsuitable
 for this full-source baseline gate: the same source tree previously returned
-zero findings on a PR and three on `main`. Disabling the feature preserves
-full-source analysis if PR triggers are restored later. Verify the hosted
-analysis log contains no
+zero findings on a PR and three on `main`. Keeping the feature disabled preserves
+full-source analysis if PR triggers are restored. Verify the hosted analysis log contains no
 `--extension-packs=codeql-action/pr-diff-range` option after Action upgrades.
 File extraction counts alone cannot detect result filtering.
 
@@ -91,15 +90,14 @@ repository production files. Conditional branches inactive for the selected
 simulator platforms are not analyzed. These file counts do not prove that every
 possible data flow, platform branch, or runtime vulnerability was checked.
 
-## Findings and manual results
+## Findings and analysis gate
 
 The check uploads SARIF to the repository's **Security > Code scanning** page
 under category `swift-production`, waits for processing, and retains SARIF,
 compiler versions, extracted-source counts, and `gate.json` as an Actions
 artifact for 14 days. The job has only `contents: read` and
-`security-events: write`; checkout does not persist credentials. Maintainers
-select the branch for `workflow_dispatch`; there is no PR trigger or privileged
-`pull_request_target` execution.
+`security-events: write`; checkout does not persist credentials. Manual runs
+use `workflow_dispatch`, never privileged `pull_request_target` execution.
 
 `scripts/security-analysis/gate.py` fails on any security severity of 7.0 or
 higher unless it exactly matches a reviewed non-actionable finding in
@@ -114,12 +112,11 @@ and `blocking_findings`. A passing analysis with three reviewed findings means
 three findings and zero actionable high-severity findings, never a clean scan
 with zero findings. No baseline is refreshed automatically.
 
-The active default-branch ruleset requires SwiftLint, Strict concurrency,
-iOS tests, watchOS tests and SwiftPM smoke tests. It does not require
-`Swift security analysis` or `Usage history Release budget`. Issue #325 removed
-the security requirement originally configured during issue #309. Workflow
-triggers and repository rules are separate settings; keep both consistent
-when changing this policy.
+The active default-branch ruleset requires the five correctness checks documented
+in [CI-POLICY.md](CI-POLICY.md). `Swift security analysis` is no longer required
+by that ruleset. Its manual job still fails on the findings and extraction rules
+above. The workflow file does not configure repository rules; verify both when
+changing policy so a removed trigger does not leave a required status pending.
 
 ## Initial baseline
 
@@ -247,10 +244,11 @@ gh api 'repos/HemSoft/codexbar-ios/code-scanning/analyses?per_page=20'
 gh api 'repos/HemSoft/codexbar-ios/code-scanning/alerts?state=open'
 ```
 
-Manual branch dispatch analyzes the selected branch revision. Historical
-pull-request runs recorded GitHub's test merge SHA and `refs/pull/<number>/merge`.
-Match the analysis commit to the workflow run in either case; do not claim it
-analyzed a different revision.
+Manual analysis records the selected ref's resolved commit. Check the run's
+`headSha` and the analysis commit before associating findings with a PR.
+Historical pull-request analyses normally recorded GitHub's test merge SHA and
+`refs/pull/<number>/merge`. Match those records to the corresponding run instead
+of treating a test merge as the branch head.
 
 ## Reproduce the positive test
 
@@ -260,12 +258,12 @@ no credentials. The fixture is absent from the final tree. `build.sh` compiles
 it separately when it exists; it never links the fixture into a production
 target. CodeQL's
 [`swift/insecure-tls`](https://codeql.github.com/codeql-query-help/swift/swift-insecure-tls/)
-query has security severity 7.5 and must fail the manual analysis job.
+query has security severity 7.5 and must fail the same manual analysis job.
 
 For future analyzer upgrades, create that path on an issue branch with the
-following contents, manually dispatch the workflow and observe the authentic
-finding and failed `Swift security analysis` status. Then remove the fixture,
-dispatch again and verify that the analysis passes:
+following contents, dispatch the workflow on that branch, and observe the
+authentic finding and failed `Swift security analysis` status. Then remove the
+fixture, dispatch again and require the next analysis to pass:
 
 ```swift
 import Foundation

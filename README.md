@@ -52,6 +52,10 @@ performance budget run manually for relevant changes and release preparation;
 see [security analysis](SECURITY-ANALYSIS.md) and
 [performance verification](USAGE-HISTORY-PERFORMANCE.md).
 
+The [CI policy](CI-POLICY.md) records measured runtimes, the five required
+correctness checks, and manual security/performance dispatch and failure
+ownership. Manual analysis keeps its existing failure rules and artifacts.
+
 ## GitHub Copilot Sign-In
 
 CodexBar bundles the public OAuth client ID and client secret used by

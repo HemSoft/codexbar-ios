@@ -1,0 +1,135 @@
+{
+  "collectedAt": "2026-09-06T21:18:44.965507+00:00",
+  "selection": "Latest 100 workflow runs; latest attempt jobs only; all outcomes retained. Durations exclude queue time. Success median and nearest-rank p90 use successful completed jobs only.",
+  "runCount": 100,
+  "jobCount": 348,
+  "oldestRunCreatedAt": "2026-09-01T08:47:36Z",
+  "newestRunCreatedAt": "2026-09-06T21:13:22Z",
+  "jobs": [
+    {
+      "name": "Strict concurrency",
+      "count": 63,
+      "outcomes": {
+        "success": 56,
+        "cancelled": 6,
+        "failure": 1
+      },
+      "success_count": 56,
+      "success_median_seconds": 243.0,
+      "success_p90_nearest_rank_seconds": 313.0,
+      "success_max_seconds": 376.0
+    },
+    {
+      "name": "Swift security analysis",
+      "count": 25,
+      "outcomes": {
+        "cancelled": 10,
+        "success": 9,
+        "failure": 6
+      },
+      "success_count": 9,
+      "success_median_seconds": 1869.0,
+      "success_p90_nearest_rank_seconds": 2392.0,
+      "success_max_seconds": 2392.0
+    },
+    {
+      "name": "SwiftLint",
+      "count": 63,
+      "outcomes": {
+        "success": 62,
+        "cancelled": 1
+      },
+      "success_count": 62,
+      "success_median_seconds": 40.0,
+      "success_p90_nearest_rank_seconds": 49.0,
+      "success_max_seconds": 54.0
+    },
+    {
+      "name": "SwiftPM smoke tests",
+      "count": 63,
+      "outcomes": {
+        "success": 60,
+        "cancelled": 3
+      },
+      "success_count": 60,
+      "success_median_seconds": 67.5,
+      "success_p90_nearest_rank_seconds": 82.0,
+      "success_max_seconds": 89.0
+    },
+    {
+      "name": "Usage history Release budget",
+      "count": 8,
+      "outcomes": {
+        "failure": 3,
+        "success": 5
+      },
+      "success_count": 5,
+      "success_median_seconds": 301.0,
+      "success_p90_nearest_rank_seconds": 325.0,
+      "success_max_seconds": 325.0
+    },
+    {
+      "name": "iOS tests",
+      "count": 63,
+      "outcomes": {
+        "pending": 1,
+        "success": 28,
+        "cancelled": 26,
+        "failure": 8
+      },
+      "success_count": 28,
+      "success_median_seconds": 1121.5,
+      "success_p90_nearest_rank_seconds": 2408.0,
+      "success_max_seconds": 2974.0
+    },
+    {
+      "name": "watchOS tests",
+      "count": 63,
+      "outcomes": {
+        "success": 55,
+        "cancelled": 8
+      },
+      "success_count": 55,
+      "success_median_seconds": 285.0,
+      "success_p90_nearest_rank_seconds": 392.0,
+      "success_max_seconds": 424.0
+    }
+  ],
+  "cancelledJobs": {
+    "timeout": 1,
+    "superseded": 53
+  },
+  "requiredChecks": [
+    "SwiftLint",
+    "Strict concurrency",
+    "iOS tests",
+    "watchOS tests",
+    "SwiftPM smoke tests"
+  ],
+  "runsWithoutJobs": [
+    {
+      "run": 34030663445,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "url": "https://github.com/HemSoft/codexbar-ios/actions/runs/34030663445"
+    },
+    {
+      "run": 34030621865,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "url": "https://github.com/HemSoft/codexbar-ios/actions/runs/34030621865"
+    },
+    {
+      "run": 33997959941,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "url": "https://github.com/HemSoft/codexbar-ios/actions/runs/33997959941"
+    },
+    {
+      "run": 33988143377,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "url": "https://github.com/HemSoft/codexbar-ios/actions/runs/33988143377"
+    }
+  ]
+}

@@ -1,9 +1,11 @@
 """Exercise the performance gate's failure policy without timing unit tests."""
 import copy
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import sys
+import subprocess
 import unittest
 import tempfile
 from unittest import mock
@@ -42,6 +44,36 @@ class PerformanceGateTests(unittest.TestCase):
                 GATE.prepare_output(output)
             self.assertTrue((output / "result.json").exists())
 
+    def test_failed_process_and_invalid_json_keep_raw_evidence(self):
+        for exit_code, error in ((7, subprocess.CalledProcessError), (0, json.JSONDecodeError)):
+            with self.subTest(exit_code=exit_code), tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary)
+                binary = output / "broken-benchmark"
+                binary.write_text(f"#!{sys.executable}\nimport sys\nprint('partial report')\n"
+                                  f"print('fixture failure', file=sys.stderr)\nsys.exit({exit_code})\n")
+                binary.chmod(0o700)
+                with mock.patch.object(GATE, "machine_snapshot") as snapshot:
+                    with self.assertRaises(error):
+                        GATE.measure(binary, output, "1-candidate")
+                    self.assertEqual(snapshot.call_args_list, [mock.call(output, "1-candidate-before"),
+                                                               mock.call(output, "1-candidate-after")])
+                self.assertEqual((output / "1-candidate.json").read_text(), "partial report\n")
+                self.assertEqual((output / "1-candidate.stderr.log").read_text(), "fixture failure\n")
+                self.assertFalse((output / "result.json").exists())
+
+    def test_unavailable_machine_probes_remain_visible_diagnostics(self):
+        errors = (OSError("probe unavailable"),
+                  UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte"))
+        for error in errors:
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary)
+                with mock.patch.object(GATE.subprocess, "run", side_effect=error):
+                    GATE.machine_snapshot(output, "before")
+                snapshot = json.loads((output / "before-machine.json").read_text())
+                self.assertIn("capturedAt", snapshot)
+                for probe in ("thermal", "memory", "processes"):
+                    self.assertEqual(snapshot[probe], {"error": str(error)})
+
     def test_committed_recordings_expand_and_replay(self):
         for name, expected_pass in (("calibration", True), ("slowdown-proof", False)):
             with self.subTest(name=name):
@@ -59,6 +91,62 @@ class PerformanceGateTests(unittest.TestCase):
                 if not expected_pass:
                     for accounts in (1, 10, 25):
                         self.assertTrue(any(f"REGRESSION {accounts} accounts recordMilliseconds" in item for item in result["findings"]))
+
+    def test_repeatability_study_rejects_missing_or_altered_evidence(self):
+        study = json.loads(SCRIPT.with_name("repeatability-study.json").read_text())
+        results = REPLAY.replay_study(study, POLICY)
+        self.assertEqual(len(results), len(study["experiments"]))
+        self.assertTrue(any(result["passed"] for _, result in results))
+        self.assertTrue(any(not result["passed"] for _, result in results))
+        equivalent = copy.deepcopy(study)
+        equivalent["experiments"][0]["result"]["timings"][0]["medianRatio"] += 1e-13
+        self.assertEqual(REPLAY.replay_study(equivalent, POLICY), results)
+
+        def change_warmup(value):
+            samples = value["experiments"][0]["runs"][0]["reference"]["scenarios"][0]["recordMilliseconds"]
+            samples[0] = 9999
+
+        def remove_trial_and_declaration(value):
+            value["experiments"].pop(0)
+            value["experimentNames"].pop(0)
+
+        mutations = [
+            lambda value: value["experiments"].clear(),
+            lambda value: value["experiments"].pop(),
+            lambda value: value["experiments"].append(copy.deepcopy(value["experiments"][0])),
+            lambda value: value["experiments"][0]["result"].update(
+                passed=not value["experiments"][0]["result"]["passed"]),
+            lambda value: value["experiments"][0]["result"]["timings"][0].update(medianRatio=0),
+            lambda value: value["experiments"][0]["runs"].pop(),
+            change_warmup,
+            remove_trial_and_declaration,
+        ]
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                invalid = copy.deepcopy(study)
+                mutate(invalid)
+                with self.assertRaises(ValueError):
+                    REPLAY.replay_study(invalid, POLICY)
+
+    def test_coordinated_report_hash_and_verdict_edits_are_rejected(self):
+        original = json.loads(SCRIPT.with_name("repeatability-study.json").read_text())
+        for sample_index in (0, 2):
+            with self.subTest(sample_index=sample_index):
+                study = copy.deepcopy(original)
+                recording = study["experiments"][0]
+                samples = recording["runs"][0]["reference"]["scenarios"][0]["recordMilliseconds"]
+                if sample_index == 0:
+                    samples[0] = 9999
+                else:
+                    samples[2:] = [9999] * len(samples[2:])
+                runs = REPLAY.expand_runs(recording)
+                recording["reportSHA256"] = [
+                    {side: hashlib.sha256(json.dumps(pair[side], sort_keys=True,
+                        separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+                     for side in ("reference", "candidate")} for pair in runs]
+                recording["result"] = GATE.evaluate(runs, POLICY)
+                with self.assertRaises(ValueError):
+                    REPLAY.replay_study(study, POLICY)
 
     def test_invalid_compressed_recording_is_rejected(self):
         recording = json.loads(SCRIPT.with_name("calibration.json").read_text())

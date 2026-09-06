@@ -98,6 +98,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Document measured CI runtimes and manual-analysis failure ownership. Preserve
+  machine-load diagnostics, process errors and replayable performance evidence.
+  Benchmark repeatability remains under investigation.
+  ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
+
 - Run Swift security analysis and the usage-history Release budget manually,
   preserving their diagnostic artifacts and failure checks while removing them
   from automatic PR runs and merge requirements. Broader CI runtime and benchmark
