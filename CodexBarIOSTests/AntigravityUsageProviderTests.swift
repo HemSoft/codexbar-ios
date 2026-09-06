@@ -432,18 +432,12 @@ final class AntigravityUsageProviderTests: XCTestCase {
         XCTAssertNil(ContentView.metricLayoutCopyDestination(apps, from: result, configurationStore: store))
     }
 
-    func testCatalogKeepsOtherProvidersAndRejectsWrongSourceResults() throws {
+    func testCatalogKeepsOtherProvidersAndRejectsWrongSourceResults() {
         let other = ProviderUsageResult(providerID: .openRouter, title: "Other", subtitle: "", bars: [], creditsRemaining: 12, fetchedAt: Self.now)
         XCTAssertEqual(other.configurableMetrics, other.availableMetrics)
         XCTAssertTrue(GoogleUsageMetricCatalog.metrics(for: .gemini, result: other).allSatisfy {
             $0.kind == .unavailableUsage("Setup required")
         })
-        let result = try Self.result(Self.payload([]))
-        XCTAssertEqual(ProviderMetricTileGridResolver.resolvedWidth(
-            preference: .automatic, kind: result.configurableMetrics[0].kind,
-            visualizationStyle: .circularRing, usesRegularHorizontalSizeClass: false,
-            collapsesToSingleColumn: false
-        ), .half)
     }
 
     private static let expiredCredential = #"{"access_token":"old","refresh_token":"refresh","client_id":"client","client_secret":"secret+value","expiry":"2020-01-01T00:00:00Z"}"#

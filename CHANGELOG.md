@@ -50,7 +50,8 @@ building, testing, or releasing the app.
   and Antigravity model families have distinct labels, and each choice keeps its
   saved visibility, order, width, and visualization after refreshes and relaunches.
   If a refresh returns no usable quotas, retain observed percentages as last-known
-  data while keeping explicitly disabled quotas unavailable.
+  data while keeping explicitly disabled quotas unavailable. VoiceOver also
+  announces unavailable and disabled states in Metrics settings.
   ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
 
 - Expose the selected account group as a separate accessibility value in account

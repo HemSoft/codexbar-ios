@@ -34,7 +34,8 @@ enum AntigravityQuotaParser {
         let missing = metrics.filter { metric in !bars.contains { $0.stableKey == metric.key } }
         let unavailable = Dictionary(uniqueKeysWithValues: missing.map { metric in
             let matches = buckets.filter { $0.bucketId == metric.key }
-            let reason = matches.count == 1 && matches.first?.disabled == true ? "Disabled" : "Unavailable"
+            let reason = matches.count == 1 && matches.first?.disabled == true
+                ? GoogleUsageMetricCatalog.disabledReason : "Unavailable"
             return ("antigravity.\(metric.key)", reason)
         })
         let message = missing.isEmpty ? nil : "Unavailable: " + missing.map(\.label).joined(separator: ", ") + "."

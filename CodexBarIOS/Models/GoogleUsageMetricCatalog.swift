@@ -2,6 +2,8 @@ import Foundation
 
 /// Known quota choices are independent of whether the latest fetch returned a value.
 public enum GoogleUsageMetricCatalog {
+    static let disabledReason = "Disabled"
+
     public struct Definition: Equatable, Sendable {
         public let key: String
         public let label: String
@@ -40,8 +42,8 @@ public enum GoogleUsageMetricCatalog {
             let metricID = "\(providerID.rawValue).\(definition.key)"
             let unavailableReason = matchingResult?.unavailableUsageMetrics[metricID]
             let kind: ProviderUsageMetricKind
-            if unavailableReason == "Disabled" {
-                kind = .unavailableUsage("Disabled")
+            if unavailableReason == disabledReason {
+                kind = .unavailableUsage(disabledReason)
             } else {
                 kind = observed.first { $0.id == metricID }?.kind
                     ?? .unavailableUsage(unavailableReason ?? missingReason)

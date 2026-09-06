@@ -384,6 +384,11 @@ struct ProviderSettingsView: View {
                     }
                 } else {
                     ForEach(viewModel.availableMetrics) { metric in
+                        let accessibilityStatus = if case let .unavailableUsage(reason) = metric.kind {
+                            ". \(reason)"
+                        } else {
+                            ""
+                        }
                         Toggle(isOn: Binding(
                                 get: { viewModel.isMetricVisible(metric.id) },
                                 set: { viewModel.setMetricVisibility($0, metricID: metric.id) }
@@ -395,7 +400,7 @@ struct ProviderSettingsView: View {
                                 }
                             }
                         }
-                        .accessibilityLabel("Show \(metric.label) on dashboard")
+                        .accessibilityLabel("Show \(metric.label) on dashboard\(accessibilityStatus)")
                         .accessibilityIdentifier("account-metric-visibility-\(metric.id)")
                     }
                 }

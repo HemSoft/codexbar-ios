@@ -4981,3 +4981,13 @@ extension AppAndWidgetTests {
         XCTAssertFalse(sameVersionPolicy.registerSuccessfulRefresh(at: start.addingTimeInterval(1)))
     }
 }
+
+final class ProviderMetricTileGridTests: XCTestCase {
+    func testUnavailableUsageTilePreservesAutomaticRingWidth() {
+        XCTAssertEqual(ProviderMetricTileGridResolver.resolvedWidth(
+            preference: .automatic, kind: .unavailableUsage("Unavailable"),
+            visualizationStyle: .circularRing, usesRegularHorizontalSizeClass: false,
+            collapsesToSingleColumn: false
+        ), .half)
+    }
+}

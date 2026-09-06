@@ -145,12 +145,17 @@ final class UITestFixtures {
 
     nonisolated static func googleResult(for account: ProviderAccountConfiguration, stage: Int) -> ProviderUsageResult {
         let definitions = GoogleUsageMetricCatalog.definitions(for: account.providerID)
-        let used: [Double] = account.providerID == .gemini ? [12, 45] : (stage >= 3 ? [100, 31, 20, 60] : [0, 31, 0, 0])
-        let partial = account.providerID == .antigravity && stage == 1
-        let bars = definitions.enumerated().compactMap { index, definition -> UsageBar? in
-            if partial && (index == 1 || index == 2) { return nil }
+        let used: [String: Double] = account.providerID == .gemini ? ["five-hour": 12, "weekly": 45] : [
+            "gemini-5h": stage >= 3 ? 100 : 0, "gemini-weekly": 31,
+            "3p-5h": stage >= 3 ? 20 : 0, "3p-weekly": stage >= 3 ? 60 : 0,
+        ]
+        let unavailable = account.providerID == .antigravity && stage == 1 ? [
+            "gemini-weekly": "Unavailable", "3p-5h": GoogleUsageMetricCatalog.disabledReason,
+        ] : [:]
+        let bars = definitions.compactMap { definition -> UsageBar? in
+            guard unavailable[definition.key] == nil, let value = used[definition.key] else { return nil }
             return UsageBar(
-                stableKey: definition.key, label: definition.label, used: used[index], limit: 100,
+                stableKey: definition.key, label: definition.label, used: value, limit: 100,
                 resetsAt: Date().addingTimeInterval(definition.window == "5h" ? 18_000 : 604_800),
                 resetDisplayStyle: .relativeWithLocalTime
             )
@@ -159,9 +164,9 @@ final class UITestFixtures {
             accountID: account.id, providerID: account.providerID, title: account.displayName,
             subtitle: account.providerID == .gemini ? "Gemini Apps usage" : "Antigravity quota groups",
             bars: bars,
-            unavailableUsageMetrics: partial ? [
-                "antigravity.gemini-weekly": "Unavailable", "antigravity.3p-5h": "Disabled",
-            ] : [:],
+            unavailableUsageMetrics: Dictionary(uniqueKeysWithValues: unavailable.map {
+                ("\(account.providerID.rawValue).\($0.key)", $0.value)
+            }),
             fetchedAt: Date()
         )
     }
