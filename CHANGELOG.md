@@ -92,6 +92,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Re-review the three accepted security findings after the Google quota changes,
+  preserving the full-source snapshot and exact diagnostic checks.
+  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+
 - Include pinned repository-wide SwiftLint and complete strict-concurrency
   checks in the local perfection audit. Report failures alongside every
   selected gate and identify separate readiness checks outside its score.

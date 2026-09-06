@@ -147,6 +147,29 @@ result in the PR. The old filtered PR results and local SARIF replay do not
 prove this new hosted workflow. After merge, verify the corresponding `main`
 analysis before recording the default-branch baseline as passing.
 
+## Review for the six Google quota choices
+
+For [#319](https://github.com/HemSoft/codexbar-ios/issues/319), the
+[full hosted analysis](https://github.com/HemSoft/codexbar-ios/actions/runs/34046485826)
+analyzed test merge `cc4e381faeb9f96a66e2841cabb3a67736e7b5cd`, containing PR head
+`ecd331d10cae0c35635f137f41c72c827ed607c5`. Analysis `1732313795` reported the
+same three findings, complete source reach, and no extraction errors. The gate
+rejected the changed production snapshot as designed.
+
+Re-review of that head confirmed the existing boundaries: `cacheIdentity` is
+still used only for in-memory cache equality, `ProviderUsageResult` remains
+non-Codable, and collapsed-state IDs remain configuration-validated local IDs.
+The new Google UI fixtures save only the same literal `ui-test-credential`.
+Their DEBUG simulator guard, isolated defaults suite, network blocker and
+private secret-store validation remain intact. The fixture diagnostic moved
+from line 162 to 209; its current raw SARIF was reviewed before updating its
+exact identity. The other two diagnostic identities are unchanged.
+
+The reviewed baseline now pins this source snapshot. Replaying the hosted
+SARIF and source-reach CSV accepts exactly those three findings and reports
+zero blocking findings. A fresh hosted check is still required after this
+baseline update; the local replay does not replace it.
+
 ## Maintaining reviewed findings
 
 Each exception pins the exact rule, severity, message, primary location, and a
