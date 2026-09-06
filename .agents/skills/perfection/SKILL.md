@@ -51,8 +51,9 @@ The runner:
   simulator build/test gates; lint and concurrency retain their existing policies;
 - runs all gates even when an earlier gate fails;
 - stores each gate's complete log, simulator test result bundles, and a summary
-  under the ignored `DerivedData/Perfection/` directory; the existing lint and
-  concurrency commands retain their standard dependency/build cache locations;
+  under the ignored `DerivedData/Perfection/` directory; strict concurrency uses
+  its own DerivedData inside the run directory, so its clean build cannot remove
+  developer build products; the lint command retains its standard package cache;
 - exits successfully only when every selected gate passes.
 
 Override simulator selection only when the task requires a particular

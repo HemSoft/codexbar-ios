@@ -4,7 +4,16 @@ set -euo pipefail
 
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 
-xcodebuild -quiet \
+# The local audit supplies an isolated path so clean never touches developer builds.
+run_xcodebuild() {
+  if [[ -n "${STRICT_CONCURRENCY_DERIVED_DATA_PATH:-}" ]]; then
+    xcodebuild -derivedDataPath "$STRICT_CONCURRENCY_DERIVED_DATA_PATH" "$@"
+  else
+    xcodebuild "$@"
+  fi
+}
+
+run_xcodebuild -quiet \
   -project CodexBarIOS.xcodeproj \
   -scheme CodexBarIOS \
   -skipPackagePluginValidation \
@@ -28,7 +37,7 @@ check_watch_connectivity_diagnostics() {
   fi
 }
 
-if ! xcodebuild -quiet \
+if ! run_xcodebuild -quiet \
   -project CodexBarIOS.xcodeproj \
   -scheme CodexBarIOS \
   -skipPackagePluginValidation \
@@ -41,7 +50,7 @@ if ! xcodebuild -quiet \
 fi
 check_watch_connectivity_diagnostics "$ios_test_log"
 
-if ! xcodebuild -quiet \
+if ! run_xcodebuild -quiet \
   -project CodexBarIOS.xcodeproj \
   -scheme CodexBarWatchTests \
   -skipPackagePluginValidation \

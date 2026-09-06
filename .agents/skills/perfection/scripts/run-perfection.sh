@@ -211,6 +211,7 @@ run_gate \
 run_gate \
   "strict-concurrency" \
   "Complete strict concurrency" \
+  env STRICT_CONCURRENCY_DERIVED_DATA_PATH="$run_dir/StrictConcurrencyDerivedData" \
   "$repo_root/scripts/check-strict-concurrency.sh"
 
 run_gate \

@@ -65,6 +65,12 @@ else:
     scheme = args[args.index("-scheme") + 1]
     assert "CODE_SIGNING_ALLOWED=NO" in args, args
     if "SWIFT_STRICT_CONCURRENCY=complete" in args:
+        isolated_path = os.environ.get("STRICT_CONCURRENCY_DERIVED_DATA_PATH")
+        if isolated_path:
+            assert args[:2] == ["-derivedDataPath", isolated_path], args
+            assert Path(os.environ["PERFECTION_OUTPUT_ROOT"]) in Path(isolated_path).parents
+        else:
+            assert "-derivedDataPath" not in args, args
         if args[-1] == "build":
             assert "SWIFT_TREAT_WARNINGS_AS_ERRORS=YES" in args, args
             assert args[-2:] == ["clean", "build"], args
@@ -95,6 +101,7 @@ sys.exit(23 if os.environ.get("PERFECTION_TEST_FAIL") == gate else 0)
             "PERFECTION_WATCH_DESTINATION": "platform=watchOS Simulator,id=fixture-watch",
             "PERFECTION_TEST_CALLS": str(self.calls),
             "PERFECTION_TEST_FAIL": "",
+            "STRICT_CONCURRENCY_DERIVED_DATA_PATH": "",
         }
 
     def run_audit(self, *arguments, failure=""):
@@ -147,6 +154,17 @@ sys.exit(23 if os.environ.get("PERFECTION_TEST_FAIL") == gate else 0)
         self.assertEqual(status.stdout, summary)
         self.assertEqual(self.read_calls(), calls)
 
+    def test_concurrency_helper_preserves_default_build_location_outside_audit(self):
+        result = subprocess.run(
+            ["bash", str(self.repo / "scripts/check-strict-concurrency.sh")],
+            cwd=self.repo, env=self.env, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([call["gate"] for call in self.read_calls()], [
+            "strict-build", "strict-ios-tests", "strict-watch-tests",
+        ])
+        self.assertTrue(all("-derivedDataPath" not in call["args"] for call in self.read_calls()))
+
     def test_each_gate_can_run_alone(self):
         for gate, label in zip(GATES, LABELS):
             with self.subTest(gate=gate):
@@ -158,6 +176,12 @@ sys.exit(23 if os.environ.get("PERFECTION_TEST_FAIL") == gate else 0)
                     "strict-build", "strict-ios-tests", "strict-watch-tests",
                 ]
                 self.assertEqual([call["gate"] for call in self.read_calls()], expected)
+                if gate == "strict-concurrency":
+                    paths = {call["args"][1] for call in self.read_calls()}
+                    self.assertEqual(len(paths), 1)
+                    isolated_path = Path(paths.pop())
+                    self.assertEqual(isolated_path.name, "StrictConcurrencyDerivedData")
+                    self.assertEqual(isolated_path.parent.parent, self.output)
 
     def test_lint_and_each_concurrency_failure_preserve_all_gate_results(self):
         for failure in ["swiftlint", "strict-build", "strict-ios-tests", "strict-watch-tests"]:
