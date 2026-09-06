@@ -15,6 +15,8 @@ fi
 
 # Xcode's explicit PCM files are incompatible with the CodeQL Swift compiler.
 # Let each compiler build its own implicit modules for this analysis build.
+# Enable SDK cross-import overlays explicitly because the extractor's Swift
+# frontend does not inherit Xcode's default, including StoreKit + SwiftUI.
 xcodebuild \
   -project CodexBarIOS.xcodeproj \
   -scheme CodexBarIOS \
@@ -24,6 +26,7 @@ xcodebuild \
   -derivedDataPath "$SECURITY_DERIVED_DATA" \
   ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO \
   SWIFT_ENABLE_EXPLICIT_MODULES=NO \
+  OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -enable-cross-import-overlays' \
   build
 
 # The temporary positive fixture is compiled, never linked to or run by the app.

@@ -29,9 +29,19 @@ Only this analysis build sets `SWIFT_ENABLE_EXPLICIT_MODULES=NO`, using Apple's
 [documented opt-out](https://developer.apple.com/documentation/xcode-release-notes/xcode-26-release-notes).
 The first run found precompiled SDK modules from Xcode's Clang incompatible with
 the CodeQL Swift compiler. Implicit modules let each compiler build its own
-compatible modules. The next hosted run must verify that this removes those
-extraction errors. The job allows 60 minutes after the first traced build took
-about 39 minutes.
+compatible modules. The second hosted run removed the SDK module errors but
+still reported 12 compiler errors in two app views. Both use StoreKit's
+`requestReview` environment value, which comes from the StoreKit/SwiftUI
+cross-import overlay.
+
+The analysis build also passes `-Xfrontend -enable-cross-import-overlays`.
+[Swift's frontend defaults this option to false](https://github.com/swiftlang/swift/blob/2d17dddbfb0dca8cdf66d12918e4068a878d8ab2/include/swift/Basic/LangOptions.h#L257),
+whereas Xcode enables overlays. [CodeQL's pinned extractor](https://github.com/github/codeql/blob/codeql-cli/v2.26.4/swift/extractor/main.cpp)
+invokes that frontend without changing the option. A minimal `requestReview` view reproduces the
+reported initializer and key-path errors with overlays disabled and compiles
+with them enabled. The next hosted run must prove complete extraction; local
+compiler success is not analyzer evidence. The job allows 60 minutes after the
+first traced build took about 39 minutes.
 
 An evidence-only CodeQL query counts extracted syntax nodes and compiler errors
 for each Swift file. The gate requires syntax for every tracked `.swift` file in
@@ -82,6 +92,14 @@ production Swift files had extracted syntax, but 422 extraction diagnostics
 included incompatible SDK modules and compiler errors in `ContentView.swift`
 and `SettingsView.swift`. This is incomplete extraction, so a clean production
 baseline remains pending. No exclusions or accepted findings were added.
+
+The [second hosted run](https://github.com/HemSoft/codexbar-ios/actions/runs/34000819436)
+again extracted syntax from all 84 production files and found only the temporary
+severity-7.5 TLS fixture. Implicit modules removed the SDK compatibility errors.
+The 12 remaining extraction diagnostics concern `requestReview` initialization
+and key-path inference, plus a `ContentView` expression type-check failure.
+The corrected gate rejected those diagnostics. This is still incomplete
+extraction and does not establish the required severity-driven failure proof.
 
 The first required job failed on unsupported grouped SARIF metadata. Its
 published fixture alert proves query detection, but the required-check positive
