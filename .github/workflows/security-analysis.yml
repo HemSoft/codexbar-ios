@@ -1,0 +1,92 @@
+name: Swift security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swift-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift-security:
+    name: Swift security analysis
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test security gate failure cases
+        run: python3 -m unittest discover -s scripts/tests -p 'test_security_analysis.py' -v
+
+      - name: Record compiler versions
+        run: |
+          echo "SECURITY_OUTPUT=$RUNNER_TEMP/swift-security" >> "$GITHUB_ENV"
+          echo "SECURITY_DERIVED_DATA=$RUNNER_TEMP/swift-security-derived-data" >> "$GITHUB_ENV"
+          SECURITY_OUTPUT="$RUNNER_TEMP/swift-security"
+          mkdir -p "$SECURITY_OUTPUT"
+          xcodebuild -version | tee "$SECURITY_OUTPUT/xcode-version.txt"
+          xcrun swift --version | tee "$SECURITY_OUTPUT/swift-version.txt"
+
+      - name: Initialize pinned CodeQL
+        id: codeql
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          languages: swift
+          build-mode: manual
+          tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.26.4/codeql-bundle-osx64.tar.gz
+          queries: security-extended
+          db-location: ${{ runner.temp }}/codeql-databases
+
+      - name: Build app, widgets, and watch companion for extraction
+        run: ./scripts/security-analysis/build.sh
+
+      - name: Analyze and publish CodeQL findings
+        id: analyze
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          output: ${{ env.SECURITY_OUTPUT }}/sarif
+          category: swift-production
+          wait-for-processing: true
+
+      - name: Measure extracted Swift syntax
+        env:
+          CODEQL: ${{ steps.codeql.outputs.codeql-path }}
+        run: |
+          "$CODEQL" version --format=json > "$SECURITY_OUTPUT/codeql-version.json"
+          "$CODEQL" query run scripts/security-analysis/queries/source-reach.ql \
+            --database="$RUNNER_TEMP/codeql-databases/swift" \
+            --output="$SECURITY_OUTPUT/source-reach.bqrs"
+          "$CODEQL" bqrs decode "$SECURITY_OUTPUT/source-reach.bqrs" \
+            --format=csv --output="$SECURITY_OUTPUT/source-reach.csv"
+
+      - name: Require complete extraction and no high-severity findings
+        run: >-
+          python3 scripts/security-analysis/gate.py
+          --sarif "$SECURITY_OUTPUT/sarif/swift.sarif"
+          --reach "$SECURITY_OUTPUT/source-reach.csv"
+          --output "$SECURITY_OUTPUT/gate.json"
+
+      - name: Preserve findings and extraction evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: swift-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.SECURITY_OUTPUT }}
+          if-no-files-found: error
+          retention-days: 14

@@ -90,6 +90,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Add Swift security analysis of the app, widgets, watch companion, and shared
+  code on pull requests, main, and a weekly schedule, with published findings
+  and a gate for high-severity findings or incomplete extraction.
+  ([#309](https://github.com/HemSoft/codexbar-ios/issues/309))
+
 - Require isolated iPhone and iPad UI journeys for account setup, saved group
   selection, dashboard recovery, History, and account deep links in pull requests.
   Failure screenshots and result bundles are retained for diagnosis.
