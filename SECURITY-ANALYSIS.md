@@ -2,7 +2,7 @@
 
 The `Swift security analysis` check builds and analyzes the iOS app, its widget,
 the embedded watch app, and its complication. It runs on every pull request,
-every push to `main`, and Mondays at 08:23 UTC (04:23 EDT / 03:23 EST). Maintainers
+every push to `main`, and Mondays at 4:23 AM EDT / 3:23 AM EST, 08:23 UTC. Maintainers
 can also run the `Swift security` workflow manually.
 
 ## Analyzer and source reach
@@ -25,11 +25,21 @@ The scheme builds all four production targets. This includes authentication,
 provider networking, credential and history persistence, and `CodexBarIOS/Shared`.
 Debug also includes the isolated UI-test fixture support in the app source tree.
 
+Only this analysis build sets `SWIFT_ENABLE_EXPLICIT_MODULES=NO`, using Apple's
+[documented opt-out](https://developer.apple.com/documentation/xcode-release-notes/xcode-26-release-notes).
+The first run found precompiled SDK modules from Xcode's Clang incompatible with
+the CodeQL Swift compiler. Implicit modules let each compiler build its own
+compatible modules. The next hosted run must verify that this removes those
+extraction errors. The job allows 60 minutes after the first traced build took
+about 39 minutes.
+
 An evidence-only CodeQL query counts extracted syntax nodes and compiler errors
 for each Swift file. The gate requires syntax for every tracked `.swift` file in
 `CodexBarIOS`, `CodexBarIOSWidget`, `CodexBarWatch`, and `CodexBarWatchWidget`.
 Adding a file without adding it to a build target fails this coverage check.
-Compiler errors also fail even if the rest of the file extracted. The CSV is
+Compiler errors also fail even if the rest of the file extracted. SARIF Swift
+extraction diagnostics fail regardless of their reported level, including errors
+in SDK files outside the repository. The CSV is
 included in the run artifact. A source archive alone is not coverage evidence.
 
 Unit tests, UI test targets, the smoke executable, and development scripts are
@@ -55,17 +65,29 @@ metadata, incomplete source reach, and extraction errors also fail the job.
 There are no accepted high-severity findings or automatic baseline refreshes.
 Fix the cause rather than dismissing an alert to bypass the check.
 
-Repository rules must require the GitHub Actions check `Swift security analysis`
-alongside the existing required checks. The workflow alone does not change
+The active default-branch ruleset requires the GitHub Actions check
+`Swift security analysis` alongside the five existing required checks. This
+rule was configured during issue #309; the workflow alone does not change
 repository rules. When changing the check name, update the rule in the same
 rollout so the old required name does not leave pull requests waiting forever.
 
 ## Initial baseline
 
 Before issue #309, the code-scanning API returned `no analysis found`. That was
-missing evidence, not a clean baseline. The first complete production analysis,
-its findings, extraction counts, and run URL will be recorded here after the
-workflow completes. No exclusions have been added while results are pending.
+missing evidence. The [first hosted run](https://github.com/HemSoft/codexbar-ios/actions/runs/33998745093)
+published analysis `1730518784` at 8:08 PM EDT on September 5, 2026 for test merge
+commit `72a45350deb24d2d40ad94fa1f0b080f0b86de7a`. CodeQL 2.26.4 found the
+temporary TLS fixture at severity 7.5 and no other findings. All 84 tracked
+production Swift files had extracted syntax, but 422 extraction diagnostics
+included incompatible SDK modules and compiler errors in `ContentView.swift`
+and `SettingsView.swift`. This is incomplete extraction, so a clean production
+baseline remains pending. No exclusions or accepted findings were added.
+
+The first required job failed on unsupported grouped SARIF metadata. Its
+published fixture alert proves query detection, but the required-check positive
+test still needs a failure caused by severity 7.5 with complete extraction.
+After that proof, remove the temporary fixture and require a clean run before
+merging.
 
 To inspect a completed analysis, use both APIs, checking its analyzed commit and
 `error` field before interpreting an empty alert list:

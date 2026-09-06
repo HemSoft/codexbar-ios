@@ -13,6 +13,8 @@ if [[ -e "$SECURITY_DERIVED_DATA" ]]; then
   exit 1
 fi
 
+# Xcode's explicit PCM files are incompatible with the CodeQL Swift compiler.
+# Let each compiler build its own implicit modules for this analysis build.
 xcodebuild \
   -project CodexBarIOS.xcodeproj \
   -scheme CodexBarIOS \
@@ -21,6 +23,7 @@ xcodebuild \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath "$SECURITY_DERIVED_DATA" \
   ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO \
+  SWIFT_ENABLE_EXPLICIT_MODULES=NO \
   build
 
 # The temporary positive fixture is compiled, never linked to or run by the app.
