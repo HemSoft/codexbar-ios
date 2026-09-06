@@ -44,6 +44,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Stop publishing cached Google quotas to alerts, widgets and Apple Watch when
+  the provider explicitly disables them, while retaining observed History data.
+  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+
 - Keep all six Google usage choices available in each account's Metrics
   settings before setup, with independent visibility controls. After an account
   returns a result, Customize Card also retains unavailable choices. Gemini Apps

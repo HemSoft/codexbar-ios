@@ -298,8 +298,16 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
             )
     }
 
+    /// Preserve cached observations in `bars`, but do not publish provider-disabled quotas.
+    public var enabledBarIndices: [Int] {
+        bars.indices.filter { index in
+            let metricID = bars[index].metricIdentifier(providerID: providerID, index: index)
+            return unavailableUsageMetrics[metricID] != GoogleUsageMetricCatalog.disabledReason
+        }
+    }
+
     public var freshBars: [UsageBar] {
-        hasFreshBars ? bars : []
+        hasFreshBars ? enabledBarIndices.map { bars[$0] } : []
     }
 
     public var hasFreshCredits: Bool {
@@ -323,8 +331,9 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     }
 
     public var availableMetrics: [ProviderUsageMetric] {
-        let usageMetrics = bars.enumerated().map { index, bar in
-            ProviderUsageMetric(
+        let usageMetrics = enabledBarIndices.map { index in
+            let bar = bars[index]
+            return ProviderUsageMetric(
                 id: bar.metricIdentifier(providerID: providerID, index: index),
                 label: bar.label,
                 kind: .usageBar(index: index)

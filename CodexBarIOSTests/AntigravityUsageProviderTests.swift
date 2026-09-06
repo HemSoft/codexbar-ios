@@ -372,8 +372,13 @@ final class AntigravityUsageProviderTests: XCTestCase {
 
     @MainActor
     func testExplicitlyDisabledBucketsOverrideCachedValuesWithoutLosingHistory() async throws {
+        let suite = "DisabledQuotaConsumers.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         let secrets = MemorySecretStore()
-        try secrets.saveSecret(#"{"access_token":"test"}"#, account: ProviderConfigurationStore.keychainAccount(for: Self.configuration))
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let account = store.addAccount(for: .antigravity)
+        XCTAssertTrue(store.saveSecret(#"{"access_token":"test"}"#, for: account))
         let fixture = IsolatedTestURLSession { request in
             let disabled = Self.buckets().map { bucket in
                 var bucket = bucket
@@ -383,12 +388,17 @@ final class AntigravityUsageProviderTests: XCTestCase {
             return (try Self.response(request, status: 200), try Self.payload(disabled))
         }
         defer { fixture.invalidate() }
-        let initial = try Self.result(Self.payload())
+        let initial = try AntigravityQuotaParser.result(from: Self.payload(), configuration: account, fetchedAt: Self.now)
+        let history = UsageHistoryStore(defaults: defaults)
+        history.record(results: [initial], now: Self.now)
+        let savedHistory = history.snapshots(for: account.id)
+        let expectedIDs = initial.availableMetrics.map(\.id)
+        assertQuotaConsumers(initial, store: store, defaults: defaults, expectedIDs: expectedIDs, severity: .critical)
         let service = UsageRefreshService(
             providers: [AntigravityUsageProvider(secretStore: secrets, sessionConfiguration: fixture.session.configuration)],
             initialResults: [initial]
         )
-        await service.refresh(configurations: [Self.configuration])
+        await service.refresh(configurations: [account])
         let result = try XCTUnwrap(service.results.first)
         XCTAssertFalse(result.hasCurrentBars)
         XCTAssertEqual(result.bars, initial.bars)
@@ -396,6 +406,57 @@ final class AntigravityUsageProviderTests: XCTestCase {
         XCTAssertEqual(result.configurableMetrics.map(\.id), initial.configurableMetrics.map(\.id))
         XCTAssertTrue(result.configurableMetrics.allSatisfy { $0.kind == .unavailableUsage("Disabled") })
         XCTAssertTrue(result.hasSuccessfulRefreshHistory)
+        XCTAssertTrue(result.freshBars.isEmpty)
+        assertQuotaConsumers(result, store: store, defaults: defaults, expectedIDs: [], severity: .normal)
+        history.record(results: [result], now: Self.now.addingTimeInterval(600))
+        XCTAssertEqual(history.snapshots(for: account.id).map(\.bars), savedHistory.map(\.bars))
+        XCTAssertEqual(history.snapshots(for: account.id).map(\.capturedAt), savedHistory.map(\.capturedAt))
+        assertQuotaConsumers(initial, store: store, defaults: defaults, expectedIDs: expectedIDs, severity: .critical)
+    }
+
+    @MainActor
+    func testDisabledCachedBucketKeepsOtherMetricIndicesAndUnavailableObservations() throws {
+        let suite = "MixedQuotaConsumers.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let account = store.addAccount(for: .antigravity)
+        XCTAssertTrue(store.saveSecret(#"{"access_token":"test"}"#, for: account))
+        let initial = try AntigravityQuotaParser.result(from: Self.payload(), configuration: account, fetchedAt: Self.now)
+        let result = ProviderUsageResult(
+            accountID: account.id, providerID: .antigravity, title: initial.title, subtitle: "",
+            bars: initial.bars,
+            unavailableUsageMetrics: ["antigravity.gemini-5h": "Disabled", "antigravity.gemini-weekly": "Unavailable"],
+            fetchedAt: Self.now
+        )
+        let expectedIDs = Array(initial.availableMetrics.map(\.id).dropFirst())
+        XCTAssertEqual(result.enabledBarIndices, [1, 2, 3])
+        XCTAssertEqual(result.availableMetrics.map(\.id), expectedIDs)
+        XCTAssertEqual(result.freshBars.map(\.stableKey), ["gemini-weekly", "3p-5h", "3p-weekly"])
+        XCTAssertEqual(result.configurableMetrics.map(\.kind), [
+            .unavailableUsage("Disabled"), .usageBar(index: 1), .usageBar(index: 2), .usageBar(index: 3),
+        ])
+        assertQuotaConsumers(result, store: store, defaults: defaults, expectedIDs: expectedIDs, severity: .normal)
+    }
+
+    @MainActor
+    private func assertQuotaConsumers(
+        _ result: ProviderUsageResult,
+        store: ProviderConfigurationStore,
+        defaults: UserDefaults,
+        expectedIDs: [String],
+        severity: UsageSeverity
+    ) {
+        XCTAssertEqual(result.highestSeverity(at: Self.now), severity)
+        let alerts = UsageAlertEvaluator.evaluate(
+            results: [result], settings: UsageAlertSettings(isEnabled: true), activeAlertIDs: [], now: Self.now
+        )
+        XCTAssertEqual(alerts.notifications.isEmpty, severity == .normal)
+        XCTAssertEqual(alerts.activeAlerts.isEmpty, severity == .normal)
+        WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults, now: Self.now)
+        XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.bars.map(\.metricID), expectedIDs)
+        let watch = WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: Self.now)
+        XCTAssertEqual(watch.accounts.first?.metrics.map(\.id), expectedIDs)
     }
 
     @MainActor

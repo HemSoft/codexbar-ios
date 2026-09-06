@@ -39,7 +39,8 @@ The job sets `CODEQL_ACTION_DIFF_INFORMED_QUERIES=false`. The pinned Action
 on pull requests and limits their results to changed lines. That is unsuitable
 for this full-source baseline gate: the same source tree previously returned
 zero findings on a PR and three on `main`. Disabling the feature preserves
-full-source analysis if PR triggers are restored later. Verify the hosted analysis log contains no
+full-source analysis if PR triggers are restored later. Verify the hosted
+analysis log contains no
 `--extension-packs=codeql-action/pr-diff-range` option after Action upgrades.
 File extraction counts alone cannot detect result filtering.
 
@@ -47,7 +48,7 @@ The [CodeQL support matrix](https://codeql.github.com/docs/codeql-overview/suppo
 covers Swift 5.4-6.3. [CodeQL 2.26.2 added Swift 6.3.3 extraction](https://codeql.github.com/docs/codeql-overview/codeql-changelog/codeql-cli-2.26.2/),
 which matches this repository's Xcode 26.6 compiler at setup. The check records
 the actual Xcode, Swift, and CodeQL versions on every run; an unsupported upgrade
-must produce working extraction evidence before merging a toolchain change.
+needs working manual extraction evidence before its analyzer support is claimed.
 
 Swift requires a [traced build](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages).
 `scripts/security-analysis/build.sh` uses a new Derived Data directory and the
@@ -90,14 +91,15 @@ repository production files. Conditional branches inactive for the selected
 simulator platforms are not analyzed. These file counts do not prove that every
 possible data flow, platform branch, or runtime vulnerability was checked.
 
-## Findings and merge gate
+## Findings and manual results
 
 The check uploads SARIF to the repository's **Security > Code scanning** page
 under category `swift-production`, waits for processing, and retains SARIF,
 compiler versions, extracted-source counts, and `gate.json` as an Actions
 artifact for 14 days. The job has only `contents: read` and
-`security-events: write`; checkout does not persist credentials. Pull requests
-use `pull_request`, never privileged `pull_request_target` execution.
+`security-events: write`; checkout does not persist credentials. Maintainers
+select the branch for `workflow_dispatch`; there is no PR trigger or privileged
+`pull_request_target` execution.
 
 `scripts/security-analysis/gate.py` fails on any security severity of 7.0 or
 higher unless it exactly matches a reviewed non-actionable finding in
@@ -112,11 +114,12 @@ and `blocking_findings`. A passing analysis with three reviewed findings means
 three findings and zero actionable high-severity findings, never a clean scan
 with zero findings. No baseline is refreshed automatically.
 
-The active default-branch ruleset requires the GitHub Actions check
-`Swift security analysis` alongside the five existing required checks. This
-rule was configured during issue #309; the workflow alone does not change
-repository rules. When changing the check name, update the rule in the same
-rollout so the old required name does not leave pull requests waiting forever.
+The active default-branch ruleset requires SwiftLint, Strict concurrency,
+iOS tests, watchOS tests and SwiftPM smoke tests. It does not require
+`Swift security analysis` or `Usage history Release budget`. Issue #325 removed
+the security requirement originally configured during issue #309. Workflow
+triggers and repository rules are separate settings; keep both consistent
+when changing this policy.
 
 ## Initial baseline
 
@@ -162,12 +165,12 @@ findings. Review found these specific contexts non-actionable:
 | [#3, cleartext preference storage](https://github.com/HemSoft/codexbar-ios/security/code-scanning/3) | `saveCollapsedDashboardAccountIDs` writes collapsed-state identifiers already present in saved configurations. Account IDs are local provider names or provider-plus-UUID values. The updater rejects IDs absent from configurations. These IDs are not credentials or provider account identities. |
 | [#4, cleartext preference storage](https://github.com/HemSoft/codexbar-ios/security/code-scanning/4) | The private `UITestSecretStore` rejects every value except the literal `ui-test-credential`. Its DEBUG simulator launch contract uses a UUID-isolated defaults suite and blocks provider networking. The stored marker has no authentication authority. |
 
-Before merging the follow-up, require a successful full-source PR analysis with
-all current production files extracted and no extraction errors. Record its
-analyzed commit, three reviewed findings, zero blocking findings, and check
-result in the PR. The old filtered PR results and local SARIF replay do not
-prove this new hosted workflow. After merge, verify the corresponding `main`
-analysis before recording the default-branch baseline as passing.
+This rollout predates the manual-only policy. The old filtered PR results and
+local SARIF replay do not establish a current hosted baseline. To report a new
+baseline as passing, manually analyze the reviewed branch and record its commit,
+complete source reach, extraction errors, reviewed findings, blocking findings
+and final job result. Dispatch against `main` when default-branch evidence is
+needed; a merge no longer starts that analysis automatically.
 
 ## Review for the six Google quota choices
 
@@ -187,10 +190,12 @@ private secret-store validation remain intact. The fixture diagnostic moved
 from line 162 to 209; its current raw SARIF was reviewed before updating its
 exact identity. The other two diagnostic identities are unchanged.
 
-The reviewed baseline now pins this source snapshot. Replaying the hosted
-SARIF and source-reach CSV accepts exactly those three findings and reports
-zero blocking findings. A fresh hosted check is still required after this
-baseline update; the local replay does not replace it.
+The reviewed baseline pins that source snapshot. Replaying its hosted SARIF
+and source-reach CSV accepted exactly those three findings and reported zero
+blocking findings. Later Google fixture changes moved the diagnostic again and
+changed the source snapshot. The subsequent extraction build timed out, so the
+current source still needs a fresh manual analysis and baseline review under
+issue #325. The older replay is not a passing analysis of the current tree.
 
 ## Maintaining reviewed findings
 
@@ -212,8 +217,10 @@ not change that source snapshot.
 When the snapshot changes, review each finding's source and consumers against
 the boundaries above. Fix actionable findings. If the contexts remain
 non-actionable, update the reviewed commit and source digest in the issue-linked
-PR, explain the review, and require the full hosted analysis again. Update
-exact diagnostic identities only after reviewing the newly produced raw SARIF.
+PR, explain the review, and dispatch the full hosted analysis manually. A
+successful result is needed before reporting the updated baseline as passing;
+this is not a required merge check. Update exact diagnostic identities only
+after reviewing the newly produced raw SARIF.
 Remove entries for resolved findings through review; their disappearance is
 not silently accepted. A new exception needs its own explicit finding,
 evidence, and rationale. Never add path-wide or rule-wide exclusions.
@@ -240,9 +247,10 @@ gh api 'repos/HemSoft/codexbar-ios/code-scanning/analyses?per_page=20'
 gh api 'repos/HemSoft/codexbar-ios/code-scanning/alerts?state=open'
 ```
 
-Pull-request analysis normally records GitHub's test merge SHA and
-`refs/pull/<number>/merge`, rather than the branch head SHA. Match that merge SHA
-to the workflow run; do not claim it analyzed a different commit.
+Manual branch dispatch analyzes the selected branch revision. Historical
+pull-request runs recorded GitHub's test merge SHA and `refs/pull/<number>/merge`.
+Match the analysis commit to the workflow run in either case; do not claim it
+analyzed a different revision.
 
 ## Reproduce the positive test
 
@@ -252,11 +260,12 @@ no credentials. The fixture is absent from the final tree. `build.sh` compiles
 it separately when it exists; it never links the fixture into a production
 target. CodeQL's
 [`swift/insecure-tls`](https://codeql.github.com/codeql-query-help/swift/swift-insecure-tls/)
-query has security severity 7.5 and must fail the same required job.
+query has security severity 7.5 and must fail the manual analysis job.
 
 For future analyzer upgrades, create that path on an issue branch with the
-following contents, observe the authentic finding and failed `Swift security analysis` status, then remove it
-and require the next analysis to pass:
+following contents, manually dispatch the workflow and observe the authentic
+finding and failed `Swift security analysis` status. Then remove the fixture,
+dispatch again and verify that the analysis passes:
 
 ```swift
 import Foundation
@@ -298,7 +307,8 @@ python3 scripts/security-analysis/gate.py --sarif /tmp/codexbar-security.sarif \
 
 Use unused database/build paths. Some local Macs cannot execute the tracer's
 copied system shell; `Bad CPU type in executable` is an extraction failure, not
-a finding-free scan. The hosted workflow remains the required evidence.
+a finding-free scan. Use the manual hosted workflow to obtain extraction
+evidence when the local tracer cannot run.
 
 The CLI's [rule-grouping option](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-analyze#--no-sarif-group-rules-by-pack)
 retains the pack metadata required by the baseline. Local CLI findings can still
