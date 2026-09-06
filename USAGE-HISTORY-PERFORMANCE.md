@@ -120,6 +120,28 @@ committed in `scripts/usage-history-performance/calibration.json`. Its original
 measurement policy is recorded separately from the subsequently adopted limits.
 Re-evaluating those samples against the adopted policy passes.
 
+The local calibration truthfully records `candidateDirty: true`: the new
+benchmark, manifest entry, and documentation were uncommitted then. All
+`CodexBarIOS` production sources matched the frozen revision, as checked before
+the run and independently confirmed from the committed change:
+
+```sh
+git diff --exit-code 3395ee6094ce8e4199577f7ede493e3a50ee1269 \
+  ea8eb7baec0e459f0403eb0d07b0fc01e4f21602 -- CodexBarIOS
+```
+
+The recorded benchmark SHA-256 identifies the benchmark source copied into both
+builds. This is verified source equivalence for the measured workload, not a
+claim of bit-identical binaries. The later [cold hosted run](https://github.com/HemSoft/codexbar-ios/actions/runs/34011866772)
+used a clean checkout and passed on Apple M1 Virtual hardware with Xcode 26.6.
+Its job took 4 minutes 50 seconds, including 54.11-second and 42.86-second Release
+builds, within the 20-minute timeout.
+
+The current benchmark explicitly casts the bounded account numbers to `Int32`
+for `%02d`. This formatting correction sits outside the timed operations and
+preserves all account IDs, fixture values, series work, and retained-data output.
+The historical source hashes and timing observations remain unchanged.
+
 | Accounts | Reference recording median, ms | Reference all-account series median, ms | Retained serialized bytes |
 | ---: | ---: | ---: | ---: |
 | 1 | 4.010 | 1.018 | 218,162 |
@@ -167,6 +189,27 @@ hardware metadata, and repeats the slowdown proof. Do not raise a limit merely
 to make a regression green. A public API change that prevents the frozen source
 from compiling is an explicit baseline maintenance task, not permission to skip
 the gate.
+
+The committed calibration and slowdown records declare the
+`uniform-retained-state-v1` format. Each scenario stores all seven raw timings
+for both operations. Its 47 byte-for-byte equal retained-state observations are
+stored once as `retainedState` with `retainedObservationCount: 47`. This is
+lossless compression of the observed records, not the runtime report schema.
+Runtime artifacts retain the full `retainedStates` array.
+
+Replay the committed evidence without rebuilding or taking new measurements:
+
+```sh
+python3 scripts/usage-history-performance/replay.py
+```
+
+The replay tool validates the declared format, expands every observed state,
+then passes the reconstructed reports through the ordinary `validate` and
+`evaluate` functions with the current policy. It must report calibration PASS
+and recording regressions for all three account counts in the slowdown proof,
+without noise findings. The policy tests exercise this path and reject invalid
+compressed records. The original timing, hash, and dirty-state metadata are
+preserved as historical measurements.
 
 ## Prove slowdown detection
 

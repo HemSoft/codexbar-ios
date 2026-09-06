@@ -60,7 +60,7 @@ private struct UsageHistoryBenchmark {
     static func result(account: Int, at date: Date, metric: Int? = nil) -> ProviderUsageResult {
         let metrics = metric.map { [$0] } ?? [0, 1]
         return ProviderUsageResult(
-            accountID: String(format: "benchmark.account.%02d", account),
+            accountID: String(format: "benchmark.account.%02d", Int32(account)),
             providerID: .codex,
             title: "Benchmark",
             subtitle: "Synthetic history",
@@ -192,7 +192,7 @@ private struct UsageHistoryBenchmark {
 
     static func validateShape(_ snapshots: [UsageHistorySnapshot], daily: Bool, accounts: Int) throws {
         let grouped = Dictionary(grouping: snapshots, by: \.accountID)
-        let expectedAccounts = Set((0..<accounts).map { String(format: "benchmark.account.%02d", $0) })
+        let expectedAccounts = Set((0..<accounts).map { String(format: "benchmark.account.%02d", Int32($0)) })
         guard Set(grouped.keys) == expectedAccounts, Set(snapshots.map(\.id)).count == snapshots.count else {
             throw BenchmarkError.invalidFixture("Lost an account or duplicated an identity")
         }

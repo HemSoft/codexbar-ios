@@ -3,14 +3,20 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import unittest
 import tempfile
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / "usage-history-performance/run.py"
 SPEC = importlib.util.spec_from_file_location("history_performance", SCRIPT)
 GATE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GATE)
 POLICY = json.loads(SCRIPT.with_name("baseline.json").read_text())
+REPLAY_SPEC = importlib.util.spec_from_file_location("history_replay", SCRIPT.with_name("replay.py"))
+REPLAY = importlib.util.module_from_spec(REPLAY_SPEC)
+with mock.patch.dict(sys.modules, {"run": GATE}):
+    REPLAY_SPEC.loader.exec_module(REPLAY)
 
 
 def report():
@@ -36,9 +42,39 @@ class PerformanceGateTests(unittest.TestCase):
                 GATE.prepare_output(output)
             self.assertTrue((output / "result.json").exists())
 
+    def test_committed_recordings_expand_and_replay(self):
+        for name, expected_pass in (("calibration", True), ("slowdown-proof", False)):
+            with self.subTest(name=name):
+                recording = json.loads(SCRIPT.with_name(f"{name}.json").read_text())
+                original = copy.deepcopy(recording)
+                expanded = REPLAY.expand_runs(recording)
+                self.assertEqual(recording, original)
+                states = expanded[0]["candidate"]["scenarios"][0]["retainedStates"]
+                self.assertEqual(len(states), 47)
+                self.assertEqual(states[0], states[-1])
+                self.assertIsNot(states[0], states[-1])
+                result = GATE.evaluate(expanded, POLICY)
+                self.assertEqual(result["passed"], expected_pass)
+                self.assertFalse(any("INCONCLUSIVE" in item for item in result["findings"]))
+                if not expected_pass:
+                    for accounts in (1, 10, 25):
+                        self.assertTrue(any(f"REGRESSION {accounts} accounts recordMilliseconds" in item for item in result["findings"]))
+
+    def test_invalid_compressed_recording_is_rejected(self):
+        recording = json.loads(SCRIPT.with_name("calibration.json").read_text())
+        recording["runs"][0]["candidate"]["scenarios"][0]["retainedObservationCount"] = 46
+        with self.assertRaises(ValueError):
+            REPLAY.expand_runs(recording)
+        recording["recordingFormat"] = "unknown"
+        with self.assertRaises(ValueError):
+            REPLAY.expand_runs(recording)
+
     def test_equal_workloads_pass_and_warmups_are_excluded(self):
-        self.runs[0]["candidate"]["scenarios"][0]["recordMilliseconds"][:2] = [10000, 10000]
-        self.assertTrue(GATE.evaluate(self.runs, POLICY)["passed"])
+        for pair in self.runs:
+            pair["candidate"]["scenarios"][0]["recordMilliseconds"] = [10000, 10000, 6, 8, 10, 12, 14]
+        result = GATE.evaluate(self.runs, POLICY)
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["timings"][0]["candidateMedians"], [10, 10, 10])
 
     def test_record_and_series_regressions_fail_independently(self):
         for metric in ("recordMilliseconds", "seriesMilliseconds"):
@@ -56,13 +92,20 @@ class PerformanceGateTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertTrue(any("INCONCLUSIVE" in item for item in result["findings"]))
 
-    def test_serialized_expansion_and_steady_growth_fail(self):
+    def test_serialized_expansion_fails_without_steady_growth(self):
         for state in self.runs[0]["candidate"]["scenarios"][0]["retainedStates"]:
             state["serializedBytes"] *= 2
         result = GATE.evaluate(self.runs, POLICY)
-        self.assertIn("REGRESSION 1 accounts: serialized size", result["findings"])
-        self.runs[1]["candidate"]["scenarios"][0]["retainedStates"][-1]["serializedBytes"] += POLICY["maximumGrowthBytesPerAccount"] + 1
-        self.assertIn("REGRESSION 1 accounts: retained serialized growth", GATE.evaluate(self.runs, POLICY)["findings"])
+        self.assertEqual(result["findings"], ["REGRESSION 1 accounts: serialized size"])
+
+    def test_steady_growth_fails_without_serialized_expansion(self):
+        states = self.runs[0]["candidate"]["scenarios"][0]["retainedStates"]
+        # Remain below the unchanged reference maximum while the steady tail grows.
+        for state in states[3:]:
+            state["serializedBytes"] -= POLICY["maximumGrowthBytesPerAccount"] + 1
+        states[-1]["serializedBytes"] += POLICY["maximumGrowthBytesPerAccount"] + 1
+        result = GATE.evaluate(self.runs, POLICY)
+        self.assertEqual(result["findings"], ["REGRESSION 1 accounts: retained serialized growth"])
 
     def test_malformed_measurements_never_pass(self):
         mutations = [

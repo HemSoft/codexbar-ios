@@ -1245,5 +1245,6 @@
         "warmupBatches": 2
       }
     }
-  ]
+  ],
+  "recordingFormat": "uniform-retained-state-v1"
 }
