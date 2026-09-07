@@ -2326,7 +2326,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         var index = configurations(for: providerID).count + 1
         while true {
             let candidate = "\(base) \(index)"
-            let matchesExisting = configurations.contains {
+            let matchesExisting = (visibleConfigurations + unlinkedGeminiCodingAccounts).contains {
                 $0.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare(candidate) == .orderedSame
             }
             if !matchesExisting {

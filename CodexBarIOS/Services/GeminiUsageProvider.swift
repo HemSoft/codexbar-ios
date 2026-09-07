@@ -205,7 +205,9 @@ public final class GeminiUsageProvider: UsageProvider {
         configuration: ProviderAccountConfiguration
     ) -> ProviderUsageResult {
         let bars = apps.bars + coding.bars
-        let failure = bars.isEmpty ? apps.failureMessage ?? coding.failureMessage : nil
+        let failedSources = [apps, coding].filter { $0.failureMessage != nil }
+        let recoverySource = failedSources.first { $0.recoveryAction != .retryRefresh } ?? failedSources.first
+        let failure = bars.isEmpty ? recoverySource?.failureMessage : nil
         let unavailable = sourceAvailability(apps, definitions: GoogleUsageMetricCatalog.appsDefinitions)
             .merging(sourceAvailability(coding, definitions: GoogleUsageMetricCatalog.codingDefinitions)) { _, latest in latest }
         var messages = apps.usageMessages + coding.usageMessages
@@ -221,7 +223,7 @@ public final class GeminiUsageProvider: UsageProvider {
             unavailableUsageMetrics: unavailable,
             usageMessages: messages,
             failureMessage: failure,
-            recoveryAction: apps.failureMessage != nil ? apps.recoveryAction : coding.recoveryAction,
+            recoveryAction: recoverySource?.recoveryAction ?? .retryRefresh,
             preserveCachedBarsOnFailure: failure != nil,
             fetchedAt: Date()
         )

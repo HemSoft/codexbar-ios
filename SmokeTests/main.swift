@@ -29,7 +29,7 @@ struct SmokeTests {
 
         expect(
             Set(service.results.map(\.providerID)) == Set(ProviderID.allCases.filter { $0 != .antigravity }),
-            "demo refresh should include every provider"
+            "demo refresh should include every visible provider"
         )
         expect(service.isRefreshing == false, "refresh flag should reset")
         expect(service.lastRefreshError == nil, "demo refresh should not fail")

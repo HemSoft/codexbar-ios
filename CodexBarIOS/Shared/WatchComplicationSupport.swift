@@ -15,10 +15,16 @@ struct WatchComplicationSelection: Equatable, Sendable {
     static func resolving(
         accountID: String?,
         metricAccountID: String?,
-        metricID: String?
+        metricID: String?,
+        snapshot: WatchDashboardSnapshot? = nil
     ) -> WatchComplicationSelection {
         let resolvedAccountID = accountID ?? metricAccountID
+        let account = snapshot?.accounts.first {
+            $0.id == resolvedAccountID || ($0.legacyAccountIDs ?? []).contains(resolvedAccountID ?? "")
+        }
+        let linkedIDs = [account?.id].compactMap { $0 } + (account?.legacyAccountIDs ?? [])
         let resolvedMetricID = metricAccountID == nil || metricAccountID == resolvedAccountID
+            || linkedIDs.contains(metricAccountID ?? "")
             ? metricID
             : nil
         return WatchComplicationSelection(

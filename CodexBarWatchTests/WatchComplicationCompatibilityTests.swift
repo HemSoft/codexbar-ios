@@ -126,6 +126,45 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
         }
     }
 
+    func testLinkedAccountAndMetricEntitiesResolveAcrossCanonicalAndLegacyIDs() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let snapshot = WatchDashboardSnapshot(
+            generatedAt: now, refreshIntervalSeconds: 300,
+            accounts: [WatchAccountSnapshot(
+                id: "gemini.account", legacyAccountIDs: ["legacy-coding", "second-legacy"], providerName: "Google Gemini",
+                accountLabel: "Personal", fetchedAt: now,
+                metrics: [
+                    WatchMetricSnapshot(id: "gemini.weekly", label: "Apps weekly", exactValue: "10%"),
+                    WatchMetricSnapshot(id: "antigravity.gemini-5h", label: "Models 5h", exactValue: "20%"),
+                    WatchMetricSnapshot(id: "antigravity.gemini-weekly", label: "Models weekly", exactValue: "31%"),
+                ]
+            ),
+            ]
+        )
+        for (accountID, metricAccountID) in [
+            ("legacy-coding", "gemini.account"),
+            ("gemini.account", "legacy-coding"),
+            ("legacy-coding", "second-legacy"),
+        ] {
+            let selection = WatchComplicationSelection.resolving(
+                accountID: accountID, metricAccountID: metricAccountID,
+                metricID: "antigravity.gemini-weekly", snapshot: snapshot
+            )
+            XCTAssertEqual(selection.metricID, "antigravity.gemini-weekly")
+            XCTAssertEqual(WatchComplicationResolver().resolve(snapshot: snapshot, selection: selection, at: now).exactValue, "31%")
+        }
+        let appsSelection = WatchComplicationSelection.resolving(
+            accountID: "legacy-coding", metricAccountID: "gemini.account", metricID: "gemini.weekly", snapshot: snapshot
+        )
+        XCTAssertEqual(WatchComplicationResolver().resolve(snapshot: snapshot, selection: appsSelection, at: now).exactValue, "10%")
+        XCTAssertNil(WatchComplicationSelection.resolving(
+            accountID: "legacy-coding", metricAccountID: "unrelated", metricID: "gemini.weekly", snapshot: snapshot
+        ).metricID)
+        XCTAssertNil(WatchComplicationSelection.resolving(
+            accountID: "legacy-coding", metricAccountID: "gemini.account", metricID: "gemini.weekly"
+        ).metricID)
+    }
+
     private func snapshot(
         accountID: String = "greptile.team",
         providerName: String = "Greptile",

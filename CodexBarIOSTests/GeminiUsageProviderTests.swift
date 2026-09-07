@@ -378,7 +378,14 @@ private func makeGeminiFixtureProvider(
         GeminiSessionCredentialsParser.storedCredential(from: "__Secure-1PSID=fixture-cookie"),
         account: ProviderConfigurationStore.keychainAccount(for: configuration)
     )
+    try secretStore.saveSecret(
+        #"{"access_token":"coding-token"}"#,
+        account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: configuration.id)
+    )
     let sessionFixture = IsolatedTestURLSession { request in
+        if request.url == AntigravityUsageProvider.quotaURL {
+            return (try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil)), Data())
+        }
         let data = request.url?.path == "/usage"
             ? Data(#"<script>window.WIZ_global_data={"SNlM0e":"fixture-token"};</script>"#.utf8)
             : responseData
@@ -501,6 +508,33 @@ final class UnifiedGeminiUsageProviderTests: XCTestCase {
         XCTAssertEqual(result.recoveryAction, .reauthenticate)
         for metricID in Self.metricIDs.prefix(2) {
             XCTAssertTrue(result.unavailableUsageMetrics[metricID]?.contains("Sign in again") == true)
+        }
+    }
+
+    func testBothSourceFailuresPrioritizeCredentialRecoveryAndKeepItsMessage() async throws {
+        for (appsStatus, codingStatus, action, message) in [
+            (503, 401, ProviderUsageRecoveryAction.reauthenticate, "Coding connection required"),
+            (403, 503, .reauthenticate, "Sign in again"),
+            (503, 503, .retryRefresh, "Try again later"),
+            (0, 503, .signIn, "sign in with Google"),
+        ] {
+            let secrets = try Self.secrets()
+            if appsStatus == 0 {
+                try secrets.deleteSecret(account: ProviderConfigurationStore.keychainAccount(for: Self.configuration))
+            }
+            let fixture = IsolatedTestURLSession { request in
+                let status = request.url?.host == "gemini.google.com" ? appsStatus : codingStatus
+                return (try Self.http(request, status: status), Data())
+            }
+            defer { fixture.invalidate() }
+            let result = try await GeminiUsageProvider(secretStore: secrets, session: fixture.session)
+                .fetchUsage(for: Self.configuration)
+            XCTAssertEqual(result.recoveryAction, action)
+            XCTAssertTrue(result.failureMessage?.contains(message) == true, result.failureMessage ?? "Missing failure")
+            XCTAssertTrue(result.bars.isEmpty)
+            XCTAssertEqual(result.unavailableUsageMetrics.count, 6)
+            XCTAssertEqual(DashboardRecoveryRoute.resolve(action: result.recoveryAction, providerID: .gemini),
+                           action == .retryRefresh ? .retryRefresh : .accountSettings)
         }
     }
 
