@@ -5,25 +5,32 @@ public enum GoogleUsageMetricCatalog {
     static let disabledReason = "Disabled"
 
     public struct Definition: Equatable, Sendable {
+        public let sourceProviderID: ProviderID
         public let key: String
         public let label: String
         public let window: String
+
+        public var id: String { "\(sourceProviderID.rawValue).\(key)" }
     }
+
+    static let appsDefinitions = [
+        Definition(sourceProviderID: .gemini, key: "five-hour", label: "Gemini Apps five-hour", window: "5h"),
+        Definition(sourceProviderID: .gemini, key: "weekly", label: "Gemini Apps weekly", window: "weekly"),
+    ]
+
+    static let codingDefinitions = [
+        Definition(sourceProviderID: .antigravity, key: "gemini-5h", label: "Gemini Models five-hour", window: "5h"),
+        Definition(sourceProviderID: .antigravity, key: "gemini-weekly", label: "Gemini Models weekly", window: "weekly"),
+        Definition(sourceProviderID: .antigravity, key: "3p-5h", label: "Other models five-hour", window: "5h"),
+        Definition(sourceProviderID: .antigravity, key: "3p-weekly", label: "Other models weekly", window: "weekly"),
+    ]
 
     public static func definitions(for providerID: ProviderID) -> [Definition] {
         switch providerID {
         case .gemini:
-            [
-                Definition(key: "five-hour", label: "Gemini Apps five-hour", window: "5h"),
-                Definition(key: "weekly", label: "Gemini Apps weekly", window: "weekly"),
-            ]
+            appsDefinitions + codingDefinitions
         case .antigravity:
-            [
-                Definition(key: "gemini-5h", label: "Gemini Models five-hour", window: "5h"),
-                Definition(key: "gemini-weekly", label: "Gemini Models weekly", window: "weekly"),
-                Definition(key: "3p-5h", label: "Other models five-hour", window: "5h"),
-                Definition(key: "3p-weekly", label: "Other models weekly", window: "weekly"),
-            ]
+            codingDefinitions
         default:
             []
         }
@@ -37,9 +44,9 @@ public enum GoogleUsageMetricCatalog {
         let matchingResult = result?.providerID == providerID ? result : nil
         let observed = matchingResult?.availableMetrics ?? []
         let definitions = definitions(for: providerID)
-        let knownIDs = Set(definitions.map { "\(providerID.rawValue).\($0.key)" })
+        let knownIDs = Set(definitions.map(\.id))
         return definitions.map { definition in
-            let metricID = "\(providerID.rawValue).\(definition.key)"
+            let metricID = definition.id
             let unavailableReason = matchingResult?.unavailableUsageMetrics[metricID]
             let kind: ProviderUsageMetricKind
             if unavailableReason == disabledReason {
@@ -55,13 +62,18 @@ public enum GoogleUsageMetricCatalog {
     public static func setupDescription(for providerID: ProviderID) -> String? {
         switch providerID {
         case .gemini:
-            "Gemini Apps has two usage limits. For the four Gemini Models and Other models limits shown by Antigravity CLI /usage, "
-                + "connect an Antigravity account in Add Account."
-        case .antigravity:
-            "Four coding quotas: Gemini Models and Other models, each with a five-hour and weekly limit. "
-                + "Other models includes Claude and GPT. Gemini Apps uses a separate account and two separate limits."
+            "Six limits belong to this Gemini account: Gemini Apps, Gemini Models, and Other models, "
+                + "each with a five-hour and weekly limit. Other models includes Claude and GPT. "
+                + "Connect the Apps session and coding session separately here, using the same Google account."
         default:
             nil
         }
+    }
+
+    /// Gemini owns every Google quota; obsolete source setup cards are never created.
+    public static func missingSourceConfigurations(
+        in configurations: [ProviderAccountConfiguration]
+    ) -> [ProviderAccountConfiguration] {
+        []
     }
 }

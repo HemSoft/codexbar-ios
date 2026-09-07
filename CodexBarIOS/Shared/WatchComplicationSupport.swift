@@ -15,10 +15,16 @@ struct WatchComplicationSelection: Equatable, Sendable {
     static func resolving(
         accountID: String?,
         metricAccountID: String?,
-        metricID: String?
+        metricID: String?,
+        snapshot: WatchDashboardSnapshot? = nil
     ) -> WatchComplicationSelection {
         let resolvedAccountID = accountID ?? metricAccountID
+        let account = snapshot?.accounts.first {
+            $0.id == resolvedAccountID || ($0.legacyAccountIDs ?? []).contains(resolvedAccountID ?? "")
+        }
+        let linkedIDs = [account?.id].compactMap { $0 } + (account?.legacyAccountIDs ?? [])
         let resolvedMetricID = metricAccountID == nil || metricAccountID == resolvedAccountID
+            || linkedIDs.contains(metricAccountID ?? "")
             ? metricID
             : nil
         return WatchComplicationSelection(
@@ -86,10 +92,11 @@ struct WatchComplicationChoiceCatalog {
     func accounts(for identifiers: [String]) -> [WatchComplicationAccountChoice] {
         let choicesByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
         return identifiers.map { identifier in
-            choicesByID[identifier] ?? WatchComplicationAccountChoice(
+            let alias = snapshot?.accounts.first { ($0.legacyAccountIDs ?? []).contains(identifier) }
+            return choicesByID[identifier] ?? WatchComplicationAccountChoice(
                 id: identifier,
-                providerName: "Saved Account",
-                accountLabel: "Open CodexBar to refresh"
+                providerName: alias?.providerName ?? "Saved Account",
+                accountLabel: alias?.accountLabel ?? "Open CodexBar to refresh"
             )
         }
     }
@@ -97,7 +104,14 @@ struct WatchComplicationChoiceCatalog {
     func metrics(for identifiers: [String]) -> [WatchComplicationMetricChoice] {
         let choicesByID = Dictionary(uniqueKeysWithValues: metrics.map { ($0.id, $0) })
         return identifiers.map { identifier in
-            choicesByID[identifier] ?? Self.savedMetricChoice(identifier: identifier)
+            if let exact = choicesByID[identifier] { return exact }
+            let saved = Self.savedMetricChoice(identifier: identifier)
+            guard let account = snapshot?.accounts.first(where: { ($0.legacyAccountIDs ?? []).contains(saved.accountID) }),
+                  let metric = account.metrics.first(where: { $0.id == saved.metricID }) else { return saved }
+            return WatchComplicationMetricChoice(
+                id: identifier, accountID: saved.accountID, metricID: metric.id,
+                providerName: account.providerName, accountLabel: account.accountLabel, metricLabel: metric.label
+            )
         }
     }
 
@@ -394,7 +408,7 @@ struct WatchComplicationResolver {
     ) -> (account: WatchAccountSnapshot, metric: WatchMetricSnapshot)? {
         let account: WatchAccountSnapshot?
         if let accountID = selection.accountID {
-            account = accounts.first { $0.id == accountID }
+            account = accounts.first { $0.id == accountID || ($0.legacyAccountIDs ?? []).contains(accountID) }
         } else {
             account = accounts.first
         }
@@ -409,6 +423,10 @@ struct WatchComplicationResolver {
                 return nil
             }
             return (account, metric)
+        }
+        if let selectedID = selection.accountID, (account.legacyAccountIDs ?? []).contains(selectedID) {
+            guard let coding = account.metrics.first(where: { $0.id.hasPrefix("antigravity.") }) else { return nil }
+            return (account, coding)
         }
         return (account, account.metrics[0])
     }

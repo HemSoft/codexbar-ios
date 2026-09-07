@@ -216,289 +216,462 @@ final class AntigravityUsageProviderTests: XCTestCase {
     }
 
     @MainActor
-    func testAccountSettingsHistoryWidgetsAndWatchKeepMetricIdentity() throws {
-        let suite = "AntigravityTests.\(UUID().uuidString)"
+    func testAllSixMetricChoicesExistOnOneAccountBeforeCredentials() throws {
+        let suite = "GoogleChoices.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
-        let gemini = store.addAccount(for: .gemini)
-        let account = store.addAccount(for: .antigravity)
-        let other = store.addAccount(for: .antigravity)
-        XCTAssertEqual(account.authMethod, .cliToken)
-        XCTAssertTrue(account.requiresSecret)
-        XCTAssertFalse(store.shouldDisplayOnDashboard(account))
-        XCTAssertTrue(store.saveSecret(#"{"access_token":"test"}"#, for: account))
-        XCTAssertTrue(store.shouldDisplayOnDashboard(account))
-        XCTAssertFalse(store.hasSecret(for: other))
-        XCTAssertFalse(store.hasSecret(for: gemini))
-        let result = try AntigravityQuotaParser.result(from: Self.payload(), configuration: account, fetchedAt: Self.now)
-        let expected = AntigravityQuotaParser.metrics.map { "antigravity.\($0.key)" }
-        WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults)
-        let snapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
-        XCTAssertEqual(snapshot.results.first?.bars.map(\.metricID), expected)
-        let watch = WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: Self.now)
-        XCTAssertEqual(watch.accounts.first?.metrics.map(\.id), expected)
-        let history = UsageHistoryStore(defaults: defaults)
-        history.record(results: [result], now: Self.now)
-        XCTAssertEqual(history.snapshots(for: account.id).count, 1)
-        XCTAssertTrue(history.snapshots(for: gemini.id).isEmpty)
+        let account = store.addAccount(for: .gemini)
+        let legacy = store.addAccount(for: .antigravity)
         let model = ProviderSettingsViewModel(configurationStore: store, accountID: account.id)
-        XCTAssertEqual(model.availableAuthMethods, [.cliToken])
-        XCTAssertEqual(model.credentialPresentation.sectionTitle, "Antigravity Session Import")
-        model.secret = "not JSON"
-        model.saveGenericCredential()
-        XCTAssertNotNil(model.credentialError)
-        model.secret = #"{"access_token":"replacement"}"#
-        model.saveGenericCredential()
-        XCTAssertNil(model.credentialError)
-        XCTAssertEqual(model.secret, "")
+        XCTAssertEqual(model.availableMetrics.map(\.id), Self.googleIDs)
+        XCTAssertTrue(model.availableMetrics.allSatisfy { $0.kind == .unavailableUsage("Setup required") })
+        XCTAssertEqual(store.visibleConfigurations, [account])
+        XCTAssertEqual(store.unlinkedGeminiCodingAccounts, [legacy])
+        XCTAssertFalse(store.shouldDisplayOnDashboard(legacy))
+        XCTAssertFalse(AddAccountFlowState.providerOptions.contains(.antigravity))
+        let service = UsageRefreshService(providers: [])
+        let dashboard = googleDashboard(store: store, service: service, defaults: defaults)
+        XCTAssertEqual(dashboard.dashboardCardItems.map(\.id), [account.id])
+        XCTAssertEqual(dashboard.dashboardCardItems.first?.result?.configurableMetrics.map(\.id), Self.googleIDs)
+        XCTAssertTrue(GoogleUsageMetricCatalog.missingSourceConfigurations(in: store.configurations).isEmpty)
     }
 
     @MainActor
-    func testScreenshotFixtureIncludesAllAntigravityBuckets() {
-        let store = ProviderConfigurationStore.appStoreScreenshotDemo()
-        let results = AppStoreScreenshotFixtures.results(for: store)
-        XCTAssertEqual(
-            results.first { $0.providerID == .antigravity }?.bars.map(\.stableKey),
-            ["gemini-5h", "gemini-weekly", "3p-5h", "3p-weekly"]
-        )
-    }
-
-    @MainActor
-    func testAllSixMetricChoicesExistBeforeCredentialsOrResults() throws {
-        let suite = "GoogleMetricChoices.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
-        let apps = store.addAccount(for: .gemini)
-        let coding = store.addAccount(for: .antigravity)
-        let appsModel = ProviderSettingsViewModel(configurationStore: store, accountID: apps.id)
-        let codingModel = ProviderSettingsViewModel(configurationStore: store, accountID: coding.id)
-        let metrics = appsModel.availableMetrics + codingModel.availableMetrics
-        XCTAssertEqual(metrics.map(\.id), [
-            "gemini.five-hour", "gemini.weekly", "antigravity.gemini-5h",
-            "antigravity.gemini-weekly", "antigravity.3p-5h", "antigravity.3p-weekly",
-        ])
-        XCTAssertTrue(metrics.allSatisfy { $0.kind == .unavailableUsage("Setup required") })
-        XCTAssertNotNil(GoogleUsageMetricCatalog.setupDescription(for: .gemini))
-        XCTAssertNotNil(GoogleUsageMetricCatalog.setupDescription(for: .antigravity))
-        XCTAssertNil(GoogleUsageMetricCatalog.setupDescription(for: .codex))
-    }
-
-    func testMissingDisabledAndZeroHaveDistinctConfigurableStates() throws {
-        var buckets = Self.buckets()
-        buckets[0]["remainingFraction"] = 1.0
-        buckets[1].removeValue(forKey: "remainingFraction")
-        buckets[2]["disabled"] = true
-        let result = try Self.result(Self.payload(buckets))
-        XCTAssertEqual(result.availableMetrics.count, 2)
-        XCTAssertEqual(result.configurableMetrics.count, 4)
-        XCTAssertEqual(result.bars.first?.usageText, "0%")
-        XCTAssertEqual(result.configurableMetrics[0].kind, .usageBar(index: 0))
-        XCTAssertEqual(result.configurableMetrics[1].kind, .unavailableUsage("Unavailable"))
-        XCTAssertEqual(result.configurableMetrics[2].kind, .unavailableUsage("Disabled"))
-        XCTAssertEqual(result.configurableMetrics[3].kind, .usageBar(index: 1))
-        XCTAssertEqual(result.bars[1].usageText, "60%")
-        XCTAssertEqual(ProviderUsageCard.menuActions(for: try Self.result(Self.payload([]))), [
-            .configureAccount, .customizeMetrics,
-        ])
-    }
-
-    @MainActor
-    func testGoogleChoicesPreserveIndependentLayoutThroughMissingResultsAndRelaunch() throws {
-        let suite = "GoogleMetricPersistence.\(UUID().uuidString)"
+    func testAllSixPreferencesSurviveMissingResultsRefreshAndRelaunch() async throws {
+        let suite = "GoogleLayout.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let secrets = MemorySecretStore()
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
-        let apps = store.addAccount(for: .gemini)
-        let account = store.addAccount(for: .antigravity)
+        let account = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveSecret("apps-session", for: account))
+        let result = try Self.unifiedResult(account)
         let model = ProviderSettingsViewModel(configurationStore: store, accountID: account.id)
-        let ids = model.availableMetrics.map(\.id)
-        store.reconcileMetricLayout(accountID: account.id, availableMetricIDs: ids)
-        model.setMetricVisibility(false, metricID: ids[1])
-        store.updateMetricWidth(.half, accountID: account.id, metricID: ids[1])
-        store.updateVisualizationStyle(.circularRing, accountID: account.id, metricID: ids[1])
-        store.updateMetricOrder(Array(ids.reversed()), accountID: account.id)
+        store.reconcileMetricLayout(accountID: account.id, availableMetricIDs: Self.googleIDs)
+        for (index, id) in Self.googleIDs.enumerated() {
+            store.updateMetricVisibility(index.isMultiple(of: 2), accountID: account.id, metricID: id)
+            store.updateMetricWidth(index.isMultiple(of: 2) ? .half : .full, accountID: account.id, metricID: id)
+            store.updateVisualizationStyle(index.isMultiple(of: 2) ? .circularRing : .largeNumeric, accountID: account.id, metricID: id)
+        }
+        store.updateMetricOrder(Array(Self.googleIDs.reversed()), accountID: account.id)
         let layout = store.metricLayouts[account.id]
-        let missing = try AntigravityQuotaParser.result(from: Self.payload([]), configuration: account, fetchedAt: Self.now)
-        model.synchronizeUsageResult(missing)
-        XCTAssertEqual(model.availableMetrics.map(\.id), ids)
-        XCTAssertEqual(store.metricLayouts[account.id], layout)
+        model.synchronizeUsageResult(result)
         model.synchronizeUsageResult(nil)
-        XCTAssertEqual(model.availableMetrics.count, 4)
+        let service = UsageRefreshService(providers: [ReturningFailureUsageProvider(providerID: .gemini)], initialResults: [result])
+        await service.refresh(configurations: [account])
+        XCTAssertFalse(try XCTUnwrap(service.results.first).hasCurrentBars)
+        XCTAssertEqual(store.metricLayouts[account.id], layout)
         let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
         XCTAssertEqual(restored.metricLayouts[account.id], layout)
-        XCTAssertFalse(restored.isMetricVisible(accountID: account.id, metricID: ids[1]))
-        XCTAssertTrue(restored.isMetricVisible(accountID: account.id, metricID: ids[0]))
-        XCTAssertTrue(restored.isMetricVisible(accountID: apps.id, metricID: "gemini.weekly"))
-        XCTAssertEqual(restored.metricWidth(accountID: account.id, metricID: ids[1]), .half)
-        XCTAssertEqual(restored.visualizationStyle(accountID: account.id, metricID: ids[1]), .circularRing)
-        XCTAssertEqual(restored.visualizationStyle(accountID: account.id, metricID: ids[0]), .linearBar)
-        let recovered = try AntigravityQuotaParser.result(from: Self.payload(), configuration: account, fetchedAt: Self.now)
-        model.synchronizeUsageResult(recovered)
-        XCTAssertEqual(model.availableMetrics.map(\.id), ids)
-        XCTAssertEqual(store.metricLayouts[account.id], layout)
+        XCTAssertEqual(model.availableMetrics.map(\.id), Self.googleIDs)
     }
 
     @MainActor
-    func testUnavailableResponseKeepsObservedQuotasAsLastKnownData() async throws {
+    func testConfirmedLegacyLinkPreservesHistoryCredentialsAndOverridesSeededCodingLayout() throws {
+        let suite = "GoogleMigration.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         let secrets = MemorySecretStore()
-        try secrets.saveSecret(#"{"access_token":"test"}"#, account: ProviderConfigurationStore.keychainAccount(for: Self.configuration))
-        let fixture = IsolatedTestURLSession { request in
-            (try Self.response(request, status: 200), try Self.payload([]))
-        }
-        defer { fixture.invalidate() }
-        var buckets = Array(Self.buckets().prefix(2))
-        buckets[0]["remainingFraction"] = 1.0
-        let initial = try Self.result(Self.payload(buckets))
-        let service = UsageRefreshService(
-            providers: [AntigravityUsageProvider(secretStore: secrets, sessionConfiguration: fixture.session.configuration)],
-            initialResults: [initial]
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+        let apps = store.addAccount(for: .gemini)
+        let coding = store.addAccount(for: .antigravity)
+        let unrelated = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveSecret("apps-secret", for: apps))
+        XCTAssertTrue(store.saveSecret(#"{"access_token":"coding-token"}"#, for: coding))
+        store.reconcileMetricLayout(accountID: apps.id, availableMetricIDs: Self.googleIDs)
+        store.updateMetricVisibility(false, accountID: apps.id, metricID: "gemini.weekly")
+        let codingIDs = Array(Self.googleIDs.dropFirst(2))
+        store.reconcileMetricLayout(accountID: coding.id, availableMetricIDs: codingIDs)
+        store.updateMetricVisibility(false, accountID: coding.id, metricID: codingIDs[1])
+        store.updateMetricWidth(.half, accountID: coding.id, metricID: codingIDs[1])
+        store.updateVisualizationStyle(.circularRing, accountID: coding.id, metricID: codingIDs[1])
+        store.updateWatchMetricVisibility(.hide, accountID: coding.id, metricID: codingIDs[1])
+        store.updateMetricOrder(Array(codingIDs.reversed()), accountID: coding.id)
+        let history = UsageHistoryStore(defaults: defaults)
+        let legacyResult = try AntigravityQuotaParser.result(from: Self.payload(), configuration: coding, fetchedAt: Self.now)
+        let appsResult = ProviderUsageResult(
+            accountID: apps.id, providerID: .gemini, title: apps.displayName, subtitle: "Apps",
+            bars: [UsageBar(stableKey: "weekly", label: "Gemini Apps weekly", used: 25, limit: 100)], fetchedAt: Self.now
         )
-        await service.refresh(configurations: [Self.configuration])
-        let result = try XCTUnwrap(service.results.first)
-        XCTAssertFalse(result.hasCurrentBars)
-        XCTAssertNotNil(result.failureMessage)
-        XCTAssertTrue(result.subtitle.contains("Showing last known data"))
-        XCTAssertEqual(result.bars, initial.bars)
-        XCTAssertEqual(result.barsFetchedAt, initial.barsFetchedAt)
-        XCTAssertEqual(result.bars.map(\.usageText), ["0%", "31%"])
-        XCTAssertEqual(result.configurableMetrics.map(\.kind), [
-            .usageBar(index: 0), .usageBar(index: 1),
-            .unavailableUsage("Unavailable"), .unavailableUsage("Unavailable"),
-        ])
+        history.record(results: [appsResult, legacyResult], now: Self.now)
+        let originalIDs = Set(history.snapshots.map(\.id))
+        XCTAssertFalse(store.linkGeminiCodingAccount(coding, to: apps, confirmedSameAccount: false))
+        XCTAssertEqual(history.snapshots.count, 2)
+        XCTAssertFalse(store.hasGeminiCodingSecret(for: apps))
+        XCTAssertTrue(store.linkGeminiCodingAccount(coding, to: apps, confirmedSameAccount: true))
+        history.migrateGoogleAccounts(links: store.confirmedGoogleAccountLinks, configurations: store.visibleConfigurations)
+        XCTAssertEqual(history.snapshots(for: apps.id).count, 2)
+        XCTAssertEqual(Set(history.snapshots.map(\.id)), originalIDs)
+        XCTAssertTrue(history.snapshots.allSatisfy { $0.providerID == .gemini })
+        XCTAssertEqual(history.snapshots(for: apps.id).flatMap(\.bars).count, 5)
+        XCTAssertFalse(store.isMetricVisible(accountID: apps.id, metricID: codingIDs[1]))
+        XCTAssertFalse(store.isMetricVisible(accountID: apps.id, metricID: "gemini.weekly"))
+        XCTAssertFalse(store.isMetricVisibleOnWatch(accountID: apps.id, metricID: codingIDs[1]))
+        XCTAssertEqual(store.metricWidth(accountID: apps.id, metricID: codingIDs[1]), .half)
+        XCTAssertEqual(store.visualizationStyle(accountID: apps.id, metricID: codingIDs[1]), .circularRing)
+        XCTAssertEqual(Array(try XCTUnwrap(store.metricLayouts[apps.id]).orderedMetricIDs.suffix(4)), Array(codingIDs.reversed()))
+        XCTAssertTrue(store.isMetricVisible(accountID: unrelated.id, metricID: codingIDs[1]))
+        XCTAssertEqual(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: apps)), "apps-secret")
+        XCTAssertNotNil(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: coding)))
+        XCTAssertFalse(store.hasGeminiCodingSecret(for: unrelated))
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let restoredHistory = UsageHistoryStore(defaults: defaults)
+        restoredHistory.migrateGoogleAccounts(links: restored.confirmedGoogleAccountLinks, configurations: restored.visibleConfigurations)
+        restoredHistory.record(results: [try Self.unifiedResult(apps)], now: Self.now)
+        XCTAssertEqual(Set(restoredHistory.snapshots.map(\.id)).count, restoredHistory.snapshots.count)
+        XCTAssertTrue(restored.unlinkedGeminiCodingAccounts.isEmpty)
+        XCTAssertEqual(restored.metricLayouts[apps.id], store.metricLayouts[apps.id])
     }
 
     @MainActor
-    func testExplicitlyDisabledBucketsOverrideCachedValuesWithoutLosingHistory() async throws {
-        let suite = "DisabledQuotaConsumers.\(UUID().uuidString)"
+    func testUnlinkedAccountsRemainIsolatedAndVerifiedDifferentIdentitiesCannotLink() throws {
+        let suite = "GoogleAssociation.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let secrets = MemorySecretStore()
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
-        let account = store.addAccount(for: .antigravity)
-        XCTAssertTrue(store.saveSecret(#"{"access_token":"test"}"#, for: account))
-        let fixture = IsolatedTestURLSession { request in
-            let disabled = Self.buckets().map { bucket in
-                var bucket = bucket
-                bucket["disabled"] = true
-                return bucket
-            }
-            return (try Self.response(request, status: 200), try Self.payload(disabled))
-        }
-        defer { fixture.invalidate() }
-        let initial = try AntigravityQuotaParser.result(from: Self.payload(), configuration: account, fetchedAt: Self.now)
+        var apps = store.addAccount(for: .gemini)
+        var coding = store.addAccount(for: .antigravity)
+        let other = store.addAccount(for: .antigravity)
+        XCTAssertTrue(store.saveSecret(#"{"access_token":"token"}"#, for: coding))
+        XCTAssertFalse(store.linkGeminiCodingAccount(coding, to: apps, confirmedSameAccount: false))
+        apps.verifiedGoogleSubject = "google-a"
+        coding.verifiedGoogleSubject = "google-b"
+        XCTAssertTrue(store.update(apps))
+        XCTAssertTrue(store.update(coding))
+        XCTAssertFalse(store.linkGeminiCodingAccount(coding, to: apps, confirmedSameAccount: true))
+        XCTAssertFalse(store.hasGeminiCodingSecret(for: apps))
+        XCTAssertEqual(Set(store.unlinkedGeminiCodingAccounts.map(\.id)), [coding.id, other.id])
+        coding.verifiedGoogleSubject = "google-a"
+        XCTAssertTrue(store.update(coding))
+        XCTAssertTrue(store.linkGeminiCodingAccount(coding, to: apps, confirmedSameAccount: false))
+        XCTAssertEqual(store.unlinkedGeminiCodingAccounts, [other])
+        XCTAssertFalse(store.linkGeminiCodingAccount(other, to: apps, confirmedSameAccount: true))
+        XCTAssertNotNil(ProviderConfigurationStore(defaults: defaults, secretStore: secrets).configuration(accountID: other.id))
+    }
+
+    @MainActor
+    func testConfirmedArchiveNameCanBeReusedWithoutLosingUnlinkedNameReservations() throws {
+        let suite = "GoogleArchiveNames.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        var apps = store.addAccount(for: .gemini)
+        var coding = store.addAccount(for: .antigravity)
+        var other = store.addAccount(for: .gemini)
+        coding.accountLabel = "Google Gemini 3"
+        XCTAssertTrue(store.update(coding))
+        let token = #"{"access_token":"coding-token"}"#
+        XCTAssertTrue(store.saveSecret(token, for: coding))
+        apps.accountLabel = "GOOGLE GEMINI 3"
+        XCTAssertFalse(store.update(apps), "Unlinked legacy sessions still reserve their names for association.")
+        XCTAssertEqual(store.unlinkedGeminiCodingAccounts, [coding])
+        XCTAssertTrue(store.linkGeminiCodingAccount(coding, to: apps, confirmedSameAccount: true))
+        XCTAssertTrue(store.update(apps), "A confirmed archival record must not block the visible account name.")
+        other.accountLabel = "google gemini 3"
+        XCTAssertFalse(store.update(other), "Visible names remain case-insensitively unique.")
+        XCTAssertEqual(store.configuration(accountID: coding.id), coding)
+        XCTAssertEqual(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: coding)), token)
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        XCTAssertEqual(restored.configuration(accountID: apps.id)?.displayName, "GOOGLE GEMINI 3")
+        XCTAssertEqual(restored.configuration(accountID: coding.id), coding)
+        XCTAssertEqual(restored.confirmedGoogleAccountLinks, [coding.id: apps.id])
+        XCTAssertTrue(restored.unlinkedGeminiCodingAccounts.isEmpty)
+        XCTAssertFalse(restored.update(other))
+        apps.accountLabel = "Personal Google"
+        XCTAssertTrue(restored.update(apps))
+        XCTAssertEqual(restored.addAccount(for: .gemini).accountLabel, "Google Gemini 3")
+    }
+
+    @MainActor
+    func testLegacyRecordWithoutCredentialLinksHistoryAndLayoutWithoutClaimingConnection() throws {
+        let suite = "GoogleDataOnlyLink.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let apps = store.addAccount(for: .gemini)
+        let legacy = store.addAccount(for: .antigravity)
+        let metricID = "antigravity.gemini-weekly"
+        store.updateMetricVisibility(false, accountID: legacy.id, metricID: metricID)
+        store.updateMetricWidth(.half, accountID: legacy.id, metricID: metricID)
         let history = UsageHistoryStore(defaults: defaults)
-        history.record(results: [initial], now: Self.now)
-        let savedHistory = history.snapshots(for: account.id)
-        let expectedIDs = initial.availableMetrics.map(\.id)
-        assertQuotaConsumers(initial, store: store, defaults: defaults, expectedIDs: expectedIDs, severity: .critical)
-        let service = UsageRefreshService(
-            providers: [AntigravityUsageProvider(secretStore: secrets, sessionConfiguration: fixture.session.configuration)],
-            initialResults: [initial]
+        let priorResult = try AntigravityQuotaParser.result(
+            from: Self.payload(), configuration: legacy, fetchedAt: Self.now
         )
-        await service.refresh(configurations: [account])
-        let result = try XCTUnwrap(service.results.first)
-        XCTAssertFalse(result.hasCurrentBars)
-        XCTAssertEqual(result.bars, initial.bars)
-        XCTAssertEqual(result.barsFetchedAt, initial.barsFetchedAt)
-        XCTAssertEqual(result.configurableMetrics.map(\.id), initial.configurableMetrics.map(\.id))
-        XCTAssertTrue(result.configurableMetrics.allSatisfy { $0.kind == .unavailableUsage("Disabled") })
-        XCTAssertTrue(result.hasSuccessfulRefreshHistory)
-        XCTAssertTrue(result.freshBars.isEmpty)
-        assertQuotaConsumers(result, store: store, defaults: defaults, expectedIDs: [], severity: .normal)
-        history.record(results: [result], now: Self.now.addingTimeInterval(600))
-        XCTAssertEqual(history.snapshots(for: account.id).map(\.bars), savedHistory.map(\.bars))
-        XCTAssertEqual(history.snapshots(for: account.id).map(\.capturedAt), savedHistory.map(\.capturedAt))
-        assertQuotaConsumers(initial, store: store, defaults: defaults, expectedIDs: expectedIDs, severity: .critical)
+        history.record(results: [priorResult], now: Self.now)
+        let originalIDs = history.snapshots.map(\.id)
+        XCTAssertTrue(store.linkGeminiCodingAccount(legacy, to: apps, confirmedSameAccount: true))
+        history.migrateGoogleAccounts(links: store.confirmedGoogleAccountLinks, configurations: store.visibleConfigurations)
+        XCTAssertEqual(history.snapshots.map(\.id), originalIDs)
+        XCTAssertEqual(history.snapshots(for: apps.id).count, 1)
+        XCTAssertFalse(store.isMetricVisible(accountID: apps.id, metricID: metricID))
+        XCTAssertEqual(store.metricWidth(accountID: apps.id, metricID: metricID), .half)
+        XCTAssertFalse(store.hasGeminiCodingSecret(for: apps))
+        XCTAssertFalse(store.isConfigured(apps))
+        XCTAssertNil(try secrets.readSecret(account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: apps.id)))
+        XCTAssertEqual(store.configuration(accountID: legacy.id), legacy)
+        XCTAssertEqual(store.confirmedGoogleAccountLinks, [legacy.id: apps.id])
     }
 
     @MainActor
-    func testDisabledCachedBucketKeepsOtherMetricIndicesAndUnavailableObservations() throws {
-        let suite = "MixedQuotaConsumers.\(UUID().uuidString)"
+    func testPendingConfirmedLinkResumesAfterCredentialCopyWithoutGuessing() throws {
+        let suite = "GoogleLinkRecovery.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let apps = store.addAccount(for: .gemini)
+        let coding = store.addAccount(for: .antigravity)
+        let token = try AntigravityCredentials.parse(#"{"access_token":"token"}"#).encoded()
+        XCTAssertTrue(store.saveSecret(token, for: coding))
+        try secrets.saveSecret(token, account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: apps.id))
+        defaults.set([coding.id: apps.id], forKey: "pendingGoogleAccountLinks")
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        XCTAssertEqual(restored.confirmedGoogleAccountLinks, [coding.id: apps.id])
+        XCTAssertTrue(restored.unlinkedGeminiCodingAccounts.isEmpty)
+        XCTAssertTrue(restored.hasGeminiCodingSecret(for: apps))
+        XCTAssertEqual(defaults.dictionary(forKey: "pendingGoogleAccountLinks")?.count, 0)
+    }
+
+    @MainActor
+    func testSyntheticSetupLayoutMovesToGeminiWithoutCreatingCodingAccount() throws {
+        let suite = "GoogleSetupLayout.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let old = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let metricID = "antigravity.gemini-weekly"
+        old.updateMetricVisibility(false, accountID: "dashboard.setup.antigravity", metricID: metricID)
+        old.updateMetricWidth(.half, accountID: "dashboard.setup.antigravity", metricID: metricID)
+        let apps = old.addAccount(for: .gemini)
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        XCTAssertEqual(restored.visibleConfigurations, [apps])
+        XCTAssertFalse(restored.isMetricVisible(accountID: apps.id, metricID: metricID))
+        XCTAssertEqual(restored.metricWidth(accountID: apps.id, metricID: metricID), .half)
+        XCTAssertTrue(GoogleUsageMetricCatalog.missingSourceConfigurations(in: restored.configurations).isEmpty)
+    }
+
+    @MainActor
+    func testLegacyWidgetAndWatchSelectionsResolveOnlyConfirmedCodingIdentity() throws {
+        let suite = "GoogleSelections.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
-        let account = store.addAccount(for: .antigravity)
-        XCTAssertTrue(store.saveSecret(#"{"access_token":"test"}"#, for: account))
-        let initial = try AntigravityQuotaParser.result(from: Self.payload(), configuration: account, fetchedAt: Self.now)
-        let result = ProviderUsageResult(
-            accountID: account.id, providerID: .antigravity, title: initial.title, subtitle: "",
-            bars: initial.bars,
-            unavailableUsageMetrics: ["antigravity.gemini-5h": "Disabled", "antigravity.gemini-weekly": "Unavailable"],
-            fetchedAt: Self.now
-        )
-        let expectedIDs = Array(initial.availableMetrics.map(\.id).dropFirst())
-        XCTAssertEqual(result.enabledBarIndices, [1, 2, 3])
-        XCTAssertEqual(result.availableMetrics.map(\.id), expectedIDs)
-        XCTAssertEqual(result.freshBars.map(\.stableKey), ["gemini-weekly", "3p-5h", "3p-weekly"])
-        XCTAssertEqual(result.configurableMetrics.map(\.kind), [
-            .unavailableUsage("Disabled"), .usageBar(index: 1), .usageBar(index: 2), .usageBar(index: 3),
-        ])
-        assertQuotaConsumers(result, store: store, defaults: defaults, expectedIDs: expectedIDs, severity: .normal)
-    }
-
-    @MainActor
-    private func assertQuotaConsumers(
-        _ result: ProviderUsageResult,
-        store: ProviderConfigurationStore,
-        defaults: UserDefaults,
-        expectedIDs: [String],
-        severity: UsageSeverity
-    ) {
-        XCTAssertEqual(result.highestSeverity(at: Self.now), severity)
-        let alerts = UsageAlertEvaluator.evaluate(
-            results: [result], settings: UsageAlertSettings(isEnabled: true), activeAlertIDs: [], now: Self.now
-        )
-        XCTAssertEqual(alerts.notifications.isEmpty, severity == .normal)
-        XCTAssertEqual(alerts.activeAlerts.isEmpty, severity == .normal)
+        let apps = store.addAccount(for: .gemini)
+        let legacy = store.addAccount(for: .antigravity)
+        XCTAssertTrue(store.saveSecret(#"{"access_token":"token"}"#, for: legacy))
+        XCTAssertTrue(store.linkGeminiCodingAccount(legacy, to: apps, confirmedSameAccount: true))
+        let result = try Self.unifiedResult(apps)
         WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults, now: Self.now)
-        XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.bars.map(\.metricID), expectedIDs)
+        let widget = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        XCTAssertEqual(widget.results.count, 1)
+        XCTAssertEqual(widget.results.first?.bars.map(\.metricID), Self.googleIDs)
+        XCTAssertEqual(widget.builderTile(resolvingSavedID: "provider.\(legacy.id)")?.id, "provider.\(apps.id)")
+        let savedID = "bar.\(legacy.id).antigravity.gemini-5h"
+        XCTAssertEqual(widget.builderTile(resolvingSavedID: savedID)?.id, "bar.\(apps.id).antigravity.gemini-5h")
+        XCTAssertEqual(
+            widget.builderTile(resolvingSavedID: "bar.\(legacy.id).2.antigravity.3p-5h")?.id,
+            "bar.\(apps.id).antigravity.3p-5h"
+        )
+        XCTAssertNil(widget.builderTile(resolvingSavedID: "bar.\(legacy.id).2.Unknown renamed metric"))
+        XCTAssertNil(widget.builderTile(resolvingSavedID: "bar.unlinked.antigravity.gemini-5h"))
         let watch = WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: Self.now)
-        XCTAssertEqual(watch.accounts.first?.metrics.map(\.id), expectedIDs)
+        XCTAssertEqual(watch.accounts.count, 1)
+        XCTAssertEqual(watch.accounts.first?.metrics.map(\.id), Self.googleIDs)
+        XCTAssertEqual(watch.accounts.first?.legacyAccountIDs, [WatchSnapshotPublisher.snapshotAccountID(providerID: .antigravity, configurationID: legacy.id)])
+        let partial = ProviderUsageResult(
+            accountID: apps.id, providerID: .gemini, title: apps.displayName, subtitle: "Coding unavailable",
+            bars: Array(result.bars.prefix(2)), fetchedAt: Self.now
+        )
+        WidgetSnapshotPublisher.publish(results: [partial], configurationStore: store, snapshotDefaults: defaults, now: Self.now)
+        let missing = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        XCTAssertNil(missing.builderTile(resolvingSavedID: savedID))
+        XCTAssertNil(missing.builderTile(resolvingSavedID: "bar.\(legacy.id).0.Gemini-Apps-five-hour"))
     }
 
     @MainActor
-    func testCopyLayoutIncludesMissingDisabledAndUnfetchedGoogleQuotas() throws {
-        let suite = "GoogleCopyLayout.\(UUID().uuidString)"
+    func testCodingCredentialReplacementAndDisconnectStaySourceAndAccountScoped() throws {
+        let suite = "GoogleCredentials.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let apps = store.addAccount(for: .gemini)
+        let other = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveSecret("apps-cookie", for: apps))
+        XCTAssertFalse(store.saveGeminiCodingSecret(#"{"access_token":"token"}"#, for: apps, confirmedSameAccount: false))
+        XCTAssertFalse(store.saveGeminiCodingSecret("apps-cookie", for: apps, confirmedSameAccount: true))
+        XCTAssertTrue(store.saveGeminiCodingSecret(#"{"access_token":"token"}"#, for: apps, confirmedSameAccount: true))
+        XCTAssertTrue(store.saveGeminiCodingSecret(#"{"access_token":"replacement"}"#, for: apps, confirmedSameAccount: true))
+        XCTAssertFalse(store.hasGeminiCodingSecret(for: other))
+        XCTAssertTrue(store.disconnectGeminiCoding(for: apps))
+        XCTAssertFalse(store.hasGeminiCodingSecret(for: apps))
+        XCTAssertEqual(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: apps)), "apps-cookie")
+    }
+
+    @MainActor
+    func testCodingDisconnectDeletesLinkedAuthorizationAndCannotReplayAfterRelaunch() throws {
+        let suite = "GoogleDisconnect.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let apps = store.addAccount(for: .gemini)
+        let legacy = store.addAccount(for: .antigravity)
+        XCTAssertTrue(store.saveSecret(#"{"access_token":"token"}"#, for: legacy))
+        XCTAssertTrue(store.linkGeminiCodingAccount(legacy, to: apps, confirmedSameAccount: true))
+        XCTAssertTrue(store.disconnectGeminiCoding(for: apps))
+        XCTAssertNil(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: legacy)))
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        XCTAssertFalse(restored.hasGeminiCodingSecret(for: apps))
+        XCTAssertEqual(restored.confirmedGoogleAccountLinks, [legacy.id: apps.id])
+        XCTAssertTrue(restored.unlinkedGeminiCodingAccounts.isEmpty)
+    }
+
+    @MainActor
+    func testCodingKeyDeletionFailureKeepsResetAccountAvailableForRetry() throws {
+        let suite = "GoogleResetRetry.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = RetriableDeleteSecretStore()
+        secrets.shouldFailDelete = false
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let apps = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveGeminiCodingSecret(#"{"access_token":"token"}"#, for: apps, confirmedSameAccount: true))
+        secrets.failingAccount = ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: apps.id)
+        XCTAssertFalse(store.resetAccounts())
+        XCTAssertNotNil(store.configuration(accountID: apps.id))
+        XCTAssertTrue(store.hasGeminiCodingSecret(for: apps))
+        secrets.failingAccount = nil
+        XCTAssertTrue(store.resetAccounts())
+        XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertNil(try secrets.readSecret(account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: apps.id)))
+    }
+
+    @MainActor
+    func testPartialAccountRemovalInvalidatesDeletedCodingSourceAndRetainsLinkedRecords() throws {
+        let suite = "GoogleRemovalRetry.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = RetriableDeleteSecretStore()
+        secrets.shouldFailDelete = false
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let apps = store.addAccount(for: .gemini)
+        let legacy = store.addAccount(for: .antigravity)
+        XCTAssertTrue(store.saveSecret(#"{"access_token":"token"}"#, for: legacy))
+        XCTAssertTrue(store.saveSecret("apps-cookie", for: apps))
+        XCTAssertTrue(store.linkGeminiCodingAccount(legacy, to: apps, confirmedSameAccount: true))
+        let service = UsageRefreshService(providers: [], initialResults: [try Self.unifiedResult(apps)])
+        let dashboard = googleDashboard(store: store, service: service, defaults: defaults)
+        secrets.failingAccount = ProviderConfigurationStore.keychainAccount(for: apps)
+        XCTAssertFalse(store.removeAccount(apps))
+        XCTAssertTrue(service.results.isEmpty)
+        XCTAssertEqual(store.confirmedGoogleAccountLinks, [legacy.id: apps.id])
+        XCTAssertNotNil(store.configuration(accountID: legacy.id))
+        XCTAssertEqual(dashboard.dashboardCardItems.count, 1)
+        secrets.failingAccount = nil
+        XCTAssertTrue(store.removeAccount(apps))
+        XCTAssertTrue(store.configurations.isEmpty)
+        XCTAssertTrue(store.confirmedGoogleAccountLinks.isEmpty)
+    }
+
+    @MainActor
+    func testStoreCodingDisconnectInvalidatesSuspendedDashboardRefresh() async throws {
+        let suite = "GoogleRefreshIdentity.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
-        let source = store.addAccount(for: .antigravity)
-        let destination = store.addAccount(for: .antigravity)
-        let result = try AntigravityQuotaParser.result(from: Self.payload(), configuration: source, fetchedAt: Self.now)
-        let ids = result.configurableMetrics.map(\.id)
-        store.reconcileMetricLayout(accountID: source.id, availableMetricIDs: ids)
-        store.updateMetricVisibility(false, accountID: source.id, metricID: ids[1])
-        store.updateMetricWidth(.half, accountID: source.id, metricID: ids[1])
-        store.updateVisualizationStyle(.circularRing, accountID: source.id, metricID: ids[1])
-        store.updateMetricOrder(Array(ids.reversed()), accountID: source.id)
-        var partial = Self.buckets()
-        partial[1]["disabled"] = true
-        for payload in [nil, try Self.payload([]), try Self.payload(partial)] {
-            let observed = try payload.map { try AntigravityQuotaParser.result(from: $0, configuration: destination, fetchedAt: Self.now) }
-            let item = DashboardProviderCardItem(configuration: destination, result: observed, isRefreshing: false, errorMessage: nil)
-            let copy = try XCTUnwrap(ContentView.metricLayoutCopyDestination(item, from: result, configurationStore: store))
-            XCTAssertEqual(copy.availableMetricIDs, ids)
-            store.copyMetricLayout(from: source.id, to: copy.id, destinationAvailableMetricIDs: copy.availableMetricIDs)
-            XCTAssertEqual(store.metricLayouts[destination.id]?.orderedMetricIDs, Array(ids.reversed()))
-            XCTAssertFalse(store.isMetricVisible(accountID: destination.id, metricID: ids[1]))
-            XCTAssertEqual(store.metricWidth(accountID: destination.id, metricID: ids[1]), .half)
-            XCTAssertEqual(store.visualizationStyle(accountID: destination.id, metricID: ids[1]), .circularRing)
-        }
-        let sameAccount = DashboardProviderCardItem(configuration: source, result: result, isRefreshing: false, errorMessage: nil)
-        XCTAssertNil(ContentView.metricLayoutCopyDestination(sameAccount, from: result, configurationStore: store))
-        let apps = DashboardProviderCardItem(configuration: store.addAccount(for: .gemini), result: nil, isRefreshing: false, errorMessage: nil)
-        XCTAssertNil(ContentView.metricLayoutCopyDestination(apps, from: result, configurationStore: store))
+        let apps = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveGeminiCodingSecret(#"{"access_token":"token"}"#, for: apps, confirmedSameAccount: true))
+        let gate = UsageProviderGate()
+        let provider = StaleCompletionTestUsageProvider(providerID: .gemini, gate: gate, fails: false)
+        let service = UsageRefreshService(providers: [provider], initialResults: [try Self.unifiedResult(apps)])
+        let dashboard = googleDashboard(store: store, service: service, defaults: defaults)
+        let refresh = Task { await dashboard.refreshNow() }
+        try await withTestWatchdog(
+            timeout: .seconds(5),
+            failureMessage: "Gemini dashboard refresh did not reach the suspended provider within five seconds.",
+            onTimeout: {
+                refresh.cancel()
+                Task { await gate.release() }
+            },
+            operation: { await gate.waitUntilBlocked() }
+        )
+        XCTAssertTrue(store.disconnectGeminiCoding(for: apps))
+        XCTAssertTrue(service.results.isEmpty)
+        await gate.release()
+        _ = await refresh.value
+        XCTAssertTrue(service.results.isEmpty)
+        XCTAssertTrue(UsageHistoryStore(defaults: defaults).snapshots.isEmpty)
     }
 
-    func testCatalogKeepsOtherProvidersAndRejectsWrongSourceResults() {
-        let other = ProviderUsageResult(providerID: .openRouter, title: "Other", subtitle: "", bars: [], creditsRemaining: 12, fetchedAt: Self.now)
-        XCTAssertEqual(other.configurableMetrics, other.availableMetrics)
-        XCTAssertTrue(GoogleUsageMetricCatalog.metrics(for: .gemini, result: other).allSatisfy {
-            $0.kind == .unavailableUsage("Setup required")
-        })
+    @MainActor
+    func testOneUnreadableSourceDoesNotHideTheOtherGeminiCredential() throws {
+        let suite = "GoogleAvailability.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = SelectiveReadFailureSecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let apps = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveSecret("apps-cookie", for: apps))
+        XCTAssertTrue(store.saveGeminiCodingSecret(#"{"access_token":"token"}"#, for: apps, confirmedSameAccount: true))
+        secrets.failingAccount = ProviderConfigurationStore.keychainAccount(for: apps)
+        store.refreshSecretAvailability()
+        XCTAssertFalse(store.hasSecret(for: apps))
+        XCTAssertTrue(store.hasGeminiCodingSecret(for: apps))
+        XCTAssertTrue(store.shouldDisplayOnDashboard(apps))
+        secrets.failingAccount = ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: apps.id)
+        store.refreshSecretAvailability()
+        XCTAssertTrue(store.hasSecret(for: apps))
+        XCTAssertFalse(store.hasGeminiCodingSecret(for: apps))
+        XCTAssertTrue(store.shouldDisplayOnDashboard(apps))
+    }
+
+    @MainActor
+    func testScreenshotFixtureContainsOneGeminiAccountAndSixBuckets() {
+        let store = ProviderConfigurationStore.appStoreScreenshotDemo()
+        let results = AppStoreScreenshotFixtures.results(for: store)
+        XCTAssertFalse(results.contains { $0.providerID == .antigravity })
+        XCTAssertEqual(results.first { $0.providerID == .gemini }?.configurableMetrics.map(\.id), Self.googleIDs)
+    }
+
+    private static let googleIDs = [
+        "gemini.five-hour", "gemini.weekly", "antigravity.gemini-5h",
+        "antigravity.gemini-weekly", "antigravity.3p-5h", "antigravity.3p-weekly",
+    ]
+
+    private static func unifiedResult(_ account: ProviderAccountConfiguration) throws -> ProviderUsageResult {
+        let coding = try result(payload())
+        return ProviderUsageResult(
+            accountID: account.id, providerID: .gemini, title: account.displayName, subtitle: "Google usage",
+            bars: [
+                UsageBar(stableKey: "five-hour", label: "Gemini Apps five-hour", used: 12, limit: 100),
+                UsageBar(stableKey: "weekly", label: "Gemini Apps weekly", used: 45, limit: 100),
+            ] + coding.bars,
+            fetchedAt: now
+        )
+    }
+
+    @MainActor
+    private func googleDashboard(
+        store: ProviderConfigurationStore,
+        service: UsageRefreshService,
+        defaults: UserDefaults
+    ) -> DashboardOrchestrator {
+        DashboardOrchestrator(
+            refreshService: service, configurationStore: store,
+            historyStore: UsageHistoryStore(defaults: defaults),
+            usageAlertNotifier: StubUsageAlertNotifier(), appReviewPromptPolicy: AppReviewPromptPolicy(defaults: defaults),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                refreshService: service, configurationStore: store, publishSnapshot: { _, _ in }, publishSettings: { _ in }
+            ),
+            watchSnapshotCoordinator: WatchSnapshotCoordinator(
+                refreshService: service, configurationStore: store, publishSnapshot: { _, _, _ in }
+            )
+        )
     }
 
     private static let expiredCredential = #"{"access_token":"old","refresh_token":"refresh","client_id":"client","client_secret":"secret+value","expiry":"2020-01-01T00:00:00Z"}"#
