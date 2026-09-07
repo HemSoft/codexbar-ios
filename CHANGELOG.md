@@ -98,6 +98,9 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Allow the full iOS unit, iPhone UI, and iPad UI suite up to 90 minutes in CI
+  so the required iPad checks can finish after the earlier suites.
+
 - Established phone-based provider setup as the required user experience,
   excluding manual credential imports. Agents own implementation and automated
   checks; Franz owns live account and quota verification.
