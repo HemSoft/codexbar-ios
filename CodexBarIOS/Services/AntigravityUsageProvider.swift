@@ -159,7 +159,7 @@ final class AntigravityUsageProvider: UsageProvider {
              FetchError.http(400), FetchError.http(401), FetchError.http(403):
             message = configuration.providerID == .gemini
                 ? "Coding connection required. New coding setup is not available in this build."
-                : "Antigravity needs a current session. Import fresh credentials from your desktop."
+                : "The saved coding connection needs attention. Open Gemini settings."
             recovery = .reauthenticate
         case FetchError.changedCredential:
             message = configuration.providerID == .gemini
