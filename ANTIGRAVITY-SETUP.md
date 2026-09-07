@@ -1,51 +1,42 @@
-# Antigravity session import
+# Gemini coding session import
 
-Antigravity is a separate account type from Google Gemini in CodexBar. It tracks
-the shared Gemini pool, including Flash, and the separate Claude/GPT pool. Each
-has a five-hour and weekly metric. Gemini Apps history is never relabeled.
+One Google Gemini account contains all six usage metrics in CodexBar. Its
+Gemini Apps connection uses Google website cookies. Its Coding Usage connection
+uses an imported desktop OAuth session to read Gemini Models and Other models,
+Claude/GPT. The two credential formats are separate and are never substituted
+for each other. Antigravity is an internal quota adapter, not a separate account
+choice or dashboard card.
 
-This experimental integration requires an imported desktop Antigravity session.
-It does not offer Google sign-in directly on iPhone. This is an unofficial API
-integration, not a Google-supported iPhone grant. Franz owns live iPhone
-verification for [#319](https://github.com/HemSoft/codexbar-ios/issues/319).
-Phone comparisons, import, and renewal checks are follow-ups and do not block
-implementation or merge of the dashboard display fix.
+This experimental coding integration requires a desktop session import. Native
+iPhone coding authorization is not available. It uses an unofficial Google API.
+Franz's live comparisons remain follow-up verification for
+[#319](https://github.com/HemSoft/codexbar-ios/issues/319) and do not block agent
+implementation or merge.
 
-## Six dashboard metrics
+## Six metrics in one Gemini card
 
-Start from Add Account. Google Gemini connects Gemini Apps' two consumer
-limits; Antigravity connects the four coding limits shown by CLI `/usage`.
-Use the same Google identity when comparing with the desktop references.
-
-| Account source | Metric label | Saved identity |
+| Source | Metric label | Preserved identity |
 | --- | --- | --- |
-| Google Gemini | Gemini Apps five-hour | `gemini.five-hour` |
-| Google Gemini | Gemini Apps weekly | `gemini.weekly` |
-| Antigravity | Gemini Models five-hour | `antigravity.gemini-5h` |
-| Antigravity | Gemini Models weekly | `antigravity.gemini-weekly` |
-| Antigravity | Other models five-hour | `antigravity.3p-5h` |
-| Antigravity | Other models weekly | `antigravity.3p-weekly` |
+| Gemini Apps | Gemini Apps five-hour | `gemini.five-hour` |
+| Gemini Apps | Gemini Apps weekly | `gemini.weekly` |
+| Coding session | Gemini Models five-hour | `antigravity.gemini-5h` |
+| Coding session | Gemini Models weekly | `antigravity.gemini-weekly` |
+| Coding session | Other models five-hour | `antigravity.3p-5h` |
+| Coding session | Other models weekly | `antigravity.3p-weekly` |
 
-Other models means Claude/GPT. With either Google source added, the dashboard
-shows all six metrics across separate Google Gemini and Antigravity cards. A
-source without an account shows a setup card. An account without credentials
-also keeps its metrics visible with Setup required. These cards contain no
-percentages or resets until their own source supplies values.
+All six choices appear together in Gemini's Metrics settings and Customize
+Card. Hide, order, width, and visualization preferences survive refresh and
+relaunch. Missing connections show Setup required without invented percentages
+or resets. Missing or disabled quotas retain their actual status. History,
+widgets, and Watch preserve source identities and contain only observed values.
 
-Customize Card offers hide, order, width, and visualization controls before a
-successful fetch. Each saved account's Metrics settings exposes visibility
-controls for the same metrics.
-Choosing Configure account on a setup card creates that source's account and
-retains the card preferences. The setup card does not create an account, copy
-credentials, or fetch usage before that action. A saved, disabled source stays
-hidden, and existing explicit metric visibility choices are respected.
-Preferences survive missing data and relaunches. A missing or disabled bucket
-has a status instead of a fabricated percentage. A failed refresh labels cached
-values as last known. Histories and shared snapshots retain their original
-metric identities and contain only observed values.
-
-You can leave Google Gemini unconnected and hide its two setup metrics, or
-disable its saved account, to show only the four Antigravity metrics.
+Existing standalone coding accounts remain stored until you link them from
+Gemini settings. Confirm that both sessions belong to the same Google account.
+Matching labels do not prove identity, and CodexBar does not guess an association.
+Confirmed linking transfers coding credentials and metric preferences into the
+chosen Gemini account and preserves its observed history. Unlinked records stay
+retained internally. Old source setup cards disappear; saved choices are retained
+when their Gemini account can be identified.
 
 ## Setup
 
@@ -56,15 +47,27 @@ disable its saved account, to show only the four Antigravity metrics.
    to the Mac clipboard with `pbcopy < ~/.codexbar/antigravity/oauth_creds.json`.
    The Antigravity CLI stores its session in the OS keyring instead; CodexBar iOS
    does not export that keyring or provide a desktop export tool.
-3. On iPhone, choose Settings, Add Account, Antigravity. Paste the session JSON
-   into Antigravity Session Import and choose Save and Validate Session.
-4. Refresh and compare both model families with Antigravity CLI `/usage` using
-   the same account. The Gemini consumer website is a different product.
+3. On iPhone, add or open the Google Gemini account for that Google identity.
+   In Coding Usage, paste the session JSON and choose Connect Coding Session.
+   Confirm the sessions belong to the same Google account. Use Update Coding
+   Session to replace an expired token after the same confirmation.
+4. To reuse an existing saved coding account, choose its Link saved coding
+   account action inside Gemini settings and confirm the same identity.
+   Disconnect an existing coding session before linking a different saved one.
+5. Refresh the Gemini card and compare both coding model families with
+   Antigravity CLI `/usage` using the same account. Gemini Apps is a different
+   quota source on that same card.
+
+Reconnecting Gemini Apps while coding is linked requires confirmation that you
+will sign in to the same Google account. Add another Gemini entry for a different
+identity. Disconnect Gemini Apps and Disconnect Coding Session remove only their
+respective authorization; the other source stays connected.
 
 Never paste a session into chat, a GitHub issue, or a repository file. Clear the
 clipboard after importing. Tokens may grant broader Google account access.
 CodexBar stores only the supported credential fields in this account's Keychain
-entry. Tokens do not enter History, widget snapshots, or Watch payloads.
+coding entry, separate from Gemini Apps cookies. Tokens do not enter History,
+widget snapshots, or Watch payloads.
 
 The accepted flat JSON shape is:
 
@@ -145,8 +148,9 @@ Franz took ownership of the remaining live iPhone testing on September 6 and
 directed that it no longer block PR #320. He reported Gemini Models weekly at
 71% remaining and the other three coding buckets at 100% remaining. These are
 reference values, not a successful phone fetch. Coding values and reset parity,
-import/reimport and coding-card customization remain his follow-up checks in
-#319. They are not claimed as passed and do not block delivery of the display fix.
+import/reimport and combined-card customization remain his follow-up checks in
+[#319](https://github.com/HemSoft/codexbar-ios/issues/319). They are not claimed
+as passed and do not block delivery of the unified account.
 
 Franz can use these optional checks after receiving the updated build:
 
@@ -158,7 +162,7 @@ Franz can use these optional checks after receiving the updated build:
 3. Refresh both sources in the same comparison interval. Record used versus
    remaining semantics, values and supplied resets for all six metrics.
 4. Toggle and customize each choice, relaunch, then hide or disconnect Apps
-   and verify all four coding metrics. Keep before/after screenshots locally
+   and verify all four coding metrics remain in the same Gemini card. Keep before/after screenshots locally
    and publish only evidence without identity or credentials.
 5. Record renewal if matching client fields are available, or exercise and
    document reimport. Saving a credential without a successful quota refresh

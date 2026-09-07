@@ -8,14 +8,15 @@ building, testing, or releasing the app.
 
 ### Added
 
-- Added experimental Antigravity session import with separate Gemini and
-  Claude/GPT five-hour and weekly quotas. Missing quota stays unavailable;
-  native iPhone sign-in and device comparison remain release follow-ups.
+- Added experimental coding session import inside Google Gemini for Gemini
+  Models and Other models, Claude/GPT, with five-hour and weekly quotas.
+  Missing quota stays unavailable. Native coding sign-in and live comparisons
+  remain follow-ups.
   ([#314](https://github.com/HemSoft/codexbar-ios/issues/314))
 
 - Added an experimental Google Gemini account option that displays five-hour
-  and weekly consumer usage with reset times. Connected-iPhone live-account
-  parity remains a pre-release gate.
+  and weekly consumer usage with reset times. Live comparison evidence is
+  tracked in the sign-in documentation.
   ([#296](https://github.com/HemSoft/codexbar-ios/issues/296))
 - Split Cursor's included usage into separate Cursor Models and Other Models
   metrics, each with its own saved dashboard, widget, and Watch visibility.
@@ -44,25 +45,17 @@ building, testing, or releasing the app.
 
 ### Fixed
 
-- Show all six Google usage metrics on the dashboard when either Google source
-  is added. Missing sources and incomplete accounts keep their metrics visible
-  with Setup required, without borrowing values or resets from another source.
-  Customize Card works before setup and retains selections after refresh and
-  relaunch. Existing hidden metrics and disabled accounts stay hidden.
+- Put all six Google usage metrics in one Gemini account and dashboard card.
+  Connect Gemini Apps and coding sessions inside that account, with confirmation
+  that they use the same Google identity. Existing coding accounts can be linked
+  from Gemini settings while retaining credentials, metric choices, and history.
+  Unlinked data stays saved until its owner confirms the association.
   ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
-
-- Stop publishing cached Google quotas to alerts, widgets and Apple Watch when
-  the provider explicitly disables them, while retaining observed History data.
-  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
-
-- Keep all six Google usage choices available in each account's Metrics
-  settings before setup, with independent visibility controls. After an account
-  returns a result, Customize Card also retains unavailable choices. Gemini Apps
-  and Antigravity model families have distinct labels, and each choice keeps its
-  saved visibility, order, width, and visualization after refreshes and relaunches.
-  If a refresh returns no usable quotas, retain observed percentages as last-known
-  data while keeping explicitly disabled quotas unavailable. VoiceOver also
-  announces unavailable and disabled states in Metrics settings.
+- Keep all six choices available before setup and through missing quota data,
+  with independent visibility, order, width, and visualization preferences.
+  Show actual unavailable or disabled status without fabricated values or resets.
+  Explicitly disabled quotas stop publishing to alerts, widgets, and Apple Watch
+  while observed History data stays intact.
   ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
 
 - Expose the selected account group as a separate accessibility value in account
@@ -110,10 +103,6 @@ building, testing, or releasing the app.
   from automatic PR runs and merge requirements. Broader CI runtime and benchmark
   reliability work remains tracked separately.
   ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
-
-- Re-review the three accepted security findings after the Google quota changes,
-  preserving the full-source snapshot and exact diagnostic checks.
-  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
 
 - Include pinned repository-wide SwiftLint and complete strict-concurrency
   checks in the local perfection audit. Report failures alongside every

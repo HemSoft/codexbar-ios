@@ -85,7 +85,7 @@ enum AppStoreScreenshotFixtures {
         let samples = Dictionary(uniqueKeysWithValues: DemoUsageProvider.samples.map { ($0.providerID, $0) })
         let capturedAt = Date(timeIntervalSince1970: 1_783_680_000)
 
-        return configurationStore.configurations.compactMap { configuration in
+        return configurationStore.visibleConfigurations.compactMap { configuration in
             guard let sample = samples[configuration.providerID] else {
                 return nil
             }

@@ -58,7 +58,20 @@ final class DashboardOrchestrator: ObservableObject {
             configurationStore: configurationStore
         )
 
-        refreshService.updateCurrentConfigurations(configurationStore.configurations)
+        configurationStore.credentialChanges.sink { [weak refreshService] accountID in
+            refreshService?.invalidateCredentials(accountID: accountID)
+        }.store(in: &cancellables)
+        historyStore.migrateGoogleAccounts(
+            links: configurationStore.confirmedGoogleAccountLinks,
+            configurations: configurationStore.visibleConfigurations
+        )
+        configurationStore.$confirmedGoogleAccountLinks.dropFirst().sink { [weak historyStore, weak configurationStore] links in
+            historyStore?.migrateGoogleAccounts(
+                links: links,
+                configurations: configurationStore?.visibleConfigurations ?? []
+            )
+        }.store(in: &cancellables)
+        refreshService.updateCurrentConfigurations(configurationStore.visibleConfigurations)
         configurationStore.$configurations.dropFirst().sink { [weak refreshService, weak historyStore] in
             let configurations = $0
             refreshService?.updateCurrentConfigurations(configurations)
@@ -69,7 +82,7 @@ final class DashboardOrchestrator: ObservableObject {
     }
 
     var dashboardCardItems: [DashboardProviderCardItem] {
-        let configurations = configurationStore.configurations.filter {
+        let configurations = configurationStore.visibleConfigurations.filter {
             configurationStore.shouldDisplayOnDashboard($0)
                 || ($0.isEnabled && !GoogleUsageMetricCatalog.definitions(for: $0.providerID).isEmpty)
         } + GoogleUsageMetricCatalog.missingSourceConfigurations(in: configurationStore.configurations)
@@ -618,7 +631,7 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
             subtitle: requiresSetup ? "\(configuration.providerID.displayName) setup required" : (errorMessage ?? status),
             bars: [],
             unavailableUsageMetrics: Dictionary(uniqueKeysWithValues: definitions.map {
-                ("\(configuration.providerID.rawValue).\($0.key)", status)
+                ($0.id, status)
             }),
             failureMessage: requiresSetup ? status : errorMessage,
             recoveryAction: requiresSetup ? .signIn : .retryRefresh,

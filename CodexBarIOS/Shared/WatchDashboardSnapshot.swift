@@ -199,6 +199,7 @@ public struct WatchMetricSnapshot: Codable, Equatable, Identifiable, Sendable {
 
 public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
     public let id: String
+    public let legacyAccountIDs: [String]?
     public let providerName: String
     public let accountLabel: String
     public let planIdentifier: String?
@@ -210,6 +211,7 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
 
     public init(
         id: String,
+        legacyAccountIDs: [String] = [],
         providerName: String,
         accountLabel: String,
         planIdentifier: String? = nil,
@@ -220,6 +222,7 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
         metrics: [WatchMetricSnapshot]
     ) {
         self.id = id
+        self.legacyAccountIDs = legacyAccountIDs.isEmpty ? nil : legacyAccountIDs
         self.providerName = providerName
         self.accountLabel = accountLabel
         self.planIdentifier = planIdentifier
@@ -232,6 +235,7 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case legacyAccountIDs
         case providerName
         case accountLabel
         case planIdentifier
@@ -250,6 +254,7 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
         ) ?? []
         self.init(
             id: try container.decode(String.self, forKey: .id),
+            legacyAccountIDs: try container.decodeIfPresent([String].self, forKey: .legacyAccountIDs) ?? [],
             providerName: try container.decode(String.self, forKey: .providerName),
             accountLabel: try container.decode(String.self, forKey: .accountLabel),
             planIdentifier: try container.decodeIfPresent(String.self, forKey: .planIdentifier),
@@ -264,6 +269,7 @@ public struct WatchAccountSnapshot: Codable, Equatable, Identifiable, Sendable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(legacyAccountIDs, forKey: .legacyAccountIDs)
         try container.encode(providerName, forKey: .providerName)
         try container.encode(accountLabel, forKey: .accountLabel)
         try container.encodeIfPresent(planIdentifier, forKey: .planIdentifier)

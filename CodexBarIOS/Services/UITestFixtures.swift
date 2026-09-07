@@ -74,12 +74,12 @@ final class UITestFixtures {
         let results = configurationStore.configurations
             .filter(configurationStore.isConfigured)
             .map { configuration in
-                google ? Self.googleResult(for: configuration, stage: 0)
+                google ? Self.googleResult(for: configuration, sources: googleSources, stage: 0)
                     : Self.result(for: configuration, balance: configuration.id.hasPrefix("ui-navigation-") ? 90 : 25)
             }
         refreshService = UsageRefreshService(
             providers: google
-                ? [UITestGoogleProvider(providerID: .gemini), UITestGoogleProvider(providerID: .antigravity)]
+                ? [UITestGoogleProvider(sources: googleSources)]
                 : [UITestUsageProvider(failsFirstRefresh: recovery)],
             initialResults: results
         )
@@ -133,36 +133,59 @@ final class UITestFixtures {
     private static func googleSources(for scenario: String?) -> [ProviderID] {
         switch scenario {
         case "google-six": [.gemini, .antigravity]
-        case "google-antigravity": [.antigravity]
+        case "google-coding-only": [.antigravity]
         case "google-apps-only": [.gemini]
         default: []
         }
     }
 
+    nonisolated static let codingCredential: String = {
+        do {
+            return try AntigravityCredentials.parse(
+                #"{"access_token":"ui-test-coding-token","expiry":"2030-01-01T00:00:00Z"}"#
+            ).encoded()
+        } catch {
+            preconditionFailure("The fixed synthetic coding credential must be valid")
+        }
+    }()
+
     private static func seedGoogleAccounts(in store: ProviderConfigurationStore, sources: [ProviderID]) {
-        for source in sources {
-            let account = ProviderAccountConfiguration(
-                id: "ui-google-\(source.rawValue)",
-                providerID: source,
-                accountLabel: source == .gemini ? "Apps Fixture" : "Coding Fixture",
-                authMethod: source == .gemini ? .browserSession : .cliToken
-            )
-            _ = store.update(account)
+        let account = ProviderAccountConfiguration(
+            id: "ui-google-gemini",
+            providerID: .gemini,
+            accountLabel: "Gemini Fixture",
+            authMethod: .browserSession
+        )
+        _ = store.update(account)
+        if sources.contains(.gemini) {
             _ = store.saveSecret("ui-test-credential", for: account)
+        }
+        if sources.contains(.antigravity) {
+            _ = store.saveGeminiCodingSecret(codingCredential, for: account, confirmedSameAccount: true)
         }
     }
 
-    nonisolated static func googleResult(for account: ProviderAccountConfiguration, stage: Int) -> ProviderUsageResult {
-        let definitions = GoogleUsageMetricCatalog.definitions(for: account.providerID)
-        let used: [String: Double] = account.providerID == .gemini ? ["five-hour": 12, "weekly": 45] : [
+    nonisolated static func googleResult(
+        for account: ProviderAccountConfiguration,
+        sources: [ProviderID],
+        stage: Int
+    ) -> ProviderUsageResult {
+        let definitions = GoogleUsageMetricCatalog.definitions(for: .gemini)
+        let used: [String: Double] = [
+            "five-hour": 12, "weekly": 45,
             "gemini-5h": stage >= 3 ? 100 : 0, "gemini-weekly": 31,
             "3p-5h": stage >= 3 ? 20 : 0, "3p-weekly": stage >= 3 ? 60 : 0,
         ]
-        let unavailable = account.providerID == .antigravity && stage == 1 ? [
-            "gemini-weekly": "Unavailable", "3p-5h": GoogleUsageMetricCatalog.disabledReason,
-        ] : [:]
+        var unavailable: [String: String] = [:]
+        for definition in definitions where !sources.contains(definition.sourceProviderID) {
+            unavailable[definition.id] = "Setup required"
+        }
+        if sources.contains(.antigravity) && stage == 1 {
+            unavailable["antigravity.gemini-weekly"] = "Unavailable"
+            unavailable["antigravity.3p-5h"] = GoogleUsageMetricCatalog.disabledReason
+        }
         let bars = definitions.compactMap { definition -> UsageBar? in
-            guard unavailable[definition.key] == nil, let value = used[definition.key] else { return nil }
+            guard unavailable[definition.id] == nil, let value = used[definition.key] else { return nil }
             return UsageBar(
                 stableKey: definition.key, label: definition.label, used: value, limit: 100,
                 resetsAt: Date().addingTimeInterval(definition.window == "5h" ? 18_000 : 604_800),
@@ -170,13 +193,9 @@ final class UITestFixtures {
             )
         }
         return ProviderUsageResult(
-            accountID: account.id, providerID: account.providerID, title: account.displayName,
-            subtitle: account.providerID == .gemini ? "Gemini Apps usage" : "Antigravity quota groups",
-            bars: bars,
-            unavailableUsageMetrics: Dictionary(uniqueKeysWithValues: unavailable.map {
-                ("\(account.providerID.rawValue).\($0.key)", $0.value)
-            }),
-            fetchedAt: Date()
+            accountID: account.id, providerID: .gemini, title: account.displayName,
+            subtitle: "Gemini Apps and coding usage",
+            bars: bars, unavailableUsageMetrics: unavailable, fetchedAt: Date()
         )
     }
 
@@ -219,7 +238,11 @@ private struct UITestSecretStore: SecretStore {
     }
 
     func saveSecret(_ secret: String, account: String) throws {
-        guard secret == "ui-test-credential" else { throw UITestFixtureError.invalidCredential }
+        let coding = try? AntigravityCredentials.parse(secret)
+        let expectedCoding = try AntigravityCredentials.parse(UITestFixtures.codingCredential)
+        guard secret == "ui-test-credential" || coding == expectedCoding else {
+            throw UITestFixtureError.invalidCredential
+        }
         UserDefaults(suiteName: suite)?.set(secret, forKey: "fixture-secret.\(account)")
     }
 
@@ -249,15 +272,16 @@ private actor UITestUsageProvider: UsageProvider {
 }
 
 private actor UITestGoogleProvider: UsageProvider {
-    nonisolated let providerID: ProviderID
+    nonisolated let providerID = ProviderID.gemini
+    private let sources: [ProviderID]
     private var stage = 0
 
-    init(providerID: ProviderID) { self.providerID = providerID }
+    init(sources: [ProviderID]) { self.sources = sources }
 
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         stage += 1
-        if stage == 2 && providerID == .antigravity { throw UITestFixtureError.refreshFailed }
-        return UITestFixtures.googleResult(for: configuration, stage: stage)
+        if stage == 2 && sources == [.antigravity] { throw UITestFixtureError.refreshFailed }
+        return UITestFixtures.googleResult(for: configuration, sources: sources, stage: stage)
     }
 }
 

@@ -410,6 +410,265 @@ private func makeGeminiBatchResponse(_ payload: [Any]) throws -> Data {
     return Data(")]}'\n\n\(rowsString)\n".utf8)
 }
 
+final class UnifiedGeminiUsageProviderTests: XCTestCase {
+    private static let configuration = ProviderAccountConfiguration(
+        id: "gemini.unified", providerID: .gemini, authMethod: .browserSession
+    )
+    private static let metricIDs = [
+        "gemini.five-hour", "gemini.weekly", "antigravity.gemini-5h",
+        "antigravity.gemini-weekly", "antigravity.3p-5h", "antigravity.3p-weekly",
+    ]
+
+    func testSingleGeminiCatalogKeepsSixSourceIdentitiesBeforeConnection() {
+        let metrics = GoogleUsageMetricCatalog.metrics(for: .gemini)
+        XCTAssertEqual(metrics.map(\.id), Self.metricIDs)
+        XCTAssertTrue(metrics.allSatisfy { $0.kind == .unavailableUsage("Setup required") })
+        XCTAssertTrue(GoogleUsageMetricCatalog.missingSourceConfigurations(in: [Self.configuration]).isEmpty)
+        XCTAssertNil(GoogleUsageMetricCatalog.setupDescription(for: .antigravity))
+        XCTAssertEqual(
+            UsageBar(stableKey: "gemini-5h", label: "Renamed", used: 31, limit: 100)
+                .metricIdentifier(providerID: .gemini, index: 5),
+            "antigravity.gemini-5h"
+        )
+    }
+
+    func testUnifiedFetchRenewsOnlyCodingCredentialAndKeepsAllSixMetrics() async throws {
+        let secrets = try Self.secrets(coding: #"{"access_token":"old","refresh_token":"refresh","client_id":"client","client_secret":"client-secret","expiry":"2020-01-01T00:00:00Z"}"#)
+        let fixture = IsolatedTestURLSession { request in
+            if request.url == AntigravityUsageProvider.tokenURL {
+                XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+                return (try Self.http(request), Data(#"{"access_token":"renewed","expires_in":3600}"#.utf8))
+            }
+            return try Self.response(request, codingToken: "renewed")
+        }
+        defer { fixture.invalidate() }
+        let result = try await GeminiUsageProvider(secretStore: secrets, session: fixture.session)
+            .fetchUsage(for: Self.configuration)
+
+        XCTAssertEqual(result.providerID, .gemini)
+        XCTAssertEqual(result.accountID, Self.configuration.id)
+        XCTAssertEqual(result.availableMetrics.map(\.id), Self.metricIDs)
+        XCTAssertEqual(result.configurableMetrics.map(\.id), Self.metricIDs)
+        XCTAssertEqual(result.bars.map(\.usageText), ["12%", "45%", "100%", "31%", "20%", "60%"])
+        XCTAssertEqual(result.bars[2].resetsAt, AntigravityQuotaParser.date("2030-09-11T16:22:20Z"))
+        XCTAssertTrue(result.hasCurrentBars)
+        XCTAssertNil(result.failureMessage)
+        XCTAssertTrue(result.unavailableUsageMetrics.isEmpty)
+        XCTAssertEqual(
+            try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: Self.configuration)),
+            "__Secure-1PSID=apps-cookie"
+        )
+        let storedCoding = try XCTUnwrap(secrets.readSecret(
+            account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: Self.configuration.id)
+        ))
+        XCTAssertEqual(try AntigravityCredentials.parse(storedCoding).accessToken, "renewed")
+    }
+
+    func testMissingCodingCredentialDoesNotReuseAppsCookieOrAnotherAccountsToken() async throws {
+        let secrets = try Self.secrets(coding: nil)
+        try secrets.saveSecret(
+            #"{"access_token":"other-account"}"#,
+            account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: "gemini.other")
+        )
+        let fixture = IsolatedTestURLSession { request in
+            XCTAssertEqual(request.url?.host, "gemini.google.com")
+            return try Self.response(request)
+        }
+        defer { fixture.invalidate() }
+        let result = try await GeminiUsageProvider(secretStore: secrets, session: fixture.session)
+            .fetchUsage(for: Self.configuration)
+
+        XCTAssertEqual(result.bars.map(\.stableKey), ["five-hour", "weekly"])
+        XCTAssertEqual(result.configurableMetrics.count, 6)
+        XCTAssertTrue(result.hasCurrentBars)
+        XCTAssertNil(result.failureMessage)
+        for metricID in Self.metricIDs.suffix(4) {
+            XCTAssertTrue(result.unavailableUsageMetrics[metricID]?.contains("Coding connection required") == true)
+        }
+        XCTAssertFalse(result.usageMessages.joined().contains("Antigravity"))
+    }
+
+    func testAppsReauthenticationLeavesCodingMetricsCurrent() async throws {
+        let secrets = try Self.secrets()
+        let fixture = IsolatedTestURLSession { try Self.response($0, appsStatus: 403) }
+        defer { fixture.invalidate() }
+        let result = try await GeminiUsageProvider(secretStore: secrets, session: fixture.session)
+            .fetchUsage(for: Self.configuration)
+
+        XCTAssertEqual(result.availableMetrics.map(\.id), Array(Self.metricIDs.suffix(4)))
+        XCTAssertTrue(result.hasCurrentBars)
+        XCTAssertNil(result.failureMessage)
+        XCTAssertEqual(result.recoveryAction, .reauthenticate)
+        for metricID in Self.metricIDs.prefix(2) {
+            XCTAssertTrue(result.unavailableUsageMetrics[metricID]?.contains("Sign in again") == true)
+        }
+    }
+
+    @MainActor
+    func testPartialCodingResponseReplacesOldSourceValuesWithoutRecordingUnavailableMetrics() async throws {
+        let suite = "UnifiedGeminiPartial.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let account = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveSecret("__Secure-1PSID=apps-cookie", for: account))
+        XCTAssertTrue(store.saveGeminiCodingSecret(
+            #"{"access_token":"coding-token"}"#,
+            for: account,
+            confirmedSameAccount: true
+        ))
+        let fixture = IsolatedTestURLSession { try Self.response($0, partialCoding: true) }
+        defer { fixture.invalidate() }
+        let cached = ProviderUsageResult(
+            accountID: account.id, providerID: .gemini, title: account.displayName, subtitle: "Old usage",
+            bars: [UsageBar(stableKey: "gemini-weekly", label: "Old weekly", used: 99, limit: 100)],
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let service = UsageRefreshService(
+            providers: [GeminiUsageProvider(secretStore: secrets, session: fixture.session)], initialResults: [cached]
+        )
+        _ = await service.refresh(configuration: account)
+        let result = try XCTUnwrap(service.results.first)
+        let currentIDs = ["gemini.five-hour", "gemini.weekly", "antigravity.gemini-5h", "antigravity.3p-weekly"]
+        XCTAssertEqual(result.availableMetrics.map(\.id), currentIDs)
+        XCTAssertTrue(result.hasCurrentBars)
+        XCTAssertEqual(result.configurableMetrics[3].kind, .unavailableUsage("Unavailable"))
+        XCTAssertEqual(result.configurableMetrics[4].kind, .unavailableUsage("Disabled"))
+
+        WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults)
+        XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.bars.map(\.metricID), currentIDs)
+        let watch = WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store)
+        XCTAssertEqual(watch.accounts.first?.providerName, ProviderID.gemini.displayName)
+        XCTAssertEqual(watch.accounts.first?.metrics.map(\.id), currentIDs)
+        let history = UsageHistoryStore(defaults: defaults)
+        history.record(results: [result])
+        let snapshot = try XCTUnwrap(history.snapshots(for: account.id).first)
+        XCTAssertEqual(snapshot.bars.map(\.stableKey), result.bars.map(\.stableKey))
+        XCTAssertFalse(snapshot.bars.contains { $0.stableKey == "gemini-weekly" })
+    }
+
+    private static func secrets(coding: String? = #"{"access_token":"coding-token"}"#) throws -> MemorySecretStore {
+        let secrets = MemorySecretStore()
+        try secrets.saveSecret("__Secure-1PSID=apps-cookie", account: ProviderConfigurationStore.keychainAccount(for: configuration))
+        if let coding {
+            try secrets.saveSecret(coding, account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: configuration.id))
+        }
+        return secrets
+    }
+
+    private static func http(_ request: URLRequest, status: Int = 200) throws -> HTTPURLResponse {
+        try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: status, httpVersion: nil, headerFields: nil))
+    }
+
+    private static func response(
+        _ request: URLRequest,
+        codingToken: String = "coding-token",
+        appsStatus: Int = 200,
+        partialCoding: Bool = false
+    ) throws -> (HTTPURLResponse, Data) {
+        if request.url?.host == "gemini.google.com" {
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "__Secure-1PSID=apps-cookie")
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            let data = request.url?.path == "/usage"
+                ? Data(#"<script>window.WIZ_global_data={"SNlM0e":"csrf-token"};</script>"#.utf8)
+                : try makeGeminiBatchResponse([2, [[2_400, 0.12, 1, [[1_900_000_000, 0]]], [48_106, 0.45, 2, [[1_900_600_000, 0]]]], false])
+            return (try http(request, status: appsStatus), data)
+        }
+        XCTAssertEqual(request.url, AntigravityUsageProvider.quotaURL)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(codingToken)")
+        XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+        var buckets: [[String: Any]] = zip(GoogleUsageMetricCatalog.codingDefinitions, [0.0, 0.69, 0.8, 0.4]).map { metric, remaining in
+            ["bucketId": metric.key, "window": metric.window, "remainingFraction": remaining, "resetTime": "2030-09-11T16:22:20Z"]
+        }
+        if partialCoding {
+            buckets[1].removeValue(forKey: "remainingFraction")
+            buckets[2]["disabled"] = true
+        }
+        return (try http(request), try JSONSerialization.data(withJSONObject: ["groups": [["buckets": buckets]]]))
+    }
+}
+
+final class UsageRefreshCredentialInvalidationTests: XCTestCase {
+    @MainActor
+    func testCredentialInvalidationRejectsSuspendedSingleAndBatchRefreshCompletions() async {
+        for isBatch in [false, true] {
+            for fails in [false, true] {
+                let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .gemini)
+                let gate = UsageProviderGate()
+                let cached = makeHistoryResult(accountID: configuration.id, providerID: .gemini, fetchedAt: Date(), used: 15)
+                let service = UsageRefreshService(
+                    providers: [StaleCompletionTestUsageProvider(providerID: .gemini, gate: gate, fails: fails)],
+                    initialResults: [cached]
+                )
+                service.updateCurrentConfigurations([configuration])
+                let refresh = Task {
+                    if isBatch {
+                        await service.refresh(configurations: [configuration])
+                    } else {
+                        _ = await service.refresh(configuration: configuration)
+                    }
+                }
+                await gate.waitUntilBlocked()
+                service.invalidateCredentials(accountID: configuration.id)
+                XCTAssertTrue(service.results.isEmpty)
+                XCTAssertEqual(service.refreshingAccountIDs, [configuration.id])
+
+                await gate.release()
+                await refresh.value
+                XCTAssertTrue(service.results.isEmpty, "Batch: \(isBatch), failed response: \(fails)")
+                XCTAssertTrue(service.refreshErrorsByAccountID.isEmpty)
+                XCTAssertNil(service.lastRefreshError)
+                XCTAssertTrue(service.refreshingAccountIDs.isEmpty)
+                XCTAssertEqual(service.trackedRefreshGenerationCount, 1)
+                if !fails {
+                    let replacement = await service.refresh(configuration: configuration)
+                    XCTAssertEqual(replacement?.bars.first?.used, 95)
+                    XCTAssertEqual(service.results.first?.bars.first?.used, 95)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testCredentialInvalidationClearsOnlyTargetAccountAndDoesNotTrackUnknownAccounts() async {
+        let target = ProviderAccountConfiguration(id: "gemini.target", providerID: .gemini, authMethod: .browserSession)
+        let other = ProviderAccountConfiguration(id: "gemini.other", providerID: .gemini, authMethod: .browserSession)
+        let service = UsageRefreshService(providers: [
+            SelectivelyFailingUsageProvider(providerID: .gemini, failedAccountID: target.id),
+        ])
+        await service.refresh(configurations: [target, other])
+        let otherResult = service.results.first { $0.accountID == other.id }
+        XCTAssertNotNil(service.refreshErrorsByAccountID[target.id])
+        XCTAssertNotNil(service.lastRefreshError)
+
+        service.invalidateCredentials(accountID: target.id)
+
+        XCTAssertEqual(service.results, otherResult.map { [$0] } ?? [])
+        XCTAssertTrue(service.refreshErrorsByAccountID.isEmpty)
+        XCTAssertNil(service.lastRefreshError)
+        for index in 0..<100 {
+            service.invalidateCredentials(accountID: "absent.\(index)")
+        }
+        XCTAssertEqual(service.trackedRefreshGenerationCount, 2)
+    }
+
+    @MainActor
+    func testConfigurationSnapshotExcludesArchivedCodingAccounts() async {
+        let gemini = ProviderAccountConfiguration.defaultConfiguration(for: .gemini)
+        let legacy = ProviderAccountConfiguration.defaultConfiguration(for: .antigravity)
+        let legacyResult = makeHistoryResult(accountID: legacy.id, providerID: .antigravity, fetchedAt: Date(), used: 15)
+        let service = UsageRefreshService(providers: [], initialResults: [legacyResult])
+
+        service.updateCurrentConfigurations([gemini, legacy])
+
+        XCTAssertEqual(service.trackedRefreshGenerationCount, 1)
+        XCTAssertTrue(service.results.isEmpty)
+        let legacyRefresh = await service.refresh(configuration: legacy)
+        XCTAssertNil(legacyRefresh)
+    }
+}
+
 final class GeminiSessionLifetimeTests: XCTestCase {
     func testReleasingFiftyProvidersReleasesOwnedSessionsAndDelegates() async throws {
         let references = try (0..<50).map { _ in

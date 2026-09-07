@@ -80,9 +80,9 @@ struct ContentView: View {
         let showGroupHeaders = orchestrator.shouldShowGroupHeaders(for: sections)
         let usageAlertsByAccountID = orchestrator.currentUsageAlertsByAccountID
         let emptyState = DashboardEmptyState.resolve(
-            hasAccounts: !configurationStore.configurations.isEmpty,
-            hasEnabledAccounts: configurationStore.configurations.contains(where: \.isEnabled),
-            needsSetupAccountID: configurationStore.configurations.first(where: {
+            hasAccounts: !configurationStore.visibleConfigurations.isEmpty,
+            hasEnabledAccounts: configurationStore.visibleConfigurations.contains(where: \.isEnabled),
+            needsSetupAccountID: configurationStore.visibleConfigurations.first(where: {
                 $0.isEnabled && !configurationStore.isConfigured($0)
             })?.id,
             cardsAreEmpty: cardItems.isEmpty,

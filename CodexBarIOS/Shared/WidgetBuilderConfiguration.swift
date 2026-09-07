@@ -194,9 +194,13 @@ public extension CodexBarWidgetSnapshot {
             return exactMatch
         }
 
+        if let linked = results.first(where: { provider in
+            (provider.legacyAccountIDs ?? []).contains { tileID == "provider.\($0)" }
+        }) { return linked.builderSummaryTile }
+
         for provider in results.sorted(by: { $0.accountID.count > $1.accountID.count }) {
             let identityMatches = provider.bars.filter {
-                $0.matchesSavedBuilderTileID(tileID, accountID: provider.accountID)
+                $0.matchesSavedBuilderTileID(tileID, accountID: provider.accountID, legacyAccountIDs: provider.legacyAccountIDs ?? [])
             }
             if identityMatches.count == 1, let identityMatch = identityMatches.first {
                 return provider.builderBarTile(identityMatch)
@@ -205,6 +209,7 @@ public extension CodexBarWidgetSnapshot {
                 $0.element.matchesSavedBuilderTileID(
                     tileID,
                     accountID: provider.accountID,
+                    legacyAccountIDs: provider.legacyAccountIDs ?? [],
                     currentIndex: $0.offset
                 )
             }) {
@@ -220,18 +225,21 @@ public extension CodexBarWidgetUsageBarSnapshot {
     func matchesSavedBuilderTileID(
         _ tileID: String,
         accountID: String,
+        legacyAccountIDs: [String] = [],
         currentIndex: Int? = nil
     ) -> Bool {
         let savedBarID = tileID.hasPrefix("bar.")
             ? String(tileID.dropFirst("bar.".count))
             : tileID
+        let matchesLegacyAccount = legacyAccountIDs.contains { savedBarID.hasPrefix("\($0).") }
+        if matchesLegacyAccount && metricID?.hasPrefix("antigravity.") != true { return false }
         if savedBarID == id
             || savedBarID == "\(accountID).\(id)" {
             return true
         }
 
         guard
-            let savedIdentity = Self.identity(in: savedBarID, accountID: accountID),
+            let savedIdentity = ([accountID] + legacyAccountIDs).compactMap({ Self.identity(in: savedBarID, accountID: $0) }).first,
             let currentIdentity = Self.identity(in: id, accountID: accountID)
         else {
             return false
@@ -244,7 +252,7 @@ public extension CodexBarWidgetUsageBarSnapshot {
                         Self.normalizedBarLabel(label)
                     )
             }
-            return savedIndex == currentIndex
+            return !matchesLegacyAccount && savedIndex == currentIndex
         }
         return Self.canonicalIdentitySuffix(savedIdentity.suffix)
             == Self.canonicalIdentitySuffix(currentIdentity.suffix)

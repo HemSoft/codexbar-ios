@@ -28,7 +28,7 @@ struct SmokeTests {
         await service.refresh()
 
         expect(
-            Set(service.results.map(\.providerID)) == Set(ProviderID.allCases),
+            Set(service.results.map(\.providerID)) == Set(ProviderID.allCases.filter { $0 != .antigravity }),
             "demo refresh should include every provider"
         )
         expect(service.isRefreshing == false, "refresh flag should reset")

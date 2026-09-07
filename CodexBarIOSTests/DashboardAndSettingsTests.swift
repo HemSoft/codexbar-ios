@@ -175,7 +175,7 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertEqual(
             Set(service.results.map(\.providerID)),
-            Set(ProviderID.allCases)
+            Set(ProviderID.allCases.filter { $0 != .antigravity })
         )
         XCTAssertFalse(service.isRefreshing)
         XCTAssertNil(service.lastRefreshError)

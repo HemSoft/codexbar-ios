@@ -90,6 +90,42 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
         XCTAssertEqual(sample.clampedUsedFraction, 0)
     }
 
+    func testConfirmedGoogleAliasPreservesCodingSelectionAndMissingSourceStatus() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let apps = WatchMetricSnapshot(id: "gemini.weekly", label: "Gemini Apps weekly", exactValue: "10%")
+        let coding = WatchMetricSnapshot(id: "antigravity.gemini-weekly", label: "Gemini Models weekly", exactValue: "31%")
+        let selection = WatchComplicationSelection(accountID: "legacy-coding", metricID: "antigravity.gemini-weekly")
+        for metrics in [[apps, coding], [apps]] {
+            let original = WatchDashboardSnapshot(
+                generatedAt: now, refreshIntervalSeconds: 300,
+                accounts: [WatchAccountSnapshot(
+                    id: "gemini.account", legacyAccountIDs: ["legacy-coding"], providerName: "Google Gemini",
+                    accountLabel: "Personal", fetchedAt: now, metrics: metrics
+                ),
+                ]
+            )
+            let decoded = try WatchDashboardSnapshot.decode(JSONEncoder().encode(original))
+            XCTAssertEqual(decoded.accounts.first?.legacyAccountIDs, ["legacy-coding"])
+            let resolver = WatchComplicationResolver()
+            let sample = resolver.resolve(snapshot: decoded, selection: selection, at: now)
+            let automaticLegacy = resolver.resolve(
+                snapshot: decoded, selection: WatchComplicationSelection(accountID: "legacy-coding", metricID: nil), at: now
+            )
+            XCTAssertEqual(sample.availability, metrics.count == 2 ? .value : .unavailable)
+            XCTAssertEqual(automaticLegacy.availability, sample.availability)
+            if metrics.count == 2 {
+                XCTAssertEqual(sample.exactValue, "31%")
+                XCTAssertEqual(automaticLegacy.metricLabel, "Gemini Models weekly")
+                let choices = WatchComplicationChoiceCatalog(snapshot: decoded)
+                XCTAssertEqual(choices.accounts(for: ["legacy-coding"]).first?.providerName, "Google Gemini")
+                XCTAssertEqual(choices.metrics(for: ["legacy-coding::antigravity.gemini-weekly"]).first?.metricLabel, "Gemini Models weekly")
+            }
+            XCTAssertEqual(resolver.resolve(
+                snapshot: decoded, selection: WatchComplicationSelection(accountID: "unlinked", metricID: coding.id), at: now
+            ).availability, .unavailable)
+        }
+    }
+
     private func snapshot(
         accountID: String = "greptile.team",
         providerName: String = "Greptile",
