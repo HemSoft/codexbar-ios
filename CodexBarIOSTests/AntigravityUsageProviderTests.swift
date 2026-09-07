@@ -352,6 +352,37 @@ final class AntigravityUsageProviderTests: XCTestCase {
     }
 
     @MainActor
+    func testConfirmedArchiveNameCanBeReusedWithoutLosingUnlinkedNameReservations() throws {
+        let suite = "GoogleArchiveNames.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        var apps = store.addAccount(for: .gemini)
+        var coding = store.addAccount(for: .antigravity)
+        var other = store.addAccount(for: .gemini)
+        coding.accountLabel = "Personal Google"
+        XCTAssertTrue(store.update(coding))
+        let token = #"{"access_token":"coding-token"}"#
+        XCTAssertTrue(store.saveSecret(token, for: coding))
+        apps.accountLabel = "PERSONAL GOOGLE"
+        XCTAssertFalse(store.update(apps), "Unlinked legacy sessions still reserve their names for association.")
+        XCTAssertEqual(store.unlinkedGeminiCodingAccounts, [coding])
+        XCTAssertTrue(store.linkGeminiCodingAccount(coding, to: apps, confirmedSameAccount: true))
+        XCTAssertTrue(store.update(apps), "A confirmed archival record must not block the visible account name.")
+        other.accountLabel = "personal google"
+        XCTAssertFalse(store.update(other), "Visible names remain case-insensitively unique.")
+        XCTAssertEqual(store.configuration(accountID: coding.id), coding)
+        XCTAssertEqual(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: coding)), token)
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        XCTAssertEqual(restored.configuration(accountID: apps.id)?.displayName, "PERSONAL GOOGLE")
+        XCTAssertEqual(restored.configuration(accountID: coding.id), coding)
+        XCTAssertEqual(restored.confirmedGoogleAccountLinks, [coding.id: apps.id])
+        XCTAssertTrue(restored.unlinkedGeminiCodingAccounts.isEmpty)
+        XCTAssertFalse(restored.update(other))
+    }
+
+    @MainActor
     func testPendingConfirmedLinkResumesAfterCredentialCopyWithoutGuessing() throws {
         let suite = "GoogleLinkRecovery.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

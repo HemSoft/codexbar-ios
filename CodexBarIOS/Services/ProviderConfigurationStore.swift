@@ -2295,7 +2295,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private func isAccountNameUnique(_ configuration: ProviderAccountConfiguration) -> Bool {
         let name = configuration.displayName
 
-        return !configurations.contains {
+        return !(visibleConfigurations + unlinkedGeminiCodingAccounts).contains {
             $0.id != configuration.id
                 && $0.displayName.localizedCaseInsensitiveCompare(name) == .orderedSame
         }
