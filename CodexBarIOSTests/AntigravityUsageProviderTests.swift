@@ -41,13 +41,21 @@ final class AntigravityUsageProviderTests: XCTestCase {
 
     @MainActor
     func testCodingReconnectValidatesBeforeSavingAndRefreshesOnce() async throws {
+        try await verifyCodingReconnect(hasAppsSession: true)
+        try await verifyCodingReconnect(hasAppsSession: false)
+    }
+
+    @MainActor
+    private func verifyCodingReconnect(hasAppsSession: Bool) async throws {
         let suite = "CodingValidation.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let secrets = MemorySecretStore()
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
         let account = store.addAccount(for: .gemini)
-        XCTAssertTrue(store.saveSecret("__Secure-1PSID=apps", for: account))
+        if hasAppsSession {
+            XCTAssertTrue(store.saveSecret("__Secure-1PSID=apps", for: account))
+        }
         let key = ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: account.id)
         let original = #"{"access_token":"working"}"#
         XCTAssertTrue(store.saveGeminiCodingSecret(original, for: account, confirmedSameAccount: true))

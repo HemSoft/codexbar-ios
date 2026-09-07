@@ -509,7 +509,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func receiveGoogleCodingCredential(_ credentials: AntigravityCredentials) async throws {
-        if configurationStore.hasSecret(for: configuration) {
+        if configurationStore.hasSecret(for: configuration)
+            || configurationStore.hasGeminiCodingSecret(for: configuration) {
             pendingGoogleCodingCredential = credentials
             needsGoogleCodingAccountConfirmation = true
             return
