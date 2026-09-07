@@ -13,7 +13,7 @@ struct AntigravityCredentials: Codable, Equatable, Sendable {
         case invalid
 
         var errorDescription: String? {
-            "Import Antigravity session JSON containing a valid access_token."
+            "The saved coding session is invalid. Open Gemini settings to manage the connection."
         }
     }
 

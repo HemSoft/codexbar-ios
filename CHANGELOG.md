@@ -111,7 +111,8 @@ building, testing, or releasing the app.
 
 - Added a development-only, one-time session handoff for connected devices.
   It saves an existing renewable coding session to the selected account's
-  Keychain and removes the staging file. Release builds exclude this tool;
+  Keychain and removes the staging file. An unreadable Keychain slot is never
+  treated as empty. Release builds exclude this tool;
   guided phone authorization remains unfinished.
   ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
 

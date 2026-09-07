@@ -189,14 +189,13 @@ final class ProviderSettingsViewModel: ObservableObject {
     var credentialPresentation: ProviderCredentialPresentation {
         if providerID == .antigravity {
             return ProviderCredentialPresentation(
-                sectionTitle: "Antigravity Session Import",
-                unsavedPlaceholder: "Paste Antigravity session JSON",
+                sectionTitle: "Saved Coding Connection",
+                unsavedPlaceholder: "Coding session",
                 savedPlaceholder: "Antigravity session saved",
                 saveButtonTitle: "Save and Validate Session",
-                setupMessage: "Import a session from your signed-in Antigravity desktop. "
-                    + "Without renewal credentials, import again when the access token expires. "
-                    + "Sign-in directly on iPhone is not available yet.",
-                setupLinkTitle: "Antigravity import instructions",
+                setupMessage: "Manage saved coding connections in Gemini settings. "
+                    + "New coding setup is not available in this build.",
+                setupLinkTitle: "Coding connection details",
                 setupURL: URL(string: "https://github.com/HemSoft/codexbar-ios/blob/main/ANTIGRAVITY-SETUP.md"),
                 securityMessage: "Session tokens may grant broader Google account access. "
                     + "They stay in this account's Keychain entry. This integration uses an unofficial quota API."
