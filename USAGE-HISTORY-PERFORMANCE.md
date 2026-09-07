@@ -401,8 +401,10 @@ The study retains the plan, all 24 raw reports in the existing lossless format,
 their independent pinned hashes, the four original verdicts, machine snapshots,
 artifact hashes and the build-input file manifest. Apply
 `scripts/usage-history-performance/clean-build-inputs.patch` to the frozen
-baseline to reconstruct the benchmark build inputs and runner. The patch hash
-is pinned in `cleanInputProof`; its production-source diff is empty.
+baseline to reconstruct the benchmark build inputs and runner. The patch hash, revision, file digests and trial metadata are independently
+pinned in `clean-input-manifest.json`. Replay reconstructs and verifies all
+111 build-input files from the baseline and rejects altered or dirty proof
+metadata. The production-source diff is empty.
 
 | Experiment | Result | Largest run CV |
 | --- | --- | ---: |

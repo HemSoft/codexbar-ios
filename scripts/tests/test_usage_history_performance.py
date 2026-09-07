@@ -136,10 +136,19 @@ class PerformanceGateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 REPLAY.replay_study(study, POLICY)
         for field in ("status", "productionDiff", "patchSHA256"):
-            study = copy.deepcopy(original)
-            study["cleanInputProof"][field] = "unverified"
-            with self.assertRaises(ValueError):
-                REPLAY.replay_study(study, POLICY)
+            for value in ("unverified", None, False, 0, [], {}):
+                study = copy.deepcopy(original)
+                study["cleanInputProof"][field] = value
+                with self.assertRaises(ValueError):
+                    REPLAY.replay_study(study, POLICY)
+        study = copy.deepcopy(original)
+        study["cleanInputProof"]["revision"] = "coordinated"
+        study["cleanInputProof"]["files"]["Package.swift"] = "changed"
+        for recording in study["experiments"]:
+            if recording["name"].startswith("clean-"):
+                recording["metadata"]["candidateRevision"] = "coordinated"
+        with self.assertRaises(ValueError):
+            REPLAY.replay_study(study, POLICY)
 
     def test_coordinated_report_hash_and_verdict_edits_are_rejected(self):
         original = json.loads(SCRIPT.with_name("repeatability-study.json").read_text())

@@ -4,11 +4,14 @@ import copy
 import hashlib
 import json
 import math
+import subprocess
+import tempfile
 from pathlib import Path
 
 from run import evaluate, validate
 
 SUMMARY_ROUNDOFF = 1e-12
+CLEAN_INPUT_MANIFEST = json.loads(Path(__file__).with_name("clean-input-manifest.json").read_text())
 STUDY_MANIFEST = json.loads(Path(__file__).with_name("repeatability-manifest.json").read_text())
 # Keep the complete study manifest outside its mutable measurement recording.
 STUDY_EXPERIMENT_NAMES = (
@@ -52,6 +55,25 @@ def expand_runs(recording):
     return runs
 
 
+def verify_clean_inputs(proof, policy):
+    pinned = CLEAN_INPUT_MANIFEST
+    patch = Path(__file__).with_name("clean-build-inputs.patch")
+    if (json.dumps(proof, sort_keys=True) != json.dumps(pinned["proof"], sort_keys=True)
+            or proof["status"] != "" or proof["productionDiff"] != ""
+            or policy["revision"] != pinned["baselineRevision"]
+            or hashlib.sha256(patch.read_bytes()).hexdigest() != pinned["proof"]["patchSHA256"]):
+        raise ValueError("clean study build-input proof is invalid")
+    root = Path(__file__).resolve().parents[2]
+    with tempfile.TemporaryDirectory(prefix="verify-clean-inputs-") as directory:
+        archive = subprocess.check_output(
+            ["git", "archive", pinned["baselineRevision"]], cwd=root)
+        subprocess.run(["tar", "-x", "-C", directory], input=archive, check=True)
+        subprocess.run(["git", "apply", str(patch.resolve())], cwd=directory, check=True)
+        for name, digest in pinned["buildInputs"].items():
+            if hashlib.sha256((Path(directory) / name).read_bytes()).hexdigest() != digest:
+                raise ValueError(f"reconstructed build input differs: {name}")
+
+
 def replay_study(study, policy):
     if study["recordingFormat"] != "paired-study-v1" or study["policy"] != policy:
         raise ValueError("unsupported study format or changed study policy")
@@ -61,15 +83,14 @@ def replay_study(study, policy):
             or tuple(STUDY_MANIFEST) != STUDY_EXPERIMENT_NAMES):
         raise ValueError("missing, duplicated or reordered study experiments")
     proof = study["cleanInputProof"]
-    patch = Path(__file__).with_name("clean-build-inputs.patch").read_bytes()
-    if (proof["status"] or proof["productionDiff"]
-            or hashlib.sha256(patch).hexdigest() != proof["patchSHA256"]):
-        raise ValueError("clean study build-input proof is invalid")
+    verify_clean_inputs(proof, policy)
     results = []
     for recording in study["experiments"]:
         if recording["name"].startswith("clean-"):
             metadata = recording["metadata"]
-            if (metadata["candidateDirty"] is not False
+            if (json.dumps(metadata, sort_keys=True)
+                    != json.dumps(CLEAN_INPUT_MANIFEST["metadata"][recording["name"]], sort_keys=True)
+                    or metadata["candidateDirty"] is not False
                     or metadata["candidateRevision"] != proof["revision"]):
                 raise ValueError("clean study requires the captured clean revision")
         runs = expand_runs(recording)
