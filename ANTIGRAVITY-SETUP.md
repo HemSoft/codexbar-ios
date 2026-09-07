@@ -41,9 +41,9 @@ when their Gemini account can be identified.
 
 ## Browser setup
 
-In Gemini settings, choose **Connect Coding Usage**, confirm that you will
-select the same Google account used for Gemini Apps, and complete Google's
-browser authorization. CodexBar saves the returned session in account-scoped
+In Gemini settings, choose **Connect Coding Usage** and complete Google's
+browser authorization. If Gemini Apps is connected, confirm the selected
+Google account after the browser returns and before the session is saved. CodexBar saves the returned session in account-scoped
 Keychain storage and refreshes usage. Cancellation preserves saved credentials.
 The app no longer asks users to paste or export session JSON.
 

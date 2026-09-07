@@ -87,7 +87,8 @@ in that account's iOS Keychain entry. You can also use the window's **Back** and
 Use **Sign in Again with Google** to renew an expired session. Existing accounts
 created by pasting credentials keep their saved session, label, group, history,
 and display preferences. If a coding session is linked, confirm that the new
-Google sign-in belongs to the same Google account before reconnecting. Add a
+Google account selected in the browser belongs to the linked coding session
+before the new session is saved. Add a
 separate Gemini entry for another Google account. **Disconnect Gemini Apps**
 removes this account's website session and preserves its coding session.
 **Disconnect Coding Session** removes only coding authorization. Neither action

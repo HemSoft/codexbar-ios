@@ -425,9 +425,11 @@ struct ProviderSettingsView: View {
             viewModel.flushPendingChanges()
             viewModel.cancelAuthentication()
         }
-        .sheet(item: $viewModel.geminiBrowserSession) { session in
+        .sheet(item: $viewModel.geminiBrowserSession, onDismiss: {
+            if viewModel.needsGeminiAccountConfirmation { requestGeminiConfirmation(.appsReconnect) }
+        }, content: { session in
             GeminiBrowserSignInView(session: session)
-        }
+        })
         .sheet(item: $viewModel.authURL) { authURL in
             SafariAuthSheet(url: authURL.url)
         }
@@ -438,6 +440,7 @@ struct ProviderSettingsView: View {
             Button("Same Google Account") { confirmGeminiAction() }
             Button("Cancel", role: .cancel) {
                 viewModel.cancelGoogleCodingSignIn()
+                viewModel.cancelGeminiSignIn()
                 pendingGeminiConfirmation = nil
             }
         } message: {
@@ -448,11 +451,7 @@ struct ProviderSettingsView: View {
     private var geminiAppsConnection: some View {
         Group {
             Button(configurationStore.hasSecret(for: viewModel.configuration) ? "Sign in Again with Google" : "Sign in with Google") {
-                if configurationStore.hasGeminiCodingSecret(for: viewModel.configuration) {
-                    requestGeminiConfirmation(.appsReconnect)
-                } else {
-                    viewModel.startGeminiSignIn()
-                }
+                viewModel.startGeminiSignIn()
             }
             .disabled(viewModel.isSigningInWithGemini)
             if viewModel.isSigningInWithGemini {
@@ -518,7 +517,7 @@ struct ProviderSettingsView: View {
     private var geminiConfirmationMessage: String {
         switch pendingGeminiConfirmation {
         case .appsReconnect:
-            "Sign in to the same Google account as the coding session already linked to \(viewModel.configuration.displayName). "
+            "Confirm that the Google account you just selected is the same as the coding session linked to \(viewModel.configuration.displayName). "
                 + "To use a different Google identity, add another Gemini account."
         case .legacyLink(let legacy):
             "Confirm that the saved coding account \(legacy.displayName) and \(viewModel.configuration.displayName) "
@@ -541,7 +540,7 @@ struct ProviderSettingsView: View {
         case .legacyLink(let legacy):
             viewModel.linkGeminiCodingAccount(legacy, confirmedSameAccount: true)
         case .appsReconnect:
-            viewModel.startGeminiSignIn(confirmedSameAccount: true)
+            viewModel.confirmGeminiAppsAccount()
         case nil:
             break
         }
