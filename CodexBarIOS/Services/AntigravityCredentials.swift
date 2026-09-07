@@ -81,3 +81,45 @@ struct AntigravityCredentials: Codable, Equatable, Sendable {
         return nil
     }
 }
+
+#if DEBUG
+/// Installs an existing session during a developer-controlled device deployment.
+/// This is excluded from release builds and is never an end-user setup flow.
+@MainActor
+enum DeveloperGoogleSessionInstaller {
+    static let fileName = "google-coding-development-session.json"
+    static let launchArgument = "--install-development-google-session"
+
+    private struct Payload: Decodable {
+        let accountID: String
+        let credential: String
+        let confirmedSameAccount: Bool
+    }
+
+    static func installIfRequested(
+        configurationStore: ProviderConfigurationStore,
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        directory: URL? = nil
+    ) -> Bool {
+        guard arguments.contains(launchArgument),
+              let directory = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        else { return false }
+        let url = directory.appendingPathComponent(fileName)
+        defer { try? FileManager.default.removeItem(at: url) }
+        guard OpenCodeZenBootstrapImporter.protectImportFile(at: url, fileManager: .default),
+              let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size <= 65_536,
+              let data = try? Data(contentsOf: url),
+              let payload = try? JSONDecoder().decode(Payload.self, from: data),
+              payload.confirmedSameAccount,
+              let account = configurationStore.configuration(accountID: payload.accountID),
+              account.providerID == .gemini,
+              let credential = try? AntigravityCredentials.parse(payload.credential),
+              credential.canRefresh
+        else { return false }
+        return configurationStore.saveGeminiCodingSecret(
+            payload.credential, for: account, confirmedSameAccount: true, requireEmptySlot: true
+        )
+    }
+}
+#endif

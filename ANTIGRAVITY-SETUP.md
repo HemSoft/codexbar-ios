@@ -126,7 +126,7 @@ Franz took ownership of the remaining live iPhone testing on September 6 and
 directed that it no longer block PR #320. He reported Gemini Models weekly at
 71% remaining and the other three coding buckets at 100% remaining. These are
 reference values, not a successful phone fetch. Coding values and reset parity,
-import/reimport and combined-card customization remain his follow-up checks in
+reconnection and combined-card customization remain his follow-up checks in
 [#319](https://github.com/HemSoft/codexbar-ios/issues/319). They are not claimed
 as passed and do not block delivery of the unified account.
 

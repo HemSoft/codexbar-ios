@@ -2487,12 +2487,17 @@ public extension ProviderConfigurationStore {
     func saveGeminiCodingSecret(
         _ secret: String,
         for configuration: ProviderAccountConfiguration,
-        confirmedSameAccount: Bool
+        confirmedSameAccount: Bool,
+        requireEmptySlot: Bool = false
     ) -> Bool {
         guard allowConfigurationMutation(), confirmedSameAccount,
               configuration.providerID == .gemini,
               self.configuration(accountID: configuration.id)?.providerID == .gemini else { return false }
         do {
+            if requireEmptySlot,
+               try secretStore.readSecret(account: Self.geminiCodingKeychainAccount(accountID: configuration.id)) != nil {
+                return false
+            }
             let credential = try AntigravityCredentials.parse(secret).encoded()
             try secretStore.saveSecret(credential, account: Self.geminiCodingKeychainAccount(accountID: configuration.id))
             credentialChanges.send(configuration.id)

@@ -92,7 +92,7 @@ final class AntigravityUsageProviderTests: XCTestCase {
         let suite = "CodingHandoff.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let secrets = MemorySecretStore()
+        let secrets = SelectiveReadFailureSecretStore()
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
         let account = store.addAccount(for: .gemini)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -116,6 +116,17 @@ final class AntigravityUsageProviderTests: XCTestCase {
             configurationStore: store, arguments: [DeveloperGoogleSessionInstaller.launchArgument], directory: directory
         ))
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        let key = ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: account.id)
+        try secrets.saveSecret("existing-session", account: key)
+        secrets.failingAccount = key
+        try stage(accountID: account.id)
+        XCTAssertFalse(DeveloperGoogleSessionInstaller.installIfRequested(
+            configurationStore: store, arguments: [DeveloperGoogleSessionInstaller.launchArgument], directory: directory
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        secrets.failingAccount = nil
+        XCTAssertEqual(try secrets.readSecret(account: key), "existing-session")
+        try secrets.deleteSecret(account: key)
         try stage(accountID: account.id)
         XCTAssertTrue(DeveloperGoogleSessionInstaller.installIfRequested(
             configurationStore: store, arguments: [DeveloperGoogleSessionInstaller.launchArgument], directory: directory
