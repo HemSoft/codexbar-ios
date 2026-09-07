@@ -86,6 +86,9 @@ struct CodexBarIOSApp: App {
                 .task {
                     #if DEBUG
                     if UITestFixtures.current != nil { return }
+                    if DeveloperGoogleSessionInstaller.installIfRequested(configurationStore: configurationStore) {
+                        await refreshService.refresh(configurations: configurationStore.visibleConfigurations)
+                    }
                     if let screenshotConfiguration {
                         let settleNanoseconds = UInt64(
                             screenshotConfiguration.settleDelay * 1_000_000_000

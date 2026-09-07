@@ -19,7 +19,8 @@ The Windows reference implementation is checked out beside this repo at:
   lock-screen widgets
 - Read-only Greptile review-activity tracking through an organization API key,
   with completed reviews kept distinct from pull requests and billing credits
-- Read-only consumer Gemini Apps usage tracking through Google website sign-in, with separate 5-hour and weekly meters and reset times
+- One Google Gemini account with six usage metrics for Gemini Apps, Gemini Models,
+  and Other models, with separate five-hour and weekly limits for each source
 - An embedded watchOS companion with a live, read-only dashboard that mirrors
   presentation-ready account metrics, visualization choices, ordering, and
   freshness from iPhone; provider setup, credentials, and provider networking
@@ -73,11 +74,11 @@ documented defaults in `CopilotWebAuthService.swift`.
 
 ## Google Gemini sign-in
 
-This experimental website integration is implemented for testing. The earlier
-simulator probe verified consumer usage, but production live sign-in, account
-switching, and reconnect on a connected iPhone remain a pre-release gate. The
-steps below describe the intended workflow; see the current verification
-boundaries in [Gemini sign-in evidence](GEMINI-SIGN-IN.md).
+One Gemini account contains all six Google usage metrics. Gemini Apps uses a
+Google website session; Gemini Models and Other models use a separate
+coding OAuth session inside the same account. Both connections are experimental.
+See the verification boundaries in [Gemini sign-in evidence](GEMINI-SIGN-IN.md)
+and [coding session setup](ANTIGRAVITY-SETUP.md).
 
 Choose **Add Account → Google Gemini → Sign in with Google** and sign in to the
 Google account you want to track. Each attempt opens a private website window
@@ -89,10 +90,23 @@ in that account's iOS Keychain entry. You can also use the window's **Back** and
 
 Use **Sign in Again with Google** to renew an expired session. Existing accounts
 created by pasting credentials keep their saved session, label, group, history,
-and display preferences. Reconnecting replaces only their credential. Add a
-separate Gemini entry for another Google account. **Disconnect Google Account**
-removes only the selected entry's saved session and does not sign you out of
-Google in Safari or disconnect another CodexBar entry.
+and display preferences. If a coding session is linked, confirm that the new
+Google account selected in the browser belongs to the linked coding session
+before the new session is saved. Add a
+separate Gemini entry for another Google account. **Disconnect Gemini Apps**
+removes this account's website session and preserves its coding session.
+**Disconnect Coding Session** removes only coding authorization. Neither action
+signs you out of Google in Safari or disconnects another CodexBar entry.
+
+Open **Coding Usage → Connect Coding Usage** in the same Gemini settings.
+Confirm that you will choose the same Google account, then complete browser
+authorization. This flow requires the developer to configure a Google OAuth
+iOS client before deployment; end users do not enter client settings. Existing standalone coding accounts are retained and
+can be linked here after that confirmation; CodexBar does not guess associations
+from matching labels. All six metrics stay available in Metrics and Customize
+Card even when a source needs setup. Their saved identities, layout, and history
+survive the account consolidation. See [coding session setup](ANTIGRAVITY-SETUP.md)
+for developer configuration and renewal details.
 
 Cancellation, a failed usage check, and a failed Keychain save leave the existing
 credential unchanged. If Google denies access, cancel and retry with an eligible
@@ -137,9 +151,10 @@ findings, survivor triage, and reproducible local command.
 
 The current Windows app is a C# / WPF / .NET 9 system tray app with shared provider logic in `src/CodexBar.Core`. The iOS implementation should port behavior from there deliberately instead of sharing project structure directly.
 
-## Antigravity quotas
+## Gemini coding quotas
 
-Antigravity session import tracks separate Gemini and Claude/GPT five-hour and
-weekly quotas. It does not replace Google Gemini Apps accounts. See
-[Antigravity setup](ANTIGRAVITY-SETUP.md) for the experimental import flow, token
-renewal requirements, and deferred connected-iPhone validation.
+The Gemini account's Coding Usage connection reads Gemini Models and Other
+models, Claude/GPT, from the internal Antigravity quota adapter. Each has
+five-hour and weekly metrics alongside Gemini Apps on one dashboard card. See
+[coding session setup](ANTIGRAVITY-SETUP.md) for browser setup, renewal, and the
+remaining live comparison checks.

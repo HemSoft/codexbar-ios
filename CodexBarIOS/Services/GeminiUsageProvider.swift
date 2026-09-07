@@ -151,6 +151,7 @@ public final class GeminiUsageProvider: UsageProvider {
     private let session: URLSession
     private let ownsSession: Bool
     private let usageURL: URL
+    private let codingProvider: AntigravityUsageProvider
 
     private static let rpcID = "jSf9Qc"
 
@@ -171,6 +172,10 @@ public final class GeminiUsageProvider: UsageProvider {
         usageURL: URL
     ) {
         self.secretStore = secretStore
+        self.codingProvider = AntigravityUsageProvider(
+            secretStore: secretStore,
+            sessionConfiguration: session?.configuration ?? sessionConfiguration
+        )
         self.session = session ?? Self.makeSession(configuration: sessionConfiguration)
         self.ownsSession = session == nil
         self.usageURL = usageURL
@@ -184,6 +189,57 @@ public final class GeminiUsageProvider: UsageProvider {
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        async let apps = fetchAppsUsage(for: configuration)
+        async let coding = codingProvider.fetchUsage(
+            for: configuration,
+            keychainAccount: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: configuration.id)
+        )
+        let sources = try await (apps, coding)
+        try Task.checkCancellation()
+        return Self.combinedResult(apps: sources.0, coding: sources.1, configuration: configuration)
+    }
+
+    private static func combinedResult(
+        apps: ProviderUsageResult,
+        coding: ProviderUsageResult,
+        configuration: ProviderAccountConfiguration
+    ) -> ProviderUsageResult {
+        let bars = apps.bars + coding.bars
+        let failedSources = [apps, coding].filter { $0.failureMessage != nil }
+        let recoverySource = failedSources.first { $0.recoveryAction != .retryRefresh } ?? failedSources.first
+        let failure = bars.isEmpty ? recoverySource?.failureMessage : nil
+        let unavailable = sourceAvailability(apps, definitions: GoogleUsageMetricCatalog.appsDefinitions)
+            .merging(sourceAvailability(coding, definitions: GoogleUsageMetricCatalog.codingDefinitions)) { _, latest in latest }
+        var messages = apps.usageMessages + coding.usageMessages
+        for message in [apps.failureMessage, coding.failureMessage].compactMap({ $0 }) where !messages.contains(message) {
+            messages.append(message)
+        }
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .gemini,
+            title: configuration.displayName,
+            subtitle: failure ?? "Gemini Apps and coding usage",
+            bars: bars,
+            unavailableUsageMetrics: unavailable,
+            usageMessages: messages,
+            failureMessage: failure,
+            recoveryAction: recoverySource?.recoveryAction ?? .retryRefresh,
+            preserveCachedBarsOnFailure: failure != nil,
+            fetchedAt: Date()
+        )
+    }
+
+    private static func sourceAvailability(
+        _ result: ProviderUsageResult,
+        definitions: [GoogleUsageMetricCatalog.Definition]
+    ) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: definitions.compactMap { definition in
+            guard !result.bars.contains(where: { $0.stableKey == definition.key }) else { return nil }
+            return (definition.id, result.unavailableUsageMetrics[definition.id] ?? result.failureMessage ?? "Unavailable")
+        })
+    }
+
+    private func fetchAppsUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         let storedSecret: String?
         do {
             storedSecret = try secretStore.readSecret(

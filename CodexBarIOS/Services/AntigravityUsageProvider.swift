@@ -1,7 +1,7 @@
 import Foundation
 
-public final class AntigravityUsageProvider: UsageProvider {
-    public let providerID = ProviderID.antigravity
+final class AntigravityUsageProvider: UsageProvider {
+    let providerID = ProviderID.antigravity
     private let secretStore: SecretStore
     private let session: URLSession
     static let quotaURL = URL(string: "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary")!
@@ -36,7 +36,7 @@ public final class AntigravityUsageProvider: UsageProvider {
         }
     }
 
-    public convenience init(secretStore: SecretStore = KeychainService()) {
+    convenience init(secretStore: SecretStore = KeychainService()) {
         self.init(secretStore: secretStore, sessionConfiguration: .ephemeral)
     }
 
@@ -52,18 +52,36 @@ public final class AntigravityUsageProvider: UsageProvider {
 
     deinit { session.invalidateAndCancel() }
 
-    public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        try await fetchUsage(for: configuration, keychainAccount: ProviderConfigurationStore.keychainAccount(for: configuration))
+    }
+
+    /// Gemini supplies its isolated coding credential account; the adapter also reads retained legacy credentials.
+    func fetchUsage(
+        for configuration: ProviderAccountConfiguration,
+        keychainAccount: String
+    ) async throws -> ProviderUsageResult {
         do {
-            let account = ProviderConfigurationStore.keychainAccount(for: configuration)
-            guard let stored = try secretStore.readSecret(account: account) else { throw FetchError.credential }
+            guard let stored = try secretStore.readSecret(account: keychainAccount) else { throw FetchError.credential }
             let credentials = try AntigravityCredentials.parse(stored)
-            let data = try await quotaData(credentials, account: account, original: stored)
+            let data = try await quotaData(credentials, account: keychainAccount, original: stored)
             try Task.checkCancellation()
             return try AntigravityQuotaParser.result(from: data, configuration: configuration)
         } catch {
             if error is CancellationError || (error as? URLError)?.code == .cancelled { throw CancellationError() }
             return failure(error, configuration: configuration)
         }
+    }
+
+    /// Validate a newly issued token without reading or replacing the saved session.
+    func validateCandidate(
+        _ credentials: AntigravityCredentials,
+        for configuration: ProviderAccountConfiguration
+    ) async throws {
+        let data = try await responseData(for: quotaRequest(token: credentials.accessToken))
+        try Task.checkCancellation()
+        let result = try AntigravityQuotaParser.result(from: data, configuration: configuration)
+        guard result.failureMessage == nil, !result.bars.isEmpty else { throw FetchError.response }
     }
 
     private func quotaData(_ credentials: AntigravityCredentials, account: String, original: String) async throws -> Data {
@@ -131,6 +149,7 @@ public final class AntigravityUsageProvider: UsageProvider {
             URLQueryItem(name: "client_id", value: credentials.clientID),
             URLQueryItem(name: "client_secret", value: credentials.clientSecret),
         ]
+        components.queryItems = components.queryItems?.filter { $0.value != nil }
         request.httpBody = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B").data(using: .utf8)
         return request
     }
@@ -150,13 +169,19 @@ public final class AntigravityUsageProvider: UsageProvider {
         switch error {
         case FetchError.credential, is AntigravityCredentials.CredentialError,
              FetchError.http(400), FetchError.http(401), FetchError.http(403):
-            message = "Antigravity needs a current session. Import fresh credentials from your desktop."
+            message = configuration.providerID == .gemini
+                ? "Coding connection required. Choose Connect Coding Usage in this Gemini account's settings."
+                : "The saved coding connection needs attention. Open Gemini settings."
             recovery = .reauthenticate
         case FetchError.changedCredential:
-            message = "Antigravity credentials changed during refresh. Refresh this account again."
+            message = configuration.providerID == .gemini
+                ? "Coding credentials changed during refresh. Refresh this Gemini account again."
+                : "Antigravity credentials changed during refresh. Refresh this account again."
             recovery = .retryRefresh
         default:
-            message = "Antigravity quotas are unavailable. Try refreshing again."
+            message = configuration.providerID == .gemini
+                ? "Coding quotas are unavailable. Try refreshing again."
+                : "Antigravity quotas are unavailable. Try refreshing again."
             recovery = .retryRefresh
         }
         return ProviderUsageResult(

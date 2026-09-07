@@ -14,6 +14,7 @@ final class AccountJourneysUITests: XCTestCase {
         tap(app.buttons["Done"], in: app)
 
         tap(app.buttons["dashboard-add-account"], in: app)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Antigravity")).firstMatch.exists)
         tap(app.buttons["OpenRouter"], in: app)
         let accountLabel = app.textFields["account-label"]
         reveal(accountLabel, in: app)
@@ -91,11 +92,10 @@ final class AccountJourneysUITests: XCTestCase {
         for (id, value) in zip(Self.codingMetricIDs, ["0%", "31%", "0%", "0%"]) {
             assertGoogleMetric(id, contains: value, in: app)
         }
-        openGoogleAccount("Apps Fixture", in: app)
-        assertMetricSwitches(["gemini.five-hour", "gemini.weekly"], in: app)
-        dismissAccountSettings(in: app)
-        openGoogleAccount("Coding Fixture", in: app)
-        assertMetricSwitches(Self.codingMetricIDs, in: app)
+        XCTAssertFalse(app.buttons["More options for Antigravity"].exists)
+        XCTAssertFalse(app.buttons["More options for Coding Fixture"].exists)
+        openGoogleAccount("Gemini Fixture", in: app)
+        assertMetricSwitches(Self.allGoogleMetricIDs, in: app)
         dismissAccountSettings(in: app)
 
         openCodingCustomizer(in: app)
@@ -134,10 +134,48 @@ final class AccountJourneysUITests: XCTestCase {
         app.tap()
     }
 
-    func testAntigravityOnlyChoicesSurvivePartialAndFailedRefresh() throws {
-        let app = launch(scenario: "google-antigravity")
-        XCTAssertTrue(app.buttons["More options for Coding Fixture"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["More options for Apps Fixture"].waitForNonExistence(timeout: 5))
+    func testGeminiOnlyDashboardShowsCodingSetupAndKeepsSelectionOnRelaunch() throws {
+        let app = launch(scenario: "google-apps-only")
+        assertGoogleMetric("gemini.five-hour", contains: "12%", in: app)
+        assertGoogleMetric("gemini.weekly", contains: "45%", in: app)
+        for id in Self.codingMetricIDs {
+            assertGoogleMetric(id, contains: "Setup required", in: app)
+        }
+        tap(app.buttons["More options for Gemini Fixture"], in: app)
+        tap(app.buttons["Customize Card…"], in: app)
+        let hiddenID = "antigravity.gemini-weekly"
+        tap(app.buttons["customize-metric-\(hiddenID)"], in: app)
+        tap(app.buttons["Hide"], in: app)
+        tap(app.buttons["Done"], in: app)
+        tap(app.buttons["Refresh usage"], in: app)
+        assertGoogleMetric("antigravity.3p-weekly", contains: "Setup required", in: app)
+        XCTAssertTrue(app.buttons["dashboard-metric-\(hiddenID)"].waitForNonExistence(timeout: 5))
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launch()
+        assertGoogleMetric("antigravity.3p-weekly", contains: "Setup required", in: app)
+        XCTAssertTrue(app.buttons["dashboard-metric-\(hiddenID)"].waitForNonExistence(timeout: 5))
+        openGoogleAccount("Gemini Fixture", in: app)
+        let toggle = app.switches["account-metric-visibility-\(hiddenID)"]
+        reveal(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "0")
+        // SwiftUI exposes the whole row as a switch; tap its trailing control.
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+            .withOffset(CGVector(dx: -25, dy: 0)).tap()
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: toggle)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed)
+        dismissAccountSettings(in: app)
+        for id in Self.codingMetricIDs {
+            assertGoogleMetric(id, contains: "Setup required", in: app)
+        }
+    }
+
+    func testCodingOnlyGeminiChoicesSurvivePartialAndFailedRefresh() throws {
+        let app = launch(scenario: "google-coding-only")
+        XCTAssertTrue(app.buttons["More options for Gemini Fixture"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["More options for Antigravity"].exists)
+        assertGoogleMetric("gemini.five-hour", contains: "Setup required", in: app)
+        assertGoogleMetric("gemini.weekly", contains: "Setup required", in: app)
         for (id, value) in zip(Self.codingMetricIDs, ["0%", "31%", "0%", "0%"]) {
             assertGoogleMetric(id, contains: value, in: app)
         }
@@ -151,7 +189,7 @@ final class AccountJourneysUITests: XCTestCase {
             XCTAssertTrue(app.buttons["customize-metric-\(id)"].isHittable)
         }
         tap(app.buttons["Done"], in: app)
-        openGoogleAccount("Coding Fixture", in: app)
+        openGoogleAccount("Gemini Fixture", in: app)
         for (id, reason) in [("antigravity.gemini-weekly", "Unavailable"), ("antigravity.3p-5h", "Disabled")] {
             let toggle = app.switches["account-metric-visibility-\(id)"]
             reveal(toggle, in: app)
@@ -167,10 +205,12 @@ final class AccountJourneysUITests: XCTestCase {
             assertGoogleMetric(id, contains: value, in: app)
             XCTAssertTrue(app.buttons["dashboard-metric-\(id)"].label.contains("fresh"))
         }
-        openGoogleAccount("Coding Fixture", in: app)
-        assertMetricSwitches(Self.codingMetricIDs, in: app)
+        openGoogleAccount("Gemini Fixture", in: app)
+        assertMetricSwitches(Self.allGoogleMetricIDs, in: app)
         tap(app.buttons["Done"], in: app)
     }
+
+    private static let allGoogleMetricIDs = ["gemini.five-hour", "gemini.weekly"] + codingMetricIDs
 
     private static let codingMetricIDs = [
         "antigravity.gemini-5h", "antigravity.gemini-weekly", "antigravity.3p-5h", "antigravity.3p-weekly",
@@ -197,7 +237,7 @@ final class AccountJourneysUITests: XCTestCase {
     }
 
     private func openCodingCustomizer(in app: XCUIApplication) {
-        tap(app.buttons["More options for Coding Fixture"], in: app)
+        tap(app.buttons["More options for Gemini Fixture"], in: app)
         tap(app.buttons["Customize Card…"], in: app)
         XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
     }

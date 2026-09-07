@@ -26,6 +26,7 @@ enum WidgetSnapshotPublisher {
                 return CodexBarWidgetProviderSnapshot(
                     accountID: result.accountID,
                     providerID: result.providerID.rawValue,
+                    legacyAccountIDs: configurationStore.linkedGoogleAccountIDs(for: result.accountID),
                     title: result.title,
                     subtitle: statusText(for: result, configurationStore: configurationStore),
                     planIdentifier: plan?.identifier,

@@ -153,7 +153,10 @@ extension CodexBarWidgetSnapshot {
         }
 
         return focus.providerID.map { providerID in
-            groupFiltered.filter { $0.providerID == providerID }
+            groupFiltered.filter {
+                $0.providerID == providerID
+                    || (providerID == "antigravity" && $0.providerID == "gemini" && !($0.legacyAccountIDs ?? []).isEmpty)
+            }
         } ?? groupFiltered
     }
 

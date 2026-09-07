@@ -30,11 +30,12 @@ struct WatchComplicationTimelineLoader {
         date: Date? = nil
     ) -> WatchComplicationEntry {
         let entryDate = date ?? now()
+        let snapshot = loadSnapshot()
         return WatchComplicationEntry(
             date: entryDate,
             sample: resolver.resolve(
-                snapshot: loadSnapshot(),
-                selection: configuration.selection,
+                snapshot: snapshot,
+                selection: configuration.selection(in: snapshot),
                 at: entryDate
             ),
             configuration: configuration
@@ -46,16 +47,17 @@ struct WatchComplicationTimelineLoader {
     ) -> Timeline<WatchComplicationEntry> {
         let date = now()
         let snapshot = loadSnapshot()
+        let selection = configuration.selection(in: snapshot)
         let entries = resolver.timelineEntryDates(
             snapshot: snapshot,
-            selection: configuration.selection,
+            selection: selection,
             now: date
         ).map { entryDate in
             WatchComplicationEntry(
                 date: entryDate,
                 sample: resolver.resolve(
                     snapshot: snapshot,
-                    selection: configuration.selection,
+                    selection: selection,
                     at: entryDate
                 ),
                 configuration: configuration
@@ -63,7 +65,7 @@ struct WatchComplicationTimelineLoader {
         }
         let nextReload = resolver.nextReloadDate(
             snapshot: snapshot,
-            selection: configuration.selection,
+            selection: selection,
             now: date
         )
         return Timeline(entries: entries, policy: .after(nextReload))
@@ -119,11 +121,12 @@ struct WatchComplicationConfigurationIntent: WidgetConfigurationIntent {
     @Parameter(title: "Metric")
     var metric: WatchComplicationMetricEntity?
 
-    var selection: WatchComplicationSelection {
+    func selection(in snapshot: WatchDashboardSnapshot?) -> WatchComplicationSelection {
         WatchComplicationSelection.resolving(
             accountID: account?.id,
             metricAccountID: metric?.accountID,
-            metricID: metric?.metricID
+            metricID: metric?.metricID,
+            snapshot: snapshot
         )
     }
 }

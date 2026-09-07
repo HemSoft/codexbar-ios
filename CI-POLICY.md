@@ -40,7 +40,7 @@ P90 is the nearest-rank percentile. Failures, cancellations and the one
 unfinished iOS job are retained in the outcome counts, not treated as passes
 or silently excluded from the inventory.
 
-| Job | Successes / total | Median | P90 | Longest success | Current timeout |
+| Job | Successes / total | Median | P90 | Longest success | Timeout at inventory |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | SwiftLint | 62 / 63 | 40s | 49s | 54s | 10m |
 | Strict concurrency | 56 / 63 | 4m 03s | 5m 13s | 6m 16s | 30m |
@@ -91,13 +91,18 @@ lint, concurrency, unit behavior, both UI device families and function-risk
 policy. These checks produce correctness decisions that timing measurements
 cannot replace. Do not remove iOS tests because it is the slowest required job.
 
-The current execution budget is 50 minutes for the slowest parallel job, plus
-runner queue time. The observed longest passing iOS job was 49m 34s, so there
-is little headroom. This is a cancellation bound, not a guaranteed turnaround.
-Do not promise a sub-30-minute gate: the observed iOS P90 exceeds 40 minutes.
-The other four checks normally finish within eight minutes in this sample.
-Their existing cancellation limits are retained; this change does not raise
-a timeout to hide a regression or lower one without cold-build evidence.
+The current iOS execution limit is 90 minutes, inherited from PR329; the
+inventory above recorded the earlier 50-minute limit. The observed longest
+passing job in that historical inventory was 49m 34s. The limit is a
+cancellation bound, not a guaranteed turnaround. A later 90-minute run still
+timed out after Xcode could not launch the iPad test app, so increasing the
+limit alone does not resolve runner failures. The complete combined Gemini
+branch subsequently passed the required iOS job.
+
+Do not promise a sub-30-minute gate: the historical iOS P90 exceeds 40 minutes.
+The other four checks normally finished within eight minutes in that sample.
+All five checks, both UI device families and existing failure behavior remain
+required. This PR does not change their current execution limits.
 
 For slow iOS runs, inspect unit tests, simulator startup, each UI family and
 artifact steps separately. Preserve both device-family checks and risk gates

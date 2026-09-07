@@ -8,14 +8,14 @@ building, testing, or releasing the app.
 
 ### Added
 
-- Added experimental Antigravity session import with separate Gemini and
-  Claude/GPT five-hour and weekly quotas. Missing quota stays unavailable;
-  native iPhone sign-in and device comparison remain release follow-ups.
+- Display Gemini Models and Other models, Claude/GPT, five-hour and weekly
+  quotas from previously saved coding connections inside Google Gemini. Missing
+  quota stays unavailable. New connection setup is tracked separately.
   ([#314](https://github.com/HemSoft/codexbar-ios/issues/314))
 
 - Added an experimental Google Gemini account option that displays five-hour
-  and weekly consumer usage with reset times. Connected-iPhone live-account
-  parity remains a pre-release gate.
+  and weekly consumer usage with reset times. Live comparison evidence is
+  tracked in the sign-in documentation.
   ([#296](https://github.com/HemSoft/codexbar-ios/issues/296))
 - Split Cursor's included usage into separate Cursor Models and Other Models
   metrics, each with its own saved dashboard, widget, and Watch visibility.
@@ -44,18 +44,28 @@ building, testing, or releasing the app.
 
 ### Fixed
 
-- Stop publishing cached Google quotas to alerts, widgets and Apple Watch when
-  the provider explicitly disables them, while retaining observed History data.
-  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+- Coding sign-in no longer leaves a permanent refreshing message after the
+  account connects. The existing usage refresh indicator tracks refresh progress.
 
-- Keep all six Google usage choices available in each account's Metrics
-  settings before setup, with independent visibility controls. After an account
-  returns a result, Customize Card also retains unavailable choices. Gemini Apps
-  and Antigravity model families have distinct labels, and each choice keeps its
-  saved visibility, order, width, and visualization after refreshes and relaunches.
-  If a refresh returns no usable quotas, retain observed percentages as last-known
-  data while keeping explicitly disabled quotas unavailable. VoiceOver also
-  announces unavailable and disabled states in Metrics settings.
+- Keep the saved coding session when a reconnect cannot retrieve valid usage,
+  and schedule one account refresh after a successful coding sign-in.
+  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+
+- Ask for linked Google account confirmation after browser account selection,
+  preserving saved sessions when the reconnect is cancelled.
+- Remove the manual coding-session JSON field from Gemini settings.
+
+- Put all six Google usage metrics in one Gemini account and dashboard card.
+  Connect Gemini Apps and coding sessions inside that account, with confirmation
+  that they use the same Google identity. Existing coding accounts can be linked
+  from Gemini settings while retaining credentials, metric choices, and history.
+  Unlinked data stays saved until its owner confirms the association.
+  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
+- Keep all six choices available before setup and through missing quota data,
+  with independent visibility, order, width, and visualization preferences.
+  Show actual unavailable or disabled status without fabricated values or resets.
+  Explicitly disabled quotas stop publishing to alerts, widgets, and Apple Watch
+  while observed History data stays intact.
   ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
 
 - Expose the selected account group as a separate accessibility value in account
@@ -104,6 +114,25 @@ building, testing, or releasing the app.
   intentional-slowdown check while retaining earlier inconclusive results.
   ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
 
+- Added a development-only, one-time session handoff for connected devices.
+  It saves an existing renewable coding session to the selected account's
+  Keychain and removes the staging file. An unreadable Keychain slot is never
+  treated as empty. Release builds exclude this tool;
+  new-user browser authorization still needs app-side OAuth configuration.
+  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+
+- Keep the Google coding browser sign-in service limited to UIKit platforms so
+  the macOS SwiftPM smoke tests can compile.
+  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+
+- Added a Google coding browser-authorization implementation with PKCE,
+  account-scoped storage, and native-client token renewal. Deployment requires
+  configuring the app’s Google OAuth iOS client. Live quota testing remains
+  with Franz. ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+
+- Allow the full iOS unit, iPhone UI, and iPad UI suite up to 90 minutes in CI
+  so the required iPad checks can finish after the earlier suites.
+
 - Established phone-based provider setup as the required user experience,
   excluding manual credential imports. Agents own implementation and automated
   checks; Franz owns live account and quota verification.
@@ -114,10 +143,6 @@ building, testing, or releasing the app.
   from automatic PR runs and merge requirements. Broader CI runtime and benchmark
   reliability work remains tracked separately.
   ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
-
-- Re-review the three accepted security findings after the Google quota changes,
-  preserving the full-source snapshot and exact diagnostic checks.
-  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
 
 - Include pinned repository-wide SwiftLint and complete strict-concurrency
   checks in the local perfection audit. Report failures alongside every
