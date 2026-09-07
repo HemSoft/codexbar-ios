@@ -45,6 +45,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Coding sign-in no longer leaves a permanent refreshing message after the
+  account connects. The existing usage refresh indicator tracks refresh progress.
+
 - Keep the saved coding session when a reconnect cannot retrieve valid usage,
   and schedule one account refresh after a successful coding sign-in.
   ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))

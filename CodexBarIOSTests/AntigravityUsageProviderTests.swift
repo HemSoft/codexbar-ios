@@ -75,6 +75,7 @@ final class AntigravityUsageProviderTests: XCTestCase {
         )
         await fulfillment(of: [refreshed], timeout: 3)
         XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(model.geminiCodingMessage, "Coding account connected.")
         let saved = try XCTUnwrap(secrets.readSecret(account: key))
         XCTAssertEqual(try AntigravityCredentials.parse(saved).accessToken, "candidate")
     }

@@ -516,7 +516,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             geminiCodingMessage = configurationStore.lastError ?? "Coding sign-in could not be saved."
             return
         }
-        geminiCodingMessage = "Coding account connected. Refreshing usage…"
+        geminiCodingMessage = "Coding account connected."
         credentialsDidChange()
     }
 
