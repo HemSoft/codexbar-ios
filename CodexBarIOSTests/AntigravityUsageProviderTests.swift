@@ -190,7 +190,7 @@ final class AntigravityUsageProviderTests: XCTestCase {
         for payload in [
             #"{"access_token":"sample","token_type":"Bearer","expires_in":3600}"#,
             #"{"access_token":"sample","refresh_token":"","token_type":"Bearer","expires_in":3600}"#,
-            #"{"access_token":"sample","refresh_token":"  ","token_type":"Bearer","expires_in":3600}"#
+            #"{"access_token":"sample","refresh_token":"  ","token_type":"Bearer","expires_in":3600}"#,
         ] {
             XCTAssertThrowsError(try GoogleCodingSignIn.credentials(
                 Data(payload.utf8), clientID: "example", now: Self.now
