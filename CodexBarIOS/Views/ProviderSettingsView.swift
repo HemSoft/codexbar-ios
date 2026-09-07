@@ -439,8 +439,12 @@ struct ProviderSettingsView: View {
         .alert("Confirm Google Account", isPresented: $isConfirmingGoogleAccount) {
             Button("Same Google Account") { confirmGeminiAction() }
             Button("Cancel", role: .cancel) {
-                viewModel.cancelGoogleCodingSignIn()
-                viewModel.cancelGeminiSignIn()
+                if case .some(.codingSignIn) = pendingGeminiConfirmation {
+                    viewModel.cancelGoogleCodingSignIn()
+                }
+                if case .some(.appsReconnect) = pendingGeminiConfirmation {
+                    viewModel.cancelGeminiSignIn()
+                }
                 pendingGeminiConfirmation = nil
             }
         } message: {
