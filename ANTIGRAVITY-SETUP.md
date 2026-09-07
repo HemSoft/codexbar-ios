@@ -135,8 +135,8 @@ Franz can use these optional checks after receiving the updated build:
 1. Unlock the phone and use a signed-in CLI session for the same Google account.
    Record `agy --version`, interactive `/usage`, and
    `agy -p "/usage" --output-format json`. Do not publish identity or tokens.
-2. Complete Connect Coding Usage in Gemini settings, then follow `DEVICE-DEPLOYMENT.md` to
-   build, install and launch the PR commit on the rediscovered device.
+2. After the agent delivers the configured build using `DEVICE-DEPLOYMENT.md`,
+   complete Connect Coding Usage in Gemini settings.
 3. Refresh both sources in the same comparison interval. Record used versus
    remaining semantics, values and supplied resets for all six metrics.
 4. Toggle and customize each choice, relaunch, then hide or disconnect Apps
@@ -146,6 +146,8 @@ Franz can use these optional checks after receiving the updated build:
    document browser reconnection. Saving a credential without a successful quota refresh
    does not prove access.
 
-A native iPhone authorization flow remains separate work. Verify an appropriate
-Google iOS grant before adding a sign-in button; desktop success alone does not
-establish that grant.
+Connect Coding Usage now implements native browser authorization. Before phone
+delivery, the agent must configure the app's registered Google iOS client through
+`GOOGLE_CODING_CLIENT_ID` and complete automated validation. Franz's live checks
+then verify account selection and the coding quotas returned by that grant;
+desktop success alone does not establish access from the iPhone.
