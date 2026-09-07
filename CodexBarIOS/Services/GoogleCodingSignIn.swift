@@ -1,3 +1,4 @@
+#if canImport(AuthenticationServices) && canImport(UIKit)
 import AuthenticationServices
 import Foundation
 import UIKit
@@ -188,3 +189,4 @@ private final class RejectGoogleCodingRedirects: NSObject, URLSessionTaskDelegat
         completionHandler(nil)
     }
 }
+#endif

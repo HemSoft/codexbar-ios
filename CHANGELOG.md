@@ -98,6 +98,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Keep the Google coding browser sign-in service limited to UIKit platforms so
+  the macOS SwiftPM smoke tests can compile.
+  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+
 - Added a Google coding browser-authorization implementation with PKCE,
   account-scoped storage, and native-client token renewal. Deployment requires
   configuring the app’s Google OAuth iOS client. Live quota testing remains
