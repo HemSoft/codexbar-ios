@@ -3,6 +3,83 @@ import XCTest
 
 final class AntigravityUsageProviderTests: XCTestCase {
     @MainActor
+    func testCodingReconnectPreservesSavedSessionWhenCandidateUsageFails() async throws {
+        for status in [401, 403, 500, 200] {
+            let suite = "CodingValidation.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let secrets = MemorySecretStore()
+            let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+            let account = store.addAccount(for: .gemini)
+            let original = #"{"access_token":"working"}"#
+            XCTAssertTrue(store.saveGeminiCodingSecret(original, for: account, confirmedSameAccount: true))
+            let fixture = IsolatedTestURLSession { request in
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer candidate")
+                return (try Self.response(request, status: status), try Self.payload([]))
+            }
+            defer { fixture.invalidate() }
+            var refreshCount = 0
+            let model = ProviderSettingsViewModel(
+                configurationStore: store, accountID: account.id,
+                onCredentialRefresh: { _ in refreshCount += 1; return nil }
+            )
+            model.googleCodingUsageProvider = AntigravityUsageProvider(
+                secretStore: secrets, sessionConfiguration: fixture.session.configuration
+            )
+            do {
+                try await model.saveValidatedGoogleCodingCredential(
+                    AntigravityCredentials.parse(#"{"access_token":"candidate"}"#)
+                )
+                XCTFail("An unusable coding grant must be rejected")
+            } catch { }
+            XCTAssertEqual(try secrets.readSecret(
+                account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: account.id)
+            ), original)
+            XCTAssertEqual(refreshCount, 0)
+        }
+    }
+
+    @MainActor
+    func testCodingReconnectValidatesBeforeSavingAndRefreshesOnce() async throws {
+        let suite = "CodingValidation.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let account = store.addAccount(for: .gemini)
+        let key = ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: account.id)
+        let original = #"{"access_token":"working"}"#
+        XCTAssertTrue(store.saveGeminiCodingSecret(original, for: account, confirmedSameAccount: true))
+        let fixture = IsolatedTestURLSession { request in
+            XCTAssertEqual(try secrets.readSecret(account: key), original)
+            return (try Self.response(request, status: 200), try Self.payload())
+        }
+        defer { fixture.invalidate() }
+        var refreshCount = 0
+        let refreshed = expectation(description: "One credential refresh")
+        refreshed.assertForOverFulfill = true
+        let model = ProviderSettingsViewModel(
+            configurationStore: store, accountID: account.id,
+            onCredentialRefresh: { _ in
+                refreshCount += 1
+                await Task.yield()
+                refreshed.fulfill()
+                return nil
+            }
+        )
+        model.googleCodingUsageProvider = AntigravityUsageProvider(
+            secretStore: secrets, sessionConfiguration: fixture.session.configuration
+        )
+        try await model.saveValidatedGoogleCodingCredential(
+            AntigravityCredentials.parse(#"{"access_token":"candidate"}"#)
+        )
+        await fulfillment(of: [refreshed], timeout: 3)
+        XCTAssertEqual(refreshCount, 1)
+        let saved = try XCTUnwrap(secrets.readSecret(account: key))
+        XCTAssertEqual(try AntigravityCredentials.parse(saved).accessToken, "candidate")
+    }
+
+    @MainActor
     func testDevelopmentHandoffRequiresOptInAndDeletesStagingFile() throws {
         let suite = "CodingHandoff.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

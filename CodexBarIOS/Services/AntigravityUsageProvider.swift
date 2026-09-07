@@ -73,6 +73,17 @@ final class AntigravityUsageProvider: UsageProvider {
         }
     }
 
+    /// Validate a newly issued token without reading or replacing the saved session.
+    func validateCandidate(
+        _ credentials: AntigravityCredentials,
+        for configuration: ProviderAccountConfiguration
+    ) async throws {
+        let data = try await responseData(for: quotaRequest(token: credentials.accessToken))
+        try Task.checkCancellation()
+        let result = try AntigravityQuotaParser.result(from: data, configuration: configuration)
+        guard result.failureMessage == nil, !result.bars.isEmpty else { throw FetchError.response }
+    }
+
     private func quotaData(_ credentials: AntigravityCredentials, account: String, original: String) async throws -> Data {
         if credentials.expiry.map({ $0 <= Date().addingTimeInterval(60) }) == true {
             let renewed = try await refresh(credentials, account: account, original: original)

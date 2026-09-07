@@ -33,6 +33,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published var geminiCodingSecret = ""
     @Published private(set) var isSigningInWithGoogleCoding = false
     private let googleCodingSignIn = GoogleCodingSignIn()
+    var googleCodingUsageProvider = AntigravityUsageProvider()
     private var googleCodingTask: Task<Void, Never>?
     @Published private(set) var geminiCodingMessage: String?
     @Published private(set) var isSigningInWithCodex = false
@@ -494,17 +495,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             defer { self.isSigningInWithGoogleCoding = false }
             do {
                 let credentials = try await self.googleCodingSignIn.signIn(configuration: client)
-                try Task.checkCancellation()
-                self.flushPendingChanges()
-                guard self.configurationStore.saveGeminiCodingSecret(
-                    try credentials.encoded(), for: self.configuration, confirmedSameAccount: true
-                ) else {
-                    self.geminiCodingMessage = self.configurationStore.lastError ?? "Coding sign-in could not be saved."
-                    return
-                }
-                self.geminiCodingMessage = "Coding account connected. Refreshing usage…"
-                self.credentialsDidChange()
-                await self.refreshMetrics()
+                try await self.saveValidatedGoogleCodingCredential(credentials)
             } catch is CancellationError {
                 self.geminiCodingMessage = "Coding sign-in canceled."
             } catch {
@@ -512,6 +503,21 @@ final class ProviderSettingsViewModel: ObservableObject {
                     ?? "Coding sign-in could not finish. Please try again."
             }
         }
+    }
+
+    func saveValidatedGoogleCodingCredential(_ credentials: AntigravityCredentials) async throws {
+        geminiCodingMessage = "Checking coding usage…"
+        try await googleCodingUsageProvider.validateCandidate(credentials, for: configuration)
+        try Task.checkCancellation()
+        flushPendingChanges()
+        guard configurationStore.saveGeminiCodingSecret(
+            try credentials.encoded(), for: configuration, confirmedSameAccount: true
+        ) else {
+            geminiCodingMessage = configurationStore.lastError ?? "Coding sign-in could not be saved."
+            return
+        }
+        geminiCodingMessage = "Coding account connected. Refreshing usage…"
+        credentialsDidChange()
     }
 
     func cancelGoogleCodingSignIn() {

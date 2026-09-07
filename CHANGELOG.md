@@ -45,6 +45,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Keep the saved coding session when a reconnect cannot retrieve valid usage,
+  and schedule one account refresh after a successful coding sign-in.
+  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+
 - Put all six Google usage metrics in one Gemini account and dashboard card.
   Connect Gemini Apps and coding sessions inside that account, with confirmation
   that they use the same Google identity. Existing coding accounts can be linked
