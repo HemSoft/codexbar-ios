@@ -71,7 +71,7 @@ documented defaults in `CopilotWebAuthService.swift`.
 ## Google Gemini sign-in
 
 One Gemini account contains all six Google usage metrics. Gemini Apps uses a
-Google website session; Gemini Models and Other models use a separately imported
+Google website session; Gemini Models and Other models use a separately saved
 coding OAuth session inside the same account. Both connections are experimental.
 See the verification boundaries in [Gemini sign-in evidence](GEMINI-SIGN-IN.md)
 and [coding session setup](ANTIGRAVITY-SETUP.md).
@@ -87,20 +87,19 @@ in that account's iOS Keychain entry. You can also use the window's **Back** and
 Use **Sign in Again with Google** to renew an expired session. Existing accounts
 created by pasting credentials keep their saved session, label, group, history,
 and display preferences. If a coding session is linked, confirm that the new
-Google sign-in belongs to the same Google account before reconnecting. Add a
+Google account selected in the browser belongs to the linked coding session
+before the new session is saved. Add a
 separate Gemini entry for another Google account. **Disconnect Gemini Apps**
 removes this account's website session and preserves its coding session.
 **Disconnect Coding Session** removes only coding authorization. Neither action
 signs you out of Google in Safari or disconnects another CodexBar entry.
 
-Open **Coding Usage** in the same Gemini settings to import your desktop coding
-session JSON. Confirm that it belongs to this Gemini account, then choose
-**Same Google Account**. Existing standalone coding accounts are retained and
-can be linked here after that confirmation; CodexBar does not guess associations
-from matching labels. All six metrics stay available in Metrics and Customize
-Card even when a source needs setup. Their saved identities, layout, and history
-survive the account consolidation. See [coding session setup](ANTIGRAVITY-SETUP.md)
-for the supported import format and renewal requirements.
+Open **Coding Usage** in the same Gemini settings to link a previously saved
+coding account after confirming its Google identity. Guided setup for a new
+coding connection remains tracked in #299; manual JSON import is not a supported
+customer flow. All six metrics remain available in Metrics and Customize Card,
+with saved identities, layouts, and history preserved. See
+[coding usage](ANTIGRAVITY-SETUP.md) for the internal credential contract.
 
 Cancellation, a failed usage check, and a failed Keychain save leave the existing
 credential unchanged. If Google denies access, cancel and retry with an eligible
@@ -150,5 +149,5 @@ The current Windows app is a C# / WPF / .NET 9 system tray app with shared provi
 The Gemini account's Coding Usage connection reads Gemini Models and Other
 models, Claude/GPT, from the internal Antigravity quota adapter. Each has
 five-hour and weekly metrics alongside Gemini Apps on one dashboard card. See
-[coding session setup](ANTIGRAVITY-SETUP.md) for desktop import, renewal, and the
+[coding session setup](ANTIGRAVITY-SETUP.md) for saved sessions, renewal, and the
 remaining live comparison checks.

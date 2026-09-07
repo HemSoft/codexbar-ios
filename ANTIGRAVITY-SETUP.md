@@ -1,14 +1,16 @@
-# Gemini coding session import
+# Gemini coding usage
 
 One Google Gemini account contains all six usage metrics in CodexBar. Its
 Gemini Apps connection uses Google website cookies. Its Coding Usage connection
-uses an imported desktop OAuth session to read Gemini Models and Other models,
+uses a separately saved OAuth session to read Gemini Models and Other models,
 Claude/GPT. The two credential formats are separate and are never substituted
 for each other. Antigravity is an internal quota adapter, not a separate account
 choice or dashboard card.
 
-This experimental coding integration requires a desktop session import. Native
-iPhone coding authorization is not available. It uses an unofficial Google API.
+Guided coding authorization is tracked in #299 and is not complete in this
+metric-consolidation change. Manual session imports are not an end-user setup
+flow. Existing saved coding sessions remain supported. The adapter uses an
+unofficial Google API.
 Franz's live comparisons remain follow-up verification for
 [#319](https://github.com/HemSoft/codexbar-ios/issues/319) and do not block agent
 implementation or merge.
@@ -38,36 +40,22 @@ chosen Gemini account and preserves its observed history. Unlinked records stay
 retained internally. Old source setup cards disappear; saved choices are retained
 when their Gemini account can be identified.
 
-## Setup
+## Existing connections
 
-1. Sign in to Antigravity on your desktop with the account whose quotas you want.
-2. Obtain that account's exported session JSON through your desktop credential
-   workflow. Upstream desktop CodexBar's OAuth flow stores portable credentials
-   in `~/.codexbar/antigravity/oauth_creds.json`. An existing file can be copied
-   to the Mac clipboard with `pbcopy < ~/.codexbar/antigravity/oauth_creds.json`.
-   The Antigravity CLI stores its session in the OS keyring instead; CodexBar iOS
-   does not export that keyring or provide a desktop export tool.
-3. On iPhone, add or open the Google Gemini account for that Google identity.
-   In Coding Usage, paste the session JSON and choose Connect Coding Session.
-   Confirm the sessions belong to the same Google account. Use Update Coding
-   Session to replace an expired token after the same confirmation.
-4. To reuse an existing saved coding account, choose its Link saved coding
-   account action inside Gemini settings and confirm the same identity.
-   Disconnect an existing coding session before linking a different saved one.
-5. Refresh the Gemini card and compare both coding model families with
-   Antigravity CLI `/usage` using the same account. Gemini Apps is a different
-   quota source on that same card.
+Open Coding Usage inside Gemini settings to link a previously saved coding
+account after confirming that it belongs to the same Google account. CodexBar
+does not infer an identity match from account labels.
 
-Reconnecting Gemini Apps while coding is linked requires confirmation that you
-will sign in to the same Google account. Add another Gemini entry for a different
-identity. Disconnect Gemini Apps and Disconnect Coding Session remove only their
-respective authorization; the other source stays connected.
+Reconnecting Gemini Apps while coding is linked asks for confirmation after the
+browser account selection and before replacing the saved session. Cancelling
+leaves both saved sessions untouched. Add another Gemini entry for a different
+identity. Disconnect actions remove only the selected source's authorization.
 
-Never paste a session into chat, a GitHub issue, or a repository file. Clear the
-clipboard after importing. Tokens may grant broader Google account access.
-CodexBar stores only the supported credential fields in this account's Keychain
-coding entry, separate from Gemini Apps cookies. Tokens do not enter History,
-widget snapshots, or Watch payloads.
+## Developer credential contract
+
+The following describes internal storage compatibility, not a customer import
+procedure. Tokens remain in the account's coding Keychain entry and must never
+appear in logs, chat, repository files, History, widgets, or Watch payloads.
 
 The accepted flat JSON shape is:
 
@@ -87,9 +75,9 @@ Automatic renewal additionally requires `refresh_token`, `client_id`, and
 `client_secret` from the same desktop OAuth client. For a nested CLI profile,
 tokens and expiry belong inside `token`; client fields belong at the top level.
 CodexBar does not guess or bundle another application's OAuth client. Without
-all renewal fields, an expired or rejected token requires a fresh import.
+all renewal fields, an expired or rejected token requires reconnection.
 Renewal uses Google's token endpoint and saves a rotated token only if the
-account's imported credential has not changed or been removed during the request.
+account's saved credential has not changed or been removed during the request.
 Renewal has fixture coverage; live renewal on iPhone remains unverified.
 
 ## Quota contract

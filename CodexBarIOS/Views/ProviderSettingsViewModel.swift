@@ -39,6 +39,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published var geminiBrowserSession: GeminiBrowserSignInSession?
     @Published private(set) var isSigningInWithGemini = false
     var geminiSessionValidator: any GeminiSessionValidating = GeminiSessionValidator()
+    @Published private(set) var needsGeminiAccountConfirmation = false
+    private var pendingGeminiCredential: String?
     private var geminiAttemptID: UUID?
     private var geminiValidationTask: Task<Void, Never>?
     @Published private(set) var codexAuthError: String?
@@ -518,12 +520,8 @@ final class ProviderSettingsViewModel: ObservableObject {
         credentialsDidChange()
     }
 
-    func startGeminiSignIn(confirmedSameAccount: Bool = false) {
+    func startGeminiSignIn() {
         guard !isSigningInWithGemini else { return }
-        guard !configurationStore.hasGeminiCodingSecret(for: configuration) || confirmedSameAccount else {
-            credentialError = "Confirm that the Google sign-in uses the same account as the linked coding session."
-            return
-        }
         credentialError = nil
         credentialMessage = nil
         validationFeedbackProviderID = nil
@@ -538,6 +536,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     func cancelGeminiSignIn() {
         guard geminiAttemptID != nil else { return }
         geminiAttemptID = nil
+        pendingGeminiCredential = nil
+        needsGeminiAccountConfirmation = false
         geminiValidationTask?.cancel()
         geminiValidationTask = nil
         geminiBrowserSession?.invalidate()
@@ -556,10 +556,26 @@ final class ProviderSettingsViewModel: ObservableObject {
             finishGeminiAttempt(attemptID)
             credentialError = (error as? GeminiSignInError ?? .browserFailed).localizedDescription
         case .success(let credential):
+            if configurationStore.hasGeminiCodingSecret(for: configuration) {
+                pendingGeminiCredential = credential
+                needsGeminiAccountConfirmation = true
+                return
+            }
             credentialMessage = "Verifying your Gemini usage..."
             geminiValidationTask = Task { [weak self] in
                 await self?.validateGeminiSession(credential, attemptID: attemptID)
             }
+        }
+    }
+
+    func confirmGeminiAppsAccount() {
+        guard needsGeminiAccountConfirmation, let credential = pendingGeminiCredential,
+              let attemptID = geminiAttemptID else { return }
+        pendingGeminiCredential = nil
+        needsGeminiAccountConfirmation = false
+        credentialMessage = "Verifying your Gemini usage..."
+        geminiValidationTask = Task { [weak self] in
+            await self?.validateGeminiSession(credential, attemptID: attemptID)
         }
     }
 

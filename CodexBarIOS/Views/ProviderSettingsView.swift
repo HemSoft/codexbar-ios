@@ -9,7 +9,6 @@ struct ProviderSettingsView: View {
     @State private var isConfirmingGoogleAccount = false
 
     private enum GeminiConfirmation {
-        case codingImport
         case legacyLink(ProviderAccountConfiguration)
         case appsReconnect
     }
@@ -425,15 +424,20 @@ struct ProviderSettingsView: View {
             viewModel.flushPendingChanges()
             viewModel.cancelAuthentication()
         }
-        .sheet(item: $viewModel.geminiBrowserSession) { session in
+        .sheet(item: $viewModel.geminiBrowserSession, onDismiss: {
+            if viewModel.needsGeminiAccountConfirmation { requestGeminiConfirmation(.appsReconnect) }
+        }, content: { session in
             GeminiBrowserSignInView(session: session)
-        }
+        })
         .sheet(item: $viewModel.authURL) { authURL in
             SafariAuthSheet(url: authURL.url)
         }
         .alert("Confirm Google Account", isPresented: $isConfirmingGoogleAccount) {
             Button("Same Google Account") { confirmGeminiAction() }
-            Button("Cancel", role: .cancel) { pendingGeminiConfirmation = nil }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelGeminiSignIn()
+                pendingGeminiConfirmation = nil
+            }
         } message: {
             Text(geminiConfirmationMessage)
         }
@@ -442,11 +446,7 @@ struct ProviderSettingsView: View {
     private var geminiAppsConnection: some View {
         Group {
             Button(configurationStore.hasSecret(for: viewModel.configuration) ? "Sign in Again with Google" : "Sign in with Google") {
-                if configurationStore.hasGeminiCodingSecret(for: viewModel.configuration) {
-                    requestGeminiConfirmation(.appsReconnect)
-                } else {
-                    viewModel.startGeminiSignIn()
-                }
+                viewModel.startGeminiSignIn()
             }
             .disabled(viewModel.isSigningInWithGemini)
             if viewModel.isSigningInWithGemini {
@@ -473,25 +473,7 @@ struct ProviderSettingsView: View {
             Text("Connect Gemini Models and Other models, Claude/GPT, to show their four coding limits in this Gemini account.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            SecureField("Paste coding session JSON", text: $viewModel.geminiCodingSecret)
-                .textContentType(.password)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .accessibilityIdentifier("gemini-coding-session")
-            Button(configurationStore.hasGeminiCodingSecret(for: viewModel.configuration) ? "Update Coding Session" : "Connect Coding Session") {
-                requestGeminiConfirmation(.codingImport)
-            }
-            .disabled(viewModel.geminiCodingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Text("Import session JSON from your signed-in Antigravity desktop. "
-                + "Coding access uses its own OAuth token, separate from Gemini Apps' website session. "
-                + "Without renewal credentials, import again when the token expires.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Link("Coding session import instructions", destination: URL(
-                string: "https://github.com/HemSoft/codexbar-ios/blob/main/ANTIGRAVITY-SETUP.md"
-            )!)
-            Text("Session tokens may grant broader Google account access. "
-                + "CodexBar keeps coding credentials in a separate Keychain entry for this Gemini account.")
+            Text("Coding usage uses a separate connection stored securely for this Gemini account.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             if configurationStore.hasGeminiCodingSecret(for: viewModel.configuration) {
@@ -522,12 +504,12 @@ struct ProviderSettingsView: View {
     private var geminiConfirmationMessage: String {
         switch pendingGeminiConfirmation {
         case .appsReconnect:
-            "Sign in to the same Google account as the coding session already linked to \(viewModel.configuration.displayName). "
+            "Confirm that the Google account you just selected is the same as the coding session linked to \(viewModel.configuration.displayName). "
                 + "To use a different Google identity, add another Gemini account."
         case .legacyLink(let legacy):
             "Confirm that the saved coding account \(legacy.displayName) and \(viewModel.configuration.displayName) "
                 + "belong to the same Google account. CodexBar cannot verify this identity automatically."
-        case .codingImport, nil:
+        case nil:
             "Confirm that this coding session and \(viewModel.configuration.displayName) belong to the same Google account. "
                 + "CodexBar cannot verify this identity automatically."
         }
@@ -540,12 +522,10 @@ struct ProviderSettingsView: View {
 
     private func confirmGeminiAction() {
         switch pendingGeminiConfirmation {
-        case .codingImport:
-            viewModel.saveGeminiCodingCredential(confirmedSameAccount: true)
         case .legacyLink(let legacy):
             viewModel.linkGeminiCodingAccount(legacy, confirmedSameAccount: true)
         case .appsReconnect:
-            viewModel.startGeminiSignIn(confirmedSameAccount: true)
+            viewModel.confirmGeminiAppsAccount()
         case nil:
             break
         }

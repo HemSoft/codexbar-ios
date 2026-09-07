@@ -45,6 +45,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Ask for linked Google account confirmation after browser account selection,
+  preserving saved sessions when the reconnect is cancelled.
+- Remove the manual coding-session JSON field from Gemini settings.
+
 - Put all six Google usage metrics in one Gemini account and dashboard card.
   Connect Gemini Apps and coding sessions inside that account, with confirmation
   that they use the same Google identity. Existing coding accounts can be linked
