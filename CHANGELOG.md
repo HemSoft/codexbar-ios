@@ -113,7 +113,7 @@ building, testing, or releasing the app.
   It saves an existing renewable coding session to the selected account's
   Keychain and removes the staging file. An unreadable Keychain slot is never
   treated as empty. Release builds exclude this tool;
-  guided phone authorization remains unfinished.
+  new-user browser authorization still needs app-side OAuth configuration.
   ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
 
 - Keep the Google coding browser sign-in service limited to UIKit platforms so

@@ -172,9 +172,11 @@ final class GoogleCodingSignIn: NSObject, ASWebAuthenticationPresentationContext
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         guard let token = try? decoder.decode(Response.self, from: data),
               token.tokenType.lowercased() == "bearer", !token.accessToken.isEmpty,
+              let refreshToken = token.refreshToken?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !refreshToken.isEmpty,
               token.expiresIn.isFinite, token.expiresIn > 0, token.expiresIn <= 86_400 else { throw Failure.invalidToken }
         return AntigravityCredentials(
-            accessToken: token.accessToken, refreshToken: token.refreshToken,
+            accessToken: token.accessToken, refreshToken: refreshToken,
             clientID: clientID, expiry: now.addingTimeInterval(token.expiresIn), isPublicClient: true
         )
     }

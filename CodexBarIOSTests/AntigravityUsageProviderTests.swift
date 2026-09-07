@@ -186,6 +186,19 @@ final class AntigravityUsageProviderTests: XCTestCase {
     }
 
     @MainActor
+    func testNativeCodingCredentialsRejectMissingRenewalToken() {
+        for payload in [
+            #"{"access_token":"sample","token_type":"Bearer","expires_in":3600}"#,
+            #"{"access_token":"sample","refresh_token":"","token_type":"Bearer","expires_in":3600}"#,
+            #"{"access_token":"sample","refresh_token":"  ","token_type":"Bearer","expires_in":3600}"#
+        ] {
+            XCTAssertThrowsError(try GoogleCodingSignIn.credentials(
+                Data(payload.utf8), clientID: "example", now: Self.now
+            ))
+        }
+    }
+
+    @MainActor
     func testNativeCodingCredentialsPreservePublicClientRenewal() throws {
         let payload = Data(#"{"access_token":"sample","refresh_token":"renew","token_type":"Bearer","expires_in":3600}"#.utf8)
         let credential = try GoogleCodingSignIn.credentials(payload, clientID: "123-example.apps.googleusercontent.com", now: Self.now)
@@ -194,9 +207,9 @@ final class AntigravityUsageProviderTests: XCTestCase {
         let restored = try AntigravityCredentials.parse(credential.encoded())
         XCTAssertTrue(restored.canRefresh)
         XCTAssertNil(restored.clientSecret)
-        for invalid in [#"{"access_token":"sample","token_type":"Basic","expires_in":3600}"#,
-                        #"{"access_token":"","token_type":"Bearer","expires_in":3600}"#,
-                        #"{"access_token":"sample","token_type":"Bearer","expires_in":-1}"#,
+        for invalid in [#"{"access_token":"sample","refresh_token":"renew","token_type":"Basic","expires_in":3600}"#,
+                        #"{"access_token":"","refresh_token":"renew","token_type":"Bearer","expires_in":3600}"#,
+                        #"{"access_token":"sample","refresh_token":"renew","token_type":"Bearer","expires_in":-1}"#,
         ] {
             XCTAssertThrowsError(try GoogleCodingSignIn.credentials(Data(invalid.utf8), clientID: "example"))
         }
