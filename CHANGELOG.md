@@ -8,10 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
-- Added experimental coding session import inside Google Gemini for Gemini
-  Models and Other models, Claude/GPT, with five-hour and weekly quotas.
-  Missing quota stays unavailable. Native coding sign-in and live comparisons
-  remain follow-ups.
+- Display Gemini Models and Other models, Claude/GPT, five-hour and weekly
+  quotas from previously saved coding connections inside Google Gemini. Missing
+  quota stays unavailable. New connection setup is tracked separately.
   ([#314](https://github.com/HemSoft/codexbar-ios/issues/314))
 
 - Added an experimental Google Gemini account option that displays five-hour

@@ -195,8 +195,8 @@ final class ProviderSettingsViewModel: ObservableObject {
                 saveButtonTitle: "Save and Validate Session",
                 setupMessage: "Manage saved coding connections in Gemini settings. "
                     + "New coding setup is not available in this build.",
-                setupLinkTitle: "Coding connection details",
-                setupURL: URL(string: "https://github.com/HemSoft/codexbar-ios/blob/main/ANTIGRAVITY-SETUP.md"),
+                setupLinkTitle: nil,
+                setupURL: nil,
                 securityMessage: "Session tokens may grant broader Google account access. "
                     + "They stay in this account's Keychain entry. This integration uses an unofficial quota API."
             )
