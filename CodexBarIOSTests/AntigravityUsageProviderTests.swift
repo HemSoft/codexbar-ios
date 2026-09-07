@@ -3,6 +3,47 @@ import XCTest
 
 final class AntigravityUsageProviderTests: XCTestCase {
     @MainActor
+    func testDevelopmentHandoffRequiresOptInAndDeletesStagingFile() throws {
+        let suite = "CodingHandoff.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = MemorySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let account = store.addAccount(for: .gemini)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent(DeveloperGoogleSessionInstaller.fileName)
+        let credential = #"{"access_token":"sample","refresh_token":"renew","client_id":"client","client_secret":"secret"}"#
+        func stage(accountID: String) throws {
+            let data = try JSONSerialization.data(withJSONObject: [
+                "accountID": accountID, "credential": credential, "confirmedSameAccount": true
+            ])
+            try data.write(to: file)
+        }
+        try stage(accountID: account.id)
+        XCTAssertFalse(DeveloperGoogleSessionInstaller.installIfRequested(
+            configurationStore: store, arguments: [], directory: directory
+        ))
+        XCTAssertFalse(store.hasGeminiCodingSecret(for: account))
+        try stage(accountID: "unknown")
+        XCTAssertFalse(DeveloperGoogleSessionInstaller.installIfRequested(
+            configurationStore: store, arguments: [DeveloperGoogleSessionInstaller.launchArgument], directory: directory
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        try stage(accountID: account.id)
+        XCTAssertTrue(DeveloperGoogleSessionInstaller.installIfRequested(
+            configurationStore: store, arguments: [DeveloperGoogleSessionInstaller.launchArgument], directory: directory
+        ))
+        XCTAssertTrue(store.hasGeminiCodingSecret(for: account))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        try stage(accountID: account.id)
+        XCTAssertFalse(DeveloperGoogleSessionInstaller.installIfRequested(
+            configurationStore: store, arguments: [DeveloperGoogleSessionInstaller.launchArgument], directory: directory
+        ))
+    }
+
+    @MainActor
     func testCodingCallbackRejectsUnexpectedStateHostAndDuplicateCodes() throws {
         let config = try GoogleCodingSignIn.Configuration(clientID: "123-example.apps.googleusercontent.com")
         let base = config.redirectURI
