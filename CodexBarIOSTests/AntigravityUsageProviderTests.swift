@@ -47,6 +47,7 @@ final class AntigravityUsageProviderTests: XCTestCase {
         let secrets = MemorySecretStore()
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
         let account = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveSecret("__Secure-1PSID=apps", for: account))
         let key = ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: account.id)
         let original = #"{"access_token":"working"}"#
         XCTAssertTrue(store.saveGeminiCodingSecret(original, for: account, confirmedSameAccount: true))
@@ -70,9 +71,15 @@ final class AntigravityUsageProviderTests: XCTestCase {
         model.googleCodingUsageProvider = AntigravityUsageProvider(
             secretStore: secrets, sessionConfiguration: fixture.session.configuration
         )
-        try await model.saveValidatedGoogleCodingCredential(
-            AntigravityCredentials.parse(#"{"access_token":"candidate"}"#)
-        )
+        let candidate = try AntigravityCredentials.parse(#"{"access_token":"candidate"}"#)
+        try await model.receiveGoogleCodingCredential(candidate)
+        XCTAssertTrue(model.needsGoogleCodingAccountConfirmation)
+        XCTAssertEqual(try secrets.readSecret(account: key), original)
+        model.cancelGoogleCodingSignIn()
+        model.confirmGoogleCodingAccount()
+        XCTAssertEqual(try secrets.readSecret(account: key), original)
+        try await model.receiveGoogleCodingCredential(candidate)
+        model.confirmGoogleCodingAccount()
         await fulfillment(of: [refreshed], timeout: 3)
         XCTAssertEqual(refreshCount, 1)
         XCTAssertEqual(model.geminiCodingMessage, "Coding account connected.")

@@ -431,9 +431,15 @@ struct ProviderSettingsView: View {
         .sheet(item: $viewModel.authURL) { authURL in
             SafariAuthSheet(url: authURL.url)
         }
+        .onChange(of: viewModel.needsGoogleCodingAccountConfirmation) { _, needed in
+            if needed { requestGeminiConfirmation(.codingSignIn) }
+        }
         .alert("Confirm Google Account", isPresented: $isConfirmingGoogleAccount) {
             Button("Same Google Account") { confirmGeminiAction() }
-            Button("Cancel", role: .cancel) { pendingGeminiConfirmation = nil }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelGoogleCodingSignIn()
+                pendingGeminiConfirmation = nil
+            }
         } message: {
             Text(geminiConfirmationMessage)
         }
@@ -474,7 +480,7 @@ struct ProviderSettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Button(configurationStore.hasGeminiCodingSecret(for: viewModel.configuration) ? "Reconnect Coding Usage" : "Connect Coding Usage") {
-                requestGeminiConfirmation(.codingSignIn)
+                viewModel.startGoogleCodingSignIn()
             }
             .disabled(viewModel.isSigningInWithGoogleCoding)
             if viewModel.isSigningInWithGoogleCoding {
@@ -518,7 +524,7 @@ struct ProviderSettingsView: View {
             "Confirm that the saved coding account \(legacy.displayName) and \(viewModel.configuration.displayName) "
                 + "belong to the same Google account. CodexBar cannot verify this identity automatically."
         case .codingSignIn, nil:
-            "Choose the same Google account used for \(viewModel.configuration.displayName). "
+            "Confirm that the Google account you just selected is the same account used for \(viewModel.configuration.displayName). "
                 + "CodexBar cannot verify this identity automatically."
         }
     }
@@ -531,7 +537,7 @@ struct ProviderSettingsView: View {
     private func confirmGeminiAction() {
         switch pendingGeminiConfirmation {
         case .codingSignIn:
-            viewModel.startGoogleCodingSignIn()
+            viewModel.confirmGoogleCodingAccount()
         case .legacyLink(let legacy):
             viewModel.linkGeminiCodingAccount(legacy, confirmedSameAccount: true)
         case .appsReconnect:

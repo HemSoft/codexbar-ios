@@ -32,6 +32,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published var secret = ""
     @Published var geminiCodingSecret = ""
     @Published private(set) var isSigningInWithGoogleCoding = false
+    @Published private(set) var needsGoogleCodingAccountConfirmation = false
+    private var pendingGoogleCodingCredential: AntigravityCredentials?
     private let googleCodingSignIn = GoogleCodingSignIn()
     var googleCodingUsageProvider = AntigravityUsageProvider()
     private var googleCodingTask: Task<Void, Never>?
@@ -495,12 +497,39 @@ final class ProviderSettingsViewModel: ObservableObject {
             defer { self.isSigningInWithGoogleCoding = false }
             do {
                 let credentials = try await self.googleCodingSignIn.signIn(configuration: client)
-                try await self.saveValidatedGoogleCodingCredential(credentials)
+                try await self.receiveGoogleCodingCredential(credentials)
             } catch is CancellationError {
                 self.geminiCodingMessage = "Coding sign-in canceled."
             } catch {
                 self.geminiCodingMessage = (error as? GoogleCodingSignIn.Failure)?.localizedDescription
                     ?? "Coding sign-in could not finish. Please try again."
+            }
+        }
+    }
+
+    func receiveGoogleCodingCredential(_ credentials: AntigravityCredentials) async throws {
+        if configurationStore.hasSecret(for: configuration) {
+            pendingGoogleCodingCredential = credentials
+            needsGoogleCodingAccountConfirmation = true
+            return
+        }
+        try await saveValidatedGoogleCodingCredential(credentials)
+    }
+
+    func confirmGoogleCodingAccount() {
+        guard needsGoogleCodingAccountConfirmation, let credentials = pendingGoogleCodingCredential else { return }
+        pendingGoogleCodingCredential = nil
+        needsGoogleCodingAccountConfirmation = false
+        isSigningInWithGoogleCoding = true
+        googleCodingTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.isSigningInWithGoogleCoding = false }
+            do {
+                try await self.saveValidatedGoogleCodingCredential(credentials)
+            } catch is CancellationError {
+                self.geminiCodingMessage = "Coding sign-in canceled."
+            } catch {
+                self.geminiCodingMessage = "Coding sign-in could not finish. Please try again."
             }
         }
     }
@@ -521,6 +550,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func cancelGoogleCodingSignIn() {
+        pendingGoogleCodingCredential = nil
+        needsGoogleCodingAccountConfirmation = false
         googleCodingTask?.cancel()
         googleCodingSignIn.cancel()
     }
