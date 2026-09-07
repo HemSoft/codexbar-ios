@@ -2,6 +2,69 @@ import XCTest
 @testable import CodexBarIOS
 
 final class AntigravityUsageProviderTests: XCTestCase {
+    @MainActor
+    func testCodingCallbackRejectsUnexpectedStateHostAndDuplicateCodes() throws {
+        let config = try GoogleCodingSignIn.Configuration(clientID: "123-example.apps.googleusercontent.com")
+        let base = config.redirectURI
+        XCTAssertEqual(try GoogleCodingSignIn.authorizationCode(
+            URL(string: base + "?state=expected&code=valid")!, configuration: config, state: "expected"
+        ), "valid")
+        for suffix in ["?state=wrong&code=valid", "?state=expected&code=a&code=b", "?state=expected&error=access_denied"] {
+            XCTAssertThrowsError(try GoogleCodingSignIn.authorizationCode(
+                URL(string: base + suffix)!, configuration: config, state: "expected"
+            ))
+        }
+        XCTAssertThrowsError(try GoogleCodingSignIn.authorizationCode(
+            URL(string: config.callbackScheme + "://attacker/oauthredirect?state=expected&code=a")!,
+            configuration: config, state: "expected"
+        ))
+    }
+
+    @MainActor
+    func testCodingClientConfigurationFailsClosedAndRequestsOfflinePKCE() throws {
+        for invalid in ["", "$(GOOGLE_CODING_CLIENT_ID)", "invalid", "bad/path.apps.googleusercontent.com"] {
+            XCTAssertThrowsError(try GoogleCodingSignIn.Configuration(clientID: invalid))
+        }
+        let config = try GoogleCodingSignIn.Configuration(clientID: "123-example.apps.googleusercontent.com")
+        let url = GoogleCodingSignIn.authorizationURL(configuration: config, state: "state", challenge: "challenge")
+        let parts = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let items = Dictionary(uniqueKeysWithValues: (parts.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(parts.host, "accounts.google.com")
+        XCTAssertEqual(items["code_challenge_method"], "S256")
+        XCTAssertEqual(items["code_challenge"], "challenge")
+        XCTAssertEqual(items["access_type"], "offline")
+        XCTAssertEqual(items["redirect_uri"], config.redirectURI)
+    }
+
+    @MainActor
+    func testCodingTokenExchangeUsesPKCEAndNoEmbeddedSecret() throws {
+        let config = try GoogleCodingSignIn.Configuration(clientID: "123-example.apps.googleusercontent.com")
+        let request = GoogleCodingSignIn.tokenRequest(code: "a+b", verifier: "verifier", configuration: config)
+        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        XCTAssertTrue(body.contains("code=a%2Bb"))
+        XCTAssertTrue(body.contains("code_verifier=verifier"))
+        XCTAssertFalse(body.contains("client_secret"))
+        XCTAssertEqual(request.url?.host, "oauth2.googleapis.com")
+        XCTAssertFalse(request.httpShouldHandleCookies)
+    }
+
+    @MainActor
+    func testNativeCodingCredentialsPreservePublicClientRenewal() throws {
+        let payload = Data(#"{"access_token":"sample","refresh_token":"renew","token_type":"Bearer","expires_in":3600}"#.utf8)
+        let credential = try GoogleCodingSignIn.credentials(payload, clientID: "123-example.apps.googleusercontent.com", now: Self.now)
+        XCTAssertTrue(credential.canRefresh)
+        XCTAssertEqual(credential.expiry, Self.now.addingTimeInterval(3600))
+        let restored = try AntigravityCredentials.parse(credential.encoded())
+        XCTAssertTrue(restored.canRefresh)
+        XCTAssertNil(restored.clientSecret)
+        for invalid in [#"{"access_token":"sample","token_type":"Basic","expires_in":3600}"#,
+                        #"{"access_token":"","token_type":"Bearer","expires_in":3600}"#,
+                        #"{"access_token":"sample","token_type":"Bearer","expires_in":-1}"#,
+        ] {
+            XCTAssertThrowsError(try GoogleCodingSignIn.credentials(Data(invalid.utf8), clientID: "example"))
+        }
+    }
+
     private static let configuration = ProviderAccountConfiguration(
         id: "antigravity-test", providerID: .antigravity, authMethod: .cliToken
     )

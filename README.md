@@ -71,7 +71,7 @@ documented defaults in `CopilotWebAuthService.swift`.
 ## Google Gemini sign-in
 
 One Gemini account contains all six Google usage metrics. Gemini Apps uses a
-Google website session; Gemini Models and Other models use a separately imported
+Google website session; Gemini Models and Other models use a separate
 coding OAuth session inside the same account. Both connections are experimental.
 See the verification boundaries in [Gemini sign-in evidence](GEMINI-SIGN-IN.md)
 and [coding session setup](ANTIGRAVITY-SETUP.md).
@@ -93,14 +93,15 @@ removes this account's website session and preserves its coding session.
 **Disconnect Coding Session** removes only coding authorization. Neither action
 signs you out of Google in Safari or disconnects another CodexBar entry.
 
-Open **Coding Usage** in the same Gemini settings to import your desktop coding
-session JSON. Confirm that it belongs to this Gemini account, then choose
-**Same Google Account**. Existing standalone coding accounts are retained and
+Open **Coding Usage → Connect Coding Usage** in the same Gemini settings.
+Confirm that you will choose the same Google account, then complete browser
+authorization. This flow requires the developer to configure a Google OAuth
+iOS client before deployment; end users do not enter client settings. Existing standalone coding accounts are retained and
 can be linked here after that confirmation; CodexBar does not guess associations
 from matching labels. All six metrics stay available in Metrics and Customize
 Card even when a source needs setup. Their saved identities, layout, and history
 survive the account consolidation. See [coding session setup](ANTIGRAVITY-SETUP.md)
-for the supported import format and renewal requirements.
+for developer configuration and renewal details.
 
 Cancellation, a failed usage check, and a failed Keychain save leave the existing
 credential unchanged. If Google denies access, cancel and retry with an eligible
@@ -150,5 +151,5 @@ The current Windows app is a C# / WPF / .NET 9 system tray app with shared provi
 The Gemini account's Coding Usage connection reads Gemini Models and Other
 models, Claude/GPT, from the internal Antigravity quota adapter. Each has
 five-hour and weekly metrics alongside Gemini Apps on one dashboard card. See
-[coding session setup](ANTIGRAVITY-SETUP.md) for desktop import, renewal, and the
+[coding session setup](ANTIGRAVITY-SETUP.md) for browser setup, renewal, and the
 remaining live comparison checks.

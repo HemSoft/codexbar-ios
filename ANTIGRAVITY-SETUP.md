@@ -1,14 +1,15 @@
-# Gemini coding session import
+# Gemini coding connection
 
 One Google Gemini account contains all six usage metrics in CodexBar. Its
 Gemini Apps connection uses Google website cookies. Its Coding Usage connection
-uses an imported desktop OAuth session to read Gemini Models and Other models,
+uses an OAuth session to read Gemini Models and Other models,
 Claude/GPT. The two credential formats are separate and are never substituted
 for each other. Antigravity is an internal quota adapter, not a separate account
 choice or dashboard card.
 
-This experimental coding integration requires a desktop session import. Native
-iPhone coding authorization is not available. It uses an unofficial Google API.
+This experimental coding integration has a native browser authorization flow
+that requires developer-side OAuth client configuration before deployment.
+It uses an unofficial Google usage API.
 Franz's live comparisons remain follow-up verification for
 [#319](https://github.com/HemSoft/codexbar-ios/issues/319) and do not block agent
 implementation or merge.
@@ -38,59 +39,36 @@ chosen Gemini account and preserves its observed history. Unlinked records stay
 retained internally. Old source setup cards disappear; saved choices are retained
 when their Gemini account can be identified.
 
-## Setup
+## Browser setup
 
-1. Sign in to Antigravity on your desktop with the account whose quotas you want.
-2. Obtain that account's exported session JSON through your desktop credential
-   workflow. Upstream desktop CodexBar's OAuth flow stores portable credentials
-   in `~/.codexbar/antigravity/oauth_creds.json`. An existing file can be copied
-   to the Mac clipboard with `pbcopy < ~/.codexbar/antigravity/oauth_creds.json`.
-   The Antigravity CLI stores its session in the OS keyring instead; CodexBar iOS
-   does not export that keyring or provide a desktop export tool.
-3. On iPhone, add or open the Google Gemini account for that Google identity.
-   In Coding Usage, paste the session JSON and choose Connect Coding Session.
-   Confirm the sessions belong to the same Google account. Use Update Coding
-   Session to replace an expired token after the same confirmation.
-4. To reuse an existing saved coding account, choose its Link saved coding
-   account action inside Gemini settings and confirm the same identity.
-   Disconnect an existing coding session before linking a different saved one.
-5. Refresh the Gemini card and compare both coding model families with
-   Antigravity CLI `/usage` using the same account. Gemini Apps is a different
-   quota source on that same card.
+In Gemini settings, choose **Connect Coding Usage**, confirm that you will
+select the same Google account used for Gemini Apps, and complete Google's
+browser authorization. CodexBar saves the returned session in account-scoped
+Keychain storage and refreshes usage. Cancellation preserves saved credentials.
+The app no longer asks users to paste or export session JSON.
 
-Reconnecting Gemini Apps while coding is linked requires confirmation that you
-will sign in to the same Google account. Add another Gemini entry for a different
-identity. Disconnect Gemini Apps and Disconnect Coding Session remove only their
-respective authorization; the other source stays connected.
+### Developer configuration required before deployment
 
-Never paste a session into chat, a GitHub issue, or a repository file. Clear the
-clipboard after importing. Tokens may grant broader Google account access.
-CodexBar stores only the supported credential fields in this account's Keychain
-coding entry, separate from Gemini Apps cookies. Tokens do not enter History,
-widget snapshots, or Watch payloads.
+This branch contains the native iOS OAuth flow, but it is not configured for
+production yet. Register a Google OAuth iOS client for `com.hemsoft.CodexBarIOS`
+and set the build setting `GOOGLE_CODING_CLIENT_ID` to its public client ID.
+The application derives the reverse-client-ID callback scheme and uses
+`:/oauthredirect`, PKCE S256, a system browser session, and offline access.
+Do not ask end users for OAuth configuration. Without a valid build setting,
+the connection action reports that coding sign-in is not configured in this
+build, rather than pretending to connect.
 
-The accepted flat JSON shape is:
+The requested scopes are `cloud-platform` and `userinfo.email`, following the
+[desktop reference](https://github.com/steipete/CodexBar/blob/main/docs/antigravity.md).
+The iOS flow uses a public native client without a client secret. Legacy saved
+credentials retain their existing renewal behavior; new native credentials
+persist their public-client renewal mode. HTTP redirects from the token endpoint
+are rejected, and raw token errors are never shown in the UI.
 
-```json
-{
-  "access_token": "<Antigravity access token>",
-  "expiry": "2030-01-01T00:00:00Z"
-}
-```
-
-The CLI profile shape `{"token":{"access_token":"...","expiry":"..."}}`
-is also accepted. `expiry_date` may replace `expiry` when it contains Unix
-milliseconds, as in upstream desktop CodexBar's export. Unknown fields are
-discarded. Google website cookies and Gemini API keys are not session JSON.
-
-Automatic renewal additionally requires `refresh_token`, `client_id`, and
-`client_secret` from the same desktop OAuth client. For a nested CLI profile,
-tokens and expiry belong inside `token`; client fields belong at the top level.
-CodexBar does not guess or bundle another application's OAuth client. Without
-all renewal fields, an expired or rejected token requires a fresh import.
-Renewal uses Google's token endpoint and saves a rotated token only if the
-account's imported credential has not changed or been removed during the request.
-Renewal has fixture coverage; live renewal on iPhone remains unverified.
+Google's [native app documentation](https://developers.google.com/identity/protocols/oauth2/native-app)
+is the callback and client-registration reference. An identity grant does not
+establish quota availability. Franz owns live account and quota verification;
+this remains pending and is not an implementation prerequisite.
 
 ## Quota contract
 
@@ -157,7 +135,7 @@ Franz can use these optional checks after receiving the updated build:
 1. Unlock the phone and use a signed-in CLI session for the same Google account.
    Record `agy --version`, interactive `/usage`, and
    `agy -p "/usage" --output-format json`. Do not publish identity or tokens.
-2. Complete session export and import, then follow `DEVICE-DEPLOYMENT.md` to
+2. Complete Connect Coding Usage in Gemini settings, then follow `DEVICE-DEPLOYMENT.md` to
    build, install and launch the PR commit on the rediscovered device.
 3. Refresh both sources in the same comparison interval. Record used versus
    remaining semantics, values and supplied resets for all six metrics.
@@ -165,7 +143,7 @@ Franz can use these optional checks after receiving the updated build:
    and verify all four coding metrics remain in the same Gemini card. Keep before/after screenshots locally
    and publish only evidence without identity or credentials.
 5. Record renewal if matching client fields are available, or exercise and
-   document reimport. Saving a credential without a successful quota refresh
+   document browser reconnection. Saving a credential without a successful quota refresh
    does not prove access.
 
 A native iPhone authorization flow remains separate work. Verify an appropriate

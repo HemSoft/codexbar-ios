@@ -7,6 +7,7 @@ struct AntigravityCredentials: Codable, Equatable, Sendable {
     var clientID: String?
     var clientSecret: String?
     var expiry: Date?
+    var isPublicClient: Bool?
 
     enum CredentialError: LocalizedError {
         case invalid
@@ -22,10 +23,11 @@ struct AntigravityCredentials: Codable, Equatable, Sendable {
         case clientID = "client_id"
         case clientSecret = "client_secret"
         case expiry
+        case isPublicClient
     }
 
     var canRefresh: Bool {
-        refreshToken != nil && clientID != nil && clientSecret != nil
+        refreshToken != nil && clientID != nil && (clientSecret != nil || isPublicClient == true)
     }
 
     static func parse(_ value: String) throws -> Self {
@@ -39,7 +41,8 @@ struct AntigravityCredentials: Codable, Equatable, Sendable {
             refreshToken: field("refresh_token", in: token),
             clientID: field("client_id", in: root),
             clientSecret: field("client_secret", in: root),
-            expiry: expiryDate(in: token)
+            expiry: expiryDate(in: token),
+            isPublicClient: root["isPublicClient"] as? Bool
         )
     }
 

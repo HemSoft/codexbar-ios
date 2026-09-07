@@ -142,11 +142,15 @@ control to erase that retained check metadata.
 
 For support or privacy questions, use the support information in [SUPPORT.md](SUPPORT.md).
 
-## Antigravity session import
+## Gemini coding authorization
 
-Imported Antigravity access tokens, optional refresh tokens, and OAuth client
+Google coding access tokens, optional refresh tokens, and OAuth client
 fields stay in the selected account's Keychain entry. Quota requests send the
 access token only to `daily-cloudcode-pa.googleapis.com`. If supplied, renewal
 credentials go only to `oauth2.googleapis.com/token`. These credentials may
 grant broader Google account access and are never included in History, widgets,
-or Watch snapshots. Native iPhone sign-in is not part of this experimental flow.
+or Watch snapshots. Coding sign-in opens Google in a system authentication
+session, which may reuse your existing browser login. The app exchanges the
+returned authorization code using PKCE. The configured native OAuth client
+requests cloud-platform and email scopes; it does not embed a client secret.
+Previously imported sessions remain stored until you reconnect or disconnect.

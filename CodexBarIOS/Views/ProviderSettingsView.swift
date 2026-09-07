@@ -9,7 +9,7 @@ struct ProviderSettingsView: View {
     @State private var isConfirmingGoogleAccount = false
 
     private enum GeminiConfirmation {
-        case codingImport
+        case codingSignIn
         case legacyLink(ProviderAccountConfiguration)
         case appsReconnect
     }
@@ -473,25 +473,15 @@ struct ProviderSettingsView: View {
             Text("Connect Gemini Models and Other models, Claude/GPT, to show their four coding limits in this Gemini account.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            SecureField("Paste coding session JSON", text: $viewModel.geminiCodingSecret)
-                .textContentType(.password)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .accessibilityIdentifier("gemini-coding-session")
-            Button(configurationStore.hasGeminiCodingSecret(for: viewModel.configuration) ? "Update Coding Session" : "Connect Coding Session") {
-                requestGeminiConfirmation(.codingImport)
+            Button(configurationStore.hasGeminiCodingSecret(for: viewModel.configuration) ? "Reconnect Coding Usage" : "Connect Coding Usage") {
+                requestGeminiConfirmation(.codingSignIn)
             }
-            .disabled(viewModel.geminiCodingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Text("Import session JSON from your signed-in Antigravity desktop. "
-                + "Coding access uses its own OAuth token, separate from Gemini Apps' website session. "
-                + "Without renewal credentials, import again when the token expires.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Link("Coding session import instructions", destination: URL(
-                string: "https://github.com/HemSoft/codexbar-ios/blob/main/ANTIGRAVITY-SETUP.md"
-            )!)
-            Text("Session tokens may grant broader Google account access. "
-                + "CodexBar keeps coding credentials in a separate Keychain entry for this Gemini account.")
+            .disabled(viewModel.isSigningInWithGoogleCoding)
+            if viewModel.isSigningInWithGoogleCoding {
+                ProgressView("Waiting for Google…")
+                Button("Cancel Sign-In") { viewModel.cancelGoogleCodingSignIn() }
+            }
+            Text("Choose the same Google account to connect your coding limits. You will return here automatically.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             if configurationStore.hasGeminiCodingSecret(for: viewModel.configuration) {
@@ -527,8 +517,8 @@ struct ProviderSettingsView: View {
         case .legacyLink(let legacy):
             "Confirm that the saved coding account \(legacy.displayName) and \(viewModel.configuration.displayName) "
                 + "belong to the same Google account. CodexBar cannot verify this identity automatically."
-        case .codingImport, nil:
-            "Confirm that this coding session and \(viewModel.configuration.displayName) belong to the same Google account. "
+        case .codingSignIn, nil:
+            "Choose the same Google account used for \(viewModel.configuration.displayName). "
                 + "CodexBar cannot verify this identity automatically."
         }
     }
@@ -540,8 +530,8 @@ struct ProviderSettingsView: View {
 
     private func confirmGeminiAction() {
         switch pendingGeminiConfirmation {
-        case .codingImport:
-            viewModel.saveGeminiCodingCredential(confirmedSameAccount: true)
+        case .codingSignIn:
+            viewModel.startGoogleCodingSignIn()
         case .legacyLink(let legacy):
             viewModel.linkGeminiCodingAccount(legacy, confirmedSameAccount: true)
         case .appsReconnect:

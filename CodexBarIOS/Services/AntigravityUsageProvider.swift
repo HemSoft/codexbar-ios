@@ -138,6 +138,7 @@ final class AntigravityUsageProvider: UsageProvider {
             URLQueryItem(name: "client_id", value: credentials.clientID),
             URLQueryItem(name: "client_secret", value: credentials.clientSecret),
         ]
+        components.queryItems = components.queryItems?.filter { $0.value != nil }
         request.httpBody = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B").data(using: .utf8)
         return request
     }
@@ -158,7 +159,7 @@ final class AntigravityUsageProvider: UsageProvider {
         case FetchError.credential, is AntigravityCredentials.CredentialError,
              FetchError.http(400), FetchError.http(401), FetchError.http(403):
             message = configuration.providerID == .gemini
-                ? "Coding connection required. Import current coding credentials in this Gemini account's settings."
+                ? "Coding connection required. Choose Connect Coding Usage in this Gemini account's settings."
                 : "Antigravity needs a current session. Import fresh credentials from your desktop."
             recovery = .reauthenticate
         case FetchError.changedCredential:

@@ -98,6 +98,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added a Google coding browser-authorization implementation with PKCE,
+  account-scoped storage, and native-client token renewal. Deployment requires
+  configuring the app’s Google OAuth iOS client. Live quota testing remains
+  with Franz. ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+
 - Established phone-based provider setup as the required user experience,
   excluding manual credential imports. Agents own implementation and automated
   checks; Franz owns live account and quota verification.
