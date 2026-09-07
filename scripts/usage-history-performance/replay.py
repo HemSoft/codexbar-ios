@@ -18,6 +18,7 @@ STUDY_EXPERIMENT_NAMES = (
     "usage-history-performance-34054447047-1",
     "unchanged-1", "unchanged-2", "unchanged-3", "slowdown",
     "quiet-1", "quiet-2", "quiet-3", "quiet-slowdown",
+    "clean-1", "clean-2", "clean-3", "clean-slowdown",
 )
 
 
@@ -59,8 +60,18 @@ def replay_study(study, policy):
     if (tuple(declared) != STUDY_EXPERIMENT_NAMES or names != declared
             or tuple(STUDY_MANIFEST) != STUDY_EXPERIMENT_NAMES):
         raise ValueError("missing, duplicated or reordered study experiments")
+    proof = study["cleanInputProof"]
+    patch = Path(__file__).with_name("clean-build-inputs.patch").read_bytes()
+    if (proof["status"] or proof["productionDiff"]
+            or hashlib.sha256(patch).hexdigest() != proof["patchSHA256"]):
+        raise ValueError("clean study build-input proof is invalid")
     results = []
     for recording in study["experiments"]:
+        if recording["name"].startswith("clean-"):
+            metadata = recording["metadata"]
+            if (metadata["candidateDirty"] is not False
+                    or metadata["candidateRevision"] != proof["revision"]):
+                raise ValueError("clean study requires the captured clean revision")
         runs = expand_runs(recording)
         hashes = [{side: hashlib.sha256(json.dumps(pair[side], sort_keys=True,
                                                    separators=(",", ":"), allow_nan=False).encode()).hexdigest()

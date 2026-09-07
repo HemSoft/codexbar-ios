@@ -292,17 +292,13 @@ all raw reports reproduces their original findings. The hosted metadata contains
 hardware and toolchain versions but no process load or thermal observations,
 so these artifacts cannot identify the cause of the hosted variation.
 
-The local study used the original M5 calibration host and the same benchmark
-source as those hosted attempts, SHA-256
-`f32a3ada7d30253404aea22a4ad1e9d63987d81d5dc70196f298ff4374b449be`.
-The measurement change only adds diagnostic snapshots and preserves failed
-process output. All 106 tracked files under `CodexBarIOS` matched the frozen
-source revision. The Swift fixture, seven timings per operation, two warmups,
-five measured batches, 47 retained-state observations, evaluator and limits
-were unchanged. No sample was deleted or relabeled.
-Policy-only commits advanced the branch during the study. Each experiment keeps
-its actual candidate revision and dirty-state metadata, and the source proof
-checks both recorded revisions against the same frozen production tree.
+The historical local study used the M5 calibration host. Its recorded commit
+revisions have matching production trees, but all eight local trials report a
+dirty candidate worktree. No patch or content digest captured those dirty
+inputs. The commit comparison therefore does not prove the actual build inputs
+were unchanged. Retain these trials as historical timing observations, not as
+proof of unchanged-code repeatability. The clean study below replaces that
+missing evidence without deleting or relabeling any earlier samples.
 
 The first plan declared three independent paired experiments followed by one
 slowdown experiment. Two unrelated simulator startups and concurrent Swift
@@ -321,7 +317,7 @@ or simulator process using at least 10% CPU. All nine snapshots qualified;
 normalized load ranged from 0.314 to 0.489. This is a documented local study
 condition, not a changed timing threshold or a guarantee of host stability.
 Admission covers only the start of the block.
-The block contains exactly three unchanged-code comparisons. A separate
+The block declared three intended unchanged-code comparisons. A separate
 once-only slowdown addendum was declared before any completed quiet comparison,
 after the first comparison had started. Both declarations and their exact
 sequencing remain in the evidence. The study stops after that fixed block.
@@ -341,7 +337,7 @@ individual samples.
 | quiet-3 | Inconclusive | 0.991 to 1.075 | 20.03% |
 | quiet-slowdown | Expected regression | 0.980 to 34.731 | 4.36% |
 
-The admitted block passed two of its three unchanged-code experiments. Its
+The admitted historical block reported two passes from three comparisons. Its
 third candidate's one-account recording medians were 4.320, 4.470 and 6.442 ms;
 series medians were 1.037, 1.100 and 1.594 ms. These yielded 19.05% and 20.03%
 CVs. All corresponding reference medians remained between 4.020 and 4.417 ms
@@ -364,8 +360,9 @@ host disturbance from a workload effect before changing the sampling design.
 The final slowdown experiment returned status 1 with recording regressions of
 34.731x, 4.423x and 2.394x for 1, 10 and 25 accounts. It had no inconclusive
 findings, and all correctness and retained-data budgets passed. Slowdown
-detection is established. Three reliable unchanged-code experiments in one
-declared block remain unproved. Selecting the three passing trials across the
+detection was reported, subject to the missing build-input evidence above. At
+that checkpoint, three reliable unchanged-code experiments in one declared
+block remained unproved. Selecting the three passing trials across the
 two blocks would hide the failures. Keep the repeatability acceptance criterion
 open and the workflow manual; this change does not claim to cure hosted noise.
 
@@ -388,3 +385,40 @@ The issue branch later incorporated main commit
 changes from PR #320. The study remains evidence about its recorded source
 checkpoints; it does not measure that later application tree. The replay verifier
 checks historical evidence without presenting it as a new benchmark run.
+
+### Clean committed-input study — 2026-09-07
+
+A new fixed plan declared three independent comparisons and one intentional
+slowdown before starting any of them. All four invocations report
+`candidateDirty: false` at commit
+`2200edbc9be93f6a72c5f165888b601ebc8fe4d9`. The candidate production tree is
+identical to frozen baseline `3395ee6094ce8e4199577f7ede493e3a50ee1269`.
+Only the benchmark harness, manifest and evidence tooling were added. The
+working tree stayed clean, and every tracked file hash was verified unchanged
+after the final experiment. No simulator or device build was started locally.
+
+The study retains the plan, all 24 raw reports in the existing lossless format,
+their independent pinned hashes, the four original verdicts, machine snapshots,
+artifact hashes and the build-input file manifest. Apply
+`scripts/usage-history-performance/clean-build-inputs.patch` to the frozen
+baseline to reconstruct the benchmark build inputs and runner. The patch hash
+is pinned in `cleanInputProof`; its production-source diff is empty.
+
+| Experiment | Result | Largest run CV |
+| --- | --- | ---: |
+| clean-1 | PASS | 3.1% |
+| clean-2 | PASS | 4.1% |
+| clean-3 | PASS | 12.4% |
+| clean-slowdown | Expected regression | 4.3% |
+
+The unchanged 15% variability limit and all latency, retained-state and
+correctness limits remain enforced. The deliberate slowdown reports recording
+regressions of 34.839x, 4.706x and 2.613x for 1, 10 and 25 accounts, plus a
+one-account series regression. It has no inconclusive findings. These three
+clean comparisons and the separate slowdown satisfy the local repeatability
+criterion. They do not establish reliability on every hosted runner or justify
+making the manual workflow an automatic gate.
+
+Run the existing replay command to verify all 16 experiments, including every
+historical failure. No failed sample was removed and no unchanged condition was
+retried to obtain these three passes.

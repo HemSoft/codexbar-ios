@@ -128,6 +128,19 @@ class PerformanceGateTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     REPLAY.replay_study(invalid, POLICY)
 
+    def test_clean_study_rejects_dirty_or_unmatched_inputs(self):
+        original = json.loads(SCRIPT.with_name("repeatability-study.json").read_text())
+        for field, value in (("candidateDirty", True), ("candidateRevision", "unknown")):
+            study = copy.deepcopy(original)
+            study["experiments"][-1]["metadata"][field] = value
+            with self.assertRaises(ValueError):
+                REPLAY.replay_study(study, POLICY)
+        for field in ("status", "productionDiff", "patchSHA256"):
+            study = copy.deepcopy(original)
+            study["cleanInputProof"][field] = "unverified"
+            with self.assertRaises(ValueError):
+                REPLAY.replay_study(study, POLICY)
+
     def test_coordinated_report_hash_and_verdict_edits_are_rejected(self):
         original = json.loads(SCRIPT.with_name("repeatability-study.json").read_text())
         for sample_index in (0, 2):

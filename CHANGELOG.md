@@ -100,7 +100,8 @@ building, testing, or releasing the app.
 
 - Document measured CI runtimes and manual-analysis failure ownership. Preserve
   machine-load diagnostics, process errors and replayable performance evidence.
-  Benchmark repeatability remains under investigation.
+  Verify benchmark repeatability with three clean-source comparisons and an
+  intentional-slowdown check while retaining earlier inconclusive results.
   ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
 
 - Established phone-based provider setup as the required user experience,

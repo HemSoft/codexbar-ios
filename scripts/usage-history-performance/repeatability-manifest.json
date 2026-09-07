@@ -281,5 +281,90 @@
         "REGRESSION 25 accounts recordMilliseconds: ratio 2.394"
       ]
     }
+  },
+  "clean-1": {
+    "reportSHA256": [
+      {
+        "reference": "c171285645b406b53c4aafdf759b0c8a33c3f97980a48d24a68593b4648b13e4",
+        "candidate": "745644efa79d847517f5eda5e0ac3d28181ee318cfbdc5bc10a5d846b694a259"
+      },
+      {
+        "reference": "d97eb67c7f9f505cb87d3e1765edc684d66c42048571dbe741ce055444578dab",
+        "candidate": "33d32d2c35b9491ce5d53fc5cdd8ae193ba9ab6676284c9f2422b0abf06eba01"
+      },
+      {
+        "reference": "db34d6562f5cd479eec2a02eee883b488070ce01ce8cd3332756f313e0c9d038",
+        "candidate": "f54f1a7192c1653c5866ddc11e72a4990a440dcb73d97bfaba74260d7521d91b"
+      }
+    ],
+    "verdict": {
+      "passed": true,
+      "findings": []
+    }
+  },
+  "clean-2": {
+    "reportSHA256": [
+      {
+        "reference": "ee4ff302d276d5dadc2f25538abd35826202ad2dac0f96212d1eb43c6536d336",
+        "candidate": "809a29294fc7188e47a406368d38ad738264687cce00d635ee3227843a233654"
+      },
+      {
+        "reference": "c0cd2ee8fb8d2c359d68ad0581d28dc42c02995211d7c9e96f3c3ef4b953cc43",
+        "candidate": "62e51f717854fcb34a595290dcfa43b37ac68c64f51754ac53de94a6b0926564"
+      },
+      {
+        "reference": "db467a3e347eaf8c12270dbc7504d77ebf88a7170bd1a06d98c0807813d8b7fd",
+        "candidate": "8926a009dcafd28a4b7792b0a4505c0665b850c7887cf66bb36366d9bec90eb3"
+      }
+    ],
+    "verdict": {
+      "passed": true,
+      "findings": []
+    }
+  },
+  "clean-3": {
+    "reportSHA256": [
+      {
+        "reference": "a7daa569088661004e7ba156f25aa29a6349c615099c8858c57a35869250ef8b",
+        "candidate": "32106e61f092e7d4215716c829ca7fc9ba401f3a882fd7d4a34fa65cc0d6f5d5"
+      },
+      {
+        "reference": "b4b4790817d68d2b5d86a34a94ea28c5df7e3de4116ca040467ab674b54e1d1f",
+        "candidate": "7ebe33c5f2fc4ab705637bc2f6c3c4a57755b470e3d8ec7b23060c48214ccb63"
+      },
+      {
+        "reference": "40cedc7a6d855d100bdc35743648e9e3387512a03309ff75e533f6019cc201ac",
+        "candidate": "3a7b45885955dd1677c788e20bf9c708b0d473e87b7e528bee219cbf0b2584bb"
+      }
+    ],
+    "verdict": {
+      "passed": true,
+      "findings": []
+    }
+  },
+  "clean-slowdown": {
+    "reportSHA256": [
+      {
+        "reference": "061e2ac57f6c207f514983d3f6d0cd66c16a21962e9298436052d8dafbbea904",
+        "candidate": "3a1702b61eac5107f87b80caec9eaa88f7f88497ba29485f8a192a9034f7a649"
+      },
+      {
+        "reference": "3978d4e1bde9c4d2980439ee03286c86d871b12120f2f0f5e7eddfccc26b035f",
+        "candidate": "156b4725546a9c06090043f1aee9621d43f4e09569e14ca47afaee05e9bff35c"
+      },
+      {
+        "reference": "5b2df50bca90cc636ac1d1cc20fc583354909a063e987b8693d3b7304466aa42",
+        "candidate": "a4353759a3e0f7f6096ef82c08f8c00d352c6e76f4b269cb95aba3ffadc4ac5b"
+      }
+    ],
+    "verdict": {
+      "passed": false,
+      "findings": [
+        "REGRESSION 1 accounts recordMilliseconds: ratio 34.839",
+        "REGRESSION 1 accounts seriesMilliseconds: ratio 2.197",
+        "REGRESSION 10 accounts recordMilliseconds: ratio 4.706",
+        "REGRESSION 25 accounts recordMilliseconds: ratio 2.613"
+      ]
+    }
   }
 }
