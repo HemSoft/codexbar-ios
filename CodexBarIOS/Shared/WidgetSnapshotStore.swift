@@ -174,6 +174,7 @@ public struct CodexBarWidgetSnapshot: Codable, Equatable, Sendable {
 public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, Sendable {
     public let accountID: String
     public let providerID: String
+    public let legacyAccountIDs: [String]?
     public let title: String
     public let subtitle: String
     public let planIdentifier: String?
@@ -194,6 +195,7 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
     public init(
         accountID: String,
         providerID: String,
+        legacyAccountIDs: [String] = [],
         title: String,
         subtitle: String,
         planIdentifier: String? = nil,
@@ -213,6 +215,7 @@ public struct CodexBarWidgetProviderSnapshot: Codable, Equatable, Identifiable, 
     ) {
         self.accountID = accountID
         self.providerID = providerID
+        self.legacyAccountIDs = legacyAccountIDs.isEmpty ? nil : legacyAccountIDs
         self.title = title
         self.subtitle = subtitle
         self.planIdentifier = planIdentifier

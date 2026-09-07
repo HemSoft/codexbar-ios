@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AB2990000000000000000001 /* GoogleCodingSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2990000000000000000002; };
 		A31900000000000000000001 /* GoogleUsageMetricCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */; };
 		A22600000000000000000001 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
 		A22600000000000000000002 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
@@ -225,6 +226,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AB2990000000000000000002 /* GoogleCodingSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCodingSignIn.swift; sourceTree = "<group>"; };
 		A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleUsageMetricCatalog.swift; sourceTree = "<group>"; };
 		A22600000000000000000005 /* GreptileUsageIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreptileUsageIdentity.swift; sourceTree = "<group>"; };
 		A22700000000000000000005 /* CursorUsageIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorUsageIdentity.swift; sourceTree = "<group>"; };
@@ -488,6 +490,7 @@
 				20000000000000000000001E /* CopilotUsageProvider.swift */,
 				200000000000000000000021 /* ClaudeCredentialsParser.swift */,
 				200000000000000000000022 /* ClaudeWebAuthService.swift */,
+				AB2990000000000000000002 /* GoogleCodingSignIn.swift */,
 				200000000000000000000023 /* ClaudeUsageParser.swift */,
 				200000000000000000000024 /* ClaudeUsageProvider.swift */,
 				200000000000000000000025 /* OpenRouterUsageProvider.swift */,
@@ -957,6 +960,7 @@
 				10000000000000000000001E /* ClaudeCredentials.swift in Sources */,
 				10000000000000000000001F /* ClaudeCredentialsParser.swift in Sources */,
 				100000000000000000000020 /* ClaudeWebAuthService.swift in Sources */,
+				AB2990000000000000000001 /* GoogleCodingSignIn.swift in Sources */,
 				100000000000000000000021 /* ClaudeUsageParser.swift in Sources */,
 				100000000000000000000022 /* ClaudeUsageProvider.swift in Sources */,
 				100000000000000000000023 /* OpenRouterUsageProvider.swift in Sources */,

@@ -30,6 +30,14 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     @Published private(set) var configuration: ProviderAccountConfiguration
     @Published var secret = ""
+    @Published var geminiCodingSecret = ""
+    @Published private(set) var isSigningInWithGoogleCoding = false
+    @Published private(set) var needsGoogleCodingAccountConfirmation = false
+    private var pendingGoogleCodingCredential: AntigravityCredentials?
+    private let googleCodingSignIn = GoogleCodingSignIn()
+    var googleCodingUsageProvider = AntigravityUsageProvider()
+    private var googleCodingTask: Task<Void, Never>?
+    @Published private(set) var geminiCodingMessage: String?
     @Published private(set) var isSigningInWithCodex = false
     @Published private(set) var isSigningInWithCopilot = false
     @Published private(set) var isSigningInWithClaude = false
@@ -37,6 +45,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published var geminiBrowserSession: GeminiBrowserSignInSession?
     @Published private(set) var isSigningInWithGemini = false
     var geminiSessionValidator: any GeminiSessionValidating = GeminiSessionValidator()
+    @Published private(set) var needsGeminiAccountConfirmation = false
+    private var pendingGeminiCredential: String?
     private var geminiAttemptID: UUID?
     private var geminiValidationTask: Task<Void, Never>?
     @Published private(set) var codexAuthError: String?
@@ -179,15 +189,14 @@ final class ProviderSettingsViewModel: ObservableObject {
     var credentialPresentation: ProviderCredentialPresentation {
         if providerID == .antigravity {
             return ProviderCredentialPresentation(
-                sectionTitle: "Antigravity Session Import",
-                unsavedPlaceholder: "Paste Antigravity session JSON",
+                sectionTitle: "Saved Coding Connection",
+                unsavedPlaceholder: "Coding session",
                 savedPlaceholder: "Antigravity session saved",
                 saveButtonTitle: "Save and Validate Session",
-                setupMessage: "Import a session from your signed-in Antigravity desktop. "
-                    + "Without renewal credentials, import again when the access token expires. "
-                    + "Sign-in directly on iPhone is not available yet.",
-                setupLinkTitle: "Antigravity import instructions",
-                setupURL: URL(string: "https://github.com/HemSoft/codexbar-ios/blob/main/ANTIGRAVITY-SETUP.md"),
+                setupMessage: "Manage saved coding connections in Gemini settings. "
+                    + "New coding setup is not available in this build.",
+                setupLinkTitle: nil,
+                setupURL: nil,
                 securityMessage: "Session tokens may grant broader Google account access. "
                     + "They stay in this account's Keychain entry. This integration uses an unofficial quota API."
             )
@@ -224,7 +233,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
         if providerID == .gemini {
             return ProviderCredentialPresentation(
-                sectionTitle: "Google Sign-In",
+                sectionTitle: "Gemini Apps Sign-In",
                 unsavedPlaceholder: "Sign in with Google",
                 savedPlaceholder: "Google session saved",
                 saveButtonTitle: "Sign in with Google",
@@ -401,6 +410,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func cancelAuthentication() {
+        cancelGoogleCodingSignIn()
         cancelGeminiSignIn()
         codexSignInTask?.cancel()
         codexAuthPresenter.finish()
@@ -470,6 +480,131 @@ final class ProviderSettingsViewModel: ObservableObject {
         credentialsDidChange()
     }
 
+    func startGoogleCodingSignIn() {
+        guard !isSigningInWithGoogleCoding, providerID == .gemini else { return }
+        geminiCodingMessage = nil
+        let client: GoogleCodingSignIn.Configuration
+        do {
+            client = try GoogleCodingSignIn.Configuration(
+                clientID: Bundle.main.object(forInfoDictionaryKey: "GoogleCodingOAuthClientID") as? String ?? ""
+            )
+        } catch {
+            geminiCodingMessage = GoogleCodingSignIn.Failure.missingConfiguration.localizedDescription
+            return
+        }
+        isSigningInWithGoogleCoding = true
+        googleCodingTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.isSigningInWithGoogleCoding = false }
+            do {
+                let credentials = try await self.googleCodingSignIn.signIn(configuration: client)
+                try await self.receiveGoogleCodingCredential(credentials)
+            } catch is CancellationError {
+                self.geminiCodingMessage = "Coding sign-in canceled."
+            } catch {
+                self.geminiCodingMessage = (error as? GoogleCodingSignIn.Failure)?.localizedDescription
+                    ?? "Coding sign-in could not finish. Please try again."
+            }
+        }
+    }
+
+    func receiveGoogleCodingCredential(_ credentials: AntigravityCredentials) async throws {
+        if configurationStore.hasSecret(for: configuration)
+            || configurationStore.hasGeminiCodingSecret(for: configuration) {
+            pendingGoogleCodingCredential = credentials
+            needsGoogleCodingAccountConfirmation = true
+            return
+        }
+        try await saveValidatedGoogleCodingCredential(credentials)
+    }
+
+    func confirmGoogleCodingAccount() {
+        guard needsGoogleCodingAccountConfirmation, let credentials = pendingGoogleCodingCredential else { return }
+        pendingGoogleCodingCredential = nil
+        needsGoogleCodingAccountConfirmation = false
+        isSigningInWithGoogleCoding = true
+        googleCodingTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.isSigningInWithGoogleCoding = false }
+            do {
+                try await self.saveValidatedGoogleCodingCredential(credentials)
+            } catch is CancellationError {
+                self.geminiCodingMessage = "Coding sign-in canceled."
+            } catch {
+                self.geminiCodingMessage = "Coding sign-in could not finish. Please try again."
+            }
+        }
+    }
+
+    func saveValidatedGoogleCodingCredential(_ credentials: AntigravityCredentials) async throws {
+        geminiCodingMessage = "Checking coding usage…"
+        try await googleCodingUsageProvider.validateCandidate(credentials, for: configuration)
+        try Task.checkCancellation()
+        flushPendingChanges()
+        guard configurationStore.saveGeminiCodingSecret(
+            try credentials.encoded(), for: configuration, confirmedSameAccount: true
+        ) else {
+            geminiCodingMessage = configurationStore.lastError ?? "Coding sign-in could not be saved."
+            return
+        }
+        geminiCodingMessage = "Coding account connected."
+        credentialsDidChange()
+    }
+
+    func cancelGoogleCodingSignIn() {
+        pendingGoogleCodingCredential = nil
+        needsGoogleCodingAccountConfirmation = false
+        googleCodingTask?.cancel()
+        googleCodingSignIn.cancel()
+    }
+
+    func saveGeminiCodingCredential(confirmedSameAccount: Bool) {
+        geminiCodingMessage = nil
+        guard providerID == .gemini else { return }
+        guard confirmedSameAccount else {
+            geminiCodingMessage = "Confirm that the coding session belongs to this Gemini account before linking it."
+            return
+        }
+        let codingCredential: String
+        do {
+            codingCredential = try AntigravityCredentials.parse(geminiCodingSecret).encoded()
+        } catch {
+            geminiCodingMessage = AntigravityCredentials.CredentialError.invalid.localizedDescription
+            return
+        }
+        flushPendingChanges()
+        guard configurationStore.saveGeminiCodingSecret(codingCredential, for: configuration, confirmedSameAccount: true) else {
+            geminiCodingMessage = configurationStore.lastError ?? "The coding session could not be saved."
+            return
+        }
+        geminiCodingSecret = ""
+        geminiCodingMessage = "Coding session saved. Check the four coding limits below for current availability."
+        credentialsDidChange()
+    }
+
+    func linkGeminiCodingAccount(_ legacy: ProviderAccountConfiguration, confirmedSameAccount: Bool) {
+        geminiCodingMessage = nil
+        flushPendingChanges()
+        guard configurationStore.linkGeminiCodingAccount(legacy, to: configuration, confirmedSameAccount: confirmedSameAccount) else {
+            geminiCodingMessage = configurationStore.lastError ?? "The saved coding account could not be linked."
+            return
+        }
+        geminiCodingMessage = "Saved coding account linked. Check its four coding limits below for current availability."
+        credentialsDidChange()
+    }
+
+    func disconnectGeminiCoding() {
+        cancelGoogleCodingSignIn()
+        geminiCodingMessage = nil
+        flushPendingChanges()
+        guard configurationStore.disconnectGeminiCoding(for: configuration) else {
+            geminiCodingMessage = configurationStore.lastError ?? "The coding session could not be removed."
+            return
+        }
+        geminiCodingMessage = "Coding session removed. Gemini Apps stays connected."
+        credentialsDidChange()
+    }
+
     func startGeminiSignIn() {
         guard !isSigningInWithGemini else { return }
         credentialError = nil
@@ -486,6 +621,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     func cancelGeminiSignIn() {
         guard geminiAttemptID != nil else { return }
         geminiAttemptID = nil
+        pendingGeminiCredential = nil
+        needsGeminiAccountConfirmation = false
         geminiValidationTask?.cancel()
         geminiValidationTask = nil
         geminiBrowserSession?.invalidate()
@@ -504,10 +641,26 @@ final class ProviderSettingsViewModel: ObservableObject {
             finishGeminiAttempt(attemptID)
             credentialError = (error as? GeminiSignInError ?? .browserFailed).localizedDescription
         case .success(let credential):
+            if configurationStore.hasGeminiCodingSecret(for: configuration) {
+                pendingGeminiCredential = credential
+                needsGeminiAccountConfirmation = true
+                return
+            }
             credentialMessage = "Verifying your Gemini usage..."
             geminiValidationTask = Task { [weak self] in
                 await self?.validateGeminiSession(credential, attemptID: attemptID)
             }
+        }
+    }
+
+    func confirmGeminiAppsAccount() {
+        guard needsGeminiAccountConfirmation, let credential = pendingGeminiCredential,
+              let attemptID = geminiAttemptID else { return }
+        pendingGeminiCredential = nil
+        needsGeminiAccountConfirmation = false
+        credentialMessage = "Verifying your Gemini usage..."
+        geminiValidationTask = Task { [weak self] in
+            await self?.validateGeminiSession(credential, attemptID: attemptID)
         }
     }
 

@@ -21,6 +21,11 @@ final class WidgetConfigurationTests: XCTestCase {
         for (focus, providerID) in mappings {
             XCTAssertEqual(focus.providerID, providerID)
         }
+        XCTAssertEqual(
+            Set(CodexBarWidgetFocus.allCases),
+            Set(CodexBarWidgetFocus.caseDisplayRepresentations.keys).subtracting([.antigravity])
+        )
+        XCTAssertEqual(Set(CodexBarWidgetFocus.allCases), Set(mappings.map(\.0)).subtracting([.antigravity]))
     }
 
     @MainActor

@@ -68,6 +68,20 @@ public final class UsageRefreshService: ObservableObject {
         RefreshInputs(configuration: first) == RefreshInputs(configuration: second)
     }
 
+    /// Invalidate credential-dependent values before a replacement or disconnect can start another refresh.
+    public func invalidateCredentials(accountID: String) {
+        if currentConfigurationsByAccountID[accountID] != nil || refreshingAccountIDs.contains(accountID) {
+            refreshGenerationsByAccountID[accountID] = UUID()
+        }
+        let remainingAccountIDs = Set(results.map(\.accountID))
+            .union(refreshErrorsByAccountID.keys)
+            .subtracting([accountID])
+        pruneCachedState(to: remainingAccountIDs)
+        if let lastRefreshError, !refreshErrorsByAccountID.values.contains(lastRefreshError) {
+            self.lastRefreshError = refreshErrorsByAccountID.sorted { $0.key < $1.key }.first?.value
+        }
+    }
+
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
         updateCurrentConfigurations(configurations)
         if isBatchRefreshRunning {
@@ -98,7 +112,7 @@ public final class UsageRefreshService: ObservableObject {
     }
 
     private func performRefresh(configurations: [ProviderAccountConfiguration]) async {
-        let enabledConfigurations = configurations.filter(\.isEnabled)
+        let enabledConfigurations = configurations.filter { $0.isEnabled && $0.providerID != .antigravity }
         while let refreshingAccountID = enabledConfigurations.lazy
             .map(\.id)
             .first(where: refreshingAccountIDs.contains) {
@@ -201,6 +215,7 @@ public final class UsageRefreshService: ObservableObject {
     public func refresh(configuration: ProviderAccountConfiguration) async -> ProviderUsageResult? {
         guard
             configuration.isEnabled,
+            configuration.providerID != .antigravity,
             let provider = providers.first(where: { $0.providerID == configuration.providerID })
         else {
             return nil
@@ -484,7 +499,7 @@ public final class UsageRefreshService: ObservableObject {
     ) {
         let hadCurrentConfigurationSnapshot = hasCurrentConfigurationSnapshot
         hasCurrentConfigurationSnapshot = true
-        let enabledConfigurations = configurations.filter(\.isEnabled)
+        let enabledConfigurations = configurations.filter { $0.isEnabled && $0.providerID != .antigravity }
         let nextConfigurations = Dictionary(
             uniqueKeysWithValues: enabledConfigurations.map { ($0.id, $0) }
         )
@@ -639,7 +654,6 @@ public extension UsageRefreshService {
                 CursorUsageProvider(),
                 GreptileUsageProvider(),
                 GeminiUsageProvider(),
-                AntigravityUsageProvider(),
             ]
         )
     }

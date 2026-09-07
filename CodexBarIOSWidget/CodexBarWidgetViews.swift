@@ -138,10 +138,11 @@ struct CodexBarWidgetView: View {
             return exactMatch
         }
 
-        if let legacyMatch = legacyBarTile(for: choice.id) {
+        if let legacyMatch = legacySummaryTile(for: choice.id) ?? legacyBarTile(for: choice.id) {
             return legacyMatch
         }
 
+        if choice.id.contains("antigravity.") { return .unavailable(choice: choice) }
         let titleMatches = allTiles.filter {
             $0.choiceTitle.localizedCaseInsensitiveCompare(choice.title) == .orderedSame
         }
@@ -164,7 +165,7 @@ struct CodexBarWidgetView: View {
             return exactMatch
         }
 
-        if let legacyMatch = legacyBarTile(for: tileID) {
+        if let legacyMatch = legacySummaryTile(for: tileID) ?? legacyBarTile(for: tileID) {
             return legacyMatch
         }
 
@@ -177,6 +178,12 @@ struct CodexBarWidgetView: View {
         )
     }
 
+    private func legacySummaryTile(for tileID: String) -> CodexBarWidgetTile? {
+        scopedProviders.first { provider in
+            (provider.legacyAccountIDs ?? []).contains { tileID == "provider.\($0)" }
+        }?.summaryTile
+    }
+
     private func legacyBarTile(for choiceID: String) -> CodexBarWidgetTile? {
         guard choiceID.hasPrefix("bar.") else {
             return nil
@@ -185,14 +192,15 @@ struct CodexBarWidgetView: View {
         let savedBarID = String(choiceID.dropFirst("bar.".count))
         let providers = scopedProviders
             .filter { provider in
-                savedBarID == provider.accountID
-                    || savedBarID.hasPrefix("\(provider.accountID).")
+                ([provider.accountID] + (provider.legacyAccountIDs ?? [])).contains {
+                    savedBarID == $0 || savedBarID.hasPrefix("\($0).")
+                }
             }
             .sorted { $0.accountID.count > $1.accountID.count }
 
         for provider in providers {
             let identityMatches = provider.bars.filter {
-                $0.matchesSavedBuilderTileID(choiceID, accountID: provider.accountID)
+                $0.matchesSavedBuilderTileID(choiceID, accountID: provider.accountID, legacyAccountIDs: provider.legacyAccountIDs ?? [])
             }
             if identityMatches.count == 1, let identityMatch = identityMatches.first {
                 return provider.barTile(identityMatch)
@@ -201,13 +209,15 @@ struct CodexBarWidgetView: View {
                 $0.element.matchesSavedBuilderTileID(
                     choiceID,
                     accountID: provider.accountID,
+                    legacyAccountIDs: provider.legacyAccountIDs ?? [],
                     currentIndex: $0.offset
                 )
             }) {
                 return provider.barTile(indexedBar.element)
             }
 
-            if provider.bars.count == 1, let onlyBar = provider.bars.first {
+            if provider.bars.count == 1, let onlyBar = provider.bars.first,
+               !(provider.legacyAccountIDs ?? []).contains(where: { savedBarID.hasPrefix("\($0).") }) {
                 return provider.barTile(onlyBar)
             }
         }

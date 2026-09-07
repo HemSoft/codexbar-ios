@@ -538,7 +538,7 @@ struct SettingsView: View {
         switch destination {
         case .accountsAndGroups:
             SettingsCategorySummary.accounts(
-                accountCount: configurationStore.configurations.count,
+                accountCount: configurationStore.visibleConfigurations.count,
                 groupCount: configurationStore.groups.count
             )
         case .dashboard:
@@ -1243,7 +1243,7 @@ struct SettingsView: View {
 
     private var accountsSectionRows: [SettingsAccountsSectionRow] {
         SettingsAccountsSectionRow.rows(
-            accountIDs: configurationStore.configurations.map(\.id)
+            accountIDs: configurationStore.visibleConfigurations.map(\.id)
         )
     }
 
@@ -1533,7 +1533,7 @@ enum SettingsAccountsSectionRow: Identifiable, Equatable {
 }
 
 struct AddAccountFlowState: Equatable {
-    static let providerOptions = ProviderID.allCases
+    static let providerOptions = ProviderID.allCases.filter { $0 != .antigravity }
 
     private(set) var accountID: String?
 
@@ -1546,7 +1546,7 @@ struct AddAccountFlowState: Equatable {
         if let accountID {
             return accountID
         }
-        guard !configurationStore.isAccountCreationBlocked else {
+        guard Self.providerOptions.contains(providerID), !configurationStore.isAccountCreationBlocked else {
             return nil
         }
 
