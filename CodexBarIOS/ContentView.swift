@@ -80,9 +80,9 @@ struct ContentView: View {
         let showGroupHeaders = orchestrator.shouldShowGroupHeaders(for: sections)
         let usageAlertsByAccountID = orchestrator.currentUsageAlertsByAccountID
         let emptyState = DashboardEmptyState.resolve(
-            hasAccounts: !configurationStore.configurations.isEmpty,
-            hasEnabledAccounts: configurationStore.configurations.contains(where: \.isEnabled),
-            needsSetupAccountID: configurationStore.configurations.first(where: {
+            hasAccounts: !configurationStore.visibleConfigurations.isEmpty,
+            hasEnabledAccounts: configurationStore.visibleConfigurations.contains(where: \.isEnabled),
+            needsSetupAccountID: configurationStore.visibleConfigurations.first(where: {
                 $0.isEnabled && !configurationStore.isConfigured($0)
             })?.id,
             cardsAreEmpty: cardItems.isEmpty,
@@ -677,7 +677,7 @@ struct ContentView: View {
                 onShowHistory: { selectedHistoryResult = result },
                 onToggleExpansion: { toggleDashboardCardExpansion(result.accountID) },
                 onConfigureAccount: {
-                    accountConfigurationNavigation.present(accountID: result.accountID)
+                    configureDashboardAccount(item.configuration)
                 },
                 onRetry: {
                     performRecovery(for: item)
@@ -847,8 +847,15 @@ struct ContentView: View {
         case .claudeSignIn:
             claudeAuthenticationController.startSignIn(for: item.configuration)
         case .accountSettings:
-            accountConfigurationNavigation.present(accountID: item.configuration.id)
+            configureDashboardAccount(item.configuration)
         }
+    }
+
+    private func configureDashboardAccount(_ configuration: ProviderAccountConfiguration) {
+        guard let saved = configurationStore.prepareDashboardAccountForSetup(configuration) else { return }
+        let needsGoogleSetup = [.gemini, .antigravity].contains(saved.providerID)
+            && !configurationStore.isConfigured(saved)
+        accountConfigurationNavigation.present(accountID: saved.id, refreshOnDismiss: !needsGoogleSetup)
     }
 
     private func toggleDashboardCardExpansion(_ accountID: String) {
@@ -1128,9 +1135,10 @@ struct DashboardAccountConfigurationNavigationState: Equatable {
     private(set) var presentation: DashboardAccountConfigurationPresentation?
     private var accountIDAwaitingDismissalRefresh: String?
 
-    mutating func present(accountID: String) {
+    mutating func present(accountID: String, refreshOnDismiss: Bool = true) {
+        guard presentation?.accountID != accountID else { return }
         presentation = DashboardAccountConfigurationPresentation(accountID: accountID)
-        accountIDAwaitingDismissalRefresh = accountID
+        accountIDAwaitingDismissalRefresh = refreshOnDismiss ? accountID : nil
     }
 
     mutating func clearPresentation() {

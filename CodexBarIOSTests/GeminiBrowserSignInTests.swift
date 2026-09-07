@@ -210,6 +210,93 @@ final class GeminiBrowserSignInTests: XCTestCase {
     }
 
     @MainActor
+    func testCodingImportRequiresConfirmationAndTypedCredentialsAndInvalidatesRefresh() throws {
+        let fixture = Fixture()
+        let account = fixture.store.addAccount(for: .gemini)
+        XCTAssertTrue(fixture.store.saveSecret("__Secure-1PSID=apps", for: account))
+        var credentialChanges = 0
+        let model = ProviderSettingsViewModel(
+            configurationStore: fixture.store, accountID: account.id,
+            onCredentialsChanged: { credentialChanges += 1 }
+        )
+        model.geminiCodingSecret = #"{"access_token":"coding","expiry":"2030-01-01T00:00:00Z"}"#
+        model.saveGeminiCodingCredential(confirmedSameAccount: false)
+        XCTAssertFalse(fixture.store.hasGeminiCodingSecret(for: account))
+        XCTAssertEqual(credentialChanges, 0)
+        XCTAssertFalse(model.geminiCodingSecret.isEmpty)
+        model.geminiCodingSecret = "__Secure-1PSID=not-a-coding-token"
+        model.saveGeminiCodingCredential(confirmedSameAccount: true)
+        XCTAssertFalse(fixture.store.hasGeminiCodingSecret(for: account))
+        model.geminiCodingSecret = #"{"access_token":"coding","expiry":"2030-01-01T00:00:00Z"}"#
+        model.saveGeminiCodingCredential(confirmedSameAccount: true)
+        XCTAssertTrue(fixture.store.hasGeminiCodingSecret(for: account))
+        XCTAssertEqual(credentialChanges, 1)
+        XCTAssertEqual(model.geminiCodingSecret, "")
+        XCTAssertEqual(try fixture.secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)), "__Secure-1PSID=apps")
+        model.disconnectGeminiCoding()
+        XCTAssertFalse(fixture.store.hasGeminiCodingSecret(for: account))
+        XCTAssertTrue(fixture.store.hasSecret(for: account))
+        XCTAssertEqual(credentialChanges, 2)
+    }
+
+    @MainActor
+    func testReconnectWithCodingRequiresSameAccountConfirmationAndPreservesBothSources() async throws {
+        let fixture = Fixture()
+        let account = fixture.store.addAccount(for: .gemini)
+        XCTAssertTrue(fixture.store.saveSecret("__Secure-1PSID=original", for: account))
+        XCTAssertTrue(fixture.store.saveGeminiCodingSecret(
+            #"{"access_token":"coding","expiry":"2030-01-01T00:00:00Z"}"#,
+            for: account, confirmedSameAccount: true
+        ))
+        let model = ProviderSettingsViewModel(configurationStore: fixture.store, accountID: account.id)
+        model.geminiSessionValidator = StubValidator(result: validResult(for: account))
+        model.startGeminiSignIn()
+        XCTAssertFalse(model.isSigningInWithGemini)
+        XCTAssertNil(model.geminiBrowserSession)
+        XCTAssertTrue(model.credentialError?.contains("same account") == true)
+        XCTAssertEqual(try fixture.secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)), "__Secure-1PSID=original")
+        model.startGeminiSignIn(confirmedSameAccount: true)
+        XCTAssertTrue(model.isSigningInWithGemini)
+        model.geminiBrowserSession?.finish(.success("__Secure-1PSID=reconnected"))
+        await waitForSignIn(model)
+        XCTAssertNil(model.credentialError)
+        XCTAssertTrue(fixture.store.hasGeminiCodingSecret(for: account))
+        XCTAssertTrue(try XCTUnwrap(fixture.secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account))).contains("reconnected"))
+        model.removeSavedCredential()
+        XCTAssertFalse(fixture.store.hasSecret(for: account))
+        XCTAssertTrue(fixture.store.hasGeminiCodingSecret(for: account))
+        model.startGeminiSignIn()
+        XCTAssertFalse(model.isSigningInWithGemini)
+    }
+
+    @MainActor
+    func testLegacyCodingLinkRequiresConfirmationAndRemovesStandaloneAccountChoice() throws {
+        let fixture = Fixture()
+        let gemini = fixture.store.addAccount(for: .gemini)
+        let legacy = fixture.store.addAccount(for: .antigravity)
+        XCTAssertTrue(fixture.store.saveSecret(
+            #"{"access_token":"legacy-coding","expiry":"2030-01-01T00:00:00Z"}"#, for: legacy
+        ))
+        var credentialChanges = 0
+        let model = ProviderSettingsViewModel(
+            configurationStore: fixture.store, accountID: gemini.id,
+            onCredentialsChanged: { credentialChanges += 1 }
+        )
+        model.linkGeminiCodingAccount(legacy, confirmedSameAccount: false)
+        XCTAssertTrue(fixture.store.unlinkedGeminiCodingAccounts.contains { $0.id == legacy.id })
+        XCTAssertFalse(fixture.store.hasGeminiCodingSecret(for: gemini))
+        XCTAssertEqual(credentialChanges, 0)
+        model.linkGeminiCodingAccount(legacy, confirmedSameAccount: true)
+        XCTAssertTrue(fixture.store.hasGeminiCodingSecret(for: gemini))
+        XCTAssertFalse(fixture.store.unlinkedGeminiCodingAccounts.contains { $0.id == legacy.id })
+        XCTAssertEqual(credentialChanges, 1)
+        XCTAssertEqual(fixture.store.visibleConfigurations.map(\.id), [gemini.id])
+        XCTAssertFalse(AddAccountFlowState.providerOptions.contains(.antigravity))
+        var flow = AddAccountFlowState()
+        XCTAssertNil(flow.select(.antigravity, configurationStore: fixture.store))
+    }
+
+    @MainActor
     private func waitForSignIn(_ model: ProviderSettingsViewModel) async {
         for _ in 0..<200 where model.isSigningInWithGemini { await Task.yield() }
         XCTAssertFalse(model.isSigningInWithGemini)

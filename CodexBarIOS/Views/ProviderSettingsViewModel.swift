@@ -30,6 +30,8 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     @Published private(set) var configuration: ProviderAccountConfiguration
     @Published var secret = ""
+    @Published var geminiCodingSecret = ""
+    @Published private(set) var geminiCodingMessage: String?
     @Published private(set) var isSigningInWithCodex = false
     @Published private(set) var isSigningInWithCopilot = false
     @Published private(set) var isSigningInWithClaude = false
@@ -224,7 +226,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
         if providerID == .gemini {
             return ProviderCredentialPresentation(
-                sectionTitle: "Google Sign-In",
+                sectionTitle: "Gemini Apps Sign-In",
                 unsavedPlaceholder: "Sign in with Google",
                 savedPlaceholder: "Google session saved",
                 saveButtonTitle: "Sign in with Google",
@@ -470,8 +472,58 @@ final class ProviderSettingsViewModel: ObservableObject {
         credentialsDidChange()
     }
 
-    func startGeminiSignIn() {
+    func saveGeminiCodingCredential(confirmedSameAccount: Bool) {
+        geminiCodingMessage = nil
+        guard providerID == .gemini else { return }
+        guard confirmedSameAccount else {
+            geminiCodingMessage = "Confirm that the coding session belongs to this Gemini account before linking it."
+            return
+        }
+        let codingCredential: String
+        do {
+            codingCredential = try AntigravityCredentials.parse(geminiCodingSecret).encoded()
+        } catch {
+            geminiCodingMessage = AntigravityCredentials.CredentialError.invalid.localizedDescription
+            return
+        }
+        flushPendingChanges()
+        guard configurationStore.saveGeminiCodingSecret(codingCredential, for: configuration, confirmedSameAccount: true) else {
+            geminiCodingMessage = configurationStore.lastError ?? "The coding session could not be saved."
+            return
+        }
+        geminiCodingSecret = ""
+        geminiCodingMessage = "Coding session saved. Check the four coding limits below for current availability."
+        credentialsDidChange()
+    }
+
+    func linkGeminiCodingAccount(_ legacy: ProviderAccountConfiguration, confirmedSameAccount: Bool) {
+        geminiCodingMessage = nil
+        flushPendingChanges()
+        guard configurationStore.linkGeminiCodingAccount(legacy, to: configuration, confirmedSameAccount: confirmedSameAccount) else {
+            geminiCodingMessage = configurationStore.lastError ?? "The saved coding account could not be linked."
+            return
+        }
+        geminiCodingMessage = "Saved coding account linked. Check its four coding limits below for current availability."
+        credentialsDidChange()
+    }
+
+    func disconnectGeminiCoding() {
+        geminiCodingMessage = nil
+        flushPendingChanges()
+        guard configurationStore.disconnectGeminiCoding(for: configuration) else {
+            geminiCodingMessage = configurationStore.lastError ?? "The coding session could not be removed."
+            return
+        }
+        geminiCodingMessage = "Coding session removed. Gemini Apps stays connected."
+        credentialsDidChange()
+    }
+
+    func startGeminiSignIn(confirmedSameAccount: Bool = false) {
         guard !isSigningInWithGemini else { return }
+        guard !configurationStore.hasGeminiCodingSecret(for: configuration) || confirmedSameAccount else {
+            credentialError = "Confirm that the Google sign-in uses the same account as the linked coding session."
+            return
+        }
         credentialError = nil
         credentialMessage = nil
         validationFeedbackProviderID = nil

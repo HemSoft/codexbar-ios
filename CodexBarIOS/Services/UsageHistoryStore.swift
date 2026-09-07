@@ -167,6 +167,21 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         )
     }
 
+    fileprivate init(migrating snapshot: UsageHistorySnapshot, to configuration: ProviderAccountConfiguration) {
+        // Keep the source snapshot identity. Apps and coding can have equal capture timestamps.
+        self.id = snapshot.id
+        self.accountID = configuration.id
+        self.providerID = .gemini
+        self.title = configuration.displayName
+        self.subtitle = snapshot.subtitle
+        self.capturedAt = snapshot.capturedAt
+        self.bars = snapshot.bars
+        self.creditsRemaining = snapshot.creditsRemaining
+        self.monetaryMetrics = snapshot.monetaryMetrics
+        self.highestSeverity = snapshot.highestSeverity
+        self.hasReachedSpendLimit = snapshot.hasReachedSpendLimit
+    }
+
     fileprivate init(
         presenting result: ProviderUsageResult,
         severityThresholds: UsageSeverityThresholds
@@ -821,6 +836,24 @@ public final class UsageHistoryStore: ObservableObject {
             restoringOnFailure: previousSnapshots,
             previousDailySnapshots: previousDailySnapshots
         )
+    }
+
+    public func migrateGoogleAccounts(
+        links: [String: String],
+        configurations: [ProviderAccountConfiguration]
+    ) {
+        guard !requiresRecovery, !links.isEmpty else { return }
+        let targets = Dictionary(uniqueKeysWithValues: configurations.filter { $0.providerID == .gemini }.map { ($0.id, $0) })
+        let previousSnapshots = snapshots
+        let previousDailySnapshots = dailySnapshots
+        func migrate(_ snapshot: UsageHistorySnapshot) -> UsageHistorySnapshot {
+            guard snapshot.providerID == .antigravity,
+                  let targetID = links[snapshot.accountID], let target = targets[targetID] else { return snapshot }
+            return UsageHistorySnapshot(migrating: snapshot, to: target)
+        }
+        snapshots = snapshots.map(migrate)
+        dailySnapshots = dailySnapshots.map(migrate)
+        save(restoringOnFailure: previousSnapshots, previousDailySnapshots: previousDailySnapshots)
     }
 
     public func discardCorruptedHistory() {

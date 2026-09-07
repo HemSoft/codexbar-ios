@@ -58,7 +58,20 @@ final class DashboardOrchestrator: ObservableObject {
             configurationStore: configurationStore
         )
 
-        refreshService.updateCurrentConfigurations(configurationStore.configurations)
+        configurationStore.credentialChanges.sink { [weak refreshService] accountID in
+            refreshService?.invalidateCredentials(accountID: accountID)
+        }.store(in: &cancellables)
+        historyStore.migrateGoogleAccounts(
+            links: configurationStore.confirmedGoogleAccountLinks,
+            configurations: configurationStore.visibleConfigurations
+        )
+        configurationStore.$confirmedGoogleAccountLinks.dropFirst().sink { [weak historyStore, weak configurationStore] links in
+            historyStore?.migrateGoogleAccounts(
+                links: links,
+                configurations: configurationStore?.visibleConfigurations ?? []
+            )
+        }.store(in: &cancellables)
+        refreshService.updateCurrentConfigurations(configurationStore.visibleConfigurations)
         configurationStore.$configurations.dropFirst().sink { [weak refreshService, weak historyStore] in
             let configurations = $0
             refreshService?.updateCurrentConfigurations(configurations)
@@ -69,16 +82,19 @@ final class DashboardOrchestrator: ObservableObject {
     }
 
     var dashboardCardItems: [DashboardProviderCardItem] {
-        DashboardProviderCardItem.items(
-            configurations: configurationStore.configurations.filter(
-                configurationStore.shouldDisplayOnDashboard
-            ),
+        let configurations = configurationStore.visibleConfigurations.filter {
+            configurationStore.shouldDisplayOnDashboard($0)
+                || ($0.isEnabled && !GoogleUsageMetricCatalog.definitions(for: $0.providerID).isEmpty)
+        } + GoogleUsageMetricCatalog.missingSourceConfigurations(in: configurationStore.configurations)
+        return DashboardProviderCardItem.items(
+            configurations: configurations,
             results: displayedResults,
             refreshingAccountIDs: refreshService.refreshingAccountIDs,
             errorsByAccountID: refreshService.refreshErrorsByAccountID,
             orderingMode: configurationStore.dashboardOrderingMode,
             manualOrder: configurationStore.dashboardCardOrder,
-            severityThresholds: configurationStore.usageAlertSettings.severityThresholds
+            severityThresholds: configurationStore.usageAlertSettings.severityThresholds,
+            setupRequiredAccountIDs: Set(configurations.filter { !configurationStore.isConfigured($0) }.map(\.id))
         )
     }
 
@@ -560,13 +576,20 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
         errorsByAccountID: [String: String],
         orderingMode: DashboardOrderingMode,
         manualOrder: [String],
-        severityThresholds: UsageSeverityThresholds = .default
+        severityThresholds: UsageSeverityThresholds = .default,
+        setupRequiredAccountIDs: Set<String> = []
     ) -> [DashboardProviderCardItem] {
         let resultsByAccountID = Dictionary(uniqueKeysWithValues: results.map { ($0.accountID, $0) })
         let items = configurations.map { configuration in
             DashboardProviderCardItem(
                 configuration: configuration,
-                result: resultsByAccountID[configuration.id],
+                result: dashboardResult(
+                    for: configuration,
+                    observed: resultsByAccountID[configuration.id],
+                    requiresSetup: setupRequiredAccountIDs.contains(configuration.id),
+                    isRefreshing: refreshingAccountIDs.contains(configuration.id),
+                    errorMessage: errorsByAccountID[configuration.id]
+                ),
                 isRefreshing: refreshingAccountIDs.contains(configuration.id),
                 errorMessage: errorsByAccountID[configuration.id]
             )
@@ -589,6 +612,32 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
             manualOrder: manualOrder,
             severityThresholds: severityThresholds
         ).compactMap { itemsByAccountID[$0.accountID] }
+    }
+
+    private static func dashboardResult(
+        for configuration: ProviderAccountConfiguration,
+        observed: ProviderUsageResult?,
+        requiresSetup: Bool,
+        isRefreshing: Bool,
+        errorMessage: String?
+    ) -> ProviderUsageResult? {
+        let definitions = GoogleUsageMetricCatalog.definitions(for: configuration.providerID)
+        guard !definitions.isEmpty, observed == nil || requiresSetup else { return observed }
+        let status = requiresSetup ? "Setup required" : (isRefreshing ? "Loading" : "Unavailable")
+        return ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: configuration.providerID,
+            title: configuration.displayName,
+            subtitle: requiresSetup ? "\(configuration.providerID.displayName) setup required" : (errorMessage ?? status),
+            bars: [],
+            unavailableUsageMetrics: Dictionary(uniqueKeysWithValues: definitions.map {
+                ($0.id, status)
+            }),
+            failureMessage: requiresSetup ? status : errorMessage,
+            recoveryAction: requiresSetup ? .signIn : .retryRefresh,
+            hasSuccessfulRefreshHistory: false,
+            fetchedAt: .distantPast
+        )
     }
 }
 
