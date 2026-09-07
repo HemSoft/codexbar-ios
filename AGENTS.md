@@ -21,6 +21,7 @@ such and may be stale — re-verify before relying on them.
 ## Contents
 
 - [Required Issue-First Workflow](#required-issue-first-workflow)
+- [End-User Experience and Live Verification](#end-user-experience-and-live-verification)
 - [Changelog and Release History](#changelog-and-release-history)
 - [Build and Test](#build-and-test)
 - [Pull Request Reviewers](#pull-request-reviewers)
@@ -49,6 +50,28 @@ Before editing files:
    reference the issue in the branch and pull-request workflow.
 4. Deliver the change through a pull request that links the issue and is the
    only path for returning the work to `main`.
+
+## End-User Experience and Live Verification
+
+Agents are responsible for delivering a good end-user experience. Routine
+provider setup and reconnection must use a guided flow on the phone, such as
+browser authorization with account selection and automatic return to the app.
+Requiring users to import JSON files, export desktop sessions, copy cookies or
+tokens, or enter OAuth client settings is not an acceptable setup experience.
+Do not turn an integration shortcut into work for the end user.
+
+Franz owns live provider-account testing and quota comparisons. Agents must
+implement the requested experience, run relevant automated checks, and deliver
+the build without waiting for Franz to prove access, sign in, supply screenshots,
+import credentials, or verify live values. Mark those live checks as pending for
+Franz; do not claim they passed or make them an agent delivery prerequisite.
+
+This division of work does not remove automated validation or truthful runtime
+status. Protect account isolation, save credentials securely, handle failed or
+canceled authorization, and show only actual provider results. Resolve app-side
+registration and configuration as development work. If required configuration
+is unavailable, identify the exact missing item and continue independent work;
+do not substitute a manual credential-import flow.
 
 ## Changelog and Release History
 

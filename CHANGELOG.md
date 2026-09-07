@@ -98,6 +98,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Established phone-based provider setup as the required user experience,
+  excluding manual credential imports. Agents own implementation and automated
+  checks; Franz owns live account and quota verification.
+  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+
 - Run Swift security analysis and the usage-history Release budget manually,
   preserving their diagnostic artifacts and failure checks while removing them
   from automatic PR runs and merge requirements. Broader CI runtime and benchmark
