@@ -1,0 +1,476 @@
+diff --git a/Package.swift b/Package.swift
+index f1b0934..a4b958d 100644
+--- a/Package.swift
++++ b/Package.swift
+@@ -9,6 +9,7 @@ let package = Package(
+         .macOS(.v14),
+     ],
+     products: [
++        .executable(name: "UsageHistoryBenchmark", targets: ["UsageHistoryBenchmark"]),
+         .library(
+             name: "CodexBarIOS",
+             targets: ["CodexBarIOS"]
+@@ -25,6 +26,7 @@ let package = Package(
+         ),
+     ],
+     targets: [
++        .executableTarget(name: "UsageHistoryBenchmark", dependencies: ["CodexBarIOS"], path: "PerformanceBenchmarks"),
+         .target(
+             name: "CodexBarIOS",
+             path: "CodexBarIOS",
+diff --git a/PerformanceBenchmarks/UsageHistoryBenchmark.swift b/PerformanceBenchmarks/UsageHistoryBenchmark.swift
+new file mode 100644
+index 0000000..3a8a3ce
+--- /dev/null
++++ b/PerformanceBenchmarks/UsageHistoryBenchmark.swift
+@@ -0,0 +1,222 @@
++import CodexBarIOS
++import Foundation
++
++private struct RetainedState: Encodable {
++    let snapshots: Int
++    let dailySnapshots: Int
++    let serializedBytes: Int
++}
++
++private struct Scenario: Encodable {
++    let accounts: Int
++    let recordMilliseconds: [Double]
++    let seriesMilliseconds: [Double]
++    let seriesPointCount: Int
++    let retainedStates: [RetainedState]
++}
++
++private struct Report: Encodable {
++    let fixtureVersion = 1
++    let configuration: String
++    let timeZone: String
++    let warmupBatches = 2
++    let measuredBatches = 5
++    let seriesIterationsPerBatch = 5
++    let scenarios: [Scenario]
++}
++
++private enum BenchmarkError: Error {
++    case invalidFixture(String)
++}
++
++@main
++private struct UsageHistoryBenchmark {
++    // Noon UTC keeps all timed/steady-state samples within one calendar day.
++    static let anchor = Date(timeIntervalSince1970: 1_788_696_000)
++    static let day: TimeInterval = 86_400
++    static let metricKeys = ["fiveHour", "weekly"]
++
++    @MainActor
++    static func main() throws {
++        #if DEBUG
++        let configuration = "debug"
++        #else
++        let configuration = "release"
++        #endif
++        guard TimeZone.current.secondsFromGMT(for: anchor) == 0 else {
++            throw BenchmarkError.invalidFixture("Run with TZ=UTC")
++        }
++        let report = Report(
++            configuration: configuration,
++            timeZone: "UTC",
++            scenarios: try [1, 10, 25].map(run)
++        )
++        let encoder = JSONEncoder()
++        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
++        FileHandle.standardOutput.write(try encoder.encode(report))
++        FileHandle.standardOutput.write(Data("\n".utf8))
++    }
++
++    static func result(account: Int, at date: Date, metric: Int? = nil) -> ProviderUsageResult {
++        let metrics = metric.map { [$0] } ?? [0, 1]
++        return ProviderUsageResult(
++            accountID: String(format: "benchmark.account.%02d", Int32(account)),
++            providerID: .codex,
++            title: "Benchmark",
++            subtitle: "Synthetic history",
++            bars: metrics.map { index in
++                UsageBar(
++                    stableKey: metricKeys[index],
++                    label: index == 0 ? "Five hours" : "Weekly",
++                    used: index == 0 ? 37 : 62,
++                    limit: 100
++                )
++            },
++            fetchedAt: date
++        )
++    }
++
++    static func fixtures(accounts: Int) throws -> (frequent: Data, daily: Data) {
++        var frequent: [UsageHistorySnapshot] = []
++        var daily: [[String: Any]] = []
++        let encoder = JSONEncoder()
++        for account in 0..<accounts {
++            for sample in 0..<240 {
++                let date = anchor.addingTimeInterval(-Double(240 - sample) * 7_200)
++                frequent.append(UsageHistorySnapshot(result: result(account: account, at: date)))
++            }
++            for daysBack in 0..<90 {
++                let date = anchor.addingTimeInterval(-Double(daysBack) * day - 3_600)
++                for metric in 0..<2 {
++                    let snapshot = UsageHistorySnapshot(result: result(account: account, at: date, metric: metric))
++                    guard var object = try JSONSerialization.jsonObject(with: encoder.encode(snapshot)) as? [String: Any] else {
++                        throw BenchmarkError.invalidFixture("Snapshot did not encode as an object")
++                    }
++                    // Daily components at a shared timestamp need distinct persisted identities.
++                    object["id"] = "\(snapshot.id).daily.bar.\(metricKeys[metric])"
++                    object.removeValue(forKey: "monetaryMetrics")
++                    daily.append(object)
++                }
++            }
++        }
++        return (try encoder.encode(frequent), try JSONSerialization.data(withJSONObject: daily, options: [.sortedKeys]))
++    }
++
++    @MainActor
++    static func run(accounts: Int) throws -> Scenario {
++        let suiteName = "UsageHistoryBenchmark.\(UUID().uuidString)"
++        guard let defaults = UserDefaults(suiteName: suiteName) else {
++            throw BenchmarkError.invalidFixture("Cannot create isolated defaults")
++        }
++        defer { defaults.removePersistentDomain(forName: suiteName) }
++        let fixture = try fixtures(accounts: accounts)
++        defaults.set(fixture.frequent, forKey: "usageHistorySnapshots")
++        defaults.set(fixture.daily, forKey: "usageHistoryDailySnapshots")
++        let store = UsageHistoryStore(defaults: defaults)
++        var retained = [try state(store: store, defaults: defaults, accounts: accounts)]
++        var recordSamples: [Double] = []
++        var seriesSamples: [Double] = []
++        var pointCount = 0
++        for batch in 0..<7 {
++            let date = anchor.addingTimeInterval(Double(batch) * 600)
++            let results = (0..<accounts).map { result(account: $0, at: date) }
++            recordSamples.append(milliseconds {
++                store.record(results: results, now: date)
++            })
++            for result in results {
++                let options = store.historySeriesOptions(for: result)
++                guard options.map(\.id) == ["usage"], options[0].series.points.count == 329,
++                      options[0].series.points.allSatisfy({ $0.value == 0.62 }) else {
++                    throw BenchmarkError.invalidFixture("Expected 329 merged timestamps in the two-metric usage series")
++                }
++            }
++            seriesSamples.append(milliseconds {
++                for _ in 0..<5 {
++                    for result in results {
++                        let options = store.historySeriesOptions(
++                            for: result,
++                            since: anchor.addingTimeInterval(-89 * day - 43_200)
++                        )
++                        pointCount += options.reduce(0) { $0 + $1.series.points.count }
++                    }
++                }
++            } / 5)
++            retained.append(try state(store: store, defaults: defaults, accounts: accounts))
++        }
++        guard pointCount == accounts * 329 * 5 * 7 else {
++            throw BenchmarkError.invalidFixture("Timed series workload changed")
++        }
++        // Fresh captures replace the oldest frequent samples. Then cross seven daily
++        // cutoffs so daily retention is exercised, rather than merely replacing today.
++        for iteration in 7..<39 {
++            let date = anchor.addingTimeInterval(Double(iteration) * 600)
++            store.record(results: (0..<accounts).map { result(account: $0, at: date) }, now: date)
++            retained.append(try state(store: store, defaults: defaults, accounts: accounts))
++        }
++        for daysForward in 1...7 {
++            let date = anchor.addingTimeInterval(Double(daysForward) * day)
++            store.record(results: (0..<accounts).map { result(account: $0, at: date) }, now: date)
++            retained.append(try state(store: store, defaults: defaults, accounts: accounts))
++        }
++        return Scenario(
++            accounts: accounts,
++            recordMilliseconds: recordSamples,
++            seriesMilliseconds: seriesSamples,
++            seriesPointCount: pointCount,
++            retainedStates: retained
++        )
++    }
++
++    @MainActor
++    static func state(store: UsageHistoryStore, defaults: UserDefaults, accounts: Int) throws -> RetainedState {
++        guard !store.requiresRecovery, store.lastError == nil,
++              store.snapshots.count == accounts * 240,
++              store.dailySnapshots.count == accounts * 180 else {
++            throw BenchmarkError.invalidFixture("History failed to retain 240 frequent / 180 daily entries per account")
++        }
++        try validateShape(store.snapshots, daily: false, accounts: accounts)
++        try validateShape(store.dailySnapshots, daily: true, accounts: accounts)
++        let decoder = JSONDecoder()
++        for (key, daily) in [("usageHistorySnapshots", false), ("usageHistoryDailySnapshots", true)] {
++            guard let data = defaults.data(forKey: key) else {
++                throw BenchmarkError.invalidFixture("Missing persisted history")
++            }
++            try validateShape(decoder.decode([UsageHistorySnapshot].self, from: data), daily: daily, accounts: accounts)
++        }
++        let size = ["usageHistorySnapshots", "usageHistoryDailySnapshots"].reduce(0) {
++            $0 + (defaults.data(forKey: $1)?.count ?? 0)
++        }
++        guard size > 0 else { throw BenchmarkError.invalidFixture("History did not persist") }
++        return RetainedState(snapshots: store.snapshots.count, dailySnapshots: store.dailySnapshots.count, serializedBytes: size)
++    }
++
++    static func validateShape(_ snapshots: [UsageHistorySnapshot], daily: Bool, accounts: Int) throws {
++        let grouped = Dictionary(grouping: snapshots, by: \.accountID)
++        let expectedAccounts = Set((0..<accounts).map { String(format: "benchmark.account.%02d", Int32($0)) })
++        guard Set(grouped.keys) == expectedAccounts, Set(snapshots.map(\.id)).count == snapshots.count else {
++            throw BenchmarkError.invalidFixture("Lost an account or duplicated an identity")
++        }
++        for accountSnapshots in grouped.values {
++            guard accountSnapshots.count == (daily ? 180 : 240),
++                  accountSnapshots.allSatisfy({ $0.bars.count == (daily ? 1 : 2) }) else {
++                throw BenchmarkError.invalidFixture("Per-account history shape changed")
++            }
++            if daily {
++                let days = Dictionary(grouping: accountSnapshots) { Calendar.current.startOfDay(for: $0.capturedAt) }
++                guard days.count == 90, days.values.allSatisfy({ entries in
++                    entries.count == 2 && Set(entries.flatMap(\.bars).compactMap(\.stableKey)) == Set(metricKeys)
++                }) else {
++                    throw BenchmarkError.invalidFixture("Expected 90 distinct UTC days with both metrics")
++                }
++            } else if !accountSnapshots.allSatisfy({ Set($0.bars.compactMap(\.stableKey)) == Set(metricKeys) }) {
++                throw BenchmarkError.invalidFixture("Frequent sample lost a metric")
++            }
++        }
++    }
++
++    @MainActor
++    static func milliseconds(_ operation: () -> Void) -> Double {
++        let duration = ContinuousClock().measure(operation)
++        return Double(duration.components.seconds) * 1_000 + Double(duration.components.attoseconds) / 1e15
++    }
++}
+diff --git a/scripts/usage-history-performance/baseline.json b/scripts/usage-history-performance/baseline.json
+new file mode 100644
+index 0000000..f8c3a69
+--- /dev/null
++++ b/scripts/usage-history-performance/baseline.json
+@@ -0,0 +1,7 @@
++{
++  "revision": "3395ee6094ce8e4199577f7ede493e3a50ee1269",
++  "maximumLatencyRatio": 1.25,
++  "maximumRunCV": 0.15,
++  "maximumSerializedRatio": 1.0,
++  "maximumGrowthBytesPerAccount": 0
++}
+diff --git a/scripts/usage-history-performance/run.py b/scripts/usage-history-performance/run.py
+new file mode 100644
+index 0000000..43d16f0
+--- /dev/null
++++ b/scripts/usage-history-performance/run.py
+@@ -0,0 +1,209 @@
++#!/usr/bin/env python3
++"""Compare the Release history workload with a frozen source revision."""
++import argparse
++import hashlib
++import json
++import math
++import os
++from pathlib import Path
++import shutil
++import statistics
++import subprocess
++import tempfile
++from datetime import datetime, timezone
++
++ROOT = Path(__file__).resolve().parents[2]
++POLICY = Path(__file__).with_name("baseline.json")
++ENV = dict(os.environ, DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer", TZ="UTC")
++
++
++def prepare_output(path):
++    if path.exists() and (not path.is_dir() or any(path.iterdir())):
++        raise ValueError("--output must be a new or empty directory; old results cannot prove this run")
++    path.mkdir(parents=True, exist_ok=True)
++
++
++def command(args, cwd=ROOT):
++    return subprocess.check_output(args, cwd=cwd, env=ENV, text=True).strip()
++
++
++def build(root, output, name):
++    with (output / f"{name}-build.log").open("w") as log:
++        subprocess.run(["xcrun", "swift", "build", "-c", "release", "--product", "UsageHistoryBenchmark"],
++                       cwd=root, env=ENV, stdout=log, stderr=subprocess.STDOUT, check=True)
++    binary = Path(command(["xcrun", "swift", "build", "-c", "release", "--show-bin-path"], root)) / "UsageHistoryBenchmark"
++    destination = output / name
++    shutil.copy2(binary, destination)
++    return destination
++
++
++def reference_tree(revision, destination):
++    # A full immutable git object is required. Never resolve a moving branch as a baseline.
++    if len(revision) != 40 or any(char not in "0123456789abcdef" for char in revision):
++        raise ValueError("baseline revision must be a full commit SHA")
++    archive = subprocess.Popen(["git", "archive", revision], cwd=ROOT, stdout=subprocess.PIPE)
++    try:
++        subprocess.run(["tar", "-x", "-C", str(destination)], stdin=archive.stdout, check=True)
++    finally:
++        archive.stdout.close()
++    if archive.wait() != 0:
++        raise RuntimeError("cannot archive baseline revision")
++    shutil.copytree(ROOT / "PerformanceBenchmarks", destination / "PerformanceBenchmarks", dirs_exist_ok=True)
++    manifest = destination / "Package.swift"
++    content = manifest.read_text()
++    if 'name: "UsageHistoryBenchmark"' not in content:
++        product = '.executable(name: "UsageHistoryBenchmark", targets: ["UsageHistoryBenchmark"]),'
++        target = '.executableTarget(name: "UsageHistoryBenchmark", dependencies: ["CodexBarIOS"], path: "PerformanceBenchmarks"),'
++        for section, entry in (("products", product), ("targets", target)):
++            marker = f"\n    {section}: [\n"
++            if content.count(marker) != 1:
++                raise ValueError(f"baseline manifest {section} section changed")
++            content = content.replace(marker, marker + "        " + entry + "\n", 1)
++        manifest.write_text(content)
++
++
++def machine_snapshot(output, name):
++    """Record diagnostic context without treating a missing probe as a timing result."""
++    snapshot = dict(capturedAt=datetime.now(timezone.utc).isoformat(),
++                    loadAverage=os.getloadavg(), logicalCPUs=os.cpu_count())
++    for label, args in (("thermal", ["pmset", "-g", "therm"]),
++                        ("memory", ["vm_stat"]),
++                        ("processes", ["ps", "-axo", "pid,ppid,%cpu,%mem,etime,comm", "-r"])):
++        try:
++            result = subprocess.run(args, env=ENV, text=True, capture_output=True, timeout=5, check=False)
++            # Executable names expose competing work without capturing command arguments or secrets.
++            stdout = "\n".join(result.stdout.splitlines()[:21]) if label == "processes" else result.stdout
++            snapshot[label] = dict(exitCode=result.returncode, stdout=stdout, stderr=result.stderr)
++        except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError) as error:
++            snapshot[label] = dict(error=str(error))
++    (output / f"{name}-machine.json").write_text(json.dumps(snapshot, indent=2) + "\n")
++
++
++def measure(binary, output, name):
++    machine_snapshot(output, f"{name}-before")
++    try:
++        # Keep stdout/stderr even when the process, JSON parser, or fixture assertion fails.
++        with (output / f"{name}.json").open("w") as stdout, (output / f"{name}.stderr.log").open("w") as stderr:
++            subprocess.run([str(binary)], cwd=ROOT, env=ENV, text=True,
++                           stdout=stdout, stderr=stderr, check=True)
++    finally:
++        machine_snapshot(output, f"{name}-after")
++    report = json.loads((output / f"{name}.json").read_text())
++    validate(report)
++    return report
++
++
++def validate(report):
++    if (report["configuration"] != "release" or report["fixtureVersion"] != 1 or report["timeZone"] != "UTC"
++            or report["warmupBatches"] != 2 or report["measuredBatches"] != 5
++            or report["seriesIterationsPerBatch"] != 5
++            or [row["accounts"] for row in report["scenarios"]] != [1, 10, 25]):
++        raise ValueError("benchmark configuration or fixture mismatch")
++    for row in report["scenarios"]:
++        accounts = row["accounts"]
++        if row["seriesPointCount"] != accounts * 329 * 5 * 7:
++            raise ValueError("series workload changed")
++        for metric in ("recordMilliseconds", "seriesMilliseconds"):
++            samples = row[metric]
++            if len(samples) != 7 or any(type(x) not in (float, int) or not math.isfinite(x) or x <= 0 for x in samples):
++                raise ValueError("missing or invalid timing samples")
++        states = row["retainedStates"]
++        if len(states) != 47 or any(state["snapshots"] != 240 * accounts
++                                   or state["dailySnapshots"] != 180 * accounts
++                                   or type(state["serializedBytes"]) is not int
++                                   or state["serializedBytes"] <= 0 for state in states):
++            raise ValueError("retained-state workload changed")
++
++
++def evaluate(runs, policy):
++    if len(runs) < 3:
++        raise ValueError("at least three paired runs are required")
++    findings, summary = [], []
++    for pair in runs:
++        for side in ("reference", "candidate"):
++            validate(pair[side])
++    for index, accounts in enumerate((1, 10, 25)):
++        for metric in ("recordMilliseconds", "seriesMilliseconds"):
++            medians = {side: [statistics.median(pair[side]["scenarios"][index][metric][2:]) for pair in runs]
++                       for side in ("reference", "candidate")}
++            ratios = [new / old for old, new in zip(medians["reference"], medians["candidate"])]
++            ratio = statistics.median(ratios)
++            # A noisy control cannot establish a pass, even if its slowness helps the candidate.
++            noise = max(statistics.pstdev(values) / statistics.mean(values) for values in medians.values())
++            summary.append(dict(accounts=accounts, metric=metric, referenceMedians=medians["reference"],
++                                candidateMedians=medians["candidate"], ratios=ratios, medianRatio=ratio, noiseCV=noise,
++                                withinRunCV={side: [statistics.pstdev(pair[side]["scenarios"][index][metric][2:]) /
++                                                  statistics.mean(pair[side]["scenarios"][index][metric][2:]) for pair in runs]
++                                             for side in ("reference", "candidate")}))
++            if noise > policy["maximumRunCV"]:
++                findings.append(f"INCONCLUSIVE {accounts} accounts {metric}: run CV {noise:.3f}")
++            if ratio > policy["maximumLatencyRatio"]:
++                findings.append(f"REGRESSION {accounts} accounts {metric}: ratio {ratio:.3f}")
++        for pair in runs:
++            old = [state["serializedBytes"] for state in pair["reference"]["scenarios"][index]["retainedStates"]]
++            new = [state["serializedBytes"] for state in pair["candidate"]["scenarios"][index]["retainedStates"]]
++            if max(new) > max(old) * policy["maximumSerializedRatio"]:
++                findings.append(f"REGRESSION {accounts} accounts: serialized size")
++            # Ignore the initial seed and two warmups; persist every later retained-state sample.
++            steady = new[3:]
++            if max(steady) - steady[0] > policy["maximumGrowthBytesPerAccount"] * accounts:
++                findings.append(f"REGRESSION {accounts} accounts: retained serialized growth")
++    return dict(passed=not findings, findings=sorted(set(findings)), timings=summary)
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--output", type=Path, required=True)
++    parser.add_argument("--pairs", type=int, default=3)
++    parser.add_argument("--prove-slowdown", action="store_true",
++                        help="insert 120ms into record in a disposable reference copy; expect the ordinary gate to fail")
++    args = parser.parse_args()
++    if args.pairs < 3:
++        parser.error("--pairs must be at least three")
++    args.output = args.output.resolve()
++    prepare_output(args.output)
++    policy = json.loads(POLICY.read_text())
++    metadata = dict(startedAt=datetime.now(timezone.utc).isoformat(), baselineRevision=policy["revision"],
++                    candidateRevision=command(["git", "rev-parse", "HEAD"]),
++                    candidateDirty=bool(command(["git", "status", "--porcelain"])),
++                    hardware=command(["sysctl", "-n", "hw.model"]), cpu=command(["sysctl", "-n", "machdep.cpu.brand_string"]),
++                    memoryBytes=command(["sysctl", "-n", "hw.memsize"]), architecture=command(["uname", "-m"]),
++                    operatingSystem=command(["sw_vers"]), swift=command(["xcrun", "swift", "--version"]),
++                    xcode=command(["xcodebuild", "-version"]), configuration="release", timezone="UTC",
++                    benchmarkSHA256=hashlib.sha256((ROOT / "PerformanceBenchmarks/UsageHistoryBenchmark.swift").read_bytes()).hexdigest(),
++                    slowdownProof=args.prove_slowdown, policy=policy)
++    (args.output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
++    with tempfile.TemporaryDirectory(prefix="usage-history-reference-") as temporary:
++        reference = Path(temporary)
++        reference_tree(policy["revision"], reference)
++        binaries = {"reference": build(reference, args.output, "reference")}
++        if args.prove_slowdown:
++            source = reference / "CodexBarIOS/Services/UsageHistoryStore.swift"
++            text = source.read_text()
++            marker = "        let recordableResults = results.filter { result in"
++            if text.count(marker) != 1:
++                raise ValueError("slowdown injection target changed")
++            source.write_text(text.replace(marker, "        Thread.sleep(forTimeInterval: 0.12)\n" + marker))
++            binaries["candidate"] = build(reference, args.output, "candidate-slowdown")
++        else:
++            binaries["candidate"] = build(ROOT, args.output, "candidate")
++        runs = []
++        for index in range(args.pairs):
++            pair = {}
++            order = ("reference", "candidate") if index % 2 == 0 else ("candidate", "reference")
++            for side in order:
++                print(f"Pair {index + 1}/{args.pairs}: {side}", flush=True)
++                pair[side] = measure(binaries[side], args.output, f"{index + 1}-{side}")
++            runs.append(pair)
++        result = evaluate(runs, policy)
++        result["metadata"] = metadata
++        (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
++        for item in result["timings"]:
++            print(f'{item["accounts"]:2} accounts {item["metric"]}: {item["medianRatio"]:.3f}x; CV {item["noiseCV"]:.3f}')
++        for finding in result["findings"]:
++            print(finding)
++        raise SystemExit(0 if result["passed"] else 1)
++
++
++if __name__ == "__main__":
++    main()

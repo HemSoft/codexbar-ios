@@ -29,6 +29,14 @@ regression exits nonzero. A failed build is not a detected slowdown.
 Use a new or empty output directory for every run. The runner rejects old
 artifacts so a failed attempt cannot reuse an earlier result as evidence.
 
+Each process also retains its stderr and before/after machine snapshots with
+load averages, the thermal observations reported by `pmset`, virtual-memory
+counters, and the 20 busiest executable names. Command arguments are omitted.
+Unavailable probes remain visible as diagnostic errors. These observations sit
+outside the timed regions and never filter samples or alter the gate. Failed
+processes and invalid JSON keep their raw output for investigation; neither can
+produce a passing result.
+
 For one diagnostic distribution without the comparison gate:
 
 ```sh
@@ -94,7 +102,8 @@ The workflow `Usage history performance` runs only by manual dispatch. Its
 and scheduled runs are disabled while
 [issue #325](https://github.com/HemSoft/codexbar-ios/issues/325) investigates
 measurement variability and evaluates CI policy. Existing correctness checks
-remain required.
+remain required. See [CI-POLICY.md](CI-POLICY.md) for the measured time budget,
+live required checks and manual failure ownership.
 
 Select a reviewed branch in Actions > Usage history performance > Run workflow,
 or run:
@@ -112,7 +121,8 @@ the related issue or PR. The job still fails on any budget or measurement-policy
 failure; manual dispatch does not relax thresholds or turn noise into a pass.
 
 Reference and candidate processes run sequentially in alternating order on the
-same host. Stop other local builds and heavy foreground work while measuring.
+same host. Arrange a measurement window without concurrent builds, simulator
+startups or heavy foreground work.
 Three paired runs give three ratios of candidate median to reference median;
 the median ratio must meet the latency limit. The reference stays pinned across
 pull requests, so repeated small changes cannot silently move the baseline.
@@ -226,6 +236,14 @@ and recording regressions for all three account counts in the slowdown proof,
 without noise findings. The policy tests exercise this path and reject invalid
 compressed records. The original timing, hash, and dirty-state metadata are
 preserved as historical measurements.
+The same command also replays `repeatability-study.json`, including its failed
+experiments. It requires the complete, unique experiment manifest, at least
+three pairs per experiment, exact SHA-256 hashes of the expanded canonical JSON
+reports, and agreement with every recorded verdict, finding and timing summary.
+Derived floating-point summaries permit only `1e-12`
+relative or absolute rounding differences. Raw samples, counts, verdicts and
+policy thresholds receive no tolerance. A recorded inconclusive result remains
+inconclusive.
 
 ## Prove slowdown detection
 
@@ -255,3 +273,154 @@ budget, at 2.331x.
 There were no inconclusive/noise findings. All fixture assertions and retained
 budgets passed. `scripts/usage-history-performance/slowdown-proof.json` preserves
 the complete timing distributions, metadata, and ordinary gate findings.
+
+## Repeatability investigation
+
+The September 6, 2026 study for
+[issue #325](https://github.com/HemSoft/codexbar-ios/issues/325) preserves four
+failed hosted attempts from three workflow runs. Each attempt failed only for
+excessive between-run variation; none reported a latency or retained-data
+regression. Their largest CVs were 31.19% and 19.65% for the two attempts of
+[run 34046485812](https://github.com/HemSoft/codexbar-ios/actions/runs/34046485812),
+35.05% for
+[run 34051802297](https://github.com/HemSoft/codexbar-ios/actions/runs/34051802297),
+and 20.06% for
+[run 34054447047](https://github.com/HemSoft/codexbar-ios/actions/runs/34054447047).
+Each attempt produced six median ratios; across the four attempts they ranged
+from 0.831 to 1.140. Replaying
+all raw reports reproduces their original findings. The hosted metadata contains
+hardware and toolchain versions but no process load or thermal observations,
+so these artifacts cannot identify the cause of the hosted variation.
+
+The historical local study used the M5 calibration host. Its recorded commit
+revisions have matching production trees, but all eight local trials report a
+dirty candidate worktree. No patch or content digest captured those dirty
+inputs. The commit comparison therefore does not prove the actual build inputs
+were unchanged. Retain these trials as historical timing observations, not as
+proof of unchanged-code repeatability. The clean study below replaces that
+missing evidence without deleting or relabeling any earlier samples.
+
+The first plan declared three independent paired experiments followed by one
+slowdown experiment. Two unrelated simulator startups and concurrent Swift
+compilation occurred during the first two comparisons. Machine snapshots show
+load averages reaching 99 and 141, alongside busy simulator and compiler
+processes. Both comparisons were inconclusive. The third comparison passed.
+The slowdown run detected recording regressions for every account count but
+also had a 16.87% CV for one-account candidate series generation, so it was not
+a valid slowdown proof. The snapshots do not establish the cause of that
+series variation.
+
+A second fixed block was declared after observing the startup bursts. Its
+admission required nine snapshots 15 seconds apart over at least two minutes,
+with one-minute load divided by logical CPU count at most 1.0, and no compiler
+or simulator process using at least 10% CPU. All nine snapshots qualified;
+normalized load ranged from 0.314 to 0.489. This is a documented local study
+condition, not a changed timing threshold or a guarantee of host stability.
+Admission covers only the start of the block.
+The block declared three intended unchanged-code comparisons. A separate
+once-only slowdown addendum was declared before any completed quiet comparison,
+after the first comparison had started. Both declarations and their exact
+sequencing remain in the evidence. The study stops after that fixed block.
+
+Each comparison below contains three alternating pairs and six independent
+processes. Ratios are the six median candidate/reference latency ratios, not
+individual samples.
+
+| Experiment | Gate result | Median ratio range | Largest run CV |
+| --- | --- | ---: | ---: |
+| unchanged-1 | Inconclusive | 0.833 to 0.980 | 64.69% |
+| unchanged-2 | Inconclusive | 0.951 to 1.025 | 101.48% |
+| unchanged-3 | PASS | 0.985 to 1.053 | 6.63% |
+| slowdown | Regression and inconclusive | 0.980 to 34.442 | 16.87% |
+| quiet-1 | PASS | 0.969 to 1.027 | 3.83% |
+| quiet-2 | PASS | 0.990 to 1.021 | 12.28% |
+| quiet-3 | Inconclusive | 0.991 to 1.075 | 20.03% |
+| quiet-slowdown | Expected regression | 0.980 to 34.731 | 4.36% |
+
+The admitted historical block reported two passes from three comparisons. Its
+third candidate's one-account recording medians were 4.320, 4.470 and 6.442 ms;
+series medians were 1.037, 1.100 and 1.594 ms. These yielded 19.05% and 20.03%
+CVs. All corresponding reference medians remained between 4.020 and 4.417 ms
+for recording and between 1.031 and 1.136 ms for series generation.
+The last candidate started more than a minute after compilation and after the
+preceding reference completed, so this was not the first process after a build.
+Its recording timings declined across the 10-account scenario and returned to
+the reference range by 25 accounts.
+
+Two new Chrome renderer processes appeared in the snapshot immediately before
+that last candidate. The machine also recorded compression and page-in activity
+during the process. Captured snapshots showed no active compiler or simulator;
+`pmset` reported that no thermal warning, performance warning or CPU power
+status had been recorded. These observations do not identify a cause or prove
+that the host was idle. The next diagnosis should measure a fixed series on a
+host reserved for the entire experiment and compare per-scenario wall time,
+CPU time and memory-pressure observations. This can distinguish early-process
+host disturbance from a workload effect before changing the sampling design.
+
+The final slowdown experiment returned status 1 with recording regressions of
+34.731x, 4.423x and 2.394x for 1, 10 and 25 accounts. It had no inconclusive
+findings, and all correctness and retained-data budgets passed. Slowdown
+detection was reported, subject to the missing build-input evidence above. At
+that checkpoint, three reliable unchanged-code experiments in one declared
+block remained unproved. Selecting the three passing trials across the
+two blocks would hide the failures. Keep the repeatability acceptance criterion
+open and the workflow manual; this change does not claim to cure hosted noise.
+
+`scripts/usage-history-performance/repeatability-study.json` stores every
+hosted and local result, both plans, the addendum, source-equivalence proof,
+machine snapshots and original metadata. All seven raw timing values remain
+for every operation and account count. The existing
+`uniform-retained-state-v1` representation compresses the 47 retained states
+only after verifying that all are equal. Build and stderr log hashes identify
+the full external artifacts. The historical calibration and slowdown records
+remain unchanged.
+
+The separate `repeatability-manifest.json` pins every original report digest and
+expected verdict. Replay rejects coordinated edits to samples, embedded hashes
+and results, including edits to warm-up values. Changes to this manifest require
+review against the original artifacts; it is never regenerated during replay.
+
+The issue branch later incorporated main commit
+`ad8e89be9a4e8dc428c5b7fe1b2cb4cdca898cae`, which includes the Google quota
+changes from PR #320. The study remains evidence about its recorded source
+checkpoints; it does not measure that later application tree. The replay verifier
+checks historical evidence without presenting it as a new benchmark run.
+
+### Clean committed-input study — 2026-09-07
+
+A new fixed plan declared three independent comparisons and one intentional
+slowdown before starting any of them. All four invocations report
+`candidateDirty: false` at commit
+`2200edbc9be93f6a72c5f165888b601ebc8fe4d9`. The candidate production tree is
+identical to frozen baseline `3395ee6094ce8e4199577f7ede493e3a50ee1269`.
+Only the benchmark harness, manifest and evidence tooling were added. The
+working tree stayed clean, and every tracked file hash was verified unchanged
+after the final experiment. No simulator or device build was started locally.
+
+The study retains the plan, all 24 raw reports in the existing lossless format,
+their independent pinned hashes, the four original verdicts, machine snapshots,
+artifact hashes and the build-input file manifest. Apply
+`scripts/usage-history-performance/clean-build-inputs.patch` to the frozen
+baseline to reconstruct the benchmark build inputs and runner. The patch hash, revision, file digests and trial metadata are independently
+pinned in `clean-input-manifest.json`. Replay reconstructs and verifies all
+111 build-input files from the baseline and rejects altered or dirty proof
+metadata. The production-source diff is empty.
+
+| Experiment | Result | Largest run CV |
+| --- | --- | ---: |
+| clean-1 | PASS | 3.1% |
+| clean-2 | PASS | 4.1% |
+| clean-3 | PASS | 12.4% |
+| clean-slowdown | Expected regression | 4.3% |
+
+The unchanged 15% variability limit and all latency, retained-state and
+correctness limits remain enforced. The deliberate slowdown reports recording
+regressions of 34.839x, 4.706x and 2.613x for 1, 10 and 25 accounts, plus a
+one-account series regression. It has no inconclusive findings. These three
+clean comparisons and the separate slowdown satisfy the local repeatability
+criterion. They do not establish reliability on every hosted runner or justify
+making the manual workflow an automatic gate.
+
+Run the existing replay command to verify all 16 experiments, including every
+historical failure. No failed sample was removed and no unchanged condition was
+retried to obtain these three passes.

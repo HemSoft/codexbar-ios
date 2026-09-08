@@ -108,6 +108,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Document measured CI runtimes and manual-analysis failure ownership. Preserve
+  machine-load diagnostics, process errors and replayable performance evidence.
+  Verify benchmark repeatability with three clean-source comparisons and an
+  intentional-slowdown check while retaining earlier inconclusive results.
+  ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
+
 - Added a development-only, one-time session handoff for connected devices.
   It saves an existing renewable coding session to the selected account's
   Keychain and removes the staging file. An unreadable Keychain slot is never
