@@ -875,3 +875,120 @@ private final class GeminiLifetimeURLProtocol: URLProtocol, @unchecked Sendable 
 
     override func stopLoading() {}
 }
+
+extension GeminiUsageProviderTests {
+    func testAllSixGeminiMetricsProjectOrdinaryPaceAndExhaustion() throws {
+        let now = Date(timeIntervalSince1970: 1_788_640_000)
+        for fraction in [0.2, 0.6] {
+            let bars = try projectionBars(fraction: fraction, now: now)
+            XCTAssertEqual(bars.map(\.stableKey), ["five-hour", "weekly", "gemini-5h", "gemini-weekly", "3p-5h", "3p-weekly"])
+            for bar in bars {
+                XCTAssertEqual(bar.fractionUsed, fraction, accuracy: 0.000_001)
+                XCTAssertEqual(try XCTUnwrap(bar.projectedFraction(at: now)), min(fraction * 2, 1), accuracy: 0.000_001)
+                XCTAssertTrue(bar.showProjectionOnCurrentBar)
+                let parts = try XCTUnwrap(bar.projectionDescriptionParts(at: now))
+                if fraction == 0.2 {
+                    XCTAssertEqual(parts.leadingText, "Projected to stay under limit")
+                    XCTAssertEqual(parts.significance, .benign)
+                    XCTAssertNil(bar.dashboardProjectionDescription(at: now))
+                } else {
+                    let start = try XCTUnwrap(bar.projectionPeriodStart)
+                    let hit = start.addingTimeInterval(now.timeIntervalSince(start) / fraction)
+                    XCTAssertEqual(try XCTUnwrap(parts.timestamp).timeIntervalSince1970, hit.timeIntervalSince1970, accuracy: 0.001)
+                    XCTAssertTrue(parts.trailingText.contains("early"))
+                    XCTAssertNotNil(bar.dashboardProjectionDescription(at: now))
+                }
+            }
+        }
+    }
+
+    func testGeminiProjectionSafeguardsForZeroExpiredAndNotStartedWindows() throws {
+        let now = Date(timeIntervalSince1970: 1_788_640_000)
+        for bar in try projectionBars(fraction: 0, now: now) {
+            XCTAssertNil(bar.projectedFraction(at: now))
+            XCTAssertNil(bar.projectionDescription(at: now))
+        }
+        for bar in try projectionBars(fraction: 0.2, now: now) {
+            for time in [try XCTUnwrap(bar.projectionPeriodStart), try XCTUnwrap(bar.projectionPeriodEnd)] {
+                XCTAssertEqual(try XCTUnwrap(bar.projectedFraction(at: time)), bar.fractionUsed, accuracy: 0.000_001)
+                XCTAssertNil(bar.projectionDescription(at: time))
+            }
+        }
+    }
+
+    func testGeminiParsersDoNotBorrowMissingOrInvalidResetTimes() throws {
+        let now = Date(timeIntervalSince1970: 1_788_640_000)
+        let validReset = now.addingTimeInterval(9_000).timeIntervalSince1970
+        for invalid: Any in [NSNull(), "bad", []] {
+            let payload: [Any] = [2, [[2_400, 0.2, 1, [[validReset, 0]]], [48_106, 0.2, 2, invalid]], false]
+            let parsed = try XCTUnwrap(GeminiUsageProvider.parseUsageResponse(makeGeminiBatchResponse(payload)))
+            XCTAssertEqual(GeminiUsageProvider.bars(from: parsed).map(\.stableKey), ["five-hour"])
+        }
+        for reset: Any in [NSNull(), "bad", "2020-01-01T00:00:00Z"] {
+            let buckets: [[String: Any]] = [
+                ["bucketId": "gemini-5h", "window": "5h", "remainingFraction": 0.8, "resetTime": reset],
+                ["bucketId": "3p-weekly", "window": "weekly", "remainingFraction": 0.8,
+                 "resetTime": ISO8601DateFormatter().string(from: now.addingTimeInterval(302_400)),
+                ],
+            ]
+            let result = try codingProjectionResult(buckets: buckets, now: now)
+            let missing = result.bars.first { $0.stableKey == "gemini-5h" }
+            if reset is NSNull {
+                XCTAssertNotNil(missing)
+                XCTAssertNil(missing?.projectedFraction(at: now))
+                XCTAssertNil(missing?.projectionDescription(at: now))
+            } else {
+                XCTAssertNil(missing)
+                XCTAssertEqual(result.unavailableUsageMetrics["antigravity.gemini-5h"], "Unavailable")
+            }
+            let weekly = try XCTUnwrap(result.bars.first { $0.stableKey == "3p-weekly" })
+            XCTAssertEqual(try XCTUnwrap(weekly.projectedFraction(at: now)), 0.4, accuracy: 0.000_001)
+        }
+    }
+
+    @MainActor
+    func testSixGeminiProjectionsSurviveWidgetSnapshotSerialization() throws {
+        let now = Date(timeIntervalSince1970: 1_788_640_000)
+        let suite = "GeminiProjection.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: MemorySecretStore())
+        let account = store.addAccount(for: .gemini)
+        XCTAssertTrue(store.saveSecret("__Secure-1PSID=fixture", for: account))
+        let bars = try projectionBars(fraction: 0.2, now: now)
+        let result = ProviderUsageResult(
+            accountID: account.id, providerID: .gemini, title: account.displayName, subtitle: "Gemini usage", bars: bars, fetchedAt: now
+        )
+        WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults, now: now)
+        let saved = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first)
+        XCTAssertEqual(saved.accountID, account.id)
+        XCTAssertEqual(saved.bars.count, 6)
+        for bar in saved.bars {
+            XCTAssertEqual(bar.fractionUsed, 0.2, accuracy: 0.000_001)
+            XCTAssertEqual(try XCTUnwrap(bar.projectedFraction), 0.4, accuracy: 0.000_001)
+            XCTAssertEqual(bar.projectionDescription, "Projected to stay under limit")
+        }
+    }
+
+    private func projectionBars(fraction: Double, now: Date) throws -> [UsageBar] {
+        let payload: [Any] = [2, [
+            [2_400, fraction, 1, [[now.addingTimeInterval(9_000).timeIntervalSince1970, 0]]],
+            [48_106, fraction, 2, [[now.addingTimeInterval(302_400).timeIntervalSince1970, 0]]],
+        ], false,
+        ]
+        let parsed = try XCTUnwrap(GeminiUsageProvider.parseUsageResponse(makeGeminiBatchResponse(payload)))
+        let buckets: [[String: Any]] = AntigravityQuotaParser.metrics.map { metric in
+            let reset = now.addingTimeInterval(metric.window == "5h" ? 9_000 : 302_400)
+            return ["bucketId": metric.key, "window": metric.window, "remainingFraction": 1 - fraction,
+                    "resetTime": ISO8601DateFormatter().string(from: reset),
+            ]
+        }
+        return GeminiUsageProvider.bars(from: parsed) + (try codingProjectionResult(buckets: buckets, now: now)).bars
+    }
+
+    private func codingProjectionResult(buckets: [[String: Any]], now: Date) throws -> ProviderUsageResult {
+        let data = try JSONSerialization.data(withJSONObject: ["groups": [["buckets": buckets]]])
+        let account = ProviderAccountConfiguration(id: "gemini.projection", providerID: .gemini, authMethod: .apiKey)
+        return try AntigravityQuotaParser.result(from: data, configuration: account, fetchedAt: now)
+    }
+}

@@ -8,6 +8,11 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Show usage projections for all six Gemini limits when their usage and reset
+  times support a forecast, including warnings when the current pace would
+  exhaust a limit before reset.
+  ([#330](https://github.com/HemSoft/codexbar-ios/issues/330))
+
 - Display Gemini Models and Other models, Claude/GPT, five-hour and weekly
   quotas from previously saved coding connections inside Google Gemini. Missing
   quota stays unavailable. New connection setup is tracked separately.

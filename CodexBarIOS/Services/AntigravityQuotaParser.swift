@@ -64,7 +64,12 @@ enum AntigravityQuotaParser {
             label: metric.label,
             used: 100 * (1 - remaining),
             limit: 100,
-            resetsAt: reset
+            resetsAt: reset,
+            projectionCurrent: 1 - remaining,
+            projectionLimit: 1,
+            projectionPeriodStart: reset?.addingTimeInterval(metric.window == "5h" ? -5 * 60 * 60 : -7 * 24 * 60 * 60),
+            projectionPeriodEnd: reset,
+            showProjectionOnCurrentBar: true
         )
     }
 
