@@ -113,6 +113,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Make the Claude cancellation test wait for authorization presentation before
+  requesting cancellation, so slow simulator startup does not fail an unrelated
+  readiness deadline. ([#330](https://github.com/HemSoft/codexbar-ios/issues/330))
+
 - Document measured CI runtimes and manual-analysis failure ownership. Preserve
   machine-load diagnostics, process errors and replayable performance evidence.
   Verify benchmark repeatability with three clean-source comparisons and an
