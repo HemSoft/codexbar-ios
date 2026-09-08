@@ -1578,28 +1578,26 @@ final class ConfigurationAndAuthTests: XCTestCase {
             preferredCallbackPorts: [0]
         )
         var presentedURL: URL?
-        let authorizationPresented = expectation(description: "Claude authorization URL presented")
-        let signInTask = Task {
+        var signInTask: Task<ClaudeWebAuthResult, Error>?
+        signInTask = Task {
             try await service.signIn {
                 presentedURL = $0
-                authorizationPresented.fulfill()
+                // Queue cancellation after sign-in yields to its callback wait.
+                Task { @MainActor in
+                    signInTask?.cancel()
+                }
             }
         }
 
-        await fulfillment(of: [authorizationPresented], timeout: 30)
-        guard presentedURL != nil else {
-            signInTask.cancel()
-            _ = try? await signInTask.value
-            return
-        }
-        signInTask.cancel()
-
         do {
-            _ = try await signInTask.value
+            _ = try await XCTUnwrap(signInTask).value
             XCTFail("Expected Claude browser sign-in cancellation.")
         } catch {
             XCTAssertTrue(error is CancellationError)
         }
+        let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(presentedURL), resolvingAgainstBaseURL: false))
+        let redirectURI = try XCTUnwrap(components.queryItemValue(named: "redirect_uri"))
+        XCTAssertEqual(URL(string: redirectURI)?.host, "localhost")
     }
 
     func testClaudeTokenRequestBodyUsesAuthorizationCodeExchange() throws {

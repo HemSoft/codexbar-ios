@@ -412,7 +412,7 @@ public final class GeminiUsageProvider: UsageProvider {
         return nil
     }
 
-    private static func bars(from payload: UsagePayload) -> [UsageBar] {
+    static func bars(from payload: UsagePayload) -> [UsageBar] {
         var bars: [UsageBar] = []
         if let fiveHour = payload.fiveHour {
             bars.append(
@@ -422,7 +422,12 @@ public final class GeminiUsageProvider: UsageProvider {
                     used: fiveHour.fractionUsed * 100,
                     limit: 100,
                     resetsAt: fiveHour.resetsAt,
-                    resetDisplayStyle: .relativeWithLocalTime
+                    resetDisplayStyle: .relativeWithLocalTime,
+                    projectionCurrent: fiveHour.fractionUsed,
+                    projectionLimit: 1,
+                    projectionPeriodStart: fiveHour.resetsAt.addingTimeInterval(-5 * 60 * 60),
+                    projectionPeriodEnd: fiveHour.resetsAt,
+                    showProjectionOnCurrentBar: true
                 )
             )
         }
@@ -434,7 +439,12 @@ public final class GeminiUsageProvider: UsageProvider {
                     used: weekly.fractionUsed * 100,
                     limit: 100,
                     resetsAt: weekly.resetsAt,
-                    resetDisplayStyle: .relativeWithLocalTime
+                    resetDisplayStyle: .relativeWithLocalTime,
+                    projectionCurrent: weekly.fractionUsed,
+                    projectionLimit: 1,
+                    projectionPeriodStart: weekly.resetsAt.addingTimeInterval(-7 * 24 * 60 * 60),
+                    projectionPeriodEnd: weekly.resetsAt,
+                    showProjectionOnCurrentBar: true
                 )
             )
         }
