@@ -91,6 +91,7 @@ final class AccountJourneysUITests: XCTestCase {
         assertGoogleMetric("gemini.weekly", contains: "45%", in: app)
         for (id, value) in zip(Self.codingMetricIDs, ["0%", "31%", "0%", "0%"]) {
             assertGoogleMetric(id, contains: value, in: app)
+            assertGoogleMetric(id, contains: "Resets", in: app)
         }
         XCTAssertFalse(app.buttons["More options for Antigravity"].exists)
         XCTAssertFalse(app.buttons["More options for Coding Fixture"].exists)
