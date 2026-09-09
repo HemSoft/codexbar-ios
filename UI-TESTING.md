@@ -110,3 +110,13 @@ For a navigation mutation check, make a disposable copy of the repository,
 replace the `dismiss()` call inside `AddAccountSetupFlow`'s Done button with an
 empty action, and run the iPhone suite there. The setup journey must fail when
 it cannot reach the dashboard balance. Keep that mutation out of the PR.
+
+### Widget reset-caption layout check
+
+For Gemini Models and Other Models fixtures, add small and medium widgets using
+Automatic display mode. At ordinary usage, verify that the reset countdown and
+local reset time appear below the gauge; at warning pace, verify that the
+projection warning takes precedence. Captions may wrap to two lines and scale
+down to fit the tile. Check a long account label and a weekly caption in both
+widget sizes. Other providers retain their existing caption content, now also
+visible in Automatic mode. Missing descriptions add no empty caption row.

@@ -465,6 +465,14 @@ struct ProviderWidgetTile: View {
                     if bar.allowsAutomaticVisualization {
                         WidgetMetricVisualization(bar: bar, layoutStyle: style)
                     }
+
+                    if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
+                        Text(detail)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.65)
+                    }
                 }
             } else {
                 Text(tile.subtitle)

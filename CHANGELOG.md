@@ -51,7 +51,8 @@ building, testing, or releasing the app.
 
 - Show the reset countdown and local reset time for Gemini Models and Other
   Models five-hour and weekly limits on the dashboard and widgets, even when no
-  projection warning is needed.
+  projection warning is needed. Default small and medium widgets now include
+  the same projection or reset details as the larger layouts.
   ([#332](https://github.com/HemSoft/codexbar-ios/issues/332))
 
 - Coding sign-in no longer leaves a permanent refreshing message after the
