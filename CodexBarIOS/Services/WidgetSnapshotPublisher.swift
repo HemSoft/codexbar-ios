@@ -44,7 +44,11 @@ enum WidgetSnapshotPublisher {
                         let projectedSeverity = barsAreFresh
                             ? bar.projectedSeverity(at: now, thresholds: severityThresholds)
                             : nil
-                        let projectionParts = barsAreFresh ? bar.projectionDescriptionParts(at: now) : nil
+                        var projectionParts = barsAreFresh ? bar.projectionDescriptionParts(at: now) : nil
+                        if projectionParts?.significance == .benign,
+                           GoogleUsageMetricCatalog.codingDefinitions.contains(where: { $0.id == metricID }) {
+                            projectionParts = nil
+                        }
                         return CodexBarWidgetUsageBarSnapshot(
                             id: stableBarID(
                                 accountID: result.accountID,

@@ -50,7 +50,8 @@ building, testing, or releasing the app.
 ### Fixed
 
 - Show the reset countdown and local reset time for Gemini Models and Other
-  Models five-hour and weekly limits, even when no projection warning is needed.
+  Models five-hour and weekly limits on the dashboard and widgets, even when no
+  projection warning is needed.
   ([#332](https://github.com/HemSoft/codexbar-ios/issues/332))
 
 - Coding sign-in no longer leaves a permanent refreshing message after the
