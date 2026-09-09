@@ -238,5 +238,8 @@ jobs:
       - name: Run smoke harness
         run: xcrun swift run CodexBarIOSSmokeTests
 
+      - name: Verify widget reset caption layout
+        run: ./scripts/tests/widget-reset-layout-tests.sh
+
       - name: Verify perfection gate selection and failure reporting
         run: python3 -m unittest discover -s scripts/tests -p 'test_perfection_runner.py' -v

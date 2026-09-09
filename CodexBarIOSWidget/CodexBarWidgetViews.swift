@@ -441,45 +441,72 @@ struct ProviderWidgetTile: View {
     }
 
     private var automaticStandardBody: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            header(font: .caption.weight(.semibold), logoSize: 22)
-
-            if let monetaryValueText = tile.monetaryValueText {
-                Text(monetaryValueText)
-                    .font(.system(size: style == .standard ? 22 : 20, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-            } else if let bar = tile.bar {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack {
-                        Text(bar.label)
-                            .lineLimit(1)
-                        Spacer(minLength: 4)
-                        Text(bar.usageText)
-                            .monospacedDigit()
+        VStack(alignment: .leading, spacing: 5) {
+            if let bar = tile.bar, tile.monetaryValueText == nil {
+                HStack(alignment: .center, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        header(font: .caption.weight(.semibold), logoSize: 22)
+                        metricHeading(bar)
                     }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                    if bar.allowsAutomaticVisualization {
+                    if usesSideVisualization(bar) {
                         WidgetMetricVisualization(bar: bar, layoutStyle: style)
                     }
-
-                    if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
-                        Text(detail)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.65)
-                    }
                 }
+                if bar.allowsAutomaticVisualization, !usesSideVisualization(bar) {
+                    WidgetMetricVisualization(bar: bar, layoutStyle: style)
+                }
+                detailLine(bar, limit: 2)
             } else {
-                Text(tile.subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(style == .standard ? 2 : 1)
+                header(font: .caption.weight(.semibold), logoSize: 22)
+                if let monetaryValueText = tile.monetaryValueText {
+                    Text(monetaryValueText)
+                        .font(.system(size: style == .standard ? 22 : 20, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                } else {
+                    Text(tile.subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(style == .standard ? 2 : 1)
+                }
             }
+        }
+    }
+
+    private func usesSideVisualization(_ bar: CodexBarWidgetUsageBarSnapshot) -> Bool {
+        guard bar.allowsAutomaticVisualization else { return false }
+        switch bar.visualizationStyle {
+        case .circularRing, .semicircularDial, .largeNumeric:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func metricHeading(_ bar: CodexBarWidgetUsageBarSnapshot) -> some View {
+        HStack {
+            Text(bar.label)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+            Spacer(minLength: 4)
+            Text(bar.usageText)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private func detailLine(_ bar: CodexBarWidgetUsageBarSnapshot, limit: Int) -> some View {
+        if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(limit)
+                .minimumScaleFactor(0.65)
         }
     }
 
@@ -516,13 +543,7 @@ struct ProviderWidgetTile: View {
                     WidgetMetricVisualization(bar: bar, layoutStyle: style)
                 }
 
-                if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
-                    Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-                }
+                detailLine(bar, limit: 1)
             } else {
                 Text(tile.subtitle)
                     .font(.caption2)
@@ -597,13 +618,7 @@ struct ProviderWidgetTile: View {
                     WidgetUsageProgressBar(bar: bar)
                 }
 
-                if let detail = bar.localizedProjectionDescription() ?? bar.localizedResetDescription() {
-                    Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-                }
+                detailLine(bar, limit: 1)
             } else if let monetaryValueText = tile.monetaryValueText {
                 Text(monetaryValueText)
                     .font(primaryMetricFont)

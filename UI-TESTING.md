@@ -113,10 +113,22 @@ it cannot reach the dashboard balance. Keep that mutation out of the PR.
 
 ### Widget reset-caption layout check
 
+Run `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/tests/widget-reset-layout-tests.sh`.
+The required SwiftPM smoke CI job runs the same check. It compiles the production
+widget tile and its dependencies against the SwiftPM module on macOS, adapting
+only the platform background color. ImageRenderer measures 54 fixtures across
+all visualization styles, three tile widths, reset/warning captions, and missing
+captions. Each tile must fit within 105 points, reserving space for the medium
+widget's margins, spacing, and Updated footer. This is an intrinsic-layout
+regression check, not an iOS screenshot or full WidgetKit host test.
+
 For Gemini Models and Other Models fixtures, add small and medium widgets using
 Automatic display mode. At ordinary usage, verify that the reset countdown and
-local reset time appear below the gauge; at warning pace, verify that the
-projection warning takes precedence. Captions may wrap to two lines and scale
+local reset time appear below the metric heading; at warning pace, verify that
+the projection warning takes precedence. Rings, dials, and large numeric
+visualizations sit beside the heading instead of taking a separate row above
+the caption. In medium widgets, check that the Updated footer also remains
+visible with those saved visualization choices. Captions may wrap to two lines and scale
 down to fit the tile. Check a long account label and a weekly caption in both
 widget sizes. Other providers retain their existing caption content, now also
 visible in Automatic mode. Missing descriptions add no empty caption row.
