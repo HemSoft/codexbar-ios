@@ -902,6 +902,53 @@ extension GeminiUsageProviderTests {
         }
     }
 
+    func testAllSixGeminiResetCaptionsMatchCodexEvenWhenProjectionIsBenign() throws {
+        let now = Date(timeIntervalSince1970: 1_788_640_000)
+        let bars = try projectionBars(fraction: 0.2, now: now)
+        XCTAssertEqual(bars.count, 6)
+        for zone in ["America/New_York", "Europe/Berlin"] {
+            let formatter = UserFacingDateTimeFormatter(
+                timeZone: try XCTUnwrap(TimeZone(identifier: zone)), locale: Locale(identifier: "en_US")
+            )
+            for bar in bars {
+                let reset = try XCTUnwrap(bar.resetsAt)
+                let start = try XCTUnwrap(bar.projectionPeriodStart)
+                let window: [String: Any] = [
+                    "used_percent": 20, "reset_at": reset.timeIntervalSince1970,
+                    "limit_window_seconds": Int(reset.timeIntervalSince(start)),
+                ]
+                let data = try JSONSerialization.data(withJSONObject: ["rate_limit": ["primary_window": window]])
+                let codex = try XCTUnwrap(CodexUsageParser.parse(data, fetchedAt: now)?.bars.first)
+                let caption = try XCTUnwrap(bar.localizedResetDescription(at: now, dateTimeFormatter: formatter))
+                XCTAssertEqual(caption, codex.localizedResetDescription(at: now, dateTimeFormatter: formatter))
+                XCTAssertTrue(caption.hasPrefix(reset.timeIntervalSince(start) > 86_400 ? "Resets 3d 12h" : "Resets 2h"))
+                XCTAssertTrue(caption.contains(formatter.timeWithZone(reset, includesWeekday: reset.timeIntervalSince(now) >= 86_400)))
+                XCTAssertNil(bar.dashboardProjectionDescription(at: now))
+            }
+        }
+    }
+
+    func testCodingResetCaptionsDoNotInventMissingMalformedOrExpiredTimes() throws {
+        let now = Date(timeIntervalSince1970: 1_788_640_000)
+        for reset: Any in [NSNull(), "bad", "2020-01-01T00:00:00Z", ISO8601DateFormatter().string(from: now)] {
+            let buckets: [[String: Any]] = AntigravityQuotaParser.metrics.map { metric in
+                ["bucketId": metric.key, "window": metric.window, "remainingFraction": 0.8, "resetTime": reset]
+            }
+            let result = try codingProjectionResult(buckets: buckets, now: now)
+            if reset is NSNull {
+                XCTAssertEqual(result.bars.count, 4)
+                for bar in result.bars {
+                    XCTAssertNil(bar.resetsAt)
+                    XCTAssertNil(bar.localizedResetDescription(at: now))
+                    XCTAssertNil(bar.projectedFraction(at: now))
+                }
+            } else {
+                XCTAssertTrue(result.bars.isEmpty)
+                XCTAssertEqual(result.unavailableUsageMetrics.count, 4)
+            }
+        }
+    }
+
     func testGeminiProjectionSafeguardsForZeroExpiredAndNotStartedWindows() throws {
         let now = Date(timeIntervalSince1970: 1_788_640_000)
         for bar in try projectionBars(fraction: 0, now: now) {

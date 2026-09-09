@@ -48,7 +48,8 @@ it. Animations retain the normal app behavior.
 
 - `testSixGoogleChoicesAndIndependentCustomizationPersist` starts with one
   Gemini account containing both source connections. Apps reads 12% and 45%
-  used; coding reads 0%, 31%, 0%, and 0%. It reaches all six settings switches
+  used; coding reads 0%, 31%, 0%, and 0%. Each coding metric must expose its
+  reset caption on the dashboard. It reaches all six settings switches
   in that account, moves, resizes, restyles and hides Gemini Models weekly
   independently, then relaunches and restores that choice through Customize Card.
 - `testGeminiOnlyDashboardShowsCodingSetupAndKeepsSelectionOnRelaunch` starts
