@@ -7,9 +7,9 @@ Claude/GPT. The two credential formats are separate and are never substituted
 for each other. Antigravity is an internal quota adapter, not a separate account
 choice or dashboard card.
 
-This experimental coding integration has a native browser authorization flow
-that requires developer-side OAuth client configuration before deployment.
-It uses an unofficial Google usage API.
+This experimental coding integration uses CodexBar's registered Google OAuth
+iOS client for native browser authorization. It uses an unofficial Google usage
+API.
 Franz's live comparisons remain follow-up verification for
 [#319](https://github.com/HemSoft/codexbar-ios/issues/319) and do not block agent
 implementation or merge.
@@ -47,16 +47,20 @@ Google account after the browser returns and before the session is saved. CodexB
 Keychain storage and refreshes usage. Cancellation preserves saved credentials.
 The app no longer asks users to paste or export session JSON.
 
-### Developer configuration required before deployment
+### Developer configuration
 
-This branch contains the native iOS OAuth flow, but it is not configured for
-production yet. Register a Google OAuth iOS client for `com.hemsoft.CodexBarIOS`
-and set the build setting `GOOGLE_CODING_CLIENT_ID` to its public client ID.
+The Google Auth Platform project named `CodexBar` is published for external
+accounts. Its iOS client is registered for bundle ID `com.hemsoft.CodexBarIOS`,
+App Store ID `6787769891`, and Apple team ID `W2A23PX5BP`. The app target's
+Debug and Release configurations set `GOOGLE_CODING_CLIENT_ID` to that public
+client ID. It is an application
+identifier, not a client secret.
+
 The application derives the reverse-client-ID callback scheme and uses
 `:/oauthredirect`, PKCE S256, a system browser session, and offline access.
-Do not ask end users for OAuth configuration. Without a valid build setting,
-the connection action reports that coding sign-in is not configured in this
-build, rather than pretending to connect.
+End users never enter OAuth configuration. If the registration changes, update
+both app-target build configurations. A missing or invalid setting makes the
+connection action report that coding sign-in is not configured in that build.
 
 The requested scopes are `cloud-platform` and `userinfo.email`, following the
 [desktop reference](https://github.com/steipete/CodexBar/blob/main/docs/antigravity.md).
@@ -146,8 +150,8 @@ Franz can use these optional checks after receiving the updated build:
    document browser reconnection. Saving a credential without a successful quota refresh
    does not prove access.
 
-Connect Coding Usage now implements native browser authorization. Before phone
-delivery, the agent must configure the app's registered Google iOS client through
-`GOOGLE_CODING_CLIENT_ID` and complete automated validation. Franz's live checks
-then verify account selection and the coding quotas returned by that grant;
-desktop success alone does not establish access from the iPhone.
+Connect Coding Usage now implements native browser authorization and the tracked
+build configuration supplies the registered Google iOS client ID. Before phone
+delivery, the agent must complete automated validation. Franz's live checks then
+verify account selection and the coding quotas returned by that grant; desktop
+success alone does not establish access from the iPhone.
