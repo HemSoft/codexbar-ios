@@ -2,18 +2,24 @@
 
 [AGENTS.md](AGENTS.md) requires every repository change to reach `main` through
 an issue-linked pull request with resolved review conversations. The live
-default-branch ruleset enforces the pull-request and resolved-conversation
-portions of that path on the server. It cannot validate issue linkage, so that
-part stays an agent-workflow requirement. This file documents the live rules,
-the review-count policy, who can change the rules, and how to apply and verify
-a change.
+default-branch ruleset currently enforces only the five required status checks.
+[Issue #305](https://github.com/HemSoft/codexbar-ios/issues/305) documents the
+payload that extends it to require pull requests, resolved conversations, and
+fast-forward-only updates; those rules take effect when the payload is applied.
+This file documents the ruleset configuration, the review-count policy, who can
+change the rules, and how to apply and verify a change.
 
-## Live ruleset
+## Ruleset configuration
 
 `main required quality checks` (ruleset [20103668](https://github.com/HemSoft/codexbar-ios/rules/20103668))
 is the repository's only ruleset. It targets `~DEFAULT_BRANCH`, is active, and
 has no bypass actors. Classic branch protection returns 404, so the ruleset
 supplies every main-branch requirement.
+
+Status: application of the payload below is pending the human review issue #305
+requires. Until then, `gh api repos/HemSoft/codexbar-ios/rules/branches/main`
+shows only the `required_status_checks` rule; the `pull_request` and
+`non_fast_forward` rows describe the post-application state.
 
 | Rule | Key parameters | Effect |
 | --- | --- | --- |
@@ -31,17 +37,19 @@ Settings follow GitHub's
 This repository requires zero approving reviews. It has a single owner and no
 `CODEOWNERS` file, so a code-owner requirement would be empty and an approval
 count of one would turn every merge into a manual owner step. The three
-automated reviewers in [AGENTS.md](AGENTS.md) still review every pull request,
-their actionable threads must be resolved, and the resolution requirement above
-makes that a server-enforced condition. Correctness is gated by the five
+automated reviewers in [AGENTS.md](AGENTS.md) are expected to review each pull
+request, and any threads they create must be resolved. The ruleset enforces
+resolution of existing threads only; it does not require those reviewers to
+run. Correctness is gated by the five
 required status checks, and the owner decides when the review loop is clean
 enough to merge. Approvals are advisory signals, not a merge gate. Raising the
 review count later follows the same change process as any other ruleset edit.
 
 ## Who can change the rules
 
-Users with the "edit repository rules" permission, which means repository
-administrators. For this repository that is the owner account, `HemSoft`. A
+Users with the "edit repository rules" permission can change repository rules;
+this includes repository administrators and custom repository roles granted
+that permission. For this repository that is the owner account, `HemSoft`. A
 ruleset change follows the same issue-first workflow as any other repository
 change: it starts with an issue, is documented through an issue-linked pull
 request carrying the exact payload, is applied by an administrator with the REST
