@@ -126,6 +126,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Document the main-branch ruleset policy in BRANCH-RULESETS.md and add the
+  exact ruleset payload: pull requests and resolved review conversations required
+  for updates to main, force pushes blocked, the five required checks unchanged,
+  and the change process recorded. Application follows the issue's human review
+  of the payload. ([#305](https://github.com/HemSoft/codexbar-ios/issues/305))
+
 - Make the Claude cancellation test wait for authorization presentation before
   requesting cancellation, so slow simulator startup does not fail an unrelated
   readiness deadline. ([#330](https://github.com/HemSoft/codexbar-ios/issues/330))
