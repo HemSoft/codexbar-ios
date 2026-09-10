@@ -41,6 +41,12 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Connect and reconnect Gemini Coding Usage from the phone through Google
+  authorization. CodexBar now includes its registered iOS OAuth client, so users
+  choose an account and return to the app without entering OAuth settings or
+  importing credentials.
+  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+
 - Connect and reconnect Google Gemini through a private Google website sign-in
   window with automatic return, verified usage, and separate account storage.
   Existing Gemini accounts retain their labels, groups, history, and display
