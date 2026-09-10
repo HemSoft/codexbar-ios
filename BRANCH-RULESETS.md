@@ -2,9 +2,11 @@
 
 [AGENTS.md](AGENTS.md) requires every repository change to reach `main` through
 an issue-linked pull request with resolved review conversations. The live
-default-branch ruleset is what enforces that delivery path on the server. This
-file documents the live rules, the review-count policy, who can change the
-rules, and how to apply and verify a change.
+default-branch ruleset enforces the pull-request and resolved-conversation
+portions of that path on the server. It cannot validate issue linkage, so that
+part stays an agent-workflow requirement. This file documents the live rules,
+the review-count policy, who can change the rules, and how to apply and verify
+a change.
 
 ## Live ruleset
 
