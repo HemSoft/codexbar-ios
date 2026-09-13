@@ -62,7 +62,9 @@ First compare the live writable configuration with the reviewed pre-change
 state. The diff must be empty. If it is not, stop and update the payload through
 another issue-linked pull request instead of overwriting the intervening change.
 
-```sh
+```bash
+set -euo pipefail
+
 live_ruleset="$(mktemp)"
 reviewed_baseline="$(mktemp)"
 trap 'rm -f "$live_ruleset" "$reviewed_baseline"' EXIT
