@@ -13,11 +13,12 @@ change the rules, and how to apply and verify a change.
 
 `main required quality checks` (ruleset [20103668](https://github.com/HemSoft/codexbar-ios/rules/20103668))
 is the repository's only ruleset. It targets `~DEFAULT_BRANCH`, is active, and
-has no bypass actors. Classic branch protection returns 404, so the ruleset
-supplies every main-branch requirement.
+has no bypass actors. Classic branch protection returns 404. Until the payload
+is applied, only the five status checks protect `main`; no server rule requires
+a pull request or blocks non-fast-forward updates.
 
-Status: application of the payload below is pending the human review issue #305
-requires. Until then, `gh api repos/HemSoft/codexbar-ios/rules/branches/main`
+Status: application of the payload below is pending the human review that issue
+#305 requires. Until then, `gh api repos/HemSoft/codexbar-ios/rules/branches/main`
 shows only the `required_status_checks` rule; the `pull_request` and
 `non_fast_forward` rows describe the post-application state.
 
