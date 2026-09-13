@@ -85,7 +85,9 @@ fi
 
 Only an empty diff permits the write and final verification:
 
-```sh
+```bash
+set -euo pipefail
+
 gh api -X PUT repos/HemSoft/codexbar-ios/rulesets/20103668 \
   --input docs/branch-rulesets/main-20103668.json
 gh api repos/HemSoft/codexbar-ios/rules/branches/main
