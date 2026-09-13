@@ -58,6 +58,28 @@ API, and is re-verified live afterwards.
 
 ## Apply and verify
 
+First compare the live writable configuration with the reviewed pre-change
+state. The diff must be empty. If it is not, stop and update the payload through
+another issue-linked pull request instead of overwriting the intervening change.
+
+```sh
+live_ruleset="$(mktemp)"
+reviewed_baseline="$(mktemp)"
+trap 'rm -f "$live_ruleset" "$reviewed_baseline"' EXIT
+
+gh api repos/HemSoft/codexbar-ios/rulesets/20103668 |
+  jq -Sc '{name,target,enforcement,conditions,bypass_actors,rules}' \
+  > "$live_ruleset"
+
+jq -Sc '{name,target,enforcement,conditions,bypass_actors,
+  rules:[.rules[] | select(.type == "required_status_checks")]}' \
+  docs/branch-rulesets/main-20103668.json > "$reviewed_baseline"
+
+diff -u "$reviewed_baseline" "$live_ruleset"
+```
+
+Only an empty diff permits the write and final verification:
+
 ```sh
 gh api -X PUT repos/HemSoft/codexbar-ios/rulesets/20103668 \
   --input docs/branch-rulesets/main-20103668.json
