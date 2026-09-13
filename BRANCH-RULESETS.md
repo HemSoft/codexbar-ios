@@ -75,7 +75,10 @@ jq -Sc '{name,target,enforcement,conditions,bypass_actors,
   rules:[.rules[] | select(.type == "required_status_checks")]}' \
   docs/branch-rulesets/main-20103668.json > "$reviewed_baseline"
 
-diff -u "$reviewed_baseline" "$live_ruleset"
+if ! diff -u "$reviewed_baseline" "$live_ruleset"; then
+  echo 'Live ruleset drifted from the reviewed state; aborting before write.' >&2
+  exit 1
+fi
 ```
 
 Only an empty diff permits the write and final verification:
