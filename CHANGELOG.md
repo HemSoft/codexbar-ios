@@ -132,6 +132,12 @@ building, testing, or releasing the app.
   and the change process recorded. Application follows the issue's human review
   of the payload. ([#305](https://github.com/HemSoft/codexbar-ios/issues/305))
 
+- Keep routine pull-request CI to SwiftLint, strict concurrency, iOS and watchOS
+  unit and risk checks, and the SwiftPM smoke harness. Run the complete iPhone
+  and iPad UI gate by manual dispatch. Those UI steps used 36m 53s of macOS
+  runner time in a completed September 10 sample.
+  ([#337](https://github.com/HemSoft/codexbar-ios/issues/337))
+
 - Make the Claude cancellation test wait for authorization presentation before
   requesting cancellation, so slow simulator startup does not fail an unrelated
   readiness deadline. ([#330](https://github.com/HemSoft/codexbar-ios/issues/330))
