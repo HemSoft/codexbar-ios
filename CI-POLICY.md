@@ -1,26 +1,30 @@
 # CI gate and manual analysis policy
 
 The automatic merge gate retains SwiftLint, Strict concurrency, iOS tests,
-watchOS tests and SwiftPM smoke tests. Swift security analysis and the
-usage-history Release budget run manually, with their failure rules and
-artifacts preserved. This is the policy selected in
-[issue #325](https://github.com/HemSoft/codexbar-ios/issues/325).
+watchOS tests and SwiftPM smoke tests. The required `iOS tests` job runs unit
+tests, coverage, and function-risk enforcement without UI journeys. The full
+iPhone and iPad UI gate, Swift security analysis, and the usage-history Release
+budget run manually with their failure rules and artifacts preserved.
+
+This policy revises the decision in
+[issue #325](https://github.com/HemSoft/codexbar-ios/issues/325), which kept both
+UI destinations in every pull-request run. The measured cost prompted
+[issue #337](https://github.com/HemSoft/codexbar-ios/issues/337) to move them to
+manual dispatch.
 
 ## Rollout status
 
-The live `main required quality checks` ruleset was changed on September 6,
-2026 at 5:13 p.m. EDT. It requires the five correctness checks above, with
-strict branch freshness and no bypass actors. Classic branch protection
-returns 404; the repository ruleset supplies these requirements.
+The live `main required quality checks` ruleset requires the five automatic
+checks above, with strict branch freshness and no bypass actors. Those status
+names do not change under issue #337, and `Full iOS UI validation` is not a
+required status. No ruleset mutation is needed for this policy change. Classic
+branch protection returns 404 because the repository ruleset supplies the
+requirements.
 
-The two workflow files in this change contain only `workflow_dispatch`.
-Their trigger edits match the earlier edits in
-[PR #320](https://github.com/HemSoft/codexbar-ios/pull/320), which is still open
-at this inventory snapshot. This issue's PR carries the same policy without
-changing that Google-metrics PR. Default-branch workflow files still contain
-automatic analysis triggers until either change lands. The live rule change
-alone does not complete issue #325. Benchmark repeatability, manual dispatch
-evidence and verification of the final merged gate remain separate criteria.
+The `CI` workflow handles pull requests, pushes to `main`, and manual dispatch.
+Only manual dispatch can start `Full iOS UI validation`, and that job waits for
+the five automatic jobs to pass. The security-analysis and usage-history
+performance workflow files contain only `workflow_dispatch`.
 
 ## Measured inventory
 
@@ -49,6 +53,13 @@ or silently excluded from the inventory.
 | SwiftPM smoke tests | 60 / 63 | 1m 08s | 1m 22s | 1m 29s | 15m |
 | Swift security analysis | 9 / 25 | 31m 09s | 39m 52s | 39m 52s | 60m |
 | Usage history Release budget | 5 / 8 | 5m 01s | 5m 25s | 5m 25s | 20m |
+
+A later successful [CI run on September 10,
+2026](https://github.com/HemSoft/codexbar-ios/actions/runs/34459470256)
+took 52m 10s and consumed 61.9 summed macOS job-minutes. Its iOS job used
+51m 07s, including 12m 24s for unit tests, 19m 32s for iPhone UI journeys, and
+17m 21s for iPad UI journeys. This completed-run sample supplied the cost basis
+for issue #337.
 
 All 54 cancelled jobs have an explanatory GitHub annotation. Fifty-three
 were superseded by a newer request, and one was the
@@ -86,55 +97,70 @@ or thermal observations.
 
 ## Automatic gate budget
 
-Keep the current five required jobs and their timeouts. They check compilation,
-lint, concurrency, unit behavior, both UI device families and function-risk
-policy. These checks produce correctness decisions that timing measurements
-cannot replace. Do not remove iOS tests because it is the slowest required job.
+Keep the five required status names. They check lint, strict concurrency, iOS
+unit behavior and function risk, watchOS behavior and function risk, and the
+SwiftPM smoke harness. The automatic `iOS tests` job has a 30-minute limit. The
+other four automatic timeouts remain unchanged.
 
-The current iOS execution limit is 90 minutes, inherited from PR329; the
-inventory above recorded the earlier 50-minute limit. The observed longest
-passing job in that historical inventory was 49m 34s. The limit is a
-cancellation bound, not a guaranteed turnaround. A later 90-minute run still
-timed out after Xcode could not launch the iPad test app, so increasing the
-limit alone does not resolve runner failures. The complete combined Gemini
-branch subsequently passed the required iOS job.
+The historical table predates the UI split and must not be used as the measured
+post-change duration. In the September 10 sample, the two UI destinations used
+36m 53s of the run's 61.9 summed macOS job-minutes. Removing those steps from
+ordinary PR runs avoids that work. Record completed post-change runs before
+claiming the actual savings. The concurrency policy cancels obsolete runs, but
+it cannot recover runner time spent before cancellation.
 
-Do not promise a sub-30-minute gate: the historical iOS P90 exceeds 40 minutes.
-The other four checks normally finished within eight minutes in that sample.
-All five checks, both UI device families and existing failure behavior remain
-required. This PR does not change their current execution limits.
-
-For slow iOS runs, inspect unit tests, simulator startup, each UI family and
-artifact steps separately. Preserve both device-family checks and risk gates
-when investigating duration. A later runtime reduction needs measured before
-and after evidence. Supersession during active revisions is expected because
-the CI concurrency policy cancels obsolete work.
+The manual full gate retains a 90-minute limit for `Full iOS UI validation`.
+Keeping the UI suites intact preserves their correctness decisions without
+charging every review-fix commit for both simulator families. Inspect unit
+tests, simulator startup, each UI family, and artifact steps separately when a
+manual run is slow.
 
 Security's 31-minute median and incomplete 60-minute attempt justify a
-separate manual job. Retain its 60-minute cap; increasing it is not part of
-this policy. Performance is manual primarily because measurement noise can
-prevent a usable decision, even though its successful runs took about five
-minutes. Retain its 20-minute cap and all current thresholds.
+separate manual job. Retain its 60-minute cap. Performance remains manual
+because measurement noise can prevent a usable decision, even though its
+successful runs took about five minutes. Retain its 20-minute cap and all
+current thresholds.
 
 ## Manual runs and failure ownership
 
+Run the full CI gate for release preparation and for changes to navigation,
+account setup, dashboard flows, accessibility behavior, UI fixtures, or UI-test
+infrastructure. The dispatch first runs the five automatic jobs. If they pass,
+`Full iOS UI validation` runs all five journeys on both iPhone and iPad. A
+failed iPhone family does not suppress the iPad family or the retained failure
+artifacts.
+
 Run security analysis for authentication, networking, credential storage,
-analyzer/toolchain changes and release preparation. Run the Release budget for
-history persistence, chart generation, benchmark/toolchain changes and release
-preparation. The maintainer requesting each run owns inspecting the result and
-recording its disposition in the related issue or PR. A green correctness gate
-does not imply either manual analysis ran.
+analyzer or toolchain changes, and release preparation. Run the Release budget
+for history persistence, chart generation, benchmark or toolchain changes, and
+release preparation. The maintainer requesting any manual run owns inspecting
+its result and recording its disposition in the related issue or PR. A green
+automatic gate does not imply a manual gate ran.
 
 Choose a branch or tag whose resolved commit has been reviewed. Record the
 resolved SHA immediately before dispatch and confirm the run's `headSha` after
-dispatch; a branch can move between those operations.
+dispatch. A branch can move between those operations.
 
-```sh
-gh workflow run security-analysis.yml --repo HemSoft/codexbar-ios --ref <reviewed-ref>
-gh workflow run usage-history-performance.yml --repo HemSoft/codexbar-ios --ref <reviewed-ref>
-gh run view <run-id> --repo HemSoft/codexbar-ios --json headSha,event,status,conclusion,url,jobs
-gh run download <run-id> --repo HemSoft/codexbar-ios --dir <new-evidence-directory>
+```bash
+set -euo pipefail
+reviewed_ref=<reviewed-branch-or-tag>
+encoded_ref="$(jq -rn --arg ref "$reviewed_ref" '$ref|@uri')"
+reviewed_sha="$(gh api \
+  "repos/HemSoft/codexbar-ios/commits/$encoded_ref" --jq '.sha')"
+
+gh workflow run ci.yml --repo HemSoft/codexbar-ios --ref "$reviewed_ref"
+gh workflow run security-analysis.yml --repo HemSoft/codexbar-ios --ref "$reviewed_ref"
+gh workflow run usage-history-performance.yml --repo HemSoft/codexbar-ios --ref "$reviewed_ref"
+
+gh run view <run-id> --repo HemSoft/codexbar-ios \
+  --json headSha,event,status,conclusion,url,jobs
+gh run download <run-id> --repo HemSoft/codexbar-ios \
+  --dir <new-evidence-directory>
 ```
+
+Compare the reported `headSha` with `$reviewed_sha`. Record a manual full gate
+as passed, failed, or not run. Never present an unrun gate as passing. UI result
+bundles, logs, summaries, and failure screenshots expire after 14 days.
 
 For security, inspect complete production source reach, compiler/extraction
 diagnostics, raw SARIF, reviewed findings and blockers in `gate.json`. Preserve
@@ -163,6 +189,7 @@ must remain visible in issue #325 until its criteria are met.
 ## Recheck the policy
 
 ```sh
+python3 -m unittest discover -s scripts/tests -p 'test_ci_policy.py' -v
 gh api repos/HemSoft/codexbar-ios/rules/branches/main
 gh api repos/HemSoft/codexbar-ios/branches/main/protection
 gh run list --repo HemSoft/codexbar-ios --limit 100 \
@@ -171,7 +198,10 @@ gh api 'repos/HemSoft/codexbar-ios/actions/runs/<run-id>/jobs?per_page=100&filte
 ```
 
 Inspect all pages when more than 100 jobs or annotations exist. Compute job
-duration from its own start and completion timestamps, not the workflow's last
-update time. Confirm both expensive workflow files contain only
-`workflow_dispatch` and that an ordinary PR push creates neither analysis run.
+duration from each job's own start and completion timestamps, not the
+workflow's last update time. Confirm an ordinary PR run marks `Full iOS UI
+validation` skipped and spends no time in either UI destination. Confirm a
+manual `CI` run records `workflow_dispatch`, matches the reviewed SHA, and runs
+both destinations after the automatic jobs pass. The security-analysis and
+usage-history performance workflows must contain only `workflow_dispatch`.
 Keep failures and cancellations in the inventory when refreshing measurements.
