@@ -141,10 +141,12 @@ Choose a branch or tag whose resolved commit has been reviewed. Record the
 resolved SHA immediately before dispatch and confirm the run's `headSha` after
 dispatch. A branch can move between those operations.
 
-```sh
+```bash
+set -euo pipefail
 reviewed_ref=<reviewed-branch-or-tag>
-reviewed_sha="$(gh api --method GET repos/HemSoft/codexbar-ios/commits \
-  -f sha="$reviewed_ref" -f per_page=1 --jq '.[0].sha')"
+encoded_ref="$(jq -rn --arg ref "$reviewed_ref" '$ref|@uri')"
+reviewed_sha="$(gh api \
+  "repos/HemSoft/codexbar-ios/commits/$encoded_ref" --jq '.sha')"
 
 gh workflow run ci.yml --repo HemSoft/codexbar-ios --ref "$reviewed_ref"
 gh workflow run security-analysis.yml --repo HemSoft/codexbar-ios --ref "$reviewed_ref"
