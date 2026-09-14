@@ -137,8 +137,17 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
   ```
 
   See [UI-TESTING.md](UI-TESTING.md) for fixture startup, storage isolation,
-  single-family runs, and failure artifacts. Both destinations are enforced
-  inside the required iOS test CI job.
+  single-family runs, and failure artifacts. Automatic pull-request CI does not
+  run these journeys. After a reviewed branch is stable, dispatch the complete
+  CI gate manually:
+
+  ```sh
+  gh workflow run ci.yml --repo HemSoft/codexbar-ios \
+    --ref <reviewed-branch-or-tag>
+  ```
+
+  The manual `Full iOS UI validation` job enforces both destinations after the
+  five automatic jobs pass.
 
 - Run the SwiftPM smoke harness:
 
