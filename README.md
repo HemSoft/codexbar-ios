@@ -85,15 +85,21 @@ Packages storage, Git LFS storage and bandwidth, gross charges, discounts, net
 spend, and a month-end projection. Public-repository Actions minutes do not
 consume the private-repository allowance. GitHub does not expose personal
 budgets, so the card says that explicitly. Organization cards show usage by
-product and SKU, monetary totals and projections, and every returned budget,
-including whether it alerts or blocks further usage. Unsupported plans, missing
-API fields, unavailable billing endpoints, permission failures, and rate limits
+product and SKU, monetary totals and projections, and returned organization or
+repository budgets, including whether each budget alerts or blocks further
+usage. Other budget scopes remain visible as unavailable because organization
+usage cannot establish their consumption safely. Unsupported plans, missing API
+fields, unavailable billing endpoints, permission failures, and rate limits
 remain visible instead of being guessed.
 
 The browser flow requests `repo read:org read:user`, uses PKCE with a loopback
-callback, and stores only the returned account token. Billing administrators
-must grant access to organization billing data. Debug builds can override the
-OAuth registration with `CODEXBAR_GITHUB_BILLING_OAUTH_CLIENT_ID` and
+callback, and stores only the returned account token. GitHub supports separate
+tokens per user, OAuth application, and scope combination, so the billing flow's
+distinct scope combination and Keychain entry do not broaden or replace a saved
+Copilot token even when both flows use the bundled public OAuth registration.
+Billing administrators must grant access to organization billing data. Debug
+builds can override the registration with
+`CODEXBAR_GITHUB_BILLING_OAUTH_CLIENT_ID` and
 `CODEXBAR_GITHUB_BILLING_OAUTH_CLIENT_SECRET`; release builds use the bundled
 registration. Live account comparison remains an owner verification step.
 Developers can run the synthetic API contract suite with:

@@ -48,6 +48,9 @@ public struct GitHubBillingOAuthConfiguration: Equatable, Sendable {
         let environmentClientSecret: String? = nil
         #endif
 
+        // GitHub issues separate tokens per user, OAuth application, and scope combination. Billing
+        // intentionally uses a different scope combination and Keychain entry from Copilot; sharing
+        // the public app registration fallback does not broaden or replace the saved Copilot token.
         return GitHubBillingOAuthConfiguration(
             clientID: environmentClientID
                 ?? Bundle.main.object(forInfoDictionaryKey: "CODEXBAR_GITHUB_BILLING_OAUTH_CLIENT_ID") as? String

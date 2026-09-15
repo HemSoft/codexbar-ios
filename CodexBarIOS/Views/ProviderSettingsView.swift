@@ -190,9 +190,7 @@ struct ProviderSettingsView: View {
                     }
                 } else if providerID == .githubBilling {
                     Button {
-                        Task {
-                            await viewModel.signInWithGitHubBilling()
-                        }
+                        viewModel.startGitHubBillingSignIn()
                     } label: {
                         if viewModel.isSigningInWithGitHubBilling && viewModel.githubBillingAccountOptions.isEmpty {
                             ProgressView()

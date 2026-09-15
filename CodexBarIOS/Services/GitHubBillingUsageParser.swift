@@ -51,7 +51,9 @@ public enum GitHubBillingUsageParser {
         )
 
         let totals = SpendTotals(items: summary.usageItems)
-        let monetaryMetrics = makeSpendMetrics(totals: totals, period: period, fetchedAt: fetchedAt)
+        let monetaryMetrics = totals.map {
+            makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt)
+        } ?? []
         let planDescriptor = plan.map { plan in
             ProviderPlanDescriptor.make(
                 providerPrefix: ProviderID.githubBilling.rawValue,
@@ -74,7 +76,7 @@ public enum GitHubBillingUsageParser {
             unavailableUsageMetrics: unavailable,
             usageMessages: [
                 "GitHub does not expose personal budgets through its public API. Included allowances and current charges are shown separately.",
-            ],
+            ] + spendStatusMessages(for: totals),
             cardInformationSections: details.isEmpty ? [] : [
                 ProviderCardInformationSection(
                     id: "github-billing.usage-detail",
@@ -107,14 +109,15 @@ public enum GitHubBillingUsageParser {
         var bars = organizationUsageBars(summary.usageItems)
         let budgetOutput = makeBudgetOutput(
             budgets: budgets,
-            usageItems: summary.usageItems,
-            period: period,
-            fetchedAt: fetchedAt
+            usageItems: usage.usageItems,
+            period: period
         )
         bars.append(contentsOf: budgetOutput.bars)
 
         let totals = SpendTotals(items: summary.usageItems)
-        var monetaryMetrics = makeSpendMetrics(totals: totals, period: period, fetchedAt: fetchedAt)
+        var monetaryMetrics = totals.map {
+            makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt)
+        } ?? []
         if budgetOutput.validBudgets.count == 1, let budget = budgetOutput.validBudgets.first {
             monetaryMetrics.append(monetaryMetric(
                 kind: .spendLimit,
@@ -130,7 +133,7 @@ public enum GitHubBillingUsageParser {
             ))
         }
 
-        var messages: [String] = []
+        var messages = budgetOutput.messages + spendStatusMessages(for: totals)
         if let budgetStatusMessage {
             messages.append(budgetStatusMessage)
         } else if budgets.isEmpty {
@@ -230,6 +233,10 @@ public enum GitHubBillingUsageParser {
             unavailable[metricID] = "GitHub returned storage in a unit that cannot be compared with a GB-hour allowance."
             return
         }
+        guard matching.allSatisfy({ $0.grossQuantity != nil }) else {
+            unavailable[metricID] = "GitHub did not return a complete accrued storage quantity."
+            return
+        }
         let used = matching.compactMap(\.grossQuantity).reduce(.zero, +)
         let limit = plan.sharedStorageGB * Decimal(period.hours)
         bars.append(allowanceBar(
@@ -256,7 +263,9 @@ public enum GitHubBillingUsageParser {
         }
 
         let storageItems = items.filter(\.isLFSStorage)
-        if storageItems.allSatisfy(\.isGBHours), let period {
+        if storageItems.allSatisfy(\.isGBHours),
+           storageItems.allSatisfy({ $0.grossQuantity != nil }),
+           let period {
             bars.append(allowanceBar(
                 stableKey: "lfs-storage",
                 label: "Git LFS storage",
@@ -271,7 +280,8 @@ public enum GitHubBillingUsageParser {
         }
 
         let bandwidthItems = items.filter(\.isLFSBandwidth)
-        if bandwidthItems.allSatisfy(\.isGB) {
+        if bandwidthItems.allSatisfy(\.isGB),
+           bandwidthItems.allSatisfy({ $0.grossQuantity != nil }) {
             bars.append(allowanceBar(
                 stableKey: "lfs-bandwidth",
                 label: "Git LFS bandwidth",
@@ -340,82 +350,158 @@ public enum GitHubBillingUsageParser {
 
     private static func makeBudgetOutput(
         budgets: [Budget]?,
-        usageItems: [SummaryItem],
-        period: BillingPeriod?,
-        fetchedAt: Date
+        usageItems: [UsageItem],
+        period: BillingPeriod?
     ) -> BudgetOutput {
         guard let budgets else { return BudgetOutput() }
         var output = BudgetOutput()
         for budget in budgets {
-            guard
-                let id = budget.id?.nonempty,
-                let amount = budget.budgetAmount,
-                amount > 0
-            else {
+            guard let candidate = budgetCandidate(budget, usageItems: usageItems) else { continue }
+            if let unavailableMessage = candidate.unavailableMessage {
+                output.messages.append(unavailableMessage)
                 continue
             }
-            let targets = budget.productsOrSKUs.compactMap(\.nonempty)
-            guard !targets.isEmpty else { continue }
-            let normalizedTargets = Set(targets.map(\.normalized))
-            let isProduct = budget.budgetType?.normalized == "productpricing"
-            let matchingItems = usageItems.filter { item in
-                let candidate = isProduct ? item.product : item.sku
-                return candidate.map { normalizedTargets.contains($0.normalized) } == true
-            }
-            let consumed = matchingItems.compactMap(\.netAmount).reduce(.zero, +)
-            let targetLabel = targets.joined(separator: ", ")
-            let name = "\(targetLabel) budget"
-            let normalized = NormalizedBudget(
-                id: id,
-                name: name,
-                amount: amount,
-                consumed: consumed,
-                preventFurtherUsage: budget.preventFurtherUsage ?? false
-            )
+            guard let normalized = candidate.normalized else { continue }
             output.validBudgets.append(normalized)
             output.bars.append(UsageBar(
-                stableKey: "budget-\(id)",
-                label: name,
-                used: consumed.doubleValue,
-                limit: amount.doubleValue,
+                stableKey: "budget-\(normalized.id)",
+                label: normalized.name,
+                used: normalized.consumed.doubleValue,
+                limit: normalized.amount.doubleValue,
                 resetsAt: period?.end,
                 resetDisplayStyle: .relativeWithLocalTime,
-                projectionCurrent: consumed.doubleValue,
-                projectionLimit: amount.doubleValue,
+                projectionCurrent: normalized.consumed.doubleValue,
+                projectionLimit: normalized.amount.doubleValue,
                 projectionPeriodStart: period?.start,
                 projectionPeriodEnd: period?.end,
                 showProjectionOnCurrentBar: period != nil
             ))
-            let remaining = max(amount - consumed, 0)
-            let percent = amount > 0 ? consumed / amount * 100 : 0
-            output.sections.append(ProviderCardInformationSection(
-                id: "github-billing.budget.\(id)",
-                title: name,
-                items: [
-                    ProviderCardInformationItem(
-                        id: "\(id).scope",
-                        label: isProduct ? "Product budget" : "SKU budget",
-                        detail: targetLabel
-                    ),
-                    ProviderCardInformationItem(
-                        id: "\(id).behavior",
-                        label: "Behavior",
-                        detail: normalized.preventFurtherUsage ? "Hard stop" : "Alert only"
-                    ),
-                    ProviderCardInformationItem(
-                        id: "\(id).consumed",
-                        label: "Current net spend",
-                        detail: currencyText(consumed)
-                    ),
-                    ProviderCardInformationItem(
-                        id: "\(id).remaining",
-                        label: "Remaining headroom",
-                        detail: "\(currencyText(remaining)) · \(decimalText(percent))% consumed"
-                    ),
-                ]
+            output.sections.append(budgetSection(
+                normalized,
+                isProduct: candidate.isProduct,
+                targetLabel: candidate.targetLabel
             ))
         }
         return output
+    }
+
+    private static func budgetCandidate(
+        _ budget: Budget,
+        usageItems: [UsageItem]
+    ) -> BudgetCandidate? {
+        guard
+            let id = budget.id?.nonempty,
+            let amount = budget.budgetAmount,
+            amount > 0,
+            let preventFurtherUsage = budget.preventFurtherUsage
+        else {
+            return nil
+        }
+        let targets = budget.productsOrSKUs.compactMap(\.nonempty)
+        guard !targets.isEmpty else { return nil }
+        let normalizedTargets = Set(targets.map(\.normalized))
+        let targetLabel = targets.joined(separator: ", ")
+        guard let isProduct = budget.isProductPricing else {
+            return BudgetCandidate(
+                unavailableMessage: "GitHub returned an unsupported budget pricing type for \(targetLabel)."
+            )
+        }
+        guard let matching = matchingUsageItems(
+            for: budget,
+            isProduct: isProduct,
+            normalizedTargets: normalizedTargets,
+            usageItems: usageItems
+        ) else {
+            return BudgetCandidate(
+                unavailableMessage: "GitHub returned a \(budget.scopeLabel) budget whose consumption cannot be calculated from organization usage."
+            )
+        }
+        guard matching.allSatisfy({ $0.netAmount != nil }) else {
+            return BudgetCandidate(
+                unavailableMessage: "GitHub did not return complete net spend for the \(targetLabel) budget."
+            )
+        }
+        let normalized = NormalizedBudget(
+            id: id,
+            name: "\(targetLabel) budget",
+            amount: amount,
+            consumed: matching.compactMap(\.netAmount).reduce(.zero, +),
+            preventFurtherUsage: preventFurtherUsage,
+            scopeDescription: budget.scopeDescription
+        )
+        return BudgetCandidate(
+            normalized: normalized,
+            isProduct: isProduct,
+            targetLabel: targetLabel
+        )
+    }
+
+    private static func matchingUsageItems(
+        for budget: Budget,
+        isProduct: Bool,
+        normalizedTargets: Set<String>,
+        usageItems: [UsageItem]
+    ) -> [UsageItem]? {
+        let scopedItems: [UsageItem]
+        switch budget.budgetScope?.normalized {
+        case "organization":
+            scopedItems = usageItems
+        case "repository":
+            guard let entity = budget.budgetEntityName?.nonempty?.normalized else { return nil }
+            scopedItems = usageItems.filter { $0.repositoryName?.normalized == entity }
+        default:
+            return nil
+        }
+        return scopedItems.filter { item in
+            let candidate = isProduct ? item.product : item.sku
+            return candidate.map { normalizedTargets.contains($0.normalized) } == true
+        }
+    }
+
+    private static func budgetSection(
+        _ budget: NormalizedBudget,
+        isProduct: Bool,
+        targetLabel: String
+    ) -> ProviderCardInformationSection {
+        let remaining = max(budget.amount - budget.consumed, 0)
+        let percent = budget.consumed / budget.amount * 100
+        return ProviderCardInformationSection(
+            id: "github-billing.budget.\(budget.id)",
+            title: budget.name,
+            items: [
+                ProviderCardInformationItem(
+                    id: "\(budget.id).scope",
+                    label: isProduct ? "Product budget" : "SKU budget",
+                    detail: targetLabel
+                ),
+                ProviderCardInformationItem(
+                    id: "\(budget.id).applies-to",
+                    label: "Applies to",
+                    detail: budget.scopeDescription
+                ),
+                ProviderCardInformationItem(
+                    id: "\(budget.id).behavior",
+                    label: "Behavior",
+                    detail: budget.preventFurtherUsage ? "Hard stop" : "Alert only"
+                ),
+                ProviderCardInformationItem(
+                    id: "\(budget.id).consumed",
+                    label: "Current net spend",
+                    detail: currencyText(budget.consumed)
+                ),
+                ProviderCardInformationItem(
+                    id: "\(budget.id).remaining",
+                    label: "Remaining headroom",
+                    detail: "\(currencyText(remaining)) · \(decimalText(percent))% consumed"
+                ),
+            ]
+        )
+    }
+
+    private static func spendStatusMessages(for totals: SpendTotals?) -> [String] {
+        totals == nil
+            ? ["GitHub did not return complete gross, discount, and net amounts for this billing period."]
+            : []
     }
 
     private static func makeSpendMetrics(
@@ -632,10 +718,31 @@ private struct Budget: Decodable {
     let preventFurtherUsage: Bool?
     let budgetProductSKU: String?
     let budgetProductSKUs: [String]?
+    let budgetScope: String?
+    let budgetEntityName: String?
 
     var productsOrSKUs: [String] {
         if let budgetProductSKU { return [budgetProductSKU] }
         return budgetProductSKUs ?? []
+    }
+
+    var scopeLabel: String {
+        budgetScope?.nonempty ?? "unknown-scope"
+    }
+
+    var isProductPricing: Bool? {
+        switch budgetType?.normalized {
+        case "productpricing": true
+        case "skupricing": false
+        default: nil
+        }
+    }
+
+    var scopeDescription: String {
+        if budgetScope?.normalized == "repository", let entity = budgetEntityName?.nonempty {
+            return "Repository \(entity)"
+        }
+        return "Organization"
     }
 
     enum CodingKeys: String, CodingKey {
@@ -645,6 +752,8 @@ private struct Budget: Decodable {
         case preventFurtherUsage = "prevent_further_usage"
         case budgetProductSKU = "budget_product_sku"
         case budgetProductSKUs = "budget_product_skus"
+        case budgetScope = "budget_scope"
+        case budgetEntityName = "budget_entity_name"
     }
 }
 
@@ -653,7 +762,12 @@ private struct SpendTotals {
     let discount: Decimal
     let net: Decimal
 
-    init(items: [SummaryItem]) {
+    init?(items: [SummaryItem]) {
+        guard items.allSatisfy({
+            $0.grossAmount != nil && $0.discountAmount != nil && $0.netAmount != nil
+        }) else {
+            return nil
+        }
         gross = items.compactMap(\.grossAmount).reduce(.zero, +)
         discount = items.compactMap(\.discountAmount).reduce(.zero, +)
         net = items.compactMap(\.netAmount).reduce(.zero, +)
@@ -743,12 +857,33 @@ private struct NormalizedBudget {
     let amount: Decimal
     let consumed: Decimal
     let preventFurtherUsage: Bool
+    let scopeDescription: String
+}
+
+private struct BudgetCandidate {
+    let normalized: NormalizedBudget?
+    let isProduct: Bool
+    let targetLabel: String
+    let unavailableMessage: String?
+
+    init(
+        normalized: NormalizedBudget? = nil,
+        isProduct: Bool = false,
+        targetLabel: String = "",
+        unavailableMessage: String? = nil
+    ) {
+        self.normalized = normalized
+        self.isProduct = isProduct
+        self.targetLabel = targetLabel
+        self.unavailableMessage = unavailableMessage
+    }
 }
 
 private struct BudgetOutput {
     var bars: [UsageBar] = []
     var sections: [ProviderCardInformationSection] = []
     var validBudgets: [NormalizedBudget] = []
+    var messages: [String] = []
 }
 
 private extension Decimal {

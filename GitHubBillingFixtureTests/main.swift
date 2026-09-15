@@ -53,6 +53,12 @@ enum GitHubBillingFixtureRunner {
         let storage = try require(free.bars.first { $0.stableKey == "actions-packages-storage" }, "Storage bar missing")
         try check(storage.used == 144, "Actions and Packages GB-hours must share one accrued total")
         try check(storage.limit == 360, "September Free storage allowance must be 0.5 GB times 720 hours")
+        let lfsStorage = try require(free.bars.first { $0.stableKey == "lfs-storage" }, "Git LFS storage bar missing")
+        try check(lfsStorage.used == 48 && lfsStorage.limit == 7_200, "Git LFS storage must use its 10 GiB accrued allowance")
+        let lfsBandwidth = try require(free.bars.first { $0.stableKey == "lfs-bandwidth" }, "Git LFS bandwidth bar missing")
+        try check(lfsBandwidth.used == 3.5 && lfsBandwidth.limit == 10, "Git LFS bandwidth must use its separate monthly allowance")
+        try check(free.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "3.125"), "Gross spend precision was lost")
+        try check(free.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "2.65"), "Full and partial discounts were not retained")
         try check(free.monetaryMetrics.first { $0.kind == .spent }?.amount == Decimal(string: "0.475"), "Net spend precision was lost")
         try check(
             free.usageMessages.contains { $0.contains("does not expose personal budgets") },
@@ -71,6 +77,14 @@ enum GitHubBillingFixtureRunner {
             pro.bars.first { $0.stableKey == "actions-private-minutes" }?.limit == 3_000,
             "Pro accounts must receive 3,000 included Actions minutes"
         )
+        try check(
+            pro.bars.first { $0.stableKey == "actions-packages-storage" }?.limit == 720,
+            "Pro accounts must receive 1 GiB of shared Actions and Packages storage"
+        )
+        try check(
+            pro.bars.first { $0.stableKey == "lfs-storage" }?.limit == 7_200,
+            "Pro Git LFS storage must retain its separate 10 GiB allowance"
+        )
     }
 
     private static func organizationBudgetsAndPaginationParsing() throws {
@@ -80,7 +94,7 @@ enum GitHubBillingFixtureRunner {
             {"budgets":[{"id":"product-budget","budget_type":"ProductPricing","budget_amount":100,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":true}
             """#),
             data(#"""
-            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"organization","budget_product_skus":["actions_linux"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
+            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"repository","budget_entity_name":"example/private","budget_product_skus":["actions_linux"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"cost-center-budget","budget_type":"ProductPricing","budget_amount":50,"prevent_further_usage":false,"budget_scope":"cost_center","budget_entity_name":"engineering","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
             """#),
         ]
         let configuration = organizationConfiguration()
@@ -91,8 +105,10 @@ enum GitHubBillingFixtureRunner {
             configuration: configuration,
             fetchedAt: try fixtureDate("2026-09-15T12:00:00Z")
         ), "Organization fixture did not parse")
-        try check(result.bars.contains { $0.stableKey == "budget-product-budget" && $0.used == 8 && $0.limit == 100 }, "Product budget did not use product net spend")
-        try check(result.bars.contains { $0.stableKey == "budget-sku-budget" && $0.used == 8 && $0.limit == 20 }, "SKU budget did not use SKU net spend")
+        try check(result.bars.contains { $0.stableKey == "budget-product-budget" && $0.used == 10 && $0.limit == 100 }, "Organization budget did not use organization-wide product net spend")
+        try check(result.bars.contains { $0.stableKey == "budget-sku-budget" && $0.used == 8 && $0.limit == 20 }, "Repository budget did not limit SKU net spend to its repository")
+        try check(!result.bars.contains { $0.stableKey == "budget-cost-center-budget" }, "Unsupported budget scopes must not show guessed consumption")
+        try check(result.usageMessages.contains { $0.contains("cost_center") }, "Unsupported budget scopes need an unavailable explanation")
         try check(result.cardInformationSections.contains { section in
             section.items.contains { $0.label == "Behavior" && $0.detail == "Hard stop" }
         }, "Hard-stop behavior was not retained")
@@ -132,6 +148,8 @@ enum GitHubBillingFixtureRunner {
         )
         let result = try require(missing, "Missing optional fields should produce unavailable metrics instead of a crash")
         try check(!result.unavailableUsageMetrics.isEmpty, "Unknown plans must explain unavailable allowances")
+        try check(result.monetaryMetrics.isEmpty, "Missing spend fields must not be presented as zero-dollar usage")
+        try check(result.usageMessages.contains { $0.contains("complete gross") }, "Missing spend fields need an unavailable explanation")
     }
 
     private static func providerRequestAndFailureFixtures() async throws {
@@ -204,8 +222,8 @@ enum GitHubBillingFixtureRunner {
                     .queryItems?.first { $0.name == "page" }?.value ?? "1") ?? 1
                 pageCounter.increment()
                 let body = page == 1
-                    ? #"{"budgets":[{"id":"one","budget_type":"ProductPricing","budget_amount":100,"prevent_further_usage":true,"budget_product_sku":"Actions"}],"has_next_page":true}"#
-                    : #"{"budgets":[{"id":"two","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_product_sku":"actions_linux"}],"has_next_page":false}"#
+                    ? #"{"budgets":[{"id":"one","budget_type":"ProductPricing","budget_amount":100,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions"}],"has_next_page":true}"#
+                    : #"{"budgets":[{"id":"two","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"actions_linux"}],"has_next_page":false}"#
                 return response(request, status: 200, body: body)
             }
             return response(request, status: 404, body: "{}")
@@ -220,11 +238,11 @@ enum GitHubBillingFixtureRunner {
     }
 
     private static func organizationSummary() -> Data {
-        data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","grossQuantity":1000,"grossAmount":10.25,"discountQuantity":200,"discountAmount":2.25,"netQuantity":800,"netAmount":8.00},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":50,"grossAmount":1.125,"discountQuantity":25,"discountAmount":0.5625,"netQuantity":25,"netAmount":0.5625}]}"#)
+        data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","grossQuantity":1200,"grossAmount":12.25,"discountQuantity":200,"discountAmount":2.25,"netQuantity":1000,"netAmount":10.00},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":50,"grossAmount":1.125,"discountQuantity":25,"discountAmount":0.5625,"netQuantity":25,"netAmount":0.5625}]}"#)
     }
 
     private static func organizationUsage() -> Data {
-        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"repositoryName":"example/private"}]}"#)
+        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","grossAmount":2,"discountAmount":0,"netAmount":2,"repositoryName":"example/other"}]}"#)
     }
 
     private static func personalConfiguration() -> ProviderAccountConfiguration {

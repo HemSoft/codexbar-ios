@@ -79,6 +79,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let githubBillingAuthService: any GitHubBillingWebAuthenticating
     private let githubBillingUsageProvider: GitHubBillingUsageProvider
     private var pendingGitHubBillingAuthResult: GitHubBillingWebAuthResult?
+    private var githubBillingSignInTask: Task<Void, Never>?
     private let claudeAuthService: ClaudeWebAuthService
     private let cursorAuthService: CursorWebAuthService
     private let copilotUsageProvider: CopilotUsageProvider
@@ -431,6 +432,8 @@ final class ProviderSettingsViewModel: ObservableObject {
         codexAuthPresenter.finish()
         cursorSignInTask?.cancel()
         cursorAuthPresenter.finish()
+        githubBillingSignInTask?.cancel()
+        githubBillingSignInTask = nil
         pendingGitHubBillingAuthResult = nil
         githubBillingAccountOptions = []
         isSigningInWithGitHubBilling = false
@@ -814,14 +817,24 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
     }
 
-    func signInWithGitHubBilling() async {
+    func startGitHubBillingSignIn() {
+        githubBillingSignInTask?.cancel()
+        githubBillingSignInTask = Task { [weak self] in
+            await self?.signInWithGitHubBilling()
+        }
+    }
+
+    private func signInWithGitHubBilling() async {
         isSigningInWithGitHubBilling = true
         credentialError = nil
         githubBillingAuthError = nil
         githubBillingMessage = nil
         githubBillingAccountOptions = []
         pendingGitHubBillingAuthResult = nil
-        defer { isSigningInWithGitHubBilling = false }
+        defer {
+            isSigningInWithGitHubBilling = false
+            githubBillingSignInTask = nil
+        }
 
         do {
             let result = try await githubBillingAuthService.signIn(configuration: .bundled) { url in
@@ -846,6 +859,8 @@ final class ProviderSettingsViewModel: ObservableObject {
             githubBillingAccountOptions = options
             selectedGitHubBillingAccountID = options.first?.id ?? ""
             githubBillingMessage = "Choose the personal account or eligible organization to monitor."
+            authURL = nil
+        } catch is CancellationError {
             authURL = nil
         } catch {
             githubBillingAuthError = error.localizedDescription
