@@ -3,8 +3,10 @@
 The automatic merge gate retains SwiftLint, Strict concurrency, iOS tests,
 watchOS tests and SwiftPM smoke tests. The required `iOS tests` job runs unit
 tests, coverage, and function-risk enforcement without UI journeys. The full
-iPhone and iPad UI gate, Swift security analysis, and the usage-history Release
-budget run manually with their failure rules and artifacts preserved.
+iPhone and iPad UI gate runs manually only as a required release-candidate
+gate, never as a pull-request gate. Swift security analysis and the
+usage-history Release budget remain manual with their failure rules and
+artifacts preserved.
 
 This policy revises the decision in
 [issue #325](https://github.com/HemSoft/codexbar-ios/issues/325), which kept both
@@ -121,36 +123,44 @@ because measurement noise can prevent a usable decision, even though its
 successful runs took about five minutes. Retain its 20-minute cap and all
 current thresholds.
 
-## Manual runs and failure ownership
+## Release gate and manual analysis ownership
 
-Run the full CI gate for release preparation and for changes to navigation,
-account setup, dashboard flows, accessibility behavior, UI fixtures, or UI-test
-infrastructure. The dispatch first runs the five automatic jobs. If they pass,
-`Full iOS UI validation` runs all five journeys on both iPhone and iPad. A
-failed iPhone family does not suppress the iPad family or the retained failure
-artifacts.
+Do not run the full CI gate for routine pull requests, including UI changes.
+After the intended release changes have merged, select the exact release
+candidate commit or tag and dispatch the gate once. The dispatch first runs the
+five automatic jobs. If they pass, `Full iOS UI validation` runs all five
+journeys on both iPhone and iPad. A failed iPhone family does not suppress the
+iPad family or its retained failure artifacts.
+
+The release cannot proceed unless every job in that manual run passes for the
+exact candidate SHA. Any candidate change invalidates the result and requires a
+new manual run. Do not reuse a run from an individual pull request as release
+evidence.
 
 Run security analysis for authentication, networking, credential storage,
 analyzer or toolchain changes, and release preparation. Run the Release budget
 for history persistence, chart generation, benchmark or toolchain changes, and
 release preparation. The maintainer requesting any manual run owns inspecting
-its result and recording its disposition in the related issue or PR. A green
-automatic gate does not imply a manual gate ran.
+its result and recording its disposition in the related issue, pull request, or
+release record. A green automatic gate does not imply a manual gate ran.
 
-Choose a branch or tag whose resolved commit has been reviewed. Record the
-resolved SHA immediately before dispatch and confirm the run's `headSha` after
-dispatch. A branch can move between those operations.
+Record the release candidate's resolved SHA immediately before dispatch and
+confirm the run's `headSha` afterward. A branch can move between those
+operations.
 
 ```bash
 set -euo pipefail
-reviewed_ref=<reviewed-branch-or-tag>
-encoded_ref="$(jq -rn --arg ref "$reviewed_ref" '$ref|@uri')"
-reviewed_sha="$(gh api \
+release_candidate_ref=<release-candidate-branch-or-tag>
+encoded_ref="$(jq -rn --arg ref "$release_candidate_ref" '$ref|@uri')"
+release_candidate_sha="$(gh api \
   "repos/HemSoft/codexbar-ios/commits/$encoded_ref" --jq '.sha')"
 
-gh workflow run ci.yml --repo HemSoft/codexbar-ios --ref "$reviewed_ref"
-gh workflow run security-analysis.yml --repo HemSoft/codexbar-ios --ref "$reviewed_ref"
-gh workflow run usage-history-performance.yml --repo HemSoft/codexbar-ios --ref "$reviewed_ref"
+gh workflow run ci.yml --repo HemSoft/codexbar-ios \
+  --ref "$release_candidate_ref"
+gh workflow run security-analysis.yml --repo HemSoft/codexbar-ios \
+  --ref "$release_candidate_ref"
+gh workflow run usage-history-performance.yml --repo HemSoft/codexbar-ios \
+  --ref "$release_candidate_ref"
 
 gh run view <run-id> --repo HemSoft/codexbar-ios \
   --json headSha,event,status,conclusion,url,jobs
@@ -158,9 +168,10 @@ gh run download <run-id> --repo HemSoft/codexbar-ios \
   --dir <new-evidence-directory>
 ```
 
-Compare the reported `headSha` with `$reviewed_sha`. Record a manual full gate
-as passed, failed, or not run. Never present an unrun gate as passing. UI result
-bundles, logs, summaries, and failure screenshots expire after 14 days.
+Compare the reported `headSha` with `$release_candidate_sha`. Record the manual
+full gate as passed, failed, or not run. Never present an unrun or stale gate as
+passing. UI result bundles, logs, summaries, and failure screenshots expire
+after 14 days.
 
 For security, inspect complete production source reach, compiler/extraction
 diagnostics, raw SARIF, reviewed findings and blockers in `gate.json`. Preserve

@@ -63,7 +63,10 @@ summed billed runner time. This is a hard constraint.
   removes at least as much automatic work and completed before-and-after runs
   prove that elapsed time and summed runner time do not increase.
 - Put new costly validation in local developer commands or an explicit manual
-  `workflow_dispatch` path. Keep `Full iOS UI validation` manual-only.
+  `workflow_dispatch` path.
+- `Full iOS UI validation` is a release gate, not a pull-request gate. Do not
+  dispatch it for routine PRs. Before a release, require a successful run for
+  the exact release-candidate SHA; rerun it if that candidate changes.
 - A pull request that changes automatic CI must list its trigger, job, matrix,
   retry, and timeout changes and provide completed before-and-after elapsed and
   summed runner-time measurements. Estimates do not satisfy this rule.
@@ -157,16 +160,18 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
 
   See [UI-TESTING.md](UI-TESTING.md) for fixture startup, storage isolation,
   single-family runs, and failure artifacts. Automatic pull-request CI does not
-  run these journeys. After a reviewed branch is stable, dispatch the complete
-  CI gate manually:
+  run these journeys, and routine PRs do not require a manual full run. Before
+  a release, dispatch the complete CI gate against the exact release-candidate
+  branch or tag:
 
   ```sh
   gh workflow run ci.yml --repo HemSoft/codexbar-ios \
-    --ref <reviewed-branch-or-tag>
+    --ref <release-candidate-branch-or-tag>
   ```
 
-  The manual `Full iOS UI validation` job enforces both destinations after the
-  five automatic jobs pass.
+  The release cannot proceed until the five automatic jobs and manual
+  `Full iOS UI validation` job pass for that exact SHA. Any change to the
+  release candidate invalidates the result and requires a new manual run.
 
 - Run the SwiftPM smoke harness:
 
