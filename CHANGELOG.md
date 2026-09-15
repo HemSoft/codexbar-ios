@@ -126,6 +126,10 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Require the manually dispatched full CI gate only for the exact release
+  candidate, not for routine pull requests. A changed candidate must pass a new
+  manual run before release. ([#341](https://github.com/HemSoft/codexbar-ios/issues/341))
+
 - Make automatic pull-request and `main` push CI time a hard non-increase
   constraint. New validation must stay local or manual unless completed
   before-and-after runs prove no increase in elapsed or billed runner time.

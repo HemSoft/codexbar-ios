@@ -293,6 +293,16 @@ use the persistent **Rate CodexBar** link instead.
 
 ### 8. Final Submission
 
+Manual CI release gate for every future version:
+
+- [ ] After all intended release changes have merged, create or select the
+  release-candidate branch or tag and record its resolved SHA.
+- [ ] Dispatch the `CI` workflow manually against that candidate. Confirm its
+  `headSha` matches and all five automatic jobs plus `Full iOS UI validation`
+  pass before uploading or releasing the build.
+- [ ] If the candidate SHA changes, discard the earlier result and pass a new
+  manual run. Routine pull requests do not require this gate.
+
 Version 1.3 submission status:
 
 - [x] Prepare version 1.3 "What's New" copy from the dated 1.3.0 changelog.

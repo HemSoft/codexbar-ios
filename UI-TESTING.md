@@ -98,12 +98,16 @@ baseline remains unchanged.
 ## CI and failure reproduction
 
 The required automatic `iOS tests` status runs unit tests, coverage, and the
-function-risk gate. It does not start either UI destination. Dispatch the `CI`
-workflow manually against a reviewed branch or tag to run the complete gate.
-After the five automatic jobs pass, `Full iOS UI validation` runs both device
-families. An always-run destination check makes the manual job fail if either
-family fails, even though the iPad family still runs after an iPhone failure.
-The runner rejects anything other than five passed tests with zero skips or
+function-risk gate. It does not start either UI destination. Routine pull
+requests do not require a manual full run. Before a release, dispatch the `CI`
+workflow against the exact release-candidate branch or tag. After the five
+automatic jobs pass, `Full iOS UI validation` runs both device families. The
+release cannot proceed unless every job passes for the candidate SHA. If that
+SHA changes, dispatch a new run.
+
+An always-run destination check makes the manual job fail if either family
+fails, even though the iPad family still runs after an iPhone failure. The
+runner rejects anything other than five passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.
