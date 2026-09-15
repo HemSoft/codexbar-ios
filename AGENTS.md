@@ -21,6 +21,7 @@ such and may be stale — re-verify before relying on them.
 ## Contents
 
 - [Required Issue-First Workflow](#required-issue-first-workflow)
+- [Automatic CI Cost Ceiling](#automatic-ci-cost-ceiling)
 - [End-User Experience and Live Verification](#end-user-experience-and-live-verification)
 - [Changelog and Release History](#changelog-and-release-history)
 - [Build and Test](#build-and-test)
@@ -50,6 +51,24 @@ Before editing files:
    reference the issue in the branch and pull-request workflow.
 4. Deliver the change through a pull request that links the issue and is the
    only path for returning the work to `main`.
+
+## Automatic CI Cost Ceiling
+
+Automatic pull-request and `main` push CI must not increase in elapsed time or
+summed billed runner time. This is a hard constraint.
+
+- Do not add automatic jobs, matrix entries, test destinations, retries,
+  analysis passes, artifact processing, broader triggers, or longer timeouts.
+- Do not add tests to a suite that automatic CI executes unless the same change
+  removes at least as much automatic work and completed before-and-after runs
+  prove that elapsed time and summed runner time do not increase.
+- Put new costly validation in local developer commands or an explicit manual
+  `workflow_dispatch` path. Keep `Full iOS UI validation` manual-only.
+- A pull request that changes automatic CI must list its trigger, job, matrix,
+  retry, and timeout changes and provide completed before-and-after elapsed and
+  summed runner-time measurements. Estimates do not satisfy this rule.
+- If a proposed change cannot prove a non-increase, do not implement it in
+  automatic CI.
 
 ## End-User Experience and Live Verification
 

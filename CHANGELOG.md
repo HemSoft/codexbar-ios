@@ -126,6 +126,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Make automatic pull-request and `main` push CI time a hard non-increase
+  constraint. New validation must stay local or manual unless completed
+  before-and-after runs prove no increase in elapsed or billed runner time.
+  ([#339](https://github.com/HemSoft/codexbar-ios/issues/339))
+
 - Keep routine pull-request CI to SwiftLint, strict concurrency, iOS and watchOS
   unit and risk checks, and the SwiftPM smoke harness. Run the complete iPhone
   and iPad UI gate by manual dispatch. Those UI steps used 36m 53s of macOS
