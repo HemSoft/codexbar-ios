@@ -123,7 +123,7 @@ public enum GitHubBillingUsageParser {
                 kind: .spendLimit,
                 label: "Budget",
                 amount: budget.amount,
-                detail: budget.preventFurtherUsage ? "Hard stop" : "Alert only"
+                detail: budget.behaviorLabel
             ))
             monetaryMetrics.append(monetaryMetric(
                 kind: .remainingHeadroom,
@@ -356,7 +356,7 @@ public enum GitHubBillingUsageParser {
         guard let budgets else { return BudgetOutput() }
         var output = BudgetOutput()
         for budget in budgets {
-            guard let candidate = budgetCandidate(budget, usageItems: usageItems) else { continue }
+            let candidate = budgetCandidate(budget, usageItems: usageItems)
             if let unavailableMessage = candidate.unavailableMessage {
                 output.messages.append(unavailableMessage)
                 continue
@@ -388,17 +388,22 @@ public enum GitHubBillingUsageParser {
     private static func budgetCandidate(
         _ budget: Budget,
         usageItems: [UsageItem]
-    ) -> BudgetCandidate? {
+    ) -> BudgetCandidate {
         guard
             let id = budget.id?.nonempty,
             let amount = budget.budgetAmount,
             amount > 0,
-            let preventFurtherUsage = budget.preventFurtherUsage
+            let preventFurtherUsage = budget.preventFurtherUsage,
+            let willAlert = budget.budgetAlerting?.willAlert
         else {
-            return nil
+            return BudgetCandidate(
+                unavailableMessage: "GitHub returned a budget without complete amount, behavior, or alert settings."
+            )
         }
         let targets = budget.productsOrSKUs.compactMap(\.nonempty)
-        guard !targets.isEmpty else { return nil }
+        guard !targets.isEmpty else {
+            return BudgetCandidate(unavailableMessage: "GitHub returned a budget without a product or SKU.")
+        }
         let normalizedTargets = Set(targets.map(\.normalized))
         let targetLabel = targets.joined(separator: ", ")
         guard let isProduct = budget.isProductPricing else {
@@ -427,6 +432,7 @@ public enum GitHubBillingUsageParser {
             amount: amount,
             consumed: matching.compactMap(\.netAmount).reduce(.zero, +),
             preventFurtherUsage: preventFurtherUsage,
+            willAlert: willAlert,
             scopeDescription: budget.scopeDescription
         )
         return BudgetCandidate(
@@ -482,7 +488,7 @@ public enum GitHubBillingUsageParser {
                 ProviderCardInformationItem(
                     id: "\(budget.id).behavior",
                     label: "Behavior",
-                    detail: budget.preventFurtherUsage ? "Hard stop" : "Alert only"
+                    detail: budget.behaviorLabel
                 ),
                 ProviderCardInformationItem(
                     id: "\(budget.id).consumed",
@@ -720,6 +726,7 @@ private struct Budget: Decodable {
     let budgetProductSKUs: [String]?
     let budgetScope: String?
     let budgetEntityName: String?
+    let budgetAlerting: BudgetAlerting?
 
     var productsOrSKUs: [String] {
         if let budgetProductSKU { return [budgetProductSKU] }
@@ -754,6 +761,15 @@ private struct Budget: Decodable {
         case budgetProductSKUs = "budget_product_skus"
         case budgetScope = "budget_scope"
         case budgetEntityName = "budget_entity_name"
+        case budgetAlerting = "budget_alerting"
+    }
+}
+
+private struct BudgetAlerting: Decodable {
+    let willAlert: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case willAlert = "will_alert"
     }
 }
 
@@ -857,7 +873,13 @@ private struct NormalizedBudget {
     let amount: Decimal
     let consumed: Decimal
     let preventFurtherUsage: Bool
+    let willAlert: Bool
     let scopeDescription: String
+
+    var behaviorLabel: String {
+        if preventFurtherUsage { return "Hard stop" }
+        return willAlert ? "Alert only" : "Tracking only"
+    }
 }
 
 private struct BudgetCandidate {

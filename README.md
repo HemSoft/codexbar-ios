@@ -93,7 +93,10 @@ fields, unavailable billing endpoints, permission failures, and rate limits
 remain visible instead of being guessed.
 
 The browser flow requests `repo read:org read:user`, uses PKCE with a loopback
-callback, and stores only the returned account token. GitHub supports separate
+callback, and stores only the returned account token. Classic GitHub OAuth does
+not offer a private-repository metadata-only scope: `repo` permits repository
+changes, while CodexBar limits its use to reading repository visibility for
+billing classification. GitHub supports separate
 tokens per user, OAuth application, and scope combination, so the billing flow's
 distinct scope combination and Keychain entry do not broaden or replace a saved
 Copilot token even when both flows use the bundled public OAuth registration.

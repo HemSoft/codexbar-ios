@@ -80,6 +80,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let githubBillingUsageProvider: GitHubBillingUsageProvider
     private var pendingGitHubBillingAuthResult: GitHubBillingWebAuthResult?
     private var githubBillingSignInTask: Task<Void, Never>?
+    private var ignoresNextGitHubBillingAuthDismissal = false
     private let claudeAuthService: ClaudeWebAuthService
     private let cursorAuthService: CursorWebAuthService
     private let copilotUsageProvider: CopilotUsageProvider
@@ -432,6 +433,19 @@ final class ProviderSettingsViewModel: ObservableObject {
         codexAuthPresenter.finish()
         cursorSignInTask?.cancel()
         cursorAuthPresenter.finish()
+        githubBillingSignInTask?.cancel()
+        githubBillingSignInTask = nil
+        pendingGitHubBillingAuthResult = nil
+        githubBillingAccountOptions = []
+        isSigningInWithGitHubBilling = false
+    }
+
+    func authenticationSheetDismissed() {
+        if ignoresNextGitHubBillingAuthDismissal {
+            ignoresNextGitHubBillingAuthDismissal = false
+            return
+        }
+        guard isSigningInWithGitHubBilling else { return }
         githubBillingSignInTask?.cancel()
         githubBillingSignInTask = nil
         pendingGitHubBillingAuthResult = nil
@@ -852,20 +866,26 @@ final class ProviderSettingsViewModel: ObservableObject {
             )
             guard !options.isEmpty else {
                 githubBillingAuthError = "GitHub sign-in returned no personal account or eligible organization."
-                authURL = nil
+                closeGitHubBillingAuthSheet()
                 return
             }
             pendingGitHubBillingAuthResult = result
             githubBillingAccountOptions = options
             selectedGitHubBillingAccountID = options.first?.id ?? ""
             githubBillingMessage = "Choose the personal account or eligible organization to monitor."
-            authURL = nil
+            closeGitHubBillingAuthSheet()
         } catch is CancellationError {
-            authURL = nil
+            // An interactive sheet dismissal already cleared the presented URL.
         } catch {
             githubBillingAuthError = error.localizedDescription
-            authURL = nil
+            closeGitHubBillingAuthSheet()
         }
+    }
+
+    private func closeGitHubBillingAuthSheet() {
+        guard authURL != nil else { return }
+        ignoresNextGitHubBillingAuthDismissal = true
+        authURL = nil
     }
 
     func connectSelectedGitHubBillingAccount() async {

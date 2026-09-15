@@ -203,13 +203,13 @@ struct ProviderSettingsView: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Label(
-                            "Requested GitHub permissions: private repository metadata, organization membership, "
-                                + "user plan, billing usage, and organization budgets.",
+                            "Requested GitHub permissions: private repository access (GitHub's classic repo scope), "
+                                + "organization membership, user plan, billing usage, and organization budgets.",
                             systemImage: "lock.shield"
                         )
                         Text(
-                            "Billing access and private repository metadata are sensitive. CodexBar uses them only "
-                                + "to classify usage, stores this account's token in its own Keychain entry, and never "
+                            "GitHub's repo scope permits repository changes, but CodexBar only reads visibility "
+                                + "metadata to classify usage. It stores this account's token in its own Keychain entry and never "
                                 + "changes or shares GitHub Copilot credentials."
                         )
                     }
@@ -505,9 +505,11 @@ struct ProviderSettingsView: View {
         }, content: { session in
             GeminiBrowserSignInView(session: session)
         })
-        .sheet(item: $viewModel.authURL) { authURL in
+        .sheet(item: $viewModel.authURL, onDismiss: {
+            viewModel.authenticationSheetDismissed()
+        }, content: { authURL in
             SafariAuthSheet(url: authURL.url)
-        }
+        })
         .onChange(of: viewModel.needsGoogleCodingAccountConfirmation) { _, needed in
             if needed { requestGeminiConfirmation(.codingSignIn) }
         }

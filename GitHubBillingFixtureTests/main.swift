@@ -94,7 +94,7 @@ enum GitHubBillingFixtureRunner {
             {"budgets":[{"id":"product-budget","budget_type":"ProductPricing","budget_amount":100,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":true}
             """#),
             data(#"""
-            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"repository","budget_entity_name":"example/private","budget_product_skus":["actions_linux"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"cost-center-budget","budget_type":"ProductPricing","budget_amount":50,"prevent_further_usage":false,"budget_scope":"cost_center","budget_entity_name":"engineering","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
+            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"repository","budget_entity_name":"example/private","budget_product_skus":["actions_linux"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"tracking-budget","budget_type":"ProductPricing","budget_amount":25,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"Packages","budget_alerting":{"will_alert":false,"alert_recipients":[]}},{"id":"cost-center-budget","budget_type":"ProductPricing","budget_amount":50,"prevent_further_usage":false,"budget_scope":"cost_center","budget_entity_name":"engineering","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
             """#),
         ]
         let configuration = organizationConfiguration()
@@ -115,6 +115,9 @@ enum GitHubBillingFixtureRunner {
         try check(result.cardInformationSections.contains { section in
             section.items.contains { $0.label == "Behavior" && $0.detail == "Alert only" }
         }, "Alert-only behavior was not retained")
+        try check(result.cardInformationSections.contains { section in
+            section.items.contains { $0.label == "Behavior" && $0.detail == "Tracking only" }
+        }, "A nonblocking budget with alerts disabled must not be labeled alert-only")
 
         let noBudget = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,
@@ -189,6 +192,12 @@ enum GitHubBillingFixtureRunner {
         }
         let success = try await provider.fetchUsage(for: personal)
         try check(success.failureMessage == nil, "Documented personal endpoints should produce usage")
+        let zeroNetSpend = success.monetaryMetrics.first { $0.kind == .spent }
+        try check(zeroNetSpend?.amount == 0, "Fully discounted usage must retain zero net spend")
+        try check(
+            zeroNetSpend?.detail == "No current charge after discounts",
+            "Fully discounted usage must be presented as no current charge"
+        )
 
         for status in [401, 403, 404, 429, 500] {
             FixtureURLProtocol.setHandler { request in response(request, status: status, body: "{}") }
@@ -222,8 +231,8 @@ enum GitHubBillingFixtureRunner {
                     .queryItems?.first { $0.name == "page" }?.value ?? "1") ?? 1
                 pageCounter.increment()
                 let body = page == 1
-                    ? #"{"budgets":[{"id":"one","budget_type":"ProductPricing","budget_amount":100,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions"}],"has_next_page":true}"#
-                    : #"{"budgets":[{"id":"two","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"actions_linux"}],"has_next_page":false}"#
+                    ? #"{"budgets":[{"id":"one","budget_type":"ProductPricing","budget_amount":100,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":true}"#
+                    : #"{"budgets":[{"id":"two","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"actions_linux","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}"#
                 return response(request, status: 200, body: body)
             }
             return response(request, status: 404, body: "{}")
