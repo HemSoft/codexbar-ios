@@ -295,8 +295,8 @@ use the persistent **Rate CodexBar** link instead.
 
 Manual CI release gate for every future version:
 
-- [ ] After all intended release changes have merged, record the exact release
-  candidate commit or tag and its resolved SHA.
+- [ ] After all intended release changes have merged, create or select the
+  release-candidate branch or tag and record its resolved SHA.
 - [ ] Dispatch the `CI` workflow manually against that candidate. Confirm its
   `headSha` matches and all five automatic jobs plus `Full iOS UI validation`
   pass before uploading or releasing the build.
