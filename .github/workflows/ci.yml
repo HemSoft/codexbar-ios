@@ -229,6 +229,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Run GitHub Billing API fixtures
+        run: xcrun swift run GitHubBillingFixtureTests
+
       - name: Run iPhone UI journeys
         id: ui-iphone
         if: ${{ !cancelled() }}

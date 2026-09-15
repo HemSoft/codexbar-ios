@@ -604,6 +604,8 @@ private struct RefreshInputs: Equatable {
     let githubOrganization: String
     let githubEnterprise: String
     let copilotTotalAllotment: Double?
+    let githubBillingAccountScope: GitHubBillingAccountScope
+    let githubBillingOwner: String
     let openCodeWorkspaceId: String
 
     init(configuration: ProviderAccountConfiguration) {
@@ -614,6 +616,8 @@ private struct RefreshInputs: Equatable {
         self.githubOrganization = configuration.githubOrganization
         self.githubEnterprise = configuration.githubEnterprise
         self.copilotTotalAllotment = configuration.copilotTotalAllotment
+        self.githubBillingAccountScope = configuration.githubBillingAccountScope
+        self.githubBillingOwner = configuration.githubBillingOwner
         self.openCodeWorkspaceId = configuration.openCodeWorkspaceId
     }
 }
@@ -647,6 +651,7 @@ public extension UsageRefreshService {
             providers: [
                 CodexUsageProvider(),
                 CopilotUsageProvider(),
+                GitHubBillingUsageProvider(),
                 ClaudeUsageProvider(),
                 OpenRouterUsageProvider(),
                 OpenCodeZenUsageProvider(),

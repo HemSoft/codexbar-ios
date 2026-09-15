@@ -8,6 +8,12 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added separate GitHub Billing accounts for personal allowances, organization
+  spend, budgets, discounts, and month-end projections. Guided GitHub sign-in,
+  account selection, permission disclosures, and account-scoped Keychain
+  storage keep billing access separate from GitHub Copilot.
+  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
+
 - Show usage projections for all six Gemini limits when their usage and reset
   times support a forecast, including warnings when the current pace would
   exhaust a limit before reset.

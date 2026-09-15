@@ -11,8 +11,8 @@ The Windows reference implementation is checked out beside this repo at:
 ## Current Scope
 
 - SwiftUI dashboard with account-scoped usage cards for Codex, GitHub Copilot,
-  Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot (Kimi), Greptile,
-  and Google Gemini
+  GitHub Billing, Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot
+  (Kimi), Greptile, and Google Gemini
 - Live provider adapters and settings for enabling accounts, choosing supported
   authentication methods, labeling accounts, and storing credentials in Keychain
 - Usage history and charts, configurable usage alerts, and home-screen and
@@ -71,6 +71,37 @@ Developers can replace the bundled values in debug builds with the
 `CODEXBAR_COPILOT_OAUTH_CLIENT_SECRET` environment variables. Release builds
 ignore process-environment overrides and use values from the app bundle or the
 documented defaults in `CopilotWebAuthService.swift`.
+
+## GitHub Billing
+
+GitHub Billing is a separate provider from GitHub Copilot. Choose
+**Add Account → GitHub Billing → Sign in with GitHub**, review the requested
+permissions, and select either your personal account or an organization where
+you have billing access. Each monitored owner gets its own configuration and
+Keychain credential; the integration never reads or replaces a Copilot token.
+
+Personal cards show the plan's included Actions minutes, shared Actions and
+Packages storage, Git LFS storage and bandwidth, gross charges, discounts, net
+spend, and a month-end projection. Public-repository Actions minutes do not
+consume the private-repository allowance. GitHub does not expose personal
+budgets, so the card says that explicitly. Organization cards show usage by
+product and SKU, monetary totals and projections, and every returned budget,
+including whether it alerts or blocks further usage. Unsupported plans, missing
+API fields, unavailable billing endpoints, permission failures, and rate limits
+remain visible instead of being guessed.
+
+The browser flow requests `repo read:org read:user`, uses PKCE with a loopback
+callback, and stores only the returned account token. Billing administrators
+must grant access to organization billing data. Debug builds can override the
+OAuth registration with `CODEXBAR_GITHUB_BILLING_OAUTH_CLIENT_ID` and
+`CODEXBAR_GITHUB_BILLING_OAUTH_CLIENT_SECRET`; release builds use the bundled
+registration. Live account comparison remains an owner verification step.
+Developers can run the synthetic API contract suite with:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcrun swift run GitHubBillingFixtureTests
+```
 
 ## Google Gemini sign-in
 

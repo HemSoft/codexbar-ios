@@ -107,6 +107,58 @@ public extension DemoUsageProvider {
                 subtitle: "Engineering organization"
             ),
             DemoUsageProvider(
+                providerID: .githubBilling,
+                plan: ProviderPlanDescriptor.make(
+                    providerPrefix: ProviderID.githubBilling.rawValue,
+                    identifier: "free",
+                    label: "Free"
+                ),
+                bars: [
+                    UsageBar(
+                        stableKey: "actions-private-minutes",
+                        label: "Private Actions minutes",
+                        used: 720,
+                        limit: 2_000,
+                        resetDescription: "Resets Oct 1"
+                    ),
+                    UsageBar(
+                        stableKey: "actions-packages-storage",
+                        label: "Actions + Packages storage",
+                        used: 118,
+                        limit: 360,
+                        resetDescription: "Resets Oct 1"
+                    ),
+                ],
+                monetaryMetrics: [
+                    ProviderMonetaryMetric(
+                        kind: .grossSpend,
+                        label: "Gross usage",
+                        minorUnits: 1248,
+                        currencyCode: "USD",
+                        decimalPlaces: 2
+                    ),
+                    ProviderMonetaryMetric(
+                        kind: .discounts,
+                        label: "Discounts",
+                        minorUnits: 1248,
+                        currencyCode: "USD",
+                        decimalPlaces: 2
+                    ),
+                    ProviderMonetaryMetric(
+                        kind: .spent,
+                        label: "Net spend",
+                        minorUnits: 0,
+                        currencyCode: "USD",
+                        decimalPlaces: 2,
+                        detail: "No current charge after discounts"
+                    ),
+                ],
+                usageMessages: [
+                    "GitHub does not expose personal budgets through its public API.",
+                ],
+                subtitle: "GitHub personal billing"
+            ),
+            DemoUsageProvider(
                 providerID: .claude,
                 plan: ProviderPlanDescriptor(
                     identifier: "claude.max20",

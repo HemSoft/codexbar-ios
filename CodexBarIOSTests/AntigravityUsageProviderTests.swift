@@ -689,7 +689,7 @@ final class AntigravityUsageProviderTests: XCTestCase {
         WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults, now: Self.now)
         let widget = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
         XCTAssertEqual(widget.results.count, 1)
-        XCTAssertEqual(widget.results.first?.bars.map(\.metricID), Self.googleIDs)
+        XCTAssertEqual(widget.results.first?.bars.compactMap(\.metricID), Self.googleIDs)
         XCTAssertEqual(widget.builderTile(resolvingSavedID: "provider.\(legacy.id)")?.id, "provider.\(apps.id)")
         let savedID = "bar.\(legacy.id).antigravity.gemini-5h"
         XCTAssertEqual(widget.builderTile(resolvingSavedID: savedID)?.id, "bar.\(apps.id).antigravity.gemini-5h")

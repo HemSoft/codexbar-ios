@@ -1661,6 +1661,8 @@ extension ProviderID {
             "sparkles"
         case .copilot:
             "chevron.left.forwardslash.chevron.right"
+        case .githubBilling:
+            "creditcard"
         case .claude:
             "text.bubble"
         case .openRouter:

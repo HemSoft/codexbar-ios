@@ -67,6 +67,23 @@ The tests assert accessible names, values, selection state, and reachable tap
 targets. They cover app-owned account and usage navigation. Live website sign-in,
 provider API contracts, and VoiceOver speech remain separate verification.
 
+## GitHub Billing API fixtures
+
+The separate manual fixture harness exercises personal Free and Pro allowances,
+public and private repository classification, mixed Actions runners, accrued
+storage, Git LFS, discounts, organization budgets and pagination, missing and
+malformed fields, and distinct 401, 403, 404, 429, and 5xx handling:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcrun swift run GitHubBillingFixtureTests
+```
+
+It uses only synthetic payloads and an in-process URL protocol. It makes no live
+GitHub requests and uses no account credentials. The manual `workflow_dispatch`
+full UI validation job runs this harness before its iPhone and iPad journeys;
+routine pull-request CI does not add this work.
+
 ## Fixture startup and isolation
 
 The DEBUG app accepts `CODEXBAR_UI_TESTS=1` only on a simulator, with a valid
@@ -82,10 +99,10 @@ own UUIDs, so separate tests and devices cannot reuse each other's state.
 
 The fixture supplies this suite to account configuration, history, app review,
 app updates, GitHub preferences, and widget preferences. Its credential store
-uses the same suite and accepts only the fixed synthetic Apps credential and
-coding-session JSON. It never reads or writes Keychain. Only synthetic
-OpenRouter and combined Gemini usage providers are registered. The production account form, group persistence, refresh service,
-dashboard, History, and URL handler still execute.
+uses the same suite and accepts only fixed synthetic test credentials. It never
+reads or writes Keychain. Only synthetic OpenRouter, combined Gemini, and GitHub
+Billing usage providers are registered. The production account form, group
+persistence, refresh service, dashboard, History, and URL handler still execute.
 
 The fixture disables lifecycle polling and bootstrap imports, uses a notifier
 that does nothing, and injects widget publishers and a Watch sender that do

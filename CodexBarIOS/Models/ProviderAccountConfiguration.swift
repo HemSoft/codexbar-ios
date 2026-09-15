@@ -15,6 +15,8 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
     public var githubOrganization: String
     public var githubEnterprise: String
     public var copilotTotalAllotment: Double?
+    public var githubBillingAccountScope: GitHubBillingAccountScope
+    public var githubBillingOwner: String
     public var openCodeWorkspaceId: String
 
     public init(
@@ -31,6 +33,8 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         githubOrganization: String = "",
         githubEnterprise: String = "",
         copilotTotalAllotment: Double? = nil,
+        githubBillingAccountScope: GitHubBillingAccountScope = .personal,
+        githubBillingOwner: String = "",
         openCodeWorkspaceId: String = ""
     ) {
         self.id = id ?? providerID.rawValue
@@ -46,6 +50,8 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         self.githubOrganization = githubOrganization
         self.githubEnterprise = githubEnterprise
         self.copilotTotalAllotment = copilotTotalAllotment
+        self.githubBillingAccountScope = githubBillingAccountScope
+        self.githubBillingOwner = githubBillingOwner
         self.openCodeWorkspaceId = openCodeWorkspaceId
     }
 
@@ -136,6 +142,8 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
             githubOrganization: githubOrganization,
             githubEnterprise: githubEnterprise,
             copilotTotalAllotment: copilotTotalAllotment,
+            githubBillingAccountScope: githubBillingAccountScope,
+            githubBillingOwner: githubBillingOwner,
             openCodeWorkspaceId: openCodeWorkspaceId
         )
     }
@@ -154,6 +162,8 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         case githubOrganization
         case githubEnterprise
         case copilotTotalAllotment
+        case githubBillingAccountScope
+        case githubBillingOwner
         case openCodeWorkspaceId
     }
 
@@ -173,6 +183,11 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         self.githubOrganization = try container.decodeIfPresent(String.self, forKey: .githubOrganization) ?? ""
         self.githubEnterprise = try container.decodeIfPresent(String.self, forKey: .githubEnterprise) ?? ""
         self.copilotTotalAllotment = try container.decodeIfPresent(Double.self, forKey: .copilotTotalAllotment)
+        self.githubBillingAccountScope = try container.decodeIfPresent(
+            GitHubBillingAccountScope.self,
+            forKey: .githubBillingAccountScope
+        ) ?? .personal
+        self.githubBillingOwner = try container.decodeIfPresent(String.self, forKey: .githubBillingOwner) ?? ""
         self.openCodeWorkspaceId = try container.decodeIfPresent(String.self, forKey: .openCodeWorkspaceId) ?? ""
     }
 }
@@ -187,6 +202,24 @@ public struct ProviderAccountGroup: Identifiable, Equatable, Codable, Sendable {
     }
 
     public static let ungroupedDisplayName = "Ungrouped"
+}
+
+public enum GitHubBillingAccountScope: String, Codable, CaseIterable, Identifiable, Sendable {
+    case personal
+    case organization
+
+    public var id: String {
+        rawValue
+    }
+
+    public var displayName: String {
+        switch self {
+        case .personal:
+            "Personal account"
+        case .organization:
+            "Organization"
+        }
+    }
 }
 
 public enum CopilotAccountScope: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -266,6 +299,8 @@ public extension ProviderAccountConfiguration {
         case .codex:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .copilot:
+            ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
+        case .githubBilling:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .claude:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
