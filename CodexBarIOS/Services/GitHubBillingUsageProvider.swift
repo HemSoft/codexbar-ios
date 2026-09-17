@@ -365,33 +365,49 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         var pages: [Data] = []
         var page = 1
         while true {
-            let request = try makeRequest(
-                pathComponents: ["organizations", organization, "settings", "billing", "budgets"],
-                queryItems: [
-                    URLQueryItem(name: "per_page", value: "100"),
-                    URLQueryItem(name: "page", value: String(page)),
-                ],
+            switch try await fetchBudgetPage(
+                organization: organization,
+                page: page,
                 accessToken: accessToken
-            )
-            do {
-                let data = try await responseData(for: request)
-                guard let info = try? JSONDecoder().decode(BudgetPageInfo.self, from: data) else {
-                    throw GitHubBillingAPIError.invalidResponse
-                }
+            ) {
+            case .page(let data, let info):
                 pages.append(data)
-                guard info.hasNextPage == true else { break }
-                guard page < Self.maximumPageCount else {
-                    throw GitHubBillingAPIError.invalidResponse
-                }
-                page += 1
-            } catch GitHubBillingAPIError.httpStatus(let status, let isRateLimited) {
-                guard let message = Self.unavailableBudgetMessage(status: status) else {
-                    throw GitHubBillingAPIError.httpStatus(status, isRateLimited)
-                }
+                guard info.hasNextPage == true else { return BudgetFetchResult(pages: pages, message: nil) }
+            case .unavailable(let message):
                 return BudgetFetchResult(pages: nil, message: message)
             }
+            guard page < Self.maximumPageCount else {
+                throw GitHubBillingAPIError.invalidResponse
+            }
+            page += 1
         }
-        return BudgetFetchResult(pages: pages, message: nil)
+    }
+
+    private func fetchBudgetPage(
+        organization: String,
+        page: Int,
+        accessToken: String
+    ) async throws -> BudgetPageFetchOutcome {
+        let request = try makeRequest(
+            pathComponents: ["organizations", organization, "settings", "billing", "budgets"],
+            queryItems: [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: String(page)),
+            ],
+            accessToken: accessToken
+        )
+        do {
+            let data = try await responseData(for: request)
+            guard let info = try? JSONDecoder().decode(BudgetPageInfo.self, from: data) else {
+                throw GitHubBillingAPIError.invalidResponse
+            }
+            return .page(data, info)
+        } catch GitHubBillingAPIError.httpStatus(let status, let isRateLimited) {
+            guard let message = Self.unavailableBudgetMessage(status: status) else {
+                throw GitHubBillingAPIError.httpStatus(status, isRateLimited)
+            }
+            return .unavailable(message)
+        }
     }
 
     private static func unavailableBudgetMessage(status: Int) -> String? {
@@ -809,6 +825,11 @@ private struct BudgetPageInfo: Decodable {
     enum CodingKeys: String, CodingKey {
         case hasNextPage = "has_next_page"
     }
+}
+
+private enum BudgetPageFetchOutcome {
+    case page(Data, BudgetPageInfo)
+    case unavailable(String)
 }
 
 private struct BudgetFetchResult {
