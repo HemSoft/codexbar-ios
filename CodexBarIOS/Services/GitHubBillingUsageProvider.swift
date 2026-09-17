@@ -35,6 +35,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
     private static let apiVersion = "2026-03-10"
     private static let userAgent = "CodexBarIOS/1.0"
     private static let maximumPageCount = 100
+    private static let maximumRepositoryVisibilityLookups = 200
 
     private let secretStore: SecretStore
     private let session: URLSession
@@ -383,22 +384,37 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                     throw GitHubBillingAPIError.invalidResponse
                 }
                 page += 1
-            } catch GitHubBillingAPIError.httpStatus(404, _) {
-                return BudgetFetchResult(
-                    pages: nil,
-                    message: "GitHub's organization budget endpoint is unavailable for this account. Usage is still shown."
-                )
+            } catch GitHubBillingAPIError.httpStatus(let status, let isRateLimited) {
+                guard let message = Self.unavailableBudgetMessage(status: status) else {
+                    throw GitHubBillingAPIError.httpStatus(status, isRateLimited)
+                }
+                return BudgetFetchResult(pages: nil, message: message)
             }
         }
         return BudgetFetchResult(pages: pages, message: nil)
+    }
+
+    private static func unavailableBudgetMessage(status: Int) -> String? {
+        switch status {
+        case 403:
+            "GitHub's organization budget endpoint is not permitted for the signed-in user. Usage is still shown."
+        case 404:
+            "GitHub's organization budget endpoint is unavailable for this account. Usage is still shown."
+        default:
+            nil
+        }
     }
 
     private func repositoryVisibility(
         repositories: Set<String>,
         accessToken: String
     ) async throws -> RepositoryVisibilityResult {
-        let orderedRepositories = repositories.sorted()
-        var result = RepositoryVisibilityResult(values: [:], hiddenRepositoryCount: 0)
+        let orderedRepositories = Array(repositories.sorted().prefix(Self.maximumRepositoryVisibilityLookups))
+        var result = RepositoryVisibilityResult(
+            values: [:],
+            hiddenRepositoryCount: 0,
+            omittedRepositoryCount: max(0, repositories.count - orderedRepositories.count)
+        )
         for batchStart in stride(from: 0, to: orderedRepositories.count, by: 8) {
             let batchEnd = min(batchStart + 8, orderedRepositories.count)
             let lookups = try await repositoryVisibilityLookups(
@@ -770,11 +786,20 @@ private struct RepositoryVisibilityLookup: Sendable {
 private struct RepositoryVisibilityResult: Sendable {
     var values: [String: Bool]
     var hiddenRepositoryCount: Int
+    let omittedRepositoryCount: Int
 
     var message: String? {
-        guard hiddenRepositoryCount > 0 else { return nil }
-        let noun = hiddenRepositoryCount == 1 ? "repository was" : "repositories were"
-        return "\(hiddenRepositoryCount) \(noun) hidden or not found, so private Actions usage could not be classified."
+        var reasons: [String] = []
+        if hiddenRepositoryCount > 0 {
+            let noun = hiddenRepositoryCount == 1 ? "repository was" : "repositories were"
+            reasons.append("\(hiddenRepositoryCount) \(noun) hidden or not found")
+        }
+        if omittedRepositoryCount > 0 {
+            reasons.append("\(omittedRepositoryCount) additional repositories exceeded the lookup safety limit")
+        }
+        guard !reasons.isEmpty else { return nil }
+        return reasons.joined(separator: ", and ")
+            + ", so private Actions usage could not be fully classified."
     }
 }
 

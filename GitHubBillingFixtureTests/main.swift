@@ -311,6 +311,28 @@ enum GitHubBillingFixtureRunner {
             hiddenRepository.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
             "Hidden repository metadata must make private Actions classification unavailable"
         )
+
+        let metadataCounter = LockedCounter()
+        let manyRepositories = try manyRepositoryUsage(count: 205)
+        FixtureURLProtocol.setHandler { request in
+            switch request.url?.path {
+            case "/user":
+                return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
+            case "/users/octocat/settings/billing/usage/summary":
+                return response(request, status: 200, data: personalSummary())
+            case "/users/octocat/settings/billing/usage":
+                return response(request, status: 200, data: manyRepositories)
+            default:
+                metadataCounter.increment()
+                return response(request, status: 200, body: #"{"private":true}"#)
+            }
+        }
+        let cappedRepositories = try await provider.fetchUsage(for: personal)
+        try check(metadataCounter.value == 200, "Repository metadata requests must stop at the safety limit")
+        try check(
+            cappedRepositories.usageMessages.contains { $0.contains("lookup safety limit") },
+            "Omitted repository metadata needs an unavailable explanation"
+        )
     }
 
     private static func assertOrganizationFailures(
@@ -325,6 +347,26 @@ enum GitHubBillingFixtureRunner {
         try check(
             hiddenOrganization.failureMessage?.contains("not find") == true,
             "Organization 404 responses must distinguish hidden or missing resources from unsupported personal billing"
+        )
+
+        FixtureURLProtocol.setHandler { request in
+            guard let url = request.url else { return response(request, status: 500, body: "{}") }
+            if url.path.hasSuffix("/usage/summary") {
+                return response(request, status: 200, data: organizationSummary())
+            }
+            if url.path.hasSuffix("/usage") {
+                return response(request, status: 200, data: organizationUsage())
+            }
+            if url.path.hasSuffix("/budgets") {
+                return response(request, status: 403, body: "{}")
+            }
+            return response(request, status: 404, body: "{}")
+        }
+        let budgetPermission = try await provider.fetchUsage(for: organization)
+        try check(budgetPermission.failureMessage == nil, "A budget 403 must not discard readable organization usage")
+        try check(
+            budgetPermission.usageMessages.contains { $0.contains("not permitted") },
+            "A budget 403 needs a distinct permission explanation"
         )
 
         let pageCounter = LockedCounter()
@@ -372,6 +414,22 @@ enum GitHubBillingFixtureRunner {
     }
 
     private static let personalUsageBody = #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#
+
+    private static func manyRepositoryUsage(count: Int) throws -> Data {
+        let items: [[String: Any]] = (0..<count).map { index in
+            [
+                "product": "Actions",
+                "sku": "Actions Linux",
+                "quantity": 1,
+                "unitType": "minutes",
+                "repositoryName": "octocat/repository-\(index)",
+                "grossAmount": 0.01,
+                "discountAmount": 0.01,
+                "netAmount": 0,
+            ]
+        }
+        return try JSONSerialization.data(withJSONObject: ["usageItems": items])
+    }
 
     private static func personalSummary() -> Data {
         data(#"{"timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":12,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0}]}"#)
