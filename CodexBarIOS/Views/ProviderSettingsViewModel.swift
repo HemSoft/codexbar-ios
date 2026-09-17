@@ -80,6 +80,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let githubBillingUsageProvider: GitHubBillingUsageProvider
     private var pendingGitHubBillingAuthResult: GitHubBillingWebAuthResult?
     private var githubBillingSignInTask: Task<Void, Never>?
+    private var githubBillingConnectionTask: Task<Void, Never>?
     private var ignoresNextGitHubBillingAuthDismissal = false
     private let claudeAuthService: ClaudeWebAuthService
     private let cursorAuthService: CursorWebAuthService
@@ -435,6 +436,8 @@ final class ProviderSettingsViewModel: ObservableObject {
         cursorAuthPresenter.finish()
         githubBillingSignInTask?.cancel()
         githubBillingSignInTask = nil
+        githubBillingConnectionTask?.cancel()
+        githubBillingConnectionTask = nil
         pendingGitHubBillingAuthResult = nil
         githubBillingAccountOptions = []
         isSigningInWithGitHubBilling = false
@@ -888,7 +891,14 @@ final class ProviderSettingsViewModel: ObservableObject {
         authURL = nil
     }
 
-    func connectSelectedGitHubBillingAccount() async {
+    func startGitHubBillingAccountConnection() {
+        githubBillingConnectionTask?.cancel()
+        githubBillingConnectionTask = Task { [weak self] in
+            await self?.connectSelectedGitHubBillingAccount()
+        }
+    }
+
+    private func connectSelectedGitHubBillingAccount() async {
         guard
             let authResult = pendingGitHubBillingAuthResult,
             let option = githubBillingAccountOptions.first(where: { $0.id == selectedGitHubBillingAccountID }),
@@ -916,6 +926,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 credentials,
                 for: updated
             )
+            try Task.checkCancellation()
             guard let storedCredential = GitHubBillingCredentialsParser.storedCredential(from: credentials),
                   persistCredential(storedCredential, with: updated) else {
                 githubBillingAuthError = configurationStore.lastError
@@ -928,6 +939,8 @@ final class ProviderSettingsViewModel: ObservableObject {
             githubBillingMessage = "GitHub Billing account connected and verified."
             credentialsDidChange(refreshMetrics: false)
             acceptUsageResult(result)
+        } catch is CancellationError {
+            githubBillingMessage = nil
         } catch {
             githubBillingMessage = nil
             githubBillingAuthError = error.localizedDescription

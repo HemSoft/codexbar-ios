@@ -226,9 +226,7 @@ struct ProviderSettingsView: View {
                         .accessibilityIdentifier("github-billing-account-picker")
 
                         Button("Connect Selected Account") {
-                            Task {
-                                await viewModel.connectSelectedGitHubBillingAccount()
-                            }
+                            viewModel.startGitHubBillingAccountConnection()
                         }
                         .disabled(
                             viewModel.isSigningInWithGitHubBilling

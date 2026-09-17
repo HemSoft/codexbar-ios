@@ -1033,7 +1033,7 @@ final class UsageHistoryTests: XCTestCase {
         defer {
             defaults.removePersistentDomain(forName: suiteName)
         }
-        let fetchedAt = Date()
+        let fetchedAt = Date(timeIntervalSince1970: 2_000_000_000)
         let result = ProviderUsageResult(
             accountID: "cursor.personal",
             providerID: .cursor,

@@ -34,6 +34,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
     private static let refreshCoordinator = CredentialRefreshCoordinator<ProviderCredentialRefreshResult<GitHubBillingCredentials>>()
     private static let apiVersion = "2026-03-10"
     private static let userAgent = "CodexBarIOS/1.0"
+    private static let maximumPageCount = 100
 
     private let secretStore: SecretStore
     private let session: URLSession
@@ -226,6 +227,9 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 )
             })
             guard memberships.count == 100 else { break }
+            guard page < Self.maximumPageCount else {
+                throw GitHubBillingAPIError.invalidResponse
+            }
             page += 1
         }
         return options
@@ -358,7 +362,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
     ) async throws -> BudgetFetchResult {
         var pages: [Data] = []
         var page = 1
-        while page <= 20 {
+        while true {
             let request = try makeRequest(
                 pathComponents: ["organizations", organization, "settings", "billing", "budgets"],
                 queryItems: [
@@ -374,6 +378,9 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 }
                 pages.append(data)
                 guard info.hasNextPage == true else { break }
+                guard page < Self.maximumPageCount else {
+                    throw GitHubBillingAPIError.invalidResponse
+                }
                 page += 1
             } catch GitHubBillingAPIError.httpStatus(404, _) {
                 return BudgetFetchResult(
@@ -627,9 +634,14 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             )
         }
         if status == 404 {
+            let message = switch configuration.githubBillingAccountScope {
+            case .personal:
+                "GitHub Enhanced Billing is unavailable or unsupported for this personal account."
+            case .organization:
+                "GitHub could not find this organization's billing resource, or the resource is hidden from the signed-in user."
+            }
             return failureResult(
-                message: "GitHub could not expose this billing resource. "
-                    + "Enhanced billing may be unsupported, hidden, or unavailable for the account.",
+                message: message,
                 recoveryAction: .retryRefresh,
                 configuration: configuration
             )

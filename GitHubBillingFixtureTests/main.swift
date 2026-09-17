@@ -94,7 +94,7 @@ enum GitHubBillingFixtureRunner {
             {"budgets":[{"id":"product-budget","budget_type":"ProductPricing","budget_amount":100,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":true}
             """#),
             data(#"""
-            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"repository","budget_entity_name":"example/private","budget_product_skus":["actions_linux"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"tracking-budget","budget_type":"ProductPricing","budget_amount":25,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"Packages","budget_alerting":{"will_alert":false,"alert_recipients":[]}},{"id":"cost-center-budget","budget_type":"ProductPricing","budget_amount":50,"prevent_further_usage":false,"budget_scope":"cost_center","budget_entity_name":"engineering","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
+            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"repository","budget_entity_name":"example/private","budget_product_skus":["actions_linux"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"tracking-budget","budget_type":"ProductPricing","budget_amount":25,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"Packages","budget_alerting":{"will_alert":false,"alert_recipients":[]}},{"id":"zero-budget","budget_type":"SkuPricing","budget_amount":0,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"actions_macos","budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"cost-center-budget","budget_type":"ProductPricing","budget_amount":50,"prevent_further_usage":false,"budget_scope":"cost_center","budget_entity_name":"engineering","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
             """#),
         ]
         let configuration = organizationConfiguration()
@@ -107,6 +107,8 @@ enum GitHubBillingFixtureRunner {
         ), "Organization fixture did not parse")
         try check(result.bars.contains { $0.stableKey == "budget-product-budget" && $0.used == 10 && $0.limit == 100 }, "Organization budget did not use organization-wide product net spend")
         try check(result.bars.contains { $0.stableKey == "budget-sku-budget" && $0.used == 8 && $0.limit == 20 }, "Repository budget did not limit SKU net spend to its repository")
+        try check(!result.bars.contains { $0.stableKey == "budget-zero-budget" }, "A zero-dollar budget must not render a meaningless percentage bar")
+        try check(result.cardInformationSections.contains { $0.id == "github-billing.budget.zero-budget" }, "A returned zero-dollar budget must remain visible")
         try check(!result.bars.contains { $0.stableKey == "budget-cost-center-budget" }, "Unsupported budget scopes must not show guessed consumption")
         try check(result.usageMessages.contains { $0.contains("cost_center") }, "Unsupported budget scopes need an unavailable explanation")
         try check(result.cardInformationSections.contains { section in
@@ -153,6 +155,35 @@ enum GitHubBillingFixtureRunner {
         try check(!result.unavailableUsageMetrics.isEmpty, "Unknown plans must explain unavailable allowances")
         try check(result.monetaryMetrics.isEmpty, "Missing spend fields must not be presented as zero-dollar usage")
         try check(result.usageMessages.contains { $0.contains("complete gross") }, "Missing spend fields need an unavailable explanation")
+
+        let missingSummaryItems = GitHubBillingUsageParser.parsePersonal(
+            summaryData: data("{\"timePeriod\":{\"year\":2026,\"month\":9}}"),
+            usageData: data("{\"usageItems\":[]}"),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: Date()
+        )
+        try check(missingSummaryItems == nil, "A missing top-level summary usageItems field must fail closed")
+
+        let missingDetailedItems = GitHubBillingUsageParser.parsePersonal(
+            summaryData: personalSummary(),
+            usageData: data("{}"),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: Date()
+        )
+        try check(missingDetailedItems == nil, "A missing top-level detailed usageItems field must fail closed")
+
+        let missingBudgets = GitHubBillingUsageParser.parseOrganization(
+            summaryData: organizationSummary(),
+            usageData: organizationUsage(),
+            budgetPageData: [data("{}")],
+            configuration: organizationConfiguration(),
+            fetchedAt: Date()
+        )
+        try check(missingBudgets == nil, "A missing top-level budgets field must fail closed")
     }
 
     private static func providerRequestAndFailureFixtures() async throws {
@@ -217,6 +248,13 @@ enum GitHubBillingFixtureRunner {
 
         let organization = organizationConfiguration()
         try store.saveSecret(credential, account: ProviderConfigurationStore.keychainAccount(for: organization))
+        FixtureURLProtocol.setHandler { request in response(request, status: 404, body: "{}") }
+        let hiddenOrganization = try await provider.fetchUsage(for: organization)
+        try check(
+            hiddenOrganization.failureMessage?.contains("not find") == true,
+            "Organization 404 responses must distinguish hidden or missing resources from unsupported personal billing"
+        )
+
         let pageCounter = LockedCounter()
         FixtureURLProtocol.setHandler { request in
             guard let url = request.url else { return response(request, status: 500, body: "{}") }
@@ -240,6 +278,25 @@ enum GitHubBillingFixtureRunner {
         let paged = try await provider.fetchUsage(for: organization)
         try check(paged.failureMessage == nil, "Paginated organization fixture failed")
         try check(pageCounter.value == 2, "Budget pagination did not retrieve every page")
+
+        FixtureURLProtocol.setHandler { request in
+            guard let url = request.url else { return response(request, status: 500, body: "{}") }
+            if url.path.hasSuffix("/usage/summary") {
+                return response(request, status: 200, data: organizationSummary())
+            }
+            if url.path.hasSuffix("/usage") {
+                return response(request, status: 200, data: organizationUsage())
+            }
+            if url.path.hasSuffix("/budgets") {
+                return response(request, status: 200, body: #"{"budgets":[],"has_next_page":true}"#)
+            }
+            return response(request, status: 404, body: "{}")
+        }
+        let excessivePagination = try await provider.fetchUsage(for: organization)
+        try check(
+            excessivePagination.failureMessage?.contains("could not read") == true,
+            "A pagination response that never terminates must fail instead of returning partial data"
+        )
     }
 
     private static func personalSummary() -> Data {
@@ -251,7 +308,7 @@ enum GitHubBillingFixtureRunner {
     }
 
     private static func organizationUsage() -> Data {
-        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","grossAmount":2,"discountAmount":0,"netAmount":2,"repositoryName":"example/other"}]}"#)
+        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","grossAmount":2,"discountAmount":0,"netAmount":2,"repositoryName":"example/other"},{"date":"2026-09-03","product":"Other","sku":"actions_linux","quantity":400,"unitType":"minutes","grossAmount":4,"discountAmount":0,"netAmount":4,"repositoryName":"example/priv-ate"}]}"#)
     }
 
     private static func personalConfiguration() -> ProviderAccountConfiguration {

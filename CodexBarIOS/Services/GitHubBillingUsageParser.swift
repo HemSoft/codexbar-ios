@@ -363,19 +363,7 @@ public enum GitHubBillingUsageParser {
             }
             guard let normalized = candidate.normalized else { continue }
             output.validBudgets.append(normalized)
-            output.bars.append(UsageBar(
-                stableKey: "budget-\(normalized.id)",
-                label: normalized.name,
-                used: normalized.consumed.doubleValue,
-                limit: normalized.amount.doubleValue,
-                resetsAt: period?.end,
-                resetDisplayStyle: .relativeWithLocalTime,
-                projectionCurrent: normalized.consumed.doubleValue,
-                projectionLimit: normalized.amount.doubleValue,
-                projectionPeriodStart: period?.start,
-                projectionPeriodEnd: period?.end,
-                showProjectionOnCurrentBar: period != nil
-            ))
+            output.bars.append(contentsOf: budgetBars(for: normalized, period: period))
             output.sections.append(budgetSection(
                 normalized,
                 isProduct: candidate.isProduct,
@@ -385,6 +373,28 @@ public enum GitHubBillingUsageParser {
         return output
     }
 
+    private static func budgetBars(
+        for budget: NormalizedBudget,
+        period: BillingPeriod?
+    ) -> [UsageBar] {
+        guard budget.amount > 0 else { return [] }
+        return [
+            UsageBar(
+                stableKey: "budget-\(budget.id)",
+                label: budget.name,
+                used: budget.consumed.doubleValue,
+                limit: budget.amount.doubleValue,
+                resetsAt: period?.end,
+                resetDisplayStyle: .relativeWithLocalTime,
+                projectionCurrent: budget.consumed.doubleValue,
+                projectionLimit: budget.amount.doubleValue,
+                projectionPeriodStart: period?.start,
+                projectionPeriodEnd: period?.end,
+                showProjectionOnCurrentBar: period != nil
+            ),
+        ]
+    }
+
     private static func budgetCandidate(
         _ budget: Budget,
         usageItems: [UsageItem]
@@ -392,7 +402,7 @@ public enum GitHubBillingUsageParser {
         guard
             let id = budget.id?.nonempty,
             let amount = budget.budgetAmount,
-            amount > 0,
+            amount >= 0,
             let preventFurtherUsage = budget.preventFurtherUsage,
             let willAlert = budget.budgetAlerting?.willAlert
         else {
@@ -453,8 +463,8 @@ public enum GitHubBillingUsageParser {
         case "organization":
             scopedItems = usageItems
         case "repository":
-            guard let entity = budget.budgetEntityName?.nonempty?.normalized else { return nil }
-            scopedItems = usageItems.filter { $0.repositoryName?.normalized == entity }
+            guard let entity = budget.budgetEntityName?.repositoryIdentity else { return nil }
+            scopedItems = usageItems.filter { $0.repositoryName?.repositoryIdentity == entity }
         default:
             return nil
         }
@@ -470,7 +480,9 @@ public enum GitHubBillingUsageParser {
         targetLabel: String
     ) -> ProviderCardInformationSection {
         let remaining = max(budget.amount - budget.consumed, 0)
-        let percent = budget.consumed / budget.amount * 100
+        let consumptionDetail = budget.amount > 0
+            ? "\(currencyText(remaining)) · \(decimalText(budget.consumed / budget.amount * 100))% consumed"
+            : "\(currencyText(remaining)) · Zero-dollar budget"
         return ProviderCardInformationSection(
             id: "github-billing.budget.\(budget.id)",
             title: budget.name,
@@ -498,7 +510,7 @@ public enum GitHubBillingUsageParser {
                 ProviderCardInformationItem(
                     id: "\(budget.id).remaining",
                     label: "Remaining headroom",
-                    detail: "\(currencyText(remaining)) · \(decimalText(percent))% consumed"
+                    detail: consumptionDetail
                 ),
             ]
         )
@@ -616,7 +628,7 @@ private struct SummaryResponse: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         timePeriod = try container.decodeIfPresent(TimePeriod.self, forKey: .timePeriod)
-        usageItems = try container.decodeIfPresent([SummaryItem].self, forKey: .usageItems) ?? []
+        usageItems = try container.decode([SummaryItem].self, forKey: .usageItems)
     }
 }
 
@@ -674,7 +686,7 @@ private struct UsageResponse: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        usageItems = try container.decodeIfPresent([UsageItem].self, forKey: .usageItems) ?? []
+        usageItems = try container.decode([UsageItem].self, forKey: .usageItems)
     }
 }
 
@@ -713,7 +725,7 @@ private struct BudgetResponse: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        budgets = try container.decodeIfPresent([Budget].self, forKey: .budgets) ?? []
+        budgets = try container.decode([Budget].self, forKey: .budgets)
     }
 }
 
@@ -922,5 +934,14 @@ private extension String {
 
     var normalized: String {
         String(lowercased().filter { $0.isLetter || $0.isNumber })
+    }
+
+    var repositoryIdentity: String? {
+        let components = split(separator: "/", omittingEmptySubsequences: false)
+        guard components.count == 2 else { return nil }
+        let owner = components[0].trimmingCharacters(in: .whitespacesAndNewlines)
+        let repository = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !owner.isEmpty, !repository.isEmpty else { return nil }
+        return "\(owner.lowercased())/\(repository.lowercased())"
     }
 }
