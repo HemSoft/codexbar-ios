@@ -6,7 +6,7 @@ excluded:
   - .swiftpm
   - build
   - DerivedData
-  - GitHubBillingFixtureTests
+  - ${SWIFTLINT_EXCLUDED_GITHUB_BILLING}
   - CodexBarIOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
 
 # CodexBar intentionally uses trailing commas in multiline collections and

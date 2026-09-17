@@ -197,7 +197,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             ),
         ]
         var page = 1
-        while page <= 20 {
+        while true {
             let request = try makeRequest(
                 pathComponents: ["user", "memberships", "orgs"],
                 queryItems: [
@@ -214,7 +214,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             options.append(contentsOf: memberships.compactMap { membership in
                 guard
                     membership.state == "active",
-                    ["admin", "billing_manager"].contains(membership.role),
+                    membership.role == "admin",
                     let login = membership.organization.login?.trimmingCharacters(in: .whitespacesAndNewlines),
                     !login.isEmpty
                 else {
@@ -293,14 +293,15 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         ))
         let (summary, usage) = try await (summaryData, usageData)
         let repositories = Self.repositoryNames(in: usage)
-        let visibility = await repositoryVisibility(
+        let visibility = try await repositoryVisibility(
             repositories: repositories,
             accessToken: credentials.accessToken
         )
         guard let result = GitHubBillingUsageParser.parsePersonal(
             summaryData: summary,
             usageData: usage,
-            repositoryVisibility: visibility,
+            repositoryVisibility: visibility.values,
+            repositoryVisibilityMessage: visibility.message,
             planName: profile.plan?.name ?? "",
             configuration: configuration,
             fetchedAt: date
@@ -395,31 +396,56 @@ public final class GitHubBillingUsageProvider: UsageProvider {
     private func repositoryVisibility(
         repositories: Set<String>,
         accessToken: String
-    ) async -> [String: Bool] {
-        await withTaskGroup(of: (String, Bool)?.self) { group in
-            for repository in repositories {
-                group.addTask { [self] in
-                    let components = repository.split(separator: "/", omittingEmptySubsequences: true)
-                    guard components.count == 2 else { return nil }
-                    do {
-                        let request = try makeRequest(
-                            pathComponents: ["repos", String(components[0]), String(components[1])],
-                            accessToken: accessToken
-                        )
-                        let data = try await responseData(for: request)
-                        let metadata = try JSONDecoder().decode(RepositoryMetadata.self, from: data)
-                        return (repository, metadata.isPrivate)
-                    } catch {
-                        return nil
+    ) async throws -> RepositoryVisibilityResult {
+        let orderedRepositories = repositories.sorted()
+        var values: [String: Bool] = [:]
+        var hiddenRepositoryCount = 0
+        for batchStart in stride(from: 0, to: orderedRepositories.count, by: 8) {
+            let batchEnd = min(batchStart + 8, orderedRepositories.count)
+            let batch = orderedRepositories[batchStart..<batchEnd]
+            let lookups = try await withThrowingTaskGroup(of: RepositoryVisibilityLookup.self) { group in
+                for repository in batch {
+                    group.addTask { [self] in
+                        let components = repository.split(separator: "/", omittingEmptySubsequences: true)
+                        guard components.count == 2 else {
+                            return RepositoryVisibilityLookup(repository: repository, isPrivate: nil, isHidden: false)
+                        }
+                        do {
+                            let request = try makeRequest(
+                                pathComponents: ["repos", String(components[0]), String(components[1])],
+                                accessToken: accessToken
+                            )
+                            let data = try await responseData(for: request)
+                            let metadata = try JSONDecoder().decode(RepositoryMetadata.self, from: data)
+                            return RepositoryVisibilityLookup(
+                                repository: repository,
+                                isPrivate: metadata.isPrivate,
+                                isHidden: false
+                            )
+                        } catch GitHubBillingAPIError.httpStatus(404, _) {
+                            return RepositoryVisibilityLookup(repository: repository, isPrivate: nil, isHidden: true)
+                        }
                     }
                 }
+                var results: [RepositoryVisibilityLookup] = []
+                for try await lookup in group {
+                    results.append(lookup)
+                }
+                return results
             }
-            var result: [String: Bool] = [:]
-            for await item in group {
-                if let item { result[item.0] = item.1 }
+            for lookup in lookups {
+                if let isPrivate = lookup.isPrivate {
+                    values[lookup.repository] = isPrivate
+                }
+                if lookup.isHidden {
+                    hiddenRepositoryCount += 1
+                }
             }
-            return result
         }
+        return RepositoryVisibilityResult(
+            values: values,
+            hiddenRepositoryCount: hiddenRepositoryCount
+        )
     }
 
     private static func repositoryNames(in usageData: Data) -> Set<String> {
@@ -628,7 +654,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         if status == 403 {
             return failureResult(
                 message: "The signed-in user lacks permission to read this billing account. "
-                    + "Organization access requires an administrator or billing-manager role.",
+                    + "Organization monitoring requires an administrator role.",
                 recoveryAction: .reauthenticate,
                 configuration: configuration
             )
@@ -703,6 +729,23 @@ private struct RepositoryMetadata: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case isPrivate = "private"
+    }
+}
+
+private struct RepositoryVisibilityLookup: Sendable {
+    let repository: String
+    let isPrivate: Bool?
+    let isHidden: Bool
+}
+
+private struct RepositoryVisibilityResult: Sendable {
+    let values: [String: Bool]
+    let hiddenRepositoryCount: Int
+
+    var message: String? {
+        guard hiddenRepositoryCount > 0 else { return nil }
+        let noun = hiddenRepositoryCount == 1 ? "repository was" : "repositories were"
+        return "\(hiddenRepositoryCount) \(noun) hidden or not found, so private Actions usage could not be classified."
     }
 }
 

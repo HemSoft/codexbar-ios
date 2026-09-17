@@ -5,6 +5,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
+PACKAGE_MANIFEST = REPOSITORY_ROOT / "Package.swift"
 SWIFTLINT_CONFIGURATION = REPOSITORY_ROOT / ".swiftlint.yml"
 UI_RUNNER = REPOSITORY_ROOT / "scripts" / "run-ui-tests.sh"
 
@@ -24,6 +25,7 @@ class CITriggerPolicyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+        cls.package_manifest = PACKAGE_MANIFEST.read_text(encoding="utf-8")
         cls.swiftlint_configuration = SWIFTLINT_CONFIGURATION.read_text(encoding="utf-8")
         cls.ui_runner = UI_RUNNER.read_text(encoding="utf-8")
 
@@ -80,7 +82,16 @@ class CITriggerPolicyTests(unittest.TestCase):
             "smoke-tests",
         ):
             self.assertNotIn("GitHubBillingFixtureTests", job_block(self.workflow, automatic_job))
-        self.assertIn("  - GitHubBillingFixtureTests\n", self.swiftlint_configuration)
+        swiftlint_job = job_block(self.workflow, "swiftlint")
+        self.assertIn("SWIFTLINT_EXCLUDED_GITHUB_BILLING", swiftlint_job)
+        self.assertIn(
+            "  - ${SWIFTLINT_EXCLUDED_GITHUB_BILLING}\n",
+            self.swiftlint_configuration,
+        )
+        fixture_target = self.package_manifest.rsplit(
+            'name: "GitHubBillingFixtureTests"', maxsplit=1
+        )[1].split("        ),", maxsplit=1)[0]
+        self.assertIn("SwiftLintBuildToolPlugin", fixture_target)
 
         ui_job = job_block(self.workflow, "ios-ui-tests")
         self.assertIn("Run GitHub Billing API fixtures", ui_job)

@@ -70,6 +70,9 @@ let package = Package(
             name: "GitHubBillingFixtureTests",
             dependencies: ["CodexBarIOS"],
             path: "GitHubBillingFixtureTests",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
+            ]
         ),
     ]
 )

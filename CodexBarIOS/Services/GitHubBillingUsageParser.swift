@@ -5,6 +5,7 @@ public enum GitHubBillingUsageParser {
         summaryData: Data,
         usageData: Data,
         repositoryVisibility: [String: Bool],
+        repositoryVisibilityMessage: String? = nil,
         planName: String,
         configuration: ProviderAccountConfiguration,
         fetchedAt: Date
@@ -76,7 +77,7 @@ public enum GitHubBillingUsageParser {
             unavailableUsageMetrics: unavailable,
             usageMessages: [
                 "GitHub does not expose personal budgets through its public API. Included allowances and current charges are shown separately.",
-            ] + spendStatusMessages(for: totals),
+            ] + [repositoryVisibilityMessage].compactMap { $0 } + spendStatusMessages(for: totals),
             cardInformationSections: details.isEmpty ? [] : [
                 ProviderCardInformationSection(
                     id: "github-billing.usage-detail",

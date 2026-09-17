@@ -1321,7 +1321,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         pendingGitHubBillingAuthResult = GitHubBillingWebAuthResult(accessToken: "synthetic-github-billing-token")
         githubBillingAccountOptions = [
             GitHubBillingAccountOption(scope: .personal, owner: "octocat", role: "owner"),
-            GitHubBillingAccountOption(scope: .organization, owner: "Example-Engineering", role: "billing_manager"),
+            GitHubBillingAccountOption(scope: .organization, owner: "Example-Engineering", role: "admin"),
         ]
         let selectedScope: GitHubBillingAccountScope = selection == "organization" ? .organization : .personal
         selectedGitHubBillingAccountID = githubBillingAccountOptions.first { $0.scope == selectedScope }?.id ?? ""

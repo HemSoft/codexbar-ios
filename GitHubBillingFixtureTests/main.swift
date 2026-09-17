@@ -246,6 +246,78 @@ enum GitHubBillingFixtureRunner {
             )
         }
 
+        try await assertRepositoryMetadataFailures(provider: provider, personal: personal)
+
+        try await assertOrganizationFailures(
+            provider: provider,
+            store: store,
+            credential: credential
+        )
+    }
+
+    private static func assertRepositoryMetadataFailures(
+        provider: GitHubBillingUsageProvider,
+        personal: ProviderAccountConfiguration
+    ) async throws {
+        for status in [401, 403, 429, 500] {
+            FixtureURLProtocol.setHandler { request in
+                switch request.url?.path {
+                case "/user":
+                    response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
+                case "/users/octocat/settings/billing/usage/summary":
+                    response(request, status: 200, data: personalSummary())
+                case "/users/octocat/settings/billing/usage":
+                    response(request, status: 200, body: personalUsageBody)
+                case "/repos/octocat/private":
+                    response(request, status: status, body: "{}")
+                default:
+                    response(request, status: 404, body: "{}")
+                }
+            }
+            let result = try await provider.fetchUsage(for: personal)
+            let expected: String = switch status {
+            case 401: "Sign in again"
+            case 403: "lacks permission"
+            case 429: "rate limit"
+            default: "temporarily unavailable"
+            }
+            try check(
+                result.failureMessage?.localizedCaseInsensitiveContains(expected) == true,
+                "Repository metadata HTTP \(status) did not produce its distinct safe message"
+            )
+        }
+
+        FixtureURLProtocol.setHandler { request in
+            switch request.url?.path {
+            case "/user":
+                response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
+            case "/users/octocat/settings/billing/usage/summary":
+                response(request, status: 200, data: personalSummary())
+            case "/users/octocat/settings/billing/usage":
+                response(request, status: 200, body: personalUsageBody)
+            case "/repos/octocat/private":
+                response(request, status: 404, body: "{}")
+            default:
+                response(request, status: 404, body: "{}")
+            }
+        }
+        let hiddenRepository = try await provider.fetchUsage(for: personal)
+        try check(hiddenRepository.failureMessage == nil, "A hidden repository must not hide the rest of personal billing")
+        try check(
+            hiddenRepository.usageMessages.contains { $0.contains("hidden or not found") },
+            "Hidden repository metadata needs a distinct explanation"
+        )
+        try check(
+            hiddenRepository.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            "Hidden repository metadata must make private Actions classification unavailable"
+        )
+    }
+
+    private static func assertOrganizationFailures(
+        provider: GitHubBillingUsageProvider,
+        store: FixtureSecretStore,
+        credential: String
+    ) async throws {
         let organization = organizationConfiguration()
         try store.saveSecret(credential, account: ProviderConfigurationStore.keychainAccount(for: organization))
         FixtureURLProtocol.setHandler { request in response(request, status: 404, body: "{}") }
@@ -298,6 +370,8 @@ enum GitHubBillingFixtureRunner {
             "A pagination response that never terminates must fail instead of returning partial data"
         )
     }
+
+    private static let personalUsageBody = #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#
 
     private static func personalSummary() -> Data {
         data(#"{"timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":12,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0}]}"#)
