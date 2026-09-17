@@ -849,6 +849,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     private func signInWithGitHubBilling(attemptID: UUID) async {
+        guard githubBillingSignInAttemptID == attemptID else { return }
         isSigningInWithGitHubBilling = true
         credentialError = nil
         githubBillingAuthError = nil
