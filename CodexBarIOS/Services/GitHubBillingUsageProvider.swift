@@ -398,54 +398,76 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         accessToken: String
     ) async throws -> RepositoryVisibilityResult {
         let orderedRepositories = repositories.sorted()
-        var values: [String: Bool] = [:]
-        var hiddenRepositoryCount = 0
+        var result = RepositoryVisibilityResult(values: [:], hiddenRepositoryCount: 0)
         for batchStart in stride(from: 0, to: orderedRepositories.count, by: 8) {
             let batchEnd = min(batchStart + 8, orderedRepositories.count)
-            let batch = orderedRepositories[batchStart..<batchEnd]
-            let lookups = try await withThrowingTaskGroup(of: RepositoryVisibilityLookup.self) { group in
-                for repository in batch {
-                    group.addTask { [self] in
-                        let components = repository.split(separator: "/", omittingEmptySubsequences: true)
-                        guard components.count == 2 else {
-                            return RepositoryVisibilityLookup(repository: repository, isPrivate: nil, isHidden: false)
-                        }
-                        do {
-                            let request = try makeRequest(
-                                pathComponents: ["repos", String(components[0]), String(components[1])],
-                                accessToken: accessToken
-                            )
-                            let data = try await responseData(for: request)
-                            let metadata = try JSONDecoder().decode(RepositoryMetadata.self, from: data)
-                            return RepositoryVisibilityLookup(
-                                repository: repository,
-                                isPrivate: metadata.isPrivate,
-                                isHidden: false
-                            )
-                        } catch GitHubBillingAPIError.httpStatus(404, _) {
-                            return RepositoryVisibilityLookup(repository: repository, isPrivate: nil, isHidden: true)
-                        }
-                    }
+            let lookups = try await repositoryVisibilityLookups(
+                repositories: orderedRepositories[batchStart..<batchEnd],
+                accessToken: accessToken
+            )
+            Self.mergeRepositoryVisibility(lookups, into: &result)
+        }
+        return result
+    }
+
+    private func repositoryVisibilityLookups(
+        repositories: ArraySlice<String>,
+        accessToken: String
+    ) async throws -> [RepositoryVisibilityLookup] {
+        try await withThrowingTaskGroup(of: RepositoryVisibilityLookup.self) { group in
+            for repository in repositories {
+                group.addTask { [self] in
+                    try await repositoryVisibilityLookup(
+                        repository: repository,
+                        accessToken: accessToken
+                    )
                 }
-                var results: [RepositoryVisibilityLookup] = []
-                for try await lookup in group {
-                    results.append(lookup)
-                }
-                return results
             }
-            for lookup in lookups {
-                if let isPrivate = lookup.isPrivate {
-                    values[lookup.repository] = isPrivate
-                }
-                if lookup.isHidden {
-                    hiddenRepositoryCount += 1
-                }
+            var results: [RepositoryVisibilityLookup] = []
+            for try await lookup in group {
+                results.append(lookup)
+            }
+            return results
+        }
+    }
+
+    private func repositoryVisibilityLookup(
+        repository: String,
+        accessToken: String
+    ) async throws -> RepositoryVisibilityLookup {
+        let components = repository.split(separator: "/", omittingEmptySubsequences: true)
+        guard components.count == 2 else {
+            return RepositoryVisibilityLookup(repository: repository, isPrivate: nil, isHidden: false)
+        }
+        do {
+            let request = try makeRequest(
+                pathComponents: ["repos", String(components[0]), String(components[1])],
+                accessToken: accessToken
+            )
+            let data = try await responseData(for: request)
+            let metadata = try JSONDecoder().decode(RepositoryMetadata.self, from: data)
+            return RepositoryVisibilityLookup(
+                repository: repository,
+                isPrivate: metadata.isPrivate,
+                isHidden: false
+            )
+        } catch GitHubBillingAPIError.httpStatus(404, _) {
+            return RepositoryVisibilityLookup(repository: repository, isPrivate: nil, isHidden: true)
+        }
+    }
+
+    private static func mergeRepositoryVisibility(
+        _ lookups: [RepositoryVisibilityLookup],
+        into result: inout RepositoryVisibilityResult
+    ) {
+        for lookup in lookups {
+            if let isPrivate = lookup.isPrivate {
+                result.values[lookup.repository] = isPrivate
+            }
+            if lookup.isHidden {
+                result.hiddenRepositoryCount += 1
             }
         }
-        return RepositoryVisibilityResult(
-            values: values,
-            hiddenRepositoryCount: hiddenRepositoryCount
-        )
     }
 
     private static func repositoryNames(in usageData: Data) -> Set<String> {
@@ -644,7 +666,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 configuration: configuration
             )
         }
-        if isRateLimited || status == 429 {
+        if Self.isRateLimit(status: status, isRateLimited: isRateLimited) {
             return failureResult(
                 message: "GitHub Billing rate limit reached. Try again later.",
                 recoveryAction: .retryRefresh,
@@ -660,14 +682,8 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             )
         }
         if status == 404 {
-            let message = switch configuration.githubBillingAccountScope {
-            case .personal:
-                "GitHub Enhanced Billing is unavailable or unsupported for this personal account."
-            case .organization:
-                "GitHub could not find this organization's billing resource, or the resource is hidden from the signed-in user."
-            }
             return failureResult(
-                message: message,
+                message: Self.notFoundMessage(for: configuration.githubBillingAccountScope),
                 recoveryAction: .retryRefresh,
                 configuration: configuration
             )
@@ -684,6 +700,19 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             recoveryAction: .retryRefresh,
             configuration: configuration
         )
+    }
+
+    private static func isRateLimit(status: Int, isRateLimited: Bool) -> Bool {
+        isRateLimited || status == 429
+    }
+
+    private static func notFoundMessage(for scope: GitHubBillingAccountScope) -> String {
+        switch scope {
+        case .personal:
+            "GitHub Enhanced Billing is unavailable or unsupported for this personal account."
+        case .organization:
+            "GitHub could not find this organization's billing resource, or the resource is hidden from the signed-in user."
+        }
     }
 
     private func failureResult(
@@ -739,8 +768,8 @@ private struct RepositoryVisibilityLookup: Sendable {
 }
 
 private struct RepositoryVisibilityResult: Sendable {
-    let values: [String: Bool]
-    let hiddenRepositoryCount: Int
+    var values: [String: Bool]
+    var hiddenRepositoryCount: Int
 
     var message: String? {
         guard hiddenRepositoryCount > 0 else { return nil }
