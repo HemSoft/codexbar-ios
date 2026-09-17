@@ -240,7 +240,12 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         _ credentials: GitHubBillingCredentials,
         for configuration: ProviderAccountConfiguration
     ) async throws -> ProviderUsageResult {
-        let result = try await fetchUsage(configuration: configuration, credentials: credentials)
+        let result: ProviderUsageResult
+        do {
+            result = try await fetchUsage(configuration: configuration, credentials: credentials)
+        } catch {
+            result = failureResult(error: error, configuration: configuration)
+        }
         if let failureMessage = result.failureMessage {
             throw GitHubBillingValidationError.validationFailed(failureMessage)
         }
@@ -719,7 +724,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         }
         if status == 404 {
             return failureResult(
-                message: Self.notFoundMessage(for: configuration.githubBillingAccountScope),
+                message: "GitHub Enhanced Billing is unavailable or unsupported for this account.",
                 recoveryAction: .retryRefresh,
                 configuration: configuration
             )
@@ -740,15 +745,6 @@ public final class GitHubBillingUsageProvider: UsageProvider {
 
     private static func isRateLimit(status: Int, isRateLimited: Bool) -> Bool {
         isRateLimited || status == 429
-    }
-
-    private static func notFoundMessage(for scope: GitHubBillingAccountScope) -> String {
-        switch scope {
-        case .personal:
-            "GitHub Enhanced Billing is unavailable or unsupported for this personal account."
-        case .organization:
-            "GitHub could not find this organization's billing resource, or the resource is hidden from the signed-in user."
-        }
     }
 
     private func failureResult(

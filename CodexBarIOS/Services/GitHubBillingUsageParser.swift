@@ -77,7 +77,9 @@ public enum GitHubBillingUsageParser {
             unavailableUsageMetrics: unavailable,
             usageMessages: [
                 "GitHub does not expose personal budgets through its public API. Included allowances and current charges are shown separately.",
-            ] + [repositoryVisibilityMessage].compactMap { $0 } + spendStatusMessages(for: totals),
+            ] + Set(unavailable.values).sorted()
+                + [repositoryVisibilityMessage].compactMap { $0 }
+                + spendStatusMessages(for: totals),
             cardInformationSections: details.isEmpty ? [] : [
                 ProviderCardInformationSection(
                     id: "github-billing.usage-detail",
@@ -100,7 +102,9 @@ public enum GitHubBillingUsageParser {
     ) -> ProviderUsageResult? {
         guard
             let summary = try? JSONDecoder().decode(SummaryResponse.self, from: summaryData),
+            summary.usageItems.allSatisfy(\.hasOrganizationMetricFields),
             let usage = try? JSONDecoder().decode(UsageResponse.self, from: usageData),
+            usage.usageItems.allSatisfy(\.hasDetailFields),
             let budgets = decodeBudgets(from: budgetPageData)
         else {
             return nil
@@ -656,6 +660,13 @@ private struct SummaryItem: Decodable {
     let discountAmount: Decimal?
     let netAmount: Decimal?
 
+    var hasOrganizationMetricFields: Bool {
+        product?.nonempty != nil
+            && sku?.nonempty != nil
+            && unitType?.nonempty != nil
+            && grossQuantity != nil
+    }
+
     var isActionsOrPackagesStorage: Bool {
         let product = product?.normalized
         let sku = sku?.normalized
@@ -709,6 +720,14 @@ private struct UsageItem: Decodable {
     let discountAmount: Decimal?
     let netAmount: Decimal?
     let repositoryName: String?
+
+    var hasDetailFields: Bool {
+        product?.nonempty != nil
+            && sku?.nonempty != nil
+            && quantity != nil
+            && unitType?.nonempty != nil
+            && netAmount != nil
+    }
 
     var isActionsMinutes: Bool {
         product?.normalized.contains("actions") == true

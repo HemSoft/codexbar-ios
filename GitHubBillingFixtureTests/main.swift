@@ -104,6 +104,10 @@ enum GitHubBillingFixtureRunner {
             unknownRunner.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
             "Unknown runners need an unavailable explanation"
         )
+        try check(
+            unknownRunner.usageMessages.contains { $0.contains("could not classify") },
+            "Unavailable allowance explanations must be visible on the account card"
+        )
     }
 
     private static func organizationBudgetsAndPaginationParsing() throws {
@@ -229,6 +233,24 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: Date()
         )
         try check(missingBudgets == nil, "A missing top-level budgets field must fail closed")
+
+        let incompleteOrganizationSummary = GitHubBillingUsageParser.parseOrganization(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Actions","unitType":"minutes","grossQuantity":1,"grossAmount":1,"discountAmount":0,"netAmount":1}]}"#),
+            usageData: organizationUsage(),
+            budgetPageData: [],
+            configuration: organizationConfiguration(),
+            fetchedAt: Date()
+        )
+        try check(incompleteOrganizationSummary == nil, "Incomplete organization summary rows must fail closed")
+
+        let incompleteOrganizationUsage = GitHubBillingUsageParser.parseOrganization(
+            summaryData: organizationSummary(),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","repositoryName":"example/private"}]}"#),
+            budgetPageData: [],
+            configuration: organizationConfiguration(),
+            fetchedAt: Date()
+        )
+        try check(incompleteOrganizationUsage == nil, "Incomplete organization detail rows must fail closed")
     }
 
     private static func providerRequestAndFailureFixtures() async throws {
@@ -397,8 +419,8 @@ enum GitHubBillingFixtureRunner {
         FixtureURLProtocol.setHandler { request in response(request, status: 404, body: "{}") }
         let hiddenOrganization = try await provider.fetchUsage(for: organization)
         try check(
-            hiddenOrganization.failureMessage?.contains("not find") == true,
-            "Organization 404 responses must distinguish hidden or missing resources from unsupported personal billing"
+            hiddenOrganization.failureMessage?.contains("Enhanced Billing is unavailable or unsupported") == true,
+            "Organization billing 404 responses must identify unsupported enhanced billing"
         )
 
         FixtureURLProtocol.setHandler { request in

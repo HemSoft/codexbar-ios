@@ -511,6 +511,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func removeSavedCredential(message: String? = nil) {
         if providerID == .gemini { cancelGeminiSignIn() }
+        if providerID == .githubBilling { cancelAuthentication() }
         credentialError = nil
         credentialMessage = nil
         validationFeedbackProviderID = nil
