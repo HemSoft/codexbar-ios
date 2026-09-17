@@ -85,6 +85,24 @@ enum GitHubBillingFixtureRunner {
             pro.bars.first { $0.stableKey == "lfs-storage" }?.limit == 7_200,
             "Pro Git LFS storage must retain its separate 10 GiB allowance"
         )
+
+        let unknownRunnerUsage = data(#"{"usageItems":[{"product":"Actions","sku":"Actions macOS 12-core","quantity":10,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":1,"discountAmount":1,"netAmount":0}]}"#)
+        let unknownRunner = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: summary,
+            usageData: unknownRunnerUsage,
+            repositoryVisibility: ["octocat/private": true],
+            planName: "pro",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Unknown runner fixture did not parse")
+        try check(
+            unknownRunner.bars.contains { $0.stableKey == "actions-private-minutes" } == false,
+            "Unknown or larger runners must not be guessed as standard included minutes"
+        )
+        try check(
+            unknownRunner.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            "Unknown runners need an unavailable explanation"
+        )
     }
 
     private static func organizationBudgetsAndPaginationParsing() throws {
@@ -129,6 +147,32 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: try fixtureDate("2026-09-15T12:00:00Z")
         ), "No-budget fixture did not parse")
         try check(noBudget.usageMessages.contains { $0.contains("no organization budgets") }, "Missing budget state was not explicit")
+
+        let fetchedAt = try fixtureDate("2026-09-15T12:00:00Z")
+        let scopedBudget = try require(GitHubBillingUsageParser.parseOrganization(
+            summaryData: organizationSummary(),
+            usageData: organizationUsage(),
+            budgetPageData: [data(#"{"budgets":[{"id":"scoped","budget_type":"ProductPricing","budget_amount":10.5,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}"#)],
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Scoped budget fixture did not parse")
+        try check(!scopedBudget.hasReachedSpendLimit, "Unrelated account spend must not trigger a scoped budget alert")
+
+        let duplicateSummary = data(#"{"timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","grossQuantity":200,"grossAmount":2,"discountAmount":0,"netAmount":2},{"product":"Actions","sku":"actions_linux","unitType":"minutes","grossQuantity":1000,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8}]}"#)
+        let aggregated = try require(GitHubBillingUsageParser.parseOrganization(
+            summaryData: duplicateSummary,
+            usageData: organizationUsage(),
+            budgetPageData: [],
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Duplicate organization usage fixture did not parse")
+        let usageBars = aggregated.bars.filter { $0.stableKey?.hasPrefix("usage-") == true }
+        try check(usageBars.count == 1, "Duplicate product and SKU rows must aggregate into one stable metric")
+        try check(usageBars.first?.used == 1_200, "Aggregated organization usage quantity was incorrect")
+        try check(
+            usageBars.first?.stableKey == "usage-actions-actions-linux-minutes",
+            "Organization metric identity must use semantic fields rather than response order"
+        )
     }
 
     private static func malformedAndMissingFields() throws {
@@ -189,11 +233,9 @@ enum GitHubBillingFixtureRunner {
     private static func providerRequestAndFailureFixtures() async throws {
         let store = FixtureSecretStore()
         let personal = personalConfiguration()
+        let credentials = GitHubBillingCredentials(accessToken: "fixture-token", username: "octocat")
         let credential = try require(
-            GitHubBillingCredentialsParser.storedCredential(from: GitHubBillingCredentials(
-                accessToken: "fixture-token",
-                username: "octocat"
-            )),
+            GitHubBillingCredentialsParser.storedCredential(from: credentials),
             "Could not encode fixture credential"
         )
         try store.saveSecret(credential, account: ProviderConfigurationStore.keychainAccount(for: personal))
@@ -244,6 +286,15 @@ enum GitHubBillingFixtureRunner {
                 result.failureMessage?.localizedCaseInsensitiveContains(expected) == true,
                 "HTTP \(status) did not produce its distinct safe message"
             )
+            do {
+                _ = try await provider.discoverAccounts(credentials: credentials)
+                throw FixtureFailure(message: "Account discovery HTTP \(status) unexpectedly succeeded")
+            } catch {
+                try check(
+                    error.localizedDescription.localizedCaseInsensitiveContains(expected),
+                    "Account discovery HTTP \(status) did not produce setup guidance"
+                )
+            }
         }
 
         try await assertRepositoryMetadataFailures(provider: provider, personal: personal)
@@ -367,6 +418,30 @@ enum GitHubBillingFixtureRunner {
         try check(
             budgetPermission.usageMessages.contains { $0.contains("not permitted") },
             "A budget 403 needs a distinct permission explanation"
+        )
+
+        FixtureURLProtocol.setHandler { request in
+            guard let url = request.url else { return response(request, status: 500, body: "{}") }
+            if url.path.hasSuffix("/usage/summary") {
+                return response(request, status: 200, data: organizationSummary())
+            }
+            if url.path.hasSuffix("/usage") {
+                return response(request, status: 200, data: organizationUsage())
+            }
+            if url.path.hasSuffix("/budgets") {
+                return response(
+                    request,
+                    status: 403,
+                    data: data("{}"),
+                    headers: ["X-RateLimit-Remaining": "0"]
+                )
+            }
+            return response(request, status: 404, body: "{}")
+        }
+        let budgetRateLimit = try await provider.fetchUsage(for: organization)
+        try check(
+            budgetRateLimit.failureMessage?.contains("rate limit") == true,
+            "A rate-limited budget 403 must not be mislabeled as a permission failure"
         )
 
         let pageCounter = LockedCounter()
@@ -496,13 +571,14 @@ enum GitHubBillingFixtureRunner {
     private static func response(
         _ request: URLRequest,
         status: Int,
-        data: Data
+        data: Data,
+        headers: [String: String]? = nil
     ) -> (HTTPURLResponse, Data) {
         let response = HTTPURLResponse(
             url: request.url!,
             statusCode: status,
             httpVersion: nil,
-            headerFields: nil
+            headerFields: headers
         )!
         return (response, data)
     }

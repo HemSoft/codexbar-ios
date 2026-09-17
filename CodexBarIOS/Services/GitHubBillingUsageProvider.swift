@@ -403,7 +403,11 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             }
             return .page(data, info)
         } catch GitHubBillingAPIError.httpStatus(let status, let isRateLimited) {
-            guard let message = Self.unavailableBudgetMessage(status: status) else {
+            guard
+                !isRateLimited,
+                status != 429,
+                let message = Self.unavailableBudgetMessage(status: status)
+            else {
                 throw GitHubBillingAPIError.httpStatus(status, isRateLimited)
             }
             return .unavailable(message)
@@ -853,10 +857,51 @@ private struct TokenRefreshResponse: Decodable {
     }
 }
 
-private enum GitHubBillingAPIError: Error {
+private enum GitHubBillingAPIError: LocalizedError {
     case invalidRequest
     case invalidResponse
     case httpStatus(Int, Bool)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidRequest:
+            "GitHub Billing could not create a valid request."
+        case .invalidResponse:
+            "GitHub Billing returned data CodexBar could not read."
+        case .httpStatus(let status, let isRateLimited):
+            Self.httpStatusMessage(status: status, isRateLimited: isRateLimited)
+        }
+    }
+
+    private static func httpStatusMessage(status: Int, isRateLimited: Bool) -> String {
+        if let priorityMessage = priorityHTTPStatusMessage(status: status, isRateLimited: isRateLimited) {
+            return priorityMessage
+        }
+        return fallbackHTTPStatusMessage(status: status)
+    }
+
+    private static func priorityHTTPStatusMessage(status: Int, isRateLimited: Bool) -> String? {
+        if status == 401 {
+            return "GitHub Billing authorization expired or was revoked. Sign in again."
+        }
+        if isRateLimited || status == 429 {
+            return "GitHub Billing rate limit reached. Try again later."
+        }
+        return nil
+    }
+
+    private static func fallbackHTTPStatusMessage(status: Int) -> String {
+        switch status {
+        case 403:
+            "The signed-in user lacks permission to read this billing account."
+        case 404:
+            "GitHub Enhanced Billing is unavailable, hidden, or not found for this account."
+        case 500..<600:
+            "GitHub Billing is temporarily unavailable. Try again later."
+        default:
+            "GitHub Billing returned HTTP \(status)."
+        }
+    }
 }
 
 private enum GitHubBillingValidationError: LocalizedError {

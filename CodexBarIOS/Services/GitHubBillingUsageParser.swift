@@ -116,23 +116,9 @@ public enum GitHubBillingUsageParser {
         bars.append(contentsOf: budgetOutput.bars)
 
         let totals = SpendTotals(items: summary.usageItems)
-        var monetaryMetrics = totals.map {
+        let monetaryMetrics = totals.map {
             makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt)
         } ?? []
-        if budgetOutput.validBudgets.count == 1, let budget = budgetOutput.validBudgets.first {
-            monetaryMetrics.append(monetaryMetric(
-                kind: .spendLimit,
-                label: "Budget",
-                amount: budget.amount,
-                detail: budget.behaviorLabel
-            ))
-            monetaryMetrics.append(monetaryMetric(
-                kind: .remainingHeadroom,
-                label: "Budget remaining",
-                amount: max(budget.amount - budget.consumed, 0),
-                detail: budget.name
-            ))
-        }
 
         var messages = budgetOutput.messages + spendStatusMessages(for: totals)
         if let budgetStatusMessage {
@@ -318,21 +304,37 @@ public enum GitHubBillingUsageParser {
     }
 
     private static func organizationUsageBars(_ items: [SummaryItem]) -> [UsageBar] {
-        items.enumerated().compactMap { index, item in
+        var buckets: [String: OrganizationUsageBucket] = [:]
+        for item in items {
             guard
                 let product = item.product?.nonempty,
                 let sku = item.sku?.nonempty,
                 let quantity = item.grossQuantity,
                 let unit = item.unitType?.nonempty
             else {
-                return nil
+                continue
             }
+            let identity = [product, sku, unit].map(stableKey).joined(separator: "-")
+            if var bucket = buckets[identity] {
+                bucket.quantity += quantity
+                buckets[identity] = bucket
+            } else {
+                buckets[identity] = OrganizationUsageBucket(
+                    product: product,
+                    sku: sku,
+                    unit: unit,
+                    quantity: quantity
+                )
+            }
+        }
+        return buckets.keys.sorted().compactMap { identity in
+            guard let bucket = buckets[identity] else { return nil }
             return UsageBar(
-                stableKey: "usage-\(stableKey(product))-\(stableKey(sku))-\(index)",
-                label: "\(product) · \(sku)",
-                used: quantity.doubleValue,
+                stableKey: "usage-\(identity)",
+                label: "\(bucket.product) · \(bucket.sku)",
+                used: bucket.quantity.doubleValue,
                 limit: 0,
-                fractionlessUsageText: "\(decimalText(quantity)) \(unit)"
+                fractionlessUsageText: "\(decimalText(bucket.quantity)) \(bucket.unit)"
             )
         }
     }
@@ -617,6 +619,13 @@ public enum GitHubBillingUsageParser {
     }
 }
 
+private struct OrganizationUsageBucket {
+    let product: String
+    let sku: String
+    let unit: String
+    var quantity: Decimal
+}
+
 private struct SummaryResponse: Decodable {
     let timePeriod: TimePeriod?
     let usageItems: [SummaryItem]
@@ -707,13 +716,12 @@ private struct UsageItem: Decodable {
     }
 
     var standardRunnerMultiplier: Decimal? {
-        let normalized = sku?.normalized ?? ""
-        let unsupportedMarkers = ["larger", "gpu", "arm", "4core", "8core", "16core", "32core", "64core"]
-        guard !unsupportedMarkers.contains(where: normalized.contains) else { return nil }
-        if normalized.contains("linux") { return 1 }
-        if normalized.contains("windows") { return 2 }
-        if normalized.contains("macos") { return 10 }
-        return nil
+        switch sku?.normalized {
+        case "actionslinux": 1
+        case "actionswindows": 2
+        case "actionsmacos": 10
+        default: nil
+        }
     }
 }
 
