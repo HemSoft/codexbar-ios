@@ -657,10 +657,10 @@ private struct SummaryItem: Decodable {
     let netAmount: Decimal?
 
     var isActionsOrPackagesStorage: Bool {
-        let product = product?.normalized ?? ""
-        let sku = sku?.normalized ?? ""
-        return (product.contains("actions") || product.contains("packages"))
-            && sku.contains("storage")
+        let product = product?.normalized
+        let sku = sku?.normalized
+        return (product == "actions" && sku == "actionsstorage")
+            || (product == "packages" && sku == "packagesstorage")
     }
 
     var isLFSStorage: Bool {

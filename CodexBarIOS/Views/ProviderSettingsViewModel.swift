@@ -81,6 +81,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var pendingGitHubBillingAuthResult: GitHubBillingWebAuthResult?
     private var githubBillingSignInTask: Task<Void, Never>?
     private var githubBillingConnectionTask: Task<Void, Never>?
+    private var githubBillingSignInAttemptID: UUID?
+    private var githubBillingConnectionAttemptID: UUID?
     private var ignoresNextGitHubBillingAuthDismissal = false
     private let claudeAuthService: ClaudeWebAuthService
     private let cursorAuthService: CursorWebAuthService
@@ -436,8 +438,10 @@ final class ProviderSettingsViewModel: ObservableObject {
         cursorAuthPresenter.finish()
         githubBillingSignInTask?.cancel()
         githubBillingSignInTask = nil
+        githubBillingSignInAttemptID = nil
         githubBillingConnectionTask?.cancel()
         githubBillingConnectionTask = nil
+        githubBillingConnectionAttemptID = nil
         pendingGitHubBillingAuthResult = nil
         githubBillingAccountOptions = []
         isSigningInWithGitHubBilling = false
@@ -451,6 +455,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         guard isSigningInWithGitHubBilling else { return }
         githubBillingSignInTask?.cancel()
         githubBillingSignInTask = nil
+        githubBillingSignInAttemptID = nil
         pendingGitHubBillingAuthResult = nil
         githubBillingAccountOptions = []
         isSigningInWithGitHubBilling = false
@@ -836,27 +841,28 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func startGitHubBillingSignIn() {
         githubBillingSignInTask?.cancel()
+        let attemptID = UUID()
+        githubBillingSignInAttemptID = attemptID
         githubBillingSignInTask = Task { [weak self] in
-            await self?.signInWithGitHubBilling()
+            await self?.signInWithGitHubBilling(attemptID: attemptID)
         }
     }
 
-    private func signInWithGitHubBilling() async {
+    private func signInWithGitHubBilling(attemptID: UUID) async {
         isSigningInWithGitHubBilling = true
         credentialError = nil
         githubBillingAuthError = nil
         githubBillingMessage = nil
         githubBillingAccountOptions = []
         pendingGitHubBillingAuthResult = nil
-        defer {
-            isSigningInWithGitHubBilling = false
-            githubBillingSignInTask = nil
-        }
+        defer { finishGitHubBillingSignIn(attemptID: attemptID) }
 
         do {
             let result = try await githubBillingAuthService.signIn(configuration: .bundled) { url in
+                guard self.githubBillingSignInAttemptID == attemptID else { return }
                 self.authURL = PresentedAuthURL(url: url)
             }
+            guard !Task.isCancelled, githubBillingSignInAttemptID == attemptID else { return }
             let provisionalCredentials = GitHubBillingCredentials(
                 accessToken: result.accessToken,
                 username: "",
@@ -867,6 +873,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             let options = try await githubBillingUsageProvider.discoverAccounts(
                 credentials: provisionalCredentials
             )
+            guard !Task.isCancelled, githubBillingSignInAttemptID == attemptID else { return }
             guard !options.isEmpty else {
                 githubBillingAuthError = "GitHub sign-in returned no personal account or eligible organization."
                 closeGitHubBillingAuthSheet()
@@ -880,9 +887,17 @@ final class ProviderSettingsViewModel: ObservableObject {
         } catch is CancellationError {
             // An interactive sheet dismissal already cleared the presented URL.
         } catch {
+            guard githubBillingSignInAttemptID == attemptID else { return }
             githubBillingAuthError = error.localizedDescription
             closeGitHubBillingAuthSheet()
         }
+    }
+
+    private func finishGitHubBillingSignIn(attemptID: UUID) {
+        guard githubBillingSignInAttemptID == attemptID else { return }
+        githubBillingSignInAttemptID = nil
+        githubBillingSignInTask = nil
+        isSigningInWithGitHubBilling = false
     }
 
     private func closeGitHubBillingAuthSheet() {
@@ -893,12 +908,16 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func startGitHubBillingAccountConnection() {
         githubBillingConnectionTask?.cancel()
+        let attemptID = UUID()
+        githubBillingConnectionAttemptID = attemptID
         githubBillingConnectionTask = Task { [weak self] in
-            await self?.connectSelectedGitHubBillingAccount()
+            await self?.connectSelectedGitHubBillingAccount(attemptID: attemptID)
         }
     }
 
-    private func connectSelectedGitHubBillingAccount() async {
+    private func connectSelectedGitHubBillingAccount(attemptID: UUID) async {
+        defer { finishGitHubBillingConnection(attemptID: attemptID) }
+        guard githubBillingConnectionAttemptID == attemptID else { return }
         guard
             let authResult = pendingGitHubBillingAuthResult,
             let option = githubBillingAccountOptions.first(where: { $0.id == selectedGitHubBillingAccountID }),
@@ -911,7 +930,6 @@ final class ProviderSettingsViewModel: ObservableObject {
         isSigningInWithGitHubBilling = true
         githubBillingAuthError = nil
         githubBillingMessage = "Checking GitHub Billing access..."
-        defer { isSigningInWithGitHubBilling = false }
 
         var updated = configuration
         updated.authMethod = .browserSession
@@ -927,6 +945,7 @@ final class ProviderSettingsViewModel: ObservableObject {
                 for: updated
             )
             try Task.checkCancellation()
+            guard githubBillingConnectionAttemptID == attemptID else { return }
             guard let storedCredential = GitHubBillingCredentialsParser.storedCredential(from: credentials),
                   persistCredential(storedCredential, with: updated) else {
                 githubBillingAuthError = configurationStore.lastError
@@ -940,11 +959,20 @@ final class ProviderSettingsViewModel: ObservableObject {
             credentialsDidChange(refreshMetrics: false)
             acceptUsageResult(result)
         } catch is CancellationError {
+            guard githubBillingConnectionAttemptID == attemptID else { return }
             githubBillingMessage = nil
         } catch {
+            guard githubBillingConnectionAttemptID == attemptID else { return }
             githubBillingMessage = nil
             githubBillingAuthError = error.localizedDescription
         }
+    }
+
+    private func finishGitHubBillingConnection(attemptID: UUID) {
+        guard githubBillingConnectionAttemptID == attemptID else { return }
+        githubBillingConnectionAttemptID = nil
+        githubBillingConnectionTask = nil
+        isSigningInWithGitHubBilling = false
     }
 
     func signInWithClaude() async {
@@ -1187,7 +1215,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private func requestCredentialMetricsRefresh(refreshMetrics: Bool = true) {
         usageResult = nil
         metricsCredentialRevision += 1
-        isCredentialRefreshPending = true
+        isCredentialRefreshPending = refreshMetrics
         guard refreshMetrics else { return }
         if isLoadingMetrics {
             needsCredentialMetricsRefresh = true

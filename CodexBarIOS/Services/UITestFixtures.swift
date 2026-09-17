@@ -283,11 +283,15 @@ final class UITestFixtures {
             ],
             monetaryMetrics: [
                 ProviderMonetaryMetric(
-                    kind: .spent, label: "Net spend", minorUnits: 6_200,
+                    kind: .grossSpend, label: "Gross usage", minorUnits: 7_000,
                     currencyCode: "USD", decimalPlaces: 2
                 ),
                 ProviderMonetaryMetric(
-                    kind: .remainingHeadroom, label: "Budget remaining", minorUnits: 3_800,
+                    kind: .discounts, label: "Discounts", minorUnits: 800,
+                    currencyCode: "USD", decimalPlaces: 2
+                ),
+                ProviderMonetaryMetric(
+                    kind: .spent, label: "Net spend", minorUnits: 6_200,
                     currencyCode: "USD", decimalPlaces: 2
                 ),
             ],
