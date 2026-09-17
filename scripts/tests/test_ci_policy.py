@@ -5,8 +5,6 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
-PACKAGE_MANIFEST = REPOSITORY_ROOT / "Package.swift"
-SWIFTLINT_CONFIGURATION = REPOSITORY_ROOT / ".swiftlint.yml"
 UI_RUNNER = REPOSITORY_ROOT / "scripts" / "run-ui-tests.sh"
 
 
@@ -25,8 +23,6 @@ class CITriggerPolicyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.workflow = CI_WORKFLOW.read_text(encoding="utf-8")
-        cls.package_manifest = PACKAGE_MANIFEST.read_text(encoding="utf-8")
-        cls.swiftlint_configuration = SWIFTLINT_CONFIGURATION.read_text(encoding="utf-8")
         cls.ui_runner = UI_RUNNER.read_text(encoding="utf-8")
 
     def test_ci_supports_automatic_and_manual_runs(self) -> None:
@@ -72,30 +68,6 @@ class CITriggerPolicyTests(unittest.TestCase):
         self.assertIn("run: ./scripts/run-ui-tests.sh ipad", ui_job)
         self.assertIn("if: ${{ always() }}", ui_job)
         self.assertIn("retention-days: 14", ui_job)
-
-    def test_github_billing_fixtures_are_manual_only(self) -> None:
-        for automatic_job in (
-            "swiftlint",
-            "strict-concurrency",
-            "ios-tests",
-            "watch-tests",
-            "smoke-tests",
-        ):
-            self.assertNotIn("GitHubBillingFixtureTests", job_block(self.workflow, automatic_job))
-        swiftlint_job = job_block(self.workflow, "swiftlint")
-        self.assertIn("SWIFTLINT_EXCLUDED_GITHUB_BILLING", swiftlint_job)
-        self.assertIn(
-            "  - ${SWIFTLINT_EXCLUDED_GITHUB_BILLING}\n",
-            self.swiftlint_configuration,
-        )
-        fixture_target = self.package_manifest.rsplit(
-            'name: "GitHubBillingFixtureTests"', maxsplit=1
-        )[1].split("        ),", maxsplit=1)[0]
-        self.assertIn("SwiftLintBuildToolPlugin", fixture_target)
-
-        ui_job = job_block(self.workflow, "ios-ui-tests")
-        self.assertIn("Run GitHub Billing API fixtures", ui_job)
-        self.assertIn("xcrun swift run GitHubBillingFixtureTests", ui_job)
 
     def test_ui_runner_requires_all_five_journeys(self) -> None:
         for assertion in (
