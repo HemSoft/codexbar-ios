@@ -72,6 +72,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let accountID: String
     private let onCredentialsChanged: @MainActor () -> Void
     private let onRefreshInputsChanged: @MainActor () -> Void
+    private let onAccountIdentityChanged: @MainActor () -> Void
     private let onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     private let onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     private let codexAuthService: any CodexWebAuthenticating
@@ -111,6 +112,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
+        onAccountIdentityChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
         codexAuthService: any CodexWebAuthenticating = CodexWebAuthService(),
@@ -128,6 +130,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             : nil
         self.onCredentialsChanged = onCredentialsChanged
         self.onRefreshInputsChanged = onRefreshInputsChanged
+        self.onAccountIdentityChanged = onAccountIdentityChanged
         self.onAccountRefresh = onAccountRefresh
         self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
         self.codexAuthService = codexAuthService
@@ -1009,6 +1012,8 @@ final class ProviderSettingsViewModel: ObservableObject {
         attemptID: UUID
     ) {
         guard githubBillingConnectionAttemptID == attemptID else { return }
+        let identityChanged = configuration.githubBillingAccountScope != self.configuration.githubBillingAccountScope
+            || configuration.githubBillingOwner.caseInsensitiveCompare(self.configuration.githubBillingOwner) != .orderedSame
         guard let storedCredential = GitHubBillingCredentialsParser.storedCredential(from: credentials),
               persistCredential(storedCredential, with: configuration) else {
             githubBillingAuthError = configurationStore.lastError
@@ -1019,6 +1024,9 @@ final class ProviderSettingsViewModel: ObservableObject {
         githubBillingAccountOptions = []
         selectedGitHubBillingAccountID = ""
         githubBillingMessage = "GitHub Billing account connected and verified."
+        if identityChanged {
+            onAccountIdentityChanged()
+        }
         credentialsDidChange(refreshMetrics: false)
         acceptUsageResult(result)
     }

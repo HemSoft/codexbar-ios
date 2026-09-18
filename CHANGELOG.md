@@ -61,6 +61,11 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Reject GitHub Billing responses attributed to a different account, clear saved
+  history when an existing card is connected to a different owner, and explain
+  when an account may be unsupported, hidden, or not found.
+  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
+
 - Show the reset countdown and local reset time for Gemini Models and Other
   Models five-hour and weekly limits on the dashboard and widgets, even when no
   projection warning is needed. Default small and medium widgets now include

@@ -724,7 +724,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         }
         if status == 404 {
             return failureResult(
-                message: "GitHub Enhanced Billing is unavailable or unsupported for this account.",
+                message: "GitHub Enhanced Billing is unavailable, unsupported, hidden, or not found for this account.",
                 recoveryAction: .retryRefresh,
                 configuration: configuration
             )

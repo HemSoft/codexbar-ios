@@ -10,8 +10,12 @@ public enum GitHubBillingUsageParser {
         configuration: ProviderAccountConfiguration,
         fetchedAt: Date
     ) -> ProviderUsageResult? {
+        let accountName = configuration.githubBillingOwner.trimmingCharacters(in: .whitespacesAndNewlines)
         guard
+            !accountName.isEmpty,
             let summary = try? JSONDecoder().decode(SummaryResponse.self, from: summaryData),
+            summary.user?.caseInsensitiveCompare(accountName) == .orderedSame,
+            summary.organization == nil,
             let usage = try? JSONDecoder().decode(UsageResponse.self, from: usageData)
         else {
             return nil
@@ -63,7 +67,6 @@ public enum GitHubBillingUsageParser {
             )
         }
         let details = usageDetails(usage.usageItems)
-        let accountName = configuration.githubBillingOwner.trimmingCharacters(in: .whitespacesAndNewlines)
         return ProviderUsageResult(
             accountID: configuration.id,
             providerID: .githubBilling,
@@ -100,11 +103,15 @@ public enum GitHubBillingUsageParser {
         configuration: ProviderAccountConfiguration,
         fetchedAt: Date
     ) -> ProviderUsageResult? {
+        let owner = configuration.githubBillingOwner.trimmingCharacters(in: .whitespacesAndNewlines)
         guard
+            !owner.isEmpty,
             let summary = try? JSONDecoder().decode(SummaryResponse.self, from: summaryData),
+            summary.organization?.caseInsensitiveCompare(owner) == .orderedSame,
+            summary.user == nil,
             summary.usageItems.allSatisfy(\.hasOrganizationMetricFields),
             let usage = try? JSONDecoder().decode(UsageResponse.self, from: usageData),
-            usage.usageItems.allSatisfy(\.hasDetailFields),
+            usage.usageItems.allSatisfy({ $0.isOrganizationDetail(for: owner) }),
             let budgets = decodeBudgets(from: budgetPageData)
         else {
             return nil
@@ -140,7 +147,6 @@ public enum GitHubBillingUsageParser {
                 items: details
             ))
         }
-        let owner = configuration.githubBillingOwner.trimmingCharacters(in: .whitespacesAndNewlines)
         return ProviderUsageResult(
             accountID: configuration.id,
             providerID: .githubBilling,
@@ -369,7 +375,6 @@ public enum GitHubBillingUsageParser {
                 continue
             }
             guard let normalized = candidate.normalized else { continue }
-            output.validBudgets.append(normalized)
             output.bars.append(contentsOf: budgetBars(for: normalized, period: period))
             output.sections.append(budgetSection(
                 normalized,
@@ -632,16 +637,22 @@ private struct OrganizationUsageBucket {
 
 private struct SummaryResponse: Decodable {
     let timePeriod: TimePeriod?
+    let user: String?
+    let organization: String?
     let usageItems: [SummaryItem]
 
     enum CodingKeys: String, CodingKey {
         case timePeriod
+        case user
+        case organization
         case usageItems
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         timePeriod = try container.decodeIfPresent(TimePeriod.self, forKey: .timePeriod)
+        user = try container.decodeIfPresent(String.self, forKey: .user)?.nonempty
+        organization = try container.decodeIfPresent(String.self, forKey: .organization)?.nonempty
         usageItems = try container.decode([SummaryItem].self, forKey: .usageItems)
     }
 }
@@ -665,6 +676,9 @@ private struct SummaryItem: Decodable {
             && sku?.nonempty != nil
             && unitType?.nonempty != nil
             && grossQuantity != nil
+            && grossAmount != nil
+            && discountAmount != nil
+            && netAmount != nil
     }
 
     var isActionsOrPackagesStorage: Bool {
@@ -720,13 +734,17 @@ private struct UsageItem: Decodable {
     let discountAmount: Decimal?
     let netAmount: Decimal?
     let repositoryName: String?
+    let organizationName: String?
 
-    var hasDetailFields: Bool {
+    func isOrganizationDetail(for owner: String) -> Bool {
         product?.nonempty != nil
             && sku?.nonempty != nil
             && quantity != nil
             && unitType?.nonempty != nil
+            && grossAmount != nil
+            && discountAmount != nil
             && netAmount != nil
+            && organizationName?.caseInsensitiveCompare(owner) == .orderedSame
     }
 
     var isActionsMinutes: Bool {
@@ -944,7 +962,6 @@ private struct BudgetCandidate {
 private struct BudgetOutput {
     var bars: [UsageBar] = []
     var sections: [ProviderCardInformationSection] = []
-    var validBudgets: [NormalizedBudget] = []
     var messages: [String] = []
 }
 

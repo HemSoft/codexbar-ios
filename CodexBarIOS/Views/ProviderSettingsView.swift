@@ -20,6 +20,7 @@ struct ProviderSettingsView: View {
         initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
+        onAccountIdentityChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil
     ) {
@@ -32,6 +33,7 @@ struct ProviderSettingsView: View {
                 initialUsageResult: initialUsageResult,
                 onCredentialsChanged: onCredentialsChanged,
                 onRefreshInputsChanged: onRefreshInputsChanged,
+                onAccountIdentityChanged: onAccountIdentityChanged,
                 onAccountRefresh: onAccountRefresh,
                 onCredentialRefresh: onCredentialRefresh
             )

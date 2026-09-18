@@ -256,6 +256,7 @@ struct SettingsView: View {
     var onAccountsChanged: @MainActor () -> Void = {}
     var onCredentialsChanged: @MainActor (String) -> Void = { _ in }
     var onRefreshInputsChanged: @MainActor (String) -> Void = { _ in }
+    var onAccountIdentityChanged: @MainActor (String) -> Void = { _ in }
     var usageResultForAccount: @MainActor (String) -> ProviderUsageResult? = { _ in nil }
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
     var onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil }
@@ -289,6 +290,7 @@ struct SettingsView: View {
         onAccountsChanged: @escaping @MainActor () -> Void = {},
         onCredentialsChanged: @escaping @MainActor (String) -> Void = { _ in },
         onRefreshInputsChanged: @escaping @MainActor (String) -> Void = { _ in },
+        onAccountIdentityChanged: @escaping @MainActor (String) -> Void = { _ in },
         usageResultForAccount: @escaping @MainActor (String) -> ProviderUsageResult? = { _ in nil },
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
@@ -301,6 +303,7 @@ struct SettingsView: View {
         self.onAccountsChanged = onAccountsChanged
         self.onCredentialsChanged = onCredentialsChanged
         self.onRefreshInputsChanged = onRefreshInputsChanged
+        self.onAccountIdentityChanged = onAccountIdentityChanged
         self.usageResultForAccount = usageResultForAccount
         self.onAccountRefresh = onAccountRefresh
         self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
@@ -330,6 +333,7 @@ struct SettingsView: View {
                             initialUsageResult: usageResultForAccount(accountID),
                             onCredentialsChanged: { onCredentialsChanged(accountID) },
                             onRefreshInputsChanged: { onRefreshInputsChanged(accountID) },
+                            onAccountIdentityChanged: { onAccountIdentityChanged(accountID) },
                             onAccountRefresh: onAccountRefresh,
                             onCredentialRefresh: onCredentialRefresh
                         )
