@@ -66,7 +66,10 @@ public enum GitHubBillingUsageParser {
                 label: plan.label
             )
         }
-        let details = usageDetails(usage.usageItems)
+        let sections = personalInformationSections(
+            bars: bars,
+            usageDetails: usageDetails(usage.usageItems)
+        )
         return ProviderUsageResult(
             accountID: configuration.id,
             providerID: .githubBilling,
@@ -83,13 +86,7 @@ public enum GitHubBillingUsageParser {
             ] + Set(unavailable.values).sorted()
                 + [repositoryVisibilityMessage].compactMap { $0 }
                 + spendStatusMessages(for: totals),
-            cardInformationSections: details.isEmpty ? [] : [
-                ProviderCardInformationSection(
-                    id: "github-billing.usage-detail",
-                    title: "Repository, product, and SKU usage",
-                    items: details
-                ),
-            ],
+            cardInformationSections: sections,
             cacheIdentity: accountName.lowercased(),
             fetchedAt: fetchedAt
         )
@@ -264,8 +261,9 @@ public enum GitHubBillingUsageParser {
             return
         }
 
-        let storageItems = items.filter(\.isLFSStorage)
-        if storageItems.allSatisfy(\.isGBHours),
+        let storageItems = items.filter(\.isPotentialLFSStorage)
+        if storageItems.allSatisfy(\.isLFSStorage),
+           storageItems.allSatisfy(\.isGBHours),
            storageItems.allSatisfy({ $0.grossQuantity != nil }),
            let period {
             bars.append(allowanceBar(
@@ -281,8 +279,9 @@ public enum GitHubBillingUsageParser {
                 : "GitHub returned Git LFS storage in an unsupported unit."
         }
 
-        let bandwidthItems = items.filter(\.isLFSBandwidth)
-        if bandwidthItems.allSatisfy(\.isGB),
+        let bandwidthItems = items.filter(\.isPotentialLFSBandwidth)
+        if bandwidthItems.allSatisfy(\.isLFSBandwidth),
+           bandwidthItems.allSatisfy(\.isGB),
            bandwidthItems.allSatisfy({ $0.grossQuantity != nil }) {
             bars.append(allowanceBar(
                 stableKey: "lfs-bandwidth",
@@ -316,6 +315,44 @@ public enum GitHubBillingUsageParser {
             projectionPeriodEnd: period?.end,
             showProjectionOnCurrentBar: period != nil
         )
+    }
+
+    private static func personalInformationSections(
+        bars: [UsageBar],
+        usageDetails: [ProviderCardInformationItem]
+    ) -> [ProviderCardInformationSection] {
+        var sections: [ProviderCardInformationSection] = []
+        if !bars.isEmpty {
+            sections.append(allowanceSection(bars))
+        }
+        if !usageDetails.isEmpty {
+            sections.append(ProviderCardInformationSection(
+                id: "github-billing.usage-detail",
+                title: "Repository, product, and SKU usage",
+                items: usageDetails
+            ))
+        }
+        return sections
+    }
+
+    private static func allowanceSection(_ bars: [UsageBar]) -> ProviderCardInformationSection {
+        ProviderCardInformationSection(
+            id: "github-billing.personal-allowances",
+            title: "Included personal allowances",
+            items: bars.enumerated().map { index, bar in
+                let remaining = max(bar.limit - bar.used, 0)
+                return ProviderCardInformationItem(
+                    id: bar.stableKey ?? "allowance-\(index)",
+                    label: bar.label,
+                    detail: "\(usageAmount(bar.used)) used · \(usageAmount(bar.limit)) included · "
+                        + "\(usageAmount(remaining)) remaining"
+                )
+            }
+        )
+    }
+
+    private static func usageAmount(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...6)))
     }
 
     private static func organizationUsageBars(_ items: [SummaryItem]) -> [UsageBar] {
@@ -706,6 +743,16 @@ private struct SummaryItem: Decodable {
 
     var isLFSBandwidth: Bool {
         isLFS && (sku?.normalized.contains("bandwidth") == true)
+    }
+
+    var isPotentialLFSStorage: Bool {
+        (isLFS || sku?.normalized.contains("lfs") == true)
+            && (isGBHours || sku?.normalized.contains("storage") == true)
+    }
+
+    var isPotentialLFSBandwidth: Bool {
+        (isLFS || sku?.normalized.contains("lfs") == true)
+            && (isGB || sku?.normalized.contains("bandwidth") == true)
     }
 
     var isLFS: Bool {

@@ -54,6 +54,17 @@ enum GitHubBillingFixtureRunner {
         let actionBar = try require(free.bars.first { $0.stableKey == "actions-private-minutes" }, "Actions minutes missing")
         try check(actionBar.used == 340, "Mixed standard runners must apply x64, arm64, and macOS multipliers")
         try check(actionBar.limit == 2_000, "Free accounts must receive 2,000 included Actions minutes")
+        try check(
+            free.cardInformationSections.contains { section in
+                section.items.contains { item in
+                    item.label == "Private Actions minutes"
+                        && item.detail.contains("340 used")
+                        && item.detail.contains("2,000 included")
+                        && item.detail.contains("1,660 remaining")
+                }
+            },
+            "Personal allowance details must show used, included, and remaining minutes"
+        )
         let storage = try require(free.bars.first { $0.stableKey == "actions-packages-storage" }, "Storage bar missing")
         try check(storage.used == 144, "Actions and Packages GB-hours must share one accrued total")
         try check(storage.limit == 360, "September Free storage allowance must be 0.5 GB times 720 hours")
@@ -232,6 +243,32 @@ enum GitHubBillingFixtureRunner {
         try check(
             missingStorageSKU.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
             "An Actions storage row missing its SKU must make the allowance unavailable"
+        )
+
+        let missingLFSSKU = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"user":"octocat","timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Git LFS","unitType":"GiB-hours","grossQuantity":1,"grossAmount":0.01,"discountAmount":0.01,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: Date()
+        ), "An incomplete Git LFS row should remain a readable response")
+        try check(
+            missingLFSSKU.unavailableUsageMetrics["githubBilling.lfs-storage"] != nil,
+            "A Git LFS storage row missing its SKU must make storage unavailable"
+        )
+
+        let missingLFSProduct = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"user":"octocat","timePeriod":{"year":2026,"month":9},"usageItems":[{"sku":"lfs_bandwidth","unitType":"GiB","grossQuantity":1,"grossAmount":0.01,"discountAmount":0.01,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: Date()
+        ), "An incomplete Git LFS bandwidth row should remain a readable response")
+        try check(
+            missingLFSProduct.unavailableUsageMetrics["githubBilling.lfs-bandwidth"] != nil,
+            "A Git LFS bandwidth row missing its product must make bandwidth unavailable"
         )
 
         let missingSummaryItems = GitHubBillingUsageParser.parsePersonal(

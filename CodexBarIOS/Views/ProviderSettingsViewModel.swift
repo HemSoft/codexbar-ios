@@ -1031,7 +1031,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         if identityChanged {
             onAccountIdentityChanged()
         }
-        credentialsDidChange(refreshMetrics: false)
+        credentialsDidChange()
         acceptUsageResult(result)
     }
 
