@@ -66,9 +66,10 @@ public enum GitHubBillingUsageParser {
                 label: plan.label
             )
         }
+        let detailOutput = usageDetails(usage.usageItems)
         let sections = personalInformationSections(
             bars: bars,
-            usageDetails: usageDetails(usage.usageItems)
+            usageDetails: detailOutput.items
         )
         return ProviderUsageResult(
             accountID: configuration.id,
@@ -84,7 +85,7 @@ public enum GitHubBillingUsageParser {
             usageMessages: [
                 "GitHub does not expose personal budgets through its public API. Included allowances and current charges are shown separately.",
             ] + Set(unavailable.values).sorted()
-                + [repositoryVisibilityMessage].compactMap { $0 }
+                + [repositoryVisibilityMessage, detailOutput.message].compactMap { $0 }
                 + spendStatusMessages(for: totals),
             cardInformationSections: sections,
             cacheIdentity: accountName.lowercased(),
@@ -128,36 +129,52 @@ public enum GitHubBillingUsageParser {
             makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt)
         } ?? []
 
-        var messages = budgetOutput.messages + spendStatusMessages(for: totals)
-        if let budgetStatusMessage {
-            messages.append(budgetStatusMessage)
-        } else if budgets.isEmpty {
-            messages.append("GitHub returned no organization budgets. Metered usage can still incur charges.")
-        }
-
-        let details = usageDetails(usage.usageItems)
-        var sections = budgetOutput.sections
-        if !details.isEmpty {
-            sections.append(ProviderCardInformationSection(
-                id: "github-billing.usage-detail",
-                title: "Repository, product, and SKU usage",
-                items: details
-            ))
-        }
+        let presentation = organizationPresentation(
+            budgetOutput: budgetOutput,
+            totals: totals,
+            details: usageDetails(usage.usageItems),
+            budgetStatusMessage: budgetStatusMessage,
+            hasBudgets: !budgets.isEmpty
+        )
         return ProviderUsageResult(
             accountID: configuration.id,
             providerID: .githubBilling,
             title: configuration.displayName,
-            subtitle: owner.isEmpty
-                ? "GitHub organization billing"
-                : "GitHub organization billing for \(owner)",
+            subtitle: "GitHub organization billing for \(owner)",
             bars: bars,
             monetaryMetrics: monetaryMetrics,
-            usageMessages: messages,
-            cardInformationSections: sections,
+            usageMessages: presentation.messages,
+            cardInformationSections: presentation.sections,
             cacheIdentity: owner.lowercased(),
             fetchedAt: fetchedAt
         )
+    }
+
+    private static func organizationPresentation(
+        budgetOutput: BudgetOutput,
+        totals: SpendTotals?,
+        details: UsageDetailOutput,
+        budgetStatusMessage: String?,
+        hasBudgets: Bool
+    ) -> OrganizationPresentationOutput {
+        var messages = budgetOutput.messages + spendStatusMessages(for: totals)
+        if let detailMessage = details.message {
+            messages.append(detailMessage)
+        }
+        if let budgetStatusMessage {
+            messages.append(budgetStatusMessage)
+        } else if !hasBudgets {
+            messages.append("GitHub returned no organization budgets. Metered usage can still incur charges.")
+        }
+        var sections = budgetOutput.sections
+        if !details.items.isEmpty {
+            sections.append(ProviderCardInformationSection(
+                id: "github-billing.usage-detail",
+                title: "Repository, product, and SKU usage",
+                items: details.items
+            ))
+        }
+        return OrganizationPresentationOutput(messages: messages, sections: sections)
     }
 
     private static func appendPersonalActionsMinutes(
@@ -183,7 +200,9 @@ public enum GitHubBillingUsageParser {
                 let repositoryName = item.repositoryName,
                 let isPrivate = repositoryVisibility[repositoryName],
                 let multiplier = item.standardRunnerMultiplier,
-                let quantity = item.quantity
+                let quantity = item.quantity,
+                quantity >= 0,
+                item.hasNonnegativeFinancialFields
             else {
                 isClassifiable = false
                 continue
@@ -232,8 +251,8 @@ public enum GitHubBillingUsageParser {
             unavailable[metricID] = "GitHub returned storage in a unit that cannot be compared with a GB-hour allowance."
             return
         }
-        guard matching.allSatisfy({ $0.grossQuantity != nil }) else {
-            unavailable[metricID] = "GitHub did not return a complete accrued storage quantity."
+        guard matching.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true }) else {
+            unavailable[metricID] = "GitHub did not return a complete nonnegative accrued storage quantity."
             return
         }
         let used = matching.compactMap(\.grossQuantity).reduce(.zero, +)
@@ -264,7 +283,7 @@ public enum GitHubBillingUsageParser {
         let storageItems = items.filter(\.isPotentialLFSStorage)
         if storageItems.allSatisfy(\.isLFSStorage),
            storageItems.allSatisfy(\.isGBHours),
-           storageItems.allSatisfy({ $0.grossQuantity != nil }),
+           storageItems.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true }),
            let period {
             bars.append(allowanceBar(
                 stableKey: "lfs-storage",
@@ -282,7 +301,7 @@ public enum GitHubBillingUsageParser {
         let bandwidthItems = items.filter(\.isPotentialLFSBandwidth)
         if bandwidthItems.allSatisfy(\.isLFSBandwidth),
            bandwidthItems.allSatisfy(\.isGB),
-           bandwidthItems.allSatisfy({ $0.grossQuantity != nil }) {
+           bandwidthItems.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true }) {
             bars.append(allowanceBar(
                 stableKey: "lfs-bandwidth",
                 label: "Git LFS bandwidth",
@@ -627,21 +646,32 @@ public enum GitHubBillingUsageParser {
         )
     }
 
-    private static func usageDetails(_ items: [UsageItem]) -> [ProviderCardInformationItem] {
-        items.prefix(40).enumerated().compactMap { index, item in
+    private static func usageDetails(_ items: [UsageItem]) -> UsageDetailOutput {
+        let details = items.enumerated().compactMap { index, item -> ProviderCardInformationItem? in
             guard let product = item.product?.nonempty, let sku = item.sku?.nonempty else {
                 return nil
             }
             let repository = item.repositoryName?.nonempty ?? "Account-wide"
             let quantity = item.quantity.map(decimalText) ?? "Unknown quantity"
             let unit = item.unitType?.nonempty ?? "units"
-            let net = item.netAmount.map(currencyText) ?? "Unknown charge"
+            let unitPrice = item.pricePerUnit.map(currencyText) ?? "Unknown unit price"
+            let gross = item.grossAmount.map(currencyText) ?? "Unknown gross amount"
+            let discount = item.discountAmount.map(currencyText) ?? "Unknown discount"
+            let net = item.netAmount.map(currencyText) ?? "Unknown net amount"
             return ProviderCardInformationItem(
                 id: "usage.\(index).\(stableKey(repository)).\(stableKey(sku))",
                 label: repository,
-                detail: "\(product) · \(sku) · \(quantity) \(unit) · \(net) net"
+                detail: "\(product) · \(sku) · \(quantity) \(unit) · \(unitPrice)/unit · "
+                    + "\(gross) gross · \(discount) discount · \(net) net"
             )
         }
+        let omittedCount = max(0, details.count - UsageDetailOutput.maximumCount)
+        return UsageDetailOutput(
+            items: Array(details.prefix(UsageDetailOutput.maximumCount)),
+            message: omittedCount == 0
+                ? nil
+                : "\(omittedCount) additional repository, product, and SKU detail rows were omitted from the card."
+        )
     }
 
     private static func decimalPlaces(for value: Decimal) -> Int {
@@ -668,6 +698,18 @@ public enum GitHubBillingUsageParser {
             .filter { !$0.isEmpty }
             .joined(separator: "-")
     }
+}
+
+private struct OrganizationPresentationOutput {
+    let messages: [String]
+    let sections: [ProviderCardInformationSection]
+}
+
+private struct UsageDetailOutput {
+    static let maximumCount = 40
+
+    let items: [ProviderCardInformationItem]
+    let message: String?
 }
 
 private struct OrganizationUsageBucket {
@@ -708,6 +750,7 @@ private struct SummaryItem: Decodable {
     let product: String?
     let sku: String?
     let unitType: String?
+    let pricePerUnit: Decimal?
     let grossQuantity: Decimal?
     let grossAmount: Decimal?
     let discountAmount: Decimal?
@@ -717,10 +760,11 @@ private struct SummaryItem: Decodable {
         product?.nonempty != nil
             && sku?.nonempty != nil
             && unitType?.nonempty != nil
-            && grossQuantity != nil
-            && grossAmount != nil
-            && discountAmount != nil
-            && netAmount != nil
+            && pricePerUnit.map { $0 >= 0 } == true
+            && grossQuantity.map { $0 >= 0 } == true
+            && grossAmount.map { $0 >= 0 } == true
+            && discountAmount.map { $0 >= 0 } == true
+            && netAmount.map { $0 >= 0 } == true
     }
 
     var isActionsOrPackagesStorage: Bool {
@@ -785,24 +829,32 @@ private struct UsageResponse: Decodable {
 }
 
 private struct UsageItem: Decodable {
+    let date: String?
     let product: String?
     let sku: String?
     let quantity: Decimal?
     let unitType: String?
+    let pricePerUnit: Decimal?
     let grossAmount: Decimal?
     let discountAmount: Decimal?
     let netAmount: Decimal?
     let repositoryName: String?
     let organizationName: String?
 
+    var hasNonnegativeFinancialFields: Bool {
+        pricePerUnit.map { $0 >= 0 } == true
+            && grossAmount.map { $0 >= 0 } == true
+            && discountAmount.map { $0 >= 0 } == true
+            && netAmount.map { $0 >= 0 } == true
+    }
+
     func isOrganizationDetail(for owner: String) -> Bool {
-        product?.nonempty != nil
+        date?.nonempty != nil
+            && product?.nonempty != nil
             && sku?.nonempty != nil
-            && quantity != nil
+            && quantity.map { $0 >= 0 } == true
             && unitType?.nonempty != nil
-            && grossAmount != nil
-            && discountAmount != nil
-            && netAmount != nil
+            && hasNonnegativeFinancialFields
             && organizationName?.caseInsensitiveCompare(owner) == .orderedSame
     }
 
@@ -903,7 +955,9 @@ private struct SpendTotals {
 
     init?(items: [SummaryItem]) {
         guard items.allSatisfy({
-            $0.grossAmount != nil && $0.discountAmount != nil && $0.netAmount != nil
+            $0.grossAmount.map { $0 >= 0 } == true
+                && $0.discountAmount.map { $0 >= 0 } == true
+                && $0.netAmount.map { $0 >= 0 } == true
         }) else {
             return nil
         }

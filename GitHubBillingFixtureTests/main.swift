@@ -177,7 +177,7 @@ enum GitHubBillingFixtureRunner {
         ), "Scoped budget fixture did not parse")
         try check(!scopedBudget.hasReachedSpendLimit, "Unrelated account spend must not trigger a scoped budget alert")
 
-        let duplicateSummary = data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","grossQuantity":200,"grossAmount":2,"discountAmount":0,"netAmount":2},{"product":"Actions","sku":"actions_linux","unitType":"minutes","grossQuantity":1000,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8}]}"#)
+        let duplicateSummary = data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":200,"grossAmount":2,"discountAmount":0,"netAmount":2},{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":1000,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8}]}"#)
         let aggregated = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: duplicateSummary,
             usageData: organizationUsage(),
@@ -327,6 +327,15 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: Date()
         )
         try check(incompleteOrganizationUsage == nil, "Incomplete organization detail rows must fail closed")
+
+        let negativeOrganizationUsage = GitHubBillingUsageParser.parseOrganization(
+            summaryData: organizationSummary(),
+            usageData: data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":-1,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":-0.01,"discountAmount":0,"netAmount":-0.01,"organizationName":"Example-Engineering"}]}"#),
+            budgetPageData: [],
+            configuration: organizationConfiguration(),
+            fetchedAt: Date()
+        )
+        try check(negativeOrganizationUsage == nil, "Negative organization detail values must fail closed")
 
         let mismatchedOrganizationOwner = GitHubBillingUsageParser.parseOrganization(
             summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"other-org","usageItems":[]}"#),
@@ -553,6 +562,10 @@ enum GitHubBillingFixtureRunner {
             cappedRepositories.usageMessages.contains { $0.contains("lookup safety limit") },
             "Omitted repository metadata needs an unavailable explanation"
         )
+        try check(
+            cappedRepositories.usageMessages.contains { $0.contains("detail rows were omitted") },
+            "Truncated repository, product, and SKU details need an explicit explanation"
+        )
     }
 
     private static func assertOrganizationFailures(
@@ -657,7 +670,7 @@ enum GitHubBillingFixtureRunner {
         )
     }
 
-    private static let personalUsageBody = #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#
+    private static let personalUsageBody = #"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#
 
     private static func manyRepositoryUsage(count: Int) throws -> Data {
         let items: [[String: Any]] = (0..<count).map { index in
@@ -666,6 +679,8 @@ enum GitHubBillingFixtureRunner {
                 "sku": "Actions Linux",
                 "quantity": 1,
                 "unitType": "minutes",
+                "pricePerUnit": 0.01,
+                "date": "2026-09-01",
                 "repositoryName": "octocat/repository-\(index)",
                 "grossAmount": 0.01,
                 "discountAmount": 0.01,
@@ -680,11 +695,11 @@ enum GitHubBillingFixtureRunner {
     }
 
     private static func organizationSummary() -> Data {
-        data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","grossQuantity":1200,"grossAmount":12.25,"discountQuantity":200,"discountAmount":2.25,"netQuantity":1000,"netAmount":10.00},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":50,"grossAmount":1.125,"discountQuantity":25,"discountAmount":0.5625,"netQuantity":25,"netAmount":0.5625}]}"#)
+        data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":1200,"grossAmount":12.25,"discountQuantity":200,"discountAmount":2.25,"netQuantity":1000,"netAmount":10.00},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.0225,"grossQuantity":50,"grossAmount":1.125,"discountQuantity":25,"discountAmount":0.5625,"netQuantity":25,"netAmount":0.5625}]}"#)
     }
 
     private static func organizationUsage() -> Data {
-        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","grossAmount":2,"discountAmount":0,"netAmount":2,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Other","sku":"actions_linux","quantity":400,"unitType":"minutes","grossAmount":4,"discountAmount":0,"netAmount":4,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"}]}"#)
+        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":2,"discountAmount":0,"netAmount":2,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Other","sku":"actions_linux","quantity":400,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":4,"discountAmount":0,"netAmount":4,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"}]}"#)
     }
 
     private static func personalConfiguration() -> ProviderAccountConfiguration {
