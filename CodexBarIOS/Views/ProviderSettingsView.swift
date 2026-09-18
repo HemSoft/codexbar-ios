@@ -20,6 +20,7 @@ struct ProviderSettingsView: View {
         initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
+        onAccountIdentityChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil
     ) {
@@ -32,6 +33,7 @@ struct ProviderSettingsView: View {
                 initialUsageResult: initialUsageResult,
                 onCredentialsChanged: onCredentialsChanged,
                 onRefreshInputsChanged: onRefreshInputsChanged,
+                onAccountIdentityChanged: onAccountIdentityChanged,
                 onAccountRefresh: onAccountRefresh,
                 onCredentialRefresh: onCredentialRefresh
             )
@@ -187,6 +189,79 @@ struct ProviderSettingsView: View {
                     if let copilotAuthError = viewModel.copilotAuthError {
                         Text(copilotAuthError)
                             .foregroundStyle(.red)
+                    }
+                } else if providerID == .githubBilling {
+                    Button {
+                        viewModel.startGitHubBillingSignIn()
+                    } label: {
+                        if viewModel.isSigningInWithGitHubBilling && viewModel.githubBillingAccountOptions.isEmpty {
+                            ProgressView()
+                        } else {
+                            Text(configurationStore.hasSecret(for: configuration) ? "Sign in Again with GitHub" : "Sign in with GitHub")
+                        }
+                    }
+                    .disabled(viewModel.isSigningInWithGitHubBilling)
+                    .accessibilityIdentifier("github-billing-sign-in")
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(
+                            "Requested GitHub permissions: private repository access (GitHub's classic repo scope), "
+                                + "organization membership, user plan, billing usage, and organization budgets.",
+                            systemImage: "lock.shield"
+                        )
+                        Text(
+                            "GitHub's repo scope permits repository changes, but CodexBar only reads visibility "
+                                + "metadata to classify usage. It stores this account's token in its own Keychain entry and never "
+                                + "changes or shares GitHub Copilot credentials."
+                        )
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("github-billing-permission-disclosure")
+
+                    if !viewModel.githubBillingAccountOptions.isEmpty {
+                        Picker("Account to monitor", selection: $viewModel.selectedGitHubBillingAccountID) {
+                            ForEach(viewModel.githubBillingAccountOptions) { option in
+                                Text(option.displayName).tag(option.id)
+                            }
+                        }
+                        .accessibilityIdentifier("github-billing-account-picker")
+
+                        Button("Connect Selected Account") {
+                            viewModel.startGitHubBillingAccountConnection()
+                        }
+                        .disabled(
+                            viewModel.isSigningInWithGitHubBilling
+                                || viewModel.selectedGitHubBillingAccountID.isEmpty
+                        )
+                        .accessibilityIdentifier("github-billing-connect-account")
+                    }
+
+                    if configurationStore.hasSecret(for: configuration) {
+                        Text(
+                            configuration.githubBillingAccountScope == .personal
+                                ? "Monitoring personal account \(configuration.githubBillingOwner). GitHub does not expose a personal budget through the public API."
+                                : "Monitoring organization \(configuration.githubBillingOwner). Budgets are read-only."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                        Button("Disconnect GitHub Billing", role: .destructive) {
+                            viewModel.removeSavedCredential()
+                        }
+                    }
+
+                    if let githubBillingMessage = viewModel.githubBillingMessage {
+                        Text(githubBillingMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("github-billing-message")
+                    }
+
+                    if let githubBillingAuthError = viewModel.githubBillingAuthError {
+                        Text(githubBillingAuthError)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("github-billing-error")
                     }
                 } else if providerID == .claude {
                     Button {
@@ -430,9 +505,11 @@ struct ProviderSettingsView: View {
         }, content: { session in
             GeminiBrowserSignInView(session: session)
         })
-        .sheet(item: $viewModel.authURL) { authURL in
+        .sheet(item: $viewModel.authURL, onDismiss: {
+            viewModel.authenticationSheetDismissed()
+        }, content: { authURL in
             SafariAuthSheet(url: authURL.url)
-        }
+        })
         .onChange(of: viewModel.needsGoogleCodingAccountConfirmation) { _, needed in
             if needed { requestGeminiConfirmation(.codingSignIn) }
         }

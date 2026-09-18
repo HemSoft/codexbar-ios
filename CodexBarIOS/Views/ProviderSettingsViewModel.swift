@@ -40,6 +40,11 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published private(set) var geminiCodingMessage: String?
     @Published private(set) var isSigningInWithCodex = false
     @Published private(set) var isSigningInWithCopilot = false
+    @Published private(set) var isSigningInWithGitHubBilling = false
+    @Published private(set) var githubBillingAccountOptions: [GitHubBillingAccountOption] = []
+    @Published var selectedGitHubBillingAccountID = ""
+    @Published private(set) var githubBillingMessage: String?
+    @Published private(set) var githubBillingAuthError: String?
     @Published private(set) var isSigningInWithClaude = false
     @Published private(set) var isSigningInWithCursor = false
     @Published var geminiBrowserSession: GeminiBrowserSignInSession?
@@ -67,10 +72,19 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let accountID: String
     private let onCredentialsChanged: @MainActor () -> Void
     private let onRefreshInputsChanged: @MainActor () -> Void
+    private let onAccountIdentityChanged: @MainActor () -> Void
     private let onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     private let onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     private let codexAuthService: any CodexWebAuthenticating
     private let copilotAuthService: any CopilotWebAuthenticating
+    private let githubBillingAuthService: any GitHubBillingWebAuthenticating
+    private let githubBillingUsageProvider: GitHubBillingUsageProvider
+    private var pendingGitHubBillingAuthResult: GitHubBillingWebAuthResult?
+    private var githubBillingSignInTask: Task<Void, Never>?
+    private var githubBillingConnectionTask: Task<Void, Never>?
+    private var githubBillingSignInAttemptID: UUID?
+    private var githubBillingConnectionAttemptID: UUID?
+    private var ignoresNextGitHubBillingAuthDismissal = false
     private let claudeAuthService: ClaudeWebAuthService
     private let cursorAuthService: CursorWebAuthService
     private let copilotUsageProvider: CopilotUsageProvider
@@ -98,10 +112,13 @@ final class ProviderSettingsViewModel: ObservableObject {
         initialUsageResult: ProviderUsageResult? = nil,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
+        onAccountIdentityChanged: @escaping @MainActor () -> Void = {},
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
         codexAuthService: any CodexWebAuthenticating = CodexWebAuthService(),
         copilotAuthService: any CopilotWebAuthenticating = CopilotWebAuthService(),
+        githubBillingAuthService: any GitHubBillingWebAuthenticating = GitHubBillingWebAuthService(),
+        githubBillingUsageProvider: GitHubBillingUsageProvider = GitHubBillingUsageProvider(),
         claudeAuthService: ClaudeWebAuthService = ClaudeWebAuthService(),
         cursorAuthService: CursorWebAuthService = CursorWebAuthService(),
         copilotUsageProvider: CopilotUsageProvider = CopilotUsageProvider()
@@ -113,10 +130,13 @@ final class ProviderSettingsViewModel: ObservableObject {
             : nil
         self.onCredentialsChanged = onCredentialsChanged
         self.onRefreshInputsChanged = onRefreshInputsChanged
+        self.onAccountIdentityChanged = onAccountIdentityChanged
         self.onAccountRefresh = onAccountRefresh
         self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
         self.codexAuthService = codexAuthService
         self.copilotAuthService = copilotAuthService
+        self.githubBillingAuthService = githubBillingAuthService
+        self.githubBillingUsageProvider = githubBillingUsageProvider
         self.claudeAuthService = claudeAuthService
         self.cursorAuthService = cursorAuthService
         self.copilotUsageProvider = copilotUsageProvider
@@ -175,7 +195,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     var availableAuthMethods: [ProviderAuthMethod] {
         switch providerID {
-        case .codex, .claude, .cursor, .gemini:
+        case .codex, .claude, .cursor, .gemini, .githubBilling:
             [.browserSession]
         case .antigravity:
             [.cliToken]
@@ -245,10 +265,12 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
 
         return ProviderCredentialPresentation(
-            sectionTitle: "Credential",
-            unsavedPlaceholder: "Paste credential",
-            savedPlaceholder: "Credential saved",
-            saveButtonTitle: "Save Credential",
+            sectionTitle: providerID == .githubBilling ? "GitHub Billing Authorization" : "Credential",
+            unsavedPlaceholder: providerID == .githubBilling ? "Sign in with GitHub" : "Paste credential",
+            savedPlaceholder: providerID == .githubBilling
+                ? "GitHub Billing authorization saved"
+                : "Credential saved",
+            saveButtonTitle: providerID == .githubBilling ? "Sign in with GitHub" : "Save Credential",
             setupMessage: nil,
             setupLinkTitle: nil,
             setupURL: nil,
@@ -405,6 +427,7 @@ final class ProviderSettingsViewModel: ObservableObject {
             _ = configurationStore.update(normalized)
         }
         configurationStore.refreshSecretAvailability()
+        debugPrepareGitHubBillingSelectionIfNeeded()
         await debugAutostartCopilotAuthIfNeeded()
         await loadMetricsIfNeeded()
     }
@@ -416,6 +439,29 @@ final class ProviderSettingsViewModel: ObservableObject {
         codexAuthPresenter.finish()
         cursorSignInTask?.cancel()
         cursorAuthPresenter.finish()
+        githubBillingSignInTask?.cancel()
+        githubBillingSignInTask = nil
+        githubBillingSignInAttemptID = nil
+        githubBillingConnectionTask?.cancel()
+        githubBillingConnectionTask = nil
+        githubBillingConnectionAttemptID = nil
+        pendingGitHubBillingAuthResult = nil
+        githubBillingAccountOptions = []
+        isSigningInWithGitHubBilling = false
+    }
+
+    func authenticationSheetDismissed() {
+        if ignoresNextGitHubBillingAuthDismissal {
+            ignoresNextGitHubBillingAuthDismissal = false
+            return
+        }
+        guard isSigningInWithGitHubBilling else { return }
+        githubBillingSignInTask?.cancel()
+        githubBillingSignInTask = nil
+        githubBillingSignInAttemptID = nil
+        pendingGitHubBillingAuthResult = nil
+        githubBillingAccountOptions = []
+        isSigningInWithGitHubBilling = false
     }
 
     func flushPendingChanges() {
@@ -468,6 +514,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     func removeSavedCredential(message: String? = nil) {
         if providerID == .gemini { cancelGeminiSignIn() }
+        if providerID == .githubBilling { cancelAuthentication() }
         credentialError = nil
         credentialMessage = nil
         validationFeedbackProviderID = nil
@@ -796,6 +843,216 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
     }
 
+    func startGitHubBillingSignIn() {
+        githubBillingSignInTask?.cancel()
+        let attemptID = UUID()
+        githubBillingSignInAttemptID = attemptID
+        githubBillingSignInTask = Task { [weak self] in
+            await self?.signInWithGitHubBilling(attemptID: attemptID)
+        }
+    }
+
+    private func signInWithGitHubBilling(attemptID: UUID) async {
+        guard isCurrentGitHubBillingSignInAttempt(attemptID) else { return }
+        isSigningInWithGitHubBilling = true
+        credentialError = nil
+        githubBillingAuthError = nil
+        githubBillingMessage = nil
+        githubBillingAccountOptions = []
+        pendingGitHubBillingAuthResult = nil
+        defer { finishGitHubBillingSignIn(attemptID: attemptID) }
+
+        do {
+            let result = try await githubBillingAuthService.signIn(configuration: .bundled) { url in
+                self.presentGitHubBillingAuthorizationURL(url, attemptID: attemptID)
+            }
+            guard isCurrentGitHubBillingSignInAttempt(attemptID) else { return }
+            let provisionalCredentials = GitHubBillingCredentials(
+                accessToken: result.accessToken,
+                username: "",
+                refreshToken: result.refreshToken,
+                expiresAt: result.expiresAt,
+                refreshTokenExpiresAt: result.refreshTokenExpiresAt
+            )
+            let options = try await githubBillingUsageProvider.discoverAccounts(
+                credentials: provisionalCredentials
+            )
+            completeGitHubBillingSignIn(
+                result: result,
+                options: options,
+                attemptID: attemptID
+            )
+        } catch is CancellationError {
+            // An interactive sheet dismissal already cleared the presented URL.
+        } catch {
+            handleGitHubBillingSignInFailure(error, attemptID: attemptID)
+        }
+    }
+
+    private func completeGitHubBillingSignIn(
+        result: GitHubBillingWebAuthResult,
+        options: [GitHubBillingAccountOption],
+        attemptID: UUID
+    ) {
+        guard isCurrentGitHubBillingSignInAttempt(attemptID) else { return }
+        guard !options.isEmpty else {
+            githubBillingAuthError = "GitHub sign-in returned no personal account or eligible organization."
+            closeGitHubBillingAuthSheet()
+            return
+        }
+        pendingGitHubBillingAuthResult = result
+        githubBillingAccountOptions = options
+        selectedGitHubBillingAccountID = options.first?.id ?? ""
+        githubBillingMessage = "Choose the personal account or eligible organization to monitor."
+        closeGitHubBillingAuthSheet()
+    }
+
+    private func isCurrentGitHubBillingSignInAttempt(_ attemptID: UUID) -> Bool {
+        !Task.isCancelled && githubBillingSignInAttemptID == attemptID
+    }
+
+    private func presentGitHubBillingAuthorizationURL(_ url: URL, attemptID: UUID) {
+        guard githubBillingSignInAttemptID == attemptID else { return }
+        authURL = PresentedAuthURL(url: url)
+    }
+
+    private func handleGitHubBillingSignInFailure(_ error: Error, attemptID: UUID) {
+        guard githubBillingSignInAttemptID == attemptID else { return }
+        githubBillingAuthError = error.localizedDescription
+        closeGitHubBillingAuthSheet()
+    }
+
+    private func finishGitHubBillingSignIn(attemptID: UUID) {
+        guard githubBillingSignInAttemptID == attemptID else { return }
+        githubBillingSignInAttemptID = nil
+        githubBillingSignInTask = nil
+        isSigningInWithGitHubBilling = false
+    }
+
+    private func closeGitHubBillingAuthSheet() {
+        guard authURL != nil else { return }
+        ignoresNextGitHubBillingAuthDismissal = true
+        authURL = nil
+    }
+
+    func startGitHubBillingAccountConnection() {
+        githubBillingConnectionTask?.cancel()
+        let attemptID = UUID()
+        githubBillingConnectionAttemptID = attemptID
+        githubBillingConnectionTask = Task { [weak self] in
+            await self?.connectSelectedGitHubBillingAccount(attemptID: attemptID)
+        }
+    }
+
+    private func connectSelectedGitHubBillingAccount(attemptID: UUID) async {
+        defer { finishGitHubBillingConnection(attemptID: attemptID) }
+        guard githubBillingConnectionAttemptID == attemptID else { return }
+        guard let inputs = githubBillingConnectionInputs() else {
+            githubBillingAuthError = "Sign in with GitHub and choose an account before connecting."
+            return
+        }
+
+        isSigningInWithGitHubBilling = true
+        githubBillingAuthError = nil
+        githubBillingMessage = "Checking GitHub Billing access..."
+
+        let updated = updatedGitHubBillingConfiguration(option: inputs.option)
+        let credentials = inputs.authResult.credentials(username: inputs.username)
+        do {
+            let result = try await githubBillingUsageProvider.validateCandidate(
+                credentials,
+                for: updated
+            )
+            try Task.checkCancellation()
+            completeGitHubBillingConnection(
+                credentials: credentials,
+                configuration: updated,
+                result: result,
+                attemptID: attemptID
+            )
+        } catch is CancellationError {
+            handleGitHubBillingConnectionCancellation(attemptID: attemptID)
+        } catch {
+            handleGitHubBillingConnectionFailure(error, attemptID: attemptID)
+        }
+    }
+
+    private func githubBillingConnectionInputs() -> (
+        authResult: GitHubBillingWebAuthResult,
+        option: GitHubBillingAccountOption,
+        username: String
+    )? {
+        guard
+            let authResult = pendingGitHubBillingAuthResult,
+            let option = githubBillingAccountOptions.first(where: { $0.id == selectedGitHubBillingAccountID }),
+            let username = githubBillingAccountOptions.first(where: { $0.scope == .personal })?.owner
+        else {
+            return nil
+        }
+        return (authResult, option, username)
+    }
+
+    private func updatedGitHubBillingConfiguration(
+        option: GitHubBillingAccountOption
+    ) -> ProviderAccountConfiguration {
+        var updated = configuration
+        updated.authMethod = .browserSession
+        let priorOwner = updated.githubBillingOwner.trimmingCharacters(in: .whitespacesAndNewlines)
+        let priorLabel = updated.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let usesGeneratedOwnerLabel = priorLabel.isEmpty
+            || (!priorOwner.isEmpty && priorLabel.caseInsensitiveCompare(priorOwner) == .orderedSame)
+        updated.githubBillingAccountScope = option.scope
+        updated.githubBillingOwner = option.owner
+        if usesGeneratedOwnerLabel {
+            updated.accountLabel = option.owner
+        }
+        return updated
+    }
+
+    private func completeGitHubBillingConnection(
+        credentials: GitHubBillingCredentials,
+        configuration: ProviderAccountConfiguration,
+        result: ProviderUsageResult,
+        attemptID: UUID
+    ) {
+        guard githubBillingConnectionAttemptID == attemptID else { return }
+        let identityChanged = configuration.githubBillingAccountScope != self.configuration.githubBillingAccountScope
+            || configuration.githubBillingOwner.caseInsensitiveCompare(self.configuration.githubBillingOwner) != .orderedSame
+        guard let storedCredential = GitHubBillingCredentialsParser.storedCredential(from: credentials),
+              persistCredential(storedCredential, with: configuration) else {
+            githubBillingAuthError = configurationStore.lastError
+                ?? "GitHub Billing authorization could not be saved in Keychain."
+            return
+        }
+        pendingGitHubBillingAuthResult = nil
+        githubBillingAccountOptions = []
+        selectedGitHubBillingAccountID = ""
+        githubBillingMessage = "GitHub Billing account connected and verified."
+        if identityChanged {
+            onAccountIdentityChanged()
+        }
+        credentialsDidChange()
+        acceptUsageResult(result)
+    }
+
+    private func handleGitHubBillingConnectionCancellation(attemptID: UUID) {
+        guard githubBillingConnectionAttemptID == attemptID else { return }
+        githubBillingMessage = nil
+    }
+
+    private func handleGitHubBillingConnectionFailure(_ error: Error, attemptID: UUID) {
+        guard githubBillingConnectionAttemptID == attemptID else { return }
+        githubBillingMessage = nil
+        githubBillingAuthError = error.localizedDescription
+    }
+
+    private func finishGitHubBillingConnection(attemptID: UUID) {
+        guard githubBillingConnectionAttemptID == attemptID else { return }
+        githubBillingConnectionAttemptID = nil
+        githubBillingConnectionTask = nil
+        isSigningInWithGitHubBilling = false
+    }
+
     func signInWithClaude() async {
         isSigningInWithClaude = true
         credentialError = nil
@@ -1036,7 +1293,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private func requestCredentialMetricsRefresh(refreshMetrics: Bool = true) {
         usageResult = nil
         metricsCredentialRevision += 1
-        isCredentialRefreshPending = true
+        isCredentialRefreshPending = refreshMetrics
         guard refreshMetrics else { return }
         if isLoadingMetrics {
             needsCredentialMetricsRefresh = true
@@ -1118,7 +1375,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
         var normalized = configuration
-        if [.codex, .claude, .cursor, .gemini].contains(configuration.providerID) {
+        if [.codex, .githubBilling, .claude, .cursor, .gemini].contains(configuration.providerID) {
             normalized.authMethod = .browserSession
         }
         return normalized
@@ -1157,7 +1414,25 @@ final class ProviderSettingsViewModel: ObservableObject {
             || current.githubOrganization != updated.githubOrganization
             || current.githubEnterprise != updated.githubEnterprise
             || current.copilotTotalAllotment != updated.copilotTotalAllotment
+            || current.githubBillingAccountScope != updated.githubBillingAccountScope
+            || current.githubBillingOwner != updated.githubBillingOwner
             || current.openCodeWorkspaceId != updated.openCodeWorkspaceId
+    }
+
+    private func debugPrepareGitHubBillingSelectionIfNeeded() {
+        #if DEBUG
+        guard providerID == .githubBilling,
+              let selection = ProcessInfo.processInfo.environment["CODEXBAR_DEBUG_GITHUB_BILLING_SELECTION"]
+        else { return }
+        pendingGitHubBillingAuthResult = GitHubBillingWebAuthResult(accessToken: "synthetic-github-billing-token")
+        githubBillingAccountOptions = [
+            GitHubBillingAccountOption(scope: .personal, owner: "octocat", role: "owner"),
+            GitHubBillingAccountOption(scope: .organization, owner: "Example-Engineering", role: "admin"),
+        ]
+        let selectedScope: GitHubBillingAccountScope = selection == "organization" ? .organization : .personal
+        selectedGitHubBillingAccountID = githubBillingAccountOptions.first { $0.scope == selectedScope }?.id ?? ""
+        githubBillingMessage = "Choose the personal account or eligible organization to monitor."
+        #endif
     }
 
     private static let openCodeBalanceFormatter: NumberFormatter = {

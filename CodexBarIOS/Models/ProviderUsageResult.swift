@@ -71,7 +71,10 @@ public struct ProviderPlanDescriptor: Codable, Equatable, Sendable {
 
 public enum ProviderMonetaryMetricKind: String, Codable, Equatable, Sendable {
     case balance
+    case grossSpend
+    case discounts
     case spent
+    case projectedSpend
     case spendLimit
     case remainingHeadroom
 }

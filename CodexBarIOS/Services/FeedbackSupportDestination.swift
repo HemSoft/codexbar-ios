@@ -384,6 +384,8 @@ extension ProviderID {
             "ChatGPT / Codex"
         case .copilot:
             "GitHub Copilot"
+        case .githubBilling:
+            "GitHub Billing"
         case .claude:
             "Claude"
         case .openRouter:

@@ -63,6 +63,7 @@ final class UITestFixtures {
 
         let scenario = environment["CODEXBAR_UI_TEST_SCENARIO"]
         let recovery = scenario == "recovery"
+        let githubBilling = scenario?.hasPrefix("github-billing") == true
         let googleSources = Self.googleSources(for: scenario)
         let google = !googleSources.isEmpty
         if google && configurationStore.configurations.isEmpty {
@@ -71,18 +72,32 @@ final class UITestFixtures {
         if recovery && configurationStore.configurations.isEmpty {
             Self.seedRecoveryAccount(in: configurationStore)
         }
+        if githubBilling && configurationStore.configurations.isEmpty {
+            Self.seedGitHubBillingAccounts(in: configurationStore, scenario: scenario)
+        }
         let results = configurationStore.configurations
             .filter(configurationStore.isConfigured)
             .map { configuration in
-                google ? Self.googleResult(for: configuration, sources: googleSources, stage: 0)
-                    : Self.result(for: configuration, balance: configuration.id.hasPrefix("ui-navigation-") ? 90 : 25)
+                if google {
+                    return Self.googleResult(for: configuration, sources: googleSources, stage: 0)
+                }
+                if githubBilling {
+                    return Self.githubBillingResult(for: configuration)
+                }
+                return Self.result(
+                    for: configuration,
+                    balance: configuration.id.hasPrefix("ui-navigation-") ? 90 : 25
+                )
             }
-        refreshService = UsageRefreshService(
-            providers: google
-                ? [UITestGoogleProvider(sources: googleSources)]
-                : [UITestUsageProvider(failsFirstRefresh: recovery)],
-            initialResults: results
-        )
+        let providers: [any UsageProvider]
+        if google {
+            providers = [UITestGoogleProvider(sources: googleSources)]
+        } else if githubBilling {
+            providers = [UITestGitHubBillingProvider()]
+        } else {
+            providers = [UITestUsageProvider(failsFirstRefresh: recovery)]
+        }
+        refreshService = UsageRefreshService(providers: providers, initialResults: results)
         if recovery && historyStore.snapshots.isEmpty {
             seedHistory()
         }
@@ -128,6 +143,176 @@ final class UITestFixtures {
             _ = configurationStore.update(navigationAccount)
             _ = configurationStore.saveSecret("ui-test-credential", for: navigationAccount)
         }
+    }
+
+    private static func seedGitHubBillingAccounts(
+        in store: ProviderConfigurationStore,
+        scenario: String?
+    ) {
+        let group = store.addGroup(named: "GitHub Billing")
+        let personal = ProviderAccountConfiguration(
+            id: scenario == "github-billing-no-personal-budget"
+                ? "ui-github-billing-personal-no-budget"
+                : "ui-github-billing-personal",
+            providerID: .githubBilling,
+            accountLabel: "Sample Personal",
+            groupID: group?.id,
+            authMethod: .browserSession,
+            githubBillingAccountScope: .personal,
+            githubBillingOwner: "sample-personal"
+        )
+        let organization = ProviderAccountConfiguration(
+            id: "ui-github-billing-organization",
+            providerID: .githubBilling,
+            accountLabel: "Sample Organization",
+            groupID: group?.id,
+            authMethod: .browserSession,
+            githubBillingAccountScope: .organization,
+            githubBillingOwner: "sample-organization"
+        )
+        let accounts: [ProviderAccountConfiguration] = switch scenario {
+        case "github-billing-personal", "github-billing-no-personal-budget": [personal]
+        case "github-billing-organization": [organization]
+        default: [personal, organization]
+        }
+        for account in accounts {
+            _ = store.update(account)
+            _ = store.saveSecret("ui-test-credential", for: account)
+        }
+    }
+
+    nonisolated static func githubBillingResult(
+        for account: ProviderAccountConfiguration
+    ) -> ProviderUsageResult {
+        let periodStart = Date().addingTimeInterval(-14 * 24 * 60 * 60)
+        let periodEnd = periodStart.addingTimeInterval(30 * 24 * 60 * 60)
+        if account.githubBillingAccountScope == .personal {
+            if account.id.hasSuffix("no-budget") {
+                return ProviderUsageResult(
+                    accountID: account.id,
+                    providerID: .githubBilling,
+                    title: account.displayName,
+                    plan: ProviderPlanDescriptor.make(
+                        providerPrefix: ProviderID.githubBilling.rawValue,
+                        identifier: "free",
+                        label: "Free"
+                    ),
+                    subtitle: "GitHub personal billing",
+                    bars: [],
+                    usageMessages: [
+                        "GitHub does not expose personal budgets through its public API. "
+                            + "Included allowances and current charges are shown separately.",
+                    ],
+                    fetchedAt: Date()
+                )
+            }
+            return ProviderUsageResult(
+                accountID: account.id,
+                providerID: .githubBilling,
+                title: account.displayName,
+                plan: ProviderPlanDescriptor.make(
+                    providerPrefix: ProviderID.githubBilling.rawValue,
+                    identifier: "free",
+                    label: "Free"
+                ),
+                subtitle: "GitHub personal billing",
+                bars: [
+                    UsageBar(
+                        stableKey: "actions-private-minutes",
+                        label: "Private Actions minutes",
+                        used: 720,
+                        limit: 2_000,
+                        resetsAt: periodEnd,
+                        projectionCurrent: 720,
+                        projectionLimit: 2_000,
+                        projectionPeriodStart: periodStart,
+                        projectionPeriodEnd: periodEnd,
+                        showProjectionOnCurrentBar: true
+                    ),
+                    UsageBar(
+                        stableKey: "actions-packages-storage",
+                        label: "Actions + Packages storage",
+                        used: 118,
+                        limit: 360,
+                        resetsAt: periodEnd
+                    ),
+                ],
+                monetaryMetrics: [
+                    ProviderMonetaryMetric(
+                        kind: .grossSpend, label: "Gross usage", minorUnits: 1248,
+                        currencyCode: "USD", decimalPlaces: 2
+                    ),
+                    ProviderMonetaryMetric(
+                        kind: .discounts, label: "Discounts", minorUnits: 1248,
+                        currencyCode: "USD", decimalPlaces: 2
+                    ),
+                    ProviderMonetaryMetric(
+                        kind: .spent,
+                        label: "Net spend",
+                        minorUnits: 0,
+                        currencyCode: "USD",
+                        decimalPlaces: 2,
+                        detail: "No current charge after discounts"
+                    ),
+                ],
+                usageMessages: [
+                    "GitHub does not expose personal budgets through its public API. "
+                        + "Included allowances and current charges are shown separately.",
+                ],
+                fetchedAt: Date()
+            )
+        }
+        return ProviderUsageResult(
+            accountID: account.id,
+            providerID: .githubBilling,
+            title: account.displayName,
+            subtitle: "GitHub organization billing",
+            bars: [
+                UsageBar(
+                    stableKey: "budget-actions",
+                    label: "Actions budget",
+                    used: 62,
+                    limit: 100,
+                    resetsAt: periodEnd,
+                    projectionCurrent: 62,
+                    projectionLimit: 100,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd,
+                    showProjectionOnCurrentBar: true
+                ),
+            ],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .grossSpend, label: "Gross usage", minorUnits: 7_000,
+                    currencyCode: "USD", decimalPlaces: 2
+                ),
+                ProviderMonetaryMetric(
+                    kind: .discounts, label: "Discounts", minorUnits: 800,
+                    currencyCode: "USD", decimalPlaces: 2
+                ),
+                ProviderMonetaryMetric(
+                    kind: .spent, label: "Net spend", minorUnits: 6_200,
+                    currencyCode: "USD", decimalPlaces: 2
+                ),
+            ],
+            cardInformationSections: [
+                ProviderCardInformationSection(
+                    id: "github-billing.budget.actions",
+                    title: "Actions budget",
+                    items: [
+                        ProviderCardInformationItem(id: "scope", label: "Product budget", detail: "Actions"),
+                        ProviderCardInformationItem(id: "behavior", label: "Behavior", detail: "Hard stop"),
+                        ProviderCardInformationItem(id: "spend", label: "Current net spend", detail: "$62.00"),
+                        ProviderCardInformationItem(
+                            id: "remaining",
+                            label: "Remaining headroom",
+                            detail: "$38.00 · 62% consumed"
+                        ),
+                    ]
+                ),
+            ],
+            fetchedAt: Date()
+        )
     }
 
     private static func googleSources(for scenario: String?) -> [ProviderID] {
@@ -268,6 +453,14 @@ private actor UITestUsageProvider: UsageProvider {
             throw UITestFixtureError.refreshFailed
         }
         return UITestFixtures.result(for: configuration, balance: 60)
+    }
+}
+
+private actor UITestGitHubBillingProvider: UsageProvider {
+    nonisolated let providerID = ProviderID.githubBilling
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        UITestFixtures.githubBillingResult(for: configuration)
     }
 }
 

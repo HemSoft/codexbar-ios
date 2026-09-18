@@ -1,6 +1,6 @@
 # CodexBar Privacy Policy
 
-Effective date: September 4, 2026
+Effective date: September 17, 2026
 
 CodexBar Usage Monitor is a local dashboard for monitoring AI provider usage, limits, and API balances. It does not require a CodexBar account and does not send your provider credentials or usage data to HemSoft servers.
 
@@ -67,6 +67,18 @@ credentials and do not grant access to a GitHub account. You must authorize the
 sign-in with GitHub, the authorization-code exchange is protected with PKCE,
 and the account tokens returned for your session are stored in the iOS
 Keychain.
+
+GitHub Billing is authorized and stored separately from GitHub Copilot. It asks
+GitHub for `repo`, `read:org`, and `read:user` OAuth scopes so it can read the
+selected user's plan and billing usage, discover organizations they administer,
+and classify billed repository usage as public or private. GitHub's `repo`
+scope is write-capable even though CodexBar only makes read-only requests.
+CodexBar sends the token only to GitHub's API and OAuth token endpoints. Billing
+amounts, repository names returned with usage, organization names, and derived
+allowance or budget readings may be stored locally in dashboard history,
+widgets, and presentation-only Watch snapshots. Each GitHub Billing account's
+access and optional refresh tokens remain in that account's own iOS Keychain
+entry and are removed when that account is disconnected.
 
 ## Data HemSoft Collects
 

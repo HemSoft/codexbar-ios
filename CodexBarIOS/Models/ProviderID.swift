@@ -3,6 +3,7 @@ import Foundation
 public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
     case codex
     case copilot
+    case githubBilling
     case claude
     case openRouter
     case openCodeZen
@@ -22,6 +23,8 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
             "ChatGPT / Codex"
         case .copilot:
             "GitHub Copilot"
+        case .githubBilling:
+            "GitHub Billing"
         case .claude:
             "Claude"
         case .openRouter:
@@ -43,7 +46,7 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
 
     public var supportsPlanBadge: Bool {
         switch self {
-        case .codex, .copilot, .claude:
+        case .codex, .copilot, .githubBilling, .claude:
             true
         case .openRouter, .openCodeZen, .moonshot, .cursor, .greptile, .gemini, .antigravity:
             false

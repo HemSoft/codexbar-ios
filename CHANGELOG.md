@@ -8,6 +8,12 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added separate GitHub Billing accounts for personal allowances, organization
+  spend, budgets, discounts, and month-end projections. Guided GitHub sign-in,
+  account selection, permission disclosures, and account-scoped Keychain
+  storage keep billing access separate from GitHub Copilot.
+  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
+
 - Show usage projections for all six Gemini limits when their usage and reset
   times support a forecast, including warnings when the current pace would
   exhaust a limit before reset.
@@ -54,6 +60,17 @@ building, testing, or releasing the app.
   ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
 
 ### Fixed
+
+- Reject GitHub Billing responses attributed to a different account, clear saved
+  history and prevent cached usage reuse when an existing card is connected to
+  a different owner, refresh dashboard and companion surfaces after connection,
+  update generated card labels to that owner, show used, included, and remaining
+  allowances, classify standard Linux and Windows arm64 runners, show complete
+  pricing details and explain omitted rows, reserve repository lookups for
+  Actions-minute classification, preserve unsupported-scope budget details with
+  unavailable headroom, keep invalid or incomplete usage unavailable, and
+  explain when an account may be unsupported, hidden, or not found.
+  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
 
 - Show the reset countdown and local reset time for Gemini Models and Other
   Models five-hour and weekly limits on the dashboard and widgets, even when no
@@ -125,6 +142,11 @@ building, testing, or releasing the app.
   ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))
 
 ### Developer Experience
+
+- Re-reviewed the complete Swift security-analysis baseline after adding GitHub
+  Billing authentication, networking, and local fixture support. The same three
+  non-actionable findings remain pinned with no new blocking finding.
+  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
 
 - Require the manually dispatched full CI gate only for the exact release
   candidate, not for routine pull requests. A changed candidate must pass a new

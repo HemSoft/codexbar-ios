@@ -838,6 +838,18 @@ public final class UsageHistoryStore: ObservableObject {
         )
     }
 
+    public func removeSnapshots(for accountID: String) {
+        guard !requiresRecovery else { return }
+        let previousSnapshots = snapshots
+        let previousDailySnapshots = dailySnapshots
+        snapshots.removeAll { $0.accountID == accountID }
+        dailySnapshots.removeAll { $0.accountID == accountID }
+        save(
+            restoringOnFailure: previousSnapshots,
+            previousDailySnapshots: previousDailySnapshots
+        )
+    }
+
     public func migrateGoogleAccounts(
         links: [String: String],
         configurations: [ProviderAccountConfiguration]

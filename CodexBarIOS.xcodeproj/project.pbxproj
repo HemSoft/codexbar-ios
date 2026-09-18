@@ -60,6 +60,10 @@
 		100000000000000000000016 /* CodexWebAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* CodexWebAuthService.swift */; };
 		100000000000000000000017 /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* AppAppearance.swift */; };
 		100000000000000000000018 /* CopilotCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001A /* CopilotCredentials.swift */; };
+		A33600000000000000000001 /* GitHubBillingCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33600000000000000000001 /* GitHubBillingCredentials.swift */; };
+		A33600000000000000000002 /* GitHubBillingUsageParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33600000000000000000002 /* GitHubBillingUsageParser.swift */; };
+		A33600000000000000000003 /* GitHubBillingUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33600000000000000000003 /* GitHubBillingUsageProvider.swift */; };
+		A33600000000000000000004 /* GitHubBillingWebAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33600000000000000000004 /* GitHubBillingWebAuthService.swift */; };
 		100000000000000000000019 /* CopilotCredentialsParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001B /* CopilotCredentialsParser.swift */; };
 		10000000000000000000001A /* CopilotWebAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001C /* CopilotWebAuthService.swift */; };
 		10000000000000000000001B /* CopilotUsageParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001D /* CopilotUsageParser.swift */; };
@@ -270,6 +274,10 @@
 		200000000000000000000018 /* CodexWebAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexWebAuthService.swift; sourceTree = "<group>"; };
 		200000000000000000000019 /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearance.swift; sourceTree = "<group>"; };
 		20000000000000000000001A /* CopilotCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotCredentials.swift; sourceTree = "<group>"; };
+		B33600000000000000000001 /* GitHubBillingCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubBillingCredentials.swift; sourceTree = "<group>"; };
+		B33600000000000000000002 /* GitHubBillingUsageParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubBillingUsageParser.swift; sourceTree = "<group>"; };
+		B33600000000000000000003 /* GitHubBillingUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubBillingUsageProvider.swift; sourceTree = "<group>"; };
+		B33600000000000000000004 /* GitHubBillingWebAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubBillingWebAuthService.swift; sourceTree = "<group>"; };
 		20000000000000000000001B /* CopilotCredentialsParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotCredentialsParser.swift; sourceTree = "<group>"; };
 		20000000000000000000001C /* CopilotWebAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotWebAuthService.swift; sourceTree = "<group>"; };
 		20000000000000000000001D /* CopilotUsageParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotUsageParser.swift; sourceTree = "<group>"; };
@@ -455,6 +463,7 @@
 				20000000000000000000000F /* ProviderAccountConfiguration.swift */,
 				200000000000000000000014 /* CodexCredentials.swift */,
 				20000000000000000000001A /* CopilotCredentials.swift */,
+				B33600000000000000000001 /* GitHubBillingCredentials.swift */,
 				200000000000000000000020 /* ClaudeCredentials.swift */,
 			);
 			path = Models;
@@ -488,6 +497,9 @@
 				20000000000000000000001C /* CopilotWebAuthService.swift */,
 				20000000000000000000001D /* CopilotUsageParser.swift */,
 				20000000000000000000001E /* CopilotUsageProvider.swift */,
+				B33600000000000000000002 /* GitHubBillingUsageParser.swift */,
+				B33600000000000000000003 /* GitHubBillingUsageProvider.swift */,
+				B33600000000000000000004 /* GitHubBillingWebAuthService.swift */,
 				200000000000000000000021 /* ClaudeCredentialsParser.swift */,
 				200000000000000000000022 /* ClaudeWebAuthService.swift */,
 				AB2990000000000000000002 /* GoogleCodingSignIn.swift */,
@@ -955,6 +967,10 @@
 				10000000000000000000001A /* CopilotWebAuthService.swift in Sources */,
 				10000000000000000000001B /* CopilotUsageParser.swift in Sources */,
 				10000000000000000000001C /* CopilotUsageProvider.swift in Sources */,
+				A33600000000000000000001 /* GitHubBillingCredentials.swift in Sources */,
+				A33600000000000000000002 /* GitHubBillingUsageParser.swift in Sources */,
+				A33600000000000000000003 /* GitHubBillingUsageProvider.swift in Sources */,
+				A33600000000000000000004 /* GitHubBillingWebAuthService.swift in Sources */,
 				10000000000000000000001D /* AutoRefreshInterval.swift in Sources */,
 				100000000000000000000038 /* DashboardOrderingMode.swift in Sources */,
 				10000000000000000000001E /* ClaudeCredentials.swift in Sources */,

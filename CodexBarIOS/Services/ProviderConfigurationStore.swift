@@ -1567,6 +1567,11 @@ public final class ProviderConfigurationStore: ObservableObject {
                 && (configuration.copilotAccountScope == .personal || !organization.isEmpty)
         }
 
+        if configuration.providerID == .githubBilling {
+            return hasSecret(for: configuration)
+                && !configuration.githubBillingOwner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
         if configuration.providerID == .openCodeZen {
             return hasSecret(for: configuration)
                 && !configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1688,7 +1693,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         if isConfigurationReady(configuration) {
             let label = configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-            if [.codex, .copilot, .claude, .cursor, .gemini].contains(configuration.providerID) {
+            if [.codex, .copilot, .githubBilling, .claude, .cursor, .gemini].contains(configuration.providerID) {
                 return label.isEmpty ? "Configured - live usage enabled" : "\(label) - live usage enabled"
             }
 
@@ -1706,6 +1711,10 @@ public final class ProviderConfigurationStore: ObservableObject {
             }
 
             return "Not configured - sign in with GitHub"
+        }
+
+        if configuration.providerID == .githubBilling {
+            return "Not configured - sign in with GitHub for billing access"
         }
 
         if configuration.providerID == .claude {
@@ -2243,7 +2252,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         switch configuration.providerID {
-        case .codex, .cursor, .gemini:
+        case .codex, .githubBilling, .cursor, .gemini:
             normalized.authMethod = .browserSession
         case .antigravity:
             normalized.authMethod = .cliToken
@@ -2365,6 +2374,15 @@ public extension ProviderConfigurationStore {
                 authMethod: .browserSession,
                 copilotAccountScope: .organization,
                 githubOrganization: "fableton-labs"
+            ),
+            ProviderAccountConfiguration(
+                id: AppStoreScreenshotFixtureID.githubBillingAccount,
+                providerID: .githubBilling,
+                accountLabel: "GitHub Billing",
+                groupID: usageGroup.id,
+                authMethod: .browserSession,
+                githubBillingAccountScope: .personal,
+                githubBillingOwner: "sample-personal"
             ),
             ProviderAccountConfiguration(
                 id: AppStoreScreenshotFixtureID.claudeAccount,

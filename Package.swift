@@ -18,6 +18,10 @@ let package = Package(
             targets: ["CodexBarIOSSmokeTests"]
         ),
         .executable(
+            name: "GitHubBillingFixtureTests",
+            targets: ["GitHubBillingFixtureTests"]
+        ),
+        .executable(
             name: "UsageHistoryBenchmark",
             targets: ["UsageHistoryBenchmark"]
         ),
@@ -58,6 +62,14 @@ let package = Package(
             name: "CodexBarIOSSmokeTests",
             dependencies: ["CodexBarIOS"],
             path: "SmokeTests",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
+            ]
+        ),
+        .executableTarget(
+            name: "GitHubBillingFixtureTests",
+            dependencies: ["CodexBarIOS"],
+            path: "GitHubBillingFixtureTests",
             plugins: [
                 .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
             ]

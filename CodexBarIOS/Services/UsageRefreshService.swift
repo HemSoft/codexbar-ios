@@ -450,19 +450,19 @@ public final class UsageRefreshService: ObservableObject {
         _ cachedResult: ProviderUsageResult,
         for failureResult: ProviderUsageResult
     ) -> Bool {
+        if let failureIdentity = failureResult.cacheIdentity {
+            return cachedResult.cacheIdentity == failureIdentity
+        }
         guard failureResult.providerID == .openCodeZen else {
             return true
         }
-        guard let failureIdentity = failureResult.cacheIdentity else {
-            guard
-                failureResult.allowsUnscopedCacheReuse,
-                let failureScope = failureResult.cacheScope
-            else {
-                return false
-            }
-            return cachedResult.cacheScope == failureScope
+        guard
+            failureResult.allowsUnscopedCacheReuse,
+            let failureScope = failureResult.cacheScope
+        else {
+            return false
         }
-        return cachedResult.cacheIdentity == failureIdentity
+        return cachedResult.cacheScope == failureScope
     }
 
     private nonisolated static func failureResult(
@@ -604,6 +604,8 @@ private struct RefreshInputs: Equatable {
     let githubOrganization: String
     let githubEnterprise: String
     let copilotTotalAllotment: Double?
+    let githubBillingAccountScope: GitHubBillingAccountScope
+    let githubBillingOwner: String
     let openCodeWorkspaceId: String
 
     init(configuration: ProviderAccountConfiguration) {
@@ -614,6 +616,8 @@ private struct RefreshInputs: Equatable {
         self.githubOrganization = configuration.githubOrganization
         self.githubEnterprise = configuration.githubEnterprise
         self.copilotTotalAllotment = configuration.copilotTotalAllotment
+        self.githubBillingAccountScope = configuration.githubBillingAccountScope
+        self.githubBillingOwner = configuration.githubBillingOwner
         self.openCodeWorkspaceId = configuration.openCodeWorkspaceId
     }
 }
@@ -647,6 +651,7 @@ public extension UsageRefreshService {
             providers: [
                 CodexUsageProvider(),
                 CopilotUsageProvider(),
+                GitHubBillingUsageProvider(),
                 ClaudeUsageProvider(),
                 OpenRouterUsageProvider(),
                 OpenCodeZenUsageProvider(),

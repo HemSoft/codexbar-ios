@@ -372,6 +372,9 @@ struct ContentView: View {
                     onRefreshInputsChanged: { accountID in
                         settingsDismissalRefreshState.refreshInputsChanged(accountID: accountID)
                     },
+                    onAccountIdentityChanged: { accountID in
+                        historyStore.removeSnapshots(for: accountID)
+                    },
                     usageResultForAccount: { accountID in
                         orchestrator.dashboardCardItems.first {
                             $0.id == accountID
@@ -446,6 +449,9 @@ struct ContentView: View {
                     },
                     onRefreshInputsChanged: {
                         accountConfigurationNavigation.refreshInputsChanged()
+                    },
+                    onAccountIdentityChanged: {
+                        historyStore.removeSnapshots(for: presentation.accountID)
                     },
                     onAccountRefresh: { configuration in
                         await orchestrator.loadAccountMetrics(configuration)
