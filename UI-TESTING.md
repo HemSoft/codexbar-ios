@@ -20,7 +20,7 @@ attachments and the accessibility hierarchy from the result bundle. Open the
 
 ## Journeys
 
-All five tests start with a new UUID storage namespace and use accessibility text
+All six tests start with a new UUID storage namespace and use accessibility text
 size 2, English labels, and the US locale. Navigation uses the real views and
 actions. Tests wait for settings destinations, keep text fields inside the
 visible form below its navigation bar, and wait for the keyboard before
@@ -63,6 +63,19 @@ it. Animations retain the normal app behavior.
   values; recovery displays 100%, 31%, 20%, and 60% used with fresh status.
   All six settings switches remain reachable after recovery.
 
+- `testGitHubBillingPermissionDisclosure` opens a synthetic personal account,
+  checks the write-capable `user` scope disclosure and sign-in-again guidance,
+  and retains screenshots. It never opens live authorization or sends fixture
+  tokens to GitHub. Run just this manual journey with:
+
+  ```sh
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
+    -project CodexBarIOS.xcodeproj -scheme CodexBarIOSUITests \
+    -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
+    -only-testing:CodexBarIOSUITests/AccountJourneysUITests/testGitHubBillingPermissionDisclosure \
+    -resultBundlePath build/github-billing-permissions.xcresult test
+  ```
+
 The tests assert accessible names, values, selection state, and reachable tap
 targets. They cover app-owned account and usage navigation. Live website sign-in,
 provider API contracts, and VoiceOver speech remain separate verification.
@@ -72,7 +85,12 @@ provider API contracts, and VoiceOver speech remain separate verification.
 The separate manual fixture harness exercises personal Free and Pro allowances,
 public and private repository classification, mixed Actions runners, accrued
 storage, Git LFS, discounts, organization budgets and pagination, missing and
-malformed fields, and distinct 401, 403, 404, 429, and 5xx handling:
+malformed fields, and distinct 401, 403, 404, 429, and 5xx handling. It also
+checks that the real authorization URL requests `user` for personal billing,
+that a modeled permission boundary rejects the former `read:user` grant, and
+that failure diagnostics exclude raw payloads, owners and arbitrary headers.
+These tests do not establish live OAuth compatibility:
+
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \

@@ -210,9 +210,14 @@ struct ProviderSettingsView: View {
                             systemImage: "lock.shield"
                         )
                         Text(
-                            "GitHub's repo scope permits repository changes, but CodexBar only reads visibility "
-                                + "metadata to classify usage. It stores this account's token in its own Keychain entry and never "
-                                + "changes or shares GitHub Copilot credentials."
+                            "Personal billing requires GitHub's user scope, which also permits profile changes. "
+                                + "The repo scope permits repository changes. CodexBar only reads account, billing, "
+                                + "and repository visibility data; it never changes your profile or repositories. "
+                                + "Billing tokens stay in separate Keychain entries and are never shared with GitHub Copilot."
+                        )
+                        Text(
+                            "If you signed in before this permission was added, sign in again and approve user access "
+                                + "before connecting your personal account."
                         )
                     }
                     .font(.footnote)
