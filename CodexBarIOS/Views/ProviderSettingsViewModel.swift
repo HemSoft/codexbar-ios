@@ -874,22 +874,34 @@ final class ProviderSettingsViewModel: ObservableObject {
             let options = try await githubBillingUsageProvider.discoverAccounts(
                 credentials: provisionalCredentials
             )
-            guard isCurrentGitHubBillingSignInAttempt(attemptID) else { return }
-            guard !options.isEmpty else {
-                githubBillingAuthError = "GitHub sign-in returned no personal account or eligible organization."
-                closeGitHubBillingAuthSheet()
-                return
-            }
-            pendingGitHubBillingAuthResult = result
-            githubBillingAccountOptions = options
-            selectedGitHubBillingAccountID = options.first?.id ?? ""
-            githubBillingMessage = "Choose the personal account or eligible organization to monitor."
-            closeGitHubBillingAuthSheet()
+            completeGitHubBillingSignIn(
+                result: result,
+                options: options,
+                attemptID: attemptID
+            )
         } catch is CancellationError {
             // An interactive sheet dismissal already cleared the presented URL.
         } catch {
             handleGitHubBillingSignInFailure(error, attemptID: attemptID)
         }
+    }
+
+    private func completeGitHubBillingSignIn(
+        result: GitHubBillingWebAuthResult,
+        options: [GitHubBillingAccountOption],
+        attemptID: UUID
+    ) {
+        guard isCurrentGitHubBillingSignInAttempt(attemptID) else { return }
+        guard !options.isEmpty else {
+            githubBillingAuthError = "GitHub sign-in returned no personal account or eligible organization."
+            closeGitHubBillingAuthSheet()
+            return
+        }
+        pendingGitHubBillingAuthResult = result
+        githubBillingAccountOptions = options
+        selectedGitHubBillingAccountID = options.first?.id ?? ""
+        githubBillingMessage = "Choose the personal account or eligible organization to monitor."
+        closeGitHubBillingAuthSheet()
     }
 
     private func isCurrentGitHubBillingSignInAttempt(_ attemptID: UUID) -> Bool {
