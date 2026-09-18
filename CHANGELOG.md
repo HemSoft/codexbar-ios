@@ -149,6 +149,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added a manual GitHub Billing permission-disclosure UI journey and updated
+  the release runner to require all six journeys on each simulator family.
+  Automatic CI workload is unchanged.
+  ([#344](https://github.com/HemSoft/codexbar-ios/issues/344))
+
 - Re-reviewed the complete Swift security-analysis baseline after adding GitHub
   Billing authentication, networking, and local fixture support. The same three
   non-actionable findings remain pinned with no new blocking finding.

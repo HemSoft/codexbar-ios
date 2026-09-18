@@ -69,10 +69,10 @@ class CITriggerPolicyTests(unittest.TestCase):
         self.assertIn("if: ${{ always() }}", ui_job)
         self.assertIn("retention-days: 14", ui_job)
 
-    def test_ui_runner_requires_all_five_journeys(self) -> None:
+    def test_ui_runner_requires_all_six_journeys(self) -> None:
         for assertion in (
-            ".totalTestCount == 5",
-            ".passedTests == 5",
+            ".totalTestCount == 6",
+            ".passedTests == 6",
             ".failedTests == 0",
             ".skippedTests == 0",
             ".expectedFailures == 0",
