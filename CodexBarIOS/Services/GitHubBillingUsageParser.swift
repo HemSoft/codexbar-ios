@@ -433,6 +433,9 @@ public enum GitHubBillingUsageParser {
             let candidate = budgetCandidate(budget, usageItems: usageItems)
             if let unavailableMessage = candidate.unavailableMessage {
                 output.messages.append(unavailableMessage)
+                if let unavailableSection = candidate.unavailableSection {
+                    output.sections.append(unavailableSection)
+                }
                 continue
             }
             guard let normalized = candidate.normalized else { continue }
@@ -501,7 +504,16 @@ public enum GitHubBillingUsageParser {
             usageItems: usageItems
         ) else {
             return BudgetCandidate(
-                unavailableMessage: "GitHub returned a \(budget.scopeLabel) budget whose consumption cannot be calculated from organization usage."
+                unavailableMessage: "GitHub returned a \(budget.scopeLabel) budget whose consumption cannot be calculated from organization usage.",
+                unavailableSection: unavailableBudgetSection(
+                    id: id,
+                    targetLabel: targetLabel,
+                    amount: amount,
+                    isProduct: isProduct,
+                    preventFurtherUsage: preventFurtherUsage,
+                    willAlert: willAlert,
+                    scopeDescription: budget.scopeDescription
+                )
             )
         }
         guard matching.allSatisfy({ $0.netAmount != nil }) else {
@@ -545,6 +557,41 @@ public enum GitHubBillingUsageParser {
             let candidate = isProduct ? item.product : item.sku
             return candidate.map { normalizedTargets.contains($0.normalized) } == true
         }
+    }
+
+    private static func unavailableBudgetSection(
+        id: String,
+        targetLabel: String,
+        amount: Decimal,
+        isProduct: Bool,
+        preventFurtherUsage: Bool,
+        willAlert: Bool,
+        scopeDescription: String
+    ) -> ProviderCardInformationSection {
+        let behavior = preventFurtherUsage ? "Hard stop" : (willAlert ? "Alert only" : "Tracking only")
+        return ProviderCardInformationSection(
+            id: "github-billing.budget.\(id)",
+            title: "\(targetLabel) budget",
+            items: [
+                ProviderCardInformationItem(
+                    id: "\(id).scope",
+                    label: isProduct ? "Product budget" : "SKU budget",
+                    detail: targetLabel
+                ),
+                ProviderCardInformationItem(
+                    id: "\(id).applies-to",
+                    label: "Applies to",
+                    detail: scopeDescription
+                ),
+                ProviderCardInformationItem(id: "\(id).amount", label: "Budget", detail: currencyText(amount)),
+                ProviderCardInformationItem(id: "\(id).behavior", label: "Behavior", detail: behavior),
+                ProviderCardInformationItem(
+                    id: "\(id).consumption",
+                    label: "Consumption and headroom",
+                    detail: "Unavailable for this budget scope"
+                ),
+            ]
+        )
     }
 
     private static func budgetSection(
@@ -1064,17 +1111,20 @@ private struct BudgetCandidate {
     let isProduct: Bool
     let targetLabel: String
     let unavailableMessage: String?
+    let unavailableSection: ProviderCardInformationSection?
 
     init(
         normalized: NormalizedBudget? = nil,
         isProduct: Bool = false,
         targetLabel: String = "",
-        unavailableMessage: String? = nil
+        unavailableMessage: String? = nil,
+        unavailableSection: ProviderCardInformationSection? = nil
     ) {
         self.normalized = normalized
         self.isProduct = isProduct
         self.targetLabel = targetLabel
         self.unavailableMessage = unavailableMessage
+        self.unavailableSection = unavailableSection
     }
 }
 

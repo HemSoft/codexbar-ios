@@ -148,6 +148,13 @@ enum GitHubBillingFixtureRunner {
         try check(result.cardInformationSections.contains { $0.id == "github-billing.budget.zero-budget" }, "A returned zero-dollar budget must remain visible")
         try check(!result.bars.contains { $0.stableKey == "budget-cost-center-budget" }, "Unsupported budget scopes must not show guessed consumption")
         try check(result.usageMessages.contains { $0.contains("cost_center") }, "Unsupported budget scopes need an unavailable explanation")
+        try check(
+            result.cardInformationSections.contains { section in
+                section.id == "github-billing.budget.cost-center-budget"
+                    && section.items.contains { $0.detail == "Unavailable for this budget scope" }
+            },
+            "Unsupported budget scopes must retain returned amount, behavior, and unavailable headroom"
+        )
         try check(result.cardInformationSections.contains { section in
             section.items.contains { $0.label == "Behavior" && $0.detail == "Hard stop" }
         }, "Hard-stop behavior was not retained")
@@ -566,6 +573,35 @@ enum GitHubBillingFixtureRunner {
             cappedRepositories.usageMessages.contains { $0.contains("detail rows were omitted") },
             "Truncated repository, product, and SKU details need an explicit explanation"
         )
+
+        try await assertActionsOnlyMetadataLookups(provider: provider, personal: personal)
+    }
+
+    private static func assertActionsOnlyMetadataLookups(
+        provider: GitHubBillingUsageProvider,
+        personal: ProviderAccountConfiguration
+    ) async throws {
+        let actionsMetadataCounter = LockedCounter()
+        let mixedProducts = try mixedProductRepositoryUsage(unrelatedCount: 205)
+        FixtureURLProtocol.setHandler { request in
+            switch request.url?.path {
+            case "/user":
+                return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
+            case "/users/octocat/settings/billing/usage/summary":
+                return response(request, status: 200, data: personalSummary())
+            case "/users/octocat/settings/billing/usage":
+                return response(request, status: 200, data: mixedProducts)
+            default:
+                actionsMetadataCounter.increment()
+                return response(request, status: 200, body: #"{"private":true}"#)
+            }
+        }
+        let actionsOnlyMetadata = try await provider.fetchUsage(for: personal)
+        try check(actionsMetadataCounter.value == 1, "Only Actions-minute repositories should need visibility metadata")
+        try check(
+            actionsOnlyMetadata.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 1,
+            "Unrelated product repositories must not consume the Actions metadata lookup limit"
+        )
     }
 
     private static func assertOrganizationFailures(
@@ -687,6 +723,36 @@ enum GitHubBillingFixtureRunner {
                 "netAmount": 0,
             ]
         }
+        return try JSONSerialization.data(withJSONObject: ["usageItems": items])
+    }
+
+    private static func mixedProductRepositoryUsage(unrelatedCount: Int) throws -> Data {
+        var items: [[String: Any]] = (0..<unrelatedCount).map { index in
+            [
+                "date": "2026-09-01",
+                "product": "Packages",
+                "sku": "packages_storage",
+                "quantity": 1,
+                "unitType": "GB-hours",
+                "pricePerUnit": 0.01,
+                "repositoryName": "octocat/package-\(index)",
+                "grossAmount": 0.01,
+                "discountAmount": 0,
+                "netAmount": 0.01,
+            ]
+        }
+        items.append([
+            "date": "2026-09-01",
+            "product": "Actions",
+            "sku": "actions_linux",
+            "quantity": 1,
+            "unitType": "minutes",
+            "pricePerUnit": 0.006,
+            "repositoryName": "octocat/actions",
+            "grossAmount": 0.006,
+            "discountAmount": 0.006,
+            "netAmount": 0,
+        ])
         return try JSONSerialization.data(withJSONObject: ["usageItems": items])
     }
 

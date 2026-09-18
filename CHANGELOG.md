@@ -66,9 +66,10 @@ building, testing, or releasing the app.
   a different owner, refresh dashboard and companion surfaces after connection,
   update generated card labels to that owner, show used, included, and remaining
   allowances, classify standard Linux and Windows arm64 runners, show complete
-  pricing details and explain omitted rows, keep invalid or incomplete usage
-  unavailable, and explain when an account may be unsupported, hidden, or not
-  found.
+  pricing details and explain omitted rows, reserve repository lookups for
+  Actions-minute classification, preserve unsupported-scope budget details with
+  unavailable headroom, keep invalid or incomplete usage unavailable, and
+  explain when an account may be unsupported, hidden, or not found.
   ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
 
 - Show the reset countdown and local reset time for Gemini Models and Other

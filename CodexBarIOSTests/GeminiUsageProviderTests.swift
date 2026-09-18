@@ -571,10 +571,7 @@ final class UnifiedGeminiUsageProviderTests: XCTestCase {
         XCTAssertEqual(result.configurableMetrics[4].kind, .unavailableUsage("Disabled"))
 
         WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults)
-        XCTAssertEqual(
-            WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.bars.compactMap(\.metricID),
-            currentIDs
-        )
+        XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.bars.map(\.metricID), currentIDs)
         let watch = WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store)
         XCTAssertEqual(watch.accounts.first?.providerName, ProviderID.gemini.displayName)
         XCTAssertEqual(watch.accounts.first?.metrics.map(\.id), currentIDs)

@@ -520,6 +520,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         }
         return Set(items.compactMap { item in
             guard
+                isPotentialActionsMinuteItem(item),
                 let repository = item["repositoryName"] as? String,
                 !repository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             else {
@@ -527,6 +528,14 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             }
             return repository
         })
+    }
+
+    private static func isPotentialActionsMinuteItem(_ item: [String: Any]) -> Bool {
+        let unit = (item["unitType"] as? String)?.lowercased() ?? ""
+        guard unit.contains("minute") else { return false }
+        let product = (item["product"] as? String)?.lowercased() ?? ""
+        let sku = (item["sku"] as? String)?.lowercased() ?? ""
+        return product.contains("actions") || sku.hasPrefix("actions")
     }
 
     private func makeRequest(
