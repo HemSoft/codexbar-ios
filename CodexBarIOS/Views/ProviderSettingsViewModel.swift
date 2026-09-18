@@ -997,9 +997,13 @@ final class ProviderSettingsViewModel: ObservableObject {
     ) -> ProviderAccountConfiguration {
         var updated = configuration
         updated.authMethod = .browserSession
+        let priorOwner = updated.githubBillingOwner.trimmingCharacters(in: .whitespacesAndNewlines)
+        let priorLabel = updated.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let usesGeneratedOwnerLabel = priorLabel.isEmpty
+            || (!priorOwner.isEmpty && priorLabel.caseInsensitiveCompare(priorOwner) == .orderedSame)
         updated.githubBillingAccountScope = option.scope
         updated.githubBillingOwner = option.owner
-        if !updated.hasCustomAccountLabel {
+        if usesGeneratedOwnerLabel {
             updated.accountLabel = option.owner
         }
         return updated
