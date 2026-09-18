@@ -3,40 +3,6 @@ import XCTest
 
 final class UsageHistoryTests: XCTestCase {
     @MainActor
-    func testRemovingAccountHistoryClearsFrequentAndDailySnapshots() {
-        let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let store = UsageHistoryStore(defaults: defaults)
-        let accountID = "github-billing.personal"
-        let fetchedAt = Date(timeIntervalSince1970: 1_789_689_600)
-        store.record(
-            results: [
-                ProviderUsageResult(
-                    accountID: accountID,
-                    providerID: .githubBilling,
-                    title: "GitHub Billing",
-                    subtitle: "Personal billing",
-                    bars: [UsageBar(stableKey: "actions", label: "Actions", used: 10, limit: 2_000)],
-                    fetchedAt: fetchedAt
-                ),
-            ],
-            now: fetchedAt
-        )
-
-        XCTAssertFalse(store.snapshots.isEmpty)
-        XCTAssertFalse(store.dailySnapshots.isEmpty)
-
-        store.removeSnapshots(for: accountID)
-
-        XCTAssertTrue(store.snapshots.isEmpty)
-        XCTAssertTrue(store.dailySnapshots.isEmpty)
-        let reloaded = UsageHistoryStore(defaults: defaults)
-        XCTAssertTrue(reloaded.snapshots.isEmpty)
-        XCTAssertTrue(reloaded.dailySnapshots.isEmpty)
-    }
-
-    @MainActor
     func testGreptileHistoryStoresCompletedReviewCountsAsNumbers() {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

@@ -180,8 +180,9 @@ public enum GitHubBillingUsageParser {
 
         var consumed = Decimal.zero
         var isClassifiable = true
-        for item in items where item.isActionsMinutes {
+        for item in items where item.isPotentialActionsMinutes {
             guard
+                item.isActionsMinutes,
                 let repositoryName = item.repositoryName,
                 let isPrivate = repositoryVisibility[repositoryName],
                 let multiplier = item.standardRunnerMultiplier,
@@ -225,7 +226,11 @@ public enum GitHubBillingUsageParser {
             unavailable[metricID] = "GitHub did not return a complete billing period for accrued storage."
             return
         }
-        let matching = items.filter { $0.isActionsOrPackagesStorage }
+        let matching = items.filter { $0.isPotentialActionsOrPackagesStorage }
+        guard matching.allSatisfy(\.isActionsOrPackagesStorage) else {
+            unavailable[metricID] = "GitHub returned Actions or Packages storage without a recognized storage SKU."
+            return
+        }
         guard matching.allSatisfy(\.isGBHours) else {
             unavailable[metricID] = "GitHub returned storage in a unit that cannot be compared with a GB-hour allowance."
             return
@@ -688,6 +693,13 @@ private struct SummaryItem: Decodable {
             || (product == "packages" && sku == "packagesstorage")
     }
 
+    var isPotentialActionsOrPackagesStorage: Bool {
+        let product = product?.normalized
+        let sku = sku?.normalized
+        guard product == "actions" || product == "packages" else { return false }
+        return sku == "actionsstorage" || sku == "packagesstorage" || (sku == nil && isGBHours)
+    }
+
     var isLFSStorage: Bool {
         isLFS && (sku?.normalized.contains("storage") == true)
     }
@@ -752,10 +764,16 @@ private struct UsageItem: Decodable {
             && unitType?.normalized.contains("minute") == true
     }
 
+    var isPotentialActionsMinutes: Bool {
+        guard unitType?.normalized.contains("minute") == true else { return false }
+        return product?.normalized.contains("actions") == true
+            || sku?.normalized.hasPrefix("actions") == true
+    }
+
     var standardRunnerMultiplier: Decimal? {
         switch sku?.normalized {
-        case "actionslinux": 1
-        case "actionswindows": 2
+        case "actionslinux", "actionslinuxarm": 1
+        case "actionswindows", "actionswindowsarm": 2
         case "actionsmacos": 10
         default: nil
         }

@@ -864,23 +864,6 @@ struct ReturningFailureUsageProvider: UsageProvider {
     }
 }
 
-struct ReturningIdentifiedFailureUsageProvider: UsageProvider {
-    let providerID = ProviderID.githubBilling
-
-    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
-        ProviderUsageResult(
-            accountID: configuration.id,
-            providerID: providerID,
-            title: configuration.displayName,
-            subtitle: "Refresh failed",
-            bars: [],
-            failureMessage: "Refresh failed",
-            cacheIdentity: configuration.githubBillingOwner.lowercased(),
-            fetchedAt: Date()
-        )
-    }
-}
-
 struct ReturningPartialFailureUsageProvider: UsageProvider {
     let providerID: ProviderID
 

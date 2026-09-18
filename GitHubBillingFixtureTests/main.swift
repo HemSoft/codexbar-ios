@@ -8,6 +8,7 @@ enum GitHubBillingFixtureRunner {
         try personalFreeAndProAllowances()
         try organizationBudgetsAndPaginationParsing()
         try malformedAndMissingFields()
+        try await accountIsolationFixtures()
         try await providerRequestAndFailureFixtures()
         print("GitHub Billing fixture suite passed: personal plans, repository classification, mixed runners, "
             + "accrued storage, Git LFS, discounts, budgets, pagination, missing data, and HTTP failures.")
@@ -33,7 +34,9 @@ enum GitHubBillingFixtureRunner {
             {"date":"2026-09-01","product":"Actions","sku":"Actions Linux","quantity":100,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.6,"discountAmount":0.6,"netAmount":0,"repositoryName":"octocat/private"},
             {"date":"2026-09-02","product":"Actions","sku":"Actions Windows","quantity":50,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":0.5,"discountAmount":0.5,"netAmount":0,"repositoryName":"octocat/private"},
             {"date":"2026-09-03","product":"Actions","sku":"Actions macOS","quantity":10,"unitType":"minutes","pricePerUnit":0.062,"grossAmount":0.62,"discountAmount":0.62,"netAmount":0,"repositoryName":"octocat/private"},
-            {"date":"2026-09-04","product":"Actions","sku":"Actions Linux","quantity":900,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":5.4,"discountAmount":5.4,"netAmount":0,"repositoryName":"octocat/public"}
+            {"date":"2026-09-04","product":"Actions","sku":"actions_linux_arm","quantity":20,"unitType":"minutes","pricePerUnit":0.005,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0,"repositoryName":"octocat/private"},
+            {"date":"2026-09-05","product":"Actions","sku":"actions_windows_arm","quantity":10,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0,"repositoryName":"octocat/private"},
+            {"date":"2026-09-06","product":"Actions","sku":"Actions Linux","quantity":900,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":5.4,"discountAmount":5.4,"netAmount":0,"repositoryName":"octocat/public"}
           ]
         }
         """#)
@@ -49,7 +52,7 @@ enum GitHubBillingFixtureRunner {
         ), "Free personal fixture did not parse")
 
         let actionBar = try require(free.bars.first { $0.stableKey == "actions-private-minutes" }, "Actions minutes missing")
-        try check(actionBar.used == 300, "Mixed standard runners must apply Linux, Windows, and macOS multipliers")
+        try check(actionBar.used == 340, "Mixed standard runners must apply x64, arm64, and macOS multipliers")
         try check(actionBar.limit == 2_000, "Free accounts must receive 2,000 included Actions minutes")
         let storage = try require(free.bars.first { $0.stableKey == "actions-packages-storage" }, "Storage bar missing")
         try check(storage.used == 144, "Actions and Packages GB-hours must share one accrued total")
@@ -205,6 +208,32 @@ enum GitHubBillingFixtureRunner {
         try check(result.monetaryMetrics.isEmpty, "Missing spend fields must not be presented as zero-dollar usage")
         try check(result.usageMessages.contains { $0.contains("complete gross") }, "Missing spend fields need an unavailable explanation")
 
+        let missingActionsProduct = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: personalSummary(),
+            usageData: data(#"{"usageItems":[{"sku":"actions_linux","quantity":1,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":0.01,"discountAmount":0.01,"netAmount":0}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: Date()
+        ), "An incomplete Actions row should remain a readable response")
+        try check(
+            missingActionsProduct.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            "An Actions minute row missing its product must make the allowance unavailable"
+        )
+
+        let missingStorageSKU = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"user":"octocat","timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Actions","unitType":"GB-hours","grossQuantity":1,"grossAmount":0.01,"discountAmount":0.01,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: Date()
+        ), "An incomplete storage row should remain a readable response")
+        try check(
+            missingStorageSKU.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
+            "An Actions storage row missing its SKU must make the allowance unavailable"
+        )
+
         let missingSummaryItems = GitHubBillingUsageParser.parsePersonal(
             summaryData: data("{\"timePeriod\":{\"year\":2026,\"month\":9}}"),
             usageData: data("{\"usageItems\":[]}"),
@@ -270,6 +299,67 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: Date()
         )
         try check(mismatchedOrganizationOwner == nil, "Organization summary data must match the configured owner")
+    }
+
+    @MainActor
+    private static func accountIsolationFixtures() async throws {
+        let suiteName = "GitHubBillingFixtureTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let historyStore = UsageHistoryStore(defaults: defaults)
+        let accountID = "github-billing.personal"
+        let fetchedAt = try fixtureDate("2026-09-15T12:00:00Z")
+        historyStore.record(
+            results: [
+                ProviderUsageResult(
+                    accountID: accountID,
+                    providerID: .githubBilling,
+                    title: "GitHub Billing",
+                    subtitle: "Personal billing",
+                    bars: [UsageBar(stableKey: "actions", label: "Actions", used: 10, limit: 2_000)],
+                    fetchedAt: fetchedAt
+                ),
+            ],
+            now: fetchedAt
+        )
+        try check(!historyStore.snapshots.isEmpty, "Billing history fixture did not record")
+        try check(!historyStore.dailySnapshots.isEmpty, "Daily billing history fixture did not record")
+        historyStore.removeSnapshots(for: accountID)
+        try check(historyStore.snapshots.isEmpty, "Changing billing owner must clear frequent history")
+        try check(historyStore.dailySnapshots.isEmpty, "Changing billing owner must clear daily history")
+        let reloadedHistoryStore = UsageHistoryStore(defaults: defaults)
+        try check(reloadedHistoryStore.snapshots.isEmpty, "Cleared billing history must remain empty after reload")
+        try check(reloadedHistoryStore.dailySnapshots.isEmpty, "Cleared daily history must remain empty after reload")
+
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .githubBilling)
+        configuration.githubBillingOwner = "new-owner"
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .githubBilling,
+            title: configuration.displayName,
+            subtitle: "Old owner billing",
+            bars: [UsageBar(label: "Actions", used: 25, limit: 100)],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: "Net spend",
+                    minorUnits: 1_000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            cacheIdentity: "old-owner",
+            fetchedAt: fetchedAt
+        )
+        let refreshService = UsageRefreshService(
+            providers: [FixtureIdentifiedFailureProvider()],
+            initialResults: [cachedResult]
+        )
+        _ = await refreshService.refresh(configuration: configuration)
+        let failure = try require(refreshService.results.first, "Billing cache failure result is missing")
+        try check(failure.bars.isEmpty, "A failed refresh must not reuse another owner's billing bars")
+        try check(failure.monetaryMetrics.isEmpty, "A failed refresh must not reuse another owner's spend")
+        try check(failure.cacheIdentity == "new-owner", "The failed result must retain the requested owner identity")
     }
 
     private static func providerRequestAndFailureFixtures() async throws {
@@ -623,6 +713,23 @@ enum GitHubBillingFixtureRunner {
             headerFields: headers
         )!
         return (response, data)
+    }
+}
+
+private struct FixtureIdentifiedFailureProvider: UsageProvider {
+    let providerID = ProviderID.githubBilling
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: providerID,
+            title: configuration.displayName,
+            subtitle: "Refresh failed",
+            bars: [],
+            failureMessage: "Refresh failed",
+            cacheIdentity: configuration.githubBillingOwner.lowercased(),
+            fetchedAt: Date()
+        )
     }
 }
 
