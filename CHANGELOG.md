@@ -132,6 +132,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Re-reviewed the complete Swift security-analysis baseline after adding GitHub
+  Billing authentication, networking, and local fixture support. The same three
+  non-actionable findings remain pinned with no new blocking finding.
+  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
+
 - Require the manually dispatched full CI gate only for the exact release
   candidate, not for routine pull requests. A changed candidate must pass a new
   manual run before release. ([#341](https://github.com/HemSoft/codexbar-ios/issues/341))
