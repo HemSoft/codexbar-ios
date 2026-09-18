@@ -1789,6 +1789,41 @@ final class ProviderParsingTests: XCTestCase {
     }
 
     @MainActor
+    func testGitHubBillingFailureDoesNotReuseAnotherOwnerCache() async throws {
+        var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .githubBilling)
+        configuration.githubBillingOwner = "new-owner"
+        let cachedResult = ProviderUsageResult(
+            accountID: configuration.id,
+            providerID: .githubBilling,
+            title: configuration.displayName,
+            subtitle: "Old owner billing",
+            bars: [UsageBar(label: "Actions", used: 25, limit: 100)],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .spent,
+                    label: "Net spend",
+                    minorUnits: 1_000,
+                    currencyCode: "USD",
+                    decimalPlaces: 2
+                ),
+            ],
+            cacheIdentity: "old-owner",
+            fetchedAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+        let service = UsageRefreshService(
+            providers: [ReturningIdentifiedFailureUsageProvider()],
+            initialResults: [cachedResult]
+        )
+
+        _ = await service.refresh(configuration: configuration)
+
+        let failure = try XCTUnwrap(service.results.first)
+        XCTAssertTrue(failure.bars.isEmpty); XCTAssertTrue(failure.monetaryMetrics.isEmpty)
+        XCTAssertEqual(failure.cacheIdentity, "new-owner")
+        XCTAssertEqual(failure.subtitle, "Refresh failed")
+    }
+
+    @MainActor
     func testOpenCodeRefreshPreservesCacheWhenCredentialReadFails() async throws {
         var configuration = ProviderAccountConfiguration.defaultConfiguration(for: .openCodeZen)
         configuration.openCodeWorkspaceId = "wrk_test"

@@ -450,19 +450,19 @@ public final class UsageRefreshService: ObservableObject {
         _ cachedResult: ProviderUsageResult,
         for failureResult: ProviderUsageResult
     ) -> Bool {
+        if let failureIdentity = failureResult.cacheIdentity {
+            return cachedResult.cacheIdentity == failureIdentity
+        }
         guard failureResult.providerID == .openCodeZen else {
             return true
         }
-        guard let failureIdentity = failureResult.cacheIdentity else {
-            guard
-                failureResult.allowsUnscopedCacheReuse,
-                let failureScope = failureResult.cacheScope
-            else {
-                return false
-            }
-            return cachedResult.cacheScope == failureScope
+        guard
+            failureResult.allowsUnscopedCacheReuse,
+            let failureScope = failureResult.cacheScope
+        else {
+            return false
         }
-        return cachedResult.cacheIdentity == failureIdentity
+        return cachedResult.cacheScope == failureScope
     }
 
     private nonisolated static func failureResult(
