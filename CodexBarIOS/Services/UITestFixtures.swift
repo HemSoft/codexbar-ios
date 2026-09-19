@@ -150,10 +150,13 @@ final class UITestFixtures {
         scenario: String?
     ) {
         let group = store.addGroup(named: "GitHub Billing")
+        let personalID = switch scenario {
+        case "github-billing-no-personal-budget": "ui-github-billing-personal-no-budget"
+        case "github-billing-incomplete": "ui-github-billing-personal-incomplete"
+        default: "ui-github-billing-personal"
+        }
         let personal = ProviderAccountConfiguration(
-            id: scenario == "github-billing-no-personal-budget"
-                ? "ui-github-billing-personal-no-budget"
-                : "ui-github-billing-personal",
+            id: personalID,
             providerID: .githubBilling,
             accountLabel: "Sample Personal",
             groupID: group?.id,
@@ -171,7 +174,9 @@ final class UITestFixtures {
             githubBillingOwner: "sample-organization"
         )
         let accounts: [ProviderAccountConfiguration] = switch scenario {
-        case "github-billing-personal", "github-billing-no-personal-budget": [personal]
+        case "github-billing-personal",
+             "github-billing-no-personal-budget",
+             "github-billing-incomplete": [personal]
         case "github-billing-organization": [organization]
         default: [personal, organization]
         }
@@ -188,7 +193,28 @@ final class UITestFixtures {
         let periodEnd = periodStart.addingTimeInterval(30 * 24 * 60 * 60)
         if account.githubBillingAccountScope == .personal {
             if account.id.hasSuffix("no-budget") {
-                return ProviderUsageResult(
+                return noBudgetPersonalBillingResult(account: account)
+            }
+            if account.id.hasSuffix("incomplete") {
+                return incompletePersonalBillingResult(
+                    account: account,
+                    periodStart: periodStart,
+                    periodEnd: periodEnd
+                )
+            }
+            return healthyPersonalBillingResult(
+                account: account,
+                periodStart: periodStart,
+                periodEnd: periodEnd
+            )
+        }
+        return organizationBillingResult(account: account, periodStart: periodStart, periodEnd: periodEnd)
+    }
+
+    nonisolated private static func noBudgetPersonalBillingResult(
+        account: ProviderAccountConfiguration
+    ) -> ProviderUsageResult {
+        return ProviderUsageResult(
                     accountID: account.id,
                     providerID: .githubBilling,
                     title: account.displayName,
@@ -199,14 +225,127 @@ final class UITestFixtures {
                     ),
                     subtitle: "GitHub personal billing",
                     bars: [],
-                    usageMessages: [
-                        "GitHub does not expose personal budgets through its public API. "
-                            + "Included allowances and current charges are shown separately.",
+                    usageMessages: [],
+                    cardInformationSections: [
+                        ProviderCardInformationSection(
+                            id: "github-billing.amounts-and-currency",
+                            title: "Amounts and currency",
+                            items: [
+                                ProviderCardInformationItem(
+                                    id: "currency",
+                                    label: "Currency",
+                                    detail: "USD. GitHub's billing API does not report a currency code, "
+                                        + "so CodexBar shows the USD amounts GitHub lists. Amounts are not "
+                                        + "converted to the device locale."
+                                ),
+                                ProviderCardInformationItem(
+                                    id: "personal-budgets",
+                                    label: "Personal budgets",
+                                    detail: "GitHub does not expose personal budgets through its public API. "
+                                        + "Included allowances and current charges are shown separately."
+                                ),
+                            ]
+                        ),
                     ],
                     fetchedAt: Date()
                 )
-            }
-            return ProviderUsageResult(
+    }
+
+    nonisolated private static func incompletePersonalBillingResult(
+        account: ProviderAccountConfiguration,
+        periodStart: Date,
+        periodEnd: Date
+    ) -> ProviderUsageResult {
+        return ProviderUsageResult(
+                    accountID: account.id,
+                    providerID: .githubBilling,
+                    title: account.displayName,
+                    plan: ProviderPlanDescriptor.make(
+                        providerPrefix: ProviderID.githubBilling.rawValue,
+                        identifier: "free",
+                        label: "Free"
+                    ),
+                    subtitle: "GitHub personal billing",
+                    bars: [
+                        UsageBar(
+                            stableKey: "actions-private-minutes",
+                            label: "Private Actions minutes",
+                            used: 720,
+                            limit: 2_000,
+                            resetsAt: periodEnd,
+                            projectionCurrent: 720,
+                            projectionLimit: 2_000,
+                            projectionPeriodStart: periodStart,
+                            projectionPeriodEnd: periodEnd,
+                            showProjectionOnCurrentBar: true
+                        ),
+                    ],
+                    monetaryMetrics: [
+                        ProviderMonetaryMetric(
+                            kind: .grossSpend, label: "Gross usage", minorUnits: 1_248,
+                            currencyCode: "USD", decimalPlaces: 2
+                        ),
+                        ProviderMonetaryMetric(
+                            kind: .discounts, label: "Discounts", minorUnits: 0,
+                            currencyCode: "USD", decimalPlaces: 2
+                        ),
+                        ProviderMonetaryMetric(
+                            kind: .spent,
+                            label: "Net spend",
+                            minorUnits: 1_248,
+                            currencyCode: "USD",
+                            decimalPlaces: 2,
+                            detail: "Current metered charge"
+                        ),
+                    ],
+                    usageMessages: [
+                        "GitHub returned Actions or Packages storage without a recognized storage SKU, "
+                            + "so the accrued storage allowance is unavailable.",
+                    ],
+                    cardInformationSections: [
+                        ProviderCardInformationSection(
+                            id: "github-billing.product.actions",
+                            title: "Actions",
+                            items: [
+                                ProviderCardInformationItem(
+                                    id: "consumed",
+                                    label: "Consumed usage",
+                                    detail: "$12.48 · 720 minutes"
+                                ),
+                                ProviderCardInformationItem(
+                                    id: "discount",
+                                    label: "Discount usage",
+                                    detail: "$0.00"
+                                ),
+                                ProviderCardInformationItem(
+                                    id: "billable",
+                                    label: "Billable usage",
+                                    detail: "$12.48"
+                                ),
+                                ProviderCardInformationItem(
+                                    id: "included-minutes",
+                                    label: "Included usage · Minutes",
+                                    detail: "720 of 2,000 minutes used · 1,280 minutes remaining"
+                                ),
+                                ProviderCardInformationItem(
+                                    id: "included-storage",
+                                    label: "Included usage · Storage",
+                                    detail: "GitHub returned Actions or Packages storage without a "
+                                        + "recognized storage SKU, so the accrued storage allowance is unavailable."
+                                ),
+                            ]
+                        ),
+                    ],
+                    fetchedAt: Date()
+                )
+    }
+
+    nonisolated private static func healthyPersonalBillingResult(
+        account: ProviderAccountConfiguration,
+        periodStart: Date,
+        periodEnd: Date
+    ) -> ProviderUsageResult {
+        return ProviderUsageResult(
                 accountID: account.id,
                 providerID: .githubBilling,
                 title: account.displayName,
@@ -239,29 +378,106 @@ final class UITestFixtures {
                 ],
                 monetaryMetrics: [
                     ProviderMonetaryMetric(
-                        kind: .grossSpend, label: "Gross usage", minorUnits: 1248,
+                        kind: .grossSpend, label: "Gross usage", minorUnits: 2_520,
                         currencyCode: "USD", decimalPlaces: 2
                     ),
                     ProviderMonetaryMetric(
-                        kind: .discounts, label: "Discounts", minorUnits: 1248,
+                        kind: .discounts, label: "Discounts", minorUnits: 1_248,
                         currencyCode: "USD", decimalPlaces: 2
                     ),
                     ProviderMonetaryMetric(
                         kind: .spent,
                         label: "Net spend",
-                        minorUnits: 0,
+                        minorUnits: 1_272,
                         currencyCode: "USD",
                         decimalPlaces: 2,
-                        detail: "No current charge after discounts"
+                        detail: "Current metered charge"
                     ),
                 ],
-                usageMessages: [
-                    "GitHub does not expose personal budgets through its public API. "
-                        + "Included allowances and current charges are shown separately.",
+                usageMessages: [],
+                cardInformationSections: [
+                    ProviderCardInformationSection(
+                        id: "github-billing.product.actions",
+                        title: "Actions",
+                        items: [
+                            ProviderCardInformationItem(
+                                id: "actions.consumed",
+                                label: "Consumed usage",
+                                detail: "$24.80 · 720 minutes · 118 GB-hours"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "actions.discount",
+                                label: "Discount usage",
+                                detail: "$12.48"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "actions.billable",
+                                label: "Billable usage",
+                                detail: "$12.32"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "actions.included.minutes",
+                                label: "Included usage · Minutes",
+                                detail: "720 of 2,000 minutes used · 1,280 minutes remaining"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "actions.included.storage",
+                                label: "Included usage · Storage",
+                                detail: "118 of 360 GB-hours used (Actions and Packages storage) · "
+                                    + "242 GB-hours remaining"
+                            ),
+                        ]
+                    ),
+                    ProviderCardInformationSection(
+                        id: "github-billing.product.copilot",
+                        title: "Copilot",
+                        items: [
+                            ProviderCardInformationItem(
+                                id: "copilot.consumed",
+                                label: "Consumed usage",
+                                detail: "$0.40 · 40 requests"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "copilot.discount",
+                                label: "Discount usage",
+                                detail: "$0.00"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "copilot.billable",
+                                label: "Billable usage",
+                                detail: "$0.40"
+                            ),
+                        ]
+                    ),
+                    ProviderCardInformationSection(
+                        id: "github-billing.amounts-and-currency",
+                        title: "Amounts and currency",
+                        items: [
+                            ProviderCardInformationItem(
+                                id: "currency",
+                                label: "Currency",
+                                detail: "USD. GitHub's billing API does not report a currency code, "
+                                    + "so CodexBar shows the USD amounts GitHub lists. Amounts are not "
+                                    + "converted to the device locale."
+                            ),
+                            ProviderCardInformationItem(
+                                id: "personal-budgets",
+                                label: "Personal budgets",
+                                detail: "GitHub does not expose personal budgets through its public API. "
+                                    + "Included allowances and current charges are shown separately."
+                            ),
+                        ]
+                    ),
                 ],
                 fetchedAt: Date()
             )
-        }
+    }
+
+    nonisolated private static func organizationBillingResult(
+        account: ProviderAccountConfiguration,
+        periodStart: Date,
+        periodEnd: Date
+    ) -> ProviderUsageResult {
         return ProviderUsageResult(
             accountID: account.id,
             providerID: .githubBilling,

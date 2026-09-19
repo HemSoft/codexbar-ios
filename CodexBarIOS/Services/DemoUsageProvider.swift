@@ -153,8 +153,59 @@ public extension DemoUsageProvider {
                         detail: "No current charge after discounts"
                     ),
                 ],
-                usageMessages: [
-                    "GitHub does not expose personal budgets through its public API.",
+                usageMessages: [],
+                cardInformationSections: [
+                    ProviderCardInformationSection(
+                        id: "github-billing.product.actions",
+                        title: "Actions",
+                        items: [
+                            ProviderCardInformationItem(
+                                id: "actions.consumed",
+                                label: "Consumed usage",
+                                detail: "$12.48 · 720 minutes"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "actions.discount",
+                                label: "Discount usage",
+                                detail: "$12.48"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "actions.billable",
+                                label: "Billable usage",
+                                detail: "$0.00"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "actions.included.minutes",
+                                label: "Included usage · Minutes",
+                                detail: "720 of 2,000 minutes used · 1,280 minutes remaining"
+                            ),
+                            ProviderCardInformationItem(
+                                id: "actions.included.storage",
+                                label: "Included usage · Storage",
+                                detail: "118 of 360 GB-hours used (Actions and Packages storage) · "
+                                    + "242 GB-hours remaining"
+                            ),
+                        ]
+                    ),
+                    ProviderCardInformationSection(
+                        id: "github-billing.amounts-and-currency",
+                        title: "Amounts and currency",
+                        items: [
+                            ProviderCardInformationItem(
+                                id: "currency",
+                                label: "Currency",
+                                detail: "USD. GitHub's billing API does not report a currency code, "
+                                    + "so CodexBar shows the USD amounts GitHub lists. Amounts are not "
+                                    + "converted to the device locale."
+                            ),
+                            ProviderCardInformationItem(
+                                id: "personal-budgets",
+                                label: "Personal budgets",
+                                detail: "GitHub does not expose personal budgets through its public API. "
+                                    + "Included allowances and current charges are shown separately."
+                            ),
+                        ]
+                    ),
                 ],
                 subtitle: "GitHub personal billing"
             ),
