@@ -210,10 +210,14 @@ struct ProviderSettingsView: View {
                             systemImage: "lock.shield"
                         )
                         Text(
-                            "Personal billing requires GitHub's user scope, which also permits profile changes. "
-                                + "The repo scope permits repository changes. CodexBar only reads account, billing, "
-                                + "and repository visibility data; it never changes your profile or repositories. "
-                                + "Billing tokens stay in separate Keychain entries and are never shared with GitHub Copilot."
+                            "Personal billing requires GitHub's user scope. It permits profile changes, reading private "
+                                + "email addresses, and following or unfollowing users. CodexBar only reads your plan and "
+                                + "billing data and never changes your profile or follows."
+                        )
+                        Text(
+                            "The repo scope permits repository changes. CodexBar only reads repository visibility "
+                                + "to classify usage; it never changes repositories. Billing tokens stay in separate "
+                                + "Keychain entries and are never shared with GitHub Copilot."
                         )
                         Text(
                             "If you signed in before this permission was added, sign in again and approve user access "

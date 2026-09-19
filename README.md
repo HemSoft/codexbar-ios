@@ -96,8 +96,9 @@ The browser flow requests `repo read:org user`, uses PKCE with a loopback
 callback, and stores only the returned account token. Personal billing endpoints
 require `user`, not the profile-only `read:user`. Existing users who authorized
 the earlier scope must sign in again and approve the expanded permission.
-The `user` scope also permits profile changes; CodexBar never uses that write
-access. Classic GitHub OAuth does
+The `user` scope also permits profile changes, reading private email addresses,
+and following or unfollowing users. CodexBar never uses those additional
+capabilities. Classic GitHub OAuth does
 not offer a private-repository metadata-only scope: `repo` permits repository
 changes, while CodexBar limits its use to reading repository visibility for
 billing classification. GitHub supports separate

@@ -13,6 +13,8 @@ final class AccountJourneysUITests: XCTestCase {
         )).firstMatch
         reveal(disclosure, in: app)
         XCTAssertTrue(disclosure.label.contains("permits profile changes"))
+        XCTAssertTrue(disclosure.label.contains("reading private email addresses"))
+        XCTAssertTrue(disclosure.label.contains("following or unfollowing users"))
         XCTAssertTrue(disclosure.label.contains("never changes your profile"))
         keepBillingScreenshot("github-billing-user-permission", of: app)
         let reconnect = app.staticTexts.matching(NSPredicate(
