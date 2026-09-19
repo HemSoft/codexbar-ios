@@ -473,6 +473,12 @@ enum GitHubBillingFixtureRunner {
         try check(result.cardInformationSections.contains { section in
             section.items.contains { $0.label == "Behavior" && $0.detail == "Tracking only" }
         }, "A nonblocking budget with alerts disabled must not be labeled alert-only")
+        try check(
+            !result.cardInformationSections.contains { section in
+                section.items.contains { $0.label == "Personal budgets" }
+            },
+            "Organization cards must not show the personal-budget API limitation"
+        )
 
         let noBudget = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,

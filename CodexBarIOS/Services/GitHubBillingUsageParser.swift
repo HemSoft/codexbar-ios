@@ -72,6 +72,7 @@ public enum GitHubBillingUsageParser {
         let detailOutput = usageDetails(usage.usageItems, currencyCode: currency.code)
         let notes = amountsAndCurrencySection(
             currency: currency,
+            includesPersonalBudgetNotes: true,
             plan: plan,
             budgetQualification: nil,
             omittedDetailCount: detailOutput.omittedCount
@@ -191,6 +192,7 @@ public enum GitHubBillingUsageParser {
             : nil
         if let notes = amountsAndCurrencySection(
             currency: currency,
+            includesPersonalBudgetNotes: false,
             plan: nil,
             budgetQualification: budgetQualification,
             omittedDetailCount: details.omittedCount
@@ -890,13 +892,16 @@ public enum GitHubBillingUsageParser {
     /// "More Information…" so healthy cards keep only actionable messages.
     private static func amountsAndCurrencySection(
         currency: GitHubBillingCurrency,
+        includesPersonalBudgetNotes: Bool,
         plan: PersonalPlan?,
         budgetQualification: String?,
         omittedDetailCount: Int
     ) -> ProviderCardInformationSection? {
         var items: [ProviderCardInformationItem] = []
         items.append(contentsOf: currencyNoteItems(currency: currency))
-        items.append(contentsOf: personalBudgetNotes(plan: plan))
+        if includesPersonalBudgetNotes {
+            items.append(contentsOf: personalBudgetNotes(plan: plan))
+        }
         if let budgetQualification {
             items.append(ProviderCardInformationItem(
                 id: "github-billing.budget-qualification",
