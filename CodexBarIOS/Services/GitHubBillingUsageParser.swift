@@ -81,6 +81,7 @@ public enum GitHubBillingUsageParser {
             productSections: productSummarySections(
                 summary.usageItems,
                 currencyCode: currency.code,
+                includesPersonalAllowances: true,
                 bars: bars,
                 unavailable: unavailable
             ),
@@ -185,7 +186,13 @@ public enum GitHubBillingUsageParser {
         if let budgetStatusMessage {
             messages.append(budgetStatusMessage)
         }
-        var sections = productSummarySections(summaryItems, currencyCode: currency.code, bars: [], unavailable: [:])
+        var sections = productSummarySections(
+            summaryItems,
+            currencyCode: currency.code,
+            includesPersonalAllowances: false,
+            bars: [],
+            unavailable: [:]
+        )
         sections.append(contentsOf: budgetOutput.sections)
         let budgetQualification = budgetStatusMessage == nil && !hasBudgets
             ? "GitHub returned no organization budgets. Metered usage can still incur charges."
@@ -695,6 +702,7 @@ public enum GitHubBillingUsageParser {
     private static func productSummarySections(
         _ items: [SummaryItem],
         currencyCode: String,
+        includesPersonalAllowances: Bool,
         bars: [UsageBar],
         unavailable: [String: String]
     ) -> [ProviderCardInformationSection] {
@@ -718,6 +726,7 @@ public enum GitHubBillingUsageParser {
                     displayName: group.displayName,
                     items: group.items,
                     currencyCode: currencyCode,
+                    includesPersonalAllowances: includesPersonalAllowances,
                     bars: bars,
                     unavailable: unavailable
                 )
@@ -765,6 +774,7 @@ public enum GitHubBillingUsageParser {
         displayName: String,
         items: [SummaryItem],
         currencyCode: String,
+        includesPersonalAllowances: Bool,
         bars: [UsageBar],
         unavailable: [String: String]
     ) -> ProviderCardInformationSection {
@@ -783,7 +793,7 @@ public enum GitHubBillingUsageParser {
                 currencyCode: currencyCode
             ),
         ]
-        if key == "actions" {
+        if includesPersonalAllowances && key == "actions" {
             rows.append(contentsOf: actionsIncludedUsageRows(bars: bars, unavailable: unavailable))
         }
         return ProviderCardInformationSection(

@@ -479,6 +479,12 @@ enum GitHubBillingFixtureRunner {
             },
             "Organization cards must not show the personal-budget API limitation"
         )
+        try check(
+            !result.cardInformationSections.contains { section in
+                section.items.contains { $0.label.hasPrefix("Included usage") }
+            },
+            "Organization cards must not show personal-plan included allowances"
+        )
 
         let noBudget = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,
