@@ -521,6 +521,27 @@ enum GitHubBillingFixtureRunner {
             "Organization cards must not show personal-plan included allowances"
         )
 
+        let conflictingCurrency = try require(GitHubBillingUsageParser.parseOrganization(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","currency":"EUR","pricePerUnit":0.01,"grossQuantity":1200,"grossAmount":12.25,"discountAmount":2.25,"netAmount":10},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","currency":"USD","pricePerUnit":0.0225,"grossQuantity":50,"grossAmount":1.125,"discountAmount":0.5625,"netAmount":0.5625}]}"#),
+            usageData: organizationUsage(),
+            budgetPageData: pages,
+            configuration: configuration,
+            fetchedAt: try fixtureDate("2026-09-15T12:00:00Z")
+        ), "Conflicting organization currency fixture did not parse")
+        try check(
+            !conflictingCurrency.bars.contains { $0.stableKey?.hasPrefix("budget-") == true },
+            "Unverified organization currency must suppress monetary budget bars"
+        )
+        let conflictingBudgetAmounts = conflictingCurrency.cardInformationSections
+            .filter { $0.id.hasPrefix("github-billing.budget.") }
+            .flatMap(\.items)
+            .filter { ["Current net spend", "Remaining headroom"].contains($0.label) }
+        try check(!conflictingBudgetAmounts.isEmpty, "Conflicting currency fixture must retain budget sections")
+        try check(
+            conflictingBudgetAmounts.allSatisfy { $0.detail == "Unavailable" },
+            "Unverified currency must suppress budget amounts and consumption percentages"
+        )
+
         let noBudget = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,
             usageData: organizationUsage(),

@@ -682,10 +682,7 @@ public enum GitHubBillingUsageParser {
         targetLabel: String,
         currencyCode: String?
     ) -> ProviderCardInformationSection {
-        let remaining = max(budget.amount - budget.consumed, 0)
-        let consumptionDetail = budget.amount > 0
-            ? "\(aggregateCurrencyText(remaining, currencyCode: currencyCode)) · \(decimalText(budget.consumed / budget.amount * 100))% consumed"
-            : "\(aggregateCurrencyText(remaining, currencyCode: currencyCode)) · Zero-dollar budget"
+        let consumptionDetail = budgetConsumptionDetail(budget, currencyCode: currencyCode)
         return ProviderCardInformationSection(
             id: "github-billing.budget.\(budget.id)",
             title: budget.name,
@@ -717,6 +714,19 @@ public enum GitHubBillingUsageParser {
                 ),
             ]
         )
+    }
+
+    private static func budgetConsumptionDetail(
+        _ budget: NormalizedBudget,
+        currencyCode: String?
+    ) -> String {
+        guard let currencyCode else { return unavailableAmountText }
+        let remaining = max(budget.amount - budget.consumed, 0)
+        if budget.amount > 0 {
+            return "\(aggregateCurrencyText(remaining, currencyCode: currencyCode)) · "
+                + "\(decimalText(budget.consumed / budget.amount * 100))% consumed"
+        }
+        return "\(aggregateCurrencyText(remaining, currencyCode: currencyCode)) · Zero-dollar budget"
     }
 
     private static func spendStatusMessages(for totals: SpendTotals?) -> [String] {
