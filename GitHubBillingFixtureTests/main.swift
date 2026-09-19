@@ -236,6 +236,7 @@ enum GitHubBillingFixtureRunner {
             {"product":"Copilot","sku":"copilot_premium_requests","unitType":"requests","pricePerUnit":0.04,"grossQuantity":10,"grossAmount":0.40,"discountAmount":0,"netAmount":0.40},
             {"product":"Codespaces","sku":"codespaces_compute","unitType":"core-hours","pricePerUnit":0.08,"grossQuantity":5,"grossAmount":0.40,"discountAmount":0.10,"netAmount":0.30},
             {"product":"Git LFS","sku":"lfs_storage","unitType":"GB-hours","pricePerUnit":0.07,"grossQuantity":1,"grossAmount":0,"discountAmount":0,"netAmount":0},
+            {"product":"LFS","sku":"lfs_bandwidth","unitType":"GB-hours","pricePerUnit":0.07,"grossQuantity":1,"grossAmount":0,"discountAmount":0,"netAmount":0},
             {"product":"Advanced Security","sku":"secret_scanning","unitType":"active-committers","pricePerUnit":0,"grossQuantity":1,"grossAmount":0,"discountAmount":0,"netAmount":0},
             {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.04,"grossQuantity":50,"grossAmount":1.125,"discountAmount":0.5625,"netAmount":0.5625}
           ]
@@ -265,6 +266,16 @@ enum GitHubBillingFixtureRunner {
         let actionsIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.actions"), "Actions summary missing")
         let codespacesIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.codespaces"), "Codespaces summary missing")
         let gitLFSIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.git-lfs"), "Git LFS summary missing")
+        try check(
+            sectionIDs.filter { $0 == "github-billing.product.git-lfs" }.count == 1,
+            "Git LFS aliases must merge into one canonical product summary"
+        )
+        try check(
+            result.cardInformationSections[gitLFSIndex].items.contains { item in
+                item.label == "Consumed usage" && item.detail.contains("2 GB-hours")
+            },
+            "The canonical Git LFS summary must include quantities from every recognized alias"
+        )
         let advancedSecurityIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.advanced-security"), "An unknown product must remain visible under its GitHub product name")
         let packagesIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.packages"), "Packages summary missing")
         try check(
@@ -399,8 +410,16 @@ enum GitHubBillingFixtureRunner {
             "Conflicting currency evidence must stay an actionable inline message"
         )
         try check(
-            conflicting?.monetaryMetrics.allSatisfy { $0.currencyCode == "USD" } == true,
-            "Unverifiable currency evidence must fall back to the documented USD rendering"
+            conflicting?.monetaryMetrics.isEmpty == true,
+            "Conflicting currency evidence must make aggregate monetary values unavailable"
+        )
+        try check(
+            conflicting?.cardInformationSections
+                .filter { $0.id.hasPrefix("github-billing.product.") }
+                .flatMap(\.items)
+                .filter { ["Discount usage", "Billable usage"].contains($0.label) }
+                .allSatisfy { $0.detail == "Unavailable" } == true,
+            "Conflicting currency evidence must not relabel product amounts as USD"
         )
         try check(
             conflicting?.cardInformationSections.contains { section in
@@ -409,8 +428,8 @@ enum GitHubBillingFixtureRunner {
                         item.label == "Currency evidence" && item.detail.contains("cannot verify")
                     }
                     && section.items.contains { item in
-                        item.label == "Currency" && item.detail.contains("could not verify")
-                            && !item.detail.contains("does not report")
+                        item.label == "Currency" && item.detail.hasPrefix("Unavailable")
+                            && item.detail.contains("could not verify") && !item.detail.contains("does not report")
                     }
             } == true,
             "Conflicting currency evidence must explain the USD fallback without claiming no code was reported"
@@ -420,8 +439,8 @@ enum GitHubBillingFixtureRunner {
             #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","currency":"ZZZ","grossQuantity":1,"grossAmount":1,"discountAmount":0,"netAmount":1}]}"#
         ))
         try check(
-            malformedCurrency?.monetaryMetrics.allSatisfy { $0.currencyCode == "USD" } == true,
-            "An unsupported three-letter currency value must not become the rendered currency"
+            malformedCurrency?.monetaryMetrics.isEmpty == true,
+            "An unsupported three-letter currency value must make monetary values unavailable"
         )
         try check(
             malformedCurrency?.usageMessages.contains { $0.contains("currency evidence") } == true,

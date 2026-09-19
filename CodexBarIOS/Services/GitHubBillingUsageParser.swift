@@ -59,9 +59,17 @@ public enum GitHubBillingUsageParser {
 
         let totals = SpendTotals(items: summary.usageItems)
         let currency = currencyResolution(topLevel: summary.currency, items: summary.usageItems)
-        let monetaryMetrics = totals.map {
-            makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt, currencyCode: currency.code)
-        } ?? []
+        let monetaryMetrics: [ProviderMonetaryMetric]
+        if let totals, let currencyCode = currency.verifiedCode {
+            monetaryMetrics = makeSpendMetrics(
+                totals: totals,
+                period: period,
+                fetchedAt: fetchedAt,
+                currencyCode: currencyCode
+            )
+        } else {
+            monetaryMetrics = []
+        }
         let planDescriptor = plan.map { plan in
             ProviderPlanDescriptor.make(
                 providerPrefix: ProviderID.githubBilling.rawValue,
@@ -69,7 +77,7 @@ public enum GitHubBillingUsageParser {
                 label: plan.label
             )
         }
-        let detailOutput = usageDetails(usage.usageItems, currencyCode: currency.code)
+        let detailOutput = usageDetails(usage.usageItems, currencyCode: currency.verifiedCode)
         let notes = amountsAndCurrencySection(
             currency: currency,
             includesPersonalBudgetNotes: true,
@@ -80,7 +88,7 @@ public enum GitHubBillingUsageParser {
         let sections = personalInformationSections(
             productSections: productSummarySections(
                 summary.usageItems,
-                currencyCode: currency.code,
+                currencyCode: currency.verifiedCode,
                 includesPersonalAllowances: true,
                 bars: bars,
                 unavailable: unavailable
@@ -138,21 +146,29 @@ public enum GitHubBillingUsageParser {
             budgets: budgets,
             usageItems: usage.usageItems,
             period: period,
-            currencyCode: currency.code
+            currencyCode: currency.verifiedCode
         )
         bars.append(contentsOf: budgetOutput.bars)
 
         let totals = SpendTotals(items: summary.usageItems)
-        let monetaryMetrics = totals.map {
-            makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt, currencyCode: currency.code)
-        } ?? []
+        let monetaryMetrics: [ProviderMonetaryMetric]
+        if let totals, let currencyCode = currency.verifiedCode {
+            monetaryMetrics = makeSpendMetrics(
+                totals: totals,
+                period: period,
+                fetchedAt: fetchedAt,
+                currencyCode: currencyCode
+            )
+        } else {
+            monetaryMetrics = []
+        }
 
         let presentation = organizationPresentation(
             summaryItems: summary.usageItems,
             currency: currency,
             budgetOutput: budgetOutput,
             totals: totals,
-            details: usageDetails(usage.usageItems, currencyCode: currency.code),
+            details: usageDetails(usage.usageItems, currencyCode: currency.verifiedCode),
             budgetStatusMessage: budgetStatusMessage,
             hasBudgets: !budgets.isEmpty
         )
@@ -188,7 +204,7 @@ public enum GitHubBillingUsageParser {
         }
         var sections = productSummarySections(
             summaryItems,
-            currencyCode: currency.code,
+            currencyCode: currency.verifiedCode,
             includesPersonalAllowances: false,
             bars: [],
             unavailable: [:]
@@ -470,7 +486,7 @@ public enum GitHubBillingUsageParser {
         budgets: [Budget]?,
         usageItems: [UsageItem],
         period: BillingPeriod?,
-        currencyCode: String
+        currencyCode: String?
     ) -> BudgetOutput {
         guard let budgets else { return BudgetOutput() }
         var output = BudgetOutput()
@@ -484,7 +500,9 @@ public enum GitHubBillingUsageParser {
                 continue
             }
             guard let normalized = candidate.normalized else { continue }
-            output.bars.append(contentsOf: budgetBars(for: normalized, period: period))
+            if currencyCode != nil {
+                output.bars.append(contentsOf: budgetBars(for: normalized, period: period))
+            }
             output.sections.append(budgetSection(
                 normalized,
                 isProduct: candidate.isProduct,
@@ -520,7 +538,7 @@ public enum GitHubBillingUsageParser {
     private static func budgetCandidate(
         _ budget: Budget,
         usageItems: [UsageItem],
-        currencyCode: String
+        currencyCode: String?
     ) -> BudgetCandidate {
         guard
             let id = budget.id?.nonempty,
@@ -615,7 +633,7 @@ public enum GitHubBillingUsageParser {
         preventFurtherUsage: Bool,
         willAlert: Bool,
         scopeDescription: String,
-        currencyCode: String
+        currencyCode: String?
     ) -> ProviderCardInformationSection {
         let behavior = preventFurtherUsage ? "Hard stop" : (willAlert ? "Alert only" : "Tracking only")
         return ProviderCardInformationSection(
@@ -651,7 +669,7 @@ public enum GitHubBillingUsageParser {
         _ budget: NormalizedBudget,
         isProduct: Bool,
         targetLabel: String,
-        currencyCode: String
+        currencyCode: String?
     ) -> ProviderCardInformationSection {
         let remaining = max(budget.amount - budget.consumed, 0)
         let consumptionDetail = budget.amount > 0
@@ -701,7 +719,7 @@ public enum GitHubBillingUsageParser {
     /// product name so returned data is never discarded.
     private static func productSummarySections(
         _ items: [SummaryItem],
-        currencyCode: String,
+        currencyCode: String?,
         includesPersonalAllowances: Bool,
         bars: [UsageBar],
         unavailable: [String: String]
@@ -709,7 +727,7 @@ public enum GitHubBillingUsageParser {
         var groups: [String: ProductUsageGroup] = [:]
         for item in items {
             let rawProduct = item.product?.nonempty
-            let key = rawProduct.map(stableKey) ?? "unlisted-products"
+            let key = canonicalProductKey(for: rawProduct)
             let displayName = canonicalProductName(for: rawProduct)
             groups[key, default: ProductUsageGroup(displayName: displayName, items: [])]
                 .items.append(item)
@@ -754,12 +772,20 @@ public enum GitHubBillingUsageParser {
         return lhsName.caseInsensitiveCompare(rhsName) == .orderedAscending
     }
 
+    private static func canonicalProductKey(for rawProduct: String?) -> String {
+        guard let rawProduct = rawProduct?.nonempty else { return "unlisted-products" }
+        let key = stableKey(rawProduct)
+        return knownProductAliases[key] ?? key
+    }
+
     private static func canonicalProductName(for rawProduct: String?) -> String {
         guard let rawProduct = rawProduct?.nonempty else {
             return "Unlisted products"
         }
         return knownProductNames[stableKey(rawProduct)] ?? rawProduct
     }
+
+    private static let knownProductAliases = ["lfs": "git-lfs"]
 
     private static let knownProductNames: [String: String] = [
         "copilot": "Copilot",
@@ -773,7 +799,7 @@ public enum GitHubBillingUsageParser {
         key: String,
         displayName: String,
         items: [SummaryItem],
-        currencyCode: String,
+        currencyCode: String?,
         includesPersonalAllowances: Bool,
         bars: [UsageBar],
         unavailable: [String: String]
@@ -806,7 +832,7 @@ public enum GitHubBillingUsageParser {
     private static func consumedUsageRow(
         _ items: [SummaryItem],
         key: String,
-        currencyCode: String
+        currencyCode: String?
     ) -> ProviderCardInformationItem {
         let amounts = items.map(\.grossAmount)
         var detail = amountUsageRow(
@@ -823,10 +849,10 @@ public enum GitHubBillingUsageParser {
         id: String,
         label: String,
         amounts: [Decimal?],
-        currencyCode: String
+        currencyCode: String?
     ) -> ProviderCardInformationItem {
         let detail: String
-        if amounts.allSatisfy({ $0.map { $0 >= 0 } == true }) {
+        if let currencyCode, amounts.allSatisfy({ $0.map { $0 >= 0 } == true }) {
             detail = aggregateCurrencyText(amounts.compactMap { $0 }.reduce(.zero, +), currencyCode: currencyCode)
         } else {
             detail = unavailableAmountText
@@ -940,8 +966,8 @@ public enum GitHubBillingUsageParser {
         }
         let currencyDetail: String
         if currency.conflictMessage != nil {
-            currencyDetail = "USD. GitHub returned currency evidence CodexBar could not verify, so amounts continue "
-                + "to show USD and are not converted to the device locale."
+            currencyDetail = "Unavailable. GitHub returned currency evidence CodexBar could not verify, so monetary "
+                + "amounts are unavailable instead of being relabeled or converted."
         } else if currency.isReported {
             currencyDetail = "\(currency.code), as GitHub's billing response reports it. Amounts are not converted to the device locale."
         } else {
@@ -1027,7 +1053,7 @@ public enum GitHubBillingUsageParser {
         )
     }
 
-    private static func usageDetails(_ items: [UsageItem], currencyCode: String) -> UsageDetailOutput {
+    private static func usageDetails(_ items: [UsageItem], currencyCode: String?) -> UsageDetailOutput {
         let details = items.enumerated().compactMap { index, item -> ProviderCardInformationItem? in
             guard let product = item.product?.nonempty, let sku = item.sku?.nonempty else {
                 return nil
@@ -1035,10 +1061,10 @@ public enum GitHubBillingUsageParser {
             let repository = item.repositoryName?.nonempty ?? "Account-wide"
             let quantity = item.quantity.map(decimalText) ?? "Unknown quantity"
             let unit = item.unitType?.nonempty ?? "units"
-            let unitPrice = item.pricePerUnit.map { unitPriceText($0, currencyCode: currencyCode) } ?? "Unknown unit price"
-            let gross = item.grossAmount.map { aggregateCurrencyText($0, currencyCode: currencyCode) } ?? "Unknown gross amount"
-            let discount = item.discountAmount.map { aggregateCurrencyText($0, currencyCode: currencyCode) } ?? "Unknown discount"
-            let net = item.netAmount.map { aggregateCurrencyText($0, currencyCode: currencyCode) } ?? "Unknown net amount"
+            let unitPrice = usageUnitPriceText(item.pricePerUnit, currencyCode: currencyCode)
+            let gross = usageAggregateText(item.grossAmount, currencyCode: currencyCode, missing: "Unknown gross amount")
+            let discount = usageAggregateText(item.discountAmount, currencyCode: currencyCode, missing: "Unknown discount")
+            let net = usageAggregateText(item.netAmount, currencyCode: currencyCode, missing: "Unknown net amount")
             return ProviderCardInformationItem(
                 id: "usage.\(index).\(stableKey(repository)).\(stableKey(sku))",
                 label: repository,
@@ -1065,7 +1091,7 @@ public enum GitHubBillingUsageParser {
         return GitHubBillingCurrency(
             code: "USD",
             isReported: false,
-            conflictMessage: "GitHub returned currency evidence CodexBar cannot verify, so amounts continue to show USD."
+            conflictMessage: "GitHub returned currency evidence CodexBar cannot verify, so monetary amounts are unavailable."
         )
     }
 
@@ -1077,9 +1103,25 @@ public enum GitHubBillingUsageParser {
         NSDecimalNumber(decimal: value).stringValue
     }
 
+    private static func usageUnitPriceText(_ value: Decimal?, currencyCode: String?) -> String {
+        guard let value else { return "Unknown unit price" }
+        guard let currencyCode else { return unavailableAmountText }
+        return unitPriceText(value, currencyCode: currencyCode)
+    }
+
+    private static func usageAggregateText(
+        _ value: Decimal?,
+        currencyCode: String?,
+        missing: String
+    ) -> String {
+        guard let value else { return missing }
+        return aggregateCurrencyText(value, currencyCode: currencyCode)
+    }
+
     /// Aggregate monetary amounts always show exactly two fractional digits.
-    private static func aggregateCurrencyText(_ value: Decimal, currencyCode: String) -> String {
-        value.formatted(
+    private static func aggregateCurrencyText(_ value: Decimal, currencyCode: String?) -> String {
+        guard let currencyCode else { return unavailableAmountText }
+        return value.formatted(
             .currency(code: currencyCode)
                 .precision(.fractionLength(2))
         )
@@ -1140,6 +1182,10 @@ private struct GitHubBillingCurrency {
     let code: String
     let isReported: Bool
     let conflictMessage: String?
+
+    var verifiedCode: String? {
+        conflictMessage == nil ? code : nil
+    }
 }
 
 private struct SummaryResponse: Decodable {
