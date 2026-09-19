@@ -128,7 +128,7 @@ current thresholds.
 Do not run the full CI gate for routine pull requests, including UI changes.
 After the intended release changes have merged, select a release-candidate
 branch or tag, record its resolved SHA, and dispatch the gate once. The dispatch
-first runs the five automatic jobs. If they pass, `Full iOS UI validation` runs all five
+first runs the five automatic jobs. If they pass, `Full iOS UI validation` runs all six
 journeys on both iPhone and iPad. A failed iPhone family does not suppress the
 iPad family or its retained failure artifacts.
 
