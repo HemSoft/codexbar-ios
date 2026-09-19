@@ -2,6 +2,40 @@ import XCTest
 
 @MainActor
 final class AccountJourneysUITests: XCTestCase {
+    func testGitHubBillingPermissionDisclosure() throws {
+        let app = launch(scenario: "github-billing-personal")
+        openAccountsAndGroups(in: app)
+        let account = app.otherElements["Sample Personal"]
+        tap(account, in: app)
+        XCTAssertTrue(app.navigationBars["Sample Personal"].waitForExistence(timeout: 10))
+        let disclosure = app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Personal billing requires GitHub's user scope"
+        )).firstMatch
+        reveal(disclosure, in: app)
+        XCTAssertTrue(disclosure.label.contains("permits profile changes"))
+        XCTAssertTrue(disclosure.label.contains("reading private email addresses"))
+        XCTAssertTrue(disclosure.label.contains("following or unfollowing users"))
+        XCTAssertTrue(disclosure.label.contains("never changes your profile"))
+        keepBillingScreenshot("github-billing-user-permission", of: app)
+        let reconnect = app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "If you signed in before this permission was added"
+        )).firstMatch
+        reveal(reconnect, in: app)
+        XCTAssertTrue(reconnect.label.contains("sign in again and approve user access"))
+        keepBillingScreenshot("github-billing-reauthorization", of: app)
+        let signIn = app.buttons["github-billing-sign-in"]
+        reveal(signIn, in: app)
+        XCTAssertTrue(signIn.isEnabled)
+        // Do not open real authorization or submit synthetic tokens to GitHub.
+    }
+
+    private func keepBillingScreenshot(_ name: String, of app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testAccountSetupPersistsGroupAndCredentialAtAccessibilitySize() throws {
         let app = launch(scenario: "empty")
         XCTAssertTrue(app.buttons["dashboard-add-account"].waitForExistence(timeout: 10))

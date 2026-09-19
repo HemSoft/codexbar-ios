@@ -61,6 +61,12 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Request the GitHub `user` permission required by personal billing rather than
+  profile-only access. Existing connections need a fresh sign-in to approve it.
+  Connection errors now identify the failed request and permission state without
+  exposing account data or treating every 404 as an unsupported account.
+  ([#344](https://github.com/HemSoft/codexbar-ios/issues/344))
+
 - Reject GitHub Billing responses attributed to a different account, clear saved
   history and prevent cached usage reuse when an existing card is connected to
   a different owner, refresh dashboard and companion surfaces after connection,
@@ -142,6 +148,11 @@ building, testing, or releasing the app.
   ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))
 
 ### Developer Experience
+
+- Added a manual GitHub Billing permission-disclosure UI journey and updated
+  the release runner to require all six journeys on each simulator family.
+  Automatic CI workload is unchanged.
+  ([#344](https://github.com/HemSoft/codexbar-ios/issues/344))
 
 - Re-reviewed the complete Swift security-analysis baseline after adding GitHub
   Billing authentication, networking, and local fixture support. The same three

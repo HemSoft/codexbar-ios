@@ -148,7 +148,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
     ) async -> ProviderUsageResult {
         do {
             return try await fetchUsage(configuration: configuration, credentials: credentials)
-        } catch GitHubBillingAPIError.httpStatus(401, _) where credentials.refreshToken?.isEmpty == false {
+        } catch GitHubBillingAPIError.httpStatus(401, _, _) where credentials.refreshToken?.isEmpty == false {
             return await retryAfterUnauthorized(
                 configuration: configuration,
                 credentials: credentials,
@@ -407,13 +407,13 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 throw GitHubBillingAPIError.invalidResponse
             }
             return .page(data, info)
-        } catch GitHubBillingAPIError.httpStatus(let status, let isRateLimited) {
+        } catch GitHubBillingAPIError.httpStatus(let status, let isRateLimited, let diagnostic) {
             guard
                 !isRateLimited,
                 status != 429,
                 let message = Self.unavailableBudgetMessage(status: status)
             else {
-                throw GitHubBillingAPIError.httpStatus(status, isRateLimited)
+                throw GitHubBillingAPIError.httpStatus(status, isRateLimited, diagnostic)
             }
             return .unavailable(message)
         }
@@ -492,7 +492,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 isPrivate: metadata.isPrivate,
                 isHidden: false
             )
-        } catch GitHubBillingAPIError.httpStatus(404, _) {
+        } catch GitHubBillingAPIError.httpStatus(404, _, _) {
             return RepositoryVisibilityLookup(repository: repository, isPrivate: nil, isHidden: true)
         }
     }
@@ -568,7 +568,10 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             let isRateLimited = httpResponse.statusCode == 429
                 || httpResponse.value(forHTTPHeaderField: "Retry-After") != nil
                 || httpResponse.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
-            throw GitHubBillingAPIError.httpStatus(httpResponse.statusCode, isRateLimited)
+            let diagnostic = GitHubBillingRequestDiagnostic(
+                request: request, response: httpResponse, apiVersion: Self.apiVersion
+            )
+            throw GitHubBillingAPIError.httpStatus(httpResponse.statusCode, isRateLimited, diagnostic)
         }
         return data
     }
@@ -683,10 +686,10 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         }
         if let apiError = error as? GitHubBillingAPIError {
             switch apiError {
-            case .httpStatus(let status, let isRateLimited):
-                return httpFailureResult(
-                    status: status,
-                    isRateLimited: isRateLimited,
+            case .httpStatus(let status, let isRateLimited, _):
+                return failureResult(
+                    message: apiError.localizedDescription,
+                    recoveryAction: Self.httpRecoveryAction(status: status, isRateLimited: isRateLimited),
                     configuration: configuration
                 )
             case .invalidRequest, .invalidResponse:
@@ -704,52 +707,10 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         )
     }
 
-    private func httpFailureResult(
-        status: Int,
-        isRateLimited: Bool,
-        configuration: ProviderAccountConfiguration
-    ) -> ProviderUsageResult {
-        if status == 401 {
-            return failureResult(
-                message: "GitHub Billing authorization expired or was revoked. Sign in again.",
-                recoveryAction: .reauthenticate,
-                configuration: configuration
-            )
-        }
-        if Self.isRateLimit(status: status, isRateLimited: isRateLimited) {
-            return failureResult(
-                message: "GitHub Billing rate limit reached. Try again later.",
-                recoveryAction: .retryRefresh,
-                configuration: configuration
-            )
-        }
-        if status == 403 {
-            return failureResult(
-                message: "The signed-in user lacks permission to read this billing account. "
-                    + "Organization monitoring requires an administrator role.",
-                recoveryAction: .reauthenticate,
-                configuration: configuration
-            )
-        }
-        if status == 404 {
-            return failureResult(
-                message: "GitHub Enhanced Billing is unavailable, unsupported, hidden, or not found for this account.",
-                recoveryAction: .retryRefresh,
-                configuration: configuration
-            )
-        }
-        if (500..<600).contains(status) {
-            return failureResult(
-                message: "GitHub Billing is temporarily unavailable. Try again later.",
-                recoveryAction: .retryRefresh,
-                configuration: configuration
-            )
-        }
-        return failureResult(
-            message: "GitHub Billing returned HTTP \(status).",
-            recoveryAction: .retryRefresh,
-            configuration: configuration
-        )
+    private static func httpRecoveryAction(status: Int, isRateLimited: Bool) -> ProviderUsageRecoveryAction {
+        if status == 401 { return .reauthenticate }
+        if isRateLimit(status: status, isRateLimited: isRateLimited) { return .retryRefresh }
+        return [403, 404].contains(status) ? .reauthenticate : .retryRefresh
     }
 
     private static func isRateLimit(status: Int, isRateLimited: Bool) -> Bool {
@@ -862,10 +823,57 @@ private struct TokenRefreshResponse: Decodable {
     }
 }
 
+// Only fixed route labels and scope capabilities may reach user-visible diagnostics.
+// Never retain URLs, owner names, raw response bodies, tokens, or arbitrary header values.
+private struct GitHubBillingRequestDiagnostic: Sendable {
+    let endpoint: String
+    let apiVersion: String
+    let acceptsUserScope: Bool
+    let grantedUserScope: String
+
+    init(request: URLRequest, response: HTTPURLResponse, apiVersion: String) {
+        endpoint = Self.endpointLabel(path: request.url?.path ?? "")
+        self.apiVersion = apiVersion
+        acceptsUserScope = Self.scopes(response.value(forHTTPHeaderField: "X-Accepted-OAuth-Scopes"))
+            .contains("user")
+        if let scopes = response.value(forHTTPHeaderField: "X-OAuth-Scopes") {
+            grantedUserScope = Self.scopes(scopes).contains("user") ? "present" : "missing"
+        } else {
+            grantedUserScope = "not reported"
+        }
+    }
+
+    func description(status: Int) -> String {
+        let requirement = acceptsUserScope ? "required" : "not reported"
+        return "Request: \(endpoint); HTTP \(status); API \(apiVersion); "
+            + "user scope: \(grantedUserScope), endpoint requirement: \(requirement)."
+    }
+
+    private static func scopes(_ value: String?) -> Set<String> {
+        Set((value ?? "").split { $0 == "," || $0.isWhitespace }.map(String.init))
+    }
+
+    private static func endpointLabel(path: String) -> String {
+        let components = path.split(separator: "/")
+        if components.first == "repos" { return "repository visibility" }
+        if path == "/user" { return "signed-in profile" }
+        if path == "/user/memberships/orgs" { return "organization membership" }
+        let scope = components.first == "users" ? "personal" : "organization"
+        let suffix = components.dropFirst(2).joined(separator: "/")
+        let routes = [
+            "settings/billing/usage/summary": "billing summary",
+            "settings/billing/usage": "billing detail",
+            "settings/billing/budgets": "billing budgets",
+        ]
+        guard let route = routes[suffix] else { return "GitHub API" }
+        return "\(scope) \(route)"
+    }
+}
+
 private enum GitHubBillingAPIError: LocalizedError {
     case invalidRequest
     case invalidResponse
-    case httpStatus(Int, Bool)
+    case httpStatus(Int, Bool, GitHubBillingRequestDiagnostic)
 
     var errorDescription: String? {
         switch self {
@@ -873,8 +881,9 @@ private enum GitHubBillingAPIError: LocalizedError {
             "GitHub Billing could not create a valid request."
         case .invalidResponse:
             "GitHub Billing returned data CodexBar could not read."
-        case .httpStatus(let status, let isRateLimited):
+        case .httpStatus(let status, let isRateLimited, let diagnostic):
             Self.httpStatusMessage(status: status, isRateLimited: isRateLimited)
+                + " " + diagnostic.description(status: status)
         }
     }
 
@@ -900,7 +909,8 @@ private enum GitHubBillingAPIError: LocalizedError {
         case 403:
             "The signed-in user lacks permission to read this billing account."
         case 404:
-            "GitHub Enhanced Billing is unavailable, hidden, or not found for this account."
+            "GitHub could not provide access to this resource. Sign in again to update permissions. "
+                + "A 404 does not confirm that your account is unsupported."
         case 500..<600:
             "GitHub Billing is temporarily unavailable. Try again later."
         default:

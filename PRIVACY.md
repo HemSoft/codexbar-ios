@@ -69,10 +69,14 @@ and the account tokens returned for your session are stored in the iOS
 Keychain.
 
 GitHub Billing is authorized and stored separately from GitHub Copilot. It asks
-GitHub for `repo`, `read:org`, and `read:user` OAuth scopes so it can read the
+GitHub for `repo`, `read:org`, and `user` OAuth scopes so it can read the
 selected user's plan and billing usage, discover organizations they administer,
 and classify billed repository usage as public or private. GitHub's `repo`
-scope is write-capable even though CodexBar only makes read-only requests.
+scope permits repository changes, and the `user` scope required by personal
+billing also permits profile changes, reading private email addresses, and
+following or unfollowing users through its included `user:email` and
+`user:follow` scopes. CodexBar does not request email addresses or change
+profiles, follows, or repositories. Its data requests are read-only.
 CodexBar sends the token only to GitHub's API and OAuth token endpoints. Billing
 amounts, repository names returned with usage, organization names, and derived
 allowance or budget readings may be stored locally in dashboard history,

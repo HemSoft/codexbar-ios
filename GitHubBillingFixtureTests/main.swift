@@ -5,6 +5,8 @@ import CodexBarIOS
 @main
 enum GitHubBillingFixtureRunner {
     static func main() async throws {
+        try await personalAuthorizationScopeRegression()
+        try await personalPermissionDiagnostics()
         try personalFreeAndProAllowances()
         try organizationBudgetsAndPaginationParsing()
         try malformedAndMissingFields()
@@ -12,6 +14,83 @@ enum GitHubBillingFixtureRunner {
         try await providerRequestAndFailureFixtures()
         print("GitHub Billing fixture suite passed: personal plans, repository classification, mixed runners, "
             + "accrued storage, Git LFS, discounts, budgets, pagination, missing data, and HTTP failures.")
+    }
+
+    private static func personalAuthorizationScopeRegression() async throws {
+        let authorizationURL = GitHubBillingWebAuthService.authorizationURL(
+            clientID: "fixture-client", redirectURI: "http://localhost:8765/callback",
+            state: "fixture-state", codeChallenge: "fixture-challenge"
+        )
+        let scope = URLComponents(url: authorizationURL, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "scope" }?.value ?? ""
+        let scopes = Set(scope.split(separator: " ").map(String.init))
+        let provider = GitHubBillingUsageProvider(session: FixtureURLProtocol.session())
+        // GitHub advertises X-Accepted-OAuth-Scopes: user on both personal billing endpoints.
+        // This models that permission boundary, not a live OAuth compatibility test.
+        FixtureURLProtocol.setHandler { request in
+            if request.url?.path == "/user" {
+                return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
+            }
+            guard scopes.contains("user") else {
+                return response(request, status: 404, body: #"{"message":"Not Found"}"#)
+            }
+            if request.url?.path.hasSuffix("/summary") == true {
+                return response(request, status: 200, data: personalSummary())
+            }
+            return response(request, status: 200, body: #"{"usageItems":[]}"#)
+        }
+        let result = try await provider.validateCandidate(
+            GitHubBillingCredentials(accessToken: "fixture-token", username: "octocat"),
+            for: personalConfiguration()
+        )
+        try check(result.failureMessage == nil, "Personal connection must request the accepted user scope")
+        try check(scopes == ["repo", "read:org", "user"], "Billing must request only its documented scopes")
+    }
+
+    private static func personalPermissionDiagnostics() async throws {
+        for endpoint in ["usage/summary", "usage"] {
+            for scope: String? in ["repo, read:org, read:user", "repo,user", "", nil] {
+                try await assertPersonalPermissionDiagnostic(endpoint: endpoint, grantedScope: scope)
+            }
+        }
+    }
+
+    private static func assertPersonalPermissionDiagnostic(endpoint: String, grantedScope: String?) async throws {
+        let store = FixtureSecretStore()
+        let provider = GitHubBillingUsageProvider(secretStore: store, session: FixtureURLProtocol.session())
+        let credentials = GitHubBillingCredentials(accessToken: "fixture-secret-never-log", username: "octocat")
+        FixtureURLProtocol.setHandler { request in
+            if request.url?.path == "/user" {
+                return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
+            }
+            if request.url?.path.hasSuffix("/billing/\(endpoint)") == true {
+                var headers = [
+                    "X-Accepted-OAuth-Scopes": "user, malicious-header-data",
+                    "X-GitHub-Request-Id": "private-request-id",
+                ]
+                headers["X-OAuth-Scopes"] = grantedScope.map { $0 + ", malicious-header-data" }
+                return response(request, status: 404, data: data(#"{"message":"fixture-secret-never-log octocat private-billing"}"#), headers: headers)
+            }
+            return response(request, status: 200, body: #"{"usageItems":[]}"#)
+        }
+        do {
+            _ = try await provider.validateCandidate(credentials, for: personalConfiguration())
+            throw FixtureFailure(message: "A rejected personal connection must not succeed")
+        } catch {
+            let message = error.localizedDescription
+            let route = endpoint == "usage" ? "personal billing detail" : "personal billing summary"
+            try check(message.contains(route), "Connection errors must identify the failing endpoint without its owner")
+            try check(message.contains("HTTP 404; API 2026-03-10"), "Connection errors must retain status and requested API version")
+            let reportedScope = grantedScope == "repo,user" ? "present" : "missing"
+            let expectedScope = grantedScope == nil ? "not reported" : reportedScope
+            try check(message.contains("user scope: \(expectedScope), endpoint requirement: required"), "Scope diagnostics must distinguish user from read:user")
+            for privateValue in ["fixture-secret-never-log", "octocat", "private-billing", "malicious-header-data", "private-request-id"] {
+                try check(!message.contains(privateValue), "Diagnostics must not disclose raw provider data")
+            }
+            try check(message.contains("Sign in again"), "An ambiguous 404 should offer reauthorization, not declare the account unsupported")
+        }
+        let savedSecret = try store.readSecret(account: ProviderConfigurationStore.keychainAccount(for: personalConfiguration()))
+        try check(savedSecret == nil, "Failed candidate validation must never save credentials")
     }
 
     private static func personalFreeAndProAllowances() throws {
@@ -463,7 +542,7 @@ enum GitHubBillingFixtureRunner {
             let expected: String = switch status {
             case 401: "Sign in again"
             case 403: "lacks permission"
-            case 404: "Enhanced billing"
+            case 404: "could not provide access"
             case 429: "rate limit"
             default: "temporarily unavailable"
             }
@@ -614,8 +693,8 @@ enum GitHubBillingFixtureRunner {
         FixtureURLProtocol.setHandler { request in response(request, status: 404, body: "{}") }
         let hiddenOrganization = try await provider.fetchUsage(for: organization)
         try check(
-            hiddenOrganization.failureMessage?.contains("unsupported, hidden, or not found") == true,
-            "Organization billing 404 responses must identify each plausible account state"
+            hiddenOrganization.failureMessage?.contains("A 404 does not confirm that your account is unsupported") == true,
+            "Organization billing 404 responses must not claim to know the account state"
         )
 
         FixtureURLProtocol.setHandler { request in
