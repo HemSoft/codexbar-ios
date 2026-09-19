@@ -815,9 +815,7 @@ public enum GitHubBillingUsageParser {
             amounts: amounts,
             currencyCode: currencyCode
         ).detail
-        if detail != unavailableAmountText {
-            detail += " · \(quantitySummary(items))"
-        }
+        detail += " · \(quantitySummary(items))"
         return ProviderCardInformationItem(id: "\(key).consumed", label: "Consumed usage", detail: detail)
     }
 

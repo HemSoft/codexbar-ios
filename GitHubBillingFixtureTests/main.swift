@@ -579,6 +579,22 @@ enum GitHubBillingFixtureRunner {
             )
         }
 
+        let incompleteAmount = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"user":"octocat","timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Copilot","sku":"copilot_premium_requests","unitType":"requests","grossQuantity":2,"discountAmount":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: Date()
+        ), "A product row with quantity but no gross amount should remain readable")
+        try check(
+            incompleteAmount.cardInformationSections
+                .first { $0.id == "github-billing.product.copilot" }?.items.contains { item in
+                    item.label == "Consumed usage" && item.detail == "Unavailable · 2 requests"
+                } == true,
+            "A valid quantity must remain visible when only the consumed amount is unavailable"
+        )
+
         let missingActionsProduct = try require(GitHubBillingUsageParser.parsePersonal(
             summaryData: personalSummary(),
             usageData: data(#"{"usageItems":[{"sku":"actions_linux","quantity":1,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":0.01,"discountAmount":0.01,"netAmount":0}]}"#),
