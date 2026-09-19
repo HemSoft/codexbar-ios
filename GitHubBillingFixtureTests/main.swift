@@ -408,8 +408,12 @@ enum GitHubBillingFixtureRunner {
                     && section.items.contains { item in
                         item.label == "Currency evidence" && item.detail.contains("cannot verify")
                     }
+                    && section.items.contains { item in
+                        item.label == "Currency" && item.detail.contains("could not verify")
+                            && !item.detail.contains("does not report")
+                    }
             } == true,
-            "Conflicting currency evidence must be explained in the amounts and currency section"
+            "Conflicting currency evidence must explain the USD fallback without claiming no code was reported"
         )
 
         let malformedCurrency = try parse(summaryData: data(
@@ -553,6 +557,27 @@ enum GitHubBillingFixtureRunner {
         try check(!result.unavailableUsageMetrics.isEmpty, "Unknown plans must explain unavailable allowances")
         try check(result.monetaryMetrics.isEmpty, "Missing spend fields must not be presented as zero-dollar usage")
         try check(result.usageMessages.contains { $0.contains("complete gross") }, "Missing spend fields need an unavailable explanation")
+
+        let incompleteQuantities = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"user":"octocat","timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Copilot","sku":"copilot_premium_requests","unitType":"requests","grossAmount":1,"discountAmount":0,"netAmount":1},{"product":"Codespaces","sku":"codespaces_compute","unitType":"core-hours","grossQuantity":-1,"grossAmount":1,"discountAmount":0,"netAmount":1},{"product":"Git LFS","sku":"lfs_storage","grossQuantity":1,"grossAmount":1,"discountAmount":0,"netAmount":1}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: Date()
+        ), "Incomplete product quantities should remain readable")
+        for sectionID in [
+            "github-billing.product.copilot",
+            "github-billing.product.codespaces",
+            "github-billing.product.git-lfs",
+        ] {
+            try check(
+                incompleteQuantities.cardInformationSections.first { $0.id == sectionID }?.items.contains { item in
+                    item.label == "Consumed usage" && item.detail.contains("Quantity unavailable")
+                } == true,
+                "Missing, negative, or unitless product quantities must be explicit in \(sectionID)"
+            )
+        }
 
         let missingActionsProduct = try require(GitHubBillingUsageParser.parsePersonal(
             summaryData: personalSummary(),

@@ -815,10 +815,8 @@ public enum GitHubBillingUsageParser {
             amounts: amounts,
             currencyCode: currencyCode
         ).detail
-        if let quantities = quantitySummary(items) {
-            detail = detail == unavailableAmountText
-                ? detail
-                : "\(detail) · \(quantities)"
+        if detail != unavailableAmountText {
+            detail += " · \(quantitySummary(items))"
         }
         return ProviderCardInformationItem(id: "\(key).consumed", label: "Consumed usage", detail: detail)
     }
@@ -838,16 +836,16 @@ public enum GitHubBillingUsageParser {
         return ProviderCardInformationItem(id: id, label: label, detail: detail)
     }
 
-    private static func quantitySummary(_ items: [SummaryItem]) -> String? {
+    private static func quantitySummary(_ items: [SummaryItem]) -> String {
         var totalsByUnit: [String: (unit: String, quantity: Decimal)] = [:]
         for item in items {
-            guard let quantity = item.grossQuantity, let unit = item.unitType?.nonempty else {
-                return nil
+            guard let quantity = item.grossQuantity, quantity >= 0, let unit = item.unitType?.nonempty else {
+                return "Quantity unavailable"
             }
             let unitKey = stableKey(unit)
             totalsByUnit[unitKey, default: (unit, .zero)].quantity += quantity
         }
-        guard !totalsByUnit.isEmpty else { return nil }
+        guard !totalsByUnit.isEmpty else { return "Quantity unavailable" }
         return totalsByUnit.values
             .sorted { $0.unit.caseInsensitiveCompare($1.unit) == .orderedAscending }
             .map { "\(usageAmount($0.quantity.doubleValue)) \($0.unit)" }
@@ -943,7 +941,10 @@ public enum GitHubBillingUsageParser {
             ))
         }
         let currencyDetail: String
-        if currency.conflictMessage == nil && currency.isReported {
+        if currency.conflictMessage != nil {
+            currencyDetail = "USD. GitHub returned currency evidence CodexBar could not verify, so amounts continue "
+                + "to show USD and are not converted to the device locale."
+        } else if currency.isReported {
             currencyDetail = "\(currency.code), as GitHub's billing response reports it. Amounts are not converted to the device locale."
         } else {
             currencyDetail = "USD. GitHub's billing API does not report a currency code, so CodexBar shows the "
