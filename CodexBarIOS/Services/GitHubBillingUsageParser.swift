@@ -1062,13 +1062,14 @@ public enum GitHubBillingUsageParser {
             let quantity = item.quantity.map(decimalText) ?? "Unknown quantity"
             let unit = item.unitType?.nonempty ?? "units"
             let unitPrice = usageUnitPriceText(item.pricePerUnit, currencyCode: currencyCode)
+            let unitPriceUnit = singularUnit(unit)
             let gross = usageAggregateText(item.grossAmount, currencyCode: currencyCode, missing: "Unknown gross amount")
             let discount = usageAggregateText(item.discountAmount, currencyCode: currencyCode, missing: "Unknown discount")
             let net = usageAggregateText(item.netAmount, currencyCode: currencyCode, missing: "Unknown net amount")
             return ProviderCardInformationItem(
                 id: "usage.\(index).\(stableKey(repository)).\(stableKey(sku))",
                 label: repository,
-                detail: "\(product) · \(sku) · \(quantity) \(unit) · \(unitPrice)/\(unit) · "
+                detail: "\(product) · \(sku) · \(quantity) \(unit) · \(unitPrice)/\(unitPriceUnit) · "
                     + "\(gross) gross · \(discount) discount · \(net) net"
             )
         }
@@ -1080,15 +1081,29 @@ public enum GitHubBillingUsageParser {
     }
 
     private static func currencyResolution(topLevel: String?, items: [SummaryItem]) -> GitHubBillingCurrency {
-        let candidates = [topLevel].compactMap { $0?.nonempty } + items.compactMap(\.currency?.nonempty)
-        let supplied = Set(candidates.map { $0.uppercased() })
-        if supplied.count == 1, let code = supplied.first, isISOCurrencyCode(code) {
-            return GitHubBillingCurrency(code: code, isReported: true, conflictMessage: nil)
+        if let topLevel = topLevel?.nonempty {
+            let supplied = [topLevel] + items.compactMap(\.currency?.nonempty)
+            return verifiedCurrency(from: supplied)
         }
+        let monetaryItems = items.filter(\.hasMonetaryEvidence)
+        let supplied = monetaryItems.compactMap(\.currency?.nonempty)
         guard !supplied.isEmpty else {
             return GitHubBillingCurrency(code: "USD", isReported: false, conflictMessage: nil)
         }
-        return GitHubBillingCurrency(
+        guard supplied.count == monetaryItems.count else { return unverifiedCurrency() }
+        return verifiedCurrency(from: supplied)
+    }
+
+    private static func verifiedCurrency(from supplied: [String]) -> GitHubBillingCurrency {
+        let codes = Set(supplied.map { $0.uppercased() })
+        guard codes.count == 1, let code = codes.first, isISOCurrencyCode(code) else {
+            return unverifiedCurrency()
+        }
+        return GitHubBillingCurrency(code: code, isReported: true, conflictMessage: nil)
+    }
+
+    private static func unverifiedCurrency() -> GitHubBillingCurrency {
+        GitHubBillingCurrency(
             code: "USD",
             isReported: false,
             conflictMessage: "GitHub returned currency evidence CodexBar cannot verify, so monetary amounts are unavailable."
@@ -1107,6 +1122,10 @@ public enum GitHubBillingUsageParser {
         guard let value else { return "Unknown unit price" }
         guard let currencyCode else { return unavailableAmountText }
         return unitPriceText(value, currencyCode: currencyCode)
+    }
+
+    private static func singularUnit(_ unit: String) -> String {
+        unit.hasSuffix("s") ? String(unit.dropLast()) : unit
     }
 
     private static func usageAggregateText(
@@ -1228,6 +1247,10 @@ private struct SummaryItem: Decodable {
     let discountAmount: Decimal?
     let netAmount: Decimal?
     let currency: String?
+
+    var hasMonetaryEvidence: Bool {
+        [pricePerUnit, grossAmount, discountAmount, netAmount].contains { $0 != nil }
+    }
 
     var hasOrganizationMetricFields: Bool {
         product?.nonempty != nil

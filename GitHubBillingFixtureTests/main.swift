@@ -304,10 +304,10 @@ enum GitHubBillingFixtureRunner {
             .first { $0.id == "github-billing.usage-detail" }?.items ?? []
         try check(!detailItems.isEmpty, "Usage detail rows must stay available alongside product summaries")
         try check(detailItems.contains { item in
-            item.detail.contains("\(unitPriceText(Decimal(string: "0.006")!, 3))/minute")
-        }, "Unit prices must keep GitHub's source precision instead of rounding the rate")
+            item.detail.contains("\(unitPriceText(Decimal(string: "0.006")!, 3))/minute ·")
+        }, "Unit prices must keep GitHub's source precision with a singular denominator")
         try check(detailItems.contains { item in
-            item.detail.contains("\(unitPriceText(Decimal(string: "0.01")!, 2))/minute")
+            item.detail.contains("\(unitPriceText(Decimal(string: "0.01")!, 2))/minute ·")
         }, "Two-digit unit rates must keep the standard currency display")
         try check(detailItems.contains { item in
             item.detail.contains("\(aggregateText(Decimal(string: "0.60")!)) gross")
@@ -433,6 +433,18 @@ enum GitHubBillingFixtureRunner {
                     }
             } == true,
             "Conflicting currency evidence must explain the USD fallback without claiming no code was reported"
+        )
+
+        let partialCurrency = try parse(summaryData: data(
+            #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","currency":"EUR","grossQuantity":1,"grossAmount":1,"discountAmount":0,"netAmount":1},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":1,"grossAmount":1,"discountAmount":0,"netAmount":1}]}"#
+        ))
+        try check(
+            partialCurrency?.monetaryMetrics.isEmpty == true,
+            "Item-level currency evidence must cover every monetary summary row"
+        )
+        try check(
+            partialCurrency?.usageMessages.contains { $0.contains("currency evidence") } == true,
+            "Partial item-level currency evidence must remain an actionable warning"
         )
 
         let malformedCurrency = try parse(summaryData: data(
