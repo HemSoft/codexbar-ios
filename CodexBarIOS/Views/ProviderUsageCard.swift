@@ -256,7 +256,20 @@ struct ProviderUsageCard: View {
     @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
     @State private var isResetActionUnavailable = false
     @State private var isCustomizingMetrics = false
-    @State private var isShowingMoreInformation = false
+    @State private var isShowingMoreInformation = Self.presentsFixtureInformationSheetOnLaunch
+
+    /// Simulator-only fixture hook: the More Information sheet opens directly when
+    /// a journey relaunches with CODEXBAR_UI_TEST_MORE_INFORMATION=1. Production
+    /// builds keep the menu-only entry point.
+    private static var presentsFixtureInformationSheetOnLaunch: Bool {
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["CODEXBAR_UI_TESTS"] == "1" else { return false }
+        return environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1"
+        #else
+        return false
+        #endif
+    }
     @State private var metricDetailPresentation: ProviderMetricTileDetailPresentation?
     @StateObject private var resetRedemptionController: CodexBankedResetRedemptionController
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize

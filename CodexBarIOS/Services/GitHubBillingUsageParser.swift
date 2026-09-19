@@ -1,6 +1,8 @@
 import Foundation
 
 public enum GitHubBillingUsageParser {
+    private static let unavailableAmountText = "Unavailable"
+
     public static func parsePersonal(
         summaryData: Data,
         usageData: Data,
@@ -56,8 +58,9 @@ public enum GitHubBillingUsageParser {
         )
 
         let totals = SpendTotals(items: summary.usageItems)
+        let currency = currencyResolution(topLevel: summary.currency, items: summary.usageItems)
         let monetaryMetrics = totals.map {
-            makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt)
+            makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt, currencyCode: currency.code)
         } ?? []
         let planDescriptor = plan.map { plan in
             ProviderPlanDescriptor.make(
@@ -66,9 +69,22 @@ public enum GitHubBillingUsageParser {
                 label: plan.label
             )
         }
-        let detailOutput = usageDetails(usage.usageItems)
+        let detailOutput = usageDetails(usage.usageItems, currencyCode: currency.code)
+        let notes = amountsAndCurrencySection(
+            currency: currency,
+            plan: plan,
+            budgetQualification: nil,
+            omittedDetailCount: detailOutput.omittedCount
+        )
         let sections = personalInformationSections(
+            productSections: productSummarySections(
+                summary.usageItems,
+                currencyCode: currency.code,
+                bars: bars,
+                unavailable: unavailable
+            ),
             bars: bars,
+            notes: notes,
             usageDetails: detailOutput.items
         )
         return ProviderUsageResult(
@@ -82,10 +98,8 @@ public enum GitHubBillingUsageParser {
             bars: bars,
             monetaryMetrics: monetaryMetrics,
             unavailableUsageMetrics: unavailable,
-            usageMessages: [
-                "GitHub does not expose personal budgets through its public API. Included allowances and current charges are shown separately.",
-            ] + Set(unavailable.values).sorted()
-                + [repositoryVisibilityMessage, detailOutput.message].compactMap { $0 }
+            usageMessages: Set(unavailable.values).sorted()
+                + [repositoryVisibilityMessage, currency.conflictMessage].compactMap { $0 }
                 + spendStatusMessages(for: totals),
             cardInformationSections: sections,
             cacheIdentity: accountName.lowercased(),
@@ -116,23 +130,27 @@ public enum GitHubBillingUsageParser {
         }
 
         let period = BillingPeriod(timePeriod: summary.timePeriod)
+        let currency = currencyResolution(topLevel: summary.currency, items: summary.usageItems)
         var bars = organizationUsageBars(summary.usageItems)
         let budgetOutput = makeBudgetOutput(
             budgets: budgets,
             usageItems: usage.usageItems,
-            period: period
+            period: period,
+            currencyCode: currency.code
         )
         bars.append(contentsOf: budgetOutput.bars)
 
         let totals = SpendTotals(items: summary.usageItems)
         let monetaryMetrics = totals.map {
-            makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt)
+            makeSpendMetrics(totals: $0, period: period, fetchedAt: fetchedAt, currencyCode: currency.code)
         } ?? []
 
         let presentation = organizationPresentation(
+            summaryItems: summary.usageItems,
+            currency: currency,
             budgetOutput: budgetOutput,
             totals: totals,
-            details: usageDetails(usage.usageItems),
+            details: usageDetails(usage.usageItems, currencyCode: currency.code),
             budgetStatusMessage: budgetStatusMessage,
             hasBudgets: !budgets.isEmpty
         )
@@ -151,6 +169,8 @@ public enum GitHubBillingUsageParser {
     }
 
     private static func organizationPresentation(
+        summaryItems: [SummaryItem],
+        currency: GitHubBillingCurrency,
         budgetOutput: BudgetOutput,
         totals: SpendTotals?,
         details: UsageDetailOutput,
@@ -158,15 +178,25 @@ public enum GitHubBillingUsageParser {
         hasBudgets: Bool
     ) -> OrganizationPresentationOutput {
         var messages = budgetOutput.messages + spendStatusMessages(for: totals)
-        if let detailMessage = details.message {
-            messages.append(detailMessage)
+        if let conflictMessage = currency.conflictMessage {
+            messages.append(conflictMessage)
         }
         if let budgetStatusMessage {
             messages.append(budgetStatusMessage)
-        } else if !hasBudgets {
-            messages.append("GitHub returned no organization budgets. Metered usage can still incur charges.")
         }
-        var sections = budgetOutput.sections
+        var sections = productSummarySections(summaryItems, currencyCode: currency.code, bars: [], unavailable: [:])
+        sections.append(contentsOf: budgetOutput.sections)
+        let budgetQualification = budgetStatusMessage == nil && !hasBudgets
+            ? "GitHub returned no organization budgets. Metered usage can still incur charges."
+            : nil
+        if let notes = amountsAndCurrencySection(
+            currency: currency,
+            plan: nil,
+            budgetQualification: budgetQualification,
+            omittedDetailCount: details.omittedCount
+        ) {
+            sections.append(notes)
+        }
         if !details.items.isEmpty {
             sections.append(ProviderCardInformationSection(
                 id: "github-billing.usage-detail",
@@ -337,12 +367,17 @@ public enum GitHubBillingUsageParser {
     }
 
     private static func personalInformationSections(
+        productSections: [ProviderCardInformationSection],
         bars: [UsageBar],
+        notes: ProviderCardInformationSection?,
         usageDetails: [ProviderCardInformationItem]
     ) -> [ProviderCardInformationSection] {
-        var sections: [ProviderCardInformationSection] = []
+        var sections = productSections
         if !bars.isEmpty {
             sections.append(allowanceSection(bars))
+        }
+        if let notes {
+            sections.append(notes)
         }
         if !usageDetails.isEmpty {
             sections.append(ProviderCardInformationSection(
@@ -425,12 +460,13 @@ public enum GitHubBillingUsageParser {
     private static func makeBudgetOutput(
         budgets: [Budget]?,
         usageItems: [UsageItem],
-        period: BillingPeriod?
+        period: BillingPeriod?,
+        currencyCode: String
     ) -> BudgetOutput {
         guard let budgets else { return BudgetOutput() }
         var output = BudgetOutput()
         for budget in budgets {
-            let candidate = budgetCandidate(budget, usageItems: usageItems)
+            let candidate = budgetCandidate(budget, usageItems: usageItems, currencyCode: currencyCode)
             if let unavailableMessage = candidate.unavailableMessage {
                 output.messages.append(unavailableMessage)
                 if let unavailableSection = candidate.unavailableSection {
@@ -443,7 +479,8 @@ public enum GitHubBillingUsageParser {
             output.sections.append(budgetSection(
                 normalized,
                 isProduct: candidate.isProduct,
-                targetLabel: candidate.targetLabel
+                targetLabel: candidate.targetLabel,
+                currencyCode: currencyCode
             ))
         }
         return output
@@ -473,7 +510,8 @@ public enum GitHubBillingUsageParser {
 
     private static func budgetCandidate(
         _ budget: Budget,
-        usageItems: [UsageItem]
+        usageItems: [UsageItem],
+        currencyCode: String
     ) -> BudgetCandidate {
         guard
             let id = budget.id?.nonempty,
@@ -512,7 +550,8 @@ public enum GitHubBillingUsageParser {
                     isProduct: isProduct,
                     preventFurtherUsage: preventFurtherUsage,
                     willAlert: willAlert,
-                    scopeDescription: budget.scopeDescription
+                    scopeDescription: budget.scopeDescription,
+                    currencyCode: currencyCode
                 )
             )
         }
@@ -566,7 +605,8 @@ public enum GitHubBillingUsageParser {
         isProduct: Bool,
         preventFurtherUsage: Bool,
         willAlert: Bool,
-        scopeDescription: String
+        scopeDescription: String,
+        currencyCode: String
     ) -> ProviderCardInformationSection {
         let behavior = preventFurtherUsage ? "Hard stop" : (willAlert ? "Alert only" : "Tracking only")
         return ProviderCardInformationSection(
@@ -583,7 +623,11 @@ public enum GitHubBillingUsageParser {
                     label: "Applies to",
                     detail: scopeDescription
                 ),
-                ProviderCardInformationItem(id: "\(id).amount", label: "Budget", detail: currencyText(amount)),
+                ProviderCardInformationItem(
+                    id: "\(id).amount",
+                    label: "Budget",
+                    detail: aggregateCurrencyText(amount, currencyCode: currencyCode)
+                ),
                 ProviderCardInformationItem(id: "\(id).behavior", label: "Behavior", detail: behavior),
                 ProviderCardInformationItem(
                     id: "\(id).consumption",
@@ -597,12 +641,13 @@ public enum GitHubBillingUsageParser {
     private static func budgetSection(
         _ budget: NormalizedBudget,
         isProduct: Bool,
-        targetLabel: String
+        targetLabel: String,
+        currencyCode: String
     ) -> ProviderCardInformationSection {
         let remaining = max(budget.amount - budget.consumed, 0)
         let consumptionDetail = budget.amount > 0
-            ? "\(currencyText(remaining)) · \(decimalText(budget.consumed / budget.amount * 100))% consumed"
-            : "\(currencyText(remaining)) · Zero-dollar budget"
+            ? "\(aggregateCurrencyText(remaining, currencyCode: currencyCode)) · \(decimalText(budget.consumed / budget.amount * 100))% consumed"
+            : "\(aggregateCurrencyText(remaining, currencyCode: currencyCode)) · Zero-dollar budget"
         return ProviderCardInformationSection(
             id: "github-billing.budget.\(budget.id)",
             title: budget.name,
@@ -625,7 +670,7 @@ public enum GitHubBillingUsageParser {
                 ProviderCardInformationItem(
                     id: "\(budget.id).consumed",
                     label: "Current net spend",
-                    detail: currencyText(budget.consumed)
+                    detail: aggregateCurrencyText(budget.consumed, currencyCode: currencyCode)
                 ),
                 ProviderCardInformationItem(
                     id: "\(budget.id).remaining",
@@ -642,18 +687,293 @@ public enum GitHubBillingUsageParser {
             : []
     }
 
+    /// Groups summary rows into one concise section per GitHub product. Known
+    /// products come first in a stable order; anything else keeps GitHub's own
+    /// product name so returned data is never discarded.
+    private static func productSummarySections(
+        _ items: [SummaryItem],
+        currencyCode: String,
+        bars: [UsageBar],
+        unavailable: [String: String]
+    ) -> [ProviderCardInformationSection] {
+        var groups: [String: ProductUsageGroup] = [:]
+        for item in items {
+            let rawProduct = item.product?.nonempty
+            let key = rawProduct.map(stableKey) ?? "unlisted-products"
+            let displayName = canonicalProductName(for: rawProduct)
+            groups[key, default: ProductUsageGroup(displayName: displayName, items: [])]
+                .items.append(item)
+        }
+        return groups
+            .map { (key: $0.key, name: $0.value.displayName) }
+            .sorted {
+                productGroupOrder(key: $0.key, name: $0.name, key: $1.key, name: $1.name)
+            }
+            .compactMap { key in
+                guard let group = groups[key.key] else { return nil }
+                return productSection(
+                    key: key.key,
+                    displayName: group.displayName,
+                    items: group.items,
+                    currencyCode: currencyCode,
+                    bars: bars,
+                    unavailable: unavailable
+                )
+            }
+    }
+
+    /// Known products come first in a stable order; anything else keeps GitHub's
+    /// own product name so returned data is never discarded.
+    private static let knownProductOrder: [String] = ["copilot", "actions", "codespaces", "gitlfs"]
+
+    private static func productGroupOrder(
+        key lhsKey: String,
+        name lhsName: String,
+        key rhsKey: String,
+        name rhsName: String
+    ) -> Bool {
+        let lhsRank = knownProductOrder.firstIndex(of: lhsKey) ?? knownProductOrder.count
+        let rhsRank = knownProductOrder.firstIndex(of: rhsKey) ?? knownProductOrder.count
+        if lhsRank != rhsRank {
+            return lhsRank < rhsRank
+        }
+        if lhsName.caseInsensitiveCompare(rhsName) == .orderedSame {
+            return lhsKey < rhsKey
+        }
+        return lhsName.caseInsensitiveCompare(rhsName) == .orderedAscending
+    }
+
+    private static func canonicalProductName(for rawProduct: String?) -> String {
+        guard let rawProduct = rawProduct?.nonempty else {
+            return "Unlisted products"
+        }
+        return knownProductNames[stableKey(rawProduct)] ?? rawProduct
+    }
+
+    private static let knownProductNames: [String: String] = [
+        "copilot": "Copilot",
+        "actions": "Actions",
+        "codespaces": "Codespaces",
+        "gitlfs": "Git LFS",
+        "lfs": "Git LFS",
+    ]
+
+    private static func productSection(
+        key: String,
+        displayName: String,
+        items: [SummaryItem],
+        currencyCode: String,
+        bars: [UsageBar],
+        unavailable: [String: String]
+    ) -> ProviderCardInformationSection {
+        var rows = [
+            consumedUsageRow(items, key: key, currencyCode: currencyCode),
+            amountUsageRow(
+                id: "\(key).discount",
+                label: "Discount usage",
+                amounts: items.map(\.discountAmount),
+                currencyCode: currencyCode
+            ),
+            amountUsageRow(
+                id: "\(key).billable",
+                label: "Billable usage",
+                amounts: items.map(\.netAmount),
+                currencyCode: currencyCode
+            ),
+        ]
+        if key == "actions" {
+            rows.append(contentsOf: actionsIncludedUsageRows(bars: bars, unavailable: unavailable))
+        }
+        return ProviderCardInformationSection(
+            id: "github-billing.product.\(key)",
+            title: displayName,
+            items: rows
+        )
+    }
+
+    private static func consumedUsageRow(
+        _ items: [SummaryItem],
+        key: String,
+        currencyCode: String
+    ) -> ProviderCardInformationItem {
+        let amounts = items.map(\.grossAmount)
+        var detail = amountUsageRow(
+            id: "\(key).consumed",
+            label: "Consumed usage",
+            amounts: amounts,
+            currencyCode: currencyCode
+        ).detail
+        if let quantities = quantitySummary(items) {
+            detail = detail == unavailableAmountText
+                ? detail
+                : "\(detail) · \(quantities)"
+        }
+        return ProviderCardInformationItem(id: "\(key).consumed", label: "Consumed usage", detail: detail)
+    }
+
+    private static func amountUsageRow(
+        id: String,
+        label: String,
+        amounts: [Decimal?],
+        currencyCode: String
+    ) -> ProviderCardInformationItem {
+        let detail: String
+        if amounts.allSatisfy({ $0.map { $0 >= 0 } == true }) {
+            detail = aggregateCurrencyText(amounts.compactMap { $0 }.reduce(.zero, +), currencyCode: currencyCode)
+        } else {
+            detail = unavailableAmountText
+        }
+        return ProviderCardInformationItem(id: id, label: label, detail: detail)
+    }
+
+    private static func quantitySummary(_ items: [SummaryItem]) -> String? {
+        var totalsByUnit: [String: (unit: String, quantity: Decimal)] = [:]
+        for item in items {
+            guard let quantity = item.grossQuantity, let unit = item.unitType?.nonempty else {
+                return nil
+            }
+            let unitKey = stableKey(unit)
+            totalsByUnit[unitKey, default: (unit, .zero)].quantity += quantity
+        }
+        guard !totalsByUnit.isEmpty else { return nil }
+        return totalsByUnit.values
+            .sorted { $0.unit.caseInsensitiveCompare($1.unit) == .orderedAscending }
+            .map { "\(usageAmount($0.quantity.doubleValue)) \($0.unit)" }
+            .joined(separator: " · ")
+    }
+
+    private static func actionsIncludedUsageRows(
+        bars: [UsageBar],
+        unavailable: [String: String]
+    ) -> [ProviderCardInformationItem] {
+        [
+            includedUsageRow(
+                id: "actions.included.minutes",
+                label: "Included usage · Minutes",
+                bar: bars.first { $0.stableKey == "actions-private-minutes" },
+                unit: "minutes",
+                scopeNote: nil,
+                reason: unavailable["githubBilling.actions-private-minutes"]
+            ),
+            includedUsageRow(
+                id: "actions.included.storage",
+                label: "Included usage · Storage",
+                bar: bars.first { $0.stableKey == "actions-packages-storage" },
+                unit: "GB-hours",
+                scopeNote: "Actions and Packages storage",
+                reason: unavailable["githubBilling.actions-packages-storage"]
+            ),
+        ]
+    }
+
+    private static func includedUsageRow(
+        id: String,
+        label: String,
+        bar: UsageBar?,
+        unit: String,
+        scopeNote: String?,
+        reason: String?
+    ) -> ProviderCardInformationItem {
+        let detail: String
+        if let bar {
+            let remaining = max(bar.limit - bar.used, 0)
+            let scope = scopeNote.map { " (\($0))" } ?? ""
+            detail = "\(usageAmount(bar.used)) of \(usageAmount(bar.limit)) \(unit) used\(scope) · "
+                + "\(usageAmount(remaining)) \(unit) remaining"
+        } else {
+            detail = reason ?? unavailableAmountText
+        }
+        return ProviderCardInformationItem(id: id, label: label, detail: detail)
+    }
+
+    /// Routine qualifications and currency disclosure live behind
+    /// "More Information…" so healthy cards keep only actionable messages.
+    private static func amountsAndCurrencySection(
+        currency: GitHubBillingCurrency,
+        plan: PersonalPlan?,
+        budgetQualification: String?,
+        omittedDetailCount: Int
+    ) -> ProviderCardInformationSection? {
+        var items: [ProviderCardInformationItem] = []
+        items.append(contentsOf: currencyNoteItems(currency: currency))
+        if let plan {
+            items.append(contentsOf: personalBudgetNotes(plan: plan))
+        }
+        if let budgetQualification {
+            items.append(ProviderCardInformationItem(
+                id: "github-billing.budget-qualification",
+                label: "Organization budgets",
+                detail: budgetQualification
+            ))
+        }
+        if omittedDetailCount > 0 {
+            items.append(ProviderCardInformationItem(
+                id: "github-billing.omitted-details",
+                label: "Detail rows",
+                detail: "\(omittedDetailCount) additional repository, product, and SKU detail rows were omitted to keep the card readable."
+            ))
+        }
+        return ProviderCardInformationSection(
+            id: "github-billing.amounts-and-currency",
+            title: "Amounts and currency",
+            items: items
+        )
+    }
+
+    private static func currencyNoteItems(currency: GitHubBillingCurrency) -> [ProviderCardInformationItem] {
+        var items: [ProviderCardInformationItem] = []
+        if let conflictMessage = currency.conflictMessage {
+            items.append(ProviderCardInformationItem(
+                id: "github-billing.currency-conflict",
+                label: "Currency evidence",
+                detail: conflictMessage
+            ))
+        }
+        let currencyDetail: String
+        if currency.conflictMessage == nil && currency.isReported {
+            currencyDetail = "\(currency.code), as GitHub's billing response reports it. Amounts are not converted to the device locale."
+        } else {
+            currencyDetail = "USD. GitHub's billing API does not report a currency code, so CodexBar shows the "
+                + "USD amounts GitHub lists. Amounts are not converted to the device locale."
+        }
+        items.append(ProviderCardInformationItem(
+            id: "github-billing.currency",
+            label: "Currency",
+            detail: currencyDetail
+        ))
+        return items
+    }
+
+    private static func personalBudgetNotes(plan: PersonalPlan) -> [ProviderCardInformationItem] {
+        [
+            ProviderCardInformationItem(
+                id: "github-billing.personal-budgets",
+                label: "Personal budgets",
+                detail: "GitHub does not expose personal budgets through its public API. "
+                    + "Included allowances and current charges are shown separately."
+            ),
+            ProviderCardInformationItem(
+                id: "github-billing.actions-classification",
+                label: "Private Actions minutes",
+                detail: "Calculated from GitHub's standard runner multipliers for repositories CodexBar could identify as private."
+            ),
+        ]
+    }
+
     private static func makeSpendMetrics(
         totals: SpendTotals,
         period: BillingPeriod?,
-        fetchedAt: Date
+        fetchedAt: Date,
+        currencyCode: String
     ) -> [ProviderMonetaryMetric] {
         var metrics = [
-            monetaryMetric(kind: .grossSpend, label: "Gross usage", amount: totals.gross),
-            monetaryMetric(kind: .discounts, label: "Discounts", amount: totals.discount),
+            monetaryMetric(kind: .grossSpend, label: "Gross usage", amount: totals.gross, currencyCode: currencyCode),
+            monetaryMetric(kind: .discounts, label: "Discounts", amount: totals.discount, currencyCode: currencyCode),
             monetaryMetric(
                 kind: .spent,
                 label: "Net spend",
                 amount: totals.net,
+                currencyCode: currencyCode,
                 detail: totals.net == 0 && totals.discount >= totals.gross && totals.gross > 0
                     ? "No current charge after discounts"
                     : "Current metered charge"
@@ -667,6 +987,7 @@ public enum GitHubBillingUsageParser {
                     kind: .projectedSpend,
                     label: "Projected month-end spend",
                     amount: totals.net * total / elapsed,
+                    currencyCode: currencyCode,
                     detail: "Estimate based on current pace"
                 ))
             }
@@ -678,22 +999,20 @@ public enum GitHubBillingUsageParser {
         kind: ProviderMonetaryMetricKind,
         label: String,
         amount: Decimal,
+        currencyCode: String,
         detail: String? = nil
     ) -> ProviderMonetaryMetric {
-        let decimalPlaces = decimalPlaces(for: amount)
-        var multiplier = Decimal(1)
-        for _ in 0..<decimalPlaces { multiplier *= 10 }
-        return ProviderMonetaryMetric(
+        ProviderMonetaryMetric(
             kind: kind,
             label: label,
-            minorUnits: amount * multiplier,
-            currencyCode: "USD",
-            decimalPlaces: decimalPlaces,
+            minorUnits: amount * 100,
+            currencyCode: currencyCode,
+            decimalPlaces: 2,
             detail: detail
         )
     }
 
-    private static func usageDetails(_ items: [UsageItem]) -> UsageDetailOutput {
+    private static func usageDetails(_ items: [UsageItem], currencyCode: String) -> UsageDetailOutput {
         let details = items.enumerated().compactMap { index, item -> ProviderCardInformationItem? in
             guard let product = item.product?.nonempty, let sku = item.sku?.nonempty else {
                 return nil
@@ -701,42 +1020,70 @@ public enum GitHubBillingUsageParser {
             let repository = item.repositoryName?.nonempty ?? "Account-wide"
             let quantity = item.quantity.map(decimalText) ?? "Unknown quantity"
             let unit = item.unitType?.nonempty ?? "units"
-            let unitPrice = item.pricePerUnit.map(currencyText) ?? "Unknown unit price"
-            let gross = item.grossAmount.map(currencyText) ?? "Unknown gross amount"
-            let discount = item.discountAmount.map(currencyText) ?? "Unknown discount"
-            let net = item.netAmount.map(currencyText) ?? "Unknown net amount"
+            let unitPrice = item.pricePerUnit.map { unitPriceText($0, currencyCode: currencyCode) } ?? "Unknown unit price"
+            let gross = item.grossAmount.map { aggregateCurrencyText($0, currencyCode: currencyCode) } ?? "Unknown gross amount"
+            let discount = item.discountAmount.map { aggregateCurrencyText($0, currencyCode: currencyCode) } ?? "Unknown discount"
+            let net = item.netAmount.map { aggregateCurrencyText($0, currencyCode: currencyCode) } ?? "Unknown net amount"
             return ProviderCardInformationItem(
                 id: "usage.\(index).\(stableKey(repository)).\(stableKey(sku))",
                 label: repository,
-                detail: "\(product) · \(sku) · \(quantity) \(unit) · \(unitPrice)/unit · "
+                detail: "\(product) · \(sku) · \(quantity) \(unit) · \(unitPrice)/\(unit) · "
                     + "\(gross) gross · \(discount) discount · \(net) net"
             )
         }
         let omittedCount = max(0, details.count - UsageDetailOutput.maximumCount)
         return UsageDetailOutput(
             items: Array(details.prefix(UsageDetailOutput.maximumCount)),
-            message: omittedCount == 0
-                ? nil
-                : "\(omittedCount) additional repository, product, and SKU detail rows were omitted from the card."
+            omittedCount: omittedCount
         )
     }
 
-    private static func decimalPlaces(for value: Decimal) -> Int {
-        let text = NSDecimalNumber(decimal: value).stringValue
-        guard let separator = text.firstIndex(of: ".") else { return 2 }
-        let count = text.distance(from: text.index(after: separator), to: text.endIndex)
-        return min(max(count, 2), 6)
+    private static func currencyResolution(topLevel: String?, items: [SummaryItem]) -> GitHubBillingCurrency {
+        let candidates = [topLevel].compactMap { $0?.nonempty } + items.compactMap(\.currency?.nonempty)
+        let supplied = Set(candidates.map { $0.uppercased() })
+        if supplied.count == 1, let code = supplied.first, isISOCurrencyCode(code) {
+            return GitHubBillingCurrency(code: code, isReported: true, conflictMessage: nil)
+        }
+        guard !supplied.isEmpty else {
+            return GitHubBillingCurrency(code: "USD", isReported: false, conflictMessage: nil)
+        }
+        return GitHubBillingCurrency(
+            code: "USD",
+            isReported: false,
+            conflictMessage: "GitHub returned currency evidence CodexBar cannot verify, so amounts continue to show USD."
+        )
+    }
+
+    private static func isISOCurrencyCode(_ code: String) -> Bool {
+        code.count == 3 && code.allSatisfy { $0.isLetter && $0.isASCII }
     }
 
     private static func decimalText(_ value: Decimal) -> String {
         NSDecimalNumber(decimal: value).stringValue
     }
 
-    private static func currencyText(_ value: Decimal) -> String {
+    /// Aggregate monetary amounts always show exactly two fractional digits.
+    private static func aggregateCurrencyText(_ value: Decimal, currencyCode: String) -> String {
         value.formatted(
-            .currency(code: "USD")
-                .precision(.fractionLength(decimalPlaces(for: value)))
+            .currency(code: currencyCode)
+                .precision(.fractionLength(2))
         )
+    }
+
+    /// Unit prices keep the precision GitHub returned, for example $0.006/minute,
+    /// instead of rounding into a different rate.
+    private static func unitPriceText(_ value: Decimal, currencyCode: String) -> String {
+        let fractionDigits = min(max(sourceFractionDigits(of: value), 2), 12)
+        return value.formatted(
+            .currency(code: currencyCode)
+                .precision(.fractionLength(fractionDigits))
+        )
+    }
+
+    private static func sourceFractionDigits(of value: Decimal) -> Int {
+        let text = NSDecimalNumber(decimal: value).stringValue
+        guard let separator = text.firstIndex(of: "."), !text.lowercased().contains("e") else { return 2 }
+        return text.distance(from: text.index(after: separator), to: text.endIndex)
     }
 
     private static func stableKey(_ value: String) -> String {
@@ -756,7 +1103,12 @@ private struct UsageDetailOutput {
     static let maximumCount = 40
 
     let items: [ProviderCardInformationItem]
-    let message: String?
+    let omittedCount: Int
+}
+
+private struct ProductUsageGroup {
+    let displayName: String
+    var items: [SummaryItem]
 }
 
 private struct OrganizationUsageBucket {
@@ -766,16 +1118,27 @@ private struct OrganizationUsageBucket {
     var quantity: Decimal
 }
 
+/// The currency every GitHub Billing amount renders with. GitHub's documented
+/// billing usage response has no currency field, so CodexBar treats USD as the
+/// documented billing currency; a consistently supplied code wins instead.
+private struct GitHubBillingCurrency {
+    let code: String
+    let isReported: Bool
+    let conflictMessage: String?
+}
+
 private struct SummaryResponse: Decodable {
     let timePeriod: TimePeriod?
     let user: String?
     let organization: String?
+    let currency: String?
     let usageItems: [SummaryItem]
 
     enum CodingKeys: String, CodingKey {
         case timePeriod
         case user
         case organization
+        case currency
         case usageItems
     }
 
@@ -784,6 +1147,7 @@ private struct SummaryResponse: Decodable {
         timePeriod = try container.decodeIfPresent(TimePeriod.self, forKey: .timePeriod)
         user = try container.decodeIfPresent(String.self, forKey: .user)?.nonempty
         organization = try container.decodeIfPresent(String.self, forKey: .organization)?.nonempty
+        currency = try container.decodeIfPresent(String.self, forKey: .currency)?.nonempty
         usageItems = try container.decode([SummaryItem].self, forKey: .usageItems)
     }
 }
@@ -802,6 +1166,7 @@ private struct SummaryItem: Decodable {
     let grossAmount: Decimal?
     let discountAmount: Decimal?
     let netAmount: Decimal?
+    let currency: String?
 
     var hasOrganizationMetricFields: Bool {
         product?.nonempty != nil

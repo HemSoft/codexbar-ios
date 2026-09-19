@@ -29,6 +29,72 @@ final class AccountJourneysUITests: XCTestCase {
         // Do not open real authorization or submit synthetic tokens to GitHub.
     }
 
+    func testGitHubBillingProductSummaryAndRoutinePlacement() throws {
+        let app = launch(scenario: "github-billing-personal")
+        let spentMetric = app.buttons["dashboard-metric-githubBilling.monetary.spent.usd"]
+        XCTAssertTrue(spentMetric.waitForExistence(timeout: 10), app.debugDescription)
+
+        // A healthy card must not stack the routine budget disclaimer below its values.
+        let routineStack = app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "GitHub does not expose personal budgets"
+        )).firstMatch
+        XCTAssertFalse(routineStack.exists, "Routine budget qualifications must stay behind More Information")
+        keepBillingScreenshot("github-billing-healthy-personal-card", of: app)
+
+        tap(app.buttons["More options for Sample Personal"], in: app)
+        let moreInformation = app.buttons["More information for Sample Personal"]
+        if moreInformation.waitForExistence(timeout: 3) {
+            tap(moreInformation, in: app)
+            XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10))
+        } else {
+            // iPadOS 27 beta simulators do not present synthesized context menus;
+            // relaunch through the fixture hook to verify the same sheet content.
+            app.terminate()
+            app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+            app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION"] = "1"
+            app.launch()
+            XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10), app.debugDescription)
+        }
+
+        let actionsSection = app.staticTexts["Actions"]
+        reveal(actionsSection, in: app)
+        keepBillingScreenshot("github-billing-product-summary", of: app)
+
+        let includedMinutes = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Included usage · Minutes, 720 of 2,000 minutes used"
+        )).firstMatch
+        reveal(includedMinutes, in: app)
+        XCTAssertTrue(includedMinutes.label.contains("1,280 minutes remaining"), includedMinutes.label)
+
+        let includedStorage = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Included usage · Storage, 118 of 360 GB-hours used"
+        )).firstMatch
+        reveal(includedStorage, in: app)
+        XCTAssertTrue(includedStorage.label.contains("242 GB-hours remaining"), includedStorage.label)
+
+        let currencyRow = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Currency, USD. GitHub's billing API does not report a currency code"
+        )).firstMatch
+        reveal(currencyRow, in: app)
+        keepBillingScreenshot("github-billing-more-information", of: app)
+
+        tap(app.navigationBars.buttons["Done"], in: app)
+        XCTAssertTrue(app.navigationBars["More Information"].waitForNonExistence(timeout: 5))
+    }
+
+    func testGitHubBillingActionableWarningStaysInline() throws {
+        let app = launch(scenario: "github-billing-incomplete")
+        let spentMetric = app.buttons["dashboard-metric-githubBilling.monetary.spent.usd"]
+        XCTAssertTrue(spentMetric.waitForExistence(timeout: 10), app.debugDescription)
+
+        // Actionable storage failure remains visible on the card without opening More Information.
+        let warning = app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "GitHub returned Actions or Packages storage without a recognized storage SKU"
+        )).firstMatch
+        reveal(warning, in: app)
+        keepBillingScreenshot("github-billing-actionable-warning", of: app)
+    }
+
     private func keepBillingScreenshot(_ name: String, of app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
