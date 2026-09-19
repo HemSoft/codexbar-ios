@@ -82,15 +82,25 @@ Keychain credential; the integration never reads or replaces a Copilot token.
 
 Personal cards show the plan's included Actions minutes, shared Actions and
 Packages storage, Git LFS storage and bandwidth, gross charges, discounts, net
-spend, and a month-end projection. Public-repository Actions minutes do not
-consume the private-repository allowance. GitHub does not expose personal
-budgets, so the card says that explicitly. Organization cards show usage by
-product and SKU, monetary totals and projections, and returned organization or
-repository budgets, including whether each budget alerts or blocks further
-usage. Other budget scopes remain visible as unavailable because organization
-usage cannot establish their consumption safely. Unsupported plans, missing API
-fields, unavailable billing endpoints, permission failures, and rate limits
-remain visible instead of being guessed.
+spend, and a month-end projection, all with exactly two decimal places in USD.
+GitHub's billing API reports no currency code, so CodexBar shows the USD
+amounts GitHub lists and never converts them to the device locale; the More
+Information sheet states this explicitly. Metered usage groups into one summary
+per product (Copilot, Actions, Codespaces, Git LFS, and any other products
+GitHub returns) with consumed, discount, and billable usage per product, and
+Actions adds an Included usage subsection splitting Minutes and Storage.
+Unit prices keep GitHub's source precision, for example $0.006/minute, instead
+of rounding into a different rate. Routine qualifications, including the lack
+of personal budgets and calculation notes, live in the More Information sheet;
+actionable problems such as permission failures, incomplete billing data, and
+repositories that could not be classified stay on the card. Public-repository
+Actions minutes do not consume the private-repository allowance. Organization
+cards show usage by product and SKU, monetary totals and projections, and
+returned organization or repository budgets, including whether each budget
+alerts or blocks further usage. Other budget scopes remain visible as
+unavailable because organization usage cannot establish their consumption
+safely. Unsupported plans, missing API fields, unavailable billing endpoints,
+permission failures, and rate limits remain visible instead of being guessed.
 
 The browser flow requests `repo read:org user`, uses PKCE with a loopback
 callback, and stores only the returned account token. Personal billing endpoints

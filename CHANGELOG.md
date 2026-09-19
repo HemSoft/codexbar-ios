@@ -47,6 +47,18 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Refined GitHub Billing cards to answer three questions quickly: what was
+  consumed, what GitHub discounted or included, and what is actually billable.
+  Aggregate amounts always show two decimal places in USD, unit prices keep
+  GitHub's source precision (for example $0.006/minute), metered usage groups
+  into Copilot, Actions, Codespaces, Git LFS, and any other returned products,
+  and Actions gains an Included usage subsection splitting Minutes and
+  Storage. Routine qualifications moved into the More Information sheet while
+  permission failures, incomplete billing data, and unclassifiable repositories
+  stay on the card. Amounts stay USD because GitHub's billing API reports no
+  currency code, and they are never converted to the device locale.
+  ([#347](https://github.com/HemSoft/codexbar-ios/issues/347))
+
 - Connect and reconnect Gemini Coding Usage from the phone through Google
   authorization. CodexBar now includes its registered iOS OAuth client, so users
   choose an account and return to the app without entering OAuth settings or
