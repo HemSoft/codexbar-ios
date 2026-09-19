@@ -500,9 +500,11 @@ public enum GitHubBillingUsageParser {
                 continue
             }
             guard let normalized = candidate.normalized else { continue }
-            if currencyCode != nil {
-                output.bars.append(contentsOf: budgetBars(for: normalized, period: period))
-            }
+            output.bars.append(contentsOf: verifiedBudgetBars(
+                for: normalized,
+                period: period,
+                currencyCode: currencyCode
+            ))
             output.sections.append(budgetSection(
                 normalized,
                 isProduct: candidate.isProduct,
@@ -511,6 +513,15 @@ public enum GitHubBillingUsageParser {
             ))
         }
         return output
+    }
+
+    private static func verifiedBudgetBars(
+        for budget: NormalizedBudget,
+        period: BillingPeriod?,
+        currencyCode: String?
+    ) -> [UsageBar] {
+        guard currencyCode != nil else { return [] }
+        return budgetBars(for: budget, period: period)
     }
 
     private static func budgetBars(
