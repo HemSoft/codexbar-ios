@@ -724,7 +724,7 @@ public enum GitHubBillingUsageParser {
 
     /// Known products come first in a stable order; anything else keeps GitHub's
     /// own product name so returned data is never discarded.
-    private static let knownProductOrder: [String] = ["copilot", "actions", "codespaces", "gitlfs"]
+    private static let knownProductOrder: [String] = ["copilot", "actions", "codespaces", "git-lfs"]
 
     private static func productGroupOrder(
         key lhsKey: String,
@@ -754,7 +754,7 @@ public enum GitHubBillingUsageParser {
         "copilot": "Copilot",
         "actions": "Actions",
         "codespaces": "Codespaces",
-        "gitlfs": "Git LFS",
+        "git-lfs": "Git LFS",
         "lfs": "Git LFS",
     ]
 
@@ -896,9 +896,7 @@ public enum GitHubBillingUsageParser {
     ) -> ProviderCardInformationSection? {
         var items: [ProviderCardInformationItem] = []
         items.append(contentsOf: currencyNoteItems(currency: currency))
-        if let plan {
-            items.append(contentsOf: personalBudgetNotes(plan: plan))
-        }
+        items.append(contentsOf: personalBudgetNotes(plan: plan))
         if let budgetQualification {
             items.append(ProviderCardInformationItem(
                 id: "github-billing.budget-qualification",
@@ -944,20 +942,23 @@ public enum GitHubBillingUsageParser {
         return items
     }
 
-    private static func personalBudgetNotes(plan: PersonalPlan) -> [ProviderCardInformationItem] {
-        [
+    private static func personalBudgetNotes(plan: PersonalPlan?) -> [ProviderCardInformationItem] {
+        var items = [
             ProviderCardInformationItem(
                 id: "github-billing.personal-budgets",
                 label: "Personal budgets",
                 detail: "GitHub does not expose personal budgets through its public API. "
                     + "Included allowances and current charges are shown separately."
             ),
-            ProviderCardInformationItem(
+        ]
+        if plan != nil {
+            items.append(ProviderCardInformationItem(
                 id: "github-billing.actions-classification",
                 label: "Private Actions minutes",
                 detail: "Calculated from GitHub's standard runner multipliers for repositories CodexBar could identify as private."
-            ),
-        ]
+            ))
+        }
+        return items
     }
 
     private static func makeSpendMetrics(
@@ -1055,7 +1056,7 @@ public enum GitHubBillingUsageParser {
     }
 
     private static func isISOCurrencyCode(_ code: String) -> Bool {
-        code.count == 3 && code.allSatisfy { $0.isLetter && $0.isASCII }
+        Locale.Currency.isoCurrencies.contains(Locale.Currency(code))
     }
 
     private static func decimalText(_ value: Decimal) -> String {

@@ -9,6 +9,7 @@ enum GitHubBillingFixtureRunner {
         try await personalPermissionDiagnostics()
         try personalFreeAndProAllowances()
         try amountAndProductSummaryContract()
+        try currencyEvidenceContract()
         try organizationBudgetsAndPaginationParsing()
         try malformedAndMissingFields()
         try await accountIsolationFixtures()
@@ -234,6 +235,8 @@ enum GitHubBillingFixtureRunner {
             {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.04,"grossQuantity":144,"grossAmount":5.10,"discountAmount":1.10,"netAmount":4.00},
             {"product":"Copilot","sku":"copilot_premium_requests","unitType":"requests","pricePerUnit":0.04,"grossQuantity":10,"grossAmount":0.40,"discountAmount":0,"netAmount":0.40},
             {"product":"Codespaces","sku":"codespaces_compute","unitType":"core-hours","pricePerUnit":0.08,"grossQuantity":5,"grossAmount":0.40,"discountAmount":0.10,"netAmount":0.30},
+            {"product":"Git LFS","sku":"lfs_storage","unitType":"GB-hours","pricePerUnit":0.07,"grossQuantity":1,"grossAmount":0,"discountAmount":0,"netAmount":0},
+            {"product":"Advanced Security","sku":"secret_scanning","unitType":"active-committers","pricePerUnit":0,"grossQuantity":1,"grossAmount":0,"discountAmount":0,"netAmount":0},
             {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.04,"grossQuantity":50,"grossAmount":1.125,"discountAmount":0.5625,"netAmount":0.5625}
           ]
         }
@@ -261,8 +264,14 @@ enum GitHubBillingFixtureRunner {
         let copilotIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.copilot"), "Copilot summary missing")
         let actionsIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.actions"), "Actions summary missing")
         let codespacesIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.codespaces"), "Codespaces summary missing")
-        let packagesIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.packages"), "An unknown product must remain visible under its GitHub product name")
-        try check(copilotIndex < actionsIndex && actionsIndex < codespacesIndex && codespacesIndex < packagesIndex, "Known products must sort before unknown products in a stable order")
+        let gitLFSIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.git-lfs"), "Git LFS summary missing")
+        let advancedSecurityIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.advanced-security"), "An unknown product must remain visible under its GitHub product name")
+        let packagesIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.packages"), "Packages summary missing")
+        try check(
+            copilotIndex < actionsIndex && actionsIndex < codespacesIndex && codespacesIndex < gitLFSIndex
+                && gitLFSIndex < advancedSecurityIndex && advancedSecurityIndex < packagesIndex,
+            "All known products must sort before alphabetized unknown products"
+        )
 
         let actionsSection = result.cardInformationSections[actionsIndex]
         try check(actionsSection.items.contains { item in
@@ -327,6 +336,25 @@ enum GitHubBillingFixtureRunner {
             item.label == "Currency" && item.detail.contains("USD")
                 && item.detail.contains("does not report a currency code")
         } == true, "GitHub Billing must identify amounts as USD because the API reports no currency")
+
+        let unknownPlan = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: summary,
+            usageData: usage,
+            repositoryVisibility: ["octocat/private": true],
+            planName: "enterprise",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Unknown-plan fixture did not parse")
+        let unknownPlanNotes = unknownPlan.cardInformationSections
+            .first { $0.id == "github-billing.amounts-and-currency" }?.items ?? []
+        try check(
+            unknownPlanNotes.contains { $0.label == "Personal budgets" },
+            "The personal-budget API limitation must remain visible for an unknown plan"
+        )
+        try check(
+            !unknownPlanNotes.contains { $0.label == "Private Actions minutes" },
+            "The plan-dependent Actions calculation note must stay hidden for an unknown plan"
+        )
     }
 
     private static func currencyEvidenceContract() throws {
@@ -385,11 +413,11 @@ enum GitHubBillingFixtureRunner {
         )
 
         let malformedCurrency = try parse(summaryData: data(
-            #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","currency":"dollar","grossQuantity":1,"grossAmount":1,"discountAmount":0,"netAmount":1}]}"#
+            #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","currency":"ZZZ","grossQuantity":1,"grossAmount":1,"discountAmount":0,"netAmount":1}]}"#
         ))
         try check(
             malformedCurrency?.monetaryMetrics.allSatisfy { $0.currencyCode == "USD" } == true,
-            "A non-ISO currency value must not become the rendered currency"
+            "An unsupported three-letter currency value must not become the rendered currency"
         )
         try check(
             malformedCurrency?.usageMessages.contains { $0.contains("currency evidence") } == true,
