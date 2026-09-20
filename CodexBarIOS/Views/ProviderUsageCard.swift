@@ -1236,13 +1236,22 @@ struct ProviderUsageCard: View {
             if result.providerID == .gemini || result.providerID == .antigravity {
                 supportingText(result.hasCurrentBars ? "Percent used · Current" : "Percent used · Last known value")
             }
-            if item.width == .full || githubAllowanceSummary != nil {
-                if let resetDescription = bar.localizedResetDescription() {
-                    supportingText(resetDescription)
-                }
-                if result.hasCurrentBars, let projectionDescription = bar.dashboardProjectionDescription() {
-                    supportingText(projectionDescription)
-                }
+            usageTileResetDetails(item: item, bar: bar, showsAllowanceSummary: githubAllowanceSummary != nil)
+        }
+    }
+
+    @ViewBuilder
+    private func usageTileResetDetails(
+        item: ProviderMetricTileGridItem,
+        bar: UsageBar,
+        showsAllowanceSummary: Bool
+    ) -> some View {
+        if item.width == .full || showsAllowanceSummary {
+            if let resetDescription = bar.localizedResetDescription() {
+                supportingText(resetDescription)
+            }
+            if result.hasCurrentBars, let projectionDescription = bar.dashboardProjectionDescription() {
+                supportingText(projectionDescription)
             }
         }
     }
@@ -1396,14 +1405,7 @@ struct ProviderUsageCard: View {
     }
 
     static func githubAllowanceSummary(_ bar: UsageBar) -> String? {
-        let unit: String
-        switch bar.stableKey {
-        case "actions-private-minutes": unit = "minutes"
-        case "actions-packages-storage", "lfs-storage", "codespaces-storage": unit = "GB-hours"
-        case "packages-data-transfer", "lfs-bandwidth": unit = "GB"
-        case "codespaces-core-hours": unit = "core hours"
-        default: return nil
-        }
+        guard let stableKey = bar.stableKey, let unit = githubAllowanceUnits[stableKey] else { return nil }
         let used = formattedUsageAmount(bar.used)
         let included = formattedUsageAmount(bar.limit)
         let difference = bar.limit - bar.used
@@ -1418,6 +1420,16 @@ struct ProviderUsageCard: View {
     static func formattedUsageAmount(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0...2)))
     }
+
+    private static let githubAllowanceUnits = [
+        "actions-private-minutes": "minutes",
+        "actions-packages-storage": "GB-hours",
+        "lfs-storage": "GB-hours",
+        "codespaces-storage": "GB-hours",
+        "packages-data-transfer": "GB",
+        "lfs-bandwidth": "GB",
+        "codespaces-core-hours": "core hours",
+    ]
 
     static let metricDetailAccessibilityHint = "Shows complete metric details."
 

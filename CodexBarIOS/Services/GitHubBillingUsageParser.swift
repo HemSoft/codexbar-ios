@@ -333,12 +333,11 @@ public enum GitHubBillingUsageParser {
         let metricID = "githubBilling.actions-private-minutes"
         let summaryCandidates = summaryItems.filter(\.isPotentialActionsMinutes)
         let candidates = usageItems.filter(\.isPotentialActionsMinutes)
-        guard summaryCandidates.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
-            output.unavailable[metricID] = "GitHub did not return complete Actions gross, discount, and billable quantities."
-            return
-        }
-        guard quantityTotals(summaryCandidates) == quantityTotals(candidates) else {
-            output.unavailable[metricID] = "GitHub's Actions summary and repository detail did not reconcile completely."
+        if let message = actionsMinutesEvidenceFailure(
+            summaryCandidates: summaryCandidates,
+            detailCandidates: candidates
+        ) {
+            output.unavailable[metricID] = message
             return
         }
         guard !candidates.isEmpty else {
@@ -350,18 +349,10 @@ public enum GitHubBillingUsageParser {
             )
             return
         }
-
-        var used = Decimal.zero
-        for item in candidates {
-            switch actionsMinuteContribution(item, repositoryVisibility: repositoryVisibility) {
-            case let .included(reportedMinutes):
-                used += reportedMinutes
-            case .excluded:
-                continue
-            case let .unavailable(reason):
-                output.unavailable[metricID] = reason
-                return
-            }
+        let total = includedActionsMinutes(candidates, repositoryVisibility: repositoryVisibility)
+        guard let used = total.used else {
+            output.unavailable[metricID] = total.unavailableMessage
+            return
         }
         let includedSummary = summaryCandidates.filter { item in
             if case .includedStandard = item.actionsRunnerAllowance { return true }
@@ -383,6 +374,37 @@ public enum GitHubBillingUsageParser {
         ))
     }
 
+    private static func actionsMinutesEvidenceFailure(
+        summaryCandidates: [SummaryItem],
+        detailCandidates: [UsageItem]
+    ) -> String? {
+        guard summaryCandidates.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            return "GitHub did not return complete Actions gross, discount, and billable quantities."
+        }
+        guard quantityTotals(summaryCandidates) == quantityTotals(detailCandidates) else {
+            return "GitHub's Actions summary and repository detail did not reconcile completely."
+        }
+        return nil
+    }
+
+    private static func includedActionsMinutes(
+        _ items: [UsageItem],
+        repositoryVisibility: [String: Bool]
+    ) -> ActionsMinutesTotal {
+        var used = Decimal.zero
+        for item in items {
+            switch actionsMinuteContribution(item, repositoryVisibility: repositoryVisibility) {
+            case let .included(reportedMinutes):
+                used += reportedMinutes
+            case .excluded:
+                continue
+            case let .unavailable(reason):
+                return ActionsMinutesTotal(unavailableMessage: reason)
+            }
+        }
+        return ActionsMinutesTotal(used: used)
+    }
+
     private static func actionsMinuteContribution(
         _ item: UsageItem,
         repositoryVisibility: [String: Bool]
@@ -395,13 +417,25 @@ public enum GitHubBillingUsageParser {
         else {
             return .unavailable("GitHub returned private Actions usage outside the verified runner allowance contract.")
         }
-        let runnerAllowance = item.actionsRunnerAllowance
-        switch runnerAllowance {
+        switch item.actionsRunnerAllowance {
+        case .includedStandard:
+            return standardRunnerContribution(
+                item,
+                quantity: quantity,
+                repositoryVisibility: repositoryVisibility
+            )
         case .excludedPaidLarger, .excludedSelfHosted:
             return .excluded
-        case .includedStandard, .unknown:
-            break
+        case .unknown:
+            return .unavailable("GitHub returned private Actions usage outside the verified runner allowance contract.")
         }
+    }
+
+    private static func standardRunnerContribution(
+        _ item: UsageItem,
+        quantity: Decimal,
+        repositoryVisibility: [String: Bool]
+    ) -> ActionsMinuteContribution {
         guard
             let repositoryName = item.repositoryName,
             let isPrivate = repositoryVisibility[repositoryName]
@@ -409,21 +443,14 @@ public enum GitHubBillingUsageParser {
             return .unavailable("GitHub returned Actions usage whose repository visibility CodexBar could not verify.")
         }
         guard isPrivate else { return .excluded }
-        switch runnerAllowance {
-        case .includedStandard:
-            guard
-                let unitPrice = item.pricePerUnit,
-                let expectedRate = item.expectedStandardRunnerRate,
-                unitPrice == expectedRate
-            else {
-                return .unavailable("GitHub returned a standard-runner price outside the verified billing contract.")
-            }
-            return .included(quantity)
-        case .excludedPaidLarger, .excludedSelfHosted:
-            return .excluded
-        case .unknown:
-            return .unavailable("GitHub returned private Actions usage outside the verified runner allowance contract.")
+        guard
+            let unitPrice = item.pricePerUnit,
+            let expectedRate = item.expectedStandardRunnerRate,
+            unitPrice == expectedRate
+        else {
+            return .unavailable("GitHub returned a standard-runner price outside the verified billing contract.")
         }
+        return .included(quantity)
     }
 
     private static func quantityTotals<Item: MeteredQuantityItem>(
@@ -483,21 +510,8 @@ public enum GitHubBillingUsageParser {
             return
         }
         let matching = items.filter(\.isPotentialActionsOrPackagesStorage)
-        guard matching.allSatisfy(\.isActionsOrPackagesStorage) else {
-            output.unavailable[metricID] = "GitHub returned shared Actions or Packages storage without a recognized storage SKU."
-            return
-        }
-        guard matching.allSatisfy(\.isGBHours) else {
-            output.unavailable[metricID] = "GitHub returned shared storage in a unit that cannot be compared with a GB-hour allowance."
-            return
-        }
-        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
-            output.unavailable[metricID] = "GitHub did not return complete shared-storage gross, discount, and billable quantities."
-            return
-        }
-        guard !matching.contains(where: { $0.isPackagesStorage && $0.grossQuantity.map { $0 > 0 } == true }) else {
-            output.unavailable[metricID] = "GitHub Billing does not identify package visibility, so nonzero "
-                + "Packages storage cannot be compared with the private-package allowance."
+        if let message = sharedStorageEvidenceFailure(matching) {
+            output.unavailable[metricID] = message
             return
         }
         let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
@@ -524,6 +538,23 @@ public enum GitHubBillingUsageParser {
             limit: limit,
             period: period
         ))
+    }
+
+    private static func sharedStorageEvidenceFailure(_ items: [SummaryItem]) -> String? {
+        guard items.allSatisfy(\.isActionsOrPackagesStorage) else {
+            return "GitHub returned shared Actions or Packages storage without a recognized storage SKU."
+        }
+        guard items.allSatisfy(\.isGBHours) else {
+            return "GitHub returned shared storage in a unit that cannot be compared with a GB-hour allowance."
+        }
+        guard items.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            return "GitHub did not return complete shared-storage gross, discount, and billable quantities."
+        }
+        guard !items.contains(where: { $0.isPackagesStorage && $0.grossQuantity.map { $0 > 0 } == true }) else {
+            return "GitHub Billing does not identify package visibility, so nonzero "
+                + "Packages storage cannot be compared with the private-package allowance."
+        }
+        return nil
     }
 
     private static func appendPackagesDataTransfer(
@@ -590,52 +621,60 @@ public enum GitHubBillingUsageParser {
         output: inout AllowanceOutput
     ) {
         let storageItems = items.filter(\.isPotentialLFSStorage)
-        if storageItems.allSatisfy(\.isLFSStorage), storageItems.allSatisfy(\.isGBHours) {
-            if storageItems.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) {
-                let used = storageItems.compactMap(\.grossQuantity).reduce(.zero, +)
-                let limit = Decimal(plan.lfsStorageGB) * Decimal(period.hours)
-                let billable = storageItems.compactMap(\.netQuantity).reduce(.zero, +)
-                if allowanceBillingIsConsistent(used: used, limit: limit, billable: billable) {
-                    output.bars.append(allowanceBar(
-                        stableKey: "lfs-storage",
-                        label: "Git LFS storage",
-                        used: used,
-                        limit: limit,
-                        period: period
-                    ))
-                } else {
-                    output.unavailable["githubBilling.lfs-storage"] = prematureBillingMessage(for: "Git LFS storage")
-                }
-            } else {
-                output.unavailable["githubBilling.lfs-storage"] = "GitHub did not return complete Git LFS storage gross, discount, and billable quantities."
-            }
-        } else {
-            output.unavailable["githubBilling.lfs-storage"] = "GitHub returned Git LFS storage in an unsupported unit."
-        }
-
+        appendLFSMetric(
+            storageItems,
+            hasExpectedContract: storageItems.allSatisfy(\.isLFSStorage)
+                && storageItems.allSatisfy(\.isGBHours),
+            stableKey: "lfs-storage",
+            label: "Git LFS storage",
+            limit: Decimal(plan.lfsStorageGB) * Decimal(period.hours),
+            period: period,
+            output: &output
+        )
         let bandwidthItems = items.filter(\.isPotentialLFSBandwidth)
-        if bandwidthItems.allSatisfy(\.isLFSBandwidth), bandwidthItems.allSatisfy(\.isGB) {
-            if bandwidthItems.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) {
-                let used = bandwidthItems.compactMap(\.grossQuantity).reduce(.zero, +)
-                let limit = Decimal(plan.lfsBandwidthGB)
-                let billable = bandwidthItems.compactMap(\.netQuantity).reduce(.zero, +)
-                if allowanceBillingIsConsistent(used: used, limit: limit, billable: billable) {
-                    output.bars.append(allowanceBar(
-                        stableKey: "lfs-bandwidth",
-                        label: "Git LFS bandwidth",
-                        used: used,
-                        limit: limit,
-                        period: period
-                    ))
-                } else {
-                    output.unavailable["githubBilling.lfs-bandwidth"] = prematureBillingMessage(for: "Git LFS bandwidth")
-                }
-            } else {
-                output.unavailable["githubBilling.lfs-bandwidth"] = "GitHub did not return complete Git LFS bandwidth gross, discount, and billable quantities."
-            }
-        } else {
-            output.unavailable["githubBilling.lfs-bandwidth"] = "GitHub returned Git LFS bandwidth in an unsupported unit."
+        appendLFSMetric(
+            bandwidthItems,
+            hasExpectedContract: bandwidthItems.allSatisfy(\.isLFSBandwidth)
+                && bandwidthItems.allSatisfy(\.isGB),
+            stableKey: "lfs-bandwidth",
+            label: "Git LFS bandwidth",
+            limit: Decimal(plan.lfsBandwidthGB),
+            period: period,
+            output: &output
+        )
+    }
+
+    private static func appendLFSMetric(
+        _ items: [SummaryItem],
+        hasExpectedContract: Bool,
+        stableKey: String,
+        label: String,
+        limit: Decimal,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let metricID = "githubBilling.\(stableKey)"
+        guard hasExpectedContract else {
+            output.unavailable[metricID] = "GitHub returned \(label) in an unsupported unit."
+            return
         }
+        guard items.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable[metricID] = "GitHub did not return complete \(label) gross, discount, and billable quantities."
+            return
+        }
+        let used = items.compactMap(\.grossQuantity).reduce(.zero, +)
+        let billable = items.compactMap(\.netQuantity).reduce(.zero, +)
+        guard allowanceBillingIsConsistent(used: used, limit: limit, billable: billable) else {
+            output.unavailable[metricID] = prematureBillingMessage(for: label)
+            return
+        }
+        output.bars.append(allowanceBar(
+            stableKey: stableKey,
+            label: label,
+            used: used,
+            limit: limit,
+            period: period
+        ))
     }
 
     private static func appendCodespacesUsage(
@@ -2235,6 +2274,16 @@ private enum ActionsMinuteContribution {
     case included(Decimal)
     case excluded
     case unavailable(String)
+}
+
+private struct ActionsMinutesTotal {
+    let used: Decimal?
+    let unavailableMessage: String?
+
+    init(used: Decimal? = nil, unavailableMessage: String? = nil) {
+        self.used = used
+        self.unavailableMessage = unavailableMessage
+    }
 }
 
 // https://docs.github.com/en/billing/reference/product-usage-included
