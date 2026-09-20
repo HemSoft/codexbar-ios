@@ -103,6 +103,11 @@ enum GitHubBillingFixtureRunner {
           "timePeriod": {"year": 2026, "month": 9},
           "user": "octocat",
           "usageItems": [
+            {"product":"Actions","sku":"Actions Linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1000,"grossAmount":6,"discountQuantity":1000,"discountAmount":6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"Actions Windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":50,"grossAmount":0.5,"discountQuantity":50,"discountAmount":0.5,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"Actions macOS","unitType":"minutes","pricePerUnit":0.062,"grossQuantity":10,"grossAmount":0.62,"discountQuantity":10,"discountAmount":0.62,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_linux_arm","unitType":"minutes","pricePerUnit":0.005,"grossQuantity":20,"grossAmount":0.1,"discountQuantity":20,"discountAmount":0.1,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_windows_arm","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":10,"grossAmount":0.1,"discountQuantity":10,"discountAmount":0.1,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":120,"grossAmount":2.125,"discountAmount":2.125,"netAmount":0},
             {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":24,"grossAmount":0.25,"discountAmount":0.125,"netAmount":0.125},
             {"product":"Actions","sku":"actions_cache_storage","unitType":"GB-hours","grossQuantity":100,"grossAmount":0,"discountAmount":0,"netAmount":0},
@@ -170,8 +175,8 @@ enum GitHubBillingFixtureRunner {
         try check(lfsStorage.used == 48 && lfsStorage.limit == 7_200, "Git LFS storage must use its 10 GiB accrued allowance")
         let lfsBandwidth = try require(free.bars.first { $0.stableKey == "lfs-bandwidth" }, "Git LFS bandwidth bar missing")
         try check(lfsBandwidth.used == 3.5 && lfsBandwidth.limit == 10, "Git LFS bandwidth must use its separate monthly allowance")
-        try check(free.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "3.125"), "Gross spend precision was lost")
-        try check(free.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "2.65"), "Full and partial discounts were not retained")
+        try check(free.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "10.445"), "Gross spend precision was lost")
+        try check(free.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "9.97"), "Full and partial discounts were not retained")
         try check(free.monetaryMetrics.first { $0.kind == .spent }?.amount == Decimal(string: "0.475"), "Net spend precision was lost")
         try check(
             free.cardInformationSections.contains { section in
@@ -205,17 +210,34 @@ enum GitHubBillingFixtureRunner {
             "Pro accounts must receive 3,000 included Actions minutes"
         )
         try check(
-            pro.bars.first { $0.stableKey == "actions-packages-storage" }?.limit == 1_440,
-            "Pro accounts must receive 2 GiB of shared Actions and Packages storage"
+            pro.bars.contains { $0.stableKey == "actions-packages-storage" } == false
+                && pro.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
+            "Conflicting Pro storage entitlements must keep the shared allowance unavailable"
         )
         try check(
             pro.bars.first { $0.stableKey == "lfs-storage" }?.limit == 7_200,
             "Pro Git LFS storage must retain its separate 10 GiB allowance"
         )
 
-        let unknownRunnerUsage = data(#"{"usageItems":[{"product":"Actions","sku":"Actions macOS 12-core","quantity":10,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":1,"discountAmount":1,"netAmount":0}]}"#)
+        let paidLargerSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_macos_l","unitType":"minutes","pricePerUnit":0.12,"grossQuantity":10,"grossAmount":1.2,"discountQuantity":0,"discountAmount":0,"netQuantity":10,"netAmount":1.2}]}"#)
+        let paidLargerUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_macos_l","quantity":10,"unitType":"minutes","pricePerUnit":0.12,"repositoryName":"octocat/private","grossAmount":1.2,"discountAmount":0,"netAmount":1.2}]}"#)
+        let paidLargerRunner = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: paidLargerSummary,
+            usageData: paidLargerUsage,
+            repositoryVisibility: ["octocat/private": true],
+            planName: "pro",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Paid larger runner fixture did not parse")
+        try check(
+            paidLargerRunner.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 0,
+            "Known paid larger runners must be excluded from standard included minutes"
+        )
+
+        let unknownRunnerSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_future_runner","unitType":"minutes","pricePerUnit":0.02,"grossQuantity":10,"grossAmount":0.2,"discountQuantity":10,"discountAmount":0.2,"netQuantity":0,"netAmount":0}]}"#)
+        let unknownRunnerUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_future_runner","quantity":10,"unitType":"minutes","pricePerUnit":0.02,"repositoryName":"octocat/private","grossAmount":0.2,"discountAmount":0.2,"netAmount":0}]}"#)
         let unknownRunner = try require(GitHubBillingUsageParser.parsePersonal(
-            summaryData: summary,
+            summaryData: unknownRunnerSummary,
             usageData: unknownRunnerUsage,
             repositoryVisibility: ["octocat/private": true],
             planName: "pro",
@@ -224,15 +246,31 @@ enum GitHubBillingFixtureRunner {
         ), "Unknown runner fixture did not parse")
         try check(
             unknownRunner.bars.contains { $0.stableKey == "actions-private-minutes" } == false,
-            "Unknown or larger runners must not be guessed as standard included minutes"
+            "Unknown runners must not be guessed as standard included minutes"
         )
         try check(
             unknownRunner.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
             "Unknown runners need an unavailable explanation"
         )
         try check(
-            unknownRunner.usageMessages.contains { $0.contains("outside the verified standard-runner") },
+            unknownRunner.usageMessages.contains { $0.contains("outside the verified runner") },
             "Unavailable allowance explanations must be visible on the account card"
+        )
+
+        let partialActionsSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":100,"grossAmount":0.6,"discountQuantity":100,"discountAmount":0.6,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":50,"grossAmount":0.5,"discountQuantity":50,"discountAmount":0.5,"netQuantity":0,"netAmount":0}]}"#)
+        let partialActionsUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":100,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.6,"discountAmount":0.6,"netAmount":0}]}"#)
+        let partialActions = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: partialActionsSummary,
+            usageData: partialActionsUsage,
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Partial Actions fixture did not parse")
+        try check(
+            partialActions.unavailableUsageMetrics["githubBilling.actions-private-minutes"]?
+                .contains("did not reconcile") == true,
+            "Partial Actions detail must not produce an understated complete percentage"
         )
 
         let unknownStorage = try require(GitHubBillingUsageParser.parsePersonal(
@@ -260,6 +298,8 @@ enum GitHubBillingFixtureRunner {
           "timePeriod": {"year": 2026, "month": 9},
           "user": "octocat",
           "usageItems": [
+            {"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1100,"grossAmount":6.6,"discountQuantity":1100,"discountAmount":6.6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":60,"grossAmount":0.6,"discountQuantity":60,"discountAmount":0.6,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.01,"grossQuantity":120,"grossAmount":1.2,"discountQuantity":120,"discountAmount":1.2,"netQuantity":0,"netAmount":0},
             {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.01,"grossQuantity":24,"grossAmount":0.24,"discountQuantity":24,"discountAmount":0.24,"netQuantity":0,"netAmount":0},
             {"product":"Packages","sku":"packages_data_transfer","unitType":"GB","pricePerUnit":0.5,"grossQuantity":2,"grossAmount":1,"discountQuantity":1.5,"discountAmount":0.75,"netQuantity":0.5,"netAmount":0.25},
@@ -342,9 +382,24 @@ enum GitHubBillingFixtureRunner {
         try check(zero.bars.count == 7, "A verified Free plan must expose every supported zero-usage allowance")
         try check(zero.bars.allSatisfy { $0.used == 0 && $0.usageText == "0%" }, "Missing usage must not hide verified zero-percent allowances")
 
+        let stalePeriod = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":8},"user":"octocat","usageItems":[]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Stale billing-period fixture did not parse")
+        try check(
+            stalePeriod.bars.isEmpty
+                && stalePeriod.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            "A stale billing period must fail every allowance closed"
+        )
+
+        let overageSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":2000,"grossAmount":20,"discountQuantity":1200,"discountAmount":12,"netQuantity":800,"netAmount":8}]}"#)
         let overageUsage = data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_windows","quantity":2000,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":20,"discountAmount":12,"netAmount":8,"repositoryName":"octocat/private"}]}"#)
         let overage = try require(GitHubBillingUsageParser.parsePersonal(
-            summaryData: summary,
+            summaryData: overageSummary,
             usageData: overageUsage,
             repositoryVisibility: ["octocat/private": true],
             planName: "free",
@@ -407,6 +462,8 @@ enum GitHubBillingFixtureRunner {
           "timePeriod": {"year": 2026, "month": 9},
           "user": "octocat",
           "usageItems": [
+            {"product":"Actions","sku":"Actions Linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":100,"grossAmount":0.6,"discountQuantity":100,"discountAmount":0.6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"Actions Windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":60,"grossAmount":0.6,"discountQuantity":60,"discountAmount":0.6,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.04,"grossQuantity":144,"grossAmount":5.10,"discountQuantity":31,"discountAmount":1.10,"netQuantity":113,"netAmount":4.00},
             {"product":"Copilot","sku":"copilot_premium_requests","unitType":"requests","pricePerUnit":0.04,"grossQuantity":10,"grossAmount":0.40,"discountQuantity":0,"discountAmount":0,"netQuantity":10,"netAmount":0.40},
             {"product":"Codespaces","sku":"codespaces_compute","unitType":"core-hours","pricePerUnit":0.08,"grossQuantity":5,"grossAmount":0.40,"discountQuantity":1.25,"discountAmount":0.10,"netQuantity":3.75,"netAmount":0.30},
@@ -463,15 +520,16 @@ enum GitHubBillingFixtureRunner {
 
         let actionsSection = result.cardInformationSections[actionsIndex]
         try check(actionsSection.items.contains { item in
-            item.label == "Consumed usage" && item.detail == "\(aggregateText(Decimal(string: "5.10")!)) · 144 GB-hours"
+            item.label == "Consumed usage"
+                && item.detail == "\(aggregateText(Decimal(string: "6.30")!)) · 144 GB-hours · 160 minutes"
         }, "Consumed usage must show the two-decimal aggregate with its returned quantity")
         try check(actionsSection.items.contains {
             $0.label == "Discount usage"
-                && $0.detail == "\(aggregateText(Decimal(string: "1.10")!)) · 31 GB-hours"
+                && $0.detail == "\(aggregateText(Decimal(string: "2.30")!)) · 31 GB-hours · 160 minutes"
         }, "Discount usage must keep its amount and covered quantity separate from consumed usage")
         try check(actionsSection.items.contains {
             $0.label == "Billable usage"
-                && $0.detail == "\(aggregateText(Decimal(string: "4.00")!)) · 113 GB-hours"
+                && $0.detail == "\(aggregateText(Decimal(string: "4.00")!)) · 113 GB-hours · 0 minutes"
         }, "Billable usage must show the authoritative net amount and quantity")
         try check(actionsSection.items.contains { item in
             item.label == "Included usage · Minutes"
@@ -498,11 +556,11 @@ enum GitHubBillingFixtureRunner {
             item.detail.contains("\(aggregateText(Decimal(string: "0.60")!)) gross")
         }, "Aggregate amounts in detail rows must use two fractional digits")
         try check(
-            result.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "7.025"),
+            result.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "8.225"),
             "Aggregate precision must be retained even though the display shows two decimals"
         )
         try check(
-            result.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "1.7625"),
+            result.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "2.9625"),
             "Discount precision must be retained"
         )
         try check(
@@ -1217,7 +1275,7 @@ enum GitHubBillingFixtureRunner {
             case "/user":
                 return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
             case "/users/octocat/settings/billing/usage/summary":
-                return response(request, status: 200, data: personalSummary())
+                return response(request, status: 200, body: #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1,"grossAmount":0.006,"discountQuantity":1,"discountAmount":0.006,"netQuantity":0,"netAmount":0}]}"#)
             case "/users/octocat/settings/billing/usage":
                 return response(request, status: 200, data: mixedProducts)
             default:

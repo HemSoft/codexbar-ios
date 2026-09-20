@@ -85,19 +85,24 @@ Personal Free and Pro cards show monthly allowance progress from GitHub's
 for eligible Actions minutes, shared Actions and Packages storage, Packages data
 transfer, Git LFS storage and bandwidth, and Codespaces compute and storage. Organization
 Free and Team cards show the same account-scoped metrics except personal
-Codespaces allowances. Each verified metric states used, included, and remaining
-usage, shows zero usage as 0%, and preserves overage above 100%. Enterprise
-allowances stay unavailable because GitHub pools them above the organization
-scope. The per-repository Actions cache allowance is not presented as an
-account-wide bar.
+Codespaces allowances. CodexBar requires GitHub's returned billing month to
+contain the refresh time. Each verified metric states used, included, and
+remaining usage, shows zero usage as 0%, and preserves overage above 100%.
+Enterprise allowances stay unavailable because GitHub pools them above the
+organization scope. Personal Pro shared storage also stays unavailable while
+GitHub's current table lists different Actions and Packages storage amounts for
+one shared pool. The per-repository Actions cache allowance is not presented as
+an account-wide bar.
 
 Actions progress includes private-repository standard GitHub-hosted runners.
 CodexBar normalizes mixed runner usage from GitHub's returned quantity and unit
 price evidence against GitHub's current
-[Linux baseline rate](https://docs.github.com/en/billing/reference/actions-runner-pricing);
-public repositories,
-larger runners, hidden repository classifications, and unknown SKUs never
-produce an understated percentage. A problem with one metric does not suppress
+[Linux baseline rate](https://docs.github.com/en/billing/reference/actions-runner-pricing).
+Known paid larger runners from GitHub's
+[SKU catalog](https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions)
+are excluded from the standard-runner allowance; public repositories are also
+excluded. Missing summary rows, hidden repository classifications, and unknown
+SKUs make only the affected metric unavailable. A problem with one metric does not suppress
 other verified allowances. Shared Actions and Packages storage is counted once.
 Storage and Packages transfer include only usage tied to repositories verified
 as private; public-repository usage is excluded, and incomplete repository

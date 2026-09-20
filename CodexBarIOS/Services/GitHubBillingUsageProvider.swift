@@ -588,8 +588,11 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let unit = (item["unitType"] as? String)?.lowercased() ?? ""
         guard unit.contains("minute") else { return false }
         let product = (item["product"] as? String)?.lowercased() ?? ""
+        if !product.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return product.contains("actions")
+        }
         let sku = (item["sku"] as? String)?.lowercased() ?? ""
-        return product.contains("actions") || sku.hasPrefix("actions")
+        return sku.hasPrefix("actions")
     }
 
     private func makeRequest(
