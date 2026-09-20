@@ -272,6 +272,8 @@ enum GitHubBillingFixtureRunner {
             "Unavailable allowance explanations must be visible on the account card"
         )
 
+        try changedActionsProductFixture(configuration: configuration, fetchedAt: fetchedAt)
+
         let partialActionsSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":100,"grossAmount":0.6,"discountQuantity":100,"discountAmount":0.6,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":50,"grossAmount":0.5,"discountQuantity":50,"discountAmount":0.5,"netQuantity":0,"netAmount":0}]}"#)
         let partialActionsUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":100,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.6,"discountAmount":0.6,"netAmount":0}]}"#)
         let partialActions = try require(GitHubBillingUsageParser.parsePersonal(
@@ -303,6 +305,28 @@ enum GitHubBillingFixtureRunner {
         try check(
             unknownStorage.bars.contains { $0.stableKey == "actions-packages-storage" } == false,
             "Incomplete shared-storage evidence must not produce an understated percentage"
+        )
+    }
+
+    private static func changedActionsProductFixture(
+        configuration: ProviderAccountConfiguration,
+        fetchedAt: Date
+    ) throws {
+        let renamedProduct = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"CI","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"CI","sku":"actions_linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Changed Actions product fixture did not parse")
+        try check(
+            renamedProduct.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            "A known Actions SKU with a changed product contract must fail closed"
+        )
+        try check(
+            renamedProduct.bars.contains { $0.stableKey == "actions-private-minutes" } == false,
+            "A changed Actions product contract must not silently understate allowance usage"
         )
     }
 
@@ -1573,7 +1597,7 @@ enum GitHubBillingFixtureRunner {
     }
 
     private static func organizationUsage() -> Data {
-        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":2,"discountAmount":0,"netAmount":2,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Other","sku":"actions_linux","quantity":400,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":4,"discountAmount":0,"netAmount":4,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"},{"date":"2026-09-04","product":"Packages","sku":"packages_storage","quantity":40,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.9,"discountAmount":0.45,"netAmount":0.45,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-05","product":"Packages","sku":"packages_storage","quantity":10,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.225,"discountAmount":0.1125,"netAmount":0.1125,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"}]}"#)
+        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":2,"discountAmount":0,"netAmount":2,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Other","sku":"other_linux","quantity":400,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":4,"discountAmount":0,"netAmount":4,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"},{"date":"2026-09-04","product":"Packages","sku":"packages_storage","quantity":40,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.9,"discountAmount":0.45,"netAmount":0.45,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-05","product":"Packages","sku":"packages_storage","quantity":10,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.225,"discountAmount":0.1125,"netAmount":0.1125,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"}]}"#)
     }
 
     private static func personalConfiguration() -> ProviderAccountConfiguration {

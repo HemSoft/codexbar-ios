@@ -354,8 +354,8 @@ public enum GitHubBillingUsageParser {
         var used = Decimal.zero
         for item in candidates {
             switch actionsMinuteContribution(item, repositoryVisibility: repositoryVisibility) {
-            case let .included(equivalentMinutes):
-                used += equivalentMinutes
+            case let .included(reportedMinutes):
+                used += reportedMinutes
             case .excluded:
                 continue
             case let .unavailable(reason):
@@ -1404,8 +1404,8 @@ public enum GitHubBillingUsageParser {
             items.append(ProviderCardInformationItem(
                 id: "github-billing.actions-classification",
                 label: "Actions plan allowance",
-                detail: "Private standard-runner usage is normalized with each returned unit price against "
-                    + "GitHub's current $0.006 Linux rate. Public and unverified runner usage is not counted."
+                detail: "Returned private standard-runner minutes count directly after their unit prices match "
+                    + "GitHub's current runner pricing. Public and unverified runner usage is not counted."
             ))
         }
         if let budgetQualification {
@@ -1762,7 +1762,6 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
 
     var isPotentialActionsMinutes: Bool {
         let normalizedProduct = product?.normalized ?? ""
-        guard normalizedProduct.isEmpty || normalizedProduct.contains("actions") else { return false }
         let normalizedSKU = sku?.normalized ?? ""
         guard !normalizedSKU.contains("storage"), !normalizedSKU.contains("cache") else { return false }
         if normalizedSKU.hasPrefix("actions") { return true }
@@ -1983,7 +1982,6 @@ private struct UsageItem: Decodable, MeteredQuantityItem {
 
     var isPotentialActionsMinutes: Bool {
         let normalizedProduct = product?.normalized ?? ""
-        guard normalizedProduct.isEmpty || normalizedProduct.contains("actions") else { return false }
         let normalizedSKU = sku?.normalized ?? ""
         guard !normalizedSKU.contains("storage"), !normalizedSKU.contains("cache") else { return false }
         if normalizedSKU.hasPrefix("actions") { return true }

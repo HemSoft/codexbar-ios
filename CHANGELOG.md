@@ -51,18 +51,13 @@ building, testing, or releasing the app.
   and Pro plans and organization Free and Team plans. Covered metrics include
   eligible Actions minutes, shared Actions and Packages storage, Packages data
   transfer, Git LFS storage and bandwidth, and personal Codespaces compute and
-  storage. Public-repository storage and Packages transfer are excluded after
-  repository eligibility is verified, paid larger and self-hosted runners do
-  not consume the hosted standard-runner allowance, returned minute quantities
-  are used without guessed operating-system multipliers, prices must match
-  GitHub's current runner contract, and summary totals must reconcile with the
-  current billing month's detail, and gross, discounted, and billable quantities
-  must be complete. Zero usage, remaining allowance, and overage remain
-  explicit; conflicting Pro shared-storage amounts, unverified usage, and
-  enterprise-pooled limits stay unavailable rather than producing a guessed
-  percentage. Organization connections now request GitHub's `admin:org` scope
-  only to read the organization plan required for that allowance; CodexBar does
-  not make organization or team changes. Budgets and billed spend remain separate.
+  storage. Public-repository usage, paid larger runners, and self-hosted runners
+  do not consume these allowance bars. Zero usage, remaining allowance, and
+  overage remain explicit. When GitHub does not provide enough evidence for a
+  trustworthy percentage, the affected allowance stays unavailable rather than
+  showing a guess. Enterprise-pooled limits also stay unavailable. Organization
+  connections ask approval to read the organization plan but never change
+  organizations or teams. Budgets and billed spend remain separate.
   ([#349](https://github.com/HemSoft/codexbar-ios/issues/349))
 
 - Refined GitHub Billing cards to answer three questions quickly: what was
