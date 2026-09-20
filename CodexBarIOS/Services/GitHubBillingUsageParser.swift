@@ -335,6 +335,10 @@ public enum GitHubBillingUsageParser {
         let metricID = "githubBilling.actions-private-minutes"
         let summaryCandidates = summaryItems.filter(\.isPotentialActionsMinutes)
         let candidates = usageItems.filter(\.isPotentialActionsMinutes)
+        guard summaryCandidates.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable[metricID] = "GitHub did not return complete Actions gross, discount, and billable quantities."
+            return
+        }
         guard quantityTotals(summaryCandidates) == quantityTotals(candidates) else {
             output.unavailable[metricID] = "GitHub's Actions summary and repository detail did not reconcile completely."
             return
@@ -471,8 +475,8 @@ public enum GitHubBillingUsageParser {
             output.unavailable[metricID] = "GitHub returned shared storage in a unit that cannot be compared with a GB-hour allowance."
             return
         }
-        guard matching.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true }) else {
-            output.unavailable[metricID] = "GitHub did not return a complete nonnegative accrued storage quantity."
+        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable[metricID] = "GitHub did not return complete shared-storage gross, discount, and billable quantities."
             return
         }
         let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
@@ -505,11 +509,12 @@ public enum GitHubBillingUsageParser {
     ) {
         let metricID = "githubBilling.packages-data-transfer"
         let matching = items.filter(\.isPotentialPackagesDataTransfer)
-        guard matching.allSatisfy(\.isPackagesDataTransfer),
-              matching.allSatisfy(\.isGB),
-              matching.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true })
-        else {
+        guard matching.allSatisfy(\.isPackagesDataTransfer), matching.allSatisfy(\.isGB) else {
             output.unavailable[metricID] = "GitHub returned Packages data transfer in an unsupported SKU or unit."
+            return
+        }
+        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable[metricID] = "GitHub did not return complete Packages transfer gross, discount, and billable quantities."
             return
         }
         let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
@@ -565,31 +570,35 @@ public enum GitHubBillingUsageParser {
         output: inout AllowanceOutput
     ) {
         let storageItems = items.filter(\.isPotentialLFSStorage)
-        if storageItems.allSatisfy(\.isLFSStorage),
-           storageItems.allSatisfy(\.isGBHours),
-           storageItems.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true }) {
-            output.bars.append(allowanceBar(
-                stableKey: "lfs-storage",
-                label: "Git LFS storage",
-                used: storageItems.compactMap(\.grossQuantity).reduce(.zero, +),
-                limit: Decimal(plan.lfsStorageGB) * Decimal(period.hours),
-                period: period
-            ))
+        if storageItems.allSatisfy(\.isLFSStorage), storageItems.allSatisfy(\.isGBHours) {
+            if storageItems.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) {
+                output.bars.append(allowanceBar(
+                    stableKey: "lfs-storage",
+                    label: "Git LFS storage",
+                    used: storageItems.compactMap(\.grossQuantity).reduce(.zero, +),
+                    limit: Decimal(plan.lfsStorageGB) * Decimal(period.hours),
+                    period: period
+                ))
+            } else {
+                output.unavailable["githubBilling.lfs-storage"] = "GitHub did not return complete Git LFS storage gross, discount, and billable quantities."
+            }
         } else {
             output.unavailable["githubBilling.lfs-storage"] = "GitHub returned Git LFS storage in an unsupported unit."
         }
 
         let bandwidthItems = items.filter(\.isPotentialLFSBandwidth)
-        if bandwidthItems.allSatisfy(\.isLFSBandwidth),
-           bandwidthItems.allSatisfy(\.isGB),
-           bandwidthItems.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true }) {
-            output.bars.append(allowanceBar(
-                stableKey: "lfs-bandwidth",
-                label: "Git LFS bandwidth",
-                used: bandwidthItems.compactMap(\.grossQuantity).reduce(.zero, +),
-                limit: Decimal(plan.lfsBandwidthGB),
-                period: period
-            ))
+        if bandwidthItems.allSatisfy(\.isLFSBandwidth), bandwidthItems.allSatisfy(\.isGB) {
+            if bandwidthItems.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) {
+                output.bars.append(allowanceBar(
+                    stableKey: "lfs-bandwidth",
+                    label: "Git LFS bandwidth",
+                    used: bandwidthItems.compactMap(\.grossQuantity).reduce(.zero, +),
+                    limit: Decimal(plan.lfsBandwidthGB),
+                    period: period
+                ))
+            } else {
+                output.unavailable["githubBilling.lfs-bandwidth"] = "GitHub did not return complete Git LFS bandwidth gross, discount, and billable quantities."
+            }
         } else {
             output.unavailable["githubBilling.lfs-bandwidth"] = "GitHub returned Git LFS bandwidth in an unsupported unit."
         }
@@ -618,10 +627,13 @@ public enum GitHubBillingUsageParser {
         output: inout AllowanceOutput
     ) {
         let matching = items.filter(\.isPotentialCodespacesCoreHours)
-        guard matching.allSatisfy(\.isCodespacesCoreHours),
-              matching.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true })
-        else {
+        guard matching.allSatisfy(\.isCodespacesCoreHours) else {
             output.unavailable["githubBilling.codespaces-core-hours"] = "GitHub returned Codespaces compute in an unsupported SKU or unit."
+            return
+        }
+        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable["githubBilling.codespaces-core-hours"] =
+                "GitHub did not return complete Codespaces compute gross, discount, and billable quantities."
             return
         }
         output.bars.append(allowanceBar(
@@ -640,10 +652,13 @@ public enum GitHubBillingUsageParser {
         output: inout AllowanceOutput
     ) {
         let matching = items.filter(\.isPotentialCodespacesStorage)
-        guard matching.allSatisfy(\.isCodespacesStorage),
-              matching.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true })
-        else {
-            output.unavailable["githubBilling.codespaces-storage"] = "GitHub returned Codespaces storage without a complete nonnegative quantity."
+        guard matching.allSatisfy(\.isCodespacesStorage) else {
+            output.unavailable["githubBilling.codespaces-storage"] = "GitHub returned Codespaces storage with an unsupported SKU."
+            return
+        }
+        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable["githubBilling.codespaces-storage"] =
+                "GitHub did not return complete Codespaces storage gross, discount, and billable quantities."
             return
         }
         let isAccrued = matching.allSatisfy(\.isGBHours)
@@ -1718,6 +1733,20 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
 
     var allowanceQuantity: Decimal? { grossQuantity }
 
+    var hasCompleteAllowanceQuantityEvidence: Bool {
+        guard
+            let grossQuantity,
+            grossQuantity >= 0,
+            let discountQuantity,
+            discountQuantity >= 0,
+            let netQuantity,
+            netQuantity >= 0
+        else {
+            return false
+        }
+        return discountQuantity + netQuantity == grossQuantity
+    }
+
     var hasMonetaryEvidence: Bool {
         [pricePerUnit, grossAmount, discountAmount, netAmount].contains { $0 != nil }
     }
@@ -1801,13 +1830,17 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     }
 
     var isPotentialLFSStorage: Bool {
-        (isLFS || sku?.normalized.contains("lfs") == true)
-            && (isGBHours || sku?.normalized.contains("storage") == true)
+        let normalizedSKU = sku?.normalized ?? ""
+        guard isLFS || normalizedSKU.contains("lfs") else { return false }
+        if normalizedSKU.contains("bandwidth") { return false }
+        return normalizedSKU.contains("storage") || isGBHours
     }
 
     var isPotentialLFSBandwidth: Bool {
-        (isLFS || sku?.normalized.contains("lfs") == true)
-            && (isGB || sku?.normalized.contains("bandwidth") == true)
+        let normalizedSKU = sku?.normalized ?? ""
+        guard isLFS || normalizedSKU.contains("lfs") else { return false }
+        if normalizedSKU.contains("storage") { return false }
+        return normalizedSKU.contains("bandwidth") || isGB
     }
 
     var isLFS: Bool {

@@ -1401,7 +1401,7 @@ struct ProviderUsageCard: View {
         case "actions-private-minutes": unit = "minute equivalents"
         case "actions-packages-storage", "lfs-storage", "codespaces-storage": unit = "GB-hours"
         case "packages-data-transfer", "lfs-bandwidth": unit = "GB"
-        case "codespaces-core-hours": unit = "core-hours"
+        case "codespaces-core-hours": unit = "core hours"
         default: return nil
         }
         let used = formattedUsageAmount(bar.used)

@@ -108,7 +108,9 @@ problem with one metric does not suppress
 other verified allowances. Shared Actions and Packages storage is counted once.
 Storage and Packages transfer include only usage tied to repositories verified
 as private; public-repository usage is excluded, and incomplete repository
-eligibility keeps the affected allowance unavailable.
+eligibility keeps the affected allowance unavailable. Each allowance also
+requires returned gross, discounted, and billable quantities to be complete and
+internally consistent.
 
 Cards also show gross charges, discounts, net spend, and month-end projections.
 Aggregate amounts use a complete, consistent ISO currency returned by GitHub;

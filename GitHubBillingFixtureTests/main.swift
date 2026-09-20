@@ -108,11 +108,11 @@ enum GitHubBillingFixtureRunner {
             {"product":"Actions","sku":"Actions macOS","unitType":"minutes","pricePerUnit":0.062,"grossQuantity":10,"grossAmount":0.62,"discountQuantity":10,"discountAmount":0.62,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_linux_arm","unitType":"minutes","pricePerUnit":0.005,"grossQuantity":20,"grossAmount":0.1,"discountQuantity":20,"discountAmount":0.1,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_windows_arm","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":10,"grossAmount":0.1,"discountQuantity":10,"discountAmount":0.1,"netQuantity":0,"netAmount":0},
-            {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":120,"grossAmount":2.125,"discountAmount":2.125,"netAmount":0},
-            {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":24,"grossAmount":0.25,"discountAmount":0.125,"netAmount":0.125},
+            {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":120,"grossAmount":2.125,"discountQuantity":120,"discountAmount":2.125,"netQuantity":0,"netAmount":0},
+            {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":24,"grossAmount":0.25,"discountQuantity":12,"discountAmount":0.125,"netQuantity":12,"netAmount":0.125},
             {"product":"Actions","sku":"actions_cache_storage","unitType":"GB-hours","grossQuantity":100,"grossAmount":0,"discountAmount":0,"netAmount":0},
-            {"product":"Git LFS","sku":"lfs_storage","unitType":"GiB-hours","grossQuantity":48,"grossAmount":0.40,"discountAmount":0.40,"netAmount":0},
-            {"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GiB","grossQuantity":3.5,"grossAmount":0.35,"discountAmount":0,"netAmount":0.35}
+            {"product":"Git LFS","sku":"lfs_storage","unitType":"GiB-hours","grossQuantity":48,"grossAmount":0.40,"discountQuantity":48,"discountAmount":0.40,"netQuantity":0,"netAmount":0},
+            {"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GiB","grossQuantity":3.5,"grossAmount":0.35,"discountQuantity":0,"discountAmount":0,"netQuantity":3.5,"netAmount":0.35}
           ]
         }
         """#)
@@ -170,6 +170,19 @@ enum GitHubBillingFixtureRunner {
         try check(
             missingStorageDetails.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
             "Shared storage must stay unavailable without complete repository eligibility"
+        )
+        let incompleteStorageQuantities = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":10,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_storage","quantity":10,"unitType":"GB-hours","repositoryName":"octocat/private"}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Incomplete storage quantity fixture did not parse")
+        try check(
+            incompleteStorageQuantities.unavailableUsageMetrics["githubBilling.actions-packages-storage"]?
+                .contains("gross, discount, and billable") == true,
+            "Missing discount or billable quantities must keep the allowance unavailable"
         )
         let lfsStorage = try require(free.bars.first { $0.stableKey == "lfs-storage" }, "Git LFS storage bar missing")
         try check(lfsStorage.used == 48 && lfsStorage.limit == 7_200, "Git LFS storage must use its 10 GiB accrued allowance")
@@ -397,6 +410,24 @@ enum GitHubBillingFixtureRunner {
             let bar = try require(free.bars.first { $0.stableKey == key }, "Missing allowance bar \(key)")
             try check(bar.used == used && bar.limit == limit, "Incorrect allowance values for \(key)")
         }
+
+        let isolatedMalformedLFS = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Git LFS","sku":"lfs_storage","unitType":"GB","pricePerUnit":0.01,"grossQuantity":2,"grossAmount":0.02,"discountQuantity":2,"discountAmount":0.02,"netQuantity":0,"netAmount":0},{"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GB","pricePerUnit":0.01,"grossQuantity":3,"grossAmount":0.03,"discountQuantity":3,"discountAmount":0.03,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Isolated malformed Git LFS fixture did not parse")
+        try check(
+            isolatedMalformedLFS.unavailableUsageMetrics["githubBilling.lfs-storage"] != nil,
+            "Malformed Git LFS storage must remain unavailable"
+        )
+        try check(
+            isolatedMalformedLFS.bars.first { $0.stableKey == "lfs-bandwidth" }?.used == 3,
+            "Malformed Git LFS storage must not erase trustworthy bandwidth"
+        )
+
         let monthlyCodespaces = try require(GitHubBillingUsageParser.parsePersonal(
             summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Codespaces","sku":"codespaces_storage","unitType":"GB-month","grossQuantity":10,"grossAmount":0.7,"discountQuantity":10,"discountAmount":0.7,"netQuantity":0,"netAmount":0}]}"#),
             usageData: data(#"{"usageItems":[]}"#),
