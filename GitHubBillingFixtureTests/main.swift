@@ -1293,6 +1293,7 @@ enum GitHubBillingFixtureRunner {
             secretStore: store,
             session: session,
             apiBaseURL: apiBaseURL,
+            repositoryVisibilityCacheDuration: 0,
             now: { now }
         )
 
@@ -1317,6 +1318,36 @@ enum GitHubBillingFixtureRunner {
         try check(
             zeroNetSpend?.detail == "No current charge after discounts",
             "Fully discounted usage must be presented as no current charge"
+        )
+
+        let cachedMetadataCounter = LockedCounter()
+        FixtureURLProtocol.setHandler { request in
+            switch request.url?.path {
+            case "/user":
+                return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
+            case "/users/octocat/settings/billing/usage/summary":
+                return response(request, status: 200, data: personalSummary())
+            case "/users/octocat/settings/billing/usage":
+                return response(request, status: 200, body: #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#)
+            case "/repos/octocat/private":
+                cachedMetadataCounter.increment()
+                return response(request, status: 200, body: #"{"private":true}"#)
+            default:
+                return response(request, status: 404, body: "{}")
+            }
+        }
+        let cachingProvider = GitHubBillingUsageProvider(
+            secretStore: store,
+            session: session,
+            apiBaseURL: apiBaseURL,
+            repositoryVisibilityCacheDuration: 15 * 60,
+            now: { now }
+        )
+        _ = try await cachingProvider.fetchUsage(for: personal)
+        _ = try await cachingProvider.fetchUsage(for: personal)
+        try check(
+            cachedMetadataCounter.value == 1,
+            "Repository visibility must be reused across routine refreshes"
         )
 
         for status in [401, 403, 404, 429, 500] {

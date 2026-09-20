@@ -42,6 +42,8 @@ public final class GitHubBillingUsageProvider: UsageProvider {
     private let apiBaseURL: URL
     private let tokenEndpoint: URL
     private let oauthConfiguration: GitHubBillingOAuthConfiguration
+    private let repositoryVisibilityCacheDuration: TimeInterval
+    private let repositoryVisibilityCache = GitHubRepositoryVisibilityCache()
     private let now: @Sendable () -> Date
 
     public let providerID = ProviderID.githubBilling
@@ -52,6 +54,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         apiBaseURL: URL = URL(string: "https://api.github.com")!,
         tokenEndpoint: URL = GitHubBillingWebAuthService.tokenEndpoint,
         oauthConfiguration: GitHubBillingOAuthConfiguration = .bundled,
+        repositoryVisibilityCacheDuration: TimeInterval = 15 * 60,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.secretStore = secretStore
@@ -59,6 +62,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         self.apiBaseURL = apiBaseURL
         self.tokenEndpoint = tokenEndpoint
         self.oauthConfiguration = oauthConfiguration
+        self.repositoryVisibilityCacheDuration = max(0, repositoryVisibilityCacheDuration)
         self.now = now
     }
 
@@ -301,7 +305,8 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let repositories = Self.repositoryNames(in: usage)
         let visibility = try await repositoryVisibility(
             repositories: repositories,
-            accessToken: credentials.accessToken
+            accessToken: credentials.accessToken,
+            cacheNamespace: "personal:\(owner.lowercased())"
         )
         guard let result = GitHubBillingUsageParser.parsePersonal(
             summaryData: summary,
@@ -346,7 +351,8 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let repositories = Self.repositoryNames(in: usage)
         let visibility = try await repositoryVisibility(
             repositories: repositories,
-            accessToken: credentials.accessToken
+            accessToken: credentials.accessToken,
+            cacheNamespace: "organization:\(owner.lowercased())"
         )
         guard let result = GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,
@@ -489,19 +495,32 @@ public final class GitHubBillingUsageProvider: UsageProvider {
 
     private func repositoryVisibility(
         repositories: Set<String>,
-        accessToken: String
+        accessToken: String,
+        cacheNamespace: String
     ) async throws -> RepositoryVisibilityResult {
         let orderedRepositories = Array(repositories.sorted().prefix(Self.maximumRepositoryVisibilityLookups))
+        let cached = await repositoryVisibilityCache.resolve(
+            repositories: orderedRepositories,
+            namespace: cacheNamespace,
+            at: now()
+        )
         var result = RepositoryVisibilityResult(
             values: [:],
             hiddenRepositoryCount: 0,
             omittedRepositoryCount: max(0, repositories.count - orderedRepositories.count)
         )
-        for batchStart in stride(from: 0, to: orderedRepositories.count, by: 8) {
-            let batchEnd = min(batchStart + 8, orderedRepositories.count)
+        Self.mergeRepositoryVisibility(cached.lookups, into: &result)
+        for batchStart in stride(from: 0, to: cached.missing.count, by: 8) {
+            let batchEnd = min(batchStart + 8, cached.missing.count)
             let lookups = try await repositoryVisibilityLookups(
-                repositories: orderedRepositories[batchStart..<batchEnd],
+                repositories: cached.missing[batchStart..<batchEnd],
                 accessToken: accessToken
+            )
+            await repositoryVisibilityCache.store(
+                lookups,
+                namespace: cacheNamespace,
+                fetchedAt: now(),
+                duration: repositoryVisibilityCacheDuration
             )
             Self.mergeRepositoryVisibility(lookups, into: &result)
         }
@@ -842,6 +861,58 @@ private struct RepositoryMetadata: Decodable {
     enum CodingKeys: String, CodingKey {
         case isPrivate = "private"
     }
+}
+
+private actor GitHubRepositoryVisibilityCache {
+    private struct Key: Hashable {
+        let namespace: String
+        let repository: String
+    }
+
+    private struct Entry {
+        let lookup: RepositoryVisibilityLookup
+        let expiresAt: Date
+    }
+
+    private var entries: [Key: Entry] = [:]
+
+    func resolve(
+        repositories: [String],
+        namespace: String,
+        at date: Date
+    ) -> RepositoryVisibilityCacheResolution {
+        var lookups: [RepositoryVisibilityLookup] = []
+        var missing: [String] = []
+        for repository in repositories {
+            let key = Key(namespace: namespace, repository: repository.lowercased())
+            guard let entry = entries[key], entry.expiresAt > date else {
+                entries[key] = nil
+                missing.append(repository)
+                continue
+            }
+            lookups.append(entry.lookup)
+        }
+        return RepositoryVisibilityCacheResolution(lookups: lookups, missing: missing)
+    }
+
+    func store(
+        _ lookups: [RepositoryVisibilityLookup],
+        namespace: String,
+        fetchedAt: Date,
+        duration: TimeInterval
+    ) {
+        guard duration > 0 else { return }
+        let expiresAt = fetchedAt.addingTimeInterval(duration)
+        for lookup in lookups {
+            let key = Key(namespace: namespace, repository: lookup.repository.lowercased())
+            entries[key] = Entry(lookup: lookup, expiresAt: expiresAt)
+        }
+    }
+}
+
+private struct RepositoryVisibilityCacheResolution: Sendable {
+    let lookups: [RepositoryVisibilityLookup]
+    let missing: [String]
 }
 
 private struct RepositoryVisibilityLookup: Sendable {
