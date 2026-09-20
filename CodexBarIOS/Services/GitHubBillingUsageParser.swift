@@ -870,6 +870,7 @@ public enum GitHubBillingUsageParser {
                 let product = item.product?.nonempty,
                 let sku = item.sku?.nonempty,
                 let quantity = item.grossQuantity,
+                quantity >= 0,
                 let unit = item.unitType?.nonempty
             else {
                 continue

@@ -1153,16 +1153,17 @@ enum GitHubBillingFixtureRunner {
         )
         try check(missingBudgets == nil, "A missing top-level budgets field must fail closed")
 
-        let incompleteOrganizationSummary = GitHubBillingUsageParser.parseOrganization(
-            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","unitType":"minutes","grossQuantity":1,"grossAmount":1,"discountAmount":0,"netAmount":1}]}"#),
+        let negativeOrganizationSummary = GitHubBillingUsageParser.parseOrganization(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":-1,"grossAmount":-0.006,"discountQuantity":0,"discountAmount":0,"netQuantity":-1,"netAmount":-0.006}]}"#),
             usageData: organizationUsage(),
             budgetPageData: [],
             configuration: organizationConfiguration(),
             fetchedAt: Date()
         )
         try check(
-            incompleteOrganizationSummary?.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
-            "An incomplete organization summary row must isolate the affected allowance"
+            negativeOrganizationSummary?.bars.contains { $0.stableKey?.hasPrefix("usage-") == true } == false
+                && negativeOrganizationSummary?.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            "Negative organization summary quantities must isolate the allowance without creating a usage bar"
         )
 
         let incompleteOrganizationUsage = GitHubBillingUsageParser.parseOrganization(
