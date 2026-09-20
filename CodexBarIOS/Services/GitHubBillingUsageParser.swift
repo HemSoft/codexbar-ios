@@ -1022,9 +1022,10 @@ public enum GitHubBillingUsageParser {
                 )
             )
         }
-        guard matching.allSatisfy({ $0.netAmount != nil }) else {
+        guard matching.allSatisfy(\.hasNonnegativeFinancialFields) else {
             return BudgetCandidate(
-                unavailableMessage: "GitHub did not return complete net spend for the \(targetLabel) budget."
+                unavailableMessage: "GitHub did not return complete nonnegative financial evidence for the "
+                    + "\(targetLabel) budget."
             )
         }
         let normalized = NormalizedBudget(

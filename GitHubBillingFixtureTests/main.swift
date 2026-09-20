@@ -1180,13 +1180,20 @@ enum GitHubBillingFixtureRunner {
         let negativeOrganizationUsage = GitHubBillingUsageParser.parseOrganization(
             summaryData: organizationSummary(),
             usageData: data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":-1,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":-0.01,"discountAmount":0,"netAmount":-0.01,"organizationName":"Example-Engineering"}]}"#),
-            budgetPageData: [],
+            budgetPageData: [data(#"{"budgets":[{"id":"negative-detail","budget_type":"ProductPricing","budget_amount":10,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}]}"#)],
             configuration: organizationConfiguration(),
             fetchedAt: Date()
         )
         try check(
             negativeOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
             "Negative organization detail values must isolate the affected allowance"
+        )
+        try check(
+            negativeOrganizationUsage?.bars.contains { $0.stableKey == "budget-negative-detail" } == false
+                && negativeOrganizationUsage?.usageMessages.contains {
+                    $0.contains("complete nonnegative financial evidence")
+                } == true,
+            "Negative organization detail values must make the affected budget unavailable"
         )
 
         let missingOrganizationIdentity = GitHubBillingUsageParser.parseOrganization(
