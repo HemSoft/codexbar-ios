@@ -533,14 +533,6 @@ final class UITestFixtures {
                     projectionPeriodEnd: periodEnd,
                     showProjectionOnCurrentBar: true
                 ),
-                UsageBar(
-                    stableKey: "packages-data-transfer",
-                    label: "Packages data transfer",
-                    used: 1.5,
-                    limit: 1,
-                    resetsAt: periodEnd,
-                    resetDisplayStyle: .relativeWithLocalTime
-                ),
             ],
             monetaryMetrics: [
                 ProviderMonetaryMetric(

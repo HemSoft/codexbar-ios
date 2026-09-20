@@ -51,9 +51,9 @@ building, testing, or releasing the app.
   and Pro plans and organization Free and Team plans. Covered metrics include
   eligible Actions minutes, shared Actions and Packages storage, Packages data
   transfer, Git LFS storage and bandwidth, and personal Codespaces compute and
-  storage. Public-repository usage, paid larger runners, and self-hosted runners
-  do not consume these allowance bars. Zero usage, remaining allowance, and
-  overage remain explicit. When GitHub does not provide enough evidence for a
+  storage. Public-repository Actions usage, paid larger runners, and self-hosted
+  runners do not consume the Actions allowance bars. Zero usage, remaining
+  allowance, and overage remain explicit. When GitHub does not provide enough evidence for a
   trustworthy percentage, the affected allowance stays unavailable rather than
   showing a guess. Enterprise-pooled limits also stay unavailable. Organization
   connections ask approval to read the organization plan but never change

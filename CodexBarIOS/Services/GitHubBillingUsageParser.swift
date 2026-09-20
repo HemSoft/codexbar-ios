@@ -297,8 +297,6 @@ public enum GitHubBillingUsageParser {
         )
         appendPackagesDataTransfer(
             summaryItems,
-            usageItems: usageItems,
-            repositoryVisibility: repositoryVisibility,
             plan: plan,
             period: period,
             output: &output
@@ -498,6 +496,11 @@ public enum GitHubBillingUsageParser {
             output.unavailable[metricID] = "GitHub did not return complete shared-storage gross, discount, and billable quantities."
             return
         }
+        guard !matching.contains(where: { $0.isPackagesStorage && $0.grossQuantity.map { $0 > 0 } == true }) else {
+            output.unavailable[metricID] = "GitHub Billing does not identify package visibility, so nonzero "
+                + "Packages storage cannot be compared with the private-package allowance."
+            return
+        }
         let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
         let details = usageItems.filter(\.isPotentialActionsOrPackagesStorage)
         guard let used = privateRepositoryQuantity(
@@ -520,8 +523,6 @@ public enum GitHubBillingUsageParser {
 
     private static func appendPackagesDataTransfer(
         _ items: [SummaryItem],
-        usageItems: [UsageItem],
-        repositoryVisibility: [String: Bool],
         plan: GitHubPlanAllowance,
         period: BillingPeriod,
         output: inout AllowanceOutput
@@ -537,20 +538,15 @@ public enum GitHubBillingUsageParser {
             return
         }
         let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
-        let details = usageItems.filter(\.isPotentialPackagesDataTransfer)
-        guard let used = privateRepositoryQuantity(
-            expectedTotal: total,
-            items: details,
-            repositoryVisibility: repositoryVisibility,
-            isValid: { $0.isPackagesDataTransfer && $0.isGB }
-        ) else {
-            output.unavailable[metricID] = "GitHub did not return complete repository eligibility for Packages data transfer."
+        guard total == 0 else {
+            output.unavailable[metricID] = "GitHub Billing does not identify package visibility or free Actions "
+                + "downloads, so nonzero Packages transfer cannot be compared with the private-package allowance."
             return
         }
         output.bars.append(allowanceBar(
             stableKey: "packages-data-transfer",
             label: "Packages data transfer",
-            used: used,
+            used: 0,
             limit: Decimal(plan.packagesTransferGB),
             period: period
         ))
@@ -1797,8 +1793,11 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     var isActionsOrPackagesStorage: Bool {
         let product = product?.normalized
         let sku = sku?.normalized
-        return (product == "actions" && sku == "actionsstorage")
-            || (product == "packages" && sku == "packagesstorage")
+        return (product == "actions" && sku == "actionsstorage") || isPackagesStorage
+    }
+
+    var isPackagesStorage: Bool {
+        product?.normalized == "packages" && sku?.normalized == "packagesstorage"
     }
 
     var isPotentialActionsOrPackagesStorage: Bool {

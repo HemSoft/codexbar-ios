@@ -107,11 +107,12 @@ unknown units, and unknown SKUs make only the affected metric unavailable. A
 problem with one metric does not suppress
 other verified allowances. Codespaces compute converts returned machine hours
 with the documented core count in each `codespaces_compute_d*` SKU. Shared
-Actions and Packages storage is counted once.
-Storage and Packages transfer include only usage tied to repositories verified
-as private; public-repository usage is excluded, and incomplete repository
-eligibility keeps the affected allowance unavailable. Each allowance also
-requires returned gross, discounted, and billable quantities to be complete and
+Actions and Packages storage is counted once. Actions storage includes only
+usage tied to repositories verified as private. GitHub Billing does not identify
+package visibility or whether transfer came from a free Actions download, so a
+nonzero Packages storage or transfer quantity keeps that allowance unavailable;
+a verified zero quantity can still show 0%. Each allowance also requires
+returned gross, discounted, and billable quantities to be complete and
 internally consistent. Standard-runner evidence fails closed if GitHub reports
 billable minutes before the verified included allowance is exhausted.
 

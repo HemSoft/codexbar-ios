@@ -592,9 +592,6 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let unit = (item["unitType"] as? String)?.lowercased() ?? ""
         let product = (item["product"] as? String)?.lowercased() ?? ""
         let sku = (item["sku"] as? String)?.lowercased() ?? ""
-        if product == "packages" {
-            return sku.contains("storage") || sku.contains("transfer") || unit.contains("gb")
-        }
         guard product == "actions", !sku.contains("cache"), !sku.contains("custom_image") else { return false }
         return sku.contains("storage") || unit.contains("gb-hour")
     }
