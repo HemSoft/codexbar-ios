@@ -379,6 +379,20 @@ enum GitHubBillingFixtureRunner {
                 .contains("price outside") == true,
             "A changed standard-runner price must fail closed"
         )
+
+        let conflictingDiscount = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":2,"discountAmount":0.012,"netQuantity":8,"netAmount":0.048}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.012,"netAmount":0.048}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Conflicting Actions discount fixture did not parse")
+        try check(
+            conflictingDiscount.unavailableUsageMetrics["githubBilling.actions-private-minutes"]?
+                .contains("before the included allowance was exhausted") == true,
+            "Billable standard minutes below the included limit must fail closed"
+        )
     }
 
     private static func planAllowanceContract() throws {
@@ -820,19 +834,20 @@ enum GitHubBillingFixtureRunner {
     }
 
     private static func organizationBudgetsAndPaginationParsing() throws {
-        let summary = organizationSummary()
+        let summary = data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1200,"grossAmount":7.2,"discountQuantity":1200,"discountAmount":7.2,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_macos_l","unitType":"minutes","pricePerUnit":0.12,"grossQuantity":100,"grossAmount":12,"discountQuantity":0,"discountAmount":2,"netQuantity":100,"netAmount":10}]}"#)
+        let usage = data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":6,"discountAmount":6,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":1.2,"discountAmount":1.2,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Actions","sku":"actions_macos_l","quantity":80,"unitType":"minutes","pricePerUnit":0.12,"grossAmount":9.6,"discountAmount":1.6,"netAmount":8,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-04","product":"Actions","sku":"actions_macos_l","quantity":20,"unitType":"minutes","pricePerUnit":0.12,"grossAmount":2.4,"discountAmount":0.4,"netAmount":2,"organizationName":"Example-Engineering","repositoryName":"example/other"}]}"#)
         let pages = [
             data(#"""
             {"budgets":[{"id":"product-budget","budget_type":"ProductPricing","budget_amount":100,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":true}
             """#),
             data(#"""
-            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"repository","budget_entity_name":"example/private","budget_product_skus":["actions_linux"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"tracking-budget","budget_type":"ProductPricing","budget_amount":25,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"Packages","budget_alerting":{"will_alert":false,"alert_recipients":[]}},{"id":"zero-budget","budget_type":"SkuPricing","budget_amount":0,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"actions_macos","budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"cost-center-budget","budget_type":"ProductPricing","budget_amount":50,"prevent_further_usage":false,"budget_scope":"cost_center","budget_entity_name":"engineering","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
+            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"repository","budget_entity_name":"example/private","budget_product_skus":["actions_macos_l"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"tracking-budget","budget_type":"ProductPricing","budget_amount":25,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"Packages","budget_alerting":{"will_alert":false,"alert_recipients":[]}},{"id":"zero-budget","budget_type":"SkuPricing","budget_amount":0,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"actions_macos","budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"cost-center-budget","budget_type":"ProductPricing","budget_amount":50,"prevent_further_usage":false,"budget_scope":"cost_center","budget_entity_name":"engineering","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
             """#),
         ]
         let configuration = organizationConfiguration()
         let result = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,
-            usageData: organizationUsage(),
+            usageData: usage,
             budgetPageData: pages,
             repositoryVisibility: organizationRepositoryVisibility,
             planName: "team",
@@ -1625,11 +1640,11 @@ enum GitHubBillingFixtureRunner {
     }
 
     private static func organizationSummary() -> Data {
-        data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1200,"grossAmount":12.25,"discountQuantity":200,"discountAmount":2.25,"netQuantity":1000,"netAmount":10.00},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.0225,"grossQuantity":50,"grossAmount":1.125,"discountQuantity":25,"discountAmount":0.5625,"netQuantity":25,"netAmount":0.5625}]}"#)
+        data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1200,"grossAmount":7.2,"discountQuantity":1200,"discountAmount":7.2,"netQuantity":0,"netAmount":0},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.0225,"grossQuantity":50,"grossAmount":1.125,"discountQuantity":25,"discountAmount":0.5625,"netQuantity":25,"netAmount":0.5625}]}"#)
     }
 
     private static func organizationUsage() -> Data {
-        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":2,"discountAmount":0,"netAmount":2,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Other","sku":"other_linux","quantity":400,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":4,"discountAmount":0,"netAmount":4,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"},{"date":"2026-09-04","product":"Packages","sku":"packages_storage","quantity":40,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.9,"discountAmount":0.45,"netAmount":0.45,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-05","product":"Packages","sku":"packages_storage","quantity":10,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.225,"discountAmount":0.1125,"netAmount":0.1125,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"}]}"#)
+        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":6,"discountAmount":6,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":1.2,"discountAmount":1.2,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Other","sku":"other_linux","quantity":400,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":4,"discountAmount":0,"netAmount":4,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"},{"date":"2026-09-04","product":"Packages","sku":"packages_storage","quantity":40,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.9,"discountAmount":0.45,"netAmount":0.45,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-05","product":"Packages","sku":"packages_storage","quantity":10,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.225,"discountAmount":0.1125,"netAmount":0.1125,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"}]}"#)
     }
 
     private static func personalConfiguration() -> ProviderAccountConfiguration {

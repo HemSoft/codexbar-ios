@@ -112,7 +112,8 @@ Storage and Packages transfer include only usage tied to repositories verified
 as private; public-repository usage is excluded, and incomplete repository
 eligibility keeps the affected allowance unavailable. Each allowance also
 requires returned gross, discounted, and billable quantities to be complete and
-internally consistent.
+internally consistent. Standard-runner evidence fails closed if GitHub reports
+billable minutes before the verified included allowance is exhausted.
 
 Cards also show gross charges, discounts, net spend, and month-end projections.
 Aggregate amounts use a complete, consistent ISO currency returned by GitHub;

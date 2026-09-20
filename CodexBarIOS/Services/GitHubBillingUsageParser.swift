@@ -366,11 +366,22 @@ public enum GitHubBillingUsageParser {
                 return
             }
         }
+        let includedSummary = summaryCandidates.filter { item in
+            if case .includedStandard = item.actionsRunnerAllowance { return true }
+            return false
+        }
+        let reportedBillable = includedSummary.compactMap(\.netQuantity).reduce(.zero, +)
+        let planLimit = Decimal(plan.actionsMinutes)
+        guard reportedBillable <= max(used - planLimit, .zero) else {
+            output.unavailable[metricID] = "GitHub reported billable standard-runner minutes before the included "
+                + "allowance was exhausted. Refresh the account; if this continues, review GitHub Billing."
+            return
+        }
         output.bars.append(allowanceBar(
             stableKey: "actions-private-minutes",
             label: "Actions plan allowance",
             used: used,
-            limit: Decimal(plan.actionsMinutes),
+            limit: planLimit,
             period: period
         ))
     }
@@ -1779,6 +1790,10 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
             && unitType?.normalized.contains("minute") == true
     }
 
+    var actionsRunnerAllowance: ActionsRunnerAllowance {
+        GitHubActionsRunnerCatalog.allowance(for: sku)
+    }
+
     var isActionsOrPackagesStorage: Bool {
         let product = product?.normalized
         let sku = sku?.normalized
@@ -2000,48 +2015,12 @@ private struct UsageItem: Decodable, MeteredQuantityItem {
     }
 
     var actionsRunnerAllowance: ActionsRunnerAllowance {
-        let normalizedSKU = sku?.normalized ?? ""
-        if Self.standardActionsRunnerRates[normalizedSKU] != nil {
-            return .includedStandard
-        }
-        if Self.paidLargerActionsRunnerSKUs.contains(normalizedSKU) {
-            return .excludedPaidLarger
-        }
-        if normalizedSKU.contains("selfhosted") {
-            return .excludedSelfHosted
-        }
-        return .unknown
+        GitHubActionsRunnerCatalog.allowance(for: sku)
     }
 
     var expectedStandardRunnerRate: Decimal? {
-        Self.standardActionsRunnerRates[sku?.normalized ?? ""]
+        GitHubActionsRunnerCatalog.standardRate(for: sku)
     }
-
-    private static let standardActionsRunnerRates: [String: Decimal] = [
-        "actionslinuxslim": Decimal(2) / 1_000,
-        "actionslinux": Decimal(6) / 1_000,
-        "actionslinuxarm": Decimal(5) / 1_000,
-        "actionswindows": Decimal(1) / 100,
-        "actionswindowsarm": Decimal(1) / 100,
-        "actionsmacos": Decimal(62) / 1_000,
-    ]
-
-    // https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions
-    private static let paidLargerActionsRunnerSKUs = Set([
-        "actionslinux2coreadvanced", "actionslinux2corearm",
-        "actionslinux4core", "actionslinux4corearm", "actionslinux4coregpu",
-        "actionslinux8core", "actionslinux8corearm",
-        "actionslinux16core", "actionslinux16corearm",
-        "actionslinux32core", "actionslinux32corearm",
-        "actionslinux64core", "actionslinux64corearm",
-        "actionslinux96core", "actionsmacosl", "actionsmacosxl",
-        "actionswindows2core", "actionswindows2coreadvanced", "actionswindows2corearm",
-        "actionswindows4core", "actionswindows4corearm", "actionswindows4coregpu",
-        "actionswindows8core", "actionswindows8corearm",
-        "actionswindows16core", "actionswindows16corearm",
-        "actionswindows32core", "actionswindows32corearm",
-        "actionswindows64core", "actionswindows64corearm", "actionswindows96core",
-    ])
 }
 
 private struct BudgetResponse: Decodable {
@@ -2171,6 +2150,46 @@ private enum ActionsRunnerAllowance {
     case excludedPaidLarger
     case excludedSelfHosted
     case unknown
+}
+
+private enum GitHubActionsRunnerCatalog {
+    static func allowance(for sku: String?) -> ActionsRunnerAllowance {
+        let normalizedSKU = sku?.normalized ?? ""
+        if standardRates[normalizedSKU] != nil { return .includedStandard }
+        if paidLargerSKUs.contains(normalizedSKU) { return .excludedPaidLarger }
+        if normalizedSKU.contains("selfhosted") { return .excludedSelfHosted }
+        return .unknown
+    }
+
+    static func standardRate(for sku: String?) -> Decimal? {
+        standardRates[sku?.normalized ?? ""]
+    }
+
+    private static let standardRates: [String: Decimal] = [
+        "actionslinuxslim": Decimal(2) / 1_000,
+        "actionslinux": Decimal(6) / 1_000,
+        "actionslinuxarm": Decimal(5) / 1_000,
+        "actionswindows": Decimal(1) / 100,
+        "actionswindowsarm": Decimal(1) / 100,
+        "actionsmacos": Decimal(62) / 1_000,
+    ]
+
+    // https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions
+    private static let paidLargerSKUs = Set([
+        "actionslinux2coreadvanced", "actionslinux2corearm",
+        "actionslinux4core", "actionslinux4corearm", "actionslinux4coregpu",
+        "actionslinux8core", "actionslinux8corearm",
+        "actionslinux16core", "actionslinux16corearm",
+        "actionslinux32core", "actionslinux32corearm",
+        "actionslinux64core", "actionslinux64corearm",
+        "actionslinux96core", "actionsmacosl", "actionsmacosxl",
+        "actionswindows2core", "actionswindows2coreadvanced", "actionswindows2corearm",
+        "actionswindows4core", "actionswindows4corearm", "actionswindows4coregpu",
+        "actionswindows8core", "actionswindows8corearm",
+        "actionswindows16core", "actionswindows16corearm",
+        "actionswindows32core", "actionswindows32corearm",
+        "actionswindows64core", "actionswindows64corearm", "actionswindows96core",
+    ])
 }
 
 private enum ActionsMinuteContribution {
