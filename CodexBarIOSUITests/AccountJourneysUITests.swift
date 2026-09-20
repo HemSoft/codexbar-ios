@@ -61,10 +61,10 @@ final class AccountJourneysUITests: XCTestCase {
         keepBillingScreenshot("github-billing-product-summary", of: app)
 
         let includedMinutes = app.descendants(matching: .any).matching(NSPredicate(
-            format: "label BEGINSWITH %@", "Included usage · Minutes, 720 of 2,000 minutes used"
+            format: "label BEGINSWITH %@", "Included usage · Minutes, 720 of 2,000 minute equivalents used"
         )).firstMatch
         reveal(includedMinutes, in: app)
-        XCTAssertTrue(includedMinutes.label.contains("1,280 minutes remaining"), includedMinutes.label)
+        XCTAssertTrue(includedMinutes.label.contains("1,280 minute equivalents remaining"), includedMinutes.label)
 
         let includedStorage = app.descendants(matching: .any).matching(NSPredicate(
             format: "label BEGINSWITH %@", "Included usage · Storage, 118 of 360 GB-hours used"
@@ -93,6 +93,47 @@ final class AccountJourneysUITests: XCTestCase {
         )).firstMatch
         reveal(warning, in: app)
         keepBillingScreenshot("github-billing-actionable-warning", of: app)
+    }
+
+    func testGitHubBillingAllowanceStates() throws {
+        try assertGitHubBillingScenario(
+            "github-billing-personal",
+            expectedPercentage: "36%",
+            screenshotName: "github-billing-personal-allowance"
+        )
+        try assertGitHubBillingScenario(
+            "github-billing-organization",
+            expectedPercentage: "50%",
+            screenshotName: "github-billing-organization-allowance"
+        )
+        try assertGitHubBillingScenario(
+            "github-billing-overage",
+            expectedPercentage: "125%",
+            screenshotName: "github-billing-allowance-overage"
+        )
+        try assertGitHubBillingScenario(
+            "github-billing-no-personal-budget",
+            expectedPercentage: "0%",
+            screenshotName: "github-billing-zero-allowance"
+        )
+        try assertGitHubBillingScenario(
+            "github-billing-incomplete",
+            expectedPercentage: "36%",
+            screenshotName: "github-billing-partial-allowance"
+        )
+    }
+
+    private func assertGitHubBillingScenario(
+        _ scenario: String,
+        expectedPercentage: String,
+        screenshotName: String
+    ) throws {
+        let app = launch(scenario: scenario)
+        defer { app.terminate() }
+        let allowance = app.buttons["dashboard-metric-githubBilling.actions-private-minutes"]
+        XCTAssertTrue(allowance.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(allowance.label.contains(expectedPercentage), allowance.label)
+        keepBillingScreenshot(screenshotName, of: app)
     }
 
     private func keepBillingScreenshot(_ name: String, of app: XCUIApplication) {

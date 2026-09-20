@@ -47,16 +47,27 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- GitHub Billing cards now show monthly allowance progress for personal Free
+  and Pro plans and organization Free and Team plans. Covered metrics include
+  eligible Actions minutes, shared Actions and Packages storage, Packages data
+  transfer, Git LFS storage and bandwidth, and personal Codespaces compute and
+  storage. Zero usage, remaining allowance, and overage remain explicit;
+  unverified usage and enterprise-pooled limits stay unavailable rather than
+  producing a guessed percentage. Budgets and billed spend remain separate.
+  ([#349](https://github.com/HemSoft/codexbar-ios/issues/349))
+
 - Refined GitHub Billing cards to answer three questions quickly: what was
   consumed, what GitHub discounted or included, and what is actually billable.
-  Aggregate amounts always show two decimal places in USD, unit prices keep
-  GitHub's source precision (for example $0.006/minute), metered usage groups
+  Aggregate amounts always show two decimal places in the verified billing
+  currency, unit prices keep GitHub's source precision (for example
+  $0.006/minute), metered usage groups
   into Copilot, Actions, Codespaces, Git LFS, and any other returned products,
   and Actions gains an Included usage subsection splitting Minutes and
   Storage. Routine qualifications moved into the More Information sheet while
   permission failures, incomplete billing data, and unclassifiable repositories
-  stay on the card. Amounts stay USD because GitHub's billing API reports no
-  currency code, and they are never converted to the device locale.
+  stay on the card. Complete ISO currency evidence is preserved, missing
+  evidence uses GitHub's documented USD billing currency, and conflicting or
+  partial evidence suppresses monetary values instead of relabeling them.
   ([#347](https://github.com/HemSoft/codexbar-ios/issues/347))
 
 - Connect and reconnect Gemini Coding Usage from the phone through Google

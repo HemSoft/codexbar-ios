@@ -338,12 +338,25 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             organization: owner,
             accessToken: credentials.accessToken
         )
-        let (summary, usage, budgets) = try await (summaryData, usageData, budgetResult)
+        async let planResult = fetchOrganizationPlan(
+            organization: owner,
+            accessToken: credentials.accessToken
+        )
+        let (summary, usage, budgets, plan) = try await (summaryData, usageData, budgetResult, planResult)
+        let repositories = Self.repositoryNames(in: usage)
+        let visibility = try await repositoryVisibility(
+            repositories: repositories,
+            accessToken: credentials.accessToken
+        )
         guard let result = GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,
             usageData: usage,
             budgetPageData: budgets.pages,
             budgetStatusMessage: budgets.message,
+            repositoryVisibility: visibility.values,
+            repositoryVisibilityMessage: visibility.message,
+            planName: plan.name,
+            planStatusMessage: plan.message,
             configuration: configuration,
             fetchedAt: date
         ) else {
@@ -361,6 +374,35 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             throw GitHubBillingAPIError.invalidResponse
         }
         return profile
+    }
+
+    private func fetchOrganizationPlan(
+        organization: String,
+        accessToken: String
+    ) async -> OrganizationPlanResult {
+        do {
+            let data = try await responseData(for: makeRequest(
+                pathComponents: ["orgs", organization],
+                accessToken: accessToken
+            ))
+            guard let profile = try? JSONDecoder().decode(OrganizationProfile.self, from: data) else {
+                return OrganizationPlanResult(
+                    name: "",
+                    message: "GitHub returned organization profile data without a verifiable plan."
+                )
+            }
+            return OrganizationPlanResult(
+                name: profile.plan?.name ?? "",
+                message: profile.plan == nil
+                    ? "GitHub did not return the organization's plan, so included allowances are unavailable."
+                    : nil
+            )
+        } catch {
+            return OrganizationPlanResult(
+                name: "",
+                message: "GitHub could not provide the organization's plan, so included allowances are unavailable."
+            )
+        }
     }
 
     private func fetchBudgetPages(
@@ -745,6 +787,19 @@ private struct UserProfile: Decodable {
     let plan: Plan?
 }
 
+private struct OrganizationProfile: Decodable {
+    struct Plan: Decodable {
+        let name: String
+    }
+
+    let plan: Plan?
+}
+
+private struct OrganizationPlanResult: Sendable {
+    let name: String
+    let message: String?
+}
+
 private struct OrganizationMembership: Decodable {
     struct Organization: Decodable {
         let login: String?
@@ -856,6 +911,7 @@ private struct GitHubBillingRequestDiagnostic: Sendable {
     private static func endpointLabel(path: String) -> String {
         let components = path.split(separator: "/")
         if components.first == "repos" { return "repository visibility" }
+        if components.first == "orgs" { return "organization profile" }
         if path == "/user" { return "signed-in profile" }
         if path == "/user/memberships/orgs" { return "organization membership" }
         let scope = components.first == "users" ? "personal" : "organization"

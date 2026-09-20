@@ -80,27 +80,46 @@ permissions, and select either your personal account or an organization where
 you have billing access. Each monitored owner gets its own configuration and
 Keychain credential; the integration never reads or replaces a Copilot token.
 
-Personal cards show the plan's included Actions minutes, shared Actions and
-Packages storage, Git LFS storage and bandwidth, gross charges, discounts, net
-spend, and a month-end projection, all with exactly two decimal places in USD.
-GitHub's billing API reports no currency code, so CodexBar shows the USD
-amounts GitHub lists and never converts them to the device locale; the More
-Information sheet states this explicitly. Metered usage groups into one summary
-per product (Copilot, Actions, Codespaces, Git LFS, and any other products
-GitHub returns) with consumed, discount, and billable usage per product, and
-Actions adds an Included usage subsection splitting Minutes and Storage.
-Unit prices keep GitHub's source precision, for example $0.006/minute, instead
-of rounding into a different rate. Routine qualifications, including the lack
-of personal budgets and calculation notes, live in the More Information sheet;
-actionable problems such as permission failures, incomplete billing data, and
-repositories that could not be classified stay on the card. Public-repository
-Actions minutes do not consume the private-repository allowance. Organization
-cards show usage by product and SKU, monetary totals and projections, and
-returned organization or repository budgets, including whether each budget
-alerts or blocks further usage. Other budget scopes remain visible as
-unavailable because organization usage cannot establish their consumption
-safely. Unsupported plans, missing API fields, unavailable billing endpoints,
-permission failures, and rate limits remain visible instead of being guessed.
+Personal Free and Pro cards show monthly allowance progress from GitHub's
+[included-product table](https://docs.github.com/en/billing/reference/product-usage-included)
+for eligible Actions minutes, shared Actions and Packages storage, Packages data
+transfer, Git LFS storage and bandwidth, and Codespaces compute and storage. Organization
+Free and Team cards show the same account-scoped metrics except personal
+Codespaces allowances. Each verified metric states used, included, and remaining
+usage, shows zero usage as 0%, and preserves overage above 100%. Enterprise
+allowances stay unavailable because GitHub pools them above the organization
+scope. The per-repository Actions cache allowance is not presented as an
+account-wide bar.
+
+Actions progress includes private-repository standard GitHub-hosted runners.
+CodexBar normalizes mixed runner usage from GitHub's returned quantity and unit
+price evidence against GitHub's current
+[Linux baseline rate](https://docs.github.com/en/billing/reference/actions-runner-pricing);
+public repositories,
+larger runners, hidden repository classifications, and unknown SKUs never
+produce an understated percentage. A problem with one metric does not suppress
+other verified allowances. Shared Actions and Packages storage is counted once.
+
+Cards also show gross charges, discounts, net spend, and month-end projections.
+Aggregate amounts use a complete, consistent ISO currency returned by GitHub;
+when GitHub supplies no currency evidence, CodexBar uses GitHub's documented USD
+billing currency. Partial, conflicting, or invalid currency evidence suppresses
+monetary values instead of relabeling them. Metered usage groups into one
+summary per product (Copilot, Actions, Codespaces, Packages, Git LFS, and any
+other products GitHub returns) with consumed, discounted, and billable amounts
+and quantities. Unit prices keep GitHub's source precision, for example
+$0.006/minute, instead of rounding into a different rate.
+
+Routine qualifications, including the lack of personal budgets and calculation
+notes, live in the More Information sheet. Actionable problems such as
+permission failures, incomplete billing data, and repositories that could not
+be classified stay on the card. Organization cards keep allowance progress,
+usage by product and SKU, monetary totals and projections, and returned
+organization or repository budgets visibly separate. Other budget scopes remain
+visible as unavailable because organization usage cannot establish their
+consumption safely. Unsupported plans, missing API fields, unavailable billing
+endpoints, permission failures, and rate limits remain visible instead of being
+guessed.
 
 The browser flow requests `repo read:org user`, uses PKCE with a loopback
 callback, and stores only the returned account token. Personal billing endpoints
