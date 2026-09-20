@@ -255,7 +255,10 @@ public enum GitHubBillingUsageParser {
             return "GitHub Enterprise allowances are pooled, but the organization API does not identify this organization's share."
         }
         let plans = scope == .personal ? "Free or Pro" : "Free or Team"
-        return "GitHub did not return a supported \(plans) plan, so included allowances are unavailable."
+        let action = scope == .personal
+            ? "Refresh the account or sign in again with the intended GitHub user."
+            : "Refresh the account or sign in again and approve organization access."
+        return "GitHub did not return a supported \(plans) plan, so included allowances are unavailable. \(action)"
     }
 
     private static func makeAllowanceOutput(
@@ -377,13 +380,6 @@ public enum GitHubBillingUsageParser {
         repositoryVisibility: [String: Bool]
     ) -> ActionsMinuteContribution {
         guard
-            let repositoryName = item.repositoryName,
-            let isPrivate = repositoryVisibility[repositoryName]
-        else {
-            return .unavailable("GitHub returned Actions usage whose repository visibility CodexBar could not verify.")
-        }
-        guard isPrivate else { return .excluded }
-        guard
             item.isActionsMinutes,
             let quantity = item.quantity,
             quantity >= 0,
@@ -391,7 +387,21 @@ public enum GitHubBillingUsageParser {
         else {
             return .unavailable("GitHub returned private Actions usage outside the verified runner allowance contract.")
         }
-        switch item.actionsRunnerAllowance {
+        let runnerAllowance = item.actionsRunnerAllowance
+        switch runnerAllowance {
+        case .excludedPaidLarger, .excludedSelfHosted:
+            return .excluded
+        case .includedStandard, .unknown:
+            break
+        }
+        guard
+            let repositoryName = item.repositoryName,
+            let isPrivate = repositoryVisibility[repositoryName]
+        else {
+            return .unavailable("GitHub returned Actions usage whose repository visibility CodexBar could not verify.")
+        }
+        guard isPrivate else { return .excluded }
+        switch runnerAllowance {
         case .includedStandard:
             guard
                 let unitPrice = item.pricePerUnit,

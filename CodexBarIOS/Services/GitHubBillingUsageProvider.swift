@@ -388,21 +388,36 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             guard let profile = try? JSONDecoder().decode(OrganizationProfile.self, from: data) else {
                 return OrganizationPlanResult(
                     name: "",
-                    message: "GitHub returned organization profile data without a verifiable plan."
+                    message: "GitHub returned organization profile data without a verifiable plan. Refresh the "
+                        + "account; if this continues, sign in again and approve organization access."
                 )
             }
             return OrganizationPlanResult(
                 name: profile.plan?.name ?? "",
                 message: profile.plan == nil
-                    ? "GitHub did not return the organization's plan, so included allowances are unavailable."
+                    ? "GitHub did not return the organization's plan. Sign in again and approve organization "
+                        + "administration access, then refresh."
                     : nil
             )
         } catch {
             return OrganizationPlanResult(
                 name: "",
-                message: "GitHub could not provide the organization's plan, so included allowances are unavailable."
+                message: organizationPlanFailureMessage(error)
             )
         }
+    }
+
+    private func organizationPlanFailureMessage(_ error: Error) -> String {
+        if case let GitHubBillingAPIError.httpStatus(status, isRateLimited, _) = error,
+           status == 403,
+           !isRateLimited {
+            return "GitHub did not permit plan access. Sign in again and approve organization administration "
+                + "access, then refresh."
+        }
+        if let apiError = error as? GitHubBillingAPIError {
+            return "GitHub could not verify the organization's plan. \(apiError.localizedDescription)"
+        }
+        return "GitHub could not verify the organization's plan. Check your connection and refresh."
     }
 
     private func fetchBudgetPages(

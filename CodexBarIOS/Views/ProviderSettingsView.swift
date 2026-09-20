@@ -222,8 +222,9 @@ struct ProviderSettingsView: View {
                                 + "separate Keychain entries and are never shared with GitHub Copilot."
                         )
                         Text(
-                            "If you signed in before this permission was added, sign in again and approve user access "
-                                + "before connecting your personal account."
+                            "If you signed in before these permissions were added, sign in again and approve user "
+                                + "and organization administration access before reconnecting a personal or "
+                                + "organization account."
                         )
                     }
                     .font(.footnote)

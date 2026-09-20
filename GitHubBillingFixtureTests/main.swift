@@ -237,7 +237,7 @@ enum GitHubBillingFixtureRunner {
         let paidLargerRunner = try require(GitHubBillingUsageParser.parsePersonal(
             summaryData: paidLargerSummary,
             usageData: paidLargerUsage,
-            repositoryVisibility: ["octocat/private": true],
+            repositoryVisibility: [:],
             planName: "pro",
             configuration: configuration,
             fetchedAt: fetchedAt
@@ -1407,6 +1407,7 @@ enum GitHubBillingFixtureRunner {
         let organization = organizationConfiguration()
         try store.saveSecret(credential, account: ProviderConfigurationStore.keychainAccount(for: organization))
         try await assertOrganizationPlanAllowance(provider: provider, organization: organization)
+        try await assertOrganizationPlanPermissionGuidance(provider: provider, organization: organization)
 
         FixtureURLProtocol.setHandler { request in response(request, status: 404, body: "{}") }
         let hiddenOrganization = try await provider.fetchUsage(for: organization)
@@ -1500,6 +1501,37 @@ enum GitHubBillingFixtureRunner {
         try check(
             excessivePagination.failureMessage?.contains("could not read") == true,
             "A pagination response that never terminates must fail instead of returning partial data"
+        )
+    }
+
+    private static func assertOrganizationPlanPermissionGuidance(
+        provider: GitHubBillingUsageProvider,
+        organization: ProviderAccountConfiguration
+    ) async throws {
+        FixtureURLProtocol.setHandler { request in
+            guard let path = request.url?.path else { return response(request, status: 500, body: "{}") }
+            switch path {
+            case "/orgs/Example-Engineering":
+                return response(request, status: 403, body: "{}")
+            case "/organizations/Example-Engineering/settings/billing/usage/summary":
+                return response(request, status: 200, data: organizationSummary())
+            case "/organizations/Example-Engineering/settings/billing/usage":
+                return response(request, status: 200, data: organizationUsage())
+            case "/organizations/Example-Engineering/settings/billing/budgets":
+                return response(request, status: 200, body: #"{"budgets":[],"has_next_page":false}"#)
+            case "/repos/example/private", "/repos/example/other":
+                return response(request, status: 200, body: #"{"private":true}"#)
+            case "/repos/example/priv-ate":
+                return response(request, status: 200, body: #"{"private":false}"#)
+            default:
+                return response(request, status: 404, body: "{}")
+            }
+        }
+        let result = try await provider.fetchUsage(for: organization)
+        try check(result.failureMessage == nil, "A plan permission failure must preserve readable billing usage")
+        try check(
+            result.usageMessages.contains { $0.contains("approve organization administration access") },
+            "A missing admin:org grant must explain how to restore organization allowance progress"
         )
     }
 
