@@ -28,10 +28,10 @@ final class AccountJourneysUITests: XCTestCase {
         XCTAssertTrue(organizationSafety.label.contains("never changes repositories, organizations, or teams"))
         keepBillingScreenshot("github-billing-user-permission", of: app)
         let reconnect = app.staticTexts.matching(NSPredicate(
-            format: "label BEGINSWITH %@", "If you signed in before this permission was added"
+            format: "label BEGINSWITH %@", "If you signed in before these permissions were added"
         )).firstMatch
         reveal(reconnect, in: app)
-        XCTAssertTrue(reconnect.label.contains("sign in again and approve user access"))
+        XCTAssertTrue(reconnect.label.contains("sign in again and approve user and organization administration access"))
         keepBillingScreenshot("github-billing-reauthorization", of: app)
         let signIn = app.buttons["github-billing-sign-in"]
         reveal(signIn, in: app)
