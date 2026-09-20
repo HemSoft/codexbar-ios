@@ -113,7 +113,7 @@ enum GitHubBillingFixtureRunner {
             {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":24,"grossAmount":0.25,"discountQuantity":12,"discountAmount":0.125,"netQuantity":12,"netAmount":0.125},
             {"product":"Actions","sku":"actions_cache_storage","unitType":"GB-hours","grossQuantity":100,"grossAmount":0,"discountAmount":0,"netAmount":0},
             {"product":"Git LFS","sku":"lfs_storage","unitType":"GiB-hours","grossQuantity":48,"grossAmount":0.40,"discountQuantity":48,"discountAmount":0.40,"netQuantity":0,"netAmount":0},
-            {"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GiB","grossQuantity":3.5,"grossAmount":0.35,"discountQuantity":0,"discountAmount":0,"netQuantity":3.5,"netAmount":0.35}
+            {"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GiB","grossQuantity":3.5,"grossAmount":0.35,"discountQuantity":3.5,"discountAmount":0.35,"netQuantity":0,"netAmount":0}
           ]
         }
         """#)
@@ -172,8 +172,8 @@ enum GitHubBillingFixtureRunner {
         let lfsBandwidth = try require(free.bars.first { $0.stableKey == "lfs-bandwidth" }, "Git LFS bandwidth bar missing")
         try check(lfsBandwidth.used == 3.5 && lfsBandwidth.limit == 10, "Git LFS bandwidth must use its separate monthly allowance")
         try check(free.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "10.445"), "Gross spend precision was lost")
-        try check(free.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "9.97"), "Full and partial discounts were not retained")
-        try check(free.monetaryMetrics.first { $0.kind == .spent }?.amount == Decimal(string: "0.475"), "Net spend precision was lost")
+        try check(free.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "10.32"), "Full and partial discounts were not retained")
+        try check(free.monetaryMetrics.first { $0.kind == .spent }?.amount == Decimal(string: "0.125"), "Net spend precision was lost")
         try check(
             free.cardInformationSections.contains { section in
                 section.id == "github-billing.amounts-and-currency"
@@ -1160,16 +1160,22 @@ enum GitHubBillingFixtureRunner {
             configuration: organizationConfiguration(),
             fetchedAt: Date()
         )
-        try check(incompleteOrganizationSummary == nil, "Incomplete organization summary rows must fail closed")
+        try check(
+            incompleteOrganizationSummary?.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            "An incomplete organization summary row must isolate the affected allowance"
+        )
 
         let incompleteOrganizationUsage = GitHubBillingUsageParser.parseOrganization(
             summaryData: organizationSummary(),
-            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","repositoryName":"example/private"}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","repositoryName":"example/private","organizationName":"Example-Engineering"}]}"#),
             budgetPageData: [],
             configuration: organizationConfiguration(),
             fetchedAt: Date()
         )
-        try check(incompleteOrganizationUsage == nil, "Incomplete organization detail rows must fail closed")
+        try check(
+            incompleteOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            "An incomplete organization detail row must isolate the affected allowance"
+        )
 
         let negativeOrganizationUsage = GitHubBillingUsageParser.parseOrganization(
             summaryData: organizationSummary(),
@@ -1178,7 +1184,19 @@ enum GitHubBillingFixtureRunner {
             configuration: organizationConfiguration(),
             fetchedAt: Date()
         )
-        try check(negativeOrganizationUsage == nil, "Negative organization detail values must fail closed")
+        try check(
+            negativeOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            "Negative organization detail values must isolate the affected allowance"
+        )
+
+        let missingOrganizationIdentity = GitHubBillingUsageParser.parseOrganization(
+            summaryData: organizationSummary(),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes"}]}"#),
+            budgetPageData: [],
+            configuration: organizationConfiguration(),
+            fetchedAt: Date()
+        )
+        try check(missingOrganizationIdentity == nil, "Organization detail rows must retain account isolation")
 
         let mismatchedOrganizationOwner = GitHubBillingUsageParser.parseOrganization(
             summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"other-org","usageItems":[]}"#),

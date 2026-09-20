@@ -113,8 +113,8 @@ package visibility or whether transfer came from a free Actions download, so a
 nonzero Packages storage or transfer quantity keeps that allowance unavailable;
 a verified zero quantity can still show 0%. Each allowance also requires
 returned gross, discounted, and billable quantities to be complete and
-internally consistent. Standard-runner evidence fails closed if GitHub reports
-billable minutes before the verified included allowance is exhausted.
+internally consistent. Evidence fails closed if GitHub reports billable covered
+usage before the verified included allowance is exhausted.
 
 Cards also show gross charges, discounts, net spend, and month-end projections.
 Aggregate amounts use a complete, consistent ISO currency returned by GitHub;

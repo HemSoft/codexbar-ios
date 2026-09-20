@@ -114,9 +114,8 @@ public enum GitHubBillingUsageParser {
             let summary = try? JSONDecoder().decode(SummaryResponse.self, from: summaryData),
             summary.organization?.caseInsensitiveCompare(owner) == .orderedSame,
             summary.user == nil,
-            summary.usageItems.allSatisfy(\.hasOrganizationMetricFields),
             let usage = try? JSONDecoder().decode(UsageResponse.self, from: usageData),
-            usage.usageItems.allSatisfy({ $0.isOrganizationDetail(for: owner) }),
+            usage.usageItems.allSatisfy({ $0.belongsToOrganization(owner) }),
             let budgets = decodeBudgets(from: budgetPageData)
         else {
             return nil
@@ -512,11 +511,17 @@ public enum GitHubBillingUsageParser {
             output.unavailable[metricID] = "GitHub did not return complete repository eligibility for shared Actions and Packages storage."
             return
         }
+        let limit = sharedStorageGB * Decimal(period.hours)
+        let billable = matching.compactMap(\.netQuantity).reduce(.zero, +)
+        guard allowanceBillingIsConsistent(used: used, limit: limit, billable: billable) else {
+            output.unavailable[metricID] = prematureBillingMessage(for: "shared storage")
+            return
+        }
         output.bars.append(allowanceBar(
             stableKey: "actions-packages-storage",
             label: "Actions + Packages storage",
             used: used,
-            limit: sharedStorageGB * Decimal(period.hours),
+            limit: limit,
             period: period
         ))
     }
@@ -587,13 +592,20 @@ public enum GitHubBillingUsageParser {
         let storageItems = items.filter(\.isPotentialLFSStorage)
         if storageItems.allSatisfy(\.isLFSStorage), storageItems.allSatisfy(\.isGBHours) {
             if storageItems.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) {
-                output.bars.append(allowanceBar(
-                    stableKey: "lfs-storage",
-                    label: "Git LFS storage",
-                    used: storageItems.compactMap(\.grossQuantity).reduce(.zero, +),
-                    limit: Decimal(plan.lfsStorageGB) * Decimal(period.hours),
-                    period: period
-                ))
+                let used = storageItems.compactMap(\.grossQuantity).reduce(.zero, +)
+                let limit = Decimal(plan.lfsStorageGB) * Decimal(period.hours)
+                let billable = storageItems.compactMap(\.netQuantity).reduce(.zero, +)
+                if allowanceBillingIsConsistent(used: used, limit: limit, billable: billable) {
+                    output.bars.append(allowanceBar(
+                        stableKey: "lfs-storage",
+                        label: "Git LFS storage",
+                        used: used,
+                        limit: limit,
+                        period: period
+                    ))
+                } else {
+                    output.unavailable["githubBilling.lfs-storage"] = prematureBillingMessage(for: "Git LFS storage")
+                }
             } else {
                 output.unavailable["githubBilling.lfs-storage"] = "GitHub did not return complete Git LFS storage gross, discount, and billable quantities."
             }
@@ -604,13 +616,20 @@ public enum GitHubBillingUsageParser {
         let bandwidthItems = items.filter(\.isPotentialLFSBandwidth)
         if bandwidthItems.allSatisfy(\.isLFSBandwidth), bandwidthItems.allSatisfy(\.isGB) {
             if bandwidthItems.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) {
-                output.bars.append(allowanceBar(
-                    stableKey: "lfs-bandwidth",
-                    label: "Git LFS bandwidth",
-                    used: bandwidthItems.compactMap(\.grossQuantity).reduce(.zero, +),
-                    limit: Decimal(plan.lfsBandwidthGB),
-                    period: period
-                ))
+                let used = bandwidthItems.compactMap(\.grossQuantity).reduce(.zero, +)
+                let limit = Decimal(plan.lfsBandwidthGB)
+                let billable = bandwidthItems.compactMap(\.netQuantity).reduce(.zero, +)
+                if allowanceBillingIsConsistent(used: used, limit: limit, billable: billable) {
+                    output.bars.append(allowanceBar(
+                        stableKey: "lfs-bandwidth",
+                        label: "Git LFS bandwidth",
+                        used: used,
+                        limit: limit,
+                        period: period
+                    ))
+                } else {
+                    output.unavailable["githubBilling.lfs-bandwidth"] = prematureBillingMessage(for: "Git LFS bandwidth")
+                }
             } else {
                 output.unavailable["githubBilling.lfs-bandwidth"] = "GitHub did not return complete Git LFS bandwidth gross, discount, and billable quantities."
             }
@@ -651,11 +670,18 @@ public enum GitHubBillingUsageParser {
                 "GitHub did not return complete Codespaces compute gross, discount, and billable quantities."
             return
         }
+        let used = matching.compactMap(\.codespacesCoreHours).reduce(.zero, +)
+        let allowanceLimit = Decimal(limit)
+        let billable = matching.compactMap(\.codespacesNetCoreHours).reduce(.zero, +)
+        guard allowanceBillingIsConsistent(used: used, limit: allowanceLimit, billable: billable) else {
+            output.unavailable["githubBilling.codespaces-core-hours"] = prematureBillingMessage(for: "Codespaces compute")
+            return
+        }
         output.bars.append(allowanceBar(
             stableKey: "codespaces-core-hours",
             label: "Codespaces core hours",
-            used: matching.compactMap(\.codespacesCoreHours).reduce(.zero, +),
-            limit: Decimal(limit),
+            used: used,
+            limit: allowanceLimit,
             period: period
         ))
     }
@@ -683,13 +709,33 @@ public enum GitHubBillingUsageParser {
             return
         }
         let monthlyToAccruedMultiplier = isAccrued ? Decimal(1) : Decimal(period.hours)
+        let used = matching.compactMap(\.grossQuantity).reduce(.zero, +) * monthlyToAccruedMultiplier
+        let allowanceLimit = Decimal(limitGB) * Decimal(period.hours)
+        let billable = matching.compactMap(\.netQuantity).reduce(.zero, +) * monthlyToAccruedMultiplier
+        guard allowanceBillingIsConsistent(used: used, limit: allowanceLimit, billable: billable) else {
+            output.unavailable["githubBilling.codespaces-storage"] = prematureBillingMessage(for: "Codespaces storage")
+            return
+        }
         output.bars.append(allowanceBar(
             stableKey: "codespaces-storage",
             label: "Codespaces storage",
-            used: matching.compactMap(\.grossQuantity).reduce(.zero, +) * monthlyToAccruedMultiplier,
-            limit: Decimal(limitGB) * Decimal(period.hours),
+            used: used,
+            limit: allowanceLimit,
             period: period
         ))
+    }
+
+    private static func allowanceBillingIsConsistent(
+        used: Decimal,
+        limit: Decimal,
+        billable: Decimal
+    ) -> Bool {
+        billable <= max(used - limit, .zero)
+    }
+
+    private static func prematureBillingMessage(for metric: String) -> String {
+        "GitHub reported billable \(metric) before the included allowance was exhausted. Refresh the account; "
+            + "if this continues, review GitHub Billing."
     }
 
     private static func allowanceBar(
@@ -1766,17 +1812,6 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
         [pricePerUnit, grossAmount, discountAmount, netAmount].contains { $0 != nil }
     }
 
-    var hasOrganizationMetricFields: Bool {
-        product?.nonempty != nil
-            && sku?.nonempty != nil
-            && unitType?.nonempty != nil
-            && pricePerUnit.map { $0 >= 0 } == true
-            && grossQuantity.map { $0 >= 0 } == true
-            && grossAmount.map { $0 >= 0 } == true
-            && discountAmount.map { $0 >= 0 } == true
-            && netAmount.map { $0 >= 0 } == true
-    }
-
     var isPotentialActionsMinutes: Bool {
         let normalizedProduct = product?.normalized ?? ""
         let normalizedSKU = sku?.normalized ?? ""
@@ -1837,6 +1872,17 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
             return nil
         }
         return grossQuantity * Decimal(codespacesCoreMultiplier)
+    }
+
+    var codespacesNetCoreHours: Decimal? {
+        guard
+            isCodespacesCoreHours,
+            let netQuantity,
+            let codespacesCoreMultiplier
+        else {
+            return nil
+        }
+        return netQuantity * Decimal(codespacesCoreMultiplier)
     }
 
     var isPotentialCodespacesCoreHours: Bool {
@@ -1948,14 +1994,8 @@ private struct UsageItem: Decodable, MeteredQuantityItem {
             && netAmount.map { $0 >= 0 } == true
     }
 
-    func isOrganizationDetail(for owner: String) -> Bool {
-        date?.nonempty != nil
-            && product?.nonempty != nil
-            && sku?.nonempty != nil
-            && quantity.map { $0 >= 0 } == true
-            && unitType?.nonempty != nil
-            && hasNonnegativeFinancialFields
-            && organizationName?.caseInsensitiveCompare(owner) == .orderedSame
+    func belongsToOrganization(_ owner: String) -> Bool {
+        organizationName?.caseInsensitiveCompare(owner) == .orderedSame
     }
 
     var isActionsOrPackagesStorage: Bool {
