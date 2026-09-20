@@ -126,7 +126,7 @@ public final class GitHubBillingWebAuthService: Sendable {
     private static let githubBaseURL = URL(string: "https://github.com")!
     public static let tokenEndpoint = githubBaseURL.appending(path: "/login/oauth/access_token")
     // Personal billing endpoints require `user`; the narrower `read:user` only reads profiles.
-    public static let requestedScope = "repo read:org user"
+    public static let requestedScope = "repo admin:org user"
     private static let callbackPath = "/callback"
 
     private let session: URLSession

@@ -16,6 +16,16 @@ final class AccountJourneysUITests: XCTestCase {
         XCTAssertTrue(disclosure.label.contains("reading private email addresses"))
         XCTAssertTrue(disclosure.label.contains("following or unfollowing users"))
         XCTAssertTrue(disclosure.label.contains("never changes your profile"))
+        let organizationDisclosure = app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Requested GitHub permissions: private repository access"
+        )).firstMatch
+        reveal(organizationDisclosure, in: app)
+        XCTAssertTrue(organizationDisclosure.label.contains("organization administration"))
+        let organizationSafety = app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "The repo scope permits repository changes"
+        )).firstMatch
+        reveal(organizationSafety, in: app)
+        XCTAssertTrue(organizationSafety.label.contains("never changes repositories, organizations, or teams"))
         keepBillingScreenshot("github-billing-user-permission", of: app)
         let reconnect = app.staticTexts.matching(NSPredicate(
             format: "label BEGINSWITH %@", "If you signed in before this permission was added"

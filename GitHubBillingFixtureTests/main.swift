@@ -48,7 +48,7 @@ enum GitHubBillingFixtureRunner {
             for: personalConfiguration()
         )
         try check(result.failureMessage == nil, "Personal connection must request the accepted user scope")
-        try check(scopes == ["repo", "read:org", "user"], "Billing must request only its documented scopes")
+        try check(scopes == ["admin:org", "repo", "user"], "Billing must request only its documented scopes")
     }
 
     private static func personalPermissionDiagnostics() async throws {
@@ -368,10 +368,10 @@ enum GitHubBillingFixtureRunner {
             {"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":60,"grossAmount":0.6,"discountQuantity":60,"discountAmount":0.6,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.01,"grossQuantity":120,"grossAmount":1.2,"discountQuantity":120,"discountAmount":1.2,"netQuantity":0,"netAmount":0},
             {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.01,"grossQuantity":24,"grossAmount":0.24,"discountQuantity":24,"discountAmount":0.24,"netQuantity":0,"netAmount":0},
-            {"product":"Packages","sku":"packages_data_transfer","unitType":"GB","pricePerUnit":0.5,"grossQuantity":2,"grossAmount":1,"discountQuantity":1.5,"discountAmount":0.75,"netQuantity":0.5,"netAmount":0.25},
+            {"product":"Packages","sku":"packages_bandwidth","unitType":"GB","pricePerUnit":0.5,"grossQuantity":2,"grossAmount":1,"discountQuantity":1.5,"discountAmount":0.75,"netQuantity":0.5,"netAmount":0.25},
             {"product":"Git LFS","sku":"lfs_storage","unitType":"GB-hours","pricePerUnit":0.001,"grossQuantity":48,"grossAmount":0.048,"discountQuantity":48,"discountAmount":0.048,"netQuantity":0,"netAmount":0},
             {"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GB","pricePerUnit":0.0875,"grossQuantity":3.5,"grossAmount":0.30625,"discountQuantity":3.5,"discountAmount":0.30625,"netQuantity":0,"netAmount":0},
-            {"product":"Codespaces","sku":"codespaces_compute","unitType":"core-hours","pricePerUnit":0.18,"grossQuantity":30,"grossAmount":5.4,"discountQuantity":30,"discountAmount":5.4,"netQuantity":0,"netAmount":0},
+            {"product":"Codespaces","sku":"codespaces_compute_d4","unitType":"hours","pricePerUnit":0.36,"grossQuantity":7.5,"grossAmount":2.7,"discountQuantity":7.5,"discountAmount":2.7,"netQuantity":0,"netAmount":0},
             {"product":"Codespaces","sku":"codespaces_storage","unitType":"GB-hours","pricePerUnit":0.0001,"grossQuantity":7200,"grossAmount":0.72,"discountQuantity":7200,"discountAmount":0.72,"netQuantity":0,"netAmount":0}
           ]
         }
@@ -385,8 +385,8 @@ enum GitHubBillingFixtureRunner {
           {"date":"2026-09-05","product":"Actions","sku":"actions_storage","quantity":20,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":0.2,"discountAmount":0.2,"netAmount":0,"repositoryName":"octocat/public"},
           {"date":"2026-09-06","product":"Packages","sku":"packages_storage","quantity":20,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":0.2,"discountAmount":0.2,"netAmount":0,"repositoryName":"octocat/private"},
           {"date":"2026-09-07","product":"Packages","sku":"packages_storage","quantity":4,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":0.04,"discountAmount":0.04,"netAmount":0,"repositoryName":"octocat/public"},
-          {"date":"2026-09-08","product":"Packages","sku":"packages_data_transfer","quantity":1.5,"unitType":"GB","pricePerUnit":0.5,"grossAmount":0.75,"discountAmount":0.5,"netAmount":0.25,"repositoryName":"octocat/private"},
-          {"date":"2026-09-09","product":"Packages","sku":"packages_data_transfer","quantity":0.5,"unitType":"GB","pricePerUnit":0.5,"grossAmount":0.25,"discountAmount":0.25,"netAmount":0,"repositoryName":"octocat/public"}
+          {"date":"2026-09-08","product":"Packages","sku":"packages_bandwidth","quantity":1.5,"unitType":"GB","pricePerUnit":0.5,"grossAmount":0.75,"discountAmount":0.5,"netAmount":0.25,"repositoryName":"octocat/private"},
+          {"date":"2026-09-09","product":"Packages","sku":"packages_bandwidth","quantity":0.5,"unitType":"GB","pricePerUnit":0.5,"grossAmount":0.25,"discountAmount":0.25,"netAmount":0,"repositoryName":"octocat/public"}
         ]}
         """#)
         let free = try require(GitHubBillingUsageParser.parsePersonal(
@@ -550,7 +550,7 @@ enum GitHubBillingFixtureRunner {
             {"product":"Actions","sku":"Actions Windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":60,"grossAmount":0.6,"discountQuantity":60,"discountAmount":0.6,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.04,"grossQuantity":144,"grossAmount":5.10,"discountQuantity":31,"discountAmount":1.10,"netQuantity":113,"netAmount":4.00},
             {"product":"Copilot","sku":"copilot_premium_requests","unitType":"requests","pricePerUnit":0.04,"grossQuantity":10,"grossAmount":0.40,"discountQuantity":0,"discountAmount":0,"netQuantity":10,"netAmount":0.40},
-            {"product":"Codespaces","sku":"codespaces_compute","unitType":"core-hours","pricePerUnit":0.08,"grossQuantity":5,"grossAmount":0.40,"discountQuantity":1.25,"discountAmount":0.10,"netQuantity":3.75,"netAmount":0.30},
+            {"product":"Codespaces","sku":"codespaces_compute_d2","unitType":"hours","pricePerUnit":0.18,"grossQuantity":2.5,"grossAmount":0.40,"discountQuantity":0.625,"discountAmount":0.10,"netQuantity":1.875,"netAmount":0.30},
             {"product":"Git LFS","sku":"lfs_storage","unitType":"GB-hours","pricePerUnit":0.07,"grossQuantity":1,"grossAmount":0,"discountQuantity":1,"discountAmount":0,"netQuantity":0,"netAmount":0},
             {"product":"LFS","sku":"lfs_bandwidth","unitType":"GB-hours","pricePerUnit":0.07,"grossQuantity":1,"grossAmount":0,"discountQuantity":1,"discountAmount":0,"netQuantity":0,"netAmount":0},
             {"product":"Advanced Security","sku":"secret_scanning","unitType":"active-committers","pricePerUnit":0,"grossQuantity":1,"grossAmount":0,"discountQuantity":0,"discountAmount":0,"netQuantity":1,"netAmount":0},

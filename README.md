@@ -133,16 +133,18 @@ consumption safely. Unsupported plans, missing API fields, unavailable billing
 endpoints, permission failures, and rate limits remain visible instead of being
 guessed.
 
-The browser flow requests `repo read:org user`, uses PKCE with a loopback
+The browser flow requests `repo admin:org user`, uses PKCE with a loopback
 callback, and stores only the returned account token. Personal billing endpoints
-require `user`, not the profile-only `read:user`. Existing users who authorized
+require `user`, not the profile-only `read:user`, while GitHub requires
+`admin:org` to include organization plan details. Existing users who authorized
 the earlier scope must sign in again and approve the expanded permission.
 The `user` scope also permits profile changes, reading private email addresses,
-and following or unfollowing users. CodexBar never uses those additional
-capabilities. Classic GitHub OAuth does
-not offer a private-repository metadata-only scope: `repo` permits repository
-changes, while CodexBar limits its use to reading repository visibility for
-billing classification. GitHub supports separate
+and following or unfollowing users. `admin:org` permits organization and team
+changes. CodexBar never uses those additional capabilities. Classic GitHub OAuth
+does not offer a private-repository metadata-only scope: `repo` permits
+repository changes, while CodexBar limits its use to reading repository
+visibility for billing classification. It limits `admin:org` to reading the
+organization plan. GitHub supports separate
 tokens per user, OAuth application, and scope combination, so the billing flow's
 distinct scope combination and Keychain entry do not broaden or replace a saved
 Copilot token even when both flows use the bundled public OAuth registration.

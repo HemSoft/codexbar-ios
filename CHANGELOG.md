@@ -59,7 +59,9 @@ building, testing, or releasing the app.
   must be complete. Zero usage, remaining allowance, and overage remain
   explicit; conflicting Pro shared-storage amounts, unverified usage, and
   enterprise-pooled limits stay unavailable rather than producing a guessed
-  percentage. Budgets and billed spend remain separate.
+  percentage. Organization connections now request GitHub's `admin:org` scope
+  only to read the organization plan required for that allowance; CodexBar does
+  not make organization or team changes. Budgets and billed spend remain separate.
   ([#349](https://github.com/HemSoft/codexbar-ios/issues/349))
 
 - Refined GitHub Billing cards to answer three questions quickly: what was

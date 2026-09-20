@@ -639,7 +639,7 @@ public enum GitHubBillingUsageParser {
         output.bars.append(allowanceBar(
             stableKey: "codespaces-core-hours",
             label: "Codespaces core hours",
-            used: matching.compactMap(\.grossQuantity).reduce(.zero, +),
+            used: matching.compactMap(\.codespacesCoreHours).reduce(.zero, +),
             limit: Decimal(limit),
             period: period
         ))
@@ -1790,25 +1790,53 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     }
 
     var isPackagesDataTransfer: Bool {
-        product?.normalized == "packages"
-            && sku?.normalized.contains("transfer") == true
+        let normalizedSKU = sku?.normalized ?? ""
+        return product?.normalized == "packages"
+            && (normalizedSKU.contains("transfer") || normalizedSKU == "packagesbandwidth")
     }
 
     var isPotentialPackagesDataTransfer: Bool {
         guard product?.normalized == "packages" else { return false }
-        return sku?.normalized.contains("transfer") == true || isGB
+        let normalizedSKU = sku?.normalized ?? ""
+        return normalizedSKU.contains("transfer") || normalizedSKU == "packagesbandwidth" || isGB
     }
 
     var isCodespacesCoreHours: Bool {
         product?.normalized == "codespaces"
-            && sku?.normalized.contains("compute") == true
-            && unitType?.normalized.contains("corehour") == true
+            && codespacesCoreMultiplier != nil
+            && isHours
+    }
+
+    var codespacesCoreHours: Decimal? {
+        guard
+            isCodespacesCoreHours,
+            let grossQuantity,
+            let codespacesCoreMultiplier
+        else {
+            return nil
+        }
+        return grossQuantity * Decimal(codespacesCoreMultiplier)
     }
 
     var isPotentialCodespacesCoreHours: Bool {
         guard product?.normalized == "codespaces" else { return false }
-        return sku?.normalized.contains("compute") == true
-            || unitType?.normalized.contains("corehour") == true
+        return sku?.normalized.contains("compute") == true || isHours
+    }
+
+    private var codespacesCoreMultiplier: Int? {
+        switch sku?.normalized {
+        case "codespacescomputed2": 2
+        case "codespacescomputed4": 4
+        case "codespacescomputed8": 8
+        case "codespacescomputed16": 16
+        case "codespacescomputed32": 32
+        default: nil
+        }
+    }
+
+    private var isHours: Bool {
+        let unit = unitType?.normalized ?? ""
+        return unit == "hour" || unit == "hours" || unit == "machinehours"
     }
 
     var isCodespacesStorage: Bool {
@@ -1927,14 +1955,16 @@ private struct UsageItem: Decodable, MeteredQuantityItem {
     }
 
     var isPackagesDataTransfer: Bool {
-        product?.normalized == "packages"
-            && sku?.normalized.contains("transfer") == true
+        let normalizedSKU = sku?.normalized ?? ""
+        return product?.normalized == "packages"
+            && (normalizedSKU.contains("transfer") || normalizedSKU == "packagesbandwidth")
     }
 
     var isPotentialPackagesDataTransfer: Bool {
         guard product?.normalized == "packages" else { return false }
+        let normalizedSKU = sku?.normalized ?? ""
         let unit = unitType?.normalized
-        return sku?.normalized.contains("transfer") == true
+        return normalizedSKU.contains("transfer") || normalizedSKU == "packagesbandwidth"
             || unit == "gb" || unit == "gib" || unit == "gigabytes"
     }
 
