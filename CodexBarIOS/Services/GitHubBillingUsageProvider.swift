@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public struct GitHubBillingAccountOption: Identifiable, Equatable, Sendable {
@@ -306,7 +307,12 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let visibility = try await repositoryVisibility(
             repositories: repositories,
             accessToken: credentials.accessToken,
-            cacheNamespace: "personal:\(owner.lowercased())"
+            cacheNamespace: Self.repositoryVisibilityCacheNamespace(
+                scope: .personal,
+                owner: owner,
+                configurationID: configuration.id,
+                accessToken: credentials.accessToken
+            )
         )
         guard let result = GitHubBillingUsageParser.parsePersonal(
             summaryData: summary,
@@ -352,7 +358,12 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let visibility = try await repositoryVisibility(
             repositories: repositories,
             accessToken: credentials.accessToken,
-            cacheNamespace: "organization:\(owner.lowercased())"
+            cacheNamespace: Self.repositoryVisibilityCacheNamespace(
+                scope: .organization,
+                owner: owner,
+                configurationID: configuration.id,
+                accessToken: credentials.accessToken
+            )
         )
         guard let result = GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,
@@ -491,6 +502,17 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         default:
             nil
         }
+    }
+
+    private static func repositoryVisibilityCacheNamespace(
+        scope: GitHubBillingAccountScope,
+        owner: String,
+        configurationID: String,
+        accessToken: String
+    ) -> String {
+        let digest = SHA256.hash(data: Data(accessToken.utf8))
+        let credentialID = digest.prefix(16).map { String(format: "%02x", $0) }.joined()
+        return "\(scope.rawValue):\(owner.lowercased()):\(configurationID):\(credentialID)"
     }
 
     private func repositoryVisibility(

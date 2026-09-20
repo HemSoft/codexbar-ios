@@ -57,9 +57,10 @@ building, testing, or releasing the app.
   trustworthy percentage, the affected allowance stays unavailable rather than
   showing a guess. Enterprise-pooled limits also stay unavailable. Organization
   connections ask approval to read the organization plan but never change
-  organizations or teams. Budgets and billed spend remain separate, and recent
-  repository visibility is reused between routine refreshes to avoid GitHub API
-  rate-limit failures.
+  organizations or teams. Budgets and billed spend remain separate, and each
+  signed-in credential reuses its own recent repository visibility between
+  routine refreshes to avoid GitHub API rate-limit failures without carrying
+  classifications across reconnections.
   ([#349](https://github.com/HemSoft/codexbar-ios/issues/349))
 
 - Refined GitHub Billing cards to answer three questions quickly: what was

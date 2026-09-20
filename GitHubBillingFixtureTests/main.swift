@@ -1320,34 +1320,12 @@ enum GitHubBillingFixtureRunner {
             "Fully discounted usage must be presented as no current charge"
         )
 
-        let cachedMetadataCounter = LockedCounter()
-        FixtureURLProtocol.setHandler { request in
-            switch request.url?.path {
-            case "/user":
-                return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
-            case "/users/octocat/settings/billing/usage/summary":
-                return response(request, status: 200, data: personalSummary())
-            case "/users/octocat/settings/billing/usage":
-                return response(request, status: 200, body: #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#)
-            case "/repos/octocat/private":
-                cachedMetadataCounter.increment()
-                return response(request, status: 200, body: #"{"private":true}"#)
-            default:
-                return response(request, status: 404, body: "{}")
-            }
-        }
-        let cachingProvider = GitHubBillingUsageProvider(
-            secretStore: store,
+        try await assertRepositoryVisibilityCaching(
+            store: store,
             session: session,
             apiBaseURL: apiBaseURL,
-            repositoryVisibilityCacheDuration: 15 * 60,
-            now: { now }
-        )
-        _ = try await cachingProvider.fetchUsage(for: personal)
-        _ = try await cachingProvider.fetchUsage(for: personal)
-        try check(
-            cachedMetadataCounter.value == 1,
-            "Repository visibility must be reused across routine refreshes"
+            personal: personal,
+            now: now
         )
 
         for status in [401, 403, 404, 429, 500] {
@@ -1381,6 +1359,63 @@ enum GitHubBillingFixtureRunner {
             provider: provider,
             store: store,
             credential: credential
+        )
+    }
+
+    private static func assertRepositoryVisibilityCaching(
+        store: FixtureSecretStore,
+        session: URLSession,
+        apiBaseURL: URL,
+        personal: ProviderAccountConfiguration,
+        now: Date
+    ) async throws {
+        let metadataCounter = LockedCounter()
+        FixtureURLProtocol.setHandler { request in
+            switch request.url?.path {
+            case "/user":
+                return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
+            case "/users/octocat/settings/billing/usage/summary":
+                return response(request, status: 200, body: #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"Actions Linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0}]}"#)
+            case "/users/octocat/settings/billing/usage":
+                return response(request, status: 200, body: #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#)
+            case "/repos/octocat/private":
+                metadataCounter.increment()
+                let token = request.value(forHTTPHeaderField: "Authorization")
+                return response(request, status: 200, body: token == "Bearer replacement-fixture-token"
+                    ? #"{"private":false}"#
+                    : #"{"private":true}"#)
+            default:
+                return response(request, status: 404, body: "{}")
+            }
+        }
+        let provider = GitHubBillingUsageProvider(
+            secretStore: store,
+            session: session,
+            apiBaseURL: apiBaseURL,
+            repositoryVisibilityCacheDuration: 15 * 60,
+            now: { now }
+        )
+        _ = try await provider.fetchUsage(for: personal)
+        _ = try await provider.fetchUsage(for: personal)
+        try check(metadataCounter.value == 1, "Routine refreshes must reuse repository visibility")
+
+        let replacementCredentials = GitHubBillingCredentials(
+            accessToken: "replacement-fixture-token",
+            username: "octocat"
+        )
+        let replacementCredential = try require(
+            GitHubBillingCredentialsParser.storedCredential(from: replacementCredentials),
+            "Could not encode replacement fixture credential"
+        )
+        try store.saveSecret(
+            replacementCredential,
+            account: ProviderConfigurationStore.keychainAccount(for: personal)
+        )
+        let replacementResult = try await provider.fetchUsage(for: personal)
+        try check(metadataCounter.value == 2, "A changed credential must fetch its own repository visibility")
+        try check(
+            replacementResult.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 0,
+            "Repository visibility from another credential must not leak through the cache"
         )
     }
 
