@@ -239,14 +239,16 @@ final class UITestFixtures {
                             label: "Actions plan allowance",
                             used: 0,
                             limit: 2_000,
-                            resetsAt: Date().addingTimeInterval(16 * 24 * 60 * 60)
+                            resetsAt: Date().addingTimeInterval(16 * 24 * 60 * 60),
+                            resetDisplayStyle: .relativeWithLocalTime
                         ),
                         UsageBar(
                             stableKey: "actions-packages-storage",
                             label: "Actions + Packages storage",
                             used: 0,
                             limit: 360,
-                            resetsAt: Date().addingTimeInterval(16 * 24 * 60 * 60)
+                            resetsAt: Date().addingTimeInterval(16 * 24 * 60 * 60),
+                            resetDisplayStyle: .relativeWithLocalTime
                         ),
                     ],
                     usageMessages: [],
@@ -297,6 +299,7 @@ final class UITestFixtures {
                             used: 720,
                             limit: 2_000,
                             resetsAt: periodEnd,
+                            resetDisplayStyle: .relativeWithLocalTime,
                             projectionCurrent: 720,
                             projectionLimit: 2_000,
                             projectionPeriodStart: periodStart,
@@ -387,6 +390,7 @@ final class UITestFixtures {
                         used: 720,
                         limit: 2_000,
                         resetsAt: periodEnd,
+                        resetDisplayStyle: .relativeWithLocalTime,
                         projectionCurrent: 720,
                         projectionLimit: 2_000,
                         projectionPeriodStart: periodStart,
@@ -398,7 +402,8 @@ final class UITestFixtures {
                         label: "Actions + Packages storage",
                         used: 118,
                         limit: 360,
-                        resetsAt: periodEnd
+                        resetsAt: periodEnd,
+                        resetDisplayStyle: .relativeWithLocalTime
                     ),
                 ],
                 monetaryMetrics: [
@@ -521,6 +526,7 @@ final class UITestFixtures {
                     used: 2_500,
                     limit: 2_000,
                     resetsAt: periodEnd,
+                    resetDisplayStyle: .relativeWithLocalTime,
                     projectionCurrent: 2_500,
                     projectionLimit: 2_000,
                     projectionPeriodStart: periodStart,
@@ -532,7 +538,8 @@ final class UITestFixtures {
                     label: "Packages data transfer",
                     used: 1.5,
                     limit: 1,
-                    resetsAt: periodEnd
+                    resetsAt: periodEnd,
+                    resetDisplayStyle: .relativeWithLocalTime
                 ),
             ],
             monetaryMetrics: [
@@ -604,6 +611,7 @@ final class UITestFixtures {
                     used: 1_500,
                     limit: 3_000,
                     resetsAt: periodEnd,
+                    resetDisplayStyle: .relativeWithLocalTime,
                     projectionCurrent: 1_500,
                     projectionLimit: 3_000,
                     projectionPeriodStart: periodStart,
@@ -615,7 +623,8 @@ final class UITestFixtures {
                     label: "Actions + Packages storage",
                     used: 500,
                     limit: 1_440,
-                    resetsAt: periodEnd
+                    resetsAt: periodEnd,
+                    resetDisplayStyle: .relativeWithLocalTime
                 ),
                 UsageBar(
                     stableKey: "budget-actions",

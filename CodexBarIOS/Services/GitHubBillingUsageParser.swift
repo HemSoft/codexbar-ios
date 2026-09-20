@@ -391,11 +391,15 @@ public enum GitHubBillingUsageParser {
         }
         switch item.actionsRunnerAllowance {
         case .includedStandard:
-            guard let unitPrice = item.pricePerUnit, unitPrice > 0 else {
-                return .unavailable("GitHub did not return a usable standard-runner unit price.")
+            guard
+                let unitPrice = item.pricePerUnit,
+                let expectedRate = item.expectedStandardRunnerRate,
+                unitPrice == expectedRate
+            else {
+                return .unavailable("GitHub returned a standard-runner price outside the verified billing contract.")
             }
             return .included(quantity * unitPrice / actionsLinuxBaselineRate)
-        case .excludedPaidLarger:
+        case .excludedPaidLarger, .excludedSelfHosted:
             return .excluded
         case .unknown:
             return .unavailable("GitHub returned private Actions usage outside the verified runner allowance contract.")
@@ -407,15 +411,17 @@ public enum GitHubBillingUsageParser {
     ) -> [MeteredQuantityKey: Decimal]? {
         var totals: [MeteredQuantityKey: Decimal] = [:]
         for item in items {
+            guard let quantity = item.allowanceQuantity, quantity >= 0 else { return nil }
+            guard quantity > 0 else { continue }
             guard
                 let sku = item.sku?.normalized.nonempty,
                 let unit = item.unitType?.normalized.nonempty,
-                let quantity = item.allowanceQuantity,
-                quantity >= 0
+                let unitPrice = item.pricePerUnit,
+                unitPrice >= 0
             else {
                 return nil
             }
-            totals[MeteredQuantityKey(sku: sku, unit: unit), default: 0] += quantity
+            totals[MeteredQuantityKey(sku: sku, unit: unit, unitPrice: unitPrice), default: 0] += quantity
         }
         return totals
     }
@@ -1687,12 +1693,14 @@ private struct TimePeriod: Decodable {
 private struct MeteredQuantityKey: Hashable {
     let sku: String
     let unit: String
+    let unitPrice: Decimal
 }
 
 private protocol MeteredQuantityItem {
     var sku: String? { get }
     var unitType: String? { get }
     var allowanceQuantity: Decimal? { get }
+    var pricePerUnit: Decimal? { get }
 }
 
 private struct SummaryItem: Decodable, MeteredQuantityItem {
@@ -1726,11 +1734,13 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     }
 
     var isPotentialActionsMinutes: Bool {
-        guard unitType?.normalized.contains("minute") == true else { return false }
-        if let product = product?.normalized.nonempty {
-            return product.contains("actions")
-        }
-        return sku?.normalized.hasPrefix("actions") == true
+        let normalizedProduct = product?.normalized ?? ""
+        guard normalizedProduct.isEmpty || normalizedProduct.contains("actions") else { return false }
+        let normalizedSKU = sku?.normalized ?? ""
+        guard !normalizedSKU.contains("storage"), !normalizedSKU.contains("cache") else { return false }
+        if normalizedSKU.hasPrefix("actions") { return true }
+        return normalizedProduct.contains("actions")
+            && unitType?.normalized.contains("minute") == true
     }
 
     var isActionsOrPackagesStorage: Bool {
@@ -1911,28 +1921,41 @@ private struct UsageItem: Decodable, MeteredQuantityItem {
     }
 
     var isPotentialActionsMinutes: Bool {
-        guard unitType?.normalized.contains("minute") == true else { return false }
-        if let product = product?.normalized.nonempty {
-            return product.contains("actions")
-        }
-        return sku?.normalized.hasPrefix("actions") == true
+        let normalizedProduct = product?.normalized ?? ""
+        guard normalizedProduct.isEmpty || normalizedProduct.contains("actions") else { return false }
+        let normalizedSKU = sku?.normalized ?? ""
+        guard !normalizedSKU.contains("storage"), !normalizedSKU.contains("cache") else { return false }
+        if normalizedSKU.hasPrefix("actions") { return true }
+        return normalizedProduct.contains("actions")
+            && unitType?.normalized.contains("minute") == true
     }
 
     var actionsRunnerAllowance: ActionsRunnerAllowance {
         let normalizedSKU = sku?.normalized ?? ""
-        if Self.includedActionsRunnerSKUs.contains(normalizedSKU) {
+        if Self.standardActionsRunnerRates[normalizedSKU] != nil {
             return .includedStandard
         }
         if Self.paidLargerActionsRunnerSKUs.contains(normalizedSKU) {
             return .excludedPaidLarger
         }
+        if normalizedSKU.contains("selfhosted") {
+            return .excludedSelfHosted
+        }
         return .unknown
     }
 
-    private static let includedActionsRunnerSKUs = Set([
-        "actionslinuxslim", "actionslinux", "actionslinuxarm",
-        "actionswindows", "actionswindowsarm", "actionsmacos",
-    ])
+    var expectedStandardRunnerRate: Decimal? {
+        Self.standardActionsRunnerRates[sku?.normalized ?? ""]
+    }
+
+    private static let standardActionsRunnerRates: [String: Decimal] = [
+        "actionslinuxslim": Decimal(2) / 1_000,
+        "actionslinux": Decimal(6) / 1_000,
+        "actionslinuxarm": Decimal(5) / 1_000,
+        "actionswindows": Decimal(1) / 100,
+        "actionswindowsarm": Decimal(1) / 100,
+        "actionsmacos": Decimal(62) / 1_000,
+    ]
 
     // https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions
     private static let paidLargerActionsRunnerSKUs = Set([
@@ -2077,6 +2100,7 @@ private enum GitHubAllowanceScope {
 private enum ActionsRunnerAllowance {
     case includedStandard
     case excludedPaidLarger
+    case excludedSelfHosted
     case unknown
 }
 

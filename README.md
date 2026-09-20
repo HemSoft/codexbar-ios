@@ -99,10 +99,12 @@ CodexBar normalizes mixed runner usage from GitHub's returned quantity and unit
 price evidence against GitHub's current
 [Linux baseline rate](https://docs.github.com/en/billing/reference/actions-runner-pricing).
 Known paid larger runners from GitHub's
-[SKU catalog](https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions)
-are excluded from the standard-runner allowance; public repositories are also
-excluded. Missing summary rows, hidden repository classifications, and unknown
-SKUs make only the affected metric unavailable. A problem with one metric does not suppress
+[SKU catalog](https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions),
+self-hosted runners, and public repositories are excluded from the hosted
+standard-runner allowance. Standard-runner unit prices must match the current
+pricing table exactly. Missing summary rows, hidden repository classifications,
+unknown units, and unknown SKUs make only the affected metric unavailable. A
+problem with one metric does not suppress
 other verified allowances. Shared Actions and Packages storage is counted once.
 Storage and Packages transfer include only usage tied to repositories verified
 as private; public-repository usage is excluded, and incomplete repository

@@ -585,14 +585,13 @@ public final class GitHubBillingUsageProvider: UsageProvider {
     }
 
     private static func isPotentialActionsMinuteItem(_ item: [String: Any]) -> Bool {
-        let unit = (item["unitType"] as? String)?.lowercased() ?? ""
-        guard unit.contains("minute") else { return false }
         let product = (item["product"] as? String)?.lowercased() ?? ""
-        if !product.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return product.contains("actions")
-        }
+        guard product.isEmpty || product.contains("actions") else { return false }
         let sku = (item["sku"] as? String)?.lowercased() ?? ""
-        return sku.hasPrefix("actions")
+        guard !sku.contains("storage"), !sku.contains("cache") else { return false }
+        if sku.hasPrefix("actions") { return true }
+        let unit = (item["unitType"] as? String)?.lowercased() ?? ""
+        return product.contains("actions") && unit.contains("minute")
     }
 
     private func makeRequest(

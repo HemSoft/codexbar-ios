@@ -1227,10 +1227,16 @@ struct ProviderUsageCard: View {
                     .monospacedDigit()
             }
             MetricVisualizationView(bar: bar, style: visualizationStyle, showsSeverity: result.hasCurrentBars)
+            let githubAllowanceSummary = result.providerID == .githubBilling
+                ? Self.githubAllowanceSummary(bar)
+                : nil
+            if let githubAllowanceSummary {
+                allowanceSupportingText(githubAllowanceSummary)
+            }
             if result.providerID == .gemini || result.providerID == .antigravity {
                 supportingText(result.hasCurrentBars ? "Percent used · Current" : "Percent used · Last known value")
             }
-            if item.width == .full {
+            if item.width == .full || githubAllowanceSummary != nil {
                 if let resetDescription = bar.localizedResetDescription() {
                     supportingText(resetDescription)
                 }
@@ -1249,6 +1255,14 @@ struct ProviderUsageCard: View {
             return preferredStyle
         }
         return result.bars[index].resolvedVisualizationStyle(preferredStyle)
+    }
+
+    private func allowanceSupportingText(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func supportingText(_ text: String) -> some View {
@@ -1362,10 +1376,14 @@ struct ProviderUsageCard: View {
             .joined(separator: ", ")
         }
 
+        let usageDescription = result.providerID == .githubBilling
+            ? Self.githubAllowanceSummary(bar)
+            : nil
         return [
             bar.label,
             bar.usageText,
-            "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit)) used",
+            usageDescription
+                ?? "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit)) used",
             result.hasCurrentBars
                 ? bar.effectiveSeverity(thresholds: thresholds).accessibilityName
                 : "status unavailable",
@@ -1375,6 +1393,26 @@ struct ProviderUsageCard: View {
         ]
         .compactMap { $0 }
         .joined(separator: ", ")
+    }
+
+    static func githubAllowanceSummary(_ bar: UsageBar) -> String? {
+        let unit: String
+        switch bar.stableKey {
+        case "actions-private-minutes": unit = "minute equivalents"
+        case "actions-packages-storage", "lfs-storage", "codespaces-storage": unit = "GB-hours"
+        case "packages-data-transfer", "lfs-bandwidth": unit = "GB"
+        case "codespaces-core-hours": unit = "core-hours"
+        default: return nil
+        }
+        let used = formattedUsageAmount(bar.used)
+        let included = formattedUsageAmount(bar.limit)
+        let difference = bar.limit - bar.used
+        if difference >= 0 {
+            return "\(used) \(unit) used · \(included) included · "
+                + "\(formattedUsageAmount(difference)) remaining"
+        }
+        return "\(used) \(unit) used · \(included) included · "
+            + "\(formattedUsageAmount(-difference)) over"
     }
 
     static func formattedUsageAmount(_ value: Double) -> String {

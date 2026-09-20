@@ -99,26 +99,31 @@ final class AccountJourneysUITests: XCTestCase {
         try assertGitHubBillingScenario(
             "github-billing-personal",
             expectedPercentage: "36%",
+            expectedUsageSummary: "720 minute equivalents used · 2,000 included · 1,280 remaining",
             screenshotName: "github-billing-personal-allowance"
         )
         try assertGitHubBillingScenario(
             "github-billing-organization",
             expectedPercentage: "50%",
+            expectedUsageSummary: "1,500 minute equivalents used · 3,000 included · 1,500 remaining",
             screenshotName: "github-billing-organization-allowance"
         )
         try assertGitHubBillingScenario(
             "github-billing-overage",
             expectedPercentage: "125%",
+            expectedUsageSummary: "2,500 minute equivalents used · 2,000 included · 500 over",
             screenshotName: "github-billing-allowance-overage"
         )
         try assertGitHubBillingScenario(
             "github-billing-no-personal-budget",
             expectedPercentage: "0%",
+            expectedUsageSummary: "0 minute equivalents used · 2,000 included · 2,000 remaining",
             screenshotName: "github-billing-zero-allowance"
         )
         try assertGitHubBillingScenario(
             "github-billing-incomplete",
             expectedPercentage: "36%",
+            expectedUsageSummary: "720 minute equivalents used · 2,000 included · 1,280 remaining",
             screenshotName: "github-billing-partial-allowance"
         )
     }
@@ -126,6 +131,7 @@ final class AccountJourneysUITests: XCTestCase {
     private func assertGitHubBillingScenario(
         _ scenario: String,
         expectedPercentage: String,
+        expectedUsageSummary: String,
         screenshotName: String
     ) throws {
         let app = launch(scenario: scenario)
@@ -133,6 +139,8 @@ final class AccountJourneysUITests: XCTestCase {
         let allowance = app.buttons["dashboard-metric-githubBilling.actions-private-minutes"]
         XCTAssertTrue(allowance.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(allowance.label.contains(expectedPercentage), allowance.label)
+        XCTAssertTrue(allowance.label.contains(expectedUsageSummary), allowance.label)
+        XCTAssertTrue(allowance.label.contains("Resets "), allowance.label)
         keepBillingScreenshot(screenshotName, of: app)
     }
 
