@@ -99,6 +99,9 @@ public repositories,
 larger runners, hidden repository classifications, and unknown SKUs never
 produce an understated percentage. A problem with one metric does not suppress
 other verified allowances. Shared Actions and Packages storage is counted once.
+Storage and Packages transfer include only usage tied to repositories verified
+as private; public-repository usage is excluded, and incomplete repository
+eligibility keeps the affected allowance unavailable.
 
 Cards also show gross charges, discounts, net spend, and month-end projections.
 Aggregate amounts use a complete, consistent ISO currency returned by GitHub;

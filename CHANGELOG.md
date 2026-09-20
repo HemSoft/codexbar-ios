@@ -51,9 +51,11 @@ building, testing, or releasing the app.
   and Pro plans and organization Free and Team plans. Covered metrics include
   eligible Actions minutes, shared Actions and Packages storage, Packages data
   transfer, Git LFS storage and bandwidth, and personal Codespaces compute and
-  storage. Zero usage, remaining allowance, and overage remain explicit;
-  unverified usage and enterprise-pooled limits stay unavailable rather than
-  producing a guessed percentage. Budgets and billed spend remain separate.
+  storage. Public-repository storage and Packages transfer are excluded after
+  repository eligibility is verified. Zero usage, remaining allowance, and
+  overage remain explicit; unverified usage and enterprise-pooled limits stay
+  unavailable rather than producing a guessed percentage. Budgets and billed
+  spend remain separate.
   ([#349](https://github.com/HemSoft/codexbar-ios/issues/349))
 
 - Refined GitHub Billing cards to answer three questions quickly: what was

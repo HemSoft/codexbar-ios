@@ -286,8 +286,22 @@ public enum GitHubBillingUsageParser {
             period: period,
             output: &output
         )
-        appendAccruedStorage(summaryItems, plan: plan, period: period, output: &output)
-        appendPackagesDataTransfer(summaryItems, plan: plan, period: period, output: &output)
+        appendAccruedStorage(
+            summaryItems,
+            usageItems: usageItems,
+            repositoryVisibility: repositoryVisibility,
+            plan: plan,
+            period: period,
+            output: &output
+        )
+        appendPackagesDataTransfer(
+            summaryItems,
+            usageItems: usageItems,
+            repositoryVisibility: repositoryVisibility,
+            plan: plan,
+            period: period,
+            output: &output
+        )
         appendLFSUsage(summaryItems, plan: plan, period: period, output: &output)
         appendCodespacesUsage(summaryItems, plan: plan, period: period, output: &output)
         return output
@@ -388,6 +402,8 @@ public enum GitHubBillingUsageParser {
 
     private static func appendAccruedStorage(
         _ items: [SummaryItem],
+        usageItems: [UsageItem],
+        repositoryVisibility: [String: Bool],
         plan: GitHubPlanAllowance,
         period: BillingPeriod,
         output: inout AllowanceOutput
@@ -406,10 +422,21 @@ public enum GitHubBillingUsageParser {
             output.unavailable[metricID] = "GitHub did not return a complete nonnegative accrued storage quantity."
             return
         }
+        let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
+        let details = usageItems.filter(\.isPotentialActionsOrPackagesStorage)
+        guard let used = privateRepositoryQuantity(
+            expectedTotal: total,
+            items: details,
+            repositoryVisibility: repositoryVisibility,
+            isValid: { $0.isActionsOrPackagesStorage && $0.isGBHours }
+        ) else {
+            output.unavailable[metricID] = "GitHub did not return complete repository eligibility for shared Actions and Packages storage."
+            return
+        }
         output.bars.append(allowanceBar(
             stableKey: "actions-packages-storage",
             label: "Actions + Packages storage",
-            used: matching.compactMap(\.grossQuantity).reduce(.zero, +),
+            used: used,
             limit: plan.sharedStorageGB * Decimal(period.hours),
             period: period
         ))
@@ -417,6 +444,8 @@ public enum GitHubBillingUsageParser {
 
     private static func appendPackagesDataTransfer(
         _ items: [SummaryItem],
+        usageItems: [UsageItem],
+        repositoryVisibility: [String: Bool],
         plan: GitHubPlanAllowance,
         period: BillingPeriod,
         output: inout AllowanceOutput
@@ -430,13 +459,50 @@ public enum GitHubBillingUsageParser {
             output.unavailable[metricID] = "GitHub returned Packages data transfer in an unsupported SKU or unit."
             return
         }
+        let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
+        let details = usageItems.filter(\.isPotentialPackagesDataTransfer)
+        guard let used = privateRepositoryQuantity(
+            expectedTotal: total,
+            items: details,
+            repositoryVisibility: repositoryVisibility,
+            isValid: { $0.isPackagesDataTransfer && $0.isGB }
+        ) else {
+            output.unavailable[metricID] = "GitHub did not return complete repository eligibility for Packages data transfer."
+            return
+        }
         output.bars.append(allowanceBar(
             stableKey: "packages-data-transfer",
             label: "Packages data transfer",
-            used: matching.compactMap(\.grossQuantity).reduce(.zero, +),
+            used: used,
             limit: Decimal(plan.packagesTransferGB),
             period: period
         ))
+    }
+
+    private static func privateRepositoryQuantity(
+        expectedTotal: Decimal,
+        items: [UsageItem],
+        repositoryVisibility: [String: Bool],
+        isValid: (UsageItem) -> Bool
+    ) -> Decimal? {
+        if items.isEmpty { return expectedTotal == 0 ? 0 : nil }
+        var total = Decimal.zero
+        var eligible = Decimal.zero
+        for item in items {
+            guard
+                isValid(item),
+                let quantity = item.quantity,
+                quantity >= 0,
+                let repositoryName = item.repositoryName,
+                let isPrivate = repositoryVisibility[repositoryName]
+            else {
+                return nil
+            }
+            total += quantity
+            if isPrivate { eligible += quantity }
+        }
+        guard total == expectedTotal else { return nil }
+        return eligible
     }
 
     private static func appendLFSUsage(
@@ -1734,6 +1800,45 @@ private struct UsageItem: Decodable {
             && unitType?.nonempty != nil
             && hasNonnegativeFinancialFields
             && organizationName?.caseInsensitiveCompare(owner) == .orderedSame
+    }
+
+    var isActionsOrPackagesStorage: Bool {
+        let product = product?.normalized
+        let sku = sku?.normalized
+        return (product == "actions" && sku == "actionsstorage")
+            || (product == "packages" && sku == "packagesstorage")
+    }
+
+    var isPotentialActionsOrPackagesStorage: Bool {
+        let product = product?.normalized
+        let sku = sku?.normalized ?? ""
+        guard product == "actions" || product == "packages" else { return false }
+        let hasSeparateScope = product == "actions"
+            && (sku.contains("cache") || sku.contains("customimage"))
+        guard !hasSeparateScope else { return false }
+        return unitType?.normalized.contains("gbhour") == true || sku.contains("storage")
+    }
+
+    var isPackagesDataTransfer: Bool {
+        product?.normalized == "packages"
+            && sku?.normalized.contains("transfer") == true
+    }
+
+    var isPotentialPackagesDataTransfer: Bool {
+        guard product?.normalized == "packages" else { return false }
+        let unit = unitType?.normalized
+        return sku?.normalized.contains("transfer") == true
+            || unit == "gb" || unit == "gib" || unit == "gigabytes"
+    }
+
+    var isGBHours: Bool {
+        let unit = unitType?.normalized ?? ""
+        return unit.contains("gbhour") || unit.contains("gibhour")
+    }
+
+    var isGB: Bool {
+        let unit = unitType?.normalized ?? ""
+        return unit == "gb" || unit == "gib" || unit == "gigabytes"
     }
 
     var isActionsMinutes: Bool {
