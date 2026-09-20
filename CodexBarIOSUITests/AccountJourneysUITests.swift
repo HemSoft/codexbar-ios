@@ -43,6 +43,9 @@ final class AccountJourneysUITests: XCTestCase {
         let app = launch(scenario: "github-billing-personal")
         let spentMetric = app.buttons["dashboard-metric-githubBilling.monetary.spent.usd"]
         XCTAssertTrue(spentMetric.waitForExistence(timeout: 10), app.debugDescription)
+        let refresh = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Refresh usage")).firstMatch
+        tap(refresh, in: app)
+        XCTAssertTrue(refresh.wait(for: \.isEnabled, toEqual: true, timeout: 10))
 
         // A healthy card must not stack the routine budget disclaimer below its values.
         let routineStack = app.staticTexts.matching(NSPredicate(
@@ -71,10 +74,10 @@ final class AccountJourneysUITests: XCTestCase {
         keepBillingScreenshot("github-billing-product-summary", of: app)
 
         let includedMinutes = app.descendants(matching: .any).matching(NSPredicate(
-            format: "label BEGINSWITH %@", "Included usage · Minutes, 720 of 2,000 minute equivalents used"
+            format: "label BEGINSWITH %@", "Included usage · Minutes, 720 of 2,000 minutes used"
         )).firstMatch
         reveal(includedMinutes, in: app)
-        XCTAssertTrue(includedMinutes.label.contains("1,280 minute equivalents remaining"), includedMinutes.label)
+        XCTAssertTrue(includedMinutes.label.contains("1,280 minutes remaining"), includedMinutes.label)
 
         let includedStorage = app.descendants(matching: .any).matching(NSPredicate(
             format: "label BEGINSWITH %@", "Included usage · Storage, 118 of 360 GB-hours used"
@@ -109,31 +112,31 @@ final class AccountJourneysUITests: XCTestCase {
         try assertGitHubBillingScenario(
             "github-billing-personal",
             expectedPercentage: "36%",
-            expectedUsageSummary: "720 minute equivalents used · 2,000 included · 1,280 remaining",
+            expectedUsageSummary: "720 minutes used · 2,000 included · 1,280 remaining",
             screenshotName: "github-billing-personal-allowance"
         )
         try assertGitHubBillingScenario(
             "github-billing-organization",
             expectedPercentage: "50%",
-            expectedUsageSummary: "1,500 minute equivalents used · 3,000 included · 1,500 remaining",
+            expectedUsageSummary: "1,500 minutes used · 3,000 included · 1,500 remaining",
             screenshotName: "github-billing-organization-allowance"
         )
         try assertGitHubBillingScenario(
             "github-billing-overage",
             expectedPercentage: "125%",
-            expectedUsageSummary: "2,500 minute equivalents used · 2,000 included · 500 over",
+            expectedUsageSummary: "2,500 minutes used · 2,000 included · 500 over",
             screenshotName: "github-billing-allowance-overage"
         )
         try assertGitHubBillingScenario(
             "github-billing-no-personal-budget",
             expectedPercentage: "0%",
-            expectedUsageSummary: "0 minute equivalents used · 2,000 included · 2,000 remaining",
+            expectedUsageSummary: "0 minutes used · 2,000 included · 2,000 remaining",
             screenshotName: "github-billing-zero-allowance"
         )
         try assertGitHubBillingScenario(
             "github-billing-incomplete",
             expectedPercentage: "36%",
-            expectedUsageSummary: "720 minute equivalents used · 2,000 included · 1,280 remaining",
+            expectedUsageSummary: "720 minutes used · 2,000 included · 1,280 remaining",
             screenshotName: "github-billing-partial-allowance"
         )
     }

@@ -352,8 +352,8 @@ final class UITestFixtures {
                                 ProviderCardInformationItem(
                                     id: "included-minutes",
                                     label: "Included usage · Minutes",
-                                    detail: "720 of 2,000 minute equivalents used (private standard runners) · "
-                                        + "1,280 minute equivalents remaining"
+                                    detail: "720 of 2,000 minutes used (private standard runners) · "
+                                        + "1,280 minutes remaining"
                                 ),
                                 ProviderCardInformationItem(
                                     id: "included-storage",
@@ -448,8 +448,8 @@ final class UITestFixtures {
                             ProviderCardInformationItem(
                                 id: "actions.included.minutes",
                                 label: "Included usage · Minutes",
-                                detail: "720 of 2,000 minute equivalents used (private standard runners) · "
-                                    + "1,280 minute equivalents remaining"
+                                detail: "720 of 2,000 minutes used (private standard runners) · "
+                                    + "1,280 minutes remaining"
                             ),
                             ProviderCardInformationItem(
                                 id: "actions.included.storage",
@@ -564,23 +564,23 @@ final class UITestFixtures {
                         ProviderCardInformationItem(
                             id: "actions.consumed",
                             label: "Consumed usage",
-                            detail: "$20.00 · 2,500 minute equivalents"
+                            detail: "$20.00 · 2,500 minutes"
                         ),
                         ProviderCardInformationItem(
                             id: "actions.discount",
                             label: "Discount usage",
-                            detail: "$12.00 · 2,000 minute equivalents"
+                            detail: "$12.00 · 2,000 minutes"
                         ),
                         ProviderCardInformationItem(
                             id: "actions.billable",
                             label: "Billable usage",
-                            detail: "$8.00 · 500 minute equivalents"
+                            detail: "$8.00 · 500 minutes"
                         ),
                         ProviderCardInformationItem(
                             id: "actions.included.minutes",
                             label: "Included usage · Minutes",
-                            detail: "2,500 of 2,000 minute equivalents used (private standard runners) · "
-                                + "500 minute equivalents over allowance"
+                            detail: "2,500 of 2,000 minutes used (private standard runners) · "
+                                + "500 minutes over allowance"
                         ),
                     ]
                 ),
@@ -661,8 +661,8 @@ final class UITestFixtures {
                         ProviderCardInformationItem(
                             id: "actions.included.minutes",
                             label: "Included usage · Minutes",
-                            detail: "1,500 of 3,000 minute equivalents used (private standard runners) · "
-                                + "1,500 minute equivalents remaining"
+                            detail: "1,500 of 3,000 minutes used (private standard runners) · "
+                                + "1,500 minutes remaining"
                         ),
                         ProviderCardInformationItem(
                             id: "actions.included.storage",

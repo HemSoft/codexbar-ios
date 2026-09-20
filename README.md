@@ -95,17 +95,19 @@ one shared pool. The per-repository Actions cache allowance is not presented as
 an account-wide bar.
 
 Actions progress includes private-repository standard GitHub-hosted runners.
-CodexBar normalizes mixed runner usage from GitHub's returned quantity and unit
-price evidence against GitHub's current
-[Linux baseline rate](https://docs.github.com/en/billing/reference/actions-runner-pricing).
-Known paid larger runners from GitHub's
+CodexBar sums GitHub's returned minute quantities without inventing operating-system
+multipliers. Returned unit prices must match GitHub's current
+[runner pricing table](https://docs.github.com/en/billing/reference/actions-runner-pricing)
+before those minutes are accepted. Known paid larger runners from GitHub's
 [SKU catalog](https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions),
 self-hosted runners, and public repositories are excluded from the hosted
 standard-runner allowance. Standard-runner unit prices must match the current
 pricing table exactly. Missing summary rows, hidden repository classifications,
 unknown units, and unknown SKUs make only the affected metric unavailable. A
 problem with one metric does not suppress
-other verified allowances. Shared Actions and Packages storage is counted once.
+other verified allowances. Codespaces compute converts returned machine hours
+with the documented core count in each `codespaces_compute_d*` SKU. Shared
+Actions and Packages storage is counted once.
 Storage and Packages transfer include only usage tied to repositories verified
 as private; public-repository usage is excluded, and incomplete repository
 eligibility keeps the affected allowance unavailable. Each allowance also

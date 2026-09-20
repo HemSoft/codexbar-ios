@@ -1398,7 +1398,7 @@ struct ProviderUsageCard: View {
     static func githubAllowanceSummary(_ bar: UsageBar) -> String? {
         let unit: String
         switch bar.stableKey {
-        case "actions-private-minutes": unit = "minute equivalents"
+        case "actions-private-minutes": unit = "minutes"
         case "actions-packages-storage", "lfs-storage", "codespaces-storage": unit = "GB-hours"
         case "packages-data-transfer", "lfs-bandwidth": unit = "GB"
         case "codespaces-core-hours": unit = "core hours"

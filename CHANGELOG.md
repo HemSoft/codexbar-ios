@@ -53,8 +53,9 @@ building, testing, or releasing the app.
   transfer, Git LFS storage and bandwidth, and personal Codespaces compute and
   storage. Public-repository storage and Packages transfer are excluded after
   repository eligibility is verified, paid larger and self-hosted runners do
-  not consume the hosted standard-runner allowance, returned prices must match
-  GitHub's current runner contract, summary totals must reconcile with the
+  not consume the hosted standard-runner allowance, returned minute quantities
+  are used without guessed operating-system multipliers, prices must match
+  GitHub's current runner contract, and summary totals must reconcile with the
   current billing month's detail, and gross, discounted, and billable quantities
   must be complete. Zero usage, remaining allowance, and overage remain
   explicit; conflicting Pro shared-storage amounts, unverified usage, and

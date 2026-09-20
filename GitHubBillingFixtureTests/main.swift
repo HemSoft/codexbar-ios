@@ -16,7 +16,7 @@ enum GitHubBillingFixtureRunner {
         try await accountIsolationFixtures()
         try await providerRequestAndFailureFixtures()
         print("GitHub Billing fixture suite passed: personal and organization allowances, zero usage, overage, "
-            + "repository classification, current-price runner normalization, shared storage, Packages, Codespaces, "
+            + "repository classification, current-price runner validation, shared storage, Packages, Codespaces, "
             + "Git LFS, quantity discounts, budgets, pagination, currency evidence, product summaries, and failures.")
     }
 
@@ -144,17 +144,17 @@ enum GitHubBillingFixtureRunner {
         ), "Free personal fixture did not parse")
 
         let actionBar = try require(free.bars.first { $0.stableKey == "actions-private-minutes" }, "Actions minutes missing")
-        try check(actionBar.used == 320, "Mixed standard runners must use GitHub's returned prices at the Linux baseline rate")
+        try check(actionBar.used == 190, "Mixed standard runners must use GitHub's returned minute quantities")
         try check(actionBar.limit == 2_000, "Free accounts must receive 2,000 included Actions minutes")
         try check(
             free.cardInformationSections.contains { section in
                 section.items.contains { item in
                     item.label == "Actions plan allowance"
-                        && item.detail.contains("320 of 2,000 minute equivalents used")
-                        && item.detail.contains("1,680 minute equivalents remaining")
+                        && item.detail.contains("190 of 2,000 minutes used")
+                        && item.detail.contains("1,810 minutes remaining")
                 }
             },
-            "Personal allowance details must show used, included, and remaining minute equivalents"
+            "Personal allowance details must show used, included, and remaining minutes"
         )
         let storage = try require(free.bars.first { $0.stableKey == "actions-packages-storage" }, "Storage bar missing")
         try check(storage.used == 120, "Private Actions and Packages GB-hours must share one eligible accrued total")
@@ -398,7 +398,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Complete Free allowance fixture did not parse")
         let expected: [(String, Double, Double)] = [
-            ("actions-private-minutes", 200, 2_000),
+            ("actions-private-minutes", 160, 2_000),
             ("actions-packages-storage", 120, 360),
             ("packages-data-transfer", 1.5, 1),
             ("lfs-storage", 48, 7_200),
@@ -480,8 +480,8 @@ enum GitHubBillingFixtureRunner {
             "A stale billing period must fail every allowance closed"
         )
 
-        let overageSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":2000,"grossAmount":20,"discountQuantity":1200,"discountAmount":12,"netQuantity":800,"netAmount":8}]}"#)
-        let overageUsage = data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_windows","quantity":2000,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":20,"discountAmount":12,"netAmount":8,"repositoryName":"octocat/private"}]}"#)
+        let overageSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":2500,"grossAmount":25,"discountQuantity":2000,"discountAmount":20,"netQuantity":500,"netAmount":5}]}"#)
+        let overageUsage = data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_windows","quantity":2500,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":25,"discountAmount":20,"netAmount":5,"repositoryName":"octocat/private"}]}"#)
         let overage = try require(GitHubBillingUsageParser.parsePersonal(
             summaryData: overageSummary,
             usageData: overageUsage,
@@ -495,7 +495,7 @@ enum GitHubBillingFixtureRunner {
             "Actions overage bar missing"
         )
         try check(actionsOverage.used > actionsOverage.limit, "Actions usage above the plan allowance must not be clamped")
-        try check(actionsOverage.usageText == "167%", "Actions overage must retain its percentage above 100%")
+        try check(actionsOverage.usageText == "125%", "Actions overage must retain its percentage above 100%")
 
         let organizationFree = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: organizationSummary(),
@@ -617,8 +617,8 @@ enum GitHubBillingFixtureRunner {
         }, "Billable usage must show the authoritative net amount and quantity")
         try check(actionsSection.items.contains { item in
             item.label == "Included usage · Minutes"
-                && item.detail == "200 of 2,000 minute equivalents used (private standard runners) · "
-                    + "1,800 minute equivalents remaining"
+                && item.detail == "160 of 2,000 minutes used (private standard runners) · "
+                    + "1,840 minutes remaining"
         }, "Actions included minutes must show used, included, and remaining values")
         try check(actionsSection.items.contains { item in
             item.label == "Included usage · Storage"

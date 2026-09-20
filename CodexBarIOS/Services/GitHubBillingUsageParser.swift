@@ -247,8 +247,6 @@ public enum GitHubBillingUsageParser {
     }
 
     // https://docs.github.com/en/billing/reference/actions-runner-pricing
-    private static let actionsLinuxBaselineRate = Decimal(string: "0.006")!
-
     private static func unsupportedPlanMessage(
         name: String,
         scope: GitHubAllowanceScope
@@ -402,7 +400,7 @@ public enum GitHubBillingUsageParser {
             else {
                 return .unavailable("GitHub returned a standard-runner price outside the verified billing contract.")
             }
-            return .included(quantity * unitPrice / actionsLinuxBaselineRate)
+            return .included(quantity)
         case .excludedPaidLarger, .excludedSelfHosted:
             return .excluded
         case .unknown:
@@ -744,7 +742,7 @@ public enum GitHubBillingUsageParser {
 
     private static func allowanceUnit(for stableKey: String?) -> String {
         switch stableKey {
-        case "actions-private-minutes": "minute equivalents"
+        case "actions-private-minutes": "minutes"
         case "actions-packages-storage", "lfs-storage", "codespaces-storage": "GB-hours"
         case "packages-data-transfer", "lfs-bandwidth": "GB"
         case "codespaces-core-hours": "core hours"
@@ -1264,7 +1262,7 @@ public enum GitHubBillingUsageParser {
                 id: "actions.included.minutes",
                 label: "Included usage · Minutes",
                 stableKey: "actions-private-minutes",
-                unit: "minute equivalents",
+                unit: "minutes",
                 scopeNote: "private standard runners"
             ),
             IncludedUsageDefinition(
