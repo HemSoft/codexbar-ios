@@ -423,6 +423,7 @@ enum GitHubBillingFixtureRunner {
             {"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1000,"grossAmount":6,"discountQuantity":1000,"discountAmount":6,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_linux_slim","unitType":"minutes","pricePerUnit":0.002,"grossQuantity":90,"grossAmount":0.18,"discountQuantity":90,"discountAmount":0.18,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":300,"grossAmount":3,"discountQuantity":300,"discountAmount":3,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_macos","unitType":"minutes","pricePerUnit":0.062,"grossQuantity":10,"grossAmount":0.62,"discountQuantity":10,"discountAmount":0.62,"netQuantity":0,"netAmount":0},
             {"product":"Actions","sku":"actions_storage","unitType":"gigabyte-hours","pricePerUnit":0.00033602,"grossQuantity":432,"grossAmount":0.14516064,"discountQuantity":432,"discountAmount":0.14516064,"netQuantity":0,"netAmount":0}
           ]
         }
@@ -433,6 +434,7 @@ enum GitHubBillingFixtureRunner {
             {"date":"2026-09-20","product":"Actions","sku":"Actions Linux","quantity":1000,"unitType":"Minutes","pricePerUnit":0.006,"repositoryName":"private","grossAmount":6,"discountAmount":6,"netAmount":0},
             {"date":"2026-09-20","product":"Actions","sku":"Actions Linux Slim","quantity":90,"unitType":"Minutes","pricePerUnit":0.002,"repositoryName":"private","grossAmount":0.18,"discountAmount":0.18,"netAmount":0},
             {"date":"2026-09-20","product":"Actions","sku":"Actions Windows","quantity":300,"unitType":"Minutes","pricePerUnit":0.01,"repositoryName":"private","grossAmount":3,"discountAmount":3,"netAmount":0},
+            {"date":"2026-09-20","product":"Actions","sku":"Actions macOS 3-core","quantity":10,"unitType":"Minutes","pricePerUnit":0.062,"repositoryName":"private","grossAmount":0.62,"discountAmount":0.62,"netAmount":0},
             {"date":"2026-09-20","product":"Actions","sku":"Actions storage","quantity":432,"unitType":"GigabyteHours","pricePerUnit":0.00033602,"repositoryName":"private","grossAmount":0.14516064,"discountAmount":0.14516064,"netAmount":0}
           ]
         }
@@ -450,8 +452,8 @@ enum GitHubBillingFixtureRunner {
             "GitHub Actions minutes must be shown"
         )
         try check(
-            abs(minutes.used - 1_530) < 0.000_001 && minutes.limit == 3_000,
-            "Actions minutes must match GitHub's price-normalized included usage"
+            abs(minutes.used - 1_633.333_333_333_333) < 0.000_001 && minutes.limit == 3_000,
+            "Actions minutes must reconcile GitHub's macOS 3-core alias and match price-normalized included usage"
         )
         let storage = try require(
             result.bars.first { $0.stableKey == "actions-storage" },

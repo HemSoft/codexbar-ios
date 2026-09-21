@@ -462,7 +462,7 @@ public enum GitHubBillingUsageParser {
             guard let quantity = item.allowanceQuantity, quantity >= 0 else { return nil }
             guard quantity > 0 else { continue }
             guard
-                let sku = item.sku?.normalized.nonempty,
+                let sku = GitHubActionsRunnerCatalog.reconciliationSKU(for: item.sku),
                 let unit = item.unitType?.normalized.nonempty,
                 let unitPrice = item.pricePerUnit,
                 unitPrice >= 0
@@ -2302,19 +2302,28 @@ private enum ActionsRunnerAllowance {
 
 enum GitHubActionsRunnerCatalog {
     fileprivate static func allowance(for sku: String?) -> ActionsRunnerAllowance {
-        let normalizedSKU = sku?.normalized ?? ""
+        let normalizedSKU = canonicalSKU(for: sku)
         if standardRates[normalizedSKU] != nil { return .includedStandard }
         if paidLargerSKUs.contains(normalizedSKU) { return .excludedPaidLarger }
         if normalizedSKU.contains("selfhosted") { return .excludedSelfHosted }
         return .unknown
     }
 
+    fileprivate static func reconciliationSKU(for sku: String?) -> String? {
+        canonicalSKU(for: sku).nonempty
+    }
+
     static func isIncludedStandard(sku: String?) -> Bool {
-        standardRates[sku?.normalized ?? ""] != nil
+        standardRates[canonicalSKU(for: sku)] != nil
     }
 
     static func standardRate(for sku: String?) -> Decimal? {
-        standardRates[sku?.normalized ?? ""]
+        standardRates[canonicalSKU(for: sku)]
+    }
+
+    private static func canonicalSKU(for sku: String?) -> String {
+        let normalizedSKU = sku?.normalized ?? ""
+        return standardAliases[normalizedSKU] ?? normalizedSKU
     }
 
     static func allowanceMinutes(quantity: Decimal, unitPrice: Decimal) -> Decimal {
@@ -2331,6 +2340,10 @@ enum GitHubActionsRunnerCatalog {
         "actionswindowsarm": Decimal(1) / 100,
         "actionsmacos": Decimal(62) / 1_000,
     ]
+
+    // GitHub's summary uses actions_macos while repository detail names the same
+    // verified $0.062 standard runner Actions macOS 3-core.
+    private static let standardAliases = ["actionsmacos3core": "actionsmacos"]
 
     // https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions
     private static let paidLargerSKUs = Set([

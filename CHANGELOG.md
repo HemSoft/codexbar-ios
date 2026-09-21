@@ -93,6 +93,11 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- GitHub Billing cards now keep Actions minutes visible when standard macOS
+  runner usage is present, matching GitHub's included-usage total instead of
+  showing a reconciliation warning.
+  ([#351](https://github.com/HemSoft/codexbar-ios/issues/351))
+
 - Request the GitHub `user` permission required by personal billing rather than
   profile-only access. Existing connections need a fresh sign-in to approve it.
   Connection errors now identify the failed request and permission state without
