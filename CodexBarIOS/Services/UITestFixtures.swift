@@ -243,7 +243,7 @@ final class UITestFixtures {
                             resetDisplayStyle: .relativeWithLocalTime
                         ),
                         UsageBar(
-                            stableKey: "actions-packages-storage",
+                            stableKey: "actions-storage",
                             label: "Actions storage",
                             used: 0,
                             limit: 0.5,
@@ -398,7 +398,7 @@ final class UITestFixtures {
                         showProjectionOnCurrentBar: true
                     ),
                     UsageBar(
-                        stableKey: "actions-packages-storage",
+                        stableKey: "actions-storage",
                         label: "Actions storage",
                         used: 0.6,
                         limit: 2,
@@ -610,7 +610,7 @@ final class UITestFixtures {
                     showProjectionOnCurrentBar: true
                 ),
                 UsageBar(
-                    stableKey: "actions-packages-storage",
+                    stableKey: "actions-storage",
                     label: "Actions storage",
                     used: 0.69,
                     limit: 2,

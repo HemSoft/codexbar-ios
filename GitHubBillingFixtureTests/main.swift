@@ -160,7 +160,7 @@ enum GitHubBillingFixtureRunner {
             "Personal allowance details must show used, included, and remaining minutes"
         )
         let freeActionsStorage = try require(
-            free.bars.first { $0.stableKey == "actions-packages-storage" },
+            free.bars.first { $0.stableKey == "actions-storage" },
             "Actions storage must remain independent from Packages visibility"
         )
         try check(
@@ -211,7 +211,7 @@ enum GitHubBillingFixtureRunner {
             "Pro accounts must receive 3,000 included Actions minutes"
         )
         try check(
-            pro.bars.first { $0.stableKey == "actions-packages-storage" }?.limit == 2,
+            pro.bars.first { $0.stableKey == "actions-storage" }?.limit == 2,
             "Pro accounts must receive GitHub's 2 GB Actions storage allowance"
         )
         try check(
@@ -286,11 +286,11 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Unknown Actions storage fixture did not parse")
         try check(
-            unknownStorage.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
+            unknownStorage.unavailableUsageMetrics["githubBilling.actions-storage"] != nil,
             "An unknown Actions storage SKU must fail closed without turning cache into account-wide usage"
         )
         try check(
-            unknownStorage.bars.contains { $0.stableKey == "actions-packages-storage" } == false,
+            unknownStorage.bars.contains { $0.stableKey == "actions-storage" } == false,
             "Incomplete Actions storage evidence must not produce an understated percentage"
         )
     }
@@ -309,7 +309,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Incomplete repository storage fixture did not parse")
         try check(
-            missingStorageDetails.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
+            missingStorageDetails.unavailableUsageMetrics["githubBilling.actions-storage"] != nil,
             "Shared storage must stay unavailable without complete repository eligibility"
         )
         let incompleteStorageQuantities = try require(GitHubBillingUsageParser.parsePersonal(
@@ -321,7 +321,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Incomplete storage quantity fixture did not parse")
         try check(
-            incompleteStorageQuantities.unavailableUsageMetrics["githubBilling.actions-packages-storage"]?
+            incompleteStorageQuantities.unavailableUsageMetrics["githubBilling.actions-storage"]?
                 .contains("gross, discount, and billable") == true,
             "Missing discount or billable quantities must keep the allowance unavailable"
         )
@@ -454,7 +454,7 @@ enum GitHubBillingFixtureRunner {
             "Actions minutes must match GitHub's price-normalized included usage"
         )
         let storage = try require(
-            result.bars.first { $0.stableKey == "actions-packages-storage" },
+            result.bars.first { $0.stableKey == "actions-storage" },
             "GitHub Actions storage must be shown"
         )
         try check(
@@ -505,7 +505,7 @@ enum GitHubBillingFixtureRunner {
         ), "Complete Free allowance fixture did not parse")
         let expected: [(String, Double, Double)] = [
             ("actions-private-minutes", 200, 2_000),
-            ("actions-packages-storage", 100.0 / 720.0, 0.5),
+            ("actions-storage", 100.0 / 720.0, 0.5),
             ("packages-data-transfer", 0, 1),
             ("lfs-storage", 48, 7_200),
             ("lfs-bandwidth", 3.5, 10),
@@ -658,7 +658,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Packages visibility fixture did not parse")
         try check(
-            result.bars.first { $0.stableKey == "actions-packages-storage" }?.used == 0,
+            result.bars.first { $0.stableKey == "actions-storage" }?.used == 0,
             "Packages storage must not be folded into the separate Actions storage allowance"
         )
         try check(
@@ -1154,7 +1154,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: Date()
         ), "An incomplete storage row should remain a readable response")
         try check(
-            missingStorageSKU.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
+            missingStorageSKU.unavailableUsageMetrics["githubBilling.actions-storage"] != nil,
             "An Actions storage row missing its SKU must make the allowance unavailable"
         )
 
@@ -1547,7 +1547,7 @@ enum GitHubBillingFixtureRunner {
             "Hidden repository metadata must make private Actions classification unavailable"
         )
         try check(
-            hiddenRepository.bars.contains { $0.stableKey == "actions-packages-storage" },
+            hiddenRepository.bars.contains { $0.stableKey == "actions-storage" },
             "An unavailable Actions-minute classification must not erase unrelated storage progress"
         )
 
@@ -1774,7 +1774,7 @@ enum GitHubBillingFixtureRunner {
             "The provider must retrieve the organization's Team allowance"
         )
         try check(
-            result.bars.first { $0.stableKey == "actions-packages-storage" }?.used == 0,
+            result.bars.first { $0.stableKey == "actions-storage" }?.used == 0,
             "The provider must keep Packages storage separate from Actions storage"
         )
     }

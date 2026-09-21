@@ -122,7 +122,7 @@ public extension DemoUsageProvider {
                         resetDescription: "Resets Oct 1"
                     ),
                     UsageBar(
-                        stableKey: "actions-packages-storage",
+                        stableKey: "actions-storage",
                         label: "Actions storage",
                         used: 0.6,
                         limit: 2,

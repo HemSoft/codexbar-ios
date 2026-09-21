@@ -312,7 +312,7 @@ public enum GitHubBillingUsageParser {
     ) -> [String: String] {
         var keys = [
             "githubBilling.actions-private-minutes",
-            "githubBilling.actions-packages-storage",
+            "githubBilling.actions-storage",
             "githubBilling.packages-storage",
             "githubBilling.packages-data-transfer",
             "githubBilling.lfs-storage",
@@ -505,7 +505,7 @@ public enum GitHubBillingUsageParser {
         period: BillingPeriod,
         output: inout AllowanceOutput
     ) {
-        let metricID = "githubBilling.actions-packages-storage"
+        let metricID = "githubBilling.actions-storage"
         let matching = items.filter(\.isPotentialActionsStorage)
         if let message = actionsStorageEvidenceFailure(matching) {
             output.unavailable[metricID] = message
@@ -530,7 +530,7 @@ public enum GitHubBillingUsageParser {
             return
         }
         output.bars.append(allowanceBar(
-            stableKey: "actions-packages-storage",
+            stableKey: "actions-storage",
             label: "Actions storage",
             used: used,
             limit: plan.actionsStorageGB,
@@ -870,7 +870,7 @@ public enum GitHubBillingUsageParser {
     private static func allowanceUnit(for stableKey: String?) -> String {
         let unitsByMetric = [
             "actions-private-minutes": "minutes",
-            "actions-packages-storage": "GB",
+            "actions-storage": "GB",
             "packages-storage": "GB",
             "lfs-storage": "GB-hours",
             "codespaces-storage": "GB-hours",
@@ -1417,7 +1417,7 @@ public enum GitHubBillingUsageParser {
             IncludedUsageDefinition(
                 id: "actions.included.storage",
                 label: "Included usage · Storage",
-                stableKey: "actions-packages-storage",
+                stableKey: "actions-storage",
                 unit: "GB",
                 scopeNote: "private Actions storage"
             ),
