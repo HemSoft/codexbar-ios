@@ -326,8 +326,8 @@ final class UITestFixtures {
                         ),
                     ],
                     usageMessages: [
-                        "GitHub returned Actions or Packages storage without a recognized storage SKU, "
-                            + "so the accrued storage allowance is unavailable.",
+                        "GitHub returned Actions storage without the recognized storage SKU, "
+                            + "so the monthly storage allowance is unavailable.",
                     ],
                     cardInformationSections: [
                         ProviderCardInformationSection(
