@@ -1932,10 +1932,10 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     }
 
     var isPotentialActionsStorage: Bool {
-        guard product?.normalized == "actions" else { return false }
         let normalizedSKU = sku?.normalized ?? ""
         guard !normalizedSKU.contains("cache"), !normalizedSKU.contains("customimage") else { return false }
-        return isGBHours || normalizedSKU.contains("storage")
+        if normalizedSKU.hasPrefix("actions"), normalizedSKU.contains("storage") { return true }
+        return product?.normalized == "actions" && (isGBHours || normalizedSKU.contains("storage"))
     }
 
     var isPackagesStorage: Bool {
@@ -1943,10 +1943,10 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     }
 
     var isPotentialPackagesStorage: Bool {
-        guard product?.normalized == "packages" else { return false }
         let normalizedSKU = sku?.normalized ?? ""
         guard !normalizedSKU.contains("transfer"), !normalizedSKU.contains("bandwidth") else { return false }
-        return isGBHours || normalizedSKU.contains("storage")
+        if normalizedSKU.hasPrefix("packages"), normalizedSKU.contains("storage") { return true }
+        return product?.normalized == "packages" && (isGBHours || normalizedSKU.contains("storage"))
     }
 
     var isPackagesDataTransfer: Bool {
@@ -1956,9 +1956,12 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     }
 
     var isPotentialPackagesDataTransfer: Bool {
-        guard product?.normalized == "packages" else { return false }
         let normalizedSKU = sku?.normalized ?? ""
-        return normalizedSKU.contains("transfer") || normalizedSKU == "packagesbandwidth" || isGB
+        if normalizedSKU == "packagesbandwidth"
+            || (normalizedSKU.hasPrefix("packages") && normalizedSKU.contains("transfer")) {
+            return true
+        }
+        return product?.normalized == "packages" && isGB
     }
 
     var isCodespacesCoreHours: Bool {
@@ -1990,8 +1993,9 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     }
 
     var isPotentialCodespacesCoreHours: Bool {
-        guard product?.normalized == "codespaces" else { return false }
-        return sku?.normalized.contains("compute") == true || isHours
+        let normalizedSKU = sku?.normalized ?? ""
+        if normalizedSKU.hasPrefix("codespaces"), normalizedSKU.contains("compute") { return true }
+        return product?.normalized == "codespaces" && isHours
     }
 
     private var codespacesCoreMultiplier: Int? {
@@ -2016,8 +2020,9 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     }
 
     var isPotentialCodespacesStorage: Bool {
-        guard product?.normalized == "codespaces" else { return false }
-        return sku?.normalized.contains("storage") == true || isGBHours || isGBMonths
+        let normalizedSKU = sku?.normalized ?? ""
+        if normalizedSKU.hasPrefix("codespaces"), normalizedSKU.contains("storage") { return true }
+        return product?.normalized == "codespaces" && (isGBHours || isGBMonths)
     }
 
     var isLFSStorage: Bool {
@@ -2107,10 +2112,10 @@ private struct UsageItem: Decodable, MeteredQuantityItem {
     }
 
     var isPotentialActionsStorage: Bool {
-        guard product?.normalized == "actions" else { return false }
         let normalizedSKU = sku?.normalized ?? ""
         guard !normalizedSKU.contains("cache"), !normalizedSKU.contains("customimage") else { return false }
-        return isGBHours || normalizedSKU.contains("storage")
+        if normalizedSKU.hasPrefix("actions"), normalizedSKU.contains("storage") { return true }
+        return product?.normalized == "actions" && (isGBHours || normalizedSKU.contains("storage"))
     }
 
     var isPackagesDataTransfer: Bool {

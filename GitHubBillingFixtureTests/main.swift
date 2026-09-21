@@ -1953,6 +1953,18 @@ private enum GitHubBillingReviewFixtures {
                 && unclassifiedBudgetUsage?.usageMessages.contains { $0.contains("consumption cannot be calculated") } == true,
             "A budget must stay unavailable when scoped detail omits its product discriminator"
         )
+
+        let unclassifiedSummary = GitHubBillingUsageParser.parseOrganization(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.0225,"grossQuantity":1,"grossAmount":0.0225,"discountQuantity":1,"discountAmount":0.0225,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            budgetPageData: [],
+            planName: "team",
+            configuration: organization,
+            fetchedAt: Date()
+        )
+        try check(unclassifiedSummary?.unavailableUsageMetrics["githubBilling.packages-storage"] != nil
+            && unclassifiedSummary?.bars.contains { $0.stableKey == "packages-storage" } == false,
+            "A recognizable allowance SKU without its product must not be presented as zero usage")
     }
 
     static func organizationVisibilityFailure(
