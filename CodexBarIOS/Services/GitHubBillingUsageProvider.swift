@@ -593,6 +593,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 result.failureMessage = "GitHub could not classify some repository visibility, so affected Actions "
                     + "allowances are unavailable. \(failure.localizedDescription)"
             }
+            if batch.failures.contains(where: \.isRateLimitFailure) { break }
         }
         return result
     }
@@ -1150,6 +1151,13 @@ private enum GitHubBillingAPIError: LocalizedError, Sendable {
 
     var isAuthorizationFailure: Bool {
         if case .httpStatus(401, _, _) = self { return true }
+        return false
+    }
+
+    var isRateLimitFailure: Bool {
+        if case let .httpStatus(status, isRateLimited, _) = self {
+            return isRateLimited || status == 429
+        }
         return false
     }
 

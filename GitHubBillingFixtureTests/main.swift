@@ -1577,7 +1577,7 @@ enum GitHubBillingFixtureRunner {
             "Truncated repository, product, and SKU details need an explicit explanation"
         )
 
-        try await assertActionsOnlyMetadataLookups(provider: provider, personal: personal)
+        try await assertActionsOnlyMetadataLookups(provider: provider, personal: personal); try await GitHubBillingReviewFixtures.rateLimitStopsBatches(provider: provider, personal: personal)
     }
 
     private static func assertActionsOnlyMetadataLookups(
@@ -1988,6 +1988,39 @@ private enum GitHubBillingReviewFixtures {
         try check(result.unavailableUsageMetrics["githubBilling.actions-storage"] != nil
             && result.usageMessages.contains { $0.contains("repository visibility") },
             "Repository metadata failures must isolate only affected Actions allowances")
+    }
+
+    static func rateLimitStopsBatches(
+        provider: GitHubBillingUsageProvider,
+        personal: ProviderAccountConfiguration
+    ) async throws {
+        let lookupCounter = LockedCounter()
+        let items: [[String: Any]] = (0..<20).map { index in
+            [
+                "product": "Actions", "sku": "actions_linux", "quantity": 1,
+                "unitType": "minutes", "pricePerUnit": 0.006,
+                "grossAmount": 0.006, "discountAmount": 0.006, "netAmount": 0,
+                "repositoryName": "octocat/rate-limit-\(index)",
+            ]
+        }
+        let usage = try JSONSerialization.data(withJSONObject: ["usageItems": items])
+        FixtureURLProtocol.setHandler { request in
+            let path = request.url?.path ?? ""
+            if path == "/user" {
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data(#"{"login":"octocat","plan":{"name":"free"}}"#))
+            }
+            if path.hasSuffix("/summary") {
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":20,"grossAmount":0.12,"discountQuantity":20,"discountAmount":0.12,"netQuantity":0,"netAmount":0}]}"#))
+            }
+            if path == "/users/octocat/settings/billing/usage" {
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, usage)
+            }
+            lookupCounter.increment()
+            return (HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: nil, headerFields: ["X-RateLimit-Remaining": "0"])!, data("{}"))
+        }
+        let result = try await provider.fetchUsage(for: personal)
+        try check(result.failureMessage == nil, "A repository rate limit must preserve personal billing")
+        try check(lookupCounter.value <= 8, "A rate-limited metadata batch must stop later repository requests")
     }
 
     private static func data(_ value: String) -> Data { Data(value.utf8) }

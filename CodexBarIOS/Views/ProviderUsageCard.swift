@@ -1406,15 +1406,19 @@ struct ProviderUsageCard: View {
 
     static func githubAllowanceSummary(_ bar: UsageBar) -> String? {
         guard let stableKey = bar.stableKey, let unit = githubAllowanceUnits[stableKey] else { return nil }
-        let used = formattedUsageAmount(bar.used)
-        let included = formattedUsageAmount(bar.limit)
+        let used = formattedAllowanceAmount(bar.used)
+        let included = formattedAllowanceAmount(bar.limit)
         let difference = bar.limit - bar.used
         if difference >= 0 {
             return "\(used) \(unit) used · \(included) included · "
-                + "\(formattedUsageAmount(difference)) remaining"
+                + "\(formattedAllowanceAmount(difference)) remaining"
         }
         return "\(used) \(unit) used · \(included) included · "
-            + "\(formattedUsageAmount(-difference)) over"
+            + "\(formattedAllowanceAmount(-difference)) over"
+    }
+
+    private static func formattedAllowanceAmount(_ value: Double) -> String {
+        value > 0 && value < 0.01 ? "<0.01" : formattedUsageAmount(value)
     }
 
     static func formattedUsageAmount(_ value: Double) -> String {
