@@ -304,16 +304,12 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         ))
         let (summary, usage) = try await (summaryData, usageData)
         let repositories = Self.repositoryNames(in: usage)
-        let visibility = try await repositoryVisibility(
+        let visibility = try await billingPreservingRepositoryVisibility(
             repositories: repositories,
             owner: owner,
-            accessToken: credentials.accessToken,
-            cacheNamespace: Self.repositoryVisibilityCacheNamespace(
-                scope: .personal,
-                owner: owner,
-                configurationID: configuration.id,
-                accessToken: credentials.accessToken
-            )
+            scope: .personal,
+            configurationID: configuration.id,
+            accessToken: credentials.accessToken
         )
         guard let result = GitHubBillingUsageParser.parsePersonal(
             summaryData: summary,
@@ -358,28 +354,13 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let visibility: RepositoryVisibilityResult
         if Self.organizationPlanSupportsAllowances(plan.name) {
             let repositories = Self.repositoryNames(in: usage)
-            do {
-                visibility = try await repositoryVisibility(
-                    repositories: repositories,
-                    owner: owner,
-                    accessToken: credentials.accessToken,
-                    cacheNamespace: Self.repositoryVisibilityCacheNamespace(
-                        scope: .organization,
-                        owner: owner,
-                        configurationID: configuration.id,
-                        accessToken: credentials.accessToken
-                    )
-                )
-            } catch {
-                guard Self.canPreserveOrganizationUsage(afterVisibilityFailure: error) else { throw error }
-                visibility = RepositoryVisibilityResult(
-                    values: [:],
-                    hiddenRepositoryCount: 0,
-                    omittedRepositoryCount: 0,
-                    failureMessage: "GitHub could not classify organization repository visibility, so Actions "
-                        + "allowances are unavailable. \(error.localizedDescription)"
-                )
-            }
+            visibility = try await billingPreservingRepositoryVisibility(
+                repositories: repositories,
+                owner: owner,
+                scope: .organization,
+                configurationID: configuration.id,
+                accessToken: credentials.accessToken
+            )
         } else {
             visibility = RepositoryVisibilityResult(values: [:], hiddenRepositoryCount: 0, omittedRepositoryCount: 0)
         }
@@ -415,7 +396,38 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         ["free", "team"].contains(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
     }
 
-    private static func canPreserveOrganizationUsage(afterVisibilityFailure error: Error) -> Bool {
+    private func billingPreservingRepositoryVisibility(
+        repositories: Set<String>,
+        owner: String,
+        scope: GitHubBillingAccountScope,
+        configurationID: String,
+        accessToken: String
+    ) async throws -> RepositoryVisibilityResult {
+        do {
+            return try await repositoryVisibility(
+                repositories: repositories,
+                owner: owner,
+                accessToken: accessToken,
+                cacheNamespace: Self.repositoryVisibilityCacheNamespace(
+                    scope: scope,
+                    owner: owner,
+                    configurationID: configurationID,
+                    accessToken: accessToken
+                )
+            )
+        } catch {
+            guard Self.canPreserveBillingUsage(afterVisibilityFailure: error) else { throw error }
+            return RepositoryVisibilityResult(
+                values: [:],
+                hiddenRepositoryCount: 0,
+                omittedRepositoryCount: 0,
+                failureMessage: "GitHub could not classify repository visibility, so Actions allowances are "
+                    + "unavailable. \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private static func canPreserveBillingUsage(afterVisibilityFailure error: Error) -> Bool {
         guard case let GitHubBillingAPIError.httpStatus(status, _, _) = error else { return true }
         return status != 401
     }

@@ -1516,10 +1516,7 @@ enum GitHubBillingFixtureRunner {
             case 429: "rate limit"
             default: "temporarily unavailable"
             }
-            try check(
-                result.failureMessage?.localizedCaseInsensitiveContains(expected) == true,
-                "Repository metadata HTTP \(status) did not produce its distinct safe message"
-            )
+            if status == 401 { try check(result.failureMessage?.localizedCaseInsensitiveContains(expected) == true, "Repository metadata HTTP 401 must still require sign-in") } else { try check(result.failureMessage == nil && result.usageMessages.contains { $0.localizedCaseInsensitiveContains(expected) } && result.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil, "Repository metadata HTTP \(status) must preserve personal billing and isolate Actions allowances") }
         }
 
         FixtureURLProtocol.setHandler { request in
