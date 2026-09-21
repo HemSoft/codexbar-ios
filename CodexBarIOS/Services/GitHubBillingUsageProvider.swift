@@ -604,32 +604,40 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         owner: String,
         accessToken: String
     ) async -> RepositoryVisibilityLookupBatch {
-        await withTaskGroup(of: RepositoryVisibilityLookupOutcome.self) { group in
+        let outcomes = await withTaskGroup(of: RepositoryVisibilityLookupOutcome.self) { group in
             for repository in repositories {
                 group.addTask { [self] in
-                    do {
-                        return .success(try await repositoryVisibilityLookup(
-                            repository: repository,
-                            owner: owner,
-                            accessToken: accessToken
-                        ))
-                    } catch let error as GitHubBillingAPIError {
-                        return .failure(error)
-                    } catch {
-                        return .failure(.invalidResponse)
-                    }
+                    await repositoryVisibilityLookupOutcome(
+                        repository: repository,
+                        owner: owner,
+                        accessToken: accessToken
+                    )
                 }
             }
-            var batch = RepositoryVisibilityLookupBatch()
+            var outcomes: [RepositoryVisibilityLookupOutcome] = []
             for await outcome in group {
-                switch outcome {
-                case .success(let lookup):
-                    batch.lookups.append(lookup)
-                case .failure(let error):
-                    batch.failures.append(error)
-                }
+                outcomes.append(outcome)
             }
-            return batch
+            return outcomes
+        }
+        return RepositoryVisibilityLookupBatch(outcomes: outcomes)
+    }
+
+    private func repositoryVisibilityLookupOutcome(
+        repository: String,
+        owner: String,
+        accessToken: String
+    ) async -> RepositoryVisibilityLookupOutcome {
+        do {
+            return .success(try await repositoryVisibilityLookup(
+                repository: repository,
+                owner: owner,
+                accessToken: accessToken
+            ))
+        } catch let error as GitHubBillingAPIError {
+            return .failure(error)
+        } catch {
+            return .failure(.invalidResponse)
         }
     }
 
@@ -1027,6 +1035,17 @@ private enum RepositoryVisibilityLookupOutcome: Sendable {
 private struct RepositoryVisibilityLookupBatch: Sendable {
     var lookups: [RepositoryVisibilityLookup] = []
     var failures: [GitHubBillingAPIError] = []
+
+    init(outcomes: [RepositoryVisibilityLookupOutcome]) {
+        for outcome in outcomes {
+            switch outcome {
+            case .success(let lookup):
+                lookups.append(lookup)
+            case .failure(let error):
+                failures.append(error)
+            }
+        }
+    }
 }
 
 private struct RepositoryVisibilityResult: Sendable {
