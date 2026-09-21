@@ -1967,12 +1967,14 @@ private enum GitHubBillingReviewFixtures {
             case "/orgs/Example-Engineering":
                 (status, body) = (200, #"{"plan":{"name":"team"}}"#)
             case "/organizations/Example-Engineering/settings/billing/usage/summary":
-                (status, body) = (200, #"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1,"grossAmount":0.006,"discountQuantity":1,"discountAmount":0.006,"netQuantity":0,"netAmount":0}]}"#)
+                (status, body) = (200, #"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1,"grossAmount":0.006,"discountQuantity":1,"discountAmount":0.006,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.000008,"grossQuantity":72,"grossAmount":0.000576,"discountQuantity":72,"discountAmount":0.000576,"netQuantity":0,"netAmount":0}]}"#)
             case "/organizations/Example-Engineering/settings/billing/usage":
-                (status, body) = (200, #"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.006,"discountAmount":0.006,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/new-private"}]}"#)
+                (status, body) = (200, #"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.006,"discountAmount":0.006,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/minutes-private"},{"product":"Actions","sku":"actions_storage","quantity":72,"unitType":"GB-hours","pricePerUnit":0.000008,"grossAmount":0.000576,"discountAmount":0.000576,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/storage-private"}]}"#)
             case "/organizations/Example-Engineering/settings/billing/budgets":
                 (status, body) = (200, #"{"budgets":[],"has_next_page":false}"#)
-            case "/repos/example/new-private":
+            case "/repos/example/minutes-private":
+                (status, body) = (200, #"{"private":true}"#)
+            case "/repos/example/storage-private":
                 (status, body) = (500, "{}")
             default:
                 (status, body) = (404, "{}")
@@ -1981,9 +1983,11 @@ private enum GitHubBillingReviewFixtures {
         }
         let result = try await provider.fetchUsage(for: organization)
         try check(result.failureMessage == nil, "Repository metadata failures must preserve organization billing")
-        try check(result.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil
+        try check(result.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 1,
+            "A failed storage lookup must preserve successfully classified Actions minutes")
+        try check(result.unavailableUsageMetrics["githubBilling.actions-storage"] != nil
             && result.usageMessages.contains { $0.contains("repository visibility") },
-            "Repository metadata failures must isolate Actions allowances with an explanation")
+            "Repository metadata failures must isolate only affected Actions allowances")
     }
 
     private static func data(_ value: String) -> Data { Data(value.utf8) }

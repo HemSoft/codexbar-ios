@@ -574,18 +574,25 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         Self.mergeRepositoryVisibility(cached.lookups, into: &result)
         for batchStart in stride(from: 0, to: cached.missing.count, by: 8) {
             let batchEnd = min(batchStart + 8, cached.missing.count)
-            let lookups = try await repositoryVisibilityLookups(
+            let batch = await repositoryVisibilityLookups(
                 repositories: cached.missing[batchStart..<batchEnd],
                 owner: owner,
                 accessToken: accessToken
             )
+            if let authorizationFailure = batch.failures.first(where: \.isAuthorizationFailure) {
+                throw authorizationFailure
+            }
             await repositoryVisibilityCache.store(
-                lookups,
+                batch.lookups,
                 namespace: cacheNamespace,
                 fetchedAt: now(),
                 duration: repositoryVisibilityCacheDuration
             )
-            Self.mergeRepositoryVisibility(lookups, into: &result)
+            Self.mergeRepositoryVisibility(batch.lookups, into: &result)
+            if result.failureMessage == nil, let failure = batch.failures.first {
+                result.failureMessage = "GitHub could not classify some repository visibility, so affected Actions "
+                    + "allowances are unavailable. \(failure.localizedDescription)"
+            }
         }
         return result
     }
@@ -594,22 +601,33 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         repositories: ArraySlice<String>,
         owner: String,
         accessToken: String
-    ) async throws -> [RepositoryVisibilityLookup] {
-        try await withThrowingTaskGroup(of: RepositoryVisibilityLookup.self) { group in
+    ) async -> RepositoryVisibilityLookupBatch {
+        await withTaskGroup(of: RepositoryVisibilityLookupOutcome.self) { group in
             for repository in repositories {
                 group.addTask { [self] in
-                    try await repositoryVisibilityLookup(
-                        repository: repository,
-                        owner: owner,
-                        accessToken: accessToken
-                    )
+                    do {
+                        return .success(try await repositoryVisibilityLookup(
+                            repository: repository,
+                            owner: owner,
+                            accessToken: accessToken
+                        ))
+                    } catch let error as GitHubBillingAPIError {
+                        return .failure(error)
+                    } catch {
+                        return .failure(.invalidResponse)
+                    }
                 }
             }
-            var results: [RepositoryVisibilityLookup] = []
-            for try await lookup in group {
-                results.append(lookup)
+            var batch = RepositoryVisibilityLookupBatch()
+            for await outcome in group {
+                switch outcome {
+                case .success(let lookup):
+                    batch.lookups.append(lookup)
+                case .failure(let error):
+                    batch.failures.append(error)
+                }
             }
-            return results
+            return batch
         }
     }
 
@@ -637,7 +655,9 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 accessToken: accessToken
             )
             let data = try await responseData(for: request)
-            let metadata = try JSONDecoder().decode(RepositoryMetadata.self, from: data)
+            guard let metadata = try? JSONDecoder().decode(RepositoryMetadata.self, from: data) else {
+                throw GitHubBillingAPIError.invalidResponse
+            }
             return RepositoryVisibilityLookup(
                 repository: repository,
                 isPrivate: metadata.isPrivate,
@@ -997,6 +1017,16 @@ private struct RepositoryVisibilityLookup: Sendable {
     let isHidden: Bool
 }
 
+private enum RepositoryVisibilityLookupOutcome: Sendable {
+    case success(RepositoryVisibilityLookup)
+    case failure(GitHubBillingAPIError)
+}
+
+private struct RepositoryVisibilityLookupBatch: Sendable {
+    var lookups: [RepositoryVisibilityLookup] = []
+    var failures: [GitHubBillingAPIError] = []
+}
+
 private struct RepositoryVisibilityResult: Sendable {
     var values: [String: Bool]
     var hiddenRepositoryCount: Int
@@ -1113,10 +1143,15 @@ private struct GitHubBillingRequestDiagnostic: Sendable {
     }
 }
 
-private enum GitHubBillingAPIError: LocalizedError {
+private enum GitHubBillingAPIError: LocalizedError, Sendable {
     case invalidRequest
     case invalidResponse
     case httpStatus(Int, Bool, GitHubBillingRequestDiagnostic)
+
+    var isAuthorizationFailure: Bool {
+        if case .httpStatus(401, _, _) = self { return true }
+        return false
+    }
 
     var errorDescription: String? {
         switch self {
