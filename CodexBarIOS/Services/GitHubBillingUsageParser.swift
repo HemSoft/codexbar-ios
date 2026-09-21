@@ -2295,13 +2295,17 @@ private enum ActionsRunnerAllowance {
     case unknown
 }
 
-private enum GitHubActionsRunnerCatalog {
-    static func allowance(for sku: String?) -> ActionsRunnerAllowance {
+enum GitHubActionsRunnerCatalog {
+    fileprivate static func allowance(for sku: String?) -> ActionsRunnerAllowance {
         let normalizedSKU = sku?.normalized ?? ""
         if standardRates[normalizedSKU] != nil { return .includedStandard }
         if paidLargerSKUs.contains(normalizedSKU) { return .excludedPaidLarger }
         if normalizedSKU.contains("selfhosted") { return .excludedSelfHosted }
         return .unknown
+    }
+
+    static func isIncludedStandard(sku: String?) -> Bool {
+        standardRates[sku?.normalized ?? ""] != nil
     }
 
     static func standardRate(for sku: String?) -> Decimal? {

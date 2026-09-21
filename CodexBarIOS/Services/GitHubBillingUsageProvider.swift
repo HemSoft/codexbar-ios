@@ -664,12 +664,9 @@ public final class GitHubBillingUsageProvider: UsageProvider {
 
     private static func isPotentialActionsMinuteItem(_ item: [String: Any]) -> Bool {
         let product = (item["product"] as? String)?.lowercased() ?? ""
-        guard product.isEmpty || product.contains("actions") else { return false }
-        let sku = (item["sku"] as? String)?.lowercased() ?? ""
-        guard !sku.contains("storage"), !sku.contains("cache") else { return false }
-        if sku.hasPrefix("actions") { return true }
         let unit = (item["unitType"] as? String)?.lowercased() ?? ""
-        return product.contains("actions") && unit.contains("minute")
+        guard product.contains("actions"), unit.contains("minute") else { return false }
+        return GitHubActionsRunnerCatalog.isIncludedStandard(sku: item["sku"] as? String)
     }
 
     private func makeRequest(

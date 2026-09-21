@@ -1602,10 +1602,10 @@ enum GitHubBillingFixtureRunner {
             }
         }
         let actionsOnlyMetadata = try await provider.fetchUsage(for: personal)
-        try check(actionsMetadataCounter.value == 1, "Only Actions-minute repositories should need visibility metadata")
+        try check(actionsMetadataCounter.value == 1, "Only included Actions runners should need visibility metadata")
         try check(
             actionsOnlyMetadata.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 1,
-            "Unrelated product repositories must not consume the Actions metadata lookup limit"
+            "Custom-image repositories must not consume the Actions metadata lookup limit"
         )
     }
 
@@ -1802,15 +1802,15 @@ enum GitHubBillingFixtureRunner {
         var items: [[String: Any]] = (0..<unrelatedCount).map { index in
             [
                 "date": "2026-09-01",
-                "product": "Copilot",
-                "sku": "copilot_premium_requests",
+                "product": "Actions",
+                "sku": "actions_custom_image",
                 "quantity": 1,
-                "unitType": "requests",
-                "pricePerUnit": 0.01,
-                "repositoryName": "octocat/package-\(index)",
-                "grossAmount": 0.01,
-                "discountAmount": 0,
-                "netAmount": 0.01,
+                "unitType": "GB-hours",
+                "pricePerUnit": 0.0008,
+                "repositoryName": "octocat/custom-image-\(index)",
+                "grossAmount": 0.0008,
+                "discountAmount": 0.0008,
+                "netAmount": 0,
             ]
         }
         items.append([
