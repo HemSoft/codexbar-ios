@@ -235,7 +235,7 @@ final class UITestFixtures {
                     subtitle: "GitHub personal billing",
                     bars: [
                         UsageBar(
-                            stableKey: "actions-private-minutes",
+                            stableKey: "actions-allowance-minutes",
                             label: "Actions minutes",
                             used: 0,
                             limit: 2_000,
@@ -294,7 +294,7 @@ final class UITestFixtures {
                     subtitle: "GitHub personal billing",
                     bars: [
                         UsageBar(
-                            stableKey: "actions-private-minutes",
+                            stableKey: "actions-allowance-minutes",
                             label: "Actions minutes",
                             used: 720,
                             limit: 2_000,
@@ -385,7 +385,7 @@ final class UITestFixtures {
                 subtitle: "GitHub personal billing",
                 bars: [
                     UsageBar(
-                        stableKey: "actions-private-minutes",
+                        stableKey: "actions-allowance-minutes",
                         label: "Actions minutes",
                         used: 1_600,
                         limit: 3_000,
@@ -520,7 +520,7 @@ final class UITestFixtures {
             subtitle: "GitHub personal billing",
             bars: [
                 UsageBar(
-                    stableKey: "actions-private-minutes",
+                    stableKey: "actions-allowance-minutes",
                     label: "Actions minutes",
                     used: 2_500,
                     limit: 2_000,
@@ -597,7 +597,7 @@ final class UITestFixtures {
             subtitle: "GitHub organization billing",
             bars: [
                 UsageBar(
-                    stableKey: "actions-private-minutes",
+                    stableKey: "actions-allowance-minutes",
                     label: "Actions minutes",
                     used: 1_500,
                     limit: 3_000,

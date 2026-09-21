@@ -311,7 +311,7 @@ public enum GitHubBillingUsageParser {
         reason: String
     ) -> [String: String] {
         var keys = [
-            "githubBilling.actions-private-minutes",
+            "githubBilling.actions-allowance-minutes",
             "githubBilling.actions-storage",
             "githubBilling.packages-storage",
             "githubBilling.packages-data-transfer",
@@ -332,7 +332,7 @@ public enum GitHubBillingUsageParser {
         period: BillingPeriod,
         output: inout AllowanceOutput
     ) {
-        let metricID = "githubBilling.actions-private-minutes"
+        let metricID = "githubBilling.actions-allowance-minutes"
         let summaryCandidates = summaryItems.filter(\.isPotentialActionsMinutes)
         let candidates = usageItems.filter(\.isPotentialActionsMinutes)
         if let message = actionsMinutesEvidenceFailure(
@@ -367,7 +367,7 @@ public enum GitHubBillingUsageParser {
             return
         }
         output.bars.append(allowanceBar(
-            stableKey: "actions-private-minutes",
+            stableKey: "actions-allowance-minutes",
             label: "Actions minutes",
             used: used,
             limit: planLimit,
@@ -484,12 +484,12 @@ public enum GitHubBillingUsageParser {
             item.isPotentialActionsMinutes && item.grossQuantity.map { $0 > 0 } == true
         }
         if summaryReportsUsage {
-            output.unavailable["githubBilling.actions-private-minutes"] =
+            output.unavailable["githubBilling.actions-allowance-minutes"] =
                 "GitHub's summary reported Actions minutes without the repository detail required to verify the allowance."
             return
         }
         output.bars.append(allowanceBar(
-            stableKey: "actions-private-minutes",
+            stableKey: "actions-allowance-minutes",
             label: "Actions minutes",
             used: 0,
             limit: Decimal(plan.actionsMinutes),
@@ -869,7 +869,7 @@ public enum GitHubBillingUsageParser {
 
     private static func allowanceUnit(for stableKey: String?) -> String {
         let unitsByMetric = [
-            "actions-private-minutes": "minutes",
+            "actions-allowance-minutes": "minutes",
             "actions-storage": "GB",
             "packages-storage": "GB",
             "lfs-storage": "GB-hours",
@@ -1410,7 +1410,7 @@ public enum GitHubBillingUsageParser {
             IncludedUsageDefinition(
                 id: "actions.included.minutes",
                 label: "Included usage · Minutes",
-                stableKey: "actions-private-minutes",
+                stableKey: "actions-allowance-minutes",
                 unit: "minutes",
                 scopeNote: "private standard runners"
             ),

@@ -1426,7 +1426,7 @@ struct ProviderUsageCard: View {
     }
 
     private static let githubAllowanceUnits = [
-        "actions-private-minutes": "minutes",
+        "actions-allowance-minutes": "minutes",
         "actions-storage": "GB",
         "packages-storage": "GB",
         "lfs-storage": "GB-hours",

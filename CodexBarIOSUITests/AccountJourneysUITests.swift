@@ -43,7 +43,7 @@ final class AccountJourneysUITests: XCTestCase {
         let app = launch(scenario: "github-billing-personal")
         let spentMetric = app.buttons["dashboard-metric-githubBilling.monetary.spent.usd"]
         XCTAssertTrue(spentMetric.waitForExistence(timeout: 10), app.debugDescription)
-        let minutes = app.buttons["dashboard-metric-githubBilling.actions-private-minutes"]
+        let minutes = app.buttons["dashboard-metric-githubBilling.actions-allowance-minutes"]
         XCTAssertTrue(minutes.label.contains("1,600 minutes used · 3,000 included · 1,400 remaining"), minutes.label)
         XCTAssertTrue(minutes.label.contains("Resets "), minutes.label)
         let storage = app.buttons["dashboard-metric-githubBilling.actions-storage"]
@@ -153,7 +153,7 @@ final class AccountJourneysUITests: XCTestCase {
     ) throws {
         let app = launch(scenario: scenario)
         defer { app.terminate() }
-        let allowance = app.buttons["dashboard-metric-githubBilling.actions-private-minutes"]
+        let allowance = app.buttons["dashboard-metric-githubBilling.actions-allowance-minutes"]
         XCTAssertTrue(allowance.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(allowance.label.contains(expectedPercentage), allowance.label)
         XCTAssertTrue(allowance.label.contains(expectedUsageSummary), allowance.label)

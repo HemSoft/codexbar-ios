@@ -115,7 +115,7 @@ public extension DemoUsageProvider {
                 ),
                 bars: [
                     UsageBar(
-                        stableKey: "actions-private-minutes",
+                        stableKey: "actions-allowance-minutes",
                         label: "Actions minutes",
                         used: 1_600,
                         limit: 3_000,

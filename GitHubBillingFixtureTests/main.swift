@@ -146,7 +146,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Free personal fixture did not parse")
 
-        let actionBar = try require(free.bars.first { $0.stableKey == "actions-private-minutes" }, "Actions minutes missing")
+        let actionBar = try require(free.bars.first { $0.stableKey == "actions-allowance-minutes" }, "Actions minutes missing")
         try check(actionBar.used == 320, "Mixed standard runners must use GitHub's allowance-minute price normalization")
         try check(actionBar.limit == 2_000, "Free accounts must receive 2,000 included Actions minutes")
         try check(
@@ -207,7 +207,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Pro personal fixture did not parse")
         try check(
-            pro.bars.first { $0.stableKey == "actions-private-minutes" }?.limit == 3_000,
+            pro.bars.first { $0.stableKey == "actions-allowance-minutes" }?.limit == 3_000,
             "Pro accounts must receive 3,000 included Actions minutes"
         )
         try check(
@@ -230,7 +230,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Paid larger runner fixture did not parse")
         try check(
-            paidLargerRunner.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 0,
+            paidLargerRunner.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 0,
             "Known paid larger runners must be excluded from standard included minutes"
         )
 
@@ -247,11 +247,11 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Unknown runner fixture did not parse")
         try check(
-            unknownRunner.bars.contains { $0.stableKey == "actions-private-minutes" } == false,
+            unknownRunner.bars.contains { $0.stableKey == "actions-allowance-minutes" } == false,
             "Unknown runners must not be guessed as standard included minutes"
         )
         try check(
-            unknownRunner.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            unknownRunner.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "Unknown runners need an unavailable explanation"
         )
         try check(
@@ -272,7 +272,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Partial Actions fixture did not parse")
         try check(
-            partialActions.unavailableUsageMetrics["githubBilling.actions-private-minutes"]?
+            partialActions.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"]?
                 .contains("did not reconcile") == true,
             "Partial Actions detail must not produce an understated complete percentage"
         )
@@ -340,11 +340,11 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Changed Actions product fixture did not parse")
         try check(
-            renamedProduct.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            renamedProduct.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "A known Actions SKU with a changed product contract must fail closed"
         )
         try check(
-            renamedProduct.bars.contains { $0.stableKey == "actions-private-minutes" } == false,
+            renamedProduct.bars.contains { $0.stableKey == "actions-allowance-minutes" } == false,
             "A changed Actions product contract must not silently understate allowance usage"
         )
     }
@@ -364,7 +364,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Self-hosted runner fixture did not parse")
         try check(
-            selfHosted.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 0,
+            selfHosted.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 0,
             "Self-hosted runners must not consume the hosted standard-runner allowance"
         )
 
@@ -379,7 +379,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Unsupported runner unit fixture did not parse")
         try check(
-            unsupportedUnit.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            unsupportedUnit.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "A changed Actions unit contract must fail closed instead of presenting zero usage"
         )
 
@@ -394,7 +394,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Changed runner price fixture did not parse")
         try check(
-            changedPrice.unavailableUsageMetrics["githubBilling.actions-private-minutes"]?
+            changedPrice.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"]?
                 .contains("price outside") == true,
             "A changed standard-runner price must fail closed"
         )
@@ -408,7 +408,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Conflicting Actions discount fixture did not parse")
         try check(
-            conflictingDiscount.unavailableUsageMetrics["githubBilling.actions-private-minutes"]?
+            conflictingDiscount.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"]?
                 .contains("before the included allowance was exhausted") == true,
             "Billable standard minutes below the included limit must fail closed"
         )
@@ -446,7 +446,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fixtureDate("2026-09-20T12:00:00Z")
         ), "GitHub included-usage fixture did not parse")
         let minutes = try require(
-            result.bars.first { $0.stableKey == "actions-private-minutes" },
+            result.bars.first { $0.stableKey == "actions-allowance-minutes" },
             "GitHub Actions minutes must be shown"
         )
         try check(
@@ -504,7 +504,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Complete Free allowance fixture did not parse")
         let expected: [(String, Double, Double)] = [
-            ("actions-private-minutes", 200, 2_000),
+            ("actions-allowance-minutes", 200, 2_000),
             ("actions-storage", 100.0 / 720.0, 0.5),
             ("packages-data-transfer", 0, 1),
             ("lfs-storage", 48, 7_200),
@@ -589,7 +589,7 @@ enum GitHubBillingFixtureRunner {
         ), "Stale billing-period fixture did not parse")
         try check(
             stalePeriod.bars.isEmpty
-                && stalePeriod.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+                && stalePeriod.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "A stale billing period must fail every allowance closed"
         )
 
@@ -604,7 +604,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Actions overage fixture did not parse")
         let actionsOverage = try require(
-            overage.bars.first { $0.stableKey == "actions-private-minutes" },
+            overage.bars.first { $0.stableKey == "actions-allowance-minutes" },
             "Actions overage bar missing"
         )
         try check(actionsOverage.used > actionsOverage.limit, "Actions usage above the plan allowance must not be clamped")
@@ -620,7 +620,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Organization Free allowance fixture did not parse")
         try check(
-            organizationFree.bars.first { $0.stableKey == "actions-private-minutes" }?.limit == 2_000,
+            organizationFree.bars.first { $0.stableKey == "actions-allowance-minutes" }?.limit == 2_000,
             "Organization Free must use the organization plan allowance"
         )
         try check(
@@ -638,7 +638,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Enterprise pooling fixture did not parse")
         try check(
-            enterprise.bars.contains { $0.stableKey == "actions-private-minutes" } == false,
+            enterprise.bars.contains { $0.stableKey == "actions-allowance-minutes" } == false,
             "An enterprise pool must not be assigned in full to an organization"
         )
         try check(
@@ -986,7 +986,7 @@ enum GitHubBillingFixtureRunner {
             "Organization cards must not show the personal-budget API limitation"
         )
         let organizationActions = try require(
-            result.bars.first { $0.stableKey == "actions-private-minutes" },
+            result.bars.first { $0.stableKey == "actions-allowance-minutes" },
             "A Team organization must expose its verified Actions allowance"
         )
         try check(organizationActions.limit == 3_000, "A Team organization must receive 3,000 included Actions minutes")
@@ -1141,7 +1141,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: Date()
         ), "An incomplete Actions row should remain a readable response")
         try check(
-            missingActionsProduct.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            missingActionsProduct.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "An Actions minute row missing its product must make the allowance unavailable"
         )
 
@@ -1232,7 +1232,7 @@ enum GitHubBillingFixtureRunner {
         )
         try check(
             negativeOrganizationSummary?.bars.contains { $0.stableKey?.hasPrefix("usage-") == true } == false
-                && negativeOrganizationSummary?.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+                && negativeOrganizationSummary?.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "Negative organization summary quantities must isolate the allowance without creating a usage bar"
         )
 
@@ -1244,7 +1244,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: Date()
         )
         try check(
-            incompleteOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            incompleteOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "An incomplete organization detail row must isolate the affected allowance"
         )
 
@@ -1256,7 +1256,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: Date()
         )
         try check(
-            negativeOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            negativeOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "Negative organization detail values must isolate the affected allowance"
         )
         try check(
@@ -1468,7 +1468,7 @@ enum GitHubBillingFixtureRunner {
         )
         _ = try await provider.fetchUsage(for: personal); let cachedResult = try await provider.fetchUsage(for: personal)
         try check(metadataCounter.value == 1, "Routine refreshes must reuse repository visibility")
-        try check(cachedResult.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 10, "Cached visibility must bind to the current repository-name casing")
+        try check(cachedResult.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 10, "Cached visibility must bind to the current repository-name casing")
 
         let replacementCredentials = GitHubBillingCredentials(
             accessToken: "replacement-fixture-token",
@@ -1485,7 +1485,7 @@ enum GitHubBillingFixtureRunner {
         let replacementResult = try await provider.fetchUsage(for: personal)
         try check(metadataCounter.value == 2, "A changed credential must fetch its own repository visibility")
         try check(
-            replacementResult.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 0,
+            replacementResult.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 0,
             "Repository visibility from another credential must not leak through the cache"
         )
     }
@@ -1516,7 +1516,7 @@ enum GitHubBillingFixtureRunner {
             case 429: "rate limit"
             default: "temporarily unavailable"
             }
-            if status == 401 { try check(result.failureMessage?.localizedCaseInsensitiveContains(expected) == true, "Repository metadata HTTP 401 must still require sign-in") } else { try check(result.failureMessage == nil && result.usageMessages.contains { $0.localizedCaseInsensitiveContains(expected) } && result.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil, "Repository metadata HTTP \(status) must preserve personal billing and isolate Actions allowances") }
+            if status == 401 { try check(result.failureMessage?.localizedCaseInsensitiveContains(expected) == true, "Repository metadata HTTP 401 must still require sign-in") } else { try check(result.failureMessage == nil && result.usageMessages.contains { $0.localizedCaseInsensitiveContains(expected) } && result.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil, "Repository metadata HTTP \(status) must preserve personal billing and isolate Actions allowances") }
         }
 
         FixtureURLProtocol.setHandler { request in
@@ -1540,7 +1540,7 @@ enum GitHubBillingFixtureRunner {
             "Hidden repository metadata needs a distinct explanation"
         )
         try check(
-            hiddenRepository.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            hiddenRepository.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "Hidden repository metadata must make private Actions classification unavailable"
         )
         try check(
@@ -1602,7 +1602,7 @@ enum GitHubBillingFixtureRunner {
         let actionsOnlyMetadata = try await provider.fetchUsage(for: personal)
         try check(actionsMetadataCounter.value == 1, "Only included Actions runners should need visibility metadata")
         try check(
-            actionsOnlyMetadata.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 1,
+            actionsOnlyMetadata.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 1,
             "Custom-image repositories must not consume the Actions metadata lookup limit"
         )
     }
@@ -1767,7 +1767,7 @@ enum GitHubBillingFixtureRunner {
         let result = try await provider.fetchUsage(for: organization)
         try check(result.failureMessage == nil, "A readable organization plan must not discard billing usage")
         try check(
-            result.bars.first { $0.stableKey == "actions-private-minutes" }?.limit == 3_000,
+            result.bars.first { $0.stableKey == "actions-allowance-minutes" }?.limit == 3_000,
             "The provider must retrieve the organization's Team allowance"
         )
         try check(
@@ -1929,7 +1929,7 @@ private enum GitHubBillingReviewFixtures {
             fetchedAt: Date()
         )
         try check(
-            customImageUsage?.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 10,
+            customImageUsage?.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 10,
             "Actions custom-image storage must not invalidate standard-runner minutes"
         )
 
@@ -1995,7 +1995,7 @@ private enum GitHubBillingReviewFixtures {
         }
         let result = try await provider.fetchUsage(for: organization)
         try check(result.failureMessage == nil, "Repository metadata failures must preserve organization billing")
-        try check(result.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 1,
+        try check(result.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 1,
             "A failed storage lookup must preserve successfully classified Actions minutes")
         try check(result.unavailableUsageMetrics["githubBilling.actions-storage"] != nil
             && result.usageMessages.contains { $0.contains("repository visibility") },
