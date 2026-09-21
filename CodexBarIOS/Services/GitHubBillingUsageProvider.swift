@@ -589,11 +589,12 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 duration: repositoryVisibilityCacheDuration
             )
             Self.mergeRepositoryVisibility(batch.lookups, into: &result)
-            if result.failureMessage == nil, let failure = batch.failures.first {
+            let rateLimitFailure = batch.failures.first(where: \.isRateLimitFailure)
+            if result.failureMessage == nil, let failure = rateLimitFailure ?? batch.failures.first {
                 result.failureMessage = "GitHub could not classify some repository visibility, so affected Actions "
                     + "allowances are unavailable. \(failure.localizedDescription)"
             }
-            if batch.failures.contains(where: \.isRateLimitFailure) { break }
+            if rateLimitFailure != nil { break }
         }
         return result
     }
