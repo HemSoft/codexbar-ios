@@ -1617,7 +1617,7 @@ enum GitHubBillingFixtureRunner {
     ) async throws {
         let organization = organizationConfiguration()
         try store.saveSecret(credential, account: ProviderConfigurationStore.keychainAccount(for: organization))
-        try await assertOrganizationPlanAllowance(provider: provider, organization: organization)
+        try await assertOrganizationPlanAllowance(provider: provider, organization: organization); try await GitHubBillingReviewFixtures.organizationVisibilityFailure(provider: provider, organization: organization)
         try await assertOrganizationPlanPermissionGuidance(provider: provider, organization: organization)
 
         FixtureURLProtocol.setHandler { request in response(request, status: 404, body: "{}") }
@@ -1956,6 +1956,37 @@ private enum GitHubBillingReviewFixtures {
                 && unclassifiedBudgetUsage?.usageMessages.contains { $0.contains("consumption cannot be calculated") } == true,
             "A budget must stay unavailable when scoped detail omits its product discriminator"
         )
+    }
+
+    static func organizationVisibilityFailure(
+        provider: GitHubBillingUsageProvider,
+        organization: ProviderAccountConfiguration
+    ) async throws {
+        FixtureURLProtocol.setHandler { request in
+            let path = request.url?.path
+            let body: String
+            let status: Int
+            switch path {
+            case "/orgs/Example-Engineering":
+                (status, body) = (200, #"{"plan":{"name":"team"}}"#)
+            case "/organizations/Example-Engineering/settings/billing/usage/summary":
+                (status, body) = (200, #"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1,"grossAmount":0.006,"discountQuantity":1,"discountAmount":0.006,"netQuantity":0,"netAmount":0}]}"#)
+            case "/organizations/Example-Engineering/settings/billing/usage":
+                (status, body) = (200, #"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.006,"discountAmount":0.006,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/new-private"}]}"#)
+            case "/organizations/Example-Engineering/settings/billing/budgets":
+                (status, body) = (200, #"{"budgets":[],"has_next_page":false}"#)
+            case "/repos/example/new-private":
+                (status, body) = (500, "{}")
+            default:
+                (status, body) = (404, "{}")
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, data(body))
+        }
+        let result = try await provider.fetchUsage(for: organization)
+        try check(result.failureMessage == nil, "Repository metadata failures must preserve organization billing")
+        try check(result.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil
+            && result.usageMessages.contains { $0.contains("repository visibility") },
+            "Repository metadata failures must isolate Actions allowances with an explanation")
     }
 
     private static func data(_ value: String) -> Data { Data(value.utf8) }

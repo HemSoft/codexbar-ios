@@ -358,17 +358,28 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let visibility: RepositoryVisibilityResult
         if Self.organizationPlanSupportsAllowances(plan.name) {
             let repositories = Self.repositoryNames(in: usage)
-            visibility = try await repositoryVisibility(
-                repositories: repositories,
-                owner: owner,
-                accessToken: credentials.accessToken,
-                cacheNamespace: Self.repositoryVisibilityCacheNamespace(
-                    scope: .organization,
+            do {
+                visibility = try await repositoryVisibility(
+                    repositories: repositories,
                     owner: owner,
-                    configurationID: configuration.id,
-                    accessToken: credentials.accessToken
+                    accessToken: credentials.accessToken,
+                    cacheNamespace: Self.repositoryVisibilityCacheNamespace(
+                        scope: .organization,
+                        owner: owner,
+                        configurationID: configuration.id,
+                        accessToken: credentials.accessToken
+                    )
                 )
-            )
+            } catch {
+                guard Self.canPreserveOrganizationUsage(afterVisibilityFailure: error) else { throw error }
+                visibility = RepositoryVisibilityResult(
+                    values: [:],
+                    hiddenRepositoryCount: 0,
+                    omittedRepositoryCount: 0,
+                    failureMessage: "GitHub could not classify organization repository visibility, so Actions "
+                        + "allowances are unavailable. \(error.localizedDescription)"
+                )
+            }
         } else {
             visibility = RepositoryVisibilityResult(values: [:], hiddenRepositoryCount: 0, omittedRepositoryCount: 0)
         }
@@ -402,6 +413,11 @@ public final class GitHubBillingUsageProvider: UsageProvider {
 
     private static func organizationPlanSupportsAllowances(_ name: String) -> Bool {
         ["free", "team"].contains(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+
+    private static func canPreserveOrganizationUsage(afterVisibilityFailure error: Error) -> Bool {
+        guard case let GitHubBillingAPIError.httpStatus(status, _, _) = error else { return true }
+        return status != 401
     }
 
     private func fetchOrganizationPlan(
@@ -973,8 +989,22 @@ private struct RepositoryVisibilityResult: Sendable {
     var values: [String: Bool]
     var hiddenRepositoryCount: Int
     let omittedRepositoryCount: Int
+    var failureMessage: String?
+
+    init(
+        values: [String: Bool],
+        hiddenRepositoryCount: Int,
+        omittedRepositoryCount: Int,
+        failureMessage: String? = nil
+    ) {
+        self.values = values
+        self.hiddenRepositoryCount = hiddenRepositoryCount
+        self.omittedRepositoryCount = omittedRepositoryCount
+        self.failureMessage = failureMessage
+    }
 
     var message: String? {
+        if let failureMessage { return failureMessage }
         var reasons: [String] = []
         if hiddenRepositoryCount > 0 {
             let noun = hiddenRepositoryCount == 1 ? "repository was" : "repositories were"
