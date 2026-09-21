@@ -82,21 +82,20 @@ Keychain credential; the integration never reads or replaces a Copilot token.
 
 Personal Free and Pro cards show monthly allowance progress from GitHub's
 [included-product table](https://docs.github.com/en/billing/reference/product-usage-included)
-for eligible Actions minutes, shared Actions and Packages storage, Packages data
-transfer, Git LFS storage and bandwidth, and Codespaces compute and storage. Organization
+for eligible Actions minutes, Actions storage, Packages data transfer, Git LFS
+storage and bandwidth, and Codespaces compute and storage. Organization
 Free and Team cards show the same account-scoped metrics except personal
 Codespaces allowances. CodexBar requires GitHub's returned billing month to
 contain the refresh time. Each verified metric states used, included, and
 remaining usage, shows zero usage as 0%, and preserves overage above 100%.
 Enterprise allowances stay unavailable because GitHub pools them above the
-organization scope. Personal Pro shared storage also stays unavailable while
-GitHub's current table lists different Actions and Packages storage amounts for
-one shared pool. The per-repository Actions cache allowance is not presented as
-an account-wide bar.
+organization scope. The per-repository Actions cache allowance is not presented
+as an account-wide bar.
 
 Actions progress includes private-repository standard GitHub-hosted runners.
-CodexBar sums GitHub's returned minute quantities without inventing operating-system
-multipliers. Returned unit prices must match GitHub's current
+CodexBar normalizes each runner's usage to GitHub's Linux allowance-minute rate,
+matching the Included usage figure in GitHub Billing. Returned unit prices must
+match GitHub's current
 [runner pricing table](https://docs.github.com/en/billing/reference/actions-runner-pricing)
 before those minutes are accepted. Known paid larger runners from GitHub's
 [SKU catalog](https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions),
@@ -106,9 +105,10 @@ pricing table exactly. Missing summary rows, hidden repository classifications,
 unknown units, and unknown SKUs make only the affected metric unavailable. A
 problem with one metric does not suppress
 other verified allowances. Codespaces compute converts returned machine hours
-with the documented core count in each `codespaces_compute_d*` SKU. Shared
-Actions and Packages storage is counted once. Actions storage includes only
-usage tied to repositories verified as private. GitHub Billing does not identify
+with the documented core count in each `codespaces_compute_d*` SKU. Actions
+storage converts GitHub's accrued GB-hours to the monthly GB figure shown in
+GitHub Billing and includes only usage tied to repositories verified as private.
+GitHub Billing does not identify
 package visibility or whether transfer came from a free Actions download, so a
 nonzero Packages storage or transfer quantity keeps that allowance unavailable;
 a verified zero quantity can still show 0%. Each allowance also requires

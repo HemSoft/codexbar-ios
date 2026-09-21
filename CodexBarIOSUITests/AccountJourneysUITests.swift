@@ -43,6 +43,12 @@ final class AccountJourneysUITests: XCTestCase {
         let app = launch(scenario: "github-billing-personal")
         let spentMetric = app.buttons["dashboard-metric-githubBilling.monetary.spent.usd"]
         XCTAssertTrue(spentMetric.waitForExistence(timeout: 10), app.debugDescription)
+        let minutes = app.buttons["dashboard-metric-githubBilling.actions-private-minutes"]
+        XCTAssertTrue(minutes.label.contains("1,600 minutes used · 3,000 included · 1,400 remaining"), minutes.label)
+        XCTAssertTrue(minutes.label.contains("Resets "), minutes.label)
+        let storage = app.buttons["dashboard-metric-githubBilling.actions-packages-storage"]
+        XCTAssertTrue(storage.label.contains("0.6 GB used · 2 included · 1.4 remaining"), storage.label)
+        XCTAssertTrue(storage.label.contains("Resets "), storage.label)
         let refresh = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Refresh usage")).firstMatch
         tap(refresh, in: app)
         XCTAssertTrue(refresh.wait(for: \.isEnabled, toEqual: true, timeout: 10))
@@ -74,16 +80,16 @@ final class AccountJourneysUITests: XCTestCase {
         keepBillingScreenshot("github-billing-product-summary", of: app)
 
         let includedMinutes = app.descendants(matching: .any).matching(NSPredicate(
-            format: "label BEGINSWITH %@", "Included usage · Minutes, 720 of 2,000 minutes used"
+            format: "label BEGINSWITH %@", "Included usage · Minutes, 1,600 of 3,000 minutes used"
         )).firstMatch
         reveal(includedMinutes, in: app)
-        XCTAssertTrue(includedMinutes.label.contains("1,280 minutes remaining"), includedMinutes.label)
+        XCTAssertTrue(includedMinutes.label.contains("1,400 minutes remaining"), includedMinutes.label)
 
         let includedStorage = app.descendants(matching: .any).matching(NSPredicate(
-            format: "label BEGINSWITH %@", "Included usage · Storage, 118 of 360 GB-hours used"
+            format: "label BEGINSWITH %@", "Included usage · Storage, 0.6 of 2 GB used"
         )).firstMatch
         reveal(includedStorage, in: app)
-        XCTAssertTrue(includedStorage.label.contains("242 GB-hours remaining"), includedStorage.label)
+        XCTAssertTrue(includedStorage.label.contains("1.4 GB remaining"), includedStorage.label)
 
         let currencyRow = app.descendants(matching: .any).matching(NSPredicate(
             format: "label BEGINSWITH %@", "Currency, USD. GitHub's billing API does not report a currency code"
@@ -102,7 +108,7 @@ final class AccountJourneysUITests: XCTestCase {
 
         // Actionable storage failure remains visible on the card without opening More Information.
         let warning = app.staticTexts.matching(NSPredicate(
-            format: "label BEGINSWITH %@", "GitHub returned Actions or Packages storage without a recognized storage SKU"
+            format: "label BEGINSWITH %@", "GitHub returned Actions storage without the recognized storage SKU"
         )).firstMatch
         reveal(warning, in: app)
         keepBillingScreenshot("github-billing-actionable-warning", of: app)
@@ -111,8 +117,8 @@ final class AccountJourneysUITests: XCTestCase {
     func testGitHubBillingAllowanceStates() throws {
         try assertGitHubBillingScenario(
             "github-billing-personal",
-            expectedPercentage: "36%",
-            expectedUsageSummary: "720 minutes used · 2,000 included · 1,280 remaining",
+            expectedPercentage: "53%",
+            expectedUsageSummary: "1,600 minutes used · 3,000 included · 1,400 remaining",
             screenshotName: "github-billing-personal-allowance"
         )
         try assertGitHubBillingScenario(

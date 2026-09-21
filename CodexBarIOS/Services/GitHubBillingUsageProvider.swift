@@ -306,6 +306,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let repositories = Self.repositoryNames(in: usage)
         let visibility = try await repositoryVisibility(
             repositories: repositories,
+            owner: owner,
             accessToken: credentials.accessToken,
             cacheNamespace: Self.repositoryVisibilityCacheNamespace(
                 scope: .personal,
@@ -357,6 +358,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
         let repositories = Self.repositoryNames(in: usage)
         let visibility = try await repositoryVisibility(
             repositories: repositories,
+            owner: owner,
             accessToken: credentials.accessToken,
             cacheNamespace: Self.repositoryVisibilityCacheNamespace(
                 scope: .organization,
@@ -517,6 +519,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
 
     private func repositoryVisibility(
         repositories: Set<String>,
+        owner: String,
         accessToken: String,
         cacheNamespace: String
     ) async throws -> RepositoryVisibilityResult {
@@ -536,6 +539,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             let batchEnd = min(batchStart + 8, cached.missing.count)
             let lookups = try await repositoryVisibilityLookups(
                 repositories: cached.missing[batchStart..<batchEnd],
+                owner: owner,
                 accessToken: accessToken
             )
             await repositoryVisibilityCache.store(
@@ -551,6 +555,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
 
     private func repositoryVisibilityLookups(
         repositories: ArraySlice<String>,
+        owner: String,
         accessToken: String
     ) async throws -> [RepositoryVisibilityLookup] {
         try await withThrowingTaskGroup(of: RepositoryVisibilityLookup.self) { group in
@@ -558,6 +563,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 group.addTask { [self] in
                     try await repositoryVisibilityLookup(
                         repository: repository,
+                        owner: owner,
                         accessToken: accessToken
                     )
                 }
@@ -572,15 +578,25 @@ public final class GitHubBillingUsageProvider: UsageProvider {
 
     private func repositoryVisibilityLookup(
         repository: String,
+        owner: String,
         accessToken: String
     ) async throws -> RepositoryVisibilityLookup {
         let components = repository.split(separator: "/", omittingEmptySubsequences: true)
-        guard components.count == 2 else {
+        let repositoryOwner: String
+        let repositoryName: String
+        switch components.count {
+        case 1:
+            repositoryOwner = owner
+            repositoryName = String(components[0])
+        case 2:
+            repositoryOwner = String(components[0])
+            repositoryName = String(components[1])
+        default:
             return RepositoryVisibilityLookup(repository: repository, isPrivate: nil, isHidden: false)
         }
         do {
             let request = try makeRequest(
-                pathComponents: ["repos", String(components[0]), String(components[1])],
+                pathComponents: ["repos", repositoryOwner, repositoryName],
                 accessToken: accessToken
             )
             let data = try await responseData(for: request)

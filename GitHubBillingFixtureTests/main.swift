@@ -8,6 +8,7 @@ enum GitHubBillingFixtureRunner {
         try await personalAuthorizationScopeRegression()
         try await personalPermissionDiagnostics()
         try personalFreeAndProAllowances()
+        try githubIncludedUsagePresentationContract()
         try planAllowanceContract()
         try packagesVisibilityEvidenceContract()
         try amountAndProductSummaryContract()
@@ -17,7 +18,7 @@ enum GitHubBillingFixtureRunner {
         try await accountIsolationFixtures()
         try await providerRequestAndFailureFixtures()
         print("GitHub Billing fixture suite passed: personal and organization allowances, zero usage, overage, "
-            + "repository classification, current-price runner validation, shared storage, Packages, Codespaces, "
+            + "repository classification, price-normalized runner validation, Actions storage, Packages, Codespaces, "
             + "Git LFS, quantity discounts, budgets, pagination, currency evidence, product summaries, and failures.")
     }
 
@@ -145,22 +146,25 @@ enum GitHubBillingFixtureRunner {
         ), "Free personal fixture did not parse")
 
         let actionBar = try require(free.bars.first { $0.stableKey == "actions-private-minutes" }, "Actions minutes missing")
-        try check(actionBar.used == 190, "Mixed standard runners must use GitHub's returned minute quantities")
+        try check(actionBar.used == 320, "Mixed standard runners must use GitHub's allowance-minute price normalization")
         try check(actionBar.limit == 2_000, "Free accounts must receive 2,000 included Actions minutes")
         try check(
             free.cardInformationSections.contains { section in
                 section.items.contains { item in
-                    item.label == "Actions plan allowance"
-                        && item.detail.contains("190 of 2,000 minutes used")
-                        && item.detail.contains("1,810 minutes remaining")
+                    item.label == "Actions minutes"
+                        && item.detail.contains("320 of 2,000 minutes used")
+                        && item.detail.contains("1,680 minutes remaining")
                 }
             },
             "Personal allowance details must show used, included, and remaining minutes"
         )
+        let freeActionsStorage = try require(
+            free.bars.first { $0.stableKey == "actions-packages-storage" },
+            "Actions storage must remain independent from Packages visibility"
+        )
         try check(
-            free.unavailableUsageMetrics["githubBilling.actions-packages-storage"]?
-                .contains("does not identify package visibility") == true,
-            "Nonzero Packages storage must not be inferred from repository visibility"
+            abs(freeActionsStorage.used - (100.0 / 720.0)) < 0.000_001 && freeActionsStorage.limit == 0.5,
+            "Free Actions storage must match GitHub's monthly GB presentation"
         )
         try incompleteStorageEvidenceFixtures(
             summary: summary,
@@ -206,9 +210,8 @@ enum GitHubBillingFixtureRunner {
             "Pro accounts must receive 3,000 included Actions minutes"
         )
         try check(
-            pro.bars.contains { $0.stableKey == "actions-packages-storage" } == false
-                && pro.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
-            "Conflicting Pro storage entitlements must keep the shared allowance unavailable"
+            pro.bars.first { $0.stableKey == "actions-packages-storage" }?.limit == 2,
+            "Pro accounts must receive GitHub's 2 GB Actions storage allowance"
         )
         try check(
             pro.bars.first { $0.stableKey == "lfs-storage" }?.limit == 7_200,
@@ -280,14 +283,14 @@ enum GitHubBillingFixtureRunner {
             planName: "free",
             configuration: configuration,
             fetchedAt: fetchedAt
-        ), "Unknown shared storage fixture did not parse")
+        ), "Unknown Actions storage fixture did not parse")
         try check(
             unknownStorage.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
-            "An unknown shared-storage SKU must fail closed without turning cache into account-wide usage"
+            "An unknown Actions storage SKU must fail closed without turning cache into account-wide usage"
         )
         try check(
             unknownStorage.bars.contains { $0.stableKey == "actions-packages-storage" } == false,
-            "Incomplete shared-storage evidence must not produce an understated percentage"
+            "Incomplete Actions storage evidence must not produce an understated percentage"
         )
     }
 
@@ -410,6 +413,61 @@ enum GitHubBillingFixtureRunner {
         )
     }
 
+    private static func githubIncludedUsagePresentationContract() throws {
+        let summary = data(#"""
+        {
+          "timePeriod": {"year": 2026, "month": 9},
+          "user": "octocat",
+          "usageItems": [
+            {"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1000,"grossAmount":6,"discountQuantity":1000,"discountAmount":6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_linux_slim","unitType":"minutes","pricePerUnit":0.002,"grossQuantity":90,"grossAmount":0.18,"discountQuantity":90,"discountAmount":0.18,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":300,"grossAmount":3,"discountQuantity":300,"discountAmount":3,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_storage","unitType":"gigabyte-hours","pricePerUnit":0.00033602,"grossQuantity":432,"grossAmount":0.14516064,"discountQuantity":432,"discountAmount":0.14516064,"netQuantity":0,"netAmount":0}
+          ]
+        }
+        """#)
+        let usage = data(#"""
+        {
+          "usageItems": [
+            {"date":"2026-09-20","product":"Actions","sku":"Actions Linux","quantity":1000,"unitType":"Minutes","pricePerUnit":0.006,"repositoryName":"private","grossAmount":6,"discountAmount":6,"netAmount":0},
+            {"date":"2026-09-20","product":"Actions","sku":"Actions Linux Slim","quantity":90,"unitType":"Minutes","pricePerUnit":0.002,"repositoryName":"private","grossAmount":0.18,"discountAmount":0.18,"netAmount":0},
+            {"date":"2026-09-20","product":"Actions","sku":"Actions Windows","quantity":300,"unitType":"Minutes","pricePerUnit":0.01,"repositoryName":"private","grossAmount":3,"discountAmount":3,"netAmount":0},
+            {"date":"2026-09-20","product":"Actions","sku":"Actions storage","quantity":432,"unitType":"GigabyteHours","pricePerUnit":0.00033602,"repositoryName":"private","grossAmount":0.14516064,"discountAmount":0.14516064,"netAmount":0}
+          ]
+        }
+        """#)
+        let result = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: summary,
+            usageData: usage,
+            repositoryVisibility: ["private": true],
+            planName: "pro",
+            configuration: personalConfiguration(),
+            fetchedAt: fixtureDate("2026-09-20T12:00:00Z")
+        ), "GitHub included-usage fixture did not parse")
+        let minutes = try require(
+            result.bars.first { $0.stableKey == "actions-private-minutes" },
+            "GitHub Actions minutes must be shown"
+        )
+        try check(
+            abs(minutes.used - 1_530) < 0.000_001 && minutes.limit == 3_000,
+            "Actions minutes must match GitHub's price-normalized included usage"
+        )
+        let storage = try require(
+            result.bars.first { $0.stableKey == "actions-packages-storage" },
+            "GitHub Actions storage must be shown"
+        )
+        try check(
+            abs(storage.used - 0.6) < 0.000_001 && storage.limit == 2,
+            "Actions storage must convert accrued GB-hours to GitHub's monthly GB presentation"
+        )
+        try check(storage.label == "Actions storage", "The storage allowance must use GitHub's product label")
+        let expectedReset = try fixtureDate("2026-10-01T00:00:00Z")
+        try check(
+            storage.resetsAt == expectedReset,
+            "Included usage must retain the billing-cycle reset date"
+        )
+    }
+
     private static func planAllowanceContract() throws {
         let fetchedAt = try fixtureDate("2026-09-15T12:00:00Z")
         let summary = data(#"""
@@ -445,8 +503,8 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Complete Free allowance fixture did not parse")
         let expected: [(String, Double, Double)] = [
-            ("actions-private-minutes", 160, 2_000),
-            ("actions-packages-storage", 100, 360),
+            ("actions-private-minutes", 200, 2_000),
+            ("actions-packages-storage", 100.0 / 720.0, 0.5),
             ("packages-data-transfer", 0, 1),
             ("lfs-storage", 48, 7_200),
             ("lfs-bandwidth", 3.5, 10),
@@ -455,7 +513,10 @@ enum GitHubBillingFixtureRunner {
         ]
         for (key, used, limit) in expected {
             let bar = try require(free.bars.first { $0.stableKey == key }, "Missing allowance bar \(key)")
-            try check(bar.used == used && bar.limit == limit, "Incorrect allowance values for \(key)")
+            try check(
+                abs(bar.used - used) < 0.000_001 && abs(bar.limit - limit) < 0.000_001,
+                "Incorrect allowance values for \(key)"
+            )
         }
 
         let isolatedMalformedLFS = try require(GitHubBillingUsageParser.parsePersonal(
@@ -542,7 +603,7 @@ enum GitHubBillingFixtureRunner {
             "Actions overage bar missing"
         )
         try check(actionsOverage.used > actionsOverage.limit, "Actions usage above the plan allowance must not be clamped")
-        try check(actionsOverage.usageText == "125%", "Actions overage must retain its percentage above 100%")
+        try check(actionsOverage.usageText == "208%", "Actions overage must retain its percentage above 100%")
 
         let organizationFree = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: organizationSummary(),
@@ -592,9 +653,8 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Packages visibility fixture did not parse")
         try check(
-            result.unavailableUsageMetrics["githubBilling.actions-packages-storage"]?
-                .contains("does not identify package visibility") == true,
-            "Private repository visibility must not be treated as private package visibility"
+            result.bars.first { $0.stableKey == "actions-packages-storage" }?.used == 0,
+            "Packages storage must not be folded into the separate Actions storage allowance"
         )
         try check(
             result.unavailableUsageMetrics["githubBilling.packages-data-transfer"]?
@@ -686,15 +746,15 @@ enum GitHubBillingFixtureRunner {
         }, "Billable usage must show the authoritative net amount and quantity")
         try check(actionsSection.items.contains { item in
             item.label == "Included usage · Minutes"
-                && item.detail == "160 of 2,000 minutes used (private standard runners) · "
-                    + "1,840 minutes remaining"
+                && item.detail == "200 of 2,000 minutes used (private standard runners) · "
+                    + "1,800 minutes remaining"
         }, "Actions included minutes must show used, included, and remaining values")
         try check(
             actionsSection.items.contains { item in
                 item.label == "Included usage · Storage"
-                    && item.detail.contains("does not identify package visibility")
+                    && item.detail.contains("before the included allowance")
             },
-            "Nonzero Packages storage must stay unavailable beside trustworthy Actions minute progress"
+            "Premature Actions storage billing must stay unavailable beside trustworthy minute progress"
         )
 
         // Aggregate amounts use two fractional digits; unit rates keep their source precision.
@@ -1377,7 +1437,7 @@ enum GitHubBillingFixtureRunner {
             case "/users/octocat/settings/billing/usage/summary":
                 return response(request, status: 200, body: #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"Actions Linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0}]}"#)
             case "/users/octocat/settings/billing/usage":
-                return response(request, status: 200, body: #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#)
+                return response(request, status: 200, body: #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#)
             case "/repos/octocat/private":
                 metadataCounter.increment()
                 let token = request.value(forHTTPHeaderField: "Authorization")
@@ -1705,9 +1765,8 @@ enum GitHubBillingFixtureRunner {
             "The provider must retrieve the organization's Team allowance"
         )
         try check(
-            result.unavailableUsageMetrics["githubBilling.actions-packages-storage"]?
-                .contains("does not identify package visibility") == true,
-            "The provider must not infer package visibility from repository metadata"
+            result.bars.first { $0.stableKey == "actions-packages-storage" }?.used == 0,
+            "The provider must keep Packages storage separate from Actions storage"
         )
     }
 
