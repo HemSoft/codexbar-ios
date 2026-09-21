@@ -590,11 +590,15 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             )
             Self.mergeRepositoryVisibility(batch.lookups, into: &result)
             let rateLimitFailure = batch.failures.first(where: \.isRateLimitFailure)
-            if result.failureMessage == nil, let failure = rateLimitFailure ?? batch.failures.first {
+            let exhaustedRateLimit = batch.lookups.contains(where: \.rateLimitExhausted)
+            if result.failureMessage == nil, exhaustedRateLimit {
+                result.failureMessage = "GitHub's repository visibility rate limit is exhausted, so affected Actions "
+                    + "allowances are unavailable until a later refresh."
+            } else if result.failureMessage == nil, let failure = rateLimitFailure ?? batch.failures.first {
                 result.failureMessage = "GitHub could not classify some repository visibility, so affected Actions "
                     + "allowances are unavailable. \(failure.localizedDescription)"
             }
-            if rateLimitFailure != nil { break }
+            if rateLimitFailure != nil || exhaustedRateLimit { break }
         }
         return result
     }
@@ -664,14 +668,15 @@ public final class GitHubBillingUsageProvider: UsageProvider {
                 pathComponents: ["repos", repositoryOwner, repositoryName],
                 accessToken: accessToken
             )
-            let data = try await responseData(for: request)
-            guard let metadata = try? JSONDecoder().decode(RepositoryMetadata.self, from: data) else {
+            let payload = try await responsePayload(for: request)
+            guard let metadata = try? JSONDecoder().decode(RepositoryMetadata.self, from: payload.data) else {
                 throw GitHubBillingAPIError.invalidResponse
             }
             return RepositoryVisibilityLookup(
                 repository: repository,
                 isPrivate: metadata.isPrivate,
-                isHidden: false
+                isHidden: false,
+                rateLimitExhausted: payload.rateLimitExhausted
             )
         } catch GitHubBillingAPIError.httpStatus(404, _, _) {
             return RepositoryVisibilityLookup(repository: repository, isPrivate: nil, isHidden: true)
@@ -749,6 +754,12 @@ public final class GitHubBillingUsageProvider: UsageProvider {
     }
 
     private func responseData(for request: URLRequest) async throws -> Data {
+        try await responsePayload(for: request).data
+    }
+
+    private func responsePayload(
+        for request: URLRequest
+    ) async throws -> (data: Data, rateLimitExhausted: Bool) {
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GitHubBillingAPIError.invalidResponse
@@ -762,7 +773,7 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             )
             throw GitHubBillingAPIError.httpStatus(httpResponse.statusCode, isRateLimited, diagnostic)
         }
-        return data
+        return (data, httpResponse.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0")
     }
 
     private func billingPeriodQuery(date: Date) -> [URLQueryItem] {
@@ -1025,6 +1036,19 @@ private struct RepositoryVisibilityLookup: Sendable {
     let repository: String
     let isPrivate: Bool?
     let isHidden: Bool
+    let rateLimitExhausted: Bool
+
+    init(
+        repository: String,
+        isPrivate: Bool?,
+        isHidden: Bool,
+        rateLimitExhausted: Bool = false
+    ) {
+        self.repository = repository
+        self.isPrivate = isPrivate
+        self.isHidden = isHidden
+        self.rateLimitExhausted = rateLimitExhausted
+    }
 }
 
 private enum RepositoryVisibilityLookupOutcome: Sendable {

@@ -2028,11 +2028,12 @@ private enum GitHubBillingReviewFixtures {
                 return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, usage)
             }
             lookupCounter.increment()
-            return (HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: nil, headerFields: ["X-RateLimit-Remaining": "0"])!, data("{}"))
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["X-RateLimit-Remaining": "0"])!, data(#"{"private":true}"#))
         }
         let result = try await provider.fetchUsage(for: personal)
-        try check(result.failureMessage == nil, "A repository rate limit must preserve personal billing")
-        try check(lookupCounter.value <= 8, "A rate-limited metadata batch must stop later repository requests")
+        try check(result.failureMessage == nil, "An exhausted repository rate limit must preserve personal billing")
+        try check(result.usageMessages.contains { $0.contains("rate limit is exhausted") }, "A successful response that exhausts the rate limit needs guidance")
+        try check(lookupCounter.value <= 8, "A successful exhausted metadata batch must stop later repository requests")
     }
 
     private static func data(_ value: String) -> Data { Data(value.utf8) }
