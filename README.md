@@ -82,8 +82,8 @@ Keychain credential; the integration never reads or replaces a Copilot token.
 
 Personal Free and Pro cards show monthly allowance progress from GitHub's
 [included-product table](https://docs.github.com/en/billing/reference/product-usage-included)
-for eligible Actions minutes, Actions storage, Packages data transfer, Git LFS
-storage and bandwidth, and Codespaces compute and storage. Organization
+for eligible Actions minutes, Actions storage, Packages storage and data transfer,
+Git LFS storage and bandwidth, and Codespaces compute and storage. Organization
 Free and Team cards show the same account-scoped metrics except personal
 Codespaces allowances. CodexBar requires GitHub's returned billing month to
 contain the refresh time. Each verified metric states used, included, and

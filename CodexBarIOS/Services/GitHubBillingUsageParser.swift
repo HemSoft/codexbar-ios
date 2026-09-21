@@ -294,6 +294,7 @@ public enum GitHubBillingUsageParser {
             period: period,
             output: &output
         )
+        appendPackagesStorage(summaryItems, plan: plan, period: period, output: &output)
         appendPackagesDataTransfer(
             summaryItems,
             plan: plan,
@@ -312,6 +313,7 @@ public enum GitHubBillingUsageParser {
         var keys = [
             "githubBilling.actions-private-minutes",
             "githubBilling.actions-packages-storage",
+            "githubBilling.packages-storage",
             "githubBilling.packages-data-transfer",
             "githubBilling.lfs-storage",
             "githubBilling.lfs-bandwidth",
@@ -551,6 +553,37 @@ public enum GitHubBillingUsageParser {
             return "GitHub did not return complete Actions-storage gross, discount, and billable quantities."
         }
         return nil
+    }
+
+    private static func appendPackagesStorage(
+        _ items: [SummaryItem],
+        plan: GitHubPlanAllowance,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let metricID = "githubBilling.packages-storage"
+        let matching = items.filter(\.isPotentialPackagesStorage)
+        guard matching.allSatisfy(\.isPackagesStorage), matching.allSatisfy(\.isGBHours) else {
+            output.unavailable[metricID] = "GitHub returned Packages storage in an unsupported SKU or unit."
+            return
+        }
+        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable[metricID] = "GitHub did not return complete Packages-storage gross, discount, and billable quantities."
+            return
+        }
+        let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
+        guard total == 0 else {
+            output.unavailable[metricID] = "GitHub Billing does not identify package visibility, so nonzero "
+                + "Packages storage cannot be compared with the private-package allowance."
+            return
+        }
+        output.bars.append(allowanceBar(
+            stableKey: "packages-storage",
+            label: "Packages storage",
+            used: 0,
+            limit: plan.packagesStorageGB,
+            period: period
+        ))
     }
 
     private static func appendPackagesDataTransfer(
@@ -841,7 +874,7 @@ public enum GitHubBillingUsageParser {
     private static func allowanceUnit(for stableKey: String?) -> String {
         switch stableKey {
         case "actions-private-minutes": "minutes"
-        case "actions-packages-storage": "GB"
+        case "actions-packages-storage", "packages-storage": "GB"
         case "lfs-storage", "codespaces-storage": "GB-hours"
         case "packages-data-transfer", "lfs-bandwidth": "GB"
         case "codespaces-core-hours": "core hours"
@@ -1376,6 +1409,13 @@ public enum GitHubBillingUsageParser {
         ],
         "packages": [
             IncludedUsageDefinition(
+                id: "packages.included.storage",
+                label: "Included usage · Storage",
+                stableKey: "packages-storage",
+                unit: "GB",
+                scopeNote: "private Packages storage"
+            ),
+            IncludedUsageDefinition(
                 id: "packages.included.transfer",
                 label: "Included usage · Data transfer",
                 stableKey: "packages-data-transfer",
@@ -1867,6 +1907,17 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
         return isGBHours || normalizedSKU.contains("storage")
     }
 
+    var isPackagesStorage: Bool {
+        product?.normalized == "packages" && sku?.normalized == "packagesstorage"
+    }
+
+    var isPotentialPackagesStorage: Bool {
+        guard product?.normalized == "packages" else { return false }
+        let normalizedSKU = sku?.normalized ?? ""
+        guard !normalizedSKU.contains("transfer"), !normalizedSKU.contains("bandwidth") else { return false }
+        return isGBHours || normalizedSKU.contains("storage")
+    }
+
     var isPackagesDataTransfer: Bool {
         let normalizedSKU = sku?.normalized ?? ""
         return product?.normalized == "packages"
@@ -2275,6 +2326,7 @@ private struct GitHubPlanAllowance {
     let label: String
     let actionsMinutes: Int
     let actionsStorageGB: Decimal
+    let packagesStorageGB: Decimal
     let packagesTransferGB: Int
     let lfsStorageGB: Int
     let lfsBandwidthGB: Int
@@ -2286,6 +2338,7 @@ private struct GitHubPlanAllowance {
         label: String,
         actionsMinutes: Int,
         actionsStorageGB: Decimal,
+        packagesStorageGB: Decimal,
         packagesTransferGB: Int,
         lfsStorageGB: Int,
         lfsBandwidthGB: Int,
@@ -2296,6 +2349,7 @@ private struct GitHubPlanAllowance {
         self.label = label
         self.actionsMinutes = actionsMinutes
         self.actionsStorageGB = actionsStorageGB
+        self.packagesStorageGB = packagesStorageGB
         self.packagesTransferGB = packagesTransferGB
         self.lfsStorageGB = lfsStorageGB
         self.lfsBandwidthGB = lfsBandwidthGB
@@ -2308,25 +2362,25 @@ private struct GitHubPlanAllowance {
         case (.personal, "free"):
             self.init(
                 id: "free", label: "Free", actionsMinutes: 2_000, actionsStorageGB: Decimal(5) / 10,
-                packagesTransferGB: 1, lfsStorageGB: 10, lfsBandwidthGB: 10,
+                packagesStorageGB: Decimal(5) / 10, packagesTransferGB: 1, lfsStorageGB: 10, lfsBandwidthGB: 10,
                 codespacesCoreHours: 120, codespacesStorageGB: 15
             )
         case (.personal, "pro"):
             self.init(
                 id: "pro", label: "Pro", actionsMinutes: 3_000, actionsStorageGB: 2,
-                packagesTransferGB: 10, lfsStorageGB: 10, lfsBandwidthGB: 10,
+                packagesStorageGB: 2, packagesTransferGB: 10, lfsStorageGB: 10, lfsBandwidthGB: 10,
                 codespacesCoreHours: 180, codespacesStorageGB: 20
             )
         case (.organization, "free"):
             self.init(
                 id: "free", label: "Free", actionsMinutes: 2_000, actionsStorageGB: Decimal(5) / 10,
-                packagesTransferGB: 1, lfsStorageGB: 10, lfsBandwidthGB: 10,
+                packagesStorageGB: Decimal(5) / 10, packagesTransferGB: 1, lfsStorageGB: 10, lfsBandwidthGB: 10,
                 codespacesCoreHours: nil, codespacesStorageGB: nil
             )
         case (.organization, "team"):
             self.init(
                 id: "team", label: "Team", actionsMinutes: 3_000, actionsStorageGB: 2,
-                packagesTransferGB: 10, lfsStorageGB: 250, lfsBandwidthGB: 250,
+                packagesStorageGB: 2, packagesTransferGB: 10, lfsStorageGB: 250, lfsBandwidthGB: 250,
                 codespacesCoreHours: nil, codespacesStorageGB: nil
             )
         default:

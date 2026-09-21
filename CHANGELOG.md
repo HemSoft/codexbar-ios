@@ -49,8 +49,8 @@ building, testing, or releasing the app.
 
 - GitHub Billing cards now show monthly allowance progress for personal Free
   and Pro plans and organization Free and Team plans. Covered metrics include
-  eligible Actions minutes, Actions storage, Packages data transfer, Git LFS
-  storage and bandwidth, and personal Codespaces compute and storage. The Actions
+  eligible Actions minutes, Actions storage, Packages storage and data transfer,
+  Git LFS storage and bandwidth, and personal Codespaces compute and storage. The Actions
   bars match GitHub Billing's allowance-minute normalization and monthly GB
   presentation, include the billing-cycle reset, and no longer disappear for
   otherwise valid accounts. Public-repository Actions usage, paid larger runners, and self-hosted

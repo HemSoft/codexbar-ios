@@ -571,8 +571,12 @@ enum GitHubBillingFixtureRunner {
             configuration: personalConfiguration(),
             fetchedAt: fetchedAt
         ), "Zero-usage allowance fixture did not parse")
-        try check(zero.bars.count == 7, "A verified Free plan must expose every supported zero-usage allowance")
+        try check(zero.bars.count == 8, "A verified Free plan must expose every supported zero-usage allowance")
         try check(zero.bars.allSatisfy { $0.used == 0 && $0.usageText == "0%" }, "Missing usage must not hide verified zero-percent allowances")
+        try check(
+            zero.bars.first { $0.stableKey == "packages-storage" }?.limit == 0.5,
+            "Verified zero Packages storage must retain the plan allowance"
+        )
 
         let stalePeriod = try require(GitHubBillingUsageParser.parsePersonal(
             summaryData: data(#"{"timePeriod":{"year":2026,"month":8},"user":"octocat","usageItems":[]}"#),
@@ -655,6 +659,11 @@ enum GitHubBillingFixtureRunner {
         try check(
             result.bars.first { $0.stableKey == "actions-packages-storage" }?.used == 0,
             "Packages storage must not be folded into the separate Actions storage allowance"
+        )
+        try check(
+            result.unavailableUsageMetrics["githubBilling.packages-storage"]?
+                .contains("does not identify package visibility") == true,
+            "Nonzero Packages storage must remain visibly unavailable"
         )
         try check(
             result.unavailableUsageMetrics["githubBilling.packages-data-transfer"]?
