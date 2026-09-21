@@ -95,7 +95,8 @@ building, testing, or releasing the app.
 
 - GitHub Billing cards now keep Actions minutes visible when standard macOS
   runner usage is present, matching GitHub's included-usage total instead of
-  showing a reconciliation warning.
+  showing a reconciliation warning. Actions minutes and storage also stay
+  together on the card and in card-customization settings.
   ([#351](https://github.com/HemSoft/codexbar-ios/issues/351))
 
 - Request the GitHub `user` permission required by personal billing rather than
