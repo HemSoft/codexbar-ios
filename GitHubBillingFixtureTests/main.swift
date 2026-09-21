@@ -15,6 +15,7 @@ enum GitHubBillingFixtureRunner {
         try currencyEvidenceContract()
         try organizationBudgetsAndPaginationParsing()
         try malformedAndMissingFields()
+        try GitHubBillingReviewFixtures.run()
         try await accountIsolationFixtures()
         try await providerRequestAndFailureFixtures()
         print("GitHub Billing fixture suite passed: personal and organization allowances, zero usage, overage, "
@@ -1728,10 +1729,8 @@ enum GitHubBillingFixtureRunner {
                 return response(request, status: 200, data: organizationUsage())
             case "/organizations/Example-Engineering/settings/billing/budgets":
                 return response(request, status: 200, body: #"{"budgets":[],"has_next_page":false}"#)
-            case "/repos/example/private", "/repos/example/other":
-                return response(request, status: 200, body: #"{"private":true}"#)
-            case "/repos/example/priv-ate":
-                return response(request, status: 200, body: #"{"private":false}"#)
+            case "/repos/example/private", "/repos/example/other", "/repos/example/priv-ate":
+                return response(request, status: 500, body: "{}")
             default:
                 return response(request, status: 404, body: "{}")
             }
@@ -1910,6 +1909,58 @@ enum GitHubBillingFixtureRunner {
             headerFields: headers
         )!
         return (response, data)
+    }
+}
+
+private enum GitHubBillingReviewFixtures {
+    static func run() throws {
+        let personal = ProviderAccountConfiguration(
+            id: "github-billing.personal",
+            providerID: .githubBilling,
+            accountLabel: "octocat",
+            authMethod: .browserSession,
+            githubBillingAccountScope: .personal,
+            githubBillingOwner: "octocat"
+        )
+        let customImageUsage = GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"user":"octocat","timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_custom_image","unitType":"GB-hours","pricePerUnit":0.0008,"grossQuantity":12,"grossAmount":0.0096,"discountQuantity":12,"discountAmount":0.0096,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0},{"product":"Actions","sku":"actions_custom_image","quantity":12,"unitType":"GB-hours","pricePerUnit":0.0008,"repositoryName":"octocat/private","grossAmount":0.0096,"discountAmount":0.0096,"netAmount":0}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: personal,
+            fetchedAt: Date()
+        )
+        try check(
+            customImageUsage?.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 10,
+            "Actions custom-image storage must not invalidate standard-runner minutes"
+        )
+
+        let organization = ProviderAccountConfiguration(
+            id: "github-billing.organization",
+            providerID: .githubBilling,
+            accountLabel: "Example Engineering",
+            authMethod: .browserSession,
+            githubBillingAccountScope: .organization,
+            githubBillingOwner: "Example-Engineering"
+        )
+        let unclassifiedBudgetUsage = GitHubBillingUsageParser.parseOrganization(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1,"grossAmount":0.006,"discountQuantity":1,"discountAmount":0.006,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[{"date":"2026-09-01","sku":"actions_linux","quantity":1,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.006,"discountAmount":0.006,"netAmount":0,"organizationName":"Example-Engineering"}]}"#),
+            budgetPageData: [data(#"{"budgets":[{"id":"unclassified-detail","budget_type":"ProductPricing","budget_amount":10,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}]}"#)],
+            configuration: organization,
+            fetchedAt: Date()
+        )
+        try check(
+            unclassifiedBudgetUsage?.bars.contains { $0.stableKey == "budget-unclassified-detail" } == false
+                && unclassifiedBudgetUsage?.usageMessages.contains { $0.contains("consumption cannot be calculated") } == true,
+            "A budget must stay unavailable when scoped detail omits its product discriminator"
+        )
+    }
+
+    private static func data(_ value: String) -> Data { Data(value.utf8) }
+
+    private static func check(_ condition: @autoclosure () -> Bool, _ message: String) throws {
+        guard condition() else { throw FixtureFailure(message: message) }
     }
 }
 

@@ -356,14 +356,10 @@ public enum GitHubBillingUsageParser {
             output.unavailable[metricID] = total.unavailableMessage
             return
         }
-        let includedSummary = summaryCandidates.filter { item in
-            if case .includedStandard = item.actionsRunnerAllowance { return true }
-            return false
-        }
-        let reportedBillable = includedSummary.reduce(Decimal.zero) { total, item in
-            guard let quantity = item.netQuantity, let price = item.pricePerUnit else { return total }
-            return total + GitHubActionsRunnerCatalog.allowanceMinutes(quantity: quantity, unitPrice: price)
-        }
+        let reportedBillable = summaryCandidates
+            .filter(\.isIncludedStandardRunner)
+            .compactMap(\.billableAllowanceMinutes)
+            .reduce(.zero, +)
         let planLimit = Decimal(plan.actionsMinutes)
         guard reportedBillable <= max(used - planLimit, .zero) else {
             output.unavailable[metricID] = "GitHub reported billable standard-runner minutes before the included "
@@ -872,14 +868,17 @@ public enum GitHubBillingUsageParser {
     }
 
     private static func allowanceUnit(for stableKey: String?) -> String {
-        switch stableKey {
-        case "actions-private-minutes": "minutes"
-        case "actions-packages-storage", "packages-storage": "GB"
-        case "lfs-storage", "codespaces-storage": "GB-hours"
-        case "packages-data-transfer", "lfs-bandwidth": "GB"
-        case "codespaces-core-hours": "core hours"
-        default: "units"
-        }
+        let unitsByMetric = [
+            "actions-private-minutes": "minutes",
+            "actions-packages-storage": "GB",
+            "packages-storage": "GB",
+            "lfs-storage": "GB-hours",
+            "codespaces-storage": "GB-hours",
+            "packages-data-transfer": "GB",
+            "lfs-bandwidth": "GB",
+            "codespaces-core-hours": "core hours",
+        ]
+        return stableKey.flatMap { unitsByMetric[$0] } ?? "units"
     }
 
     private static func allowanceRemainingText(_ bar: UsageBar, unit: String) -> String {
@@ -1091,9 +1090,25 @@ public enum GitHubBillingUsageParser {
         default:
             return nil
         }
-        return scopedItems.filter { item in
-            let candidate = isProduct ? item.product : item.sku
-            return candidate.map { normalizedTargets.contains($0.normalized) } == true
+        return classifiedBudgetUsageItems(
+            scopedItems,
+            isProduct: isProduct,
+            normalizedTargets: normalizedTargets
+        )
+    }
+
+    private static func classifiedBudgetUsageItems(
+        _ items: [UsageItem],
+        isProduct: Bool,
+        normalizedTargets: Set<String>
+    ) -> [UsageItem]? {
+        let candidates = items.map { item in
+            (isProduct ? item.product : item.sku)?.nonempty
+        }
+        guard candidates.allSatisfy({ $0 != nil }) else { return nil }
+        return zip(items, candidates).compactMap { item, candidate in
+            guard let candidate, normalizedTargets.contains(candidate.normalized) else { return nil }
+            return item
         }
     }
 
@@ -1886,10 +1901,26 @@ private struct SummaryItem: Decodable, MeteredQuantityItem {
     var isPotentialActionsMinutes: Bool {
         let normalizedProduct = product?.normalized ?? ""
         let normalizedSKU = sku?.normalized ?? ""
-        guard !normalizedSKU.contains("storage"), !normalizedSKU.contains("cache") else { return false }
+        guard
+            !normalizedSKU.contains("storage"),
+            !normalizedSKU.contains("cache"),
+            !normalizedSKU.contains("customimage")
+        else {
+            return false
+        }
         if normalizedSKU.hasPrefix("actions") { return true }
         return normalizedProduct.contains("actions")
             && unitType?.normalized.contains("minute") == true
+    }
+
+    var isIncludedStandardRunner: Bool {
+        if case .includedStandard = actionsRunnerAllowance { return true }
+        return false
+    }
+
+    var billableAllowanceMinutes: Decimal? {
+        guard let netQuantity, let pricePerUnit else { return nil }
+        return GitHubActionsRunnerCatalog.allowanceMinutes(quantity: netQuantity, unitPrice: pricePerUnit)
     }
 
     var actionsRunnerAllowance: ActionsRunnerAllowance {
@@ -2114,7 +2145,13 @@ private struct UsageItem: Decodable, MeteredQuantityItem {
     var isPotentialActionsMinutes: Bool {
         let normalizedProduct = product?.normalized ?? ""
         let normalizedSKU = sku?.normalized ?? ""
-        guard !normalizedSKU.contains("storage"), !normalizedSKU.contains("cache") else { return false }
+        guard
+            !normalizedSKU.contains("storage"),
+            !normalizedSKU.contains("cache"),
+            !normalizedSKU.contains("customimage")
+        else {
+            return false
+        }
         if normalizedSKU.hasPrefix("actions") { return true }
         return normalizedProduct.contains("actions")
             && unitType?.normalized.contains("minute") == true

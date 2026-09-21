@@ -355,18 +355,23 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             accessToken: credentials.accessToken
         )
         let (summary, usage, budgets, plan) = try await (summaryData, usageData, budgetResult, planResult)
-        let repositories = Self.repositoryNames(in: usage)
-        let visibility = try await repositoryVisibility(
-            repositories: repositories,
-            owner: owner,
-            accessToken: credentials.accessToken,
-            cacheNamespace: Self.repositoryVisibilityCacheNamespace(
-                scope: .organization,
+        let visibility: RepositoryVisibilityResult
+        if Self.organizationPlanSupportsAllowances(plan.name) {
+            let repositories = Self.repositoryNames(in: usage)
+            visibility = try await repositoryVisibility(
+                repositories: repositories,
                 owner: owner,
-                configurationID: configuration.id,
-                accessToken: credentials.accessToken
+                accessToken: credentials.accessToken,
+                cacheNamespace: Self.repositoryVisibilityCacheNamespace(
+                    scope: .organization,
+                    owner: owner,
+                    configurationID: configuration.id,
+                    accessToken: credentials.accessToken
+                )
             )
-        )
+        } else {
+            visibility = RepositoryVisibilityResult(values: [:], hiddenRepositoryCount: 0, omittedRepositoryCount: 0)
+        }
         guard let result = GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,
             usageData: usage,
@@ -393,6 +398,10 @@ public final class GitHubBillingUsageProvider: UsageProvider {
             throw GitHubBillingAPIError.invalidResponse
         }
         return profile
+    }
+
+    private static func organizationPlanSupportsAllowances(_ name: String) -> Bool {
+        ["free", "team"].contains(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
     }
 
     private func fetchOrganizationPlan(
