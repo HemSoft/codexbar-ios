@@ -110,22 +110,22 @@ public extension DemoUsageProvider {
                 providerID: .githubBilling,
                 plan: ProviderPlanDescriptor.make(
                     providerPrefix: ProviderID.githubBilling.rawValue,
-                    identifier: "free",
-                    label: "Free"
+                    identifier: "pro",
+                    label: "Pro"
                 ),
                 bars: [
                     UsageBar(
-                        stableKey: "actions-private-minutes",
-                        label: "Private Actions minutes",
-                        used: 720,
-                        limit: 2_000,
+                        stableKey: "actions-allowance-minutes",
+                        label: "Actions minutes",
+                        used: 1_600,
+                        limit: 3_000,
                         resetDescription: "Resets Oct 1"
                     ),
                     UsageBar(
-                        stableKey: "actions-packages-storage",
-                        label: "Actions + Packages storage",
-                        used: 118,
-                        limit: 360,
+                        stableKey: "actions-storage",
+                        label: "Actions storage",
+                        used: 0.6,
+                        limit: 2,
                         resetDescription: "Resets Oct 1"
                     ),
                 ],
@@ -177,13 +177,12 @@ public extension DemoUsageProvider {
                             ProviderCardInformationItem(
                                 id: "actions.included.minutes",
                                 label: "Included usage · Minutes",
-                                detail: "720 of 2,000 minutes used · 1,280 minutes remaining"
+                                detail: "1,600 of 3,000 minutes used · 1,400 minutes remaining"
                             ),
                             ProviderCardInformationItem(
                                 id: "actions.included.storage",
                                 label: "Included usage · Storage",
-                                detail: "118 of 360 GB-hours used (Actions and Packages storage) · "
-                                    + "242 GB-hours remaining"
+                                detail: "0.6 of 2 GB used (private Actions storage) · 1.4 GB remaining"
                             ),
                         ]
                     ),

@@ -1227,16 +1227,31 @@ struct ProviderUsageCard: View {
                     .monospacedDigit()
             }
             MetricVisualizationView(bar: bar, style: visualizationStyle, showsSeverity: result.hasCurrentBars)
+            let githubAllowanceSummary = result.providerID == .githubBilling
+                ? Self.githubAllowanceSummary(bar)
+                : nil
+            if let githubAllowanceSummary {
+                allowanceSupportingText(githubAllowanceSummary)
+            }
             if result.providerID == .gemini || result.providerID == .antigravity {
                 supportingText(result.hasCurrentBars ? "Percent used · Current" : "Percent used · Last known value")
             }
-            if item.width == .full {
-                if let resetDescription = bar.localizedResetDescription() {
-                    supportingText(resetDescription)
-                }
-                if result.hasCurrentBars, let projectionDescription = bar.dashboardProjectionDescription() {
-                    supportingText(projectionDescription)
-                }
+            usageTileResetDetails(item: item, bar: bar, showsAllowanceSummary: githubAllowanceSummary != nil)
+        }
+    }
+
+    @ViewBuilder
+    private func usageTileResetDetails(
+        item: ProviderMetricTileGridItem,
+        bar: UsageBar,
+        showsAllowanceSummary: Bool
+    ) -> some View {
+        if item.width == .full || showsAllowanceSummary {
+            if let resetDescription = bar.localizedResetDescription() {
+                supportingText(resetDescription)
+            }
+            if result.hasCurrentBars, let projectionDescription = bar.dashboardProjectionDescription() {
+                supportingText(projectionDescription)
             }
         }
     }
@@ -1249,6 +1264,14 @@ struct ProviderUsageCard: View {
             return preferredStyle
         }
         return result.bars[index].resolvedVisualizationStyle(preferredStyle)
+    }
+
+    private func allowanceSupportingText(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func supportingText(_ text: String) -> some View {
@@ -1362,10 +1385,14 @@ struct ProviderUsageCard: View {
             .joined(separator: ", ")
         }
 
+        let usageDescription = result.providerID == .githubBilling
+            ? Self.githubAllowanceSummary(bar)
+            : nil
         return [
             bar.label,
             bar.usageText,
-            "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit)) used",
+            usageDescription
+                ?? "\(Self.formattedUsageAmount(bar.used)) of \(Self.formattedUsageAmount(bar.limit)) used",
             result.hasCurrentBars
                 ? bar.effectiveSeverity(thresholds: thresholds).accessibilityName
                 : "status unavailable",
@@ -1377,9 +1404,37 @@ struct ProviderUsageCard: View {
         .joined(separator: ", ")
     }
 
+    static func githubAllowanceSummary(_ bar: UsageBar) -> String? {
+        guard let stableKey = bar.stableKey, let unit = githubAllowanceUnits[stableKey] else { return nil }
+        let used = formattedAllowanceAmount(bar.used)
+        let included = formattedAllowanceAmount(bar.limit)
+        let difference = bar.limit - bar.used
+        if difference >= 0 {
+            return "\(used) \(unit) used · \(included) included · "
+                + "\(formattedAllowanceAmount(difference)) remaining"
+        }
+        return "\(used) \(unit) used · \(included) included · "
+            + "\(formattedAllowanceAmount(-difference)) over"
+    }
+
+    private static func formattedAllowanceAmount(_ value: Double) -> String {
+        value > 0 && value < 0.01 ? "<0.01" : formattedUsageAmount(value)
+    }
+
     static func formattedUsageAmount(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0...2)))
     }
+
+    private static let githubAllowanceUnits = [
+        "actions-allowance-minutes": "minutes",
+        "actions-storage": "GB",
+        "packages-storage": "GB",
+        "lfs-storage": "GB-hours",
+        "codespaces-storage": "GB-hours",
+        "packages-data-transfer": "GB",
+        "lfs-bandwidth": "GB",
+        "codespaces-core-hours": "core hours",
+    ]
 
     static let metricDetailAccessibilityHint = "Shows complete metric details."
 

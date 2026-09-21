@@ -23,37 +23,16 @@ public enum GitHubBillingUsageParser {
             return nil
         }
 
-        let period = BillingPeriod(timePeriod: summary.timePeriod)
-        let plan = PersonalPlan(name: planName)
-        var bars: [UsageBar] = []
-        var unavailable: [String: String] = [:]
-        let allowanceFailure = plan == nil
-            ? "GitHub did not return a supported Free or Pro plan, so CodexBar cannot calculate this allowance."
-            : nil
-
-        appendPersonalActionsMinutes(
-            usage.usageItems,
+        let period = BillingPeriod(timePeriod: summary.timePeriod, containing: fetchedAt)
+        let plan = GitHubPlanAllowance(name: planName, scope: .personal)
+        let allowanceFailure = unsupportedPlanMessage(name: planName, scope: .personal)
+        let allowance = makeAllowanceOutput(
+            summaryItems: summary.usageItems,
+            usageItems: usage.usageItems,
             repositoryVisibility: repositoryVisibility,
             plan: plan,
             period: period,
-            bars: &bars,
-            unavailable: &unavailable,
-            failure: allowanceFailure
-        )
-        appendAccruedStorage(
-            summary.usageItems,
-            plan: plan,
-            period: period,
-            bars: &bars,
-            unavailable: &unavailable,
-            failure: allowanceFailure
-        )
-        appendLFSUsage(
-            summary.usageItems,
-            plan: plan,
-            period: period,
-            bars: &bars,
-            unavailable: &unavailable,
+            scope: .personal,
             failure: allowanceFailure
         )
 
@@ -89,11 +68,11 @@ public enum GitHubBillingUsageParser {
             productSections: productSummarySections(
                 summary.usageItems,
                 currencyCode: currency.verifiedCode,
-                includesPersonalAllowances: true,
-                bars: bars,
-                unavailable: unavailable
+                includesPlanAllowances: true,
+                bars: allowance.bars,
+                unavailable: allowance.unavailable
             ),
-            bars: bars,
+            bars: allowance.bars,
             notes: notes,
             usageDetails: detailOutput.items
         )
@@ -105,10 +84,10 @@ public enum GitHubBillingUsageParser {
             subtitle: accountName.isEmpty
                 ? "GitHub personal billing"
                 : "GitHub personal billing for \(accountName)",
-            bars: bars,
+            bars: allowance.bars,
             monetaryMetrics: monetaryMetrics,
-            unavailableUsageMetrics: unavailable,
-            usageMessages: Set(unavailable.values).sorted()
+            unavailableUsageMetrics: allowance.unavailable,
+            usageMessages: Set(allowance.unavailable.values).sorted()
                 + [repositoryVisibilityMessage, currency.conflictMessage].compactMap { $0 }
                 + spendStatusMessages(for: totals),
             cardInformationSections: sections,
@@ -122,6 +101,10 @@ public enum GitHubBillingUsageParser {
         usageData: Data,
         budgetPageData: [Data]?,
         budgetStatusMessage: String? = nil,
+        repositoryVisibility: [String: Bool] = [:],
+        repositoryVisibilityMessage: String? = nil,
+        planName: String = "",
+        planStatusMessage: String? = nil,
         configuration: ProviderAccountConfiguration,
         fetchedAt: Date
     ) -> ProviderUsageResult? {
@@ -131,17 +114,26 @@ public enum GitHubBillingUsageParser {
             let summary = try? JSONDecoder().decode(SummaryResponse.self, from: summaryData),
             summary.organization?.caseInsensitiveCompare(owner) == .orderedSame,
             summary.user == nil,
-            summary.usageItems.allSatisfy(\.hasOrganizationMetricFields),
             let usage = try? JSONDecoder().decode(UsageResponse.self, from: usageData),
-            usage.usageItems.allSatisfy({ $0.isOrganizationDetail(for: owner) }),
+            usage.usageItems.allSatisfy({ $0.belongsToOrganization(owner) }),
             let budgets = decodeBudgets(from: budgetPageData)
         else {
             return nil
         }
 
-        let period = BillingPeriod(timePeriod: summary.timePeriod)
+        let period = BillingPeriod(timePeriod: summary.timePeriod, containing: fetchedAt)
         let currency = currencyResolution(topLevel: summary.currency, items: summary.usageItems)
-        var bars = organizationUsageBars(summary.usageItems)
+        let plan = GitHubPlanAllowance(name: planName, scope: .organization)
+        let allowance = makeAllowanceOutput(
+            summaryItems: summary.usageItems,
+            usageItems: usage.usageItems,
+            repositoryVisibility: repositoryVisibility,
+            plan: plan,
+            period: period,
+            scope: .organization,
+            failure: planStatusMessage ?? unsupportedPlanMessage(name: planName, scope: .organization)
+        )
+        var bars = organizationUsageBars(summary.usageItems) + allowance.bars
         let budgetOutput = makeBudgetOutput(
             budgets: budgets,
             usageItems: usage.usageItems,
@@ -166,19 +158,31 @@ public enum GitHubBillingUsageParser {
         let presentation = organizationPresentation(
             summaryItems: summary.usageItems,
             currency: currency,
+            allowance: allowance,
+            plan: plan,
             budgetOutput: budgetOutput,
             totals: totals,
             details: usageDetails(usage.usageItems, currencyCode: currency.verifiedCode),
             budgetStatusMessage: budgetStatusMessage,
+            repositoryVisibilityMessage: repositoryVisibilityMessage,
             hasBudgets: !budgets.isEmpty
         )
+        let planDescriptor = plan.map { plan in
+            ProviderPlanDescriptor.make(
+                providerPrefix: ProviderID.githubBilling.rawValue,
+                identifier: "organization-\(plan.id)",
+                label: plan.label
+            )
+        }
         return ProviderUsageResult(
             accountID: configuration.id,
             providerID: .githubBilling,
             title: configuration.displayName,
+            plan: planDescriptor,
             subtitle: "GitHub organization billing for \(owner)",
             bars: bars,
             monetaryMetrics: monetaryMetrics,
+            unavailableUsageMetrics: allowance.unavailable,
             usageMessages: presentation.messages,
             cardInformationSections: presentation.sections,
             cacheIdentity: owner.lowercased(),
@@ -189,26 +193,35 @@ public enum GitHubBillingUsageParser {
     private static func organizationPresentation(
         summaryItems: [SummaryItem],
         currency: GitHubBillingCurrency,
+        allowance: AllowanceOutput,
+        plan: GitHubPlanAllowance?,
         budgetOutput: BudgetOutput,
         totals: SpendTotals?,
         details: UsageDetailOutput,
         budgetStatusMessage: String?,
+        repositoryVisibilityMessage: String?,
         hasBudgets: Bool
     ) -> OrganizationPresentationOutput {
-        var messages = budgetOutput.messages + spendStatusMessages(for: totals)
+        var messages = Set(allowance.unavailable.values).sorted()
+            + budgetOutput.messages
+            + spendStatusMessages(for: totals)
         if let conflictMessage = currency.conflictMessage {
             messages.append(conflictMessage)
         }
         if let budgetStatusMessage {
             messages.append(budgetStatusMessage)
         }
+        if let repositoryVisibilityMessage {
+            messages.append(repositoryVisibilityMessage)
+        }
         var sections = productSummarySections(
             summaryItems,
             currencyCode: currency.verifiedCode,
-            includesPersonalAllowances: false,
-            bars: [],
-            unavailable: [:]
+            includesPlanAllowances: true,
+            bars: allowance.bars,
+            unavailable: allowance.unavailable
         )
+        sections.append(contentsOf: allowanceSections(allowance.bars))
         sections.append(contentsOf: budgetOutput.sections)
         let budgetQualification = budgetStatusMessage == nil && !hasBudgets
             ? "GitHub returned no organization budgets. Metered usage can still incur charges."
@@ -216,7 +229,7 @@ public enum GitHubBillingUsageParser {
         if let notes = amountsAndCurrencySection(
             currency: currency,
             includesPersonalBudgetNotes: false,
-            plan: nil,
+            plan: plan,
             budgetQualification: budgetQualification,
             omittedDetailCount: details.omittedCount
         ) {
@@ -232,141 +245,561 @@ public enum GitHubBillingUsageParser {
         return OrganizationPresentationOutput(messages: messages, sections: sections)
     }
 
-    private static func appendPersonalActionsMinutes(
-        _ items: [UsageItem],
+    // https://docs.github.com/en/billing/reference/actions-runner-pricing
+    private static func unsupportedPlanMessage(
+        name: String,
+        scope: GitHubAllowanceScope
+    ) -> String {
+        if scope == .organization, ["business", "businessplus", "enterprise"].contains(name.normalized) {
+            return "GitHub Enterprise allowances are pooled, but the organization API does not identify this organization's share."
+        }
+        let plans = scope == .personal ? "Free or Pro" : "Free or Team"
+        let action = scope == .personal
+            ? "Refresh the account or sign in again with the intended GitHub user."
+            : "Refresh the account or sign in again and approve organization access."
+        return "GitHub did not return a supported \(plans) plan, so included allowances are unavailable. \(action)"
+    }
+
+    private static func makeAllowanceOutput(
+        summaryItems: [SummaryItem],
+        usageItems: [UsageItem],
         repositoryVisibility: [String: Bool],
-        plan: PersonalPlan?,
+        plan: GitHubPlanAllowance?,
         period: BillingPeriod?,
-        bars: inout [UsageBar],
-        unavailable: inout [String: String],
-        failure: String?
-    ) {
-        let metricID = "githubBilling.actions-private-minutes"
+        scope: GitHubAllowanceScope,
+        failure: String
+    ) -> AllowanceOutput {
         guard let plan else {
-            unavailable[metricID] = failure ?? "The GitHub plan allowance is unavailable."
-            return
+            return AllowanceOutput(unavailable: unavailableAllowances(scope: scope, reason: failure))
+        }
+        guard let period else {
+            let reason = "GitHub did not return a complete billing period, so included allowances are unavailable."
+            return AllowanceOutput(unavailable: unavailableAllowances(scope: scope, reason: reason))
         }
 
-        var consumed = Decimal.zero
-        var isClassifiable = true
-        for item in items where item.isPotentialActionsMinutes {
-            guard
-                item.isActionsMinutes,
-                let repositoryName = item.repositoryName,
-                let isPrivate = repositoryVisibility[repositoryName],
-                let multiplier = item.standardRunnerMultiplier,
-                let quantity = item.quantity,
-                quantity >= 0,
-                item.hasNonnegativeFinancialFields
-            else {
-                isClassifiable = false
+        var output = AllowanceOutput()
+        appendActionsMinutes(
+            summaryItems: summaryItems,
+            usageItems: usageItems,
+            repositoryVisibility: repositoryVisibility,
+            plan: plan,
+            period: period,
+            output: &output
+        )
+        appendActionsStorage(
+            summaryItems,
+            usageItems: usageItems,
+            repositoryVisibility: repositoryVisibility,
+            plan: plan,
+            period: period,
+            output: &output
+        )
+        appendPackagesStorage(summaryItems, plan: plan, period: period, output: &output)
+        appendPackagesDataTransfer(
+            summaryItems,
+            plan: plan,
+            period: period,
+            output: &output
+        )
+        appendLFSUsage(summaryItems, plan: plan, period: period, output: &output)
+        appendCodespacesUsage(summaryItems, plan: plan, period: period, output: &output)
+        return output
+    }
+
+    private static func unavailableAllowances(
+        scope: GitHubAllowanceScope,
+        reason: String
+    ) -> [String: String] {
+        var keys = [
+            "githubBilling.actions-allowance-minutes",
+            "githubBilling.actions-storage",
+            "githubBilling.packages-storage",
+            "githubBilling.packages-data-transfer",
+            "githubBilling.lfs-storage",
+            "githubBilling.lfs-bandwidth",
+        ]
+        if scope == .personal {
+            keys += ["githubBilling.codespaces-core-hours", "githubBilling.codespaces-storage"]
+        }
+        return Dictionary(uniqueKeysWithValues: keys.map { ($0, reason) })
+    }
+
+    private static func appendActionsMinutes(
+        summaryItems: [SummaryItem],
+        usageItems: [UsageItem],
+        repositoryVisibility: [String: Bool],
+        plan: GitHubPlanAllowance,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let metricID = "githubBilling.actions-allowance-minutes"
+        let summaryCandidates = summaryItems.filter(\.isPotentialActionsMinutes)
+        let candidates = usageItems.filter(\.isPotentialActionsMinutes)
+        if let message = actionsMinutesEvidenceFailure(
+            summaryCandidates: summaryCandidates,
+            detailCandidates: candidates
+        ) {
+            output.unavailable[metricID] = message
+            return
+        }
+        guard !candidates.isEmpty else {
+            appendEmptyActionsMinutes(
+                summaryItems: summaryItems,
+                plan: plan,
+                period: period,
+                output: &output
+            )
+            return
+        }
+        let total = includedActionsMinutes(candidates, repositoryVisibility: repositoryVisibility)
+        guard let used = total.used else {
+            output.unavailable[metricID] = total.unavailableMessage
+            return
+        }
+        let reportedBillable = summaryCandidates
+            .filter(\.isIncludedStandardRunner)
+            .compactMap(\.billableAllowanceMinutes)
+            .reduce(.zero, +)
+        let planLimit = Decimal(plan.actionsMinutes)
+        guard reportedBillable <= max(used - planLimit, .zero) else {
+            output.unavailable[metricID] = "GitHub reported billable standard-runner minutes before the included "
+                + "allowance was exhausted. Refresh the account; if this continues, review GitHub Billing."
+            return
+        }
+        output.bars.append(allowanceBar(
+            stableKey: "actions-allowance-minutes",
+            label: "Actions minutes",
+            used: used,
+            limit: planLimit,
+            period: period
+        ))
+    }
+
+    private static func actionsMinutesEvidenceFailure(
+        summaryCandidates: [SummaryItem],
+        detailCandidates: [UsageItem]
+    ) -> String? {
+        guard summaryCandidates.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            return "GitHub did not return complete Actions gross, discount, and billable quantities."
+        }
+        guard quantityTotals(summaryCandidates) == quantityTotals(detailCandidates) else {
+            return "GitHub's Actions summary and repository detail did not reconcile completely."
+        }
+        return nil
+    }
+
+    private static func includedActionsMinutes(
+        _ items: [UsageItem],
+        repositoryVisibility: [String: Bool]
+    ) -> ActionsMinutesTotal {
+        var used = Decimal.zero
+        for item in items {
+            switch actionsMinuteContribution(item, repositoryVisibility: repositoryVisibility) {
+            case let .included(reportedMinutes):
+                used += reportedMinutes
+            case .excluded:
                 continue
-            }
-            if isPrivate {
-                consumed += quantity * multiplier
+            case let .unavailable(reason):
+                return ActionsMinutesTotal(unavailableMessage: reason)
             }
         }
+        return ActionsMinutesTotal(used: used)
+    }
 
-        guard isClassifiable else {
-            unavailable[metricID] = "GitHub returned Actions usage that CodexBar could not classify as a private standard runner."
+    private static func actionsMinuteContribution(
+        _ item: UsageItem,
+        repositoryVisibility: [String: Bool]
+    ) -> ActionsMinuteContribution {
+        guard
+            item.isActionsMinutes,
+            let quantity = item.quantity,
+            quantity >= 0,
+            item.hasNonnegativeFinancialFields
+        else {
+            return .unavailable("GitHub returned private Actions usage outside the verified runner allowance contract.")
+        }
+        switch item.actionsRunnerAllowance {
+        case .includedStandard:
+            return standardRunnerContribution(
+                item,
+                quantity: quantity,
+                repositoryVisibility: repositoryVisibility
+            )
+        case .excludedPaidLarger, .excludedSelfHosted:
+            return .excluded
+        case .unknown:
+            return .unavailable("GitHub returned private Actions usage outside the verified runner allowance contract.")
+        }
+    }
+
+    private static func standardRunnerContribution(
+        _ item: UsageItem,
+        quantity: Decimal,
+        repositoryVisibility: [String: Bool]
+    ) -> ActionsMinuteContribution {
+        guard
+            let repositoryName = item.repositoryName,
+            let isPrivate = repositoryVisibility[repositoryName]
+        else {
+            return .unavailable("GitHub returned Actions usage whose repository visibility CodexBar could not verify.")
+        }
+        guard isPrivate else { return .excluded }
+        guard
+            let unitPrice = item.pricePerUnit,
+            let expectedRate = item.expectedStandardRunnerRate,
+            unitPrice == expectedRate
+        else {
+            return .unavailable("GitHub returned a standard-runner price outside the verified billing contract.")
+        }
+        return .included(GitHubActionsRunnerCatalog.allowanceMinutes(quantity: quantity, unitPrice: unitPrice))
+    }
+
+    private static func quantityTotals<Item: MeteredQuantityItem>(
+        _ items: [Item]
+    ) -> [MeteredQuantityKey: Decimal]? {
+        var totals: [MeteredQuantityKey: Decimal] = [:]
+        for item in items {
+            guard let quantity = item.allowanceQuantity, quantity >= 0 else { return nil }
+            guard quantity > 0 else { continue }
+            guard
+                let sku = item.sku?.normalized.nonempty,
+                let unit = item.unitType?.normalized.nonempty,
+                let unitPrice = item.pricePerUnit,
+                unitPrice >= 0
+            else {
+                return nil
+            }
+            totals[MeteredQuantityKey(sku: sku, unit: unit, unitPrice: unitPrice), default: 0] += quantity
+        }
+        return totals
+    }
+
+    private static func appendEmptyActionsMinutes(
+        summaryItems: [SummaryItem],
+        plan: GitHubPlanAllowance,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let summaryReportsUsage = summaryItems.contains { item in
+            item.isPotentialActionsMinutes && item.grossQuantity.map { $0 > 0 } == true
+        }
+        if summaryReportsUsage {
+            output.unavailable["githubBilling.actions-allowance-minutes"] =
+                "GitHub's summary reported Actions minutes without the repository detail required to verify the allowance."
             return
         }
-        bars.append(allowanceBar(
-            stableKey: "actions-private-minutes",
-            label: "Private Actions minutes",
-            used: consumed,
+        output.bars.append(allowanceBar(
+            stableKey: "actions-allowance-minutes",
+            label: "Actions minutes",
+            used: 0,
             limit: Decimal(plan.actionsMinutes),
             period: period
         ))
     }
 
-    private static func appendAccruedStorage(
+    private static func appendActionsStorage(
         _ items: [SummaryItem],
-        plan: PersonalPlan?,
-        period: BillingPeriod?,
-        bars: inout [UsageBar],
-        unavailable: inout [String: String],
-        failure: String?
+        usageItems: [UsageItem],
+        repositoryVisibility: [String: Bool],
+        plan: GitHubPlanAllowance,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
     ) {
-        let metricID = "githubBilling.actions-packages-storage"
-        guard let plan else {
-            unavailable[metricID] = failure ?? "The GitHub plan allowance is unavailable."
+        let metricID = "githubBilling.actions-storage"
+        let matching = items.filter(\.isPotentialActionsStorage)
+        if let message = actionsStorageEvidenceFailure(matching) {
+            output.unavailable[metricID] = message
             return
         }
-        guard let period else {
-            unavailable[metricID] = "GitHub did not return a complete billing period for accrued storage."
+        let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
+        let details = usageItems.filter(\.isPotentialActionsStorage)
+        guard let accruedUsage = privateRepositoryQuantity(
+            expectedTotal: total,
+            items: details,
+            repositoryVisibility: repositoryVisibility,
+            isValid: { $0.isActionsStorage && $0.isGBHours }
+        ) else {
+            output.unavailable[metricID] = "GitHub did not return complete repository eligibility for Actions storage."
             return
         }
-        let matching = items.filter { $0.isPotentialActionsOrPackagesStorage }
-        guard matching.allSatisfy(\.isActionsOrPackagesStorage) else {
-            unavailable[metricID] = "GitHub returned Actions or Packages storage without a recognized storage SKU."
+        let periodHours = Decimal(period.hours)
+        let used = accruedUsage / periodHours
+        let billable = matching.compactMap(\.netQuantity).reduce(.zero, +) / periodHours
+        guard allowanceBillingIsConsistent(used: used, limit: plan.actionsStorageGB, billable: billable) else {
+            output.unavailable[metricID] = prematureBillingMessage(for: "Actions storage")
             return
         }
-        guard matching.allSatisfy(\.isGBHours) else {
-            unavailable[metricID] = "GitHub returned storage in a unit that cannot be compared with a GB-hour allowance."
+        output.bars.append(allowanceBar(
+            stableKey: "actions-storage",
+            label: "Actions storage",
+            used: used,
+            limit: plan.actionsStorageGB,
+            period: period
+        ))
+    }
+
+    private static func actionsStorageEvidenceFailure(_ items: [SummaryItem]) -> String? {
+        guard items.allSatisfy(\.isActionsStorage) else {
+            return "GitHub returned Actions storage without the recognized storage SKU."
+        }
+        guard items.allSatisfy(\.isGBHours) else {
+            return "GitHub returned Actions storage in a unit that cannot be compared with its monthly allowance."
+        }
+        guard items.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            return "GitHub did not return complete Actions-storage gross, discount, and billable quantities."
+        }
+        return nil
+    }
+
+    private static func appendPackagesStorage(
+        _ items: [SummaryItem],
+        plan: GitHubPlanAllowance,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let metricID = "githubBilling.packages-storage"
+        let matching = items.filter(\.isPotentialPackagesStorage)
+        guard matching.allSatisfy(\.isPackagesStorage), matching.allSatisfy(\.isGBHours) else {
+            output.unavailable[metricID] = "GitHub returned Packages storage in an unsupported SKU or unit."
             return
         }
-        guard matching.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true }) else {
-            unavailable[metricID] = "GitHub did not return a complete nonnegative accrued storage quantity."
+        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable[metricID] = "GitHub did not return complete Packages-storage gross, discount, and billable quantities."
             return
         }
-        let used = matching.compactMap(\.grossQuantity).reduce(.zero, +)
-        let limit = plan.sharedStorageGB * Decimal(period.hours)
-        bars.append(allowanceBar(
-            stableKey: "actions-packages-storage",
-            label: "Actions + Packages storage",
+        let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
+        guard total == 0 else {
+            output.unavailable[metricID] = "GitHub Billing does not identify package visibility, so nonzero "
+                + "Packages storage cannot be compared with the private-package allowance."
+            return
+        }
+        output.bars.append(allowanceBar(
+            stableKey: "packages-storage",
+            label: "Packages storage",
+            used: 0,
+            limit: plan.packagesStorageGB,
+            period: period
+        ))
+    }
+
+    private static func appendPackagesDataTransfer(
+        _ items: [SummaryItem],
+        plan: GitHubPlanAllowance,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let metricID = "githubBilling.packages-data-transfer"
+        let matching = items.filter(\.isPotentialPackagesDataTransfer)
+        guard matching.allSatisfy(\.isPackagesDataTransfer), matching.allSatisfy(\.isGB) else {
+            output.unavailable[metricID] = "GitHub returned Packages data transfer in an unsupported SKU or unit."
+            return
+        }
+        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable[metricID] = "GitHub did not return complete Packages transfer gross, discount, and billable quantities."
+            return
+        }
+        let total = matching.compactMap(\.grossQuantity).reduce(.zero, +)
+        guard total == 0 else {
+            output.unavailable[metricID] = "GitHub Billing does not identify package visibility or free Actions "
+                + "downloads, so nonzero Packages transfer cannot be compared with the private-package allowance."
+            return
+        }
+        output.bars.append(allowanceBar(
+            stableKey: "packages-data-transfer",
+            label: "Packages data transfer",
+            used: 0,
+            limit: Decimal(plan.packagesTransferGB),
+            period: period
+        ))
+    }
+
+    private static func privateRepositoryQuantity(
+        expectedTotal: Decimal,
+        items: [UsageItem],
+        repositoryVisibility: [String: Bool],
+        isValid: (UsageItem) -> Bool
+    ) -> Decimal? {
+        if items.isEmpty { return expectedTotal == 0 ? 0 : nil }
+        var total = Decimal.zero
+        var eligible = Decimal.zero
+        for item in items {
+            guard
+                isValid(item),
+                let quantity = item.quantity,
+                quantity >= 0,
+                let repositoryName = item.repositoryName,
+                let isPrivate = repositoryVisibility[repositoryName]
+            else {
+                return nil
+            }
+            total += quantity
+            if isPrivate { eligible += quantity }
+        }
+        guard total == expectedTotal else { return nil }
+        return eligible
+    }
+
+    private static func appendLFSUsage(
+        _ items: [SummaryItem],
+        plan: GitHubPlanAllowance,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let storageItems = items.filter(\.isPotentialLFSStorage)
+        appendLFSMetric(
+            storageItems,
+            hasExpectedContract: storageItems.allSatisfy(\.isLFSStorage)
+                && storageItems.allSatisfy(\.isGBHours),
+            stableKey: "lfs-storage",
+            label: "Git LFS storage",
+            limit: Decimal(plan.lfsStorageGB) * Decimal(period.hours),
+            period: period,
+            output: &output
+        )
+        let bandwidthItems = items.filter(\.isPotentialLFSBandwidth)
+        appendLFSMetric(
+            bandwidthItems,
+            hasExpectedContract: bandwidthItems.allSatisfy(\.isLFSBandwidth)
+                && bandwidthItems.allSatisfy(\.isGB),
+            stableKey: "lfs-bandwidth",
+            label: "Git LFS bandwidth",
+            limit: Decimal(plan.lfsBandwidthGB),
+            period: period,
+            output: &output
+        )
+    }
+
+    private static func appendLFSMetric(
+        _ items: [SummaryItem],
+        hasExpectedContract: Bool,
+        stableKey: String,
+        label: String,
+        limit: Decimal,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let metricID = "githubBilling.\(stableKey)"
+        guard hasExpectedContract else {
+            output.unavailable[metricID] = "GitHub returned \(label) in an unsupported unit."
+            return
+        }
+        guard items.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable[metricID] = "GitHub did not return complete \(label) gross, discount, and billable quantities."
+            return
+        }
+        let used = items.compactMap(\.grossQuantity).reduce(.zero, +)
+        let billable = items.compactMap(\.netQuantity).reduce(.zero, +)
+        guard allowanceBillingIsConsistent(used: used, limit: limit, billable: billable) else {
+            output.unavailable[metricID] = prematureBillingMessage(for: label)
+            return
+        }
+        output.bars.append(allowanceBar(
+            stableKey: stableKey,
+            label: label,
             used: used,
             limit: limit,
             period: period
         ))
     }
 
-    private static func appendLFSUsage(
+    private static func appendCodespacesUsage(
         _ items: [SummaryItem],
-        plan: PersonalPlan?,
-        period: BillingPeriod?,
-        bars: inout [UsageBar],
-        unavailable: inout [String: String],
-        failure: String?
+        plan: GitHubPlanAllowance,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
     ) {
-        guard let plan else {
-            unavailable["githubBilling.lfs-storage"] = failure ?? "The GitHub plan allowance is unavailable."
-            unavailable["githubBilling.lfs-bandwidth"] = failure ?? "The GitHub plan allowance is unavailable."
+        guard
+            let coreHours = plan.codespacesCoreHours,
+            let storageGB = plan.codespacesStorageGB
+        else {
             return
         }
+        appendCodespacesCoreHours(items, limit: coreHours, period: period, output: &output)
+        appendCodespacesStorage(items, limitGB: storageGB, period: period, output: &output)
+    }
 
-        let storageItems = items.filter(\.isPotentialLFSStorage)
-        if storageItems.allSatisfy(\.isLFSStorage),
-           storageItems.allSatisfy(\.isGBHours),
-           storageItems.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true }),
-           let period {
-            bars.append(allowanceBar(
-                stableKey: "lfs-storage",
-                label: "Git LFS storage",
-                used: storageItems.compactMap(\.grossQuantity).reduce(.zero, +),
-                limit: Decimal(plan.lfsStorageGB) * Decimal(period.hours),
-                period: period
-            ))
-        } else {
-            unavailable["githubBilling.lfs-storage"] = period == nil
-                ? "GitHub did not return a complete billing period for accrued Git LFS storage."
-                : "GitHub returned Git LFS storage in an unsupported unit."
+    private static func appendCodespacesCoreHours(
+        _ items: [SummaryItem],
+        limit: Int,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let matching = items.filter(\.isPotentialCodespacesCoreHours)
+        guard matching.allSatisfy(\.isCodespacesCoreHours) else {
+            output.unavailable["githubBilling.codespaces-core-hours"] = "GitHub returned Codespaces compute in an unsupported SKU or unit."
+            return
         }
+        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable["githubBilling.codespaces-core-hours"] =
+                "GitHub did not return complete Codespaces compute gross, discount, and billable quantities."
+            return
+        }
+        let used = matching.compactMap(\.codespacesCoreHours).reduce(.zero, +)
+        let allowanceLimit = Decimal(limit)
+        let billable = matching.compactMap(\.codespacesNetCoreHours).reduce(.zero, +)
+        guard allowanceBillingIsConsistent(used: used, limit: allowanceLimit, billable: billable) else {
+            output.unavailable["githubBilling.codespaces-core-hours"] = prematureBillingMessage(for: "Codespaces compute")
+            return
+        }
+        output.bars.append(allowanceBar(
+            stableKey: "codespaces-core-hours",
+            label: "Codespaces core hours",
+            used: used,
+            limit: allowanceLimit,
+            period: period
+        ))
+    }
 
-        let bandwidthItems = items.filter(\.isPotentialLFSBandwidth)
-        if bandwidthItems.allSatisfy(\.isLFSBandwidth),
-           bandwidthItems.allSatisfy(\.isGB),
-           bandwidthItems.allSatisfy({ $0.grossQuantity.map { $0 >= 0 } == true }) {
-            bars.append(allowanceBar(
-                stableKey: "lfs-bandwidth",
-                label: "Git LFS bandwidth",
-                used: bandwidthItems.compactMap(\.grossQuantity).reduce(.zero, +),
-                limit: Decimal(plan.lfsBandwidthGB),
-                period: period
-            ))
-        } else {
-            unavailable["githubBilling.lfs-bandwidth"] = "GitHub returned Git LFS bandwidth in an unsupported unit."
+    private static func appendCodespacesStorage(
+        _ items: [SummaryItem],
+        limitGB: Int,
+        period: BillingPeriod,
+        output: inout AllowanceOutput
+    ) {
+        let matching = items.filter(\.isPotentialCodespacesStorage)
+        guard matching.allSatisfy(\.isCodespacesStorage) else {
+            output.unavailable["githubBilling.codespaces-storage"] = "GitHub returned Codespaces storage with an unsupported SKU."
+            return
         }
+        guard matching.allSatisfy(\.hasCompleteAllowanceQuantityEvidence) else {
+            output.unavailable["githubBilling.codespaces-storage"] =
+                "GitHub did not return complete Codespaces storage gross, discount, and billable quantities."
+            return
+        }
+        let isAccrued = matching.allSatisfy(\.isGBHours)
+        let isMonthly = matching.allSatisfy { $0.isGB || $0.isGBMonths }
+        guard isAccrued || isMonthly else {
+            output.unavailable["githubBilling.codespaces-storage"] = "GitHub returned Codespaces storage in an unsupported unit."
+            return
+        }
+        let monthlyToAccruedMultiplier = isAccrued ? Decimal(1) : Decimal(period.hours)
+        let used = matching.compactMap(\.grossQuantity).reduce(.zero, +) * monthlyToAccruedMultiplier
+        let allowanceLimit = Decimal(limitGB) * Decimal(period.hours)
+        let billable = matching.compactMap(\.netQuantity).reduce(.zero, +) * monthlyToAccruedMultiplier
+        guard allowanceBillingIsConsistent(used: used, limit: allowanceLimit, billable: billable) else {
+            output.unavailable["githubBilling.codespaces-storage"] = prematureBillingMessage(for: "Codespaces storage")
+            return
+        }
+        output.bars.append(allowanceBar(
+            stableKey: "codespaces-storage",
+            label: "Codespaces storage",
+            used: used,
+            limit: allowanceLimit,
+            period: period
+        ))
+    }
+
+    private static func allowanceBillingIsConsistent(
+        used: Decimal,
+        limit: Decimal,
+        billable: Decimal
+    ) -> Bool {
+        billable <= max(used - limit, .zero)
+    }
+
+    private static func prematureBillingMessage(for metric: String) -> String {
+        "GitHub reported billable \(metric) before the included allowance was exhausted. Refresh the account; "
+            + "if this continues, review GitHub Billing."
     }
 
     private static func allowanceBar(
@@ -414,20 +847,45 @@ public enum GitHubBillingUsageParser {
         return sections
     }
 
+    private static func allowanceSections(_ bars: [UsageBar]) -> [ProviderCardInformationSection] {
+        bars.isEmpty ? [] : [allowanceSection(bars)]
+    }
+
     private static func allowanceSection(_ bars: [UsageBar]) -> ProviderCardInformationSection {
         ProviderCardInformationSection(
-            id: "github-billing.personal-allowances",
-            title: "Included personal allowances",
+            id: "github-billing.plan-allowances",
+            title: "Included plan allowances",
             items: bars.enumerated().map { index, bar in
-                let remaining = max(bar.limit - bar.used, 0)
+                let unit = allowanceUnit(for: bar.stableKey)
+                let suffix = allowanceRemainingText(bar, unit: unit)
                 return ProviderCardInformationItem(
                     id: bar.stableKey ?? "allowance-\(index)",
                     label: bar.label,
-                    detail: "\(usageAmount(bar.used)) used · \(usageAmount(bar.limit)) included · "
-                        + "\(usageAmount(remaining)) remaining"
+                    detail: "\(usageAmount(bar.used)) of \(usageAmount(bar.limit)) \(unit) used · \(suffix)"
                 )
             }
         )
+    }
+
+    private static func allowanceUnit(for stableKey: String?) -> String {
+        let unitsByMetric = [
+            "actions-allowance-minutes": "minutes",
+            "actions-storage": "GB",
+            "packages-storage": "GB",
+            "lfs-storage": "GB-hours",
+            "codespaces-storage": "GB-hours",
+            "packages-data-transfer": "GB",
+            "lfs-bandwidth": "GB",
+            "codespaces-core-hours": "core hours",
+        ]
+        return stableKey.flatMap { unitsByMetric[$0] } ?? "units"
+    }
+
+    private static func allowanceRemainingText(_ bar: UsageBar, unit: String) -> String {
+        if bar.used > bar.limit {
+            return "\(usageAmount(bar.used - bar.limit)) \(unit) over allowance"
+        }
+        return "\(usageAmount(bar.limit - bar.used)) \(unit) remaining"
     }
 
     private static func usageAmount(_ value: Double) -> String {
@@ -441,6 +899,7 @@ public enum GitHubBillingUsageParser {
                 let product = item.product?.nonempty,
                 let sku = item.sku?.nonempty,
                 let quantity = item.grossQuantity,
+                quantity >= 0,
                 let unit = item.unitType?.nonempty
             else {
                 continue
@@ -593,9 +1052,10 @@ public enum GitHubBillingUsageParser {
                 )
             )
         }
-        guard matching.allSatisfy({ $0.netAmount != nil }) else {
+        guard matching.allSatisfy(\.hasNonnegativeFinancialFields) else {
             return BudgetCandidate(
-                unavailableMessage: "GitHub did not return complete net spend for the \(targetLabel) budget."
+                unavailableMessage: "GitHub did not return complete nonnegative financial evidence for the "
+                    + "\(targetLabel) budget."
             )
         }
         let normalized = NormalizedBudget(
@@ -630,9 +1090,25 @@ public enum GitHubBillingUsageParser {
         default:
             return nil
         }
-        return scopedItems.filter { item in
-            let candidate = isProduct ? item.product : item.sku
-            return candidate.map { normalizedTargets.contains($0.normalized) } == true
+        return classifiedBudgetUsageItems(
+            scopedItems,
+            isProduct: isProduct,
+            normalizedTargets: normalizedTargets
+        )
+    }
+
+    private static func classifiedBudgetUsageItems(
+        _ items: [UsageItem],
+        isProduct: Bool,
+        normalizedTargets: Set<String>
+    ) -> [UsageItem]? {
+        let candidates = items.map { item in
+            (isProduct ? item.product : item.sku)?.nonempty
+        }
+        guard candidates.allSatisfy({ $0 != nil }) else { return nil }
+        return zip(items, candidates).compactMap { item, candidate in
+            guard let candidate, normalizedTargets.contains(candidate.normalized) else { return nil }
+            return item
         }
     }
 
@@ -741,7 +1217,7 @@ public enum GitHubBillingUsageParser {
     private static func productSummarySections(
         _ items: [SummaryItem],
         currencyCode: String?,
-        includesPersonalAllowances: Bool,
+        includesPlanAllowances: Bool,
         bars: [UsageBar],
         unavailable: [String: String]
     ) -> [ProviderCardInformationSection] {
@@ -765,7 +1241,7 @@ public enum GitHubBillingUsageParser {
                     displayName: group.displayName,
                     items: group.items,
                     currencyCode: currencyCode,
-                    includesPersonalAllowances: includesPersonalAllowances,
+                    includesPlanAllowances: includesPlanAllowances,
                     bars: bars,
                     unavailable: unavailable
                 )
@@ -774,7 +1250,7 @@ public enum GitHubBillingUsageParser {
 
     /// Known products come first in a stable order; anything else keeps GitHub's
     /// own product name so returned data is never discarded.
-    private static let knownProductOrder: [String] = ["copilot", "actions", "codespaces", "git-lfs"]
+    private static let knownProductOrder: [String] = ["copilot", "actions", "codespaces", "packages", "git-lfs"]
 
     private static func productGroupOrder(
         key lhsKey: String,
@@ -821,27 +1297,35 @@ public enum GitHubBillingUsageParser {
         displayName: String,
         items: [SummaryItem],
         currencyCode: String?,
-        includesPersonalAllowances: Bool,
+        includesPlanAllowances: Bool,
         bars: [UsageBar],
         unavailable: [String: String]
     ) -> ProviderCardInformationSection {
         var rows = [
             consumedUsageRow(items, key: key, currencyCode: currencyCode),
-            amountUsageRow(
+            amountAndQuantityUsageRow(
                 id: "\(key).discount",
                 label: "Discount usage",
                 amounts: items.map(\.discountAmount),
+                items: items,
+                quantityKeyPath: \.discountQuantity,
                 currencyCode: currencyCode
             ),
-            amountUsageRow(
+            amountAndQuantityUsageRow(
                 id: "\(key).billable",
                 label: "Billable usage",
                 amounts: items.map(\.netAmount),
+                items: items,
+                quantityKeyPath: \.netQuantity,
                 currencyCode: currencyCode
             ),
         ]
-        if includesPersonalAllowances && key == "actions" {
-            rows.append(contentsOf: actionsIncludedUsageRows(bars: bars, unavailable: unavailable))
+        if includesPlanAllowances {
+            rows.append(contentsOf: includedUsageRows(
+                productKey: key,
+                bars: bars,
+                unavailable: unavailable
+            ))
         }
         return ProviderCardInformationSection(
             id: "github-billing.product.\(key)",
@@ -862,8 +1346,29 @@ public enum GitHubBillingUsageParser {
             amounts: amounts,
             currencyCode: currencyCode
         ).detail
-        detail += " · \(quantitySummary(items))"
+        detail += " · \(quantitySummary(items, keyPath: \.grossQuantity))"
         return ProviderCardInformationItem(id: "\(key).consumed", label: "Consumed usage", detail: detail)
+    }
+
+    private static func amountAndQuantityUsageRow(
+        id: String,
+        label: String,
+        amounts: [Decimal?],
+        items: [SummaryItem],
+        quantityKeyPath: KeyPath<SummaryItem, Decimal?>,
+        currencyCode: String?
+    ) -> ProviderCardInformationItem {
+        let amount = amountUsageRow(
+            id: id,
+            label: label,
+            amounts: amounts,
+            currencyCode: currencyCode
+        ).detail
+        return ProviderCardInformationItem(
+            id: id,
+            label: label,
+            detail: "\(amount) · \(quantitySummary(items, keyPath: quantityKeyPath))"
+        )
     }
 
     private static func amountUsageRow(
@@ -881,10 +1386,13 @@ public enum GitHubBillingUsageParser {
         return ProviderCardInformationItem(id: id, label: label, detail: detail)
     }
 
-    private static func quantitySummary(_ items: [SummaryItem]) -> String {
+    private static func quantitySummary(
+        _ items: [SummaryItem],
+        keyPath: KeyPath<SummaryItem, Decimal?>
+    ) -> String {
         var totalsByUnit: [String: (unit: String, quantity: Decimal)] = [:]
         for item in items {
-            guard let quantity = item.grossQuantity, quantity >= 0, let unit = item.unitType?.nonempty else {
+            guard let quantity = item[keyPath: keyPath], quantity >= 0, let unit = item.unitType?.nonempty else {
                 return "Quantity unavailable"
             }
             let unitKey = stableKey(unit)
@@ -897,28 +1405,115 @@ public enum GitHubBillingUsageParser {
             .joined(separator: " · ")
     }
 
-    private static func actionsIncludedUsageRows(
+    private static let includedUsageDefinitions: [String: [IncludedUsageDefinition]] = [
+        "actions": [
+            IncludedUsageDefinition(
+                id: "actions.included.minutes",
+                label: "Included usage · Minutes",
+                stableKey: "actions-allowance-minutes",
+                unit: "minutes",
+                scopeNote: "private standard runners"
+            ),
+            IncludedUsageDefinition(
+                id: "actions.included.storage",
+                label: "Included usage · Storage",
+                stableKey: "actions-storage",
+                unit: "GB",
+                scopeNote: "private Actions storage"
+            ),
+        ],
+        "packages": [
+            IncludedUsageDefinition(
+                id: "packages.included.storage",
+                label: "Included usage · Storage",
+                stableKey: "packages-storage",
+                unit: "GB",
+                scopeNote: "private Packages storage"
+            ),
+            IncludedUsageDefinition(
+                id: "packages.included.transfer",
+                label: "Included usage · Data transfer",
+                stableKey: "packages-data-transfer",
+                unit: "GB"
+            ),
+        ],
+        "codespaces": [
+            IncludedUsageDefinition(
+                id: "codespaces.included.core-hours",
+                label: "Included usage · Core hours",
+                stableKey: "codespaces-core-hours",
+                unit: "core hours"
+            ),
+            IncludedUsageDefinition(
+                id: "codespaces.included.storage",
+                label: "Included usage · Storage",
+                stableKey: "codespaces-storage",
+                unit: "GB-hours"
+            ),
+        ],
+        "git-lfs": [
+            IncludedUsageDefinition(
+                id: "git-lfs.included.storage",
+                label: "Included usage · Storage",
+                stableKey: "lfs-storage",
+                unit: "GB-hours"
+            ),
+            IncludedUsageDefinition(
+                id: "git-lfs.included.bandwidth",
+                label: "Included usage · Bandwidth",
+                stableKey: "lfs-bandwidth",
+                unit: "GB"
+            ),
+        ],
+    ]
+
+    private static func includedUsageRows(
+        productKey: String,
         bars: [UsageBar],
         unavailable: [String: String]
     ) -> [ProviderCardInformationItem] {
-        [
-            includedUsageRow(
-                id: "actions.included.minutes",
-                label: "Included usage · Minutes",
-                bar: bars.first { $0.stableKey == "actions-private-minutes" },
-                unit: "minutes",
-                scopeNote: nil,
-                reason: unavailable["githubBilling.actions-private-minutes"]
-            ),
-            includedUsageRow(
-                id: "actions.included.storage",
-                label: "Included usage · Storage",
-                bar: bars.first { $0.stableKey == "actions-packages-storage" },
-                unit: "GB-hours",
-                scopeNote: "Actions and Packages storage",
-                reason: unavailable["githubBilling.actions-packages-storage"]
-            ),
-        ]
+        let definitions = includedUsageDefinitions[productKey] ?? []
+        return definitions
+            .filter { hasAllowanceMetric($0.stableKey, bars: bars, unavailable: unavailable) }
+            .map { definition in
+                includedUsageRow(
+                    id: definition.id,
+                    label: definition.label,
+                    stableKey: definition.stableKey,
+                    unit: definition.unit,
+                    scopeNote: definition.scopeNote,
+                    bars: bars,
+                    unavailable: unavailable
+                )
+            }
+    }
+
+    private static func hasAllowanceMetric(
+        _ stableKey: String,
+        bars: [UsageBar],
+        unavailable: [String: String]
+    ) -> Bool {
+        bars.contains { $0.stableKey == stableKey }
+            || unavailable["githubBilling.\(stableKey)"] != nil
+    }
+
+    private static func includedUsageRow(
+        id: String,
+        label: String,
+        stableKey: String,
+        unit: String,
+        scopeNote: String?,
+        bars: [UsageBar],
+        unavailable: [String: String]
+    ) -> ProviderCardInformationItem {
+        includedUsageRow(
+            id: id,
+            label: label,
+            bar: bars.first { $0.stableKey == stableKey },
+            unit: unit,
+            scopeNote: scopeNote,
+            reason: unavailable["githubBilling.\(stableKey)"]
+        )
     }
 
     private static func includedUsageRow(
@@ -931,10 +1526,9 @@ public enum GitHubBillingUsageParser {
     ) -> ProviderCardInformationItem {
         let detail: String
         if let bar {
-            let remaining = max(bar.limit - bar.used, 0)
             let scope = scopeNote.map { " (\($0))" } ?? ""
             detail = "\(usageAmount(bar.used)) of \(usageAmount(bar.limit)) \(unit) used\(scope) · "
-                + "\(usageAmount(remaining)) \(unit) remaining"
+                + allowanceRemainingText(bar, unit: unit)
         } else {
             detail = reason ?? unavailableAmountText
         }
@@ -946,14 +1540,22 @@ public enum GitHubBillingUsageParser {
     private static func amountsAndCurrencySection(
         currency: GitHubBillingCurrency,
         includesPersonalBudgetNotes: Bool,
-        plan: PersonalPlan?,
+        plan: GitHubPlanAllowance?,
         budgetQualification: String?,
         omittedDetailCount: Int
     ) -> ProviderCardInformationSection? {
         var items: [ProviderCardInformationItem] = []
         items.append(contentsOf: currencyNoteItems(currency: currency))
         if includesPersonalBudgetNotes {
-            items.append(contentsOf: personalBudgetNotes(plan: plan))
+            items.append(contentsOf: personalBudgetNotes())
+        }
+        if plan != nil {
+            items.append(ProviderCardInformationItem(
+                id: "github-billing.actions-classification",
+                label: "Actions plan allowance",
+                detail: "Private standard-runner usage is normalized to GitHub's Linux allowance-minute rate. "
+                    + "Public and unverified runner usage is not counted."
+            ))
         }
         if let budgetQualification {
             items.append(ProviderCardInformationItem(
@@ -1003,8 +1605,8 @@ public enum GitHubBillingUsageParser {
         return items
     }
 
-    private static func personalBudgetNotes(plan: PersonalPlan?) -> [ProviderCardInformationItem] {
-        var items = [
+    private static func personalBudgetNotes() -> [ProviderCardInformationItem] {
+        [
             ProviderCardInformationItem(
                 id: "github-billing.personal-budgets",
                 label: "Personal budgets",
@@ -1012,14 +1614,6 @@ public enum GitHubBillingUsageParser {
                     + "Included allowances and current charges are shown separately."
             ),
         ]
-        if plan != nil {
-            items.append(ProviderCardInformationItem(
-                id: "github-billing.actions-classification",
-                label: "Private Actions minutes",
-                detail: "Calculated from GitHub's standard runner multipliers for repositories CodexBar could identify as private."
-            ))
-        }
-        return items
     }
 
     private static func makeSpendMetrics(
@@ -1258,44 +1852,177 @@ private struct TimePeriod: Decodable {
     let month: Int?
 }
 
-private struct SummaryItem: Decodable {
+private struct MeteredQuantityKey: Hashable {
+    let sku: String
+    let unit: String
+    let unitPrice: Decimal
+}
+
+private protocol MeteredQuantityItem {
+    var sku: String? { get }
+    var unitType: String? { get }
+    var allowanceQuantity: Decimal? { get }
+    var pricePerUnit: Decimal? { get }
+}
+
+private struct SummaryItem: Decodable, MeteredQuantityItem {
     let product: String?
     let sku: String?
     let unitType: String?
     let pricePerUnit: Decimal?
     let grossQuantity: Decimal?
     let grossAmount: Decimal?
+    let discountQuantity: Decimal?
     let discountAmount: Decimal?
+    let netQuantity: Decimal?
     let netAmount: Decimal?
     let currency: String?
+
+    var allowanceQuantity: Decimal? { grossQuantity }
+
+    var hasCompleteAllowanceQuantityEvidence: Bool {
+        guard
+            let grossQuantity,
+            grossQuantity >= 0,
+            let discountQuantity,
+            discountQuantity >= 0,
+            let netQuantity,
+            netQuantity >= 0
+        else {
+            return false
+        }
+        return discountQuantity + netQuantity == grossQuantity
+    }
 
     var hasMonetaryEvidence: Bool {
         [pricePerUnit, grossAmount, discountAmount, netAmount].contains { $0 != nil }
     }
 
-    var hasOrganizationMetricFields: Bool {
-        product?.nonempty != nil
-            && sku?.nonempty != nil
-            && unitType?.nonempty != nil
-            && pricePerUnit.map { $0 >= 0 } == true
-            && grossQuantity.map { $0 >= 0 } == true
-            && grossAmount.map { $0 >= 0 } == true
-            && discountAmount.map { $0 >= 0 } == true
-            && netAmount.map { $0 >= 0 } == true
+    var isPotentialActionsMinutes: Bool {
+        let normalizedProduct = product?.normalized ?? ""
+        let normalizedSKU = sku?.normalized ?? ""
+        guard
+            !normalizedSKU.contains("storage"),
+            !normalizedSKU.contains("cache"),
+            !normalizedSKU.contains("customimage")
+        else {
+            return false
+        }
+        if normalizedSKU.hasPrefix("actions") { return true }
+        return normalizedProduct.contains("actions")
+            && unitType?.normalized.contains("minute") == true
     }
 
-    var isActionsOrPackagesStorage: Bool {
-        let product = product?.normalized
-        let sku = sku?.normalized
-        return (product == "actions" && sku == "actionsstorage")
-            || (product == "packages" && sku == "packagesstorage")
+    var isIncludedStandardRunner: Bool {
+        if case .includedStandard = actionsRunnerAllowance { return true }
+        return false
     }
 
-    var isPotentialActionsOrPackagesStorage: Bool {
-        let product = product?.normalized
-        let sku = sku?.normalized
-        guard product == "actions" || product == "packages" else { return false }
-        return sku == "actionsstorage" || sku == "packagesstorage" || (sku == nil && isGBHours)
+    var billableAllowanceMinutes: Decimal? {
+        guard let netQuantity, let pricePerUnit else { return nil }
+        return GitHubActionsRunnerCatalog.allowanceMinutes(quantity: netQuantity, unitPrice: pricePerUnit)
+    }
+
+    var actionsRunnerAllowance: ActionsRunnerAllowance {
+        GitHubActionsRunnerCatalog.allowance(for: sku)
+    }
+
+    var isActionsStorage: Bool {
+        product?.normalized == "actions" && sku?.normalized == "actionsstorage"
+    }
+
+    var isPotentialActionsStorage: Bool {
+        let normalizedSKU = sku?.normalized ?? ""
+        guard !normalizedSKU.contains("cache"), !normalizedSKU.contains("customimage") else { return false }
+        if normalizedSKU.hasPrefix("actions"), normalizedSKU.contains("storage") { return true }
+        return product?.normalized == "actions" && (isGBHours || normalizedSKU.contains("storage"))
+    }
+
+    var isPackagesStorage: Bool {
+        product?.normalized == "packages" && sku?.normalized == "packagesstorage"
+    }
+
+    var isPotentialPackagesStorage: Bool {
+        let normalizedSKU = sku?.normalized ?? ""
+        guard !normalizedSKU.contains("transfer"), !normalizedSKU.contains("bandwidth") else { return false }
+        if normalizedSKU.hasPrefix("packages"), normalizedSKU.contains("storage") { return true }
+        return product?.normalized == "packages" && (isGBHours || normalizedSKU.contains("storage"))
+    }
+
+    var isPackagesDataTransfer: Bool {
+        let normalizedSKU = sku?.normalized ?? ""
+        return product?.normalized == "packages"
+            && (normalizedSKU.contains("transfer") || normalizedSKU == "packagesbandwidth")
+    }
+
+    var isPotentialPackagesDataTransfer: Bool {
+        let normalizedSKU = sku?.normalized ?? ""
+        if normalizedSKU == "packagesbandwidth"
+            || (normalizedSKU.hasPrefix("packages") && normalizedSKU.contains("transfer")) {
+            return true
+        }
+        return product?.normalized == "packages" && isGB
+    }
+
+    var isCodespacesCoreHours: Bool {
+        product?.normalized == "codespaces"
+            && codespacesCoreMultiplier != nil
+            && isHours
+    }
+
+    var codespacesCoreHours: Decimal? {
+        guard
+            isCodespacesCoreHours,
+            let grossQuantity,
+            let codespacesCoreMultiplier
+        else {
+            return nil
+        }
+        return grossQuantity * Decimal(codespacesCoreMultiplier)
+    }
+
+    var codespacesNetCoreHours: Decimal? {
+        guard
+            isCodespacesCoreHours,
+            let netQuantity,
+            let codespacesCoreMultiplier
+        else {
+            return nil
+        }
+        return netQuantity * Decimal(codespacesCoreMultiplier)
+    }
+
+    var isPotentialCodespacesCoreHours: Bool {
+        let normalizedSKU = sku?.normalized ?? ""
+        if normalizedSKU.hasPrefix("codespaces"), normalizedSKU.contains("compute") { return true }
+        return product?.normalized == "codespaces" && isHours
+    }
+
+    private var codespacesCoreMultiplier: Int? {
+        switch sku?.normalized {
+        case "codespacescomputed2": 2
+        case "codespacescomputed4": 4
+        case "codespacescomputed8": 8
+        case "codespacescomputed16": 16
+        case "codespacescomputed32": 32
+        default: nil
+        }
+    }
+
+    private var isHours: Bool {
+        let unit = unitType?.normalized ?? ""
+        return unit == "hour" || unit == "hours" || unit == "machinehours"
+    }
+
+    var isCodespacesStorage: Bool {
+        product?.normalized == "codespaces"
+            && sku?.normalized.contains("storage") == true
+    }
+
+    var isPotentialCodespacesStorage: Bool {
+        let normalizedSKU = sku?.normalized ?? ""
+        if normalizedSKU.hasPrefix("codespaces"), normalizedSKU.contains("storage") { return true }
+        return product?.normalized == "codespaces" && (isGBHours || isGBMonths)
     }
 
     var isLFSStorage: Bool {
@@ -1307,13 +2034,17 @@ private struct SummaryItem: Decodable {
     }
 
     var isPotentialLFSStorage: Bool {
-        (isLFS || sku?.normalized.contains("lfs") == true)
-            && (isGBHours || sku?.normalized.contains("storage") == true)
+        let normalizedSKU = sku?.normalized ?? ""
+        guard isLFS || normalizedSKU.contains("lfs") else { return false }
+        if normalizedSKU.contains("bandwidth") { return false }
+        return normalizedSKU.contains("storage") || isGBHours
     }
 
     var isPotentialLFSBandwidth: Bool {
-        (isLFS || sku?.normalized.contains("lfs") == true)
-            && (isGB || sku?.normalized.contains("bandwidth") == true)
+        let normalizedSKU = sku?.normalized ?? ""
+        guard isLFS || normalizedSKU.contains("lfs") else { return false }
+        if normalizedSKU.contains("storage") { return false }
+        return normalizedSKU.contains("bandwidth") || isGB
     }
 
     var isLFS: Bool {
@@ -1323,12 +2054,17 @@ private struct SummaryItem: Decodable {
 
     var isGBHours: Bool {
         let unit = unitType?.normalized ?? ""
-        return unit.contains("gbhour") || unit.contains("gibhour")
+        return unit.contains("gbhour") || unit.contains("gibhour") || unit.contains("gigabytehour")
     }
 
     var isGB: Bool {
         let unit = unitType?.normalized ?? ""
         return unit == "gb" || unit == "gib" || unit == "gigabytes"
+    }
+
+    var isGBMonths: Bool {
+        let unit = unitType?.normalized ?? ""
+        return unit.contains("gbmonth") || unit.contains("gibmonth")
     }
 }
 
@@ -1345,7 +2081,7 @@ private struct UsageResponse: Decodable {
     }
 }
 
-private struct UsageItem: Decodable {
+private struct UsageItem: Decodable, MeteredQuantityItem {
     let date: String?
     let product: String?
     let sku: String?
@@ -1358,6 +2094,8 @@ private struct UsageItem: Decodable {
     let repositoryName: String?
     let organizationName: String?
 
+    var allowanceQuantity: Decimal? { quantity }
+
     var hasNonnegativeFinancialFields: Bool {
         pricePerUnit.map { $0 >= 0 } == true
             && grossAmount.map { $0 >= 0 } == true
@@ -1365,14 +2103,43 @@ private struct UsageItem: Decodable {
             && netAmount.map { $0 >= 0 } == true
     }
 
-    func isOrganizationDetail(for owner: String) -> Bool {
-        date?.nonempty != nil
-            && product?.nonempty != nil
-            && sku?.nonempty != nil
-            && quantity.map { $0 >= 0 } == true
-            && unitType?.nonempty != nil
-            && hasNonnegativeFinancialFields
-            && organizationName?.caseInsensitiveCompare(owner) == .orderedSame
+    func belongsToOrganization(_ owner: String) -> Bool {
+        organizationName?.caseInsensitiveCompare(owner) == .orderedSame
+    }
+
+    var isActionsStorage: Bool {
+        product?.normalized == "actions" && sku?.normalized == "actionsstorage"
+    }
+
+    var isPotentialActionsStorage: Bool {
+        let normalizedSKU = sku?.normalized ?? ""
+        guard !normalizedSKU.contains("cache"), !normalizedSKU.contains("customimage") else { return false }
+        if normalizedSKU.hasPrefix("actions"), normalizedSKU.contains("storage") { return true }
+        return product?.normalized == "actions" && (isGBHours || normalizedSKU.contains("storage"))
+    }
+
+    var isPackagesDataTransfer: Bool {
+        let normalizedSKU = sku?.normalized ?? ""
+        return product?.normalized == "packages"
+            && (normalizedSKU.contains("transfer") || normalizedSKU == "packagesbandwidth")
+    }
+
+    var isPotentialPackagesDataTransfer: Bool {
+        guard product?.normalized == "packages" else { return false }
+        let normalizedSKU = sku?.normalized ?? ""
+        let unit = unitType?.normalized
+        return normalizedSKU.contains("transfer") || normalizedSKU == "packagesbandwidth"
+            || unit == "gb" || unit == "gib" || unit == "gigabytes"
+    }
+
+    var isGBHours: Bool {
+        let unit = unitType?.normalized ?? ""
+        return unit.contains("gbhour") || unit.contains("gibhour") || unit.contains("gigabytehour")
+    }
+
+    var isGB: Bool {
+        let unit = unitType?.normalized ?? ""
+        return unit == "gb" || unit == "gib" || unit == "gigabytes"
     }
 
     var isActionsMinutes: Bool {
@@ -1381,18 +2148,26 @@ private struct UsageItem: Decodable {
     }
 
     var isPotentialActionsMinutes: Bool {
-        guard unitType?.normalized.contains("minute") == true else { return false }
-        return product?.normalized.contains("actions") == true
-            || sku?.normalized.hasPrefix("actions") == true
+        let normalizedProduct = product?.normalized ?? ""
+        let normalizedSKU = sku?.normalized ?? ""
+        guard
+            !normalizedSKU.contains("storage"),
+            !normalizedSKU.contains("cache"),
+            !normalizedSKU.contains("customimage")
+        else {
+            return false
+        }
+        if normalizedSKU.hasPrefix("actions") { return true }
+        return normalizedProduct.contains("actions")
+            && unitType?.normalized.contains("minute") == true
     }
 
-    var standardRunnerMultiplier: Decimal? {
-        switch sku?.normalized {
-        case "actionslinux", "actionslinuxarm": 1
-        case "actionswindows", "actionswindowsarm": 2
-        case "actionsmacos": 10
-        default: nil
-        }
+    var actionsRunnerAllowance: ActionsRunnerAllowance {
+        GitHubActionsRunnerCatalog.allowance(for: sku)
+    }
+
+    var expectedStandardRunnerRate: Decimal? {
+        GitHubActionsRunnerCatalog.standardRate(for: sku)
     }
 }
 
@@ -1489,7 +2264,7 @@ private struct BillingPeriod {
     let end: Date
     let hours: Int
 
-    init?(timePeriod: TimePeriod?) {
+    init?(timePeriod: TimePeriod?, containing fetchedAt: Date) {
         guard
             let year = timePeriod?.year,
             let month = timePeriod?.month,
@@ -1501,7 +2276,9 @@ private struct BillingPeriod {
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         guard
             let start = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
-            let end = calendar.date(byAdding: .month, value: 1, to: start)
+            let end = calendar.date(byAdding: .month, value: 1, to: start),
+            fetchedAt >= start,
+            fetchedAt < end
         else {
             return nil
         }
@@ -1511,49 +2288,146 @@ private struct BillingPeriod {
     }
 }
 
-private struct PersonalPlan {
+private enum GitHubAllowanceScope {
+    case personal
+    case organization
+}
+
+private enum ActionsRunnerAllowance {
+    case includedStandard
+    case excludedPaidLarger
+    case excludedSelfHosted
+    case unknown
+}
+
+enum GitHubActionsRunnerCatalog {
+    fileprivate static func allowance(for sku: String?) -> ActionsRunnerAllowance {
+        let normalizedSKU = sku?.normalized ?? ""
+        if standardRates[normalizedSKU] != nil { return .includedStandard }
+        if paidLargerSKUs.contains(normalizedSKU) { return .excludedPaidLarger }
+        if normalizedSKU.contains("selfhosted") { return .excludedSelfHosted }
+        return .unknown
+    }
+
+    static func isIncludedStandard(sku: String?) -> Bool {
+        standardRates[sku?.normalized ?? ""] != nil
+    }
+
+    static func standardRate(for sku: String?) -> Decimal? {
+        standardRates[sku?.normalized ?? ""]
+    }
+
+    static func allowanceMinutes(quantity: Decimal, unitPrice: Decimal) -> Decimal {
+        quantity * unitPrice / allowanceMinuteRate
+    }
+
+    private static let allowanceMinuteRate = Decimal(6) / 1_000
+
+    private static let standardRates: [String: Decimal] = [
+        "actionslinuxslim": Decimal(2) / 1_000,
+        "actionslinux": Decimal(6) / 1_000,
+        "actionslinuxarm": Decimal(5) / 1_000,
+        "actionswindows": Decimal(1) / 100,
+        "actionswindowsarm": Decimal(1) / 100,
+        "actionsmacos": Decimal(62) / 1_000,
+    ]
+
+    // https://docs.github.com/en/billing/reference/product-and-sku-names#github-actions
+    private static let paidLargerSKUs = Set([
+        "actionslinux2coreadvanced", "actionslinux2corearm",
+        "actionslinux4core", "actionslinux4corearm", "actionslinux4coregpu",
+        "actionslinux8core", "actionslinux8corearm",
+        "actionslinux16core", "actionslinux16corearm",
+        "actionslinux32core", "actionslinux32corearm",
+        "actionslinux64core", "actionslinux64corearm",
+        "actionslinux96core", "actionsmacosl", "actionsmacosxl",
+        "actionswindows2core", "actionswindows2coreadvanced", "actionswindows2corearm",
+        "actionswindows4core", "actionswindows4corearm", "actionswindows4coregpu",
+        "actionswindows8core", "actionswindows8corearm",
+        "actionswindows16core", "actionswindows16corearm",
+        "actionswindows32core", "actionswindows32corearm",
+        "actionswindows64core", "actionswindows64corearm", "actionswindows96core",
+    ])
+}
+
+private enum ActionsMinuteContribution {
+    case included(Decimal)
+    case excluded
+    case unavailable(String)
+}
+
+private struct ActionsMinutesTotal {
+    let used: Decimal?
+    let unavailableMessage: String?
+
+    init(used: Decimal? = nil, unavailableMessage: String? = nil) {
+        self.used = used
+        self.unavailableMessage = unavailableMessage
+    }
+}
+
+// https://docs.github.com/en/billing/reference/product-usage-included
+private struct GitHubPlanAllowance {
     let id: String
     let label: String
     let actionsMinutes: Int
-    let sharedStorageGB: Decimal
+    let actionsStorageGB: Decimal
+    let packagesStorageGB: Decimal
+    let packagesTransferGB: Int
     let lfsStorageGB: Int
     let lfsBandwidthGB: Int
+    let codespacesCoreHours: Int?
+    let codespacesStorageGB: Int?
 
     private init(
         id: String,
         label: String,
         actionsMinutes: Int,
-        sharedStorageGB: Decimal,
+        actionsStorageGB: Decimal,
+        packagesStorageGB: Decimal,
+        packagesTransferGB: Int,
         lfsStorageGB: Int,
-        lfsBandwidthGB: Int
+        lfsBandwidthGB: Int,
+        codespacesCoreHours: Int?,
+        codespacesStorageGB: Int?
     ) {
         self.id = id
         self.label = label
         self.actionsMinutes = actionsMinutes
-        self.sharedStorageGB = sharedStorageGB
+        self.actionsStorageGB = actionsStorageGB
+        self.packagesStorageGB = packagesStorageGB
+        self.packagesTransferGB = packagesTransferGB
         self.lfsStorageGB = lfsStorageGB
         self.lfsBandwidthGB = lfsBandwidthGB
+        self.codespacesCoreHours = codespacesCoreHours
+        self.codespacesStorageGB = codespacesStorageGB
     }
 
-    init?(name: String) {
-        switch name.normalized {
-        case "free":
+    init?(name: String, scope: GitHubAllowanceScope) {
+        switch (scope, name.normalized) {
+        case (.personal, "free"):
             self.init(
-                id: "free",
-                label: "Free",
-                actionsMinutes: 2_000,
-                sharedStorageGB: Decimal(5) / Decimal(10),
-                lfsStorageGB: 10,
-                lfsBandwidthGB: 10
+                id: "free", label: "Free", actionsMinutes: 2_000, actionsStorageGB: Decimal(5) / 10,
+                packagesStorageGB: Decimal(5) / 10, packagesTransferGB: 1, lfsStorageGB: 10, lfsBandwidthGB: 10,
+                codespacesCoreHours: 120, codespacesStorageGB: 15
             )
-        case "pro":
+        case (.personal, "pro"):
             self.init(
-                id: "pro",
-                label: "Pro",
-                actionsMinutes: 3_000,
-                sharedStorageGB: 1,
-                lfsStorageGB: 10,
-                lfsBandwidthGB: 10
+                id: "pro", label: "Pro", actionsMinutes: 3_000, actionsStorageGB: 2,
+                packagesStorageGB: 2, packagesTransferGB: 10, lfsStorageGB: 10, lfsBandwidthGB: 10,
+                codespacesCoreHours: 180, codespacesStorageGB: 20
+            )
+        case (.organization, "free"):
+            self.init(
+                id: "free", label: "Free", actionsMinutes: 2_000, actionsStorageGB: Decimal(5) / 10,
+                packagesStorageGB: Decimal(5) / 10, packagesTransferGB: 1, lfsStorageGB: 10, lfsBandwidthGB: 10,
+                codespacesCoreHours: nil, codespacesStorageGB: nil
+            )
+        case (.organization, "team"):
+            self.init(
+                id: "team", label: "Team", actionsMinutes: 3_000, actionsStorageGB: 2,
+                packagesStorageGB: 2, packagesTransferGB: 10, lfsStorageGB: 250, lfsBandwidthGB: 250,
+                codespacesCoreHours: nil, codespacesStorageGB: nil
             )
         default:
             return nil
@@ -1595,6 +2469,41 @@ private struct BudgetCandidate {
         self.targetLabel = targetLabel
         self.unavailableMessage = unavailableMessage
         self.unavailableSection = unavailableSection
+    }
+}
+
+private struct IncludedUsageDefinition {
+    let id: String
+    let label: String
+    let stableKey: String
+    let unit: String
+    let scopeNote: String?
+
+    init(
+        id: String,
+        label: String,
+        stableKey: String,
+        unit: String,
+        scopeNote: String? = nil
+    ) {
+        self.id = id
+        self.label = label
+        self.stableKey = stableKey
+        self.unit = unit
+        self.scopeNote = scopeNote
+    }
+}
+
+private struct AllowanceOutput {
+    var bars: [UsageBar]
+    var unavailable: [String: String]
+
+    init(
+        bars: [UsageBar] = [],
+        unavailable: [String: String] = [:]
+    ) {
+        self.bars = bars
+        self.unavailable = unavailable
     }
 }
 

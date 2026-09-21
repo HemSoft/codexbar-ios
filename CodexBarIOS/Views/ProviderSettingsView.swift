@@ -206,7 +206,8 @@ struct ProviderSettingsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Label(
                             "Requested GitHub permissions: private repository access (GitHub's classic repo scope), "
-                                + "organization membership, user plan, billing usage, and organization budgets.",
+                                + "organization administration (classic admin:org), user plan, billing usage, and "
+                                + "organization budgets.",
                             systemImage: "lock.shield"
                         )
                         Text(
@@ -215,13 +216,15 @@ struct ProviderSettingsView: View {
                                 + "billing data and never changes your profile or follows."
                         )
                         Text(
-                            "The repo scope permits repository changes. CodexBar only reads repository visibility "
-                                + "to classify usage; it never changes repositories. Billing tokens stay in separate "
-                                + "Keychain entries and are never shared with GitHub Copilot."
+                            "The repo scope permits repository changes, and admin:org permits organization and team "
+                                + "changes. CodexBar only reads repository visibility and organization plan details; "
+                                + "it never changes repositories, organizations, or teams. Billing tokens stay in "
+                                + "separate Keychain entries and are never shared with GitHub Copilot."
                         )
                         Text(
-                            "If you signed in before this permission was added, sign in again and approve user access "
-                                + "before connecting your personal account."
+                            "If you signed in before these permissions were added, sign in again and approve user "
+                                + "and organization administration access before reconnecting a personal or "
+                                + "organization account."
                         )
                     }
                     .font(.footnote)

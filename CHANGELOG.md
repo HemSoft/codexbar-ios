@@ -47,16 +47,36 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- GitHub Billing cards now show monthly allowance progress for personal Free
+  and Pro plans and organization Free and Team plans. Covered metrics include
+  eligible Actions minutes, Actions storage, Packages storage and data transfer,
+  Git LFS storage and bandwidth, and personal Codespaces compute and storage. The Actions
+  bars match GitHub Billing's allowance-minute normalization and monthly GB
+  presentation, include the billing-cycle reset, and no longer disappear for
+  otherwise valid accounts. Public-repository Actions usage, paid larger runners, and self-hosted
+  runners do not consume the Actions allowance bars. Zero usage, remaining
+  allowance, and overage remain explicit. When GitHub does not provide enough evidence for a
+  trustworthy percentage, the affected allowance stays unavailable rather than
+  showing a guess. Enterprise-pooled limits also stay unavailable. Organization
+  connections ask approval to read the organization plan but never change
+  organizations or teams. Budgets and billed spend remain separate, and each
+  signed-in credential reuses its own recent repository visibility between
+  routine refreshes to avoid GitHub API rate-limit failures without carrying
+  classifications across reconnections.
+  ([#349](https://github.com/HemSoft/codexbar-ios/issues/349))
+
 - Refined GitHub Billing cards to answer three questions quickly: what was
   consumed, what GitHub discounted or included, and what is actually billable.
-  Aggregate amounts always show two decimal places in USD, unit prices keep
-  GitHub's source precision (for example $0.006/minute), metered usage groups
+  Aggregate amounts always show two decimal places in the verified billing
+  currency, unit prices keep GitHub's source precision (for example
+  $0.006/minute), metered usage groups
   into Copilot, Actions, Codespaces, Git LFS, and any other returned products,
   and Actions gains an Included usage subsection splitting Minutes and
   Storage. Routine qualifications moved into the More Information sheet while
   permission failures, incomplete billing data, and unclassifiable repositories
-  stay on the card. Amounts stay USD because GitHub's billing API reports no
-  currency code, and they are never converted to the device locale.
+  stay on the card. Complete ISO currency evidence is preserved, missing
+  evidence uses GitHub's documented USD billing currency, and conflicting or
+  partial evidence suppresses monetary values instead of relabeling them.
   ([#347](https://github.com/HemSoft/codexbar-ios/issues/347))
 
 - Connect and reconnect Gemini Coding Usage from the phone through Google

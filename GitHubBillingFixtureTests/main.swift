@@ -8,15 +8,19 @@ enum GitHubBillingFixtureRunner {
         try await personalAuthorizationScopeRegression()
         try await personalPermissionDiagnostics()
         try personalFreeAndProAllowances()
+        try githubIncludedUsagePresentationContract()
+        try planAllowanceContract()
+        try packagesVisibilityEvidenceContract()
         try amountAndProductSummaryContract()
         try currencyEvidenceContract()
         try organizationBudgetsAndPaginationParsing()
         try malformedAndMissingFields()
+        try GitHubBillingReviewFixtures.run()
         try await accountIsolationFixtures()
         try await providerRequestAndFailureFixtures()
-        print("GitHub Billing fixture suite passed: personal plans, repository classification, mixed runners, "
-            + "accrued storage, Git LFS, discounts, budgets, pagination, missing data, two-decimal aggregates, "
-            + "unit-rate precision, USD currency evidence, product summaries, and HTTP failures.")
+        print("GitHub Billing fixture suite passed: personal and organization allowances, zero usage, overage, "
+            + "repository classification, price-normalized runner validation, Actions storage, Packages, Codespaces, "
+            + "Git LFS, quantity discounts, budgets, pagination, currency evidence, product summaries, and failures.")
     }
 
     private static func personalAuthorizationScopeRegression() async throws {
@@ -47,7 +51,7 @@ enum GitHubBillingFixtureRunner {
             for: personalConfiguration()
         )
         try check(result.failureMessage == nil, "Personal connection must request the accepted user scope")
-        try check(scopes == ["repo", "read:org", "user"], "Billing must request only its documented scopes")
+        try check(scopes == ["admin:org", "repo", "user"], "Billing must request only its documented scopes")
     }
 
     private static func personalPermissionDiagnostics() async throws {
@@ -102,11 +106,16 @@ enum GitHubBillingFixtureRunner {
           "timePeriod": {"year": 2026, "month": 9},
           "user": "octocat",
           "usageItems": [
-            {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":120,"grossAmount":2.125,"discountAmount":2.125,"netAmount":0},
-            {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":24,"grossAmount":0.25,"discountAmount":0.125,"netAmount":0.125},
+            {"product":"Actions","sku":"Actions Linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1000,"grossAmount":6,"discountQuantity":1000,"discountAmount":6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"Actions Windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":50,"grossAmount":0.5,"discountQuantity":50,"discountAmount":0.5,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"Actions macOS","unitType":"minutes","pricePerUnit":0.062,"grossQuantity":10,"grossAmount":0.62,"discountQuantity":10,"discountAmount":0.62,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_linux_arm","unitType":"minutes","pricePerUnit":0.005,"grossQuantity":20,"grossAmount":0.1,"discountQuantity":20,"discountAmount":0.1,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_windows_arm","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":10,"grossAmount":0.1,"discountQuantity":10,"discountAmount":0.1,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":120,"grossAmount":2.125,"discountQuantity":120,"discountAmount":2.125,"netQuantity":0,"netAmount":0},
+            {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","grossQuantity":24,"grossAmount":0.25,"discountQuantity":12,"discountAmount":0.125,"netQuantity":12,"netAmount":0.125},
             {"product":"Actions","sku":"actions_cache_storage","unitType":"GB-hours","grossQuantity":100,"grossAmount":0,"discountAmount":0,"netAmount":0},
-            {"product":"Git LFS","sku":"lfs_storage","unitType":"GiB-hours","grossQuantity":48,"grossAmount":0.40,"discountAmount":0.40,"netAmount":0},
-            {"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GiB","grossQuantity":3.5,"grossAmount":0.35,"discountAmount":0,"netAmount":0.35}
+            {"product":"Git LFS","sku":"lfs_storage","unitType":"GiB-hours","grossQuantity":48,"grossAmount":0.40,"discountQuantity":48,"discountAmount":0.40,"netQuantity":0,"netAmount":0},
+            {"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GiB","grossQuantity":3.5,"grossAmount":0.35,"discountQuantity":3.5,"discountAmount":0.35,"netQuantity":0,"netAmount":0}
           ]
         }
         """#)
@@ -118,7 +127,11 @@ enum GitHubBillingFixtureRunner {
             {"date":"2026-09-03","product":"Actions","sku":"Actions macOS","quantity":10,"unitType":"minutes","pricePerUnit":0.062,"grossAmount":0.62,"discountAmount":0.62,"netAmount":0,"repositoryName":"octocat/private"},
             {"date":"2026-09-04","product":"Actions","sku":"actions_linux_arm","quantity":20,"unitType":"minutes","pricePerUnit":0.005,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0,"repositoryName":"octocat/private"},
             {"date":"2026-09-05","product":"Actions","sku":"actions_windows_arm","quantity":10,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0,"repositoryName":"octocat/private"},
-            {"date":"2026-09-06","product":"Actions","sku":"Actions Linux","quantity":900,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":5.4,"discountAmount":5.4,"netAmount":0,"repositoryName":"octocat/public"}
+            {"date":"2026-09-06","product":"Actions","sku":"Actions Linux","quantity":900,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":5.4,"discountAmount":5.4,"netAmount":0,"repositoryName":"octocat/public"},
+            {"date":"2026-09-07","product":"Actions","sku":"actions_storage","quantity":100,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":1,"discountAmount":1,"netAmount":0,"repositoryName":"octocat/private"},
+            {"date":"2026-09-08","product":"Actions","sku":"actions_storage","quantity":20,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":0.2,"discountAmount":0.2,"netAmount":0,"repositoryName":"octocat/public"},
+            {"date":"2026-09-09","product":"Packages","sku":"packages_storage","quantity":20,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":0.2,"discountAmount":0.1,"netAmount":0.1,"repositoryName":"octocat/private"},
+            {"date":"2026-09-10","product":"Packages","sku":"packages_storage","quantity":4,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":0.04,"discountAmount":0.04,"netAmount":0,"repositoryName":"octocat/public"}
           ]
         }
         """#)
@@ -133,30 +146,39 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Free personal fixture did not parse")
 
-        let actionBar = try require(free.bars.first { $0.stableKey == "actions-private-minutes" }, "Actions minutes missing")
-        try check(actionBar.used == 340, "Mixed standard runners must apply x64, arm64, and macOS multipliers")
+        let actionBar = try require(free.bars.first { $0.stableKey == "actions-allowance-minutes" }, "Actions minutes missing")
+        try check(actionBar.used == 320, "Mixed standard runners must use GitHub's allowance-minute price normalization")
         try check(actionBar.limit == 2_000, "Free accounts must receive 2,000 included Actions minutes")
         try check(
             free.cardInformationSections.contains { section in
                 section.items.contains { item in
-                    item.label == "Private Actions minutes"
-                        && item.detail.contains("340 used")
-                        && item.detail.contains("2,000 included")
-                        && item.detail.contains("1,660 remaining")
+                    item.label == "Actions minutes"
+                        && item.detail.contains("320 of 2,000 minutes used")
+                        && item.detail.contains("1,680 minutes remaining")
                 }
             },
             "Personal allowance details must show used, included, and remaining minutes"
         )
-        let storage = try require(free.bars.first { $0.stableKey == "actions-packages-storage" }, "Storage bar missing")
-        try check(storage.used == 144, "Actions and Packages GB-hours must share one accrued total")
-        try check(storage.limit == 360, "September Free storage allowance must be 0.5 GB times 720 hours")
+        let freeActionsStorage = try require(
+            free.bars.first { $0.stableKey == "actions-storage" },
+            "Actions storage must remain independent from Packages visibility"
+        )
+        try check(
+            abs(freeActionsStorage.used - (100.0 / 720.0)) < 0.000_001 && freeActionsStorage.limit == 0.5,
+            "Free Actions storage must match GitHub's monthly GB presentation"
+        )
+        try incompleteStorageEvidenceFixtures(
+            summary: summary,
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        )
         let lfsStorage = try require(free.bars.first { $0.stableKey == "lfs-storage" }, "Git LFS storage bar missing")
         try check(lfsStorage.used == 48 && lfsStorage.limit == 7_200, "Git LFS storage must use its 10 GiB accrued allowance")
         let lfsBandwidth = try require(free.bars.first { $0.stableKey == "lfs-bandwidth" }, "Git LFS bandwidth bar missing")
         try check(lfsBandwidth.used == 3.5 && lfsBandwidth.limit == 10, "Git LFS bandwidth must use its separate monthly allowance")
-        try check(free.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "3.125"), "Gross spend precision was lost")
-        try check(free.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "2.65"), "Full and partial discounts were not retained")
-        try check(free.monetaryMetrics.first { $0.kind == .spent }?.amount == Decimal(string: "0.475"), "Net spend precision was lost")
+        try check(free.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "10.445"), "Gross spend precision was lost")
+        try check(free.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "10.32"), "Full and partial discounts were not retained")
+        try check(free.monetaryMetrics.first { $0.kind == .spent }?.amount == Decimal(string: "0.125"), "Net spend precision was lost")
         try check(
             free.cardInformationSections.contains { section in
                 section.id == "github-billing.amounts-and-currency"
@@ -185,21 +207,39 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Pro personal fixture did not parse")
         try check(
-            pro.bars.first { $0.stableKey == "actions-private-minutes" }?.limit == 3_000,
+            pro.bars.first { $0.stableKey == "actions-allowance-minutes" }?.limit == 3_000,
             "Pro accounts must receive 3,000 included Actions minutes"
         )
         try check(
-            pro.bars.first { $0.stableKey == "actions-packages-storage" }?.limit == 720,
-            "Pro accounts must receive 1 GiB of shared Actions and Packages storage"
+            pro.bars.first { $0.stableKey == "actions-storage" }?.limit == 2,
+            "Pro accounts must receive GitHub's 2 GB Actions storage allowance"
         )
         try check(
             pro.bars.first { $0.stableKey == "lfs-storage" }?.limit == 7_200,
             "Pro Git LFS storage must retain its separate 10 GiB allowance"
         )
 
-        let unknownRunnerUsage = data(#"{"usageItems":[{"product":"Actions","sku":"Actions macOS 12-core","quantity":10,"unitType":"minutes","repositoryName":"octocat/private","grossAmount":1,"discountAmount":1,"netAmount":0}]}"#)
+        let paidLargerSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_macos_l","unitType":"minutes","pricePerUnit":0.12,"grossQuantity":10,"grossAmount":1.2,"discountQuantity":0,"discountAmount":0,"netQuantity":10,"netAmount":1.2}]}"#)
+        let paidLargerUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_macos_l","quantity":10,"unitType":"minutes","pricePerUnit":0.12,"repositoryName":"octocat/private","grossAmount":1.2,"discountAmount":0,"netAmount":1.2}]}"#)
+        let paidLargerRunner = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: paidLargerSummary,
+            usageData: paidLargerUsage,
+            repositoryVisibility: [:],
+            planName: "pro",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Paid larger runner fixture did not parse")
+        try check(
+            paidLargerRunner.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 0,
+            "Known paid larger runners must be excluded from standard included minutes"
+        )
+
+        try runnerContractFailures(configuration: configuration, fetchedAt: fetchedAt)
+
+        let unknownRunnerSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_future_runner","unitType":"minutes","pricePerUnit":0.02,"grossQuantity":10,"grossAmount":0.2,"discountQuantity":10,"discountAmount":0.2,"netQuantity":0,"netAmount":0}]}"#)
+        let unknownRunnerUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_future_runner","quantity":10,"unitType":"minutes","pricePerUnit":0.02,"repositoryName":"octocat/private","grossAmount":0.2,"discountAmount":0.2,"netAmount":0}]}"#)
         let unknownRunner = try require(GitHubBillingUsageParser.parsePersonal(
-            summaryData: summary,
+            summaryData: unknownRunnerSummary,
             usageData: unknownRunnerUsage,
             repositoryVisibility: ["octocat/private": true],
             planName: "pro",
@@ -207,16 +247,429 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: fetchedAt
         ), "Unknown runner fixture did not parse")
         try check(
-            unknownRunner.bars.contains { $0.stableKey == "actions-private-minutes" } == false,
-            "Unknown or larger runners must not be guessed as standard included minutes"
+            unknownRunner.bars.contains { $0.stableKey == "actions-allowance-minutes" } == false,
+            "Unknown runners must not be guessed as standard included minutes"
         )
         try check(
-            unknownRunner.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            unknownRunner.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "Unknown runners need an unavailable explanation"
         )
         try check(
-            unknownRunner.usageMessages.contains { $0.contains("could not classify") },
+            unknownRunner.usageMessages.contains { $0.contains("outside the verified runner") },
             "Unavailable allowance explanations must be visible on the account card"
+        )
+
+        try changedActionsProductFixture(configuration: configuration, fetchedAt: fetchedAt)
+
+        let partialActionsSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":100,"grossAmount":0.6,"discountQuantity":100,"discountAmount":0.6,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":50,"grossAmount":0.5,"discountQuantity":50,"discountAmount":0.5,"netQuantity":0,"netAmount":0}]}"#)
+        let partialActionsUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":100,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.6,"discountAmount":0.6,"netAmount":0}]}"#)
+        let partialActions = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: partialActionsSummary,
+            usageData: partialActionsUsage,
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Partial Actions fixture did not parse")
+        try check(
+            partialActions.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"]?
+                .contains("did not reconcile") == true,
+            "Partial Actions detail must not produce an understated complete percentage"
+        )
+
+        let unknownStorage = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_cache_storage","unitType":"GB-hours","grossQuantity":200,"grossAmount":0,"discountAmount":0,"netAmount":0},{"product":"Actions","sku":"actions_mystery_storage","unitType":"GB-hours","grossQuantity":10,"grossAmount":0,"discountAmount":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Unknown Actions storage fixture did not parse")
+        try check(
+            unknownStorage.unavailableUsageMetrics["githubBilling.actions-storage"] != nil,
+            "An unknown Actions storage SKU must fail closed without turning cache into account-wide usage"
+        )
+        try check(
+            unknownStorage.bars.contains { $0.stableKey == "actions-storage" } == false,
+            "Incomplete Actions storage evidence must not produce an understated percentage"
+        )
+    }
+
+    private static func incompleteStorageEvidenceFixtures(
+        summary: Data,
+        configuration: ProviderAccountConfiguration,
+        fetchedAt: Date
+    ) throws {
+        let missingStorageDetails = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: summary,
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Incomplete repository storage fixture did not parse")
+        try check(
+            missingStorageDetails.unavailableUsageMetrics["githubBilling.actions-storage"] != nil,
+            "Shared storage must stay unavailable without complete repository eligibility"
+        )
+        let incompleteStorageQuantities = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":10,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_storage","quantity":10,"unitType":"GB-hours","repositoryName":"octocat/private"}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Incomplete storage quantity fixture did not parse")
+        try check(
+            incompleteStorageQuantities.unavailableUsageMetrics["githubBilling.actions-storage"]?
+                .contains("gross, discount, and billable") == true,
+            "Missing discount or billable quantities must keep the allowance unavailable"
+        )
+    }
+
+    private static func changedActionsProductFixture(
+        configuration: ProviderAccountConfiguration,
+        fetchedAt: Date
+    ) throws {
+        let renamedProduct = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"CI","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"CI","sku":"actions_linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Changed Actions product fixture did not parse")
+        try check(
+            renamedProduct.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
+            "A known Actions SKU with a changed product contract must fail closed"
+        )
+        try check(
+            renamedProduct.bars.contains { $0.stableKey == "actions-allowance-minutes" } == false,
+            "A changed Actions product contract must not silently understate allowance usage"
+        )
+    }
+
+    private static func runnerContractFailures(
+        configuration: ProviderAccountConfiguration,
+        fetchedAt: Date
+    ) throws {
+        let selfHostedSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_self_hosted","unitType":"minutes","pricePerUnit":0,"grossQuantity":100,"grossAmount":0,"discountQuantity":0,"discountAmount":0,"netQuantity":100,"netAmount":0}]}"#)
+        let selfHostedUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_self_hosted","quantity":100,"unitType":"minutes","pricePerUnit":0,"repositoryName":"octocat/private","grossAmount":0,"discountAmount":0,"netAmount":0}]}"#)
+        let selfHosted = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: selfHostedSummary,
+            usageData: selfHostedUsage,
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Self-hosted runner fixture did not parse")
+        try check(
+            selfHosted.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 0,
+            "Self-hosted runners must not consume the hosted standard-runner allowance"
+        )
+
+        let unsupportedUnitSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"hours","pricePerUnit":0.006,"grossQuantity":1,"grossAmount":0.006,"discountQuantity":1,"discountAmount":0.006,"netQuantity":0,"netAmount":0}]}"#)
+        let unsupportedUnitUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"hours","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.006,"discountAmount":0.006,"netAmount":0}]}"#)
+        let unsupportedUnit = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: unsupportedUnitSummary,
+            usageData: unsupportedUnitUsage,
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Unsupported runner unit fixture did not parse")
+        try check(
+            unsupportedUnit.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
+            "A changed Actions unit contract must fail closed instead of presenting zero usage"
+        )
+
+        let changedPriceSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.007,"grossQuantity":10,"grossAmount":0.07,"discountQuantity":10,"discountAmount":0.07,"netQuantity":0,"netAmount":0}]}"#)
+        let changedPriceUsage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":10,"unitType":"minutes","pricePerUnit":0.007,"repositoryName":"octocat/private","grossAmount":0.07,"discountAmount":0.07,"netAmount":0}]}"#)
+        let changedPrice = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: changedPriceSummary,
+            usageData: changedPriceUsage,
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Changed runner price fixture did not parse")
+        try check(
+            changedPrice.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"]?
+                .contains("price outside") == true,
+            "A changed standard-runner price must fail closed"
+        )
+
+        let conflictingDiscount = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":2,"discountAmount":0.012,"netQuantity":8,"netAmount":0.048}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.012,"netAmount":0.048}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: configuration,
+            fetchedAt: fetchedAt
+        ), "Conflicting Actions discount fixture did not parse")
+        try check(
+            conflictingDiscount.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"]?
+                .contains("before the included allowance was exhausted") == true,
+            "Billable standard minutes below the included limit must fail closed"
+        )
+    }
+
+    private static func githubIncludedUsagePresentationContract() throws {
+        let summary = data(#"""
+        {
+          "timePeriod": {"year": 2026, "month": 9},
+          "user": "octocat",
+          "usageItems": [
+            {"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1000,"grossAmount":6,"discountQuantity":1000,"discountAmount":6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_linux_slim","unitType":"minutes","pricePerUnit":0.002,"grossQuantity":90,"grossAmount":0.18,"discountQuantity":90,"discountAmount":0.18,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":300,"grossAmount":3,"discountQuantity":300,"discountAmount":3,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_storage","unitType":"gigabyte-hours","pricePerUnit":0.00033602,"grossQuantity":432,"grossAmount":0.14516064,"discountQuantity":432,"discountAmount":0.14516064,"netQuantity":0,"netAmount":0}
+          ]
+        }
+        """#)
+        let usage = data(#"""
+        {
+          "usageItems": [
+            {"date":"2026-09-20","product":"Actions","sku":"Actions Linux","quantity":1000,"unitType":"Minutes","pricePerUnit":0.006,"repositoryName":"private","grossAmount":6,"discountAmount":6,"netAmount":0},
+            {"date":"2026-09-20","product":"Actions","sku":"Actions Linux Slim","quantity":90,"unitType":"Minutes","pricePerUnit":0.002,"repositoryName":"private","grossAmount":0.18,"discountAmount":0.18,"netAmount":0},
+            {"date":"2026-09-20","product":"Actions","sku":"Actions Windows","quantity":300,"unitType":"Minutes","pricePerUnit":0.01,"repositoryName":"private","grossAmount":3,"discountAmount":3,"netAmount":0},
+            {"date":"2026-09-20","product":"Actions","sku":"Actions storage","quantity":432,"unitType":"GigabyteHours","pricePerUnit":0.00033602,"repositoryName":"private","grossAmount":0.14516064,"discountAmount":0.14516064,"netAmount":0}
+          ]
+        }
+        """#)
+        let result = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: summary,
+            usageData: usage,
+            repositoryVisibility: ["private": true],
+            planName: "pro",
+            configuration: personalConfiguration(),
+            fetchedAt: fixtureDate("2026-09-20T12:00:00Z")
+        ), "GitHub included-usage fixture did not parse")
+        let minutes = try require(
+            result.bars.first { $0.stableKey == "actions-allowance-minutes" },
+            "GitHub Actions minutes must be shown"
+        )
+        try check(
+            abs(minutes.used - 1_530) < 0.000_001 && minutes.limit == 3_000,
+            "Actions minutes must match GitHub's price-normalized included usage"
+        )
+        let storage = try require(
+            result.bars.first { $0.stableKey == "actions-storage" },
+            "GitHub Actions storage must be shown"
+        )
+        try check(
+            abs(storage.used - 0.6) < 0.000_001 && storage.limit == 2,
+            "Actions storage must convert accrued GB-hours to GitHub's monthly GB presentation"
+        )
+        try check(storage.label == "Actions storage", "The storage allowance must use GitHub's product label")
+        let expectedReset = try fixtureDate("2026-10-01T00:00:00Z")
+        try check(
+            storage.resetsAt == expectedReset,
+            "Included usage must retain the billing-cycle reset date"
+        )
+    }
+
+    private static func planAllowanceContract() throws {
+        let fetchedAt = try fixtureDate("2026-09-15T12:00:00Z")
+        let summary = data(#"""
+        {
+          "timePeriod": {"year": 2026, "month": 9},
+          "user": "octocat",
+          "usageItems": [
+            {"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1100,"grossAmount":6.6,"discountQuantity":1100,"discountAmount":6.6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":60,"grossAmount":0.6,"discountQuantity":60,"discountAmount":0.6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.01,"grossQuantity":120,"grossAmount":1.2,"discountQuantity":120,"discountAmount":1.2,"netQuantity":0,"netAmount":0},
+            {"product":"Git LFS","sku":"lfs_storage","unitType":"GB-hours","pricePerUnit":0.001,"grossQuantity":48,"grossAmount":0.048,"discountQuantity":48,"discountAmount":0.048,"netQuantity":0,"netAmount":0},
+            {"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GB","pricePerUnit":0.0875,"grossQuantity":3.5,"grossAmount":0.30625,"discountQuantity":3.5,"discountAmount":0.30625,"netQuantity":0,"netAmount":0},
+            {"product":"Codespaces","sku":"codespaces_compute_d4","unitType":"hours","pricePerUnit":0.36,"grossQuantity":7.5,"grossAmount":2.7,"discountQuantity":7.5,"discountAmount":2.7,"netQuantity":0,"netAmount":0},
+            {"product":"Codespaces","sku":"codespaces_storage","unitType":"GB-hours","pricePerUnit":0.0001,"grossQuantity":7200,"grossAmount":0.72,"discountQuantity":7200,"discountAmount":0.72,"netQuantity":0,"netAmount":0}
+          ]
+        }
+        """#)
+        let usage = data(#"""
+        {"usageItems":[
+          {"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":100,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.6,"discountAmount":0.6,"netAmount":0,"repositoryName":"octocat/private"},
+          {"date":"2026-09-02","product":"Actions","sku":"actions_windows","quantity":60,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":0.6,"discountAmount":0.6,"netAmount":0,"repositoryName":"octocat/private"},
+          {"date":"2026-09-03","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":6,"discountAmount":6,"netAmount":0,"repositoryName":"octocat/public"},
+          {"date":"2026-09-04","product":"Actions","sku":"actions_storage","quantity":100,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":1,"discountAmount":1,"netAmount":0,"repositoryName":"octocat/private"},
+          {"date":"2026-09-05","product":"Actions","sku":"actions_storage","quantity":20,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":0.2,"discountAmount":0.2,"netAmount":0,"repositoryName":"octocat/public"}
+        ]}
+        """#)
+        let free = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: summary,
+            usageData: usage,
+            repositoryVisibility: ["octocat/private": true, "octocat/public": false],
+            planName: "free",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Complete Free allowance fixture did not parse")
+        let expected: [(String, Double, Double)] = [
+            ("actions-allowance-minutes", 200, 2_000),
+            ("actions-storage", 100.0 / 720.0, 0.5),
+            ("packages-data-transfer", 0, 1),
+            ("lfs-storage", 48, 7_200),
+            ("lfs-bandwidth", 3.5, 10),
+            ("codespaces-core-hours", 30, 120),
+            ("codespaces-storage", 7_200, 10_800),
+        ]
+        for (key, used, limit) in expected {
+            let bar = try require(free.bars.first { $0.stableKey == key }, "Missing allowance bar \(key)")
+            try check(
+                abs(bar.used - used) < 0.000_001 && abs(bar.limit - limit) < 0.000_001,
+                "Incorrect allowance values for \(key)"
+            )
+        }
+
+        let isolatedMalformedLFS = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Git LFS","sku":"lfs_storage","unitType":"GB","pricePerUnit":0.01,"grossQuantity":2,"grossAmount":0.02,"discountQuantity":2,"discountAmount":0.02,"netQuantity":0,"netAmount":0},{"product":"Git LFS","sku":"lfs_bandwidth","unitType":"GB","pricePerUnit":0.01,"grossQuantity":3,"grossAmount":0.03,"discountQuantity":3,"discountAmount":0.03,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Isolated malformed Git LFS fixture did not parse")
+        try check(
+            isolatedMalformedLFS.unavailableUsageMetrics["githubBilling.lfs-storage"] != nil,
+            "Malformed Git LFS storage must remain unavailable"
+        )
+        try check(
+            isolatedMalformedLFS.bars.first { $0.stableKey == "lfs-bandwidth" }?.used == 3,
+            "Malformed Git LFS storage must not erase trustworthy bandwidth"
+        )
+
+        let monthlyCodespaces = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Codespaces","sku":"codespaces_storage","unitType":"GB-month","grossQuantity":10,"grossAmount":0.7,"discountQuantity":10,"discountAmount":0.7,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Monthly Codespaces storage fixture did not parse")
+        try check(
+            monthlyCodespaces.bars.first { $0.stableKey == "codespaces-storage" }?.used == 7_200,
+            "A monthly Codespaces quantity must normalize to the accrued GB-hour presentation"
+        )
+        let transfer = try require(
+            free.bars.first { $0.stableKey == "packages-data-transfer" },
+            "Packages transfer allowance missing"
+        )
+        try check(transfer.usageText == "0%", "Verified zero Packages transfer must remain visible")
+        try check(
+            free.cardInformationSections.contains { section in
+                section.id == "github-billing.plan-allowances"
+                    && section.items.contains { item in
+                        item.id == "packages-data-transfer" && item.detail.contains("1 GB remaining")
+                    }
+            },
+            "A verified zero Packages transfer quantity must show the full remaining allowance"
+        )
+
+        let zero = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Zero-usage allowance fixture did not parse")
+        try check(zero.bars.count == 8, "A verified Free plan must expose every supported zero-usage allowance")
+        try check(zero.bars.allSatisfy { $0.used == 0 && $0.usageText == "0%" }, "Missing usage must not hide verified zero-percent allowances")
+        try check(
+            zero.bars.first { $0.stableKey == "packages-storage" }?.limit == 0.5,
+            "Verified zero Packages storage must retain the plan allowance"
+        )
+
+        let stalePeriod = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":8},"user":"octocat","usageItems":[]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            repositoryVisibility: [:],
+            planName: "free",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Stale billing-period fixture did not parse")
+        try check(
+            stalePeriod.bars.isEmpty
+                && stalePeriod.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
+            "A stale billing period must fail every allowance closed"
+        )
+
+        let overageSummary = data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":2500,"grossAmount":25,"discountQuantity":2000,"discountAmount":20,"netQuantity":500,"netAmount":5}]}"#)
+        let overageUsage = data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_windows","quantity":2500,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":25,"discountAmount":20,"netAmount":5,"repositoryName":"octocat/private"}]}"#)
+        let overage = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: overageSummary,
+            usageData: overageUsage,
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Actions overage fixture did not parse")
+        let actionsOverage = try require(
+            overage.bars.first { $0.stableKey == "actions-allowance-minutes" },
+            "Actions overage bar missing"
+        )
+        try check(actionsOverage.used > actionsOverage.limit, "Actions usage above the plan allowance must not be clamped")
+        try check(actionsOverage.usageText == "208%", "Actions overage must retain its percentage above 100%")
+
+        let organizationFree = try require(GitHubBillingUsageParser.parseOrganization(
+            summaryData: organizationSummary(),
+            usageData: organizationUsage(),
+            budgetPageData: [],
+            repositoryVisibility: organizationRepositoryVisibility,
+            planName: "free",
+            configuration: organizationConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Organization Free allowance fixture did not parse")
+        try check(
+            organizationFree.bars.first { $0.stableKey == "actions-allowance-minutes" }?.limit == 2_000,
+            "Organization Free must use the organization plan allowance"
+        )
+        try check(
+            organizationFree.bars.contains { $0.stableKey == "codespaces-core-hours" } == false,
+            "Organization plans must not invent personal Codespaces allowances"
+        )
+
+        let enterprise = try require(GitHubBillingUsageParser.parseOrganization(
+            summaryData: organizationSummary(),
+            usageData: organizationUsage(),
+            budgetPageData: [],
+            repositoryVisibility: organizationRepositoryVisibility,
+            planName: "enterprise",
+            configuration: organizationConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Enterprise pooling fixture did not parse")
+        try check(
+            enterprise.bars.contains { $0.stableKey == "actions-allowance-minutes" } == false,
+            "An enterprise pool must not be assigned in full to an organization"
+        )
+        try check(
+            enterprise.usageMessages.contains { $0.contains("allowances are pooled") },
+            "Enterprise organizations need a scoped unavailable explanation"
+        )
+    }
+
+    private static func packagesVisibilityEvidenceContract() throws {
+        let fetchedAt = try fixtureDate("2026-09-15T12:00:00Z")
+        let result = try require(GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.01,"grossQuantity":24,"grossAmount":0.24,"discountQuantity":24,"discountAmount":0.24,"netQuantity":0,"netAmount":0},{"product":"Packages","sku":"packages_bandwidth","unitType":"GB","pricePerUnit":0.5,"grossQuantity":2,"grossAmount":1,"discountQuantity":1.5,"discountAmount":0.75,"netQuantity":0.5,"netAmount":0.25}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"Packages","sku":"packages_storage","quantity":24,"unitType":"GB-hours","pricePerUnit":0.01,"grossAmount":0.24,"discountAmount":0.24,"netAmount":0,"repositoryName":"octocat/private"},{"product":"Packages","sku":"packages_bandwidth","quantity":2,"unitType":"GB","pricePerUnit":0.5,"grossAmount":1,"discountAmount":0.75,"netAmount":0.25,"repositoryName":"octocat/private"}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: personalConfiguration(),
+            fetchedAt: fetchedAt
+        ), "Packages visibility fixture did not parse")
+        try check(
+            result.bars.first { $0.stableKey == "actions-storage" }?.used == 0,
+            "Packages storage must not be folded into the separate Actions storage allowance"
+        )
+        try check(
+            result.unavailableUsageMetrics["githubBilling.packages-storage"]?
+                .contains("does not identify package visibility") == true,
+            "Nonzero Packages storage must remain visibly unavailable"
+        )
+        try check(
+            result.unavailableUsageMetrics["githubBilling.packages-data-transfer"]?
+                .contains("free Actions downloads") == true,
+            "Packages transfer must fail closed when GitHub omits package visibility and transfer cause"
         )
     }
 
@@ -232,13 +685,15 @@ enum GitHubBillingFixtureRunner {
           "timePeriod": {"year": 2026, "month": 9},
           "user": "octocat",
           "usageItems": [
-            {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.04,"grossQuantity":144,"grossAmount":5.10,"discountAmount":1.10,"netAmount":4.00},
-            {"product":"Copilot","sku":"copilot_premium_requests","unitType":"requests","pricePerUnit":0.04,"grossQuantity":10,"grossAmount":0.40,"discountAmount":0,"netAmount":0.40},
-            {"product":"Codespaces","sku":"codespaces_compute","unitType":"core-hours","pricePerUnit":0.08,"grossQuantity":5,"grossAmount":0.40,"discountAmount":0.10,"netAmount":0.30},
-            {"product":"Git LFS","sku":"lfs_storage","unitType":"GB-hours","pricePerUnit":0.07,"grossQuantity":1,"grossAmount":0,"discountAmount":0,"netAmount":0},
-            {"product":"LFS","sku":"lfs_bandwidth","unitType":"GB-hours","pricePerUnit":0.07,"grossQuantity":1,"grossAmount":0,"discountAmount":0,"netAmount":0},
-            {"product":"Advanced Security","sku":"secret_scanning","unitType":"active-committers","pricePerUnit":0,"grossQuantity":1,"grossAmount":0,"discountAmount":0,"netAmount":0},
-            {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.04,"grossQuantity":50,"grossAmount":1.125,"discountAmount":0.5625,"netAmount":0.5625}
+            {"product":"Actions","sku":"Actions Linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":100,"grossAmount":0.6,"discountQuantity":100,"discountAmount":0.6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"Actions Windows","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":60,"grossAmount":0.6,"discountQuantity":60,"discountAmount":0.6,"netQuantity":0,"netAmount":0},
+            {"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.04,"grossQuantity":144,"grossAmount":5.10,"discountQuantity":31,"discountAmount":1.10,"netQuantity":113,"netAmount":4.00},
+            {"product":"Copilot","sku":"copilot_premium_requests","unitType":"requests","pricePerUnit":0.04,"grossQuantity":10,"grossAmount":0.40,"discountQuantity":0,"discountAmount":0,"netQuantity":10,"netAmount":0.40},
+            {"product":"Codespaces","sku":"codespaces_compute_d2","unitType":"hours","pricePerUnit":0.18,"grossQuantity":2.5,"grossAmount":0.40,"discountQuantity":0.625,"discountAmount":0.10,"netQuantity":1.875,"netAmount":0.30},
+            {"product":"Git LFS","sku":"lfs_storage","unitType":"GB-hours","pricePerUnit":0.07,"grossQuantity":1,"grossAmount":0,"discountQuantity":1,"discountAmount":0,"netQuantity":0,"netAmount":0},
+            {"product":"LFS","sku":"lfs_bandwidth","unitType":"GB-hours","pricePerUnit":0.07,"grossQuantity":1,"grossAmount":0,"discountQuantity":1,"discountAmount":0,"netQuantity":0,"netAmount":0},
+            {"product":"Advanced Security","sku":"secret_scanning","unitType":"active-committers","pricePerUnit":0,"grossQuantity":1,"grossAmount":0,"discountQuantity":0,"discountAmount":0,"netQuantity":1,"netAmount":0},
+            {"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.04,"grossQuantity":50,"grossAmount":1.125,"discountQuantity":25,"discountAmount":0.5625,"netQuantity":25,"netAmount":0.5625}
           ]
         }
         """#)
@@ -246,7 +701,9 @@ enum GitHubBillingFixtureRunner {
         {
           "usageItems": [
             {"date":"2026-09-01","product":"Actions","sku":"Actions Linux","quantity":100,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.6,"discountAmount":0.6,"netAmount":0,"repositoryName":"octocat/private"},
-            {"date":"2026-09-02","product":"Actions","sku":"Actions Windows","quantity":50,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":0.5,"discountAmount":0.5,"netAmount":0,"repositoryName":"octocat/private"}
+            {"date":"2026-09-02","product":"Actions","sku":"Actions Windows","quantity":60,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":0.6,"discountAmount":0.6,"netAmount":0,"repositoryName":"octocat/private"},
+            {"date":"2026-09-03","product":"Actions","sku":"actions_storage","quantity":144,"unitType":"GB-hours","pricePerUnit":0.04,"grossAmount":5.76,"discountAmount":1.76,"netAmount":4,"repositoryName":"octocat/private"},
+            {"date":"2026-09-04","product":"Packages","sku":"packages_storage","quantity":50,"unitType":"GB-hours","pricePerUnit":0.04,"grossAmount":2,"discountAmount":1,"netAmount":1,"repositoryName":"octocat/private"}
           ]
         }
         """#)
@@ -279,25 +736,36 @@ enum GitHubBillingFixtureRunner {
         let advancedSecurityIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.advanced-security"), "An unknown product must remain visible under its GitHub product name")
         let packagesIndex = try require(sectionIDs.firstIndex(of: "github-billing.product.packages"), "Packages summary missing")
         try check(
-            copilotIndex < actionsIndex && actionsIndex < codespacesIndex && codespacesIndex < gitLFSIndex
-                && gitLFSIndex < advancedSecurityIndex && advancedSecurityIndex < packagesIndex,
+            copilotIndex < actionsIndex && actionsIndex < codespacesIndex && codespacesIndex < packagesIndex
+                && packagesIndex < gitLFSIndex && gitLFSIndex < advancedSecurityIndex,
             "All known products must sort before alphabetized unknown products"
         )
 
         let actionsSection = result.cardInformationSections[actionsIndex]
         try check(actionsSection.items.contains { item in
-            item.label == "Consumed usage" && item.detail == "\(aggregateText(Decimal(string: "5.10")!)) · 144 GB-hours"
+            item.label == "Consumed usage"
+                && item.detail == "\(aggregateText(Decimal(string: "6.30")!)) · 144 GB-hours · 160 minutes"
         }, "Consumed usage must show the two-decimal aggregate with its returned quantity")
-        try check(actionsSection.items.contains { $0.label == "Discount usage" && $0.detail == aggregateText(Decimal(string: "1.10")!) }, "Discount usage must stay separate from consumed usage")
-        try check(actionsSection.items.contains { $0.label == "Billable usage" && $0.detail == aggregateText(Decimal(string: "4.00")!) }, "Billable usage must show the authoritative net amount")
+        try check(actionsSection.items.contains {
+            $0.label == "Discount usage"
+                && $0.detail == "\(aggregateText(Decimal(string: "2.30")!)) · 31 GB-hours · 160 minutes"
+        }, "Discount usage must keep its amount and covered quantity separate from consumed usage")
+        try check(actionsSection.items.contains {
+            $0.label == "Billable usage"
+                && $0.detail == "\(aggregateText(Decimal(string: "4.00")!)) · 113 GB-hours · 0 minutes"
+        }, "Billable usage must show the authoritative net amount and quantity")
         try check(actionsSection.items.contains { item in
             item.label == "Included usage · Minutes"
-                && item.detail == "200 of 2,000 minutes used · 1,800 minutes remaining"
+                && item.detail == "200 of 2,000 minutes used (private standard runners) · "
+                    + "1,800 minutes remaining"
         }, "Actions included minutes must show used, included, and remaining values")
-        try check(actionsSection.items.contains { item in
-            item.label == "Included usage · Storage"
-                && item.detail == "194 of 360 GB-hours used (Actions and Packages storage) · 166 GB-hours remaining"
-        }, "Actions included storage must split from minutes with used and remaining values")
+        try check(
+            actionsSection.items.contains { item in
+                item.label == "Included usage · Storage"
+                    && item.detail.contains("before the included allowance")
+            },
+            "Premature Actions storage billing must stay unavailable beside trustworthy minute progress"
+        )
 
         // Aggregate amounts use two fractional digits; unit rates keep their source precision.
         let detailItems = result.cardInformationSections
@@ -313,11 +781,11 @@ enum GitHubBillingFixtureRunner {
             item.detail.contains("\(aggregateText(Decimal(string: "0.60")!)) gross")
         }, "Aggregate amounts in detail rows must use two fractional digits")
         try check(
-            result.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "7.025"),
+            result.monetaryMetrics.first { $0.kind == .grossSpend }?.amount == Decimal(string: "8.225"),
             "Aggregate precision must be retained even though the display shows two decimals"
         )
         try check(
-            result.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "1.7625"),
+            result.monetaryMetrics.first { $0.kind == .discounts }?.amount == Decimal(string: "2.9625"),
             "Discount precision must be retained"
         )
         try check(
@@ -363,7 +831,7 @@ enum GitHubBillingFixtureRunner {
             "The personal-budget API limitation must remain visible for an unknown plan"
         )
         try check(
-            !unknownPlanNotes.contains { $0.label == "Private Actions minutes" },
+            !unknownPlanNotes.contains { $0.label == "Actions plan allowance" },
             "The plan-dependent Actions calculation note must stay hidden for an unknown plan"
         )
     }
@@ -418,7 +886,7 @@ enum GitHubBillingFixtureRunner {
                 .filter { $0.id.hasPrefix("github-billing.product.") }
                 .flatMap(\.items)
                 .filter { ["Discount usage", "Billable usage"].contains($0.label) }
-                .allSatisfy { $0.detail == "Unavailable" } == true,
+                .allSatisfy { $0.detail.hasPrefix("Unavailable ·") } == true,
             "Conflicting currency evidence must not relabel product amounts as USD"
         )
         try check(
@@ -469,20 +937,23 @@ enum GitHubBillingFixtureRunner {
     }
 
     private static func organizationBudgetsAndPaginationParsing() throws {
-        let summary = organizationSummary()
+        let summary = data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1200,"grossAmount":7.2,"discountQuantity":1200,"discountAmount":7.2,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_macos_l","unitType":"minutes","pricePerUnit":0.12,"grossQuantity":100,"grossAmount":12,"discountQuantity":0,"discountAmount":2,"netQuantity":100,"netAmount":10}]}"#)
+        let usage = data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":6,"discountAmount":6,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":1.2,"discountAmount":1.2,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Actions","sku":"actions_macos_l","quantity":80,"unitType":"minutes","pricePerUnit":0.12,"grossAmount":9.6,"discountAmount":1.6,"netAmount":8,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-04","product":"Actions","sku":"actions_macos_l","quantity":20,"unitType":"minutes","pricePerUnit":0.12,"grossAmount":2.4,"discountAmount":0.4,"netAmount":2,"organizationName":"Example-Engineering","repositoryName":"example/other"}]}"#)
         let pages = [
             data(#"""
             {"budgets":[{"id":"product-budget","budget_type":"ProductPricing","budget_amount":100,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":true}
             """#),
             data(#"""
-            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"repository","budget_entity_name":"example/private","budget_product_skus":["actions_linux"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"tracking-budget","budget_type":"ProductPricing","budget_amount":25,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"Packages","budget_alerting":{"will_alert":false,"alert_recipients":[]}},{"id":"zero-budget","budget_type":"SkuPricing","budget_amount":0,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"actions_macos","budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"cost-center-budget","budget_type":"ProductPricing","budget_amount":50,"prevent_further_usage":false,"budget_scope":"cost_center","budget_entity_name":"engineering","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
+            {"budgets":[{"id":"sku-budget","budget_type":"SkuPricing","budget_amount":20,"prevent_further_usage":false,"budget_scope":"repository","budget_entity_name":"example/private","budget_product_skus":["actions_macos_l"],"budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"tracking-budget","budget_type":"ProductPricing","budget_amount":25,"prevent_further_usage":false,"budget_scope":"organization","budget_product_sku":"Packages","budget_alerting":{"will_alert":false,"alert_recipients":[]}},{"id":"zero-budget","budget_type":"SkuPricing","budget_amount":0,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"actions_macos","budget_alerting":{"will_alert":true,"alert_recipients":[]}},{"id":"cost-center-budget","budget_type":"ProductPricing","budget_amount":50,"prevent_further_usage":false,"budget_scope":"cost_center","budget_entity_name":"engineering","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}
             """#),
         ]
         let configuration = organizationConfiguration()
         let result = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: summary,
-            usageData: organizationUsage(),
+            usageData: usage,
             budgetPageData: pages,
+            repositoryVisibility: organizationRepositoryVisibility,
+            planName: "team",
             configuration: configuration,
             fetchedAt: try fixtureDate("2026-09-15T12:00:00Z")
         ), "Organization fixture did not parse")
@@ -514,17 +985,25 @@ enum GitHubBillingFixtureRunner {
             },
             "Organization cards must not show the personal-budget API limitation"
         )
+        let organizationActions = try require(
+            result.bars.first { $0.stableKey == "actions-allowance-minutes" },
+            "A Team organization must expose its verified Actions allowance"
+        )
+        try check(organizationActions.limit == 3_000, "A Team organization must receive 3,000 included Actions minutes")
         try check(
-            !result.cardInformationSections.contains { section in
-                section.items.contains { $0.label.hasPrefix("Included usage") }
+            result.cardInformationSections.contains { section in
+                section.id == "github-billing.product.actions"
+                    && section.items.contains { $0.label == "Included usage · Minutes" }
             },
-            "Organization cards must not show personal-plan included allowances"
+            "Organization product details must separate included usage from budgets"
         )
 
         let conflictingCurrency = try require(GitHubBillingUsageParser.parseOrganization(
-            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","currency":"EUR","pricePerUnit":0.01,"grossQuantity":1200,"grossAmount":12.25,"discountAmount":2.25,"netAmount":10},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","currency":"USD","pricePerUnit":0.0225,"grossQuantity":50,"grossAmount":1.125,"discountAmount":0.5625,"netAmount":0.5625}]}"#),
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","currency":"EUR","pricePerUnit":0.006,"grossQuantity":1200,"grossAmount":12.25,"discountAmount":2.25,"netAmount":10},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","currency":"USD","pricePerUnit":0.0225,"grossQuantity":50,"grossAmount":1.125,"discountAmount":0.5625,"netAmount":0.5625}]}"#),
             usageData: organizationUsage(),
             budgetPageData: pages,
+            repositoryVisibility: organizationRepositoryVisibility,
+            planName: "team",
             configuration: configuration,
             fetchedAt: try fixtureDate("2026-09-15T12:00:00Z")
         ), "Conflicting organization currency fixture did not parse")
@@ -546,6 +1025,8 @@ enum GitHubBillingFixtureRunner {
             summaryData: summary,
             usageData: organizationUsage(),
             budgetPageData: [data("{\"budgets\":[],\"has_next_page\":false}")],
+            repositoryVisibility: organizationRepositoryVisibility,
+            planName: "team",
             configuration: configuration,
             fetchedAt: try fixtureDate("2026-09-15T12:00:00Z")
         ), "No-budget fixture did not parse")
@@ -563,16 +1044,20 @@ enum GitHubBillingFixtureRunner {
             summaryData: organizationSummary(),
             usageData: organizationUsage(),
             budgetPageData: [data(#"{"budgets":[{"id":"scoped","budget_type":"ProductPricing","budget_amount":10.5,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}],"has_next_page":false}"#)],
+            repositoryVisibility: organizationRepositoryVisibility,
+            planName: "team",
             configuration: configuration,
             fetchedAt: fetchedAt
         ), "Scoped budget fixture did not parse")
         try check(!scopedBudget.hasReachedSpendLimit, "Unrelated account spend must not trigger a scoped budget alert")
 
-        let duplicateSummary = data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":200,"grossAmount":2,"discountAmount":0,"netAmount":2},{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":1000,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8}]}"#)
+        let duplicateSummary = data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":200,"grossAmount":2,"discountAmount":0,"netAmount":2},{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1000,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8}]}"#)
         let aggregated = try require(GitHubBillingUsageParser.parseOrganization(
             summaryData: duplicateSummary,
             usageData: organizationUsage(),
             budgetPageData: [],
+            repositoryVisibility: organizationRepositoryVisibility,
+            planName: "team",
             configuration: configuration,
             fetchedAt: fetchedAt
         ), "Duplicate organization usage fixture did not parse")
@@ -656,7 +1141,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: Date()
         ), "An incomplete Actions row should remain a readable response")
         try check(
-            missingActionsProduct.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            missingActionsProduct.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "An Actions minute row missing its product must make the allowance unavailable"
         )
 
@@ -669,7 +1154,7 @@ enum GitHubBillingFixtureRunner {
             fetchedAt: Date()
         ), "An incomplete storage row should remain a readable response")
         try check(
-            missingStorageSKU.unavailableUsageMetrics["githubBilling.actions-packages-storage"] != nil,
+            missingStorageSKU.unavailableUsageMetrics["githubBilling.actions-storage"] != nil,
             "An Actions storage row missing its SKU must make the allowance unavailable"
         )
 
@@ -738,32 +1223,58 @@ enum GitHubBillingFixtureRunner {
         )
         try check(missingBudgets == nil, "A missing top-level budgets field must fail closed")
 
-        let incompleteOrganizationSummary = GitHubBillingUsageParser.parseOrganization(
-            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","unitType":"minutes","grossQuantity":1,"grossAmount":1,"discountAmount":0,"netAmount":1}]}"#),
+        let negativeOrganizationSummary = GitHubBillingUsageParser.parseOrganization(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":-1,"grossAmount":-0.006,"discountQuantity":0,"discountAmount":0,"netQuantity":-1,"netAmount":-0.006}]}"#),
             usageData: organizationUsage(),
             budgetPageData: [],
             configuration: organizationConfiguration(),
             fetchedAt: Date()
         )
-        try check(incompleteOrganizationSummary == nil, "Incomplete organization summary rows must fail closed")
+        try check(
+            negativeOrganizationSummary?.bars.contains { $0.stableKey?.hasPrefix("usage-") == true } == false
+                && negativeOrganizationSummary?.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
+            "Negative organization summary quantities must isolate the allowance without creating a usage bar"
+        )
 
         let incompleteOrganizationUsage = GitHubBillingUsageParser.parseOrganization(
             summaryData: organizationSummary(),
-            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","repositoryName":"example/private"}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","repositoryName":"example/private","organizationName":"Example-Engineering"}]}"#),
             budgetPageData: [],
             configuration: organizationConfiguration(),
             fetchedAt: Date()
         )
-        try check(incompleteOrganizationUsage == nil, "Incomplete organization detail rows must fail closed")
+        try check(
+            incompleteOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
+            "An incomplete organization detail row must isolate the affected allowance"
+        )
 
         let negativeOrganizationUsage = GitHubBillingUsageParser.parseOrganization(
             summaryData: organizationSummary(),
             usageData: data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":-1,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":-0.01,"discountAmount":0,"netAmount":-0.01,"organizationName":"Example-Engineering"}]}"#),
+            budgetPageData: [data(#"{"budgets":[{"id":"negative-detail","budget_type":"ProductPricing","budget_amount":10,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}]}"#)],
+            configuration: organizationConfiguration(),
+            fetchedAt: Date()
+        )
+        try check(
+            negativeOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
+            "Negative organization detail values must isolate the affected allowance"
+        )
+        try check(
+            negativeOrganizationUsage?.bars.contains { $0.stableKey == "budget-negative-detail" } == false
+                && negativeOrganizationUsage?.usageMessages.contains {
+                    $0.contains("complete nonnegative financial evidence")
+                } == true,
+            "Negative organization detail values must make the affected budget unavailable"
+        )
+
+        let missingOrganizationIdentity = GitHubBillingUsageParser.parseOrganization(
+            summaryData: organizationSummary(),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes"}]}"#),
             budgetPageData: [],
             configuration: organizationConfiguration(),
             fetchedAt: Date()
         )
-        try check(negativeOrganizationUsage == nil, "Negative organization detail values must fail closed")
+        try check(missingOrganizationIdentity == nil, "Organization detail rows must retain account isolation")
 
         let mismatchedOrganizationOwner = GitHubBillingUsageParser.parseOrganization(
             summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"other-org","usageItems":[]}"#),
@@ -852,6 +1363,7 @@ enum GitHubBillingFixtureRunner {
             secretStore: store,
             session: session,
             apiBaseURL: apiBaseURL,
+            repositoryVisibilityCacheDuration: 0,
             now: { now }
         )
 
@@ -876,6 +1388,14 @@ enum GitHubBillingFixtureRunner {
         try check(
             zeroNetSpend?.detail == "No current charge after discounts",
             "Fully discounted usage must be presented as no current charge"
+        )
+
+        try await assertRepositoryVisibilityCaching(
+            store: store,
+            session: session,
+            apiBaseURL: apiBaseURL,
+            personal: personal,
+            now: now
         )
 
         for status in [401, 403, 404, 429, 500] {
@@ -912,6 +1432,64 @@ enum GitHubBillingFixtureRunner {
         )
     }
 
+    private static func assertRepositoryVisibilityCaching(
+        store: FixtureSecretStore,
+        session: URLSession,
+        apiBaseURL: URL,
+        personal: ProviderAccountConfiguration,
+        now: Date
+    ) async throws {
+        let metadataCounter = LockedCounter(); let usageCounter = LockedCounter()
+        FixtureURLProtocol.setHandler { request in
+            switch request.url?.path {
+            case "/user":
+                return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
+            case "/users/octocat/settings/billing/usage/summary":
+                return response(request, status: 200, body: #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"Actions Linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0}]}"#)
+            case "/users/octocat/settings/billing/usage":
+                usageCounter.increment(); let repository = usageCounter.value == 1 ? "private" : "PRIVATE"
+                return response(request, status: 200, body: #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"\#(repository)","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#)
+            case "/repos/octocat/private", "/repos/octocat/PRIVATE":
+                metadataCounter.increment()
+                let token = request.value(forHTTPHeaderField: "Authorization")
+                return response(request, status: 200, body: token == "Bearer replacement-fixture-token"
+                    ? #"{"private":false}"#
+                    : #"{"private":true}"#)
+            default:
+                return response(request, status: 404, body: "{}")
+            }
+        }
+        let provider = GitHubBillingUsageProvider(
+            secretStore: store,
+            session: session,
+            apiBaseURL: apiBaseURL,
+            repositoryVisibilityCacheDuration: 15 * 60,
+            now: { now }
+        )
+        _ = try await provider.fetchUsage(for: personal); let cachedResult = try await provider.fetchUsage(for: personal)
+        try check(metadataCounter.value == 1, "Routine refreshes must reuse repository visibility")
+        try check(cachedResult.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 10, "Cached visibility must bind to the current repository-name casing")
+
+        let replacementCredentials = GitHubBillingCredentials(
+            accessToken: "replacement-fixture-token",
+            username: "octocat"
+        )
+        let replacementCredential = try require(
+            GitHubBillingCredentialsParser.storedCredential(from: replacementCredentials),
+            "Could not encode replacement fixture credential"
+        )
+        try store.saveSecret(
+            replacementCredential,
+            account: ProviderConfigurationStore.keychainAccount(for: personal)
+        )
+        let replacementResult = try await provider.fetchUsage(for: personal)
+        try check(metadataCounter.value == 2, "A changed credential must fetch its own repository visibility")
+        try check(
+            replacementResult.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 0,
+            "Repository visibility from another credential must not leak through the cache"
+        )
+    }
+
     private static func assertRepositoryMetadataFailures(
         provider: GitHubBillingUsageProvider,
         personal: ProviderAccountConfiguration
@@ -938,10 +1516,7 @@ enum GitHubBillingFixtureRunner {
             case 429: "rate limit"
             default: "temporarily unavailable"
             }
-            try check(
-                result.failureMessage?.localizedCaseInsensitiveContains(expected) == true,
-                "Repository metadata HTTP \(status) did not produce its distinct safe message"
-            )
+            if status == 401 { try check(result.failureMessage?.localizedCaseInsensitiveContains(expected) == true, "Repository metadata HTTP 401 must still require sign-in") } else { try check(result.failureMessage == nil && result.usageMessages.contains { $0.localizedCaseInsensitiveContains(expected) } && result.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil, "Repository metadata HTTP \(status) must preserve personal billing and isolate Actions allowances") }
         }
 
         FixtureURLProtocol.setHandler { request in
@@ -965,8 +1540,12 @@ enum GitHubBillingFixtureRunner {
             "Hidden repository metadata needs a distinct explanation"
         )
         try check(
-            hiddenRepository.unavailableUsageMetrics["githubBilling.actions-private-minutes"] != nil,
+            hiddenRepository.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
             "Hidden repository metadata must make private Actions classification unavailable"
+        )
+        try check(
+            hiddenRepository.bars.contains { $0.stableKey == "actions-storage" },
+            "An unavailable Actions-minute classification must not erase unrelated storage progress"
         )
 
         let metadataCounter = LockedCounter()
@@ -998,7 +1577,7 @@ enum GitHubBillingFixtureRunner {
             "Truncated repository, product, and SKU details need an explicit explanation"
         )
 
-        try await assertActionsOnlyMetadataLookups(provider: provider, personal: personal)
+        try await assertActionsOnlyMetadataLookups(provider: provider, personal: personal); try await GitHubBillingReviewFixtures.rateLimitStopsBatches(provider: provider, personal: personal)
     }
 
     private static func assertActionsOnlyMetadataLookups(
@@ -1012,7 +1591,7 @@ enum GitHubBillingFixtureRunner {
             case "/user":
                 return response(request, status: 200, body: #"{"login":"octocat","plan":{"name":"free"}}"#)
             case "/users/octocat/settings/billing/usage/summary":
-                return response(request, status: 200, data: personalSummary())
+                return response(request, status: 200, body: #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1,"grossAmount":0.006,"discountQuantity":1,"discountAmount":0.006,"netQuantity":0,"netAmount":0}]}"#)
             case "/users/octocat/settings/billing/usage":
                 return response(request, status: 200, data: mixedProducts)
             default:
@@ -1021,10 +1600,10 @@ enum GitHubBillingFixtureRunner {
             }
         }
         let actionsOnlyMetadata = try await provider.fetchUsage(for: personal)
-        try check(actionsMetadataCounter.value == 1, "Only Actions-minute repositories should need visibility metadata")
+        try check(actionsMetadataCounter.value == 1, "Only included Actions runners should need visibility metadata")
         try check(
-            actionsOnlyMetadata.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 1,
-            "Unrelated product repositories must not consume the Actions metadata lookup limit"
+            actionsOnlyMetadata.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 1,
+            "Custom-image repositories must not consume the Actions metadata lookup limit"
         )
     }
 
@@ -1035,6 +1614,9 @@ enum GitHubBillingFixtureRunner {
     ) async throws {
         let organization = organizationConfiguration()
         try store.saveSecret(credential, account: ProviderConfigurationStore.keychainAccount(for: organization))
+        try await assertOrganizationPlanAllowance(provider: provider, organization: organization); try await GitHubBillingReviewFixtures.organizationVisibilityFailure(provider: provider, organization: organization)
+        try await assertOrganizationPlanPermissionGuidance(provider: provider, organization: organization)
+
         FixtureURLProtocol.setHandler { request in response(request, status: 404, body: "{}") }
         let hiddenOrganization = try await provider.fetchUsage(for: organization)
         try check(
@@ -1130,6 +1712,70 @@ enum GitHubBillingFixtureRunner {
         )
     }
 
+    private static func assertOrganizationPlanPermissionGuidance(
+        provider: GitHubBillingUsageProvider,
+        organization: ProviderAccountConfiguration
+    ) async throws {
+        FixtureURLProtocol.setHandler { request in
+            guard let path = request.url?.path else { return response(request, status: 500, body: "{}") }
+            switch path {
+            case "/orgs/Example-Engineering":
+                return response(request, status: 403, body: "{}")
+            case "/organizations/Example-Engineering/settings/billing/usage/summary":
+                return response(request, status: 200, data: organizationSummary())
+            case "/organizations/Example-Engineering/settings/billing/usage":
+                return response(request, status: 200, data: organizationUsage())
+            case "/organizations/Example-Engineering/settings/billing/budgets":
+                return response(request, status: 200, body: #"{"budgets":[],"has_next_page":false}"#)
+            case "/repos/example/private", "/repos/example/other", "/repos/example/priv-ate":
+                return response(request, status: 500, body: "{}")
+            default:
+                return response(request, status: 404, body: "{}")
+            }
+        }
+        let result = try await provider.fetchUsage(for: organization)
+        try check(result.failureMessage == nil, "A plan permission failure must preserve readable billing usage")
+        try check(
+            result.usageMessages.contains { $0.contains("approve organization administration access") },
+            "A missing admin:org grant must explain how to restore organization allowance progress"
+        )
+    }
+
+    private static func assertOrganizationPlanAllowance(
+        provider: GitHubBillingUsageProvider,
+        organization: ProviderAccountConfiguration
+    ) async throws {
+        FixtureURLProtocol.setHandler { request in
+            guard let path = request.url?.path else { return response(request, status: 500, body: "{}") }
+            switch path {
+            case "/orgs/Example-Engineering":
+                return response(request, status: 200, body: #"{"plan":{"name":"team"}}"#)
+            case "/organizations/Example-Engineering/settings/billing/usage/summary":
+                return response(request, status: 200, data: organizationSummary())
+            case "/organizations/Example-Engineering/settings/billing/usage":
+                return response(request, status: 200, data: organizationUsage())
+            case "/organizations/Example-Engineering/settings/billing/budgets":
+                return response(request, status: 200, body: #"{"budgets":[],"has_next_page":false}"#)
+            case "/repos/example/private", "/repos/example/other":
+                return response(request, status: 200, body: #"{"private":true}"#)
+            case "/repos/example/priv-ate":
+                return response(request, status: 200, body: #"{"private":false}"#)
+            default:
+                return response(request, status: 404, body: "{}")
+            }
+        }
+        let result = try await provider.fetchUsage(for: organization)
+        try check(result.failureMessage == nil, "A readable organization plan must not discard billing usage")
+        try check(
+            result.bars.first { $0.stableKey == "actions-allowance-minutes" }?.limit == 3_000,
+            "The provider must retrieve the organization's Team allowance"
+        )
+        try check(
+            result.bars.first { $0.stableKey == "actions-storage" }?.used == 0,
+            "The provider must keep Packages storage separate from Actions storage"
+        )
+    }
+
     private static let personalUsageBody = #"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#
 
     private static func manyRepositoryUsage(count: Int) throws -> Data {
@@ -1154,15 +1800,15 @@ enum GitHubBillingFixtureRunner {
         var items: [[String: Any]] = (0..<unrelatedCount).map { index in
             [
                 "date": "2026-09-01",
-                "product": "Packages",
-                "sku": "packages_storage",
+                "product": "Actions",
+                "sku": "actions_custom_image",
                 "quantity": 1,
                 "unitType": "GB-hours",
-                "pricePerUnit": 0.01,
-                "repositoryName": "octocat/package-\(index)",
-                "grossAmount": 0.01,
-                "discountAmount": 0,
-                "netAmount": 0.01,
+                "pricePerUnit": 0.0008,
+                "repositoryName": "octocat/custom-image-\(index)",
+                "grossAmount": 0.0008,
+                "discountAmount": 0.0008,
+                "netAmount": 0,
             ]
         }
         items.append([
@@ -1171,7 +1817,7 @@ enum GitHubBillingFixtureRunner {
             "sku": "actions_linux",
             "quantity": 1,
             "unitType": "minutes",
-            "pricePerUnit": 0.006,
+            "pricePerUnit": NSDecimalNumber(string: "0.006"),
             "repositoryName": "octocat/actions",
             "grossAmount": 0.006,
             "discountAmount": 0.006,
@@ -1181,15 +1827,15 @@ enum GitHubBillingFixtureRunner {
     }
 
     private static func personalSummary() -> Data {
-        data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","grossQuantity":12,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0}]}"#)
+        data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Copilot","sku":"copilot_premium_requests","unitType":"requests","grossQuantity":1,"grossAmount":0.1,"discountAmount":0.1,"netAmount":0}]}"#)
     }
 
     private static func organizationSummary() -> Data {
-        data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.01,"grossQuantity":1200,"grossAmount":12.25,"discountQuantity":200,"discountAmount":2.25,"netQuantity":1000,"netAmount":10.00},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.0225,"grossQuantity":50,"grossAmount":1.125,"discountQuantity":25,"discountAmount":0.5625,"netQuantity":25,"netAmount":0.5625}]}"#)
+        data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1200,"grossAmount":7.2,"discountQuantity":1200,"discountAmount":7.2,"netQuantity":0,"netAmount":0},{"product":"Packages","sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.0225,"grossQuantity":50,"grossAmount":1.125,"discountQuantity":25,"discountAmount":0.5625,"netQuantity":25,"netAmount":0.5625}]}"#)
     }
 
     private static func organizationUsage() -> Data {
-        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":10.25,"discountAmount":2.25,"netAmount":8,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":2,"discountAmount":0,"netAmount":2,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Other","sku":"actions_linux","quantity":400,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":4,"discountAmount":0,"netAmount":4,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"}]}"#)
+        data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":1000,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":6,"discountAmount":6,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-02","product":"Actions","sku":"actions_linux","quantity":200,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":1.2,"discountAmount":1.2,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/other"},{"date":"2026-09-03","product":"Other","sku":"other_linux","quantity":400,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":4,"discountAmount":0,"netAmount":4,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"},{"date":"2026-09-04","product":"Packages","sku":"packages_storage","quantity":40,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.9,"discountAmount":0.45,"netAmount":0.45,"organizationName":"Example-Engineering","repositoryName":"example/private"},{"date":"2026-09-05","product":"Packages","sku":"packages_storage","quantity":10,"unitType":"GB-hours","pricePerUnit":0.0225,"grossAmount":0.225,"discountAmount":0.1125,"netAmount":0.1125,"organizationName":"Example-Engineering","repositoryName":"example/priv-ate"}]}"#)
     }
 
     private static func personalConfiguration() -> ProviderAccountConfiguration {
@@ -1202,6 +1848,12 @@ enum GitHubBillingFixtureRunner {
             githubBillingOwner: "octocat"
         )
     }
+
+    private static let organizationRepositoryVisibility = [
+        "example/private": true,
+        "example/other": true,
+        "example/priv-ate": false,
+    ]
 
     private static func organizationConfiguration() -> ProviderAccountConfiguration {
         ProviderAccountConfiguration(
@@ -1255,6 +1907,139 @@ enum GitHubBillingFixtureRunner {
             headerFields: headers
         )!
         return (response, data)
+    }
+}
+
+private enum GitHubBillingReviewFixtures {
+    static func run() throws {
+        let personal = ProviderAccountConfiguration(
+            id: "github-billing.personal",
+            providerID: .githubBilling,
+            accountLabel: "octocat",
+            authMethod: .browserSession,
+            githubBillingAccountScope: .personal,
+            githubBillingOwner: "octocat"
+        )
+        let customImageUsage = GitHubBillingUsageParser.parsePersonal(
+            summaryData: data(#"{"user":"octocat","timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_custom_image","unitType":"GB-hours","pricePerUnit":0.0008,"grossQuantity":12,"grossAmount":0.0096,"discountQuantity":12,"discountAmount":0.0096,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0},{"product":"Actions","sku":"actions_custom_image","quantity":12,"unitType":"GB-hours","pricePerUnit":0.0008,"repositoryName":"octocat/private","grossAmount":0.0096,"discountAmount":0.0096,"netAmount":0}]}"#),
+            repositoryVisibility: ["octocat/private": true],
+            planName: "free",
+            configuration: personal,
+            fetchedAt: Date()
+        )
+        try check(
+            customImageUsage?.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 10,
+            "Actions custom-image storage must not invalidate standard-runner minutes"
+        )
+
+        let organization = ProviderAccountConfiguration(
+            id: "github-billing.organization",
+            providerID: .githubBilling,
+            accountLabel: "Example Engineering",
+            authMethod: .browserSession,
+            githubBillingAccountScope: .organization,
+            githubBillingOwner: "Example-Engineering"
+        )
+        let unclassifiedBudgetUsage = GitHubBillingUsageParser.parseOrganization(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1,"grossAmount":0.006,"discountQuantity":1,"discountAmount":0.006,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[{"date":"2026-09-01","sku":"actions_linux","quantity":1,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.006,"discountAmount":0.006,"netAmount":0,"organizationName":"Example-Engineering"}]}"#),
+            budgetPageData: [data(#"{"budgets":[{"id":"unclassified-detail","budget_type":"ProductPricing","budget_amount":10,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}]}"#)],
+            configuration: organization,
+            fetchedAt: Date()
+        )
+        try check(
+            unclassifiedBudgetUsage?.bars.contains { $0.stableKey == "budget-unclassified-detail" } == false
+                && unclassifiedBudgetUsage?.usageMessages.contains { $0.contains("consumption cannot be calculated") } == true,
+            "A budget must stay unavailable when scoped detail omits its product discriminator"
+        )
+
+        let unclassifiedSummary = GitHubBillingUsageParser.parseOrganization(
+            summaryData: data(#"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"sku":"packages_storage","unitType":"GB-hours","pricePerUnit":0.0225,"grossQuantity":1,"grossAmount":0.0225,"discountQuantity":1,"discountAmount":0.0225,"netQuantity":0,"netAmount":0}]}"#),
+            usageData: data(#"{"usageItems":[]}"#),
+            budgetPageData: [],
+            planName: "team",
+            configuration: organization,
+            fetchedAt: Date()
+        )
+        try check(unclassifiedSummary?.unavailableUsageMetrics["githubBilling.packages-storage"] != nil
+            && unclassifiedSummary?.bars.contains { $0.stableKey == "packages-storage" } == false,
+            "A recognizable allowance SKU without its product must not be presented as zero usage")
+    }
+
+    static func organizationVisibilityFailure(
+        provider: GitHubBillingUsageProvider,
+        organization: ProviderAccountConfiguration
+    ) async throws {
+        FixtureURLProtocol.setHandler { request in
+            let path = request.url?.path
+            let body: String
+            let status: Int
+            switch path {
+            case "/orgs/Example-Engineering":
+                (status, body) = (200, #"{"plan":{"name":"team"}}"#)
+            case "/organizations/Example-Engineering/settings/billing/usage/summary":
+                (status, body) = (200, #"{"timePeriod":{"year":2026,"month":9},"organization":"Example-Engineering","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":1,"grossAmount":0.006,"discountQuantity":1,"discountAmount":0.006,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_storage","unitType":"GB-hours","pricePerUnit":0.000008,"grossQuantity":72,"grossAmount":0.000576,"discountQuantity":72,"discountAmount":0.000576,"netQuantity":0,"netAmount":0}]}"#)
+            case "/organizations/Example-Engineering/settings/billing/usage":
+                (status, body) = (200, #"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.006,"discountAmount":0.006,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/minutes-private"},{"product":"Actions","sku":"actions_storage","quantity":72,"unitType":"GB-hours","pricePerUnit":0.000008,"grossAmount":0.000576,"discountAmount":0.000576,"netAmount":0,"organizationName":"Example-Engineering","repositoryName":"example/storage-private"}]}"#)
+            case "/organizations/Example-Engineering/settings/billing/budgets":
+                (status, body) = (200, #"{"budgets":[],"has_next_page":false}"#)
+            case "/repos/example/minutes-private":
+                (status, body) = (200, #"{"private":true}"#)
+            case "/repos/example/storage-private":
+                (status, body) = (500, "{}")
+            default:
+                (status, body) = (404, "{}")
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, data(body))
+        }
+        let result = try await provider.fetchUsage(for: organization)
+        try check(result.failureMessage == nil, "Repository metadata failures must preserve organization billing")
+        try check(result.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 1,
+            "A failed storage lookup must preserve successfully classified Actions minutes")
+        try check(result.unavailableUsageMetrics["githubBilling.actions-storage"] != nil
+            && result.usageMessages.contains { $0.contains("repository visibility") },
+            "Repository metadata failures must isolate only affected Actions allowances")
+    }
+
+    static func rateLimitStopsBatches(
+        provider: GitHubBillingUsageProvider,
+        personal: ProviderAccountConfiguration
+    ) async throws {
+        let lookupCounter = LockedCounter()
+        let items: [[String: Any]] = (0..<20).map { index in
+            [
+                "product": "Actions", "sku": "actions_linux", "quantity": 1,
+                "unitType": "minutes", "pricePerUnit": 0.006,
+                "grossAmount": 0.006, "discountAmount": 0.006, "netAmount": 0,
+                "repositoryName": "octocat/rate-limit-\(index)",
+            ]
+        }
+        let usage = try JSONSerialization.data(withJSONObject: ["usageItems": items])
+        FixtureURLProtocol.setHandler { request in
+            let path = request.url?.path ?? ""
+            if path == "/user" {
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data(#"{"login":"octocat","plan":{"name":"free"}}"#))
+            }
+            if path.hasSuffix("/summary") {
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data(#"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":20,"grossAmount":0.12,"discountQuantity":20,"discountAmount":0.12,"netQuantity":0,"netAmount":0}]}"#))
+            }
+            if path == "/users/octocat/settings/billing/usage" {
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, usage)
+            }
+            lookupCounter.increment()
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["X-RateLimit-Remaining": "0"])!, data(#"{"private":true}"#))
+        }
+        let result = try await provider.fetchUsage(for: personal)
+        try check(result.failureMessage == nil, "An exhausted repository rate limit must preserve personal billing")
+        try check(result.usageMessages.contains { $0.contains("rate limit is exhausted") }, "A successful response that exhausts the rate limit needs guidance")
+        try check(lookupCounter.value <= 8, "A successful exhausted metadata batch must stop later repository requests")
+    }
+
+    private static func data(_ value: String) -> Data { Data(value.utf8) }
+
+    private static func check(_ condition: @autoclosure () -> Bool, _ message: String) throws {
+        guard condition() else { throw FixtureFailure(message: message) }
     }
 }
 

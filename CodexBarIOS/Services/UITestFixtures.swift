@@ -153,6 +153,7 @@ final class UITestFixtures {
         let personalID = switch scenario {
         case "github-billing-no-personal-budget": "ui-github-billing-personal-no-budget"
         case "github-billing-incomplete": "ui-github-billing-personal-incomplete"
+        case "github-billing-overage": "ui-github-billing-personal-overage"
         default: "ui-github-billing-personal"
         }
         let personal = ProviderAccountConfiguration(
@@ -176,7 +177,8 @@ final class UITestFixtures {
         let accounts: [ProviderAccountConfiguration] = switch scenario {
         case "github-billing-personal",
              "github-billing-no-personal-budget",
-             "github-billing-incomplete": [personal]
+             "github-billing-incomplete",
+             "github-billing-overage": [personal]
         case "github-billing-organization": [organization]
         default: [personal, organization]
         }
@@ -189,7 +191,7 @@ final class UITestFixtures {
     nonisolated static func githubBillingResult(
         for account: ProviderAccountConfiguration
     ) -> ProviderUsageResult {
-        let periodStart = Date().addingTimeInterval(-14 * 24 * 60 * 60)
+        let periodStart = Date().addingTimeInterval(-20 * 24 * 60 * 60)
         let periodEnd = periodStart.addingTimeInterval(30 * 24 * 60 * 60)
         if account.githubBillingAccountScope == .personal {
             if account.id.hasSuffix("no-budget") {
@@ -197,6 +199,13 @@ final class UITestFixtures {
             }
             if account.id.hasSuffix("incomplete") {
                 return incompletePersonalBillingResult(
+                    account: account,
+                    periodStart: periodStart,
+                    periodEnd: periodEnd
+                )
+            }
+            if account.id.hasSuffix("overage") {
+                return overagePersonalBillingResult(
                     account: account,
                     periodStart: periodStart,
                     periodEnd: periodEnd
@@ -224,7 +233,24 @@ final class UITestFixtures {
                         label: "Free"
                     ),
                     subtitle: "GitHub personal billing",
-                    bars: [],
+                    bars: [
+                        UsageBar(
+                            stableKey: "actions-allowance-minutes",
+                            label: "Actions minutes",
+                            used: 0,
+                            limit: 2_000,
+                            resetsAt: Date().addingTimeInterval(16 * 24 * 60 * 60),
+                            resetDisplayStyle: .relativeWithLocalTime
+                        ),
+                        UsageBar(
+                            stableKey: "actions-storage",
+                            label: "Actions storage",
+                            used: 0,
+                            limit: 0.5,
+                            resetsAt: Date().addingTimeInterval(16 * 24 * 60 * 60),
+                            resetDisplayStyle: .relativeWithLocalTime
+                        ),
+                    ],
                     usageMessages: [],
                     cardInformationSections: [
                         ProviderCardInformationSection(
@@ -268,11 +294,12 @@ final class UITestFixtures {
                     subtitle: "GitHub personal billing",
                     bars: [
                         UsageBar(
-                            stableKey: "actions-private-minutes",
-                            label: "Private Actions minutes",
+                            stableKey: "actions-allowance-minutes",
+                            label: "Actions minutes",
                             used: 720,
                             limit: 2_000,
                             resetsAt: periodEnd,
+                            resetDisplayStyle: .relativeWithLocalTime,
                             projectionCurrent: 720,
                             projectionLimit: 2_000,
                             projectionPeriodStart: periodStart,
@@ -299,8 +326,8 @@ final class UITestFixtures {
                         ),
                     ],
                     usageMessages: [
-                        "GitHub returned Actions or Packages storage without a recognized storage SKU, "
-                            + "so the accrued storage allowance is unavailable.",
+                        "GitHub returned Actions storage without the recognized storage SKU, "
+                            + "so the monthly storage allowance is unavailable.",
                     ],
                     cardInformationSections: [
                         ProviderCardInformationSection(
@@ -315,23 +342,24 @@ final class UITestFixtures {
                                 ProviderCardInformationItem(
                                     id: "discount",
                                     label: "Discount usage",
-                                    detail: "$0.00"
+                                    detail: "$0.00 · Quantity unavailable"
                                 ),
                                 ProviderCardInformationItem(
                                     id: "billable",
                                     label: "Billable usage",
-                                    detail: "$12.48"
+                                    detail: "$12.48 · Quantity unavailable"
                                 ),
                                 ProviderCardInformationItem(
                                     id: "included-minutes",
                                     label: "Included usage · Minutes",
-                                    detail: "720 of 2,000 minutes used · 1,280 minutes remaining"
+                                    detail: "720 of 2,000 minutes used (private standard runners) · "
+                                        + "1,280 minutes remaining"
                                 ),
                                 ProviderCardInformationItem(
                                     id: "included-storage",
                                     label: "Included usage · Storage",
-                                    detail: "GitHub returned Actions or Packages storage without a "
-                                        + "recognized storage SKU, so the accrued storage allowance is unavailable."
+                                    detail: "GitHub returned Actions storage without the recognized storage SKU, "
+                                    + "so the monthly storage allowance is unavailable."
                                 ),
                             ]
                         ),
@@ -351,29 +379,31 @@ final class UITestFixtures {
                 title: account.displayName,
                 plan: ProviderPlanDescriptor.make(
                     providerPrefix: ProviderID.githubBilling.rawValue,
-                    identifier: "free",
-                    label: "Free"
+                    identifier: "pro",
+                    label: "Pro"
                 ),
                 subtitle: "GitHub personal billing",
                 bars: [
                     UsageBar(
-                        stableKey: "actions-private-minutes",
-                        label: "Private Actions minutes",
-                        used: 720,
-                        limit: 2_000,
+                        stableKey: "actions-allowance-minutes",
+                        label: "Actions minutes",
+                        used: 1_600,
+                        limit: 3_000,
                         resetsAt: periodEnd,
-                        projectionCurrent: 720,
-                        projectionLimit: 2_000,
+                        resetDisplayStyle: .relativeWithLocalTime,
+                        projectionCurrent: 1_600,
+                        projectionLimit: 3_000,
                         projectionPeriodStart: periodStart,
                         projectionPeriodEnd: periodEnd,
                         showProjectionOnCurrentBar: true
                     ),
                     UsageBar(
-                        stableKey: "actions-packages-storage",
-                        label: "Actions + Packages storage",
-                        used: 118,
-                        limit: 360,
-                        resetsAt: periodEnd
+                        stableKey: "actions-storage",
+                        label: "Actions storage",
+                        used: 0.6,
+                        limit: 2,
+                        resetsAt: periodEnd,
+                        resetDisplayStyle: .relativeWithLocalTime
                     ),
                 ],
                 monetaryMetrics: [
@@ -408,23 +438,23 @@ final class UITestFixtures {
                             ProviderCardInformationItem(
                                 id: "actions.discount",
                                 label: "Discount usage",
-                                detail: "$12.48"
+                                detail: "$12.48 · 720 minutes · 60 GB-hours"
                             ),
                             ProviderCardInformationItem(
                                 id: "actions.billable",
                                 label: "Billable usage",
-                                detail: "$12.32"
+                                detail: "$12.32 · 0 minutes · 58 GB-hours"
                             ),
                             ProviderCardInformationItem(
                                 id: "actions.included.minutes",
                                 label: "Included usage · Minutes",
-                                detail: "720 of 2,000 minutes used · 1,280 minutes remaining"
+                                detail: "1,600 of 3,000 minutes used (private standard runners) · "
+                                    + "1,400 minutes remaining"
                             ),
                             ProviderCardInformationItem(
                                 id: "actions.included.storage",
                                 label: "Included usage · Storage",
-                                detail: "118 of 360 GB-hours used (Actions and Packages storage) · "
-                                    + "242 GB-hours remaining"
+                                detail: "0.6 of 2 GB used (private Actions storage) · 1.4 GB remaining"
                             ),
                         ]
                     ),
@@ -473,6 +503,83 @@ final class UITestFixtures {
             )
     }
 
+    nonisolated private static func overagePersonalBillingResult(
+        account: ProviderAccountConfiguration,
+        periodStart: Date,
+        periodEnd: Date
+    ) -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: account.id,
+            providerID: .githubBilling,
+            title: account.displayName,
+            plan: ProviderPlanDescriptor.make(
+                providerPrefix: ProviderID.githubBilling.rawValue,
+                identifier: "free",
+                label: "Free"
+            ),
+            subtitle: "GitHub personal billing",
+            bars: [
+                UsageBar(
+                    stableKey: "actions-allowance-minutes",
+                    label: "Actions minutes",
+                    used: 2_500,
+                    limit: 2_000,
+                    resetsAt: periodEnd,
+                    resetDisplayStyle: .relativeWithLocalTime,
+                    projectionCurrent: 2_500,
+                    projectionLimit: 2_000,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd,
+                    showProjectionOnCurrentBar: true
+                ),
+            ],
+            monetaryMetrics: [
+                ProviderMonetaryMetric(
+                    kind: .grossSpend, label: "Gross usage", minorUnits: 2_000,
+                    currencyCode: "USD", decimalPlaces: 2
+                ),
+                ProviderMonetaryMetric(
+                    kind: .discounts, label: "Discounts", minorUnits: 1_200,
+                    currencyCode: "USD", decimalPlaces: 2
+                ),
+                ProviderMonetaryMetric(
+                    kind: .spent, label: "Net spend", minorUnits: 800,
+                    currencyCode: "USD", decimalPlaces: 2
+                ),
+            ],
+            cardInformationSections: [
+                ProviderCardInformationSection(
+                    id: "github-billing.product.actions",
+                    title: "Actions",
+                    items: [
+                        ProviderCardInformationItem(
+                            id: "actions.consumed",
+                            label: "Consumed usage",
+                            detail: "$20.00 · 2,500 minutes"
+                        ),
+                        ProviderCardInformationItem(
+                            id: "actions.discount",
+                            label: "Discount usage",
+                            detail: "$12.00 · 2,000 minutes"
+                        ),
+                        ProviderCardInformationItem(
+                            id: "actions.billable",
+                            label: "Billable usage",
+                            detail: "$8.00 · 500 minutes"
+                        ),
+                        ProviderCardInformationItem(
+                            id: "actions.included.minutes",
+                            label: "Included usage · Minutes",
+                            detail: "2,500 of 2,000 minutes used (private standard runners) · "
+                                + "500 minutes over allowance"
+                        ),
+                    ]
+                ),
+            ],
+            fetchedAt: Date()
+        )
+    }
+
     nonisolated private static func organizationBillingResult(
         account: ProviderAccountConfiguration,
         periodStart: Date,
@@ -482,8 +589,34 @@ final class UITestFixtures {
             accountID: account.id,
             providerID: .githubBilling,
             title: account.displayName,
+            plan: ProviderPlanDescriptor.make(
+                providerPrefix: ProviderID.githubBilling.rawValue,
+                identifier: "organization-team",
+                label: "Team"
+            ),
             subtitle: "GitHub organization billing",
             bars: [
+                UsageBar(
+                    stableKey: "actions-allowance-minutes",
+                    label: "Actions minutes",
+                    used: 1_500,
+                    limit: 3_000,
+                    resetsAt: periodEnd,
+                    resetDisplayStyle: .relativeWithLocalTime,
+                    projectionCurrent: 1_500,
+                    projectionLimit: 3_000,
+                    projectionPeriodStart: periodStart,
+                    projectionPeriodEnd: periodEnd,
+                    showProjectionOnCurrentBar: true
+                ),
+                UsageBar(
+                    stableKey: "actions-storage",
+                    label: "Actions storage",
+                    used: 0.69,
+                    limit: 2,
+                    resetsAt: periodEnd,
+                    resetDisplayStyle: .relativeWithLocalTime
+                ),
                 UsageBar(
                     stableKey: "budget-actions",
                     label: "Actions budget",
@@ -512,6 +645,23 @@ final class UITestFixtures {
                 ),
             ],
             cardInformationSections: [
+                ProviderCardInformationSection(
+                    id: "github-billing.product.actions",
+                    title: "Actions",
+                    items: [
+                        ProviderCardInformationItem(
+                            id: "actions.included.minutes",
+                            label: "Included usage · Minutes",
+                            detail: "1,500 of 3,000 minutes used (private standard runners) · "
+                                + "1,500 minutes remaining"
+                        ),
+                        ProviderCardInformationItem(
+                            id: "actions.included.storage",
+                            label: "Included usage · Storage",
+                            detail: "0.69 of 2 GB used (private Actions storage) · 1.31 GB remaining"
+                        ),
+                    ]
+                ),
                 ProviderCardInformationSection(
                     id: "github-billing.budget.actions",
                     title: "Actions budget",
