@@ -1439,7 +1439,7 @@ enum GitHubBillingFixtureRunner {
         personal: ProviderAccountConfiguration,
         now: Date
     ) async throws {
-        let metadataCounter = LockedCounter()
+        let metadataCounter = LockedCounter(); let usageCounter = LockedCounter()
         FixtureURLProtocol.setHandler { request in
             switch request.url?.path {
             case "/user":
@@ -1447,8 +1447,9 @@ enum GitHubBillingFixtureRunner {
             case "/users/octocat/settings/billing/usage/summary":
                 return response(request, status: 200, body: #"{"timePeriod":{"year":2026,"month":9},"user":"octocat","usageItems":[{"product":"Actions","sku":"Actions Linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0}]}"#)
             case "/users/octocat/settings/billing/usage":
-                return response(request, status: 200, body: #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#)
-            case "/repos/octocat/private":
+                usageCounter.increment(); let repository = usageCounter.value == 1 ? "private" : "PRIVATE"
+                return response(request, status: 200, body: #"{"usageItems":[{"product":"Actions","sku":"Actions Linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"\#(repository)","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#)
+            case "/repos/octocat/private", "/repos/octocat/PRIVATE":
                 metadataCounter.increment()
                 let token = request.value(forHTTPHeaderField: "Authorization")
                 return response(request, status: 200, body: token == "Bearer replacement-fixture-token"
@@ -1465,9 +1466,9 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibilityCacheDuration: 15 * 60,
             now: { now }
         )
-        _ = try await provider.fetchUsage(for: personal)
-        _ = try await provider.fetchUsage(for: personal)
+        _ = try await provider.fetchUsage(for: personal); let cachedResult = try await provider.fetchUsage(for: personal)
         try check(metadataCounter.value == 1, "Routine refreshes must reuse repository visibility")
+        try check(cachedResult.bars.first { $0.stableKey == "actions-private-minutes" }?.used == 10, "Cached visibility must bind to the current repository-name casing")
 
         let replacementCredentials = GitHubBillingCredentials(
             accessToken: "replacement-fixture-token",

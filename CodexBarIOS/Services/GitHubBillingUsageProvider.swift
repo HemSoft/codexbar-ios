@@ -934,7 +934,11 @@ private actor GitHubRepositoryVisibilityCache {
                 missing.append(repository)
                 continue
             }
-            lookups.append(entry.lookup)
+            lookups.append(RepositoryVisibilityLookup(
+                repository: repository,
+                isPrivate: entry.lookup.isPrivate,
+                isHidden: entry.lookup.isHidden
+            ))
         }
         return RepositoryVisibilityCacheResolution(lookups: lookups, missing: missing)
     }
