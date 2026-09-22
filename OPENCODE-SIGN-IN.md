@@ -1,68 +1,80 @@
 # OpenCode phone sign-in
 
-OpenCode account settings offer **Sign in with OpenCode** or **Reconnect
-OpenCode**. A new private website session opens each time. Sign in using the
-provider's website, choose the workspace there, then select **Connect this
-workspace**. CodexBar verifies actual Go usage or Zen balance before saving the
-session in the account's Keychain entry and returning to settings.
+OpenCode Go and Zen use browser approval. In account settings, choose **Sign in
+with OpenCode** or **Reconnect OpenCode**. Sign in on OpenCode and approve the
+workspace you want to track. CodexBar returns automatically, verifies available
+Go usage or Zen balance, then saves the credentials in that account's Keychain
+entry. No JSON, workspace ID, copied token, or desktop session is required.
 
-Removing the saved credential disconnects this device. It does not revoke the
-provider's session remotely or remove account preferences/history. Reconnecting
-an existing entry must select the same workspace. Add another OpenCode account
-to track a different workspace. Existing saved credentials remain readable.
+Removing a saved credential disconnects that CodexBar account on this device.
+It does not revoke access at OpenCode. Account customization and history remain.
+Reconnection cannot silently replace an existing account's workspace. Add another
+CodexBar account to track a different workspace.
 
 ## Provider contract
 
-Verified September 22, 2026:
+The initial embedded-browser implementation was rejected during review. Google
+[does not support authorization in embedded user agents](https://developers.google.com/identity/protocols/oauth2/native-app#authorization-errors-disallowed-useragent).
+Production sign-in now uses `ASWebAuthenticationSession`, through the app's
+existing private system-browser presenter. It does not inspect browser cookies,
+passwords, or page contents.
 
-- [Go documentation](https://opencode.ai/docs/go/) links to
-  [OpenCode sign-in](https://opencode.ai/auth).
-- An unauthenticated GET follows the provider's redirect to
-  `https://auth.opencode.ai/authorize`, with GitHub and Google sign-in choices.
-- [Console auth source](https://github.com/anomalyco/opencode/blob/2406400f0aeb07b36d0495af4e05aaca49159832/packages/console/app/src/context/auth.ts)
-  and its [callback](https://github.com/anomalyco/opencode/blob/2406400f0aeb07b36d0495af4e05aaca49159832/packages/console/app/src/routes/auth/%5B...callback%5D.ts)
-  establish the HTTP-only `auth` cookie at the provider origin.
-- The [workspace picker](https://github.com/anomalyco/opencode/blob/2406400f0aeb07b36d0495af4e05aaca49159832/packages/console/app/src/routes/workspace-picker.tsx)
-  navigates to `/workspace/<id>`. CodexBar reads only the selected URL and the
-  provider-scoped cookie, not passwords or page form values.
+The current [OpenCode Console](https://opencode.ai/console/) provides a device
+approval flow. Its deployed [client schemas](https://opencode.ai/console/assets/index-CGGre-5H.js)
+and [Go client](https://opencode.ai/console/assets/queries-DUtsFTY0.js) define:
 
-No supported third-party mobile dashboard OAuth grant has been verified.
-OpenCode's OAuth discovery endpoint is not sufficient evidence that a new
-mobile client can receive dashboard credentials. The implementation therefore
-uses a nonpersistent WebKit session rather than inventing a client registration
-or requesting users copy credentials. The embedded sign-in provider's behavior
-can change. Upstream also contains console-migration redirects; an unrecognized
-origin stays blocked instead of accepting an unverified session.
+- `POST /console/auth/device/code`, with CodexBar's own public client label
+  `codexbar-ios` and `supports_org_scope: true`.
+- A provider-hosted `/console/device` approval page with workspace selection.
+- `POST /console/auth/device/token`, supporting device-code and refresh grants.
+- `GET /console/auth/session` for the authorized user's identity.
+- `GET /console/api/go/status` and `GET /console/api/billing/status`, authenticated
+  by the resulting bearer token and `x-org-id` workspace header.
 
-Only HTTPS navigation on the exact OpenCode, OpenCode auth, GitHub, and Google
-Accounts origins is allowed. Verification rejects redirects and uses an
-isolated URLSession with no shared cookie storage. Cancel and navigation errors
-never display provider URLs or raw WebKit error text. A canceled attempt cannot
-save a late result.
+An unauthenticated development probe returned a device challenge, a 900-second
+expiry, and a five-second polling interval. A later unapproved token poll returned
+`expired_token`. Those probes verify endpoint availability, not successful
+account authorization. These are first-party Console contracts, not a claim of
+public API stability. Endpoint or schema changes must fail visibly rather than
+fall back to credential pasting.
 
-## Local regression checks
+## Credential and usage handling
 
-New tests are local/manual. Automatic CI jobs, destinations, triggers, retries,
-and timeouts are unchanged; existing assertions are only updated for new copy.
+CodexBar accepts approval URLs only at the exact HTTPS Console device path.
+Polling respects the provider interval, pending approval, slow-down responses,
+denial, expiry, and cancellation. Token requests and usage requests have no shared
+cookie storage and reject redirects.
+
+The returned workspace scope must agree with the authenticated identity before
+usage verification. Go data for a different workspace member is not displayed.
+Only verified current Go windows or a real Zen balance can establish a connected
+account. Go and balance failures remain independent. The Console's microcent
+amounts are converted using 100,000,000 microcents per dollar. Go history keeps
+its existing metric identities and uses server reset times. An inactive rolling
+window has no invented reset date.
+
+Credentials are stored per CodexBar account. Expiring tokens use the shared
+credential-refresh coordinator and check the current stored credential before
+saving a replacement. Failed persistence does not establish a new connection.
+Cancellation and failed verification leave the saved account unchanged.
+
+Older saved dashboard credentials remain readable for compatibility. New setup
+and reconnection never ask the user to obtain or paste one.
+
+## Local validation
+
+Run local auth and Console parsing regressions without adding automatic CI work:
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode-27-beta.app/Contents/Developer \
-  xcrun swift test --filter OpenCode
-
-DEVELOPER_DIR=/Applications/Xcode-27-beta.app/Contents/Developer \
-  xcodebuild -project CodexBarIOS.xcodeproj -scheme CodexBarIOSUITests \
-  -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
-  -only-testing:CodexBarIOSUITests/OpenCodeSignInUITests \
-  -skipPackagePluginValidation test
+  xcrun swift test --filter OpenCodeAuthTests
 ```
 
-Repeat the UI command with an available iPad destination. The simulator-only
-UUID-scoped UI fixture uses synthetic website pages and credentials. It covers
-workspace selection, saving, cancellation, verification failure/retry, removal,
-reconnection, and relaunch without contacting a provider. The SwiftPM tests cover
-origin/cookie validation, workspace isolation, actual-data verification, failed
-Keychain writes, and preserving configuration when removing credentials.
+`OpenCodeSignInUITests` belongs to the existing manually dispatched UI target.
+Its UUID-isolated fixture simulates browser approval and never opens a provider
+account or uses live credentials. It covers disconnected setup, cancellation,
+workspace selection, credential removal, reconnection, relaunch, and verification
+failure. Synthetic screenshots are not proof of live Google or GitHub sign-in.
 
-Live GitHub/Google sign-in, MFA, workspace selection, and Go/Zen quota comparison
-remain pending for Franz. Synthetic tests do not establish live provider login
-compatibility. Live credentials and account screenshots must remain local.
+Franz owns the final live-account sign-in and Go/Zen quota comparison. Those
+checks remain pending and are not a prerequisite for agent build delivery.

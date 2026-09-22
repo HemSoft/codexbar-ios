@@ -81,6 +81,8 @@
 		A31400000000000000000301 /* AntigravityUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000302 /* AntigravityUsageProvider.swift */; };
 		A31400000000000000000201 /* AntigravityQuotaParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000202 /* AntigravityQuotaParser.swift */; };
 		A31400000000000000000101 /* AntigravityCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000102 /* AntigravityCredentials.swift */; };
+		A35300000000000000000301 /* OpenCodeDeviceAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000302 /* OpenCodeDeviceAuthService.swift */; };
+		A35300000000000000000401 /* OpenCodeConsoleUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000402 /* OpenCodeConsoleUsageProvider.swift */; };
 		A35300000000000000000201 /* OpenCodeBrowserSessionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000202 /* OpenCodeBrowserSessionPolicy.swift */; };
 		A29900000000000000000001 /* GeminiBrowserSessionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */; };
 		10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003F /* MoonshotUsageProvider.swift */; };
@@ -298,6 +300,8 @@
 		A31400000000000000000302 /* AntigravityUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityUsageProvider.swift; sourceTree = "<group>"; };
 		A31400000000000000000202 /* AntigravityQuotaParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityQuotaParser.swift; sourceTree = "<group>"; };
 		A31400000000000000000102 /* AntigravityCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityCredentials.swift; sourceTree = "<group>"; };
+		A35300000000000000000302 /* OpenCodeDeviceAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeDeviceAuthService.swift; sourceTree = "<group>"; };
+		A35300000000000000000402 /* OpenCodeConsoleUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeConsoleUsageProvider.swift; sourceTree = "<group>"; };
 		A35300000000000000000202 /* OpenCodeBrowserSessionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeBrowserSessionPolicy.swift; sourceTree = "<group>"; };
 		A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiBrowserSessionPolicy.swift; sourceTree = "<group>"; };
 		20000000000000000000003F /* MoonshotUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonshotUsageProvider.swift; sourceTree = "<group>"; };
@@ -519,6 +523,8 @@
 				A31400000000000000000102 /* AntigravityCredentials.swift */,
 				A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */,
 				A35300000000000000000202 /* OpenCodeBrowserSessionPolicy.swift */,
+				A35300000000000000000302 /* OpenCodeDeviceAuthService.swift */,
+				A35300000000000000000402 /* OpenCodeConsoleUsageProvider.swift */,
 				20000000000000000000003F /* MoonshotUsageProvider.swift */,
 				200000000000000000000040 /* TokenEndpointErrorFormatter.swift */,
 				200000000000000000000041 /* ProviderAuthSupport.swift */,
@@ -997,6 +1003,8 @@
 				A31400000000000000000101 /* AntigravityCredentials.swift in Sources */,
 				A29900000000000000000001 /* GeminiBrowserSessionPolicy.swift in Sources */,
 				A35300000000000000000201 /* OpenCodeBrowserSessionPolicy.swift in Sources */,
+				A35300000000000000000301 /* OpenCodeDeviceAuthService.swift in Sources */,
+				A35300000000000000000401 /* OpenCodeConsoleUsageProvider.swift in Sources */,
 				10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */,
 				100000000000000000000040 /* TokenEndpointErrorFormatter.swift in Sources */,
 				100000000000000000000041 /* ProviderAuthSupport.swift in Sources */,

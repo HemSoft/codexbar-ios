@@ -10,8 +10,8 @@ final class OpenCodeSignInUITests: XCTestCase {
         XCTAssertEqual(app.secureTextFields.count, 0)
         capture("OpenCode disconnected account", app: app)
         signIn.tap()
-        XCTAssertTrue(app.links["Choose Sample workspace"].waitForExistence(timeout: 10))
-        capture("Private sign-in and workspace choice", app: app)
+        XCTAssertTrue(app.buttons["Choose Sample workspace"].waitForExistence(timeout: 10))
+        capture("Synthetic browser approval and workspace choice", app: app)
         app.buttons["Cancel"].tap()
         XCTAssertTrue(signIn.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Remove Saved Credential"].exists)
@@ -68,15 +68,15 @@ final class OpenCodeSignInUITests: XCTestCase {
 
     private func chooseWorkspace(in app: XCUIApplication) {
         app.buttons["Sign in with OpenCode"].tap()
-        XCTAssertTrue(app.links["Choose Sample workspace"].waitForExistence(timeout: 10))
-        app.links["Choose Sample workspace"].tap()
+        XCTAssertTrue(app.buttons["Choose Sample workspace"].waitForExistence(timeout: 10))
+        app.buttons["Choose Sample workspace"].tap()
         XCTAssertTrue(app.buttons["Connect this workspace"].wait(for: \.isEnabled, toEqual: true, timeout: 10))
     }
 
     private func connect(in app: XCUIApplication) {
         app.buttons["Sign in with OpenCode"].tap()
-        XCTAssertTrue(app.links["Choose Sample workspace"].waitForExistence(timeout: 10))
-        app.links["Choose Sample workspace"].tap()
+        XCTAssertTrue(app.buttons["Choose Sample workspace"].waitForExistence(timeout: 10))
+        app.buttons["Choose Sample workspace"].tap()
         let connect = app.buttons["Connect this workspace"]
         XCTAssertTrue(connect.wait(for: \.isEnabled, toEqual: true, timeout: 10))
         capture("Selected workspace", app: app)

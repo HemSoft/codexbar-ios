@@ -45,7 +45,7 @@ final class OpenCodeCredentialStorageTests: XCTestCase {
     }
 }
 
-private final class OpenCodeTestSecrets: SecretStore, @unchecked Sendable {
+final class OpenCodeTestSecrets: SecretStore, @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: String] = [:]
     private var fails = false

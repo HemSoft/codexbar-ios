@@ -47,7 +47,7 @@ building, testing, or releasing the app.
 
 ### Changed
 
-- OpenCode Go and Zen now use a private phone sign-in window with workspace
+- OpenCode Go and Zen now use private system-browser approval with workspace
   selection instead of pasted JSON, cookies, or workspace IDs. Removing auth
   leaves a guided reconnect action and preserves account customization and
   history. Sessions are verified before being saved securely on the device.

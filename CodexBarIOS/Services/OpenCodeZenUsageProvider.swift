@@ -1,20 +1,21 @@
 import CryptoKit
 import Foundation
 
-private struct OpenCodeGoWindow {
+struct OpenCodeGoWindow {
     let stableKey: String
     let label: String
     let usagePercent: Double
     let resetInSeconds: TimeInterval
     let hasExactResetBoundary: Bool
+    var hasReset = true
 }
 
-private enum OpenCodeBalanceFetchOutcome {
+enum OpenCodeBalanceFetchOutcome {
     case value(Double)
     case failure(String)
 }
 
-private enum OpenCodeGoPageOutcome {
+enum OpenCodeGoPageOutcome {
     case subscribed([OpenCodeGoWindow])
     case notSubscribed
     case otherWorkspaceMember
@@ -40,6 +41,10 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         let storedSecret = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration))
+        if let credential = OpenCodeConsoleCredential.parse(storedSecret) {
+            return await OpenCodeConsoleUsageProvider(secretStore: secretStore)
+                .fetchUsage(credential: credential, configuration: configuration)
+        }
         guard let workspaceId = Self.normalizedWorkspaceId(from: configuration.openCodeWorkspaceId)
             ?? Self.workspaceId(fromCredentialPayload: storedSecret)
         else {
@@ -800,7 +805,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                 label: window.label,
                 used: window.usagePercent,
                 limit: 100,
-                resetsAt: fetchedAt.addingTimeInterval(window.resetInSeconds),
+                resetsAt: window.hasReset ? fetchedAt.addingTimeInterval(window.resetInSeconds) : nil,
                 resetDisplayStyle: .relativeWithLocalTime,
                 projectionCurrent: projectionPeriod == nil
                     ? nil
@@ -969,7 +974,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         )
     }
 
-    private static func buildCombinedResult(
+    static func buildCombinedResult(
         balance: OpenCodeBalanceFetchOutcome,
         goUsage: OpenCodeGoPageOutcome,
         configuration: ProviderAccountConfiguration,

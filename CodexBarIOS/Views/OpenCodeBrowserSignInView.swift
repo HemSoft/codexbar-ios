@@ -1,47 +1,58 @@
 import SwiftUI
-import WebKit
 
 @MainActor
-final class OpenCodeBrowserSignInSession: NSObject, ObservableObject, Identifiable, WKNavigationDelegate, WKUIDelegate {
+final class OpenCodeBrowserSignInSession: ObservableObject, Identifiable {
     let id = UUID()
-    let webView: WKWebView
-    @Published private(set) var host = "opencode.ai"
     @Published private(set) var workspaceID: String?
-    @Published private(set) var message: String?
-    @Published private(set) var isConnecting = false
+    @Published private(set) var isSynthetic = false
+    private let presenter = PrivateWebAuthenticationPresenter()
     private var completion: ((Result<OpenCodeBrowserCredential, Error>) -> Void)?
+    private var task: Task<Void, Never>?
     private var didStart = false
-    private var navigationRevision = 0
 
     init(completion: @escaping (Result<OpenCodeBrowserCredential, Error>) -> Void) {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        webView = WKWebView(frame: .zero, configuration: configuration)
         self.completion = completion
-        super.init()
-        webView.navigationDelegate = self
-        webView.uiDelegate = self
     }
 
     func start() {
         guard !didStart else { return }
         didStart = true
         #if DEBUG
-        if let fixtures = UITestFixtures.current {
-            fixtures.loadOpenCodePage(into: webView, url: OpenCodeBrowserSessionPolicy.signInURL)
+        if UITestFixtures.current != nil {
+            isSynthetic = true
             return
         }
         #endif
-        webView.load(URLRequest(url: OpenCodeBrowserSessionPolicy.signInURL))
+        task = Task { [weak self] in await self?.authorizeInBrowser() }
+    }
+
+    private func authorizeInBrowser() async {
+        let service = OpenCodeDeviceAuthService()
+        defer { service.session.invalidateAndCancel() }
+        do {
+            let authorization = try await service.begin()
+            try Task.checkCancellation()
+            guard presenter.present(url: authorization.verificationURL, onCancel: { [weak self] in
+                self?.cancel()
+            }) else { throw OpenCodeSignInError.browserFailed }
+            let credential = try await service.authorize(authorization)
+            try Task.checkCancellation()
+            finish(.success(OpenCodeBrowserCredential(
+                workspaceID: credential.workspaceID, session: try credential.encoded()
+            )))
+        } catch {
+            guard !Task.isCancelled else { return }
+            finish(.failure(error as? OpenCodeSignInError ?? .browserFailed))
+        }
     }
 
     func cancel() { finish(.failure(OpenCodeSignInError.canceled)) }
 
     func invalidate() {
         completion = nil
-        webView.stopLoading()
-        webView.navigationDelegate = nil
-        webView.uiDelegate = nil
+        task?.cancel()
+        task = nil
+        presenter.finish()
     }
 
     private func finish(_ result: Result<OpenCodeBrowserCredential, Error>) {
@@ -50,88 +61,18 @@ final class OpenCodeBrowserSignInSession: NSObject, ObservableObject, Identifiab
         callback?(result)
     }
 
-    func connect() {
-        guard let workspaceID, !isConnecting else { return }
-        isConnecting = true
-        let revision = navigationRevision
-        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
-            guard let self else { return }
-            self.isConnecting = false
-            guard self.completion != nil, self.navigationRevision == revision else { return }
-            self.readCredential(cookies, workspaceID: workspaceID)
-        }
-    }
-
-    private func readCredential(_ cookies: [HTTPCookie], workspaceID: String) {
-        guard OpenCodeBrowserSessionPolicy.workspaceID(from: webView.url) == workspaceID else { return }
-        do {
-            guard let credential = try OpenCodeBrowserSessionPolicy.credential(from: cookies) else {
-                message = "Finish signing in on OpenCode, then choose Connect this workspace."
-                return
-            }
-            finish(.success(OpenCodeBrowserCredential(workspaceID: workspaceID, session: credential)))
-        } catch {
-            message = OpenCodeSignInError.ambiguousSession.localizedDescription
-        }
-    }
-
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        navigationRevision += 1
-        workspaceID = nil
-        message = nil
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        host = webView.url?.host ?? "opencode.ai"
-        workspaceID = OpenCodeBrowserSessionPolicy.workspaceID(from: webView.url)
-    }
-
-    func webView(
-        _ webView: WKWebView,
-        decidePolicyFor navigationAction: WKNavigationAction
-    ) async -> WKNavigationActionPolicy {
-        guard OpenCodeBrowserSessionPolicy.allowsNavigation(to: navigationAction.request.url) else {
-            message = "This window only opens OpenCode and its GitHub or Google sign-in pages. Cancel to return safely."
-            return .cancel
-        }
+    func selectSyntheticWorkspace() {
         #if DEBUG
-        if let fixtures = UITestFixtures.current, navigationAction.navigationType == .linkActivated,
-           let url = navigationAction.request.url {
-            fixtures.loadOpenCodePage(into: webView, url: url)
-            return .cancel
-        }
+        guard isSynthetic, UITestFixtures.current != nil else { return }
+        workspaceID = "wrk_fixture"
         #endif
-        return .allow
     }
 
-    func webView(
-        _ webView: WKWebView,
-        createWebViewWith configuration: WKWebViewConfiguration,
-        for navigationAction: WKNavigationAction,
-        windowFeatures: WKWindowFeatures
-    ) -> WKWebView? {
-        guard navigationAction.targetFrame == nil,
-              OpenCodeBrowserSessionPolicy.allowsNavigation(to: navigationAction.request.url) else { return nil }
-        webView.load(navigationAction.request)
-        return nil
-    }
-
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        navigationFailed(error)
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        navigationFailed(error)
-    }
-
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        finish(.failure(OpenCodeSignInError.browserFailed))
-    }
-
-    private func navigationFailed(_ error: Error) {
-        guard (error as NSError).code != NSURLErrorCancelled else { return }
-        // Provider URLs and WebKit errors can contain authorization codes. Do not display them.
-        finish(.failure(OpenCodeSignInError.browserFailed))
+    func connectSyntheticWorkspace() {
+        #if DEBUG
+        guard isSynthetic, UITestFixtures.current != nil, let workspaceID else { return }
+        finish(.success(OpenCodeBrowserCredential(workspaceID: workspaceID, session: "ui-test-credential")))
+        #endif
     }
 }
 
@@ -140,37 +81,33 @@ struct OpenCodeBrowserSignInView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                Text("Sign in on OpenCode's website and choose your workspace. Connect it to return to CodexBar automatically.")
-                    .font(.footnote).padding()
-                if let message = session.message {
-                    Text(message).font(.footnote).foregroundStyle(.red).padding(.horizontal)
+            VStack(spacing: 20) {
+                Image(systemName: "safari").font(.largeTitle)
+                Text("Approve CodexBar in your browser").font(.headline)
+                Text("Sign in with OpenCode and choose your workspace. You will return here automatically after approval.")
+                    .multilineTextAlignment(.center)
+                if session.isSynthetic {
+                    Text("Synthetic browser approval. No live account or credentials.").font(.footnote)
+                    if session.workspaceID == nil {
+                        Button("Choose Sample workspace") { session.selectSyntheticWorkspace() }
+                    } else {
+                        Text("Sample workspace")
+                        Button("Connect this workspace") { session.connectSyntheticWorkspace() }
+                    }
+                } else {
+                    ProgressView("Waiting for OpenCode approval...")
                 }
-                OpenCodeBrowserWebView(session: session)
             }
-            .navigationTitle(session.host)
+            .padding()
+            .navigationTitle("OpenCode sign-in")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { session.cancel() }
                 }
-                ToolbarItem(placement: .bottomBar) {
-                    Button("Connect this workspace") { session.connect() }
-                        .disabled(session.workspaceID == nil || session.isConnecting)
-                }
             }
         }
         .interactiveDismissDisabled()
+        .task { session.start() }
     }
-}
-
-private struct OpenCodeBrowserWebView: UIViewRepresentable {
-    let session: OpenCodeBrowserSignInSession
-
-    func makeUIView(context: Context) -> WKWebView {
-        session.start()
-        return session.webView
-    }
-
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
