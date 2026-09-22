@@ -117,23 +117,26 @@ public struct MetricTilePreference: Codable, Equatable, Sendable {
 }
 
 public struct AccountMetricLayout: Codable, Equatable, Sendable {
-    public static let currentVersion = 2
+    public static let currentVersion = 3
 
     public var version: Int
     public var orderedMetricIDs: [String]
     public var preferences: [String: MetricTilePreference]
     public var usesLegacyFullWidthDefaults: Bool
+    public var hasAppliedGitHubActionsMetricGrouping: Bool
 
     public init(
         version: Int = AccountMetricLayout.currentVersion,
         orderedMetricIDs: [String] = [],
         preferences: [String: MetricTilePreference] = [:],
-        usesLegacyFullWidthDefaults: Bool = false
+        usesLegacyFullWidthDefaults: Bool = false,
+        hasAppliedGitHubActionsMetricGrouping: Bool = false
     ) {
         self.version = version
         self.orderedMetricIDs = orderedMetricIDs
         self.preferences = preferences
         self.usesLegacyFullWidthDefaults = usesLegacyFullWidthDefaults
+        self.hasAppliedGitHubActionsMetricGrouping = hasAppliedGitHubActionsMetricGrouping
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -141,6 +144,7 @@ public struct AccountMetricLayout: Codable, Equatable, Sendable {
         case orderedMetricIDs
         case preferences
         case usesLegacyFullWidthDefaults
+        case hasAppliedGitHubActionsMetricGrouping
     }
 
     public init(from decoder: Decoder) throws {
@@ -159,6 +163,10 @@ public struct AccountMetricLayout: Codable, Equatable, Sendable {
         usesLegacyFullWidthDefaults = try container.decodeIfPresent(
             Bool.self,
             forKey: .usesLegacyFullWidthDefaults
+        ) ?? false
+        hasAppliedGitHubActionsMetricGrouping = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .hasAppliedGitHubActionsMetricGrouping
         ) ?? false
     }
 }
@@ -350,6 +358,39 @@ private enum CursorMetricPreferenceCompatibility {
     }
 }
 
+private enum GitHubBillingMetricPreferenceCompatibility {
+    private static let actionsMinutesID = "githubBilling.actions-allowance-minutes"
+    private static let actionsStorageID = "githubBilling.actions-storage"
+
+    static func groupActionsMetrics(
+        layout: inout AccountMetricLayout,
+        availableMetricIDs: [String]
+    ) {
+        guard !layout.hasAppliedGitHubActionsMetricGrouping else {
+            return
+        }
+        let availableMetricIDs = Set(availableMetricIDs)
+        guard
+            availableMetricIDs.contains(actionsMinutesID),
+            availableMetricIDs.contains(actionsStorageID),
+            let minutesIndex = layout.orderedMetricIDs.firstIndex(of: actionsMinutesID),
+            let storageIndex = layout.orderedMetricIDs.firstIndex(of: actionsStorageID)
+        else {
+            return
+        }
+
+        let insertionIndex = min(minutesIndex, storageIndex)
+        layout.orderedMetricIDs.removeAll {
+            $0 == actionsMinutesID || $0 == actionsStorageID
+        }
+        layout.orderedMetricIDs.insert(
+            contentsOf: [actionsMinutesID, actionsStorageID],
+            at: min(insertionIndex, layout.orderedMetricIDs.endIndex)
+        )
+        layout.hasAppliedGitHubActionsMetricGrouping = true
+    }
+}
+
 private enum MetricPreferenceCompatibility {
     static func migrate(
         layout: inout AccountMetricLayout,
@@ -360,6 +401,16 @@ private enum MetricPreferenceCompatibility {
             availableMetricIDs: availableMetricIDs
         )
         CursorMetricPreferenceCompatibility.migrate(
+            layout: &layout,
+            availableMetricIDs: availableMetricIDs
+        )
+    }
+
+    static func migrateOrder(
+        layout: inout AccountMetricLayout,
+        availableMetricIDs: [String]
+    ) {
+        GitHubBillingMetricPreferenceCompatibility.groupActionsMetrics(
             layout: &layout,
             availableMetricIDs: availableMetricIDs
         )
@@ -978,8 +1029,12 @@ public final class ProviderConfigurationStore: ObservableObject {
             )
         }
 
-        layout.version = AccountMetricLayout.currentVersion
         layout.orderedMetricIDs = orderedMetricIDs
+        MetricPreferenceCompatibility.migrateOrder(
+            layout: &layout,
+            availableMetricIDs: availableMetricIDs
+        )
+        layout.version = AccountMetricLayout.currentVersion
         for metricID in availableMetricIDs where layout.preferences[metricID] == nil {
             layout.preferences[metricID] = MetricTilePreference(
                 width: layout.usesLegacyFullWidthDefaults ? .full : .automatic,

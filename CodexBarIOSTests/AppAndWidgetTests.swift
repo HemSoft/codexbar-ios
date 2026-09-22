@@ -4207,23 +4207,23 @@ final class AppAndWidgetTests: XCTestCase {
     }
 
     @MainActor
-    func testVersionOneMetricLayoutMigratesWatchVisibilityToInherit() throws {
+    func testVersionOneMetricLayoutMigratesWatchVisibilityAndGroupsGitHubActionsMetrics() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-        let accountID = "codex.personal"
-        let metricID = "codex.session"
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let accountID = "githubBilling.personal"
+        let minutesID = "githubBilling.actions-allowance-minutes"
+        let storageID = "githubBilling.actions-storage"
+        let lfsStorageID = "githubBilling.lfs-storage"
         defaults.set(
             Data(
                 """
                 {
                   "\(accountID)": {
                     "version": 1,
-                    "orderedMetricIDs": ["\(metricID)"],
+                    "orderedMetricIDs": ["\(storageID)", "\(lfsStorageID)"],
                     "preferences": {
-                      "\(metricID)": {
+                      "\(storageID)": {
                         "isVisible": false,
                         "width": "half",
                         "isNewlyDiscovered": false
@@ -4236,17 +4236,17 @@ final class AppAndWidgetTests: XCTestCase {
             forKey: "metricVisualizationPreferences"
         )
 
-        let store = ProviderConfigurationStore(
-            defaults: defaults,
-            secretStore: EmptySecretStore()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: EmptySecretStore())
+        let order = store.metricOrder(
+            accountID: accountID,
+            availableMetricIDs: [minutesID, storageID, lfsStorageID]
         )
 
         XCTAssertEqual(store.metricLayouts[accountID]?.version, AccountMetricLayout.currentVersion)
-        XCTAssertEqual(
-            store.watchVisibilityPolicy(accountID: accountID, metricID: metricID),
-            .inherit
-        )
-        XCTAssertFalse(store.isMetricVisibleOnWatch(accountID: accountID, metricID: metricID))
+        XCTAssertEqual(order, [minutesID, storageID, lfsStorageID])
+        XCTAssertTrue(try XCTUnwrap(store.metricLayouts[accountID]).hasAppliedGitHubActionsMetricGrouping)
+        XCTAssertEqual(store.watchVisibilityPolicy(accountID: accountID, metricID: storageID), .inherit)
+        XCTAssertFalse(store.isMetricVisibleOnWatch(accountID: accountID, metricID: storageID))
     }
 
     @MainActor
