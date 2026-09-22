@@ -47,6 +47,12 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- OpenCode Go and Zen now use a private phone sign-in window with workspace
+  selection instead of pasted JSON, cookies, or workspace IDs. Removing auth
+  leaves a guided reconnect action and preserves account customization and
+  history. Sessions are verified before being saved securely on the device.
+  ([#353](https://github.com/HemSoft/codexbar-ios/issues/353))
+
 - GitHub Billing cards now show monthly allowance progress for personal Free
   and Pro plans and organization Free and Team plans. Covered metrics include
   eligible Actions minutes, Actions storage, Packages storage and data transfer,

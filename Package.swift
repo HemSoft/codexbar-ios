@@ -33,6 +33,12 @@ let package = Package(
         ),
     ],
     targets: [
+        // Local-only auth regressions; automatic CI continues running its existing smoke executable.
+        .testTarget(
+            name: "OpenCodeAuthTests",
+            dependencies: ["CodexBarIOS"],
+            path: "OpenCodeAuthTests"
+        ),
         .executableTarget(
             name: "UsageHistoryBenchmark",
             dependencies: ["CodexBarIOS"],

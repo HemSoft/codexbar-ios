@@ -63,6 +63,11 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published private(set) var credentialMessage: String?
     @Published var authURL: PresentedAuthURL?
     @Published private(set) var copilotTotalAllotmentText = ""
+    @Published var openCodeBrowserSession: OpenCodeBrowserSignInSession?
+    @Published private(set) var isSigningInWithOpenCode = false
+    var openCodeSessionValidator: any OpenCodeSessionValidating = OpenCodeSessionValidator()
+    private var openCodeAttemptID: UUID?
+    private var openCodeValidationTask: Task<Void, Never>?
     @Published private(set) var openCodeCredentialMessage: String?
     @Published private(set) var isRefreshingOpenCode = false
     @Published private(set) var usageResult: ProviderUsageResult?
@@ -195,13 +200,13 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     var availableAuthMethods: [ProviderAuthMethod] {
         switch providerID {
-        case .codex, .claude, .cursor, .gemini, .githubBilling:
+        case .codex, .claude, .cursor, .gemini, .githubBilling, .openCodeZen:
             [.browserSession]
         case .antigravity:
             [.cliToken]
         case .copilot:
             [.browserSession, .cliToken]
-        case .openRouter, .openCodeZen, .moonshot, .greptile:
+        case .openRouter, .moonshot, .greptile:
             [.apiKey]
         }
     }
@@ -433,6 +438,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func cancelAuthentication() {
+        cancelOpenCodeSignIn()
         cancelGoogleCodingSignIn()
         cancelGeminiSignIn()
         codexSignInTask?.cancel()
@@ -513,6 +519,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func removeSavedCredential(message: String? = nil) {
+        if providerID == .openCodeZen { cancelOpenCodeSignIn() }
         if providerID == .gemini { cancelGeminiSignIn() }
         if providerID == .githubBilling { cancelAuthentication() }
         credentialError = nil
@@ -1109,6 +1116,110 @@ final class ProviderSettingsViewModel: ObservableObject {
         credentialsDidChange()
     }
 
+    func startOpenCodeSignIn() {
+        guard !isSigningInWithOpenCode else { return }
+        flushPendingChanges()
+        credentialError = nil
+        openCodeCredentialMessage = nil
+        isSigningInWithOpenCode = true
+        let attemptID = UUID()
+        openCodeAttemptID = attemptID
+        #if DEBUG
+        if UITestFixtures.current != nil { openCodeSessionValidator = UITestOpenCodeSessionValidator() }
+        #endif
+        openCodeBrowserSession = OpenCodeBrowserSignInSession { [weak self] result in
+            self?.completeOpenCodeSignIn(result, attemptID: attemptID)
+        }
+    }
+
+    func cancelOpenCodeSignIn() {
+        guard openCodeAttemptID != nil else { return }
+        openCodeAttemptID = nil
+        openCodeValidationTask?.cancel()
+        openCodeValidationTask = nil
+        openCodeBrowserSession?.invalidate()
+        openCodeBrowserSession = nil
+        isSigningInWithOpenCode = false
+        openCodeCredentialMessage = OpenCodeSignInError.canceled.localizedDescription
+    }
+
+    private func completeOpenCodeSignIn(_ result: Result<OpenCodeBrowserCredential, Error>, attemptID: UUID) {
+        guard openCodeAttemptID == attemptID else { return }
+        openCodeBrowserSession?.invalidate()
+        openCodeBrowserSession = nil
+        switch result {
+        case .failure(let error):
+            finishOpenCodeAttempt(attemptID)
+            openCodeCredentialMessage = (error as? OpenCodeSignInError ?? .browserFailed).localizedDescription
+        case .success(let candidate):
+            openCodeCredentialMessage = "Verifying OpenCode workspace access..."
+            openCodeValidationTask = Task { [weak self] in
+                await self?.validateOpenCodeSession(candidate, attemptID: attemptID)
+            }
+        }
+    }
+
+    private func validateOpenCodeSession(_ candidate: OpenCodeBrowserCredential, attemptID: UUID) async {
+        defer { finishOpenCodeAttempt(attemptID) }
+        guard OpenCodeSessionValidator.canReconnect(
+            workspaceID: candidate.workspaceID, configuredWorkspace: configuration.openCodeWorkspaceId
+        ) else {
+            openCodeCredentialMessage = "Choose the workspace already linked to this account. To track another workspace, add a separate OpenCode account."
+            return
+        }
+        var updated = configuration
+        updated.openCodeWorkspaceId = candidate.workspaceID
+        updated.authMethod = .browserSession
+        do {
+            let result = try await openCodeSessionValidator.validate(credential: candidate.session, configuration: updated)
+            guard openCodeAttemptID == attemptID, !Task.isCancelled else { return }
+            acceptOpenCodeSession(candidate.session, configuration: updated, result: result)
+        } catch {
+            guard openCodeAttemptID == attemptID else { return }
+            openCodeCredentialMessage = OpenCodeSignInError.validationFailed.localizedDescription
+        }
+    }
+
+    private func acceptOpenCodeSession(
+        _ credential: String,
+        configuration updated: ProviderAccountConfiguration,
+        result: ProviderUsageResult
+    ) {
+        guard result.accountID == accountID, result.providerID == .openCodeZen else { return }
+        guard OpenCodeSessionValidator.hasVerifiedUsage(result) else {
+            openCodeCredentialMessage = OpenCodeSignInError.validationFailed.localizedDescription
+            return
+        }
+        guard saveOpenCodeSession(credential, workspaceID: updated.openCodeWorkspaceId) else { return }
+        secret = ""
+        openCodeCredentialMessage = "OpenCode connected. Session saved securely on this device."
+        credentialsDidChange()
+        acceptUsageResult(result)
+    }
+
+    private func saveOpenCodeSession(_ credential: String, workspaceID: String) -> Bool {
+        flushPendingChanges()
+        guard var current = configurationStore.configuration(accountID: accountID) else { return false }
+        guard OpenCodeSessionValidator.canReconnect(workspaceID: workspaceID, configuredWorkspace: current.openCodeWorkspaceId) else {
+            openCodeCredentialMessage = "The account's workspace changed during sign-in. Try again."
+            return false
+        }
+        current.openCodeWorkspaceId = workspaceID
+        current.authMethod = .browserSession
+        guard persistCredential(credential, with: current) else {
+            openCodeCredentialMessage = "OpenCode sign-in completed, but the session could not be saved. Try again."
+            return false
+        }
+        return true
+    }
+
+    private func finishOpenCodeAttempt(_ attemptID: UUID) {
+        guard openCodeAttemptID == attemptID else { return }
+        openCodeAttemptID = nil
+        openCodeValidationTask = nil
+        isSigningInWithOpenCode = false
+    }
+
     func saveOpenCodeCredential() {
         credentialError = nil
         guard persist(configuration) else {
@@ -1375,7 +1486,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
         var normalized = configuration
-        if [.codex, .githubBilling, .claude, .cursor, .gemini].contains(configuration.providerID) {
+        if [.codex, .githubBilling, .claude, .cursor, .gemini, .openCodeZen].contains(configuration.providerID) {
             normalized.authMethod = .browserSession
         }
         return normalized

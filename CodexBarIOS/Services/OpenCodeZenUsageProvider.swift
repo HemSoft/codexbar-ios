@@ -43,11 +43,11 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         guard let workspaceId = Self.normalizedWorkspaceId(from: configuration.openCodeWorkspaceId)
             ?? Self.workspaceId(fromCredentialPayload: storedSecret)
         else {
-            return failureResult("Not configured - enter OpenCode workspace ID.", configuration: configuration)
+            return failureResult("Not configured - sign in with OpenCode to choose a workspace.", configuration: configuration)
         }
 
         guard let balanceCredential = Self.normalizedAPIKey(from: storedSecret) else {
-            return failureResult("Not configured - enter OpenCode dashboard auth value.", configuration: configuration)
+            return failureResult("Disconnected - sign in with OpenCode.", configuration: configuration)
         }
         let goCredential = Self.normalizedGoCredential(from: storedSecret)
             ?? balanceCredential
@@ -143,8 +143,8 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             case 200..<300:
                 if let text = String(data: data, encoding: .utf8), Self.looksLikeOpenAuthPage(text) {
                     let message = Self.looksLikeZenModelAPIKey(apiKey)
-                        ? "This is an OpenCode Zen model API key, not an OpenCode dashboard auth value. Refresh the saved dashboard session."
-                        : "OpenCode returned the sign-in page. Refresh the saved dashboard auth value."
+                        ? "This is an OpenCode Zen model API key, not an OpenCode dashboard auth value. Reconnect in account settings."
+                        : "OpenCode returned the sign-in page. Reconnect in account settings."
                     return .failure(message)
                 }
 
@@ -182,7 +182,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                     return .failure("Could not read the OpenCode Go dashboard response.")
                 }
                 if Self.looksLikeOpenAuthPage(text) {
-                    return .failure("OpenCode returned the sign-in page. Refresh the saved dashboard auth value.")
+                    return .failure("OpenCode returned the sign-in page. Reconnect in account settings.")
                 }
                 return Self.parseGoPage(text)
             case 401, 403:

@@ -2052,7 +2052,7 @@ final class ProviderParsingTests: XCTestCase {
         XCTAssertEqual(result.providerID, .openCodeZen)
         XCTAssertEqual(
             result.subtitle,
-            "This is an OpenCode Zen model API key, not an OpenCode dashboard auth value. Refresh the saved dashboard session."
+            "This is an OpenCode Zen model API key, not an OpenCode dashboard auth value. Reconnect in account settings."
         )
         XCTAssertNil(result.creditsRemaining)
         XCTAssertTrue(result.bars.isEmpty)
@@ -2505,7 +2505,7 @@ final class ProviderParsingTests: XCTestCase {
         let result = try await provider.fetchUsage(for: configuration)
 
         XCTAssertEqual(result.providerID, .openCodeZen)
-        XCTAssertEqual(result.subtitle, "OpenCode returned the sign-in page. Refresh the saved dashboard auth value.")
+        XCTAssertEqual(result.subtitle, "OpenCode returned the sign-in page. Reconnect in account settings.")
         XCTAssertNil(result.creditsRemaining)
         XCTAssertTrue(result.bars.isEmpty)
     }
@@ -2559,7 +2559,7 @@ final class ProviderParsingTests: XCTestCase {
         let result = try await provider.fetchUsage(for: configuration)
 
         XCTAssertEqual(result.providerID, .openCodeZen)
-        XCTAssertEqual(result.subtitle, "Not configured - enter OpenCode workspace ID.")
+        XCTAssertEqual(result.subtitle, "Not configured - sign in with OpenCode to choose a workspace.")
         XCTAssertNil(result.creditsRemaining)
         XCTAssertTrue(result.bars.isEmpty)
     }
@@ -2573,7 +2573,7 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertEqual(result.providerID, .openCodeZen)
         XCTAssertEqual(result.accountID, configuration.id)
-        XCTAssertEqual(result.subtitle, "Not configured - enter OpenCode dashboard auth value.")
+        XCTAssertEqual(result.subtitle, "Disconnected - sign in with OpenCode.")
         XCTAssertNil(result.creditsRemaining)
         XCTAssertTrue(result.bars.isEmpty)
     }

@@ -57,6 +57,13 @@ The [CI policy](CI-POLICY.md) records measured runtimes, the five required
 correctness checks, and manual security/performance dispatch and failure
 ownership. Manual analysis keeps its existing failure rules and artifacts.
 
+## OpenCode sign-in
+
+OpenCode Go and Zen use a private phone sign-in window with workspace selection.
+No credential JSON or workspace-ID entry is required. See
+[OpenCode sign-in](OPENCODE-SIGN-IN.md) for reconnection, local validation, and
+pending live-provider checks.
+
 ## GitHub Copilot Sign-In
 
 CodexBar bundles the public OAuth client ID and client secret used by
