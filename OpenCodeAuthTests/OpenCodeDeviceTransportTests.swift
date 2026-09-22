@@ -106,7 +106,10 @@ final class OpenCodeDeviceTransportTests: XCTestCase, @unchecked Sendable {
         }
     }
 
-    private static let refreshedToken = #"{"access_token":"renewed-access","refresh_token":"renewed-refresh","token_type":"Bearer","expires_in":3600,"org_id":"wrk_one"}"#
+    private static let refreshedToken = #"""
+    {"access_token":"renewed-access","refresh_token":"renewed-refresh",
+     "token_type":"Bearer","expires_in":3600,"org_id":"wrk_one"}
+    """#
 
     private func expiredAccount() throws -> (ProviderAccountConfiguration, OpenCodeConsoleCredential, OpenCodeTestSecrets) {
         var configuration = ProviderAccountConfiguration(id: UUID().uuidString, providerID: .openCodeZen, authMethod: .browserSession)
