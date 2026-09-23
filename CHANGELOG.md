@@ -195,6 +195,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added local OpenCode authorization and quota regressions with the same pinned
+  strict lint plugin as the app, plus manual iPhone/iPad reconnect journeys.
+  The manual release runner now checks all eleven current UI journeys.
+  No automatic test suite or CI job was added.
+  ([#353](https://github.com/HemSoft/codexbar-ios/issues/353))
+
 - Added a manual GitHub Billing permission-disclosure UI journey and updated
   the release runner to require all six journeys on each simulator family.
   Automatic CI workload is unchanged.

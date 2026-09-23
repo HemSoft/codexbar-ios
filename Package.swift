@@ -37,7 +37,10 @@ let package = Package(
         .testTarget(
             name: "OpenCodeAuthTests",
             dependencies: ["CodexBarIOS"],
-            path: "OpenCodeAuthTests"
+            path: "OpenCodeAuthTests",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
+            ]
         ),
         .executableTarget(
             name: "UsageHistoryBenchmark",
