@@ -23,7 +23,7 @@ struct OpenCodeConsoleUsageProvider {
         let fetchedAt = Date()
         async let balance = fetchBalance(current, service: service)
         async let goUsage = fetchGo(current, service: service, now: fetchedAt)
-        let identity = Data(SHA256.hash(data: Data("\(current.workspaceID)\u{0}\(current.userID)\u{0}\(current.accessToken)".utf8)))
+        let identity = Data(SHA256.hash(data: Data("\(current.workspaceID)\u{0}\(current.userID)".utf8)))
             .base64EncodedString()
         return await OpenCodeZenUsageProvider.buildCombinedResult(
             balance: balance, goUsage: goUsage, configuration: configuration,
@@ -60,6 +60,12 @@ struct OpenCodeConsoleUsageProvider {
                     return .success(refreshed)
                 }
             )
+        }
+        if case .temporarilyUnavailable = result,
+           credential.expiresAt > Date(),
+           let saved = try? secretStore.readSecret(account: account),
+           OpenCodeConsoleCredential.parse(saved) == credential {
+            return credential
         }
         guard case .success(let refreshed) = result,
               refreshed.workspaceID == credential.workspaceID, refreshed.userID == credential.userID else { return nil }

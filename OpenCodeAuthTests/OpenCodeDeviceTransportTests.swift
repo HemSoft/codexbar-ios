@@ -85,6 +85,72 @@ final class OpenCodeDeviceTransportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(OpenCodeConsoleCredential.parse(saved)?.accessToken, "renewed-access")
     }
 
+    func testCacheIdentitySurvivesTokenRenewal() async throws {
+        let (configuration, expired, secrets) = try expiredAccount()
+        let valid = OpenCodeConsoleCredential(
+            kind: expired.kind, accessToken: expired.accessToken, refreshToken: expired.refreshToken,
+            expiresAt: Date().addingTimeInterval(3600), workspaceID: expired.workspaceID, userID: expired.userID
+        )
+        let account = ProviderConfigurationStore.keychainAccount(for: configuration)
+        try secrets.saveSecret(valid.encoded(), account: account)
+        AuthTestURLProtocol.state.reset(handler: Self.balanceOnlyResponse)
+        let provider = OpenCodeConsoleUsageProvider(secretStore: secrets, makeSession: Self.mockSession)
+        let before = await provider.fetchUsage(credential: valid, configuration: configuration)
+        try secrets.saveSecret(expired.encoded(), account: account)
+        AuthTestURLProtocol.state.reset { request in
+            request.url?.lastPathComponent == "token" ? (200, Self.refreshedToken) : Self.balanceOnlyResponse(request)
+        }
+        let after = await provider.fetchUsage(credential: expired, configuration: configuration)
+        XCTAssertNotNil(before.cacheIdentity)
+        XCTAssertEqual(before.cacheIdentity, after.cacheIdentity)
+        XCTAssertTrue(after.preserveCachedBarsOnFailure)
+    }
+
+    func testTransientRenewalFailureUsesTheStillSavedValidToken() async throws {
+        let (configuration, expired, secrets) = try expiredAccount()
+        let valid = OpenCodeConsoleCredential(
+            kind: expired.kind, accessToken: expired.accessToken, refreshToken: expired.refreshToken,
+            expiresAt: Date().addingTimeInterval(30), workspaceID: expired.workspaceID, userID: expired.userID
+        )
+        let account = ProviderConfigurationStore.keychainAccount(for: configuration)
+        try secrets.saveSecret(valid.encoded(), account: account)
+        AuthTestURLProtocol.state.reset { request in
+            request.url?.lastPathComponent == "token" ? (503, "{}") : Self.balanceOnlyResponse(request)
+        }
+        let provider = OpenCodeConsoleUsageProvider(secretStore: secrets, makeSession: Self.mockSession)
+        let result = await provider.fetchUsage(credential: valid, configuration: configuration)
+        XCTAssertEqual(result.creditsRemaining, 25)
+        XCTAssertTrue(result.hasCurrentCredits)
+        XCTAssertEqual(OpenCodeConsoleCredential.parse(try secrets.readSecret(account: account)), valid)
+    }
+
+    func testRenewalFallbackRejectsRemovedReplacedExpiredAndRejectedCredentials() async throws {
+        for scenario in ["removed", "replaced", "expired", "rejected"] {
+            let (configuration, original, secrets) = try expiredAccount()
+            let credential = OpenCodeConsoleCredential(
+                kind: original.kind, accessToken: original.accessToken, refreshToken: original.refreshToken,
+                expiresAt: Date().addingTimeInterval(scenario == "expired" ? -1 : 30),
+                workspaceID: original.workspaceID, userID: original.userID
+            )
+            let account = ProviderConfigurationStore.keychainAccount(for: configuration)
+            try secrets.saveSecret(credential.encoded(), account: account)
+            AuthTestURLProtocol.state.reset { _ in
+                if scenario == "removed" { try? secrets.deleteSecret(account: account) }
+                if scenario == "replaced" { try? secrets.saveSecret("different-account-session", account: account) }
+                return (scenario == "rejected" ? 401 : 503, "{}")
+            }
+            let provider = OpenCodeConsoleUsageProvider(secretStore: secrets, makeSession: Self.mockSession)
+            let result = await provider.fetchUsage(credential: credential, configuration: configuration)
+            XCTAssertNotNil(result.failureMessage, scenario)
+            XCTAssertFalse(result.hasCurrentCredits, scenario)
+            XCTAssertEqual(AuthTestURLProtocol.state.requests.count, 1, scenario)
+        }
+    }
+
+    private static func balanceOnlyResponse(_ request: URLRequest) -> (Int, String) {
+        request.url?.path.contains("/billing/") == true ? (200, #"{"balanceMicroCents":"2500000000"}"#) : (503, "{}")
+    }
+
     func testRemovedOrUnsavableCredentialsCannotBeRestoredByRefresh() async throws {
         for removeDuringRequest in [false, true] {
             let (configuration, credential, secrets) = try expiredAccount()

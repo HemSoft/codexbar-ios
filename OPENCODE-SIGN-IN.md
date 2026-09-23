@@ -55,8 +55,13 @@ window has no invented reset date.
 
 Credentials are stored per CodexBar account. Expiring tokens use the shared
 credential-refresh coordinator and check the current stored credential before
-saving a replacement. Failed persistence does not establish a new connection.
-Cancellation and failed verification leave the saved account unchanged.
+saving a replacement. Cache identity follows the workspace and user, so routine
+token renewal does not discard the last known value of an unavailable component.
+A transient renewal failure can use the previous token only before its actual
+expiry and only while that exact credential remains saved. Removed, replaced,
+rejected, and expired credentials are not used as a fallback. Failed persistence
+does not establish a new connection. Cancellation and failed verification leave
+the saved account unchanged.
 
 Older saved dashboard credentials remain readable for compatibility. New setup
 and reconnection never ask the user to obtain or paste one.

@@ -51,6 +51,8 @@ building, testing, or releasing the app.
   selection instead of pasted JSON, cookies, or workspace IDs. Removing auth
   leaves a guided reconnect action and preserves account customization and
   history. Sessions are verified before being saved securely on the device.
+  Normal renewal preserves cached usage and keeps a still-valid saved session
+  usable during temporary connection failures.
   ([#353](https://github.com/HemSoft/codexbar-ios/issues/353))
 
 - GitHub Billing cards now show monthly allowance progress for personal Free
