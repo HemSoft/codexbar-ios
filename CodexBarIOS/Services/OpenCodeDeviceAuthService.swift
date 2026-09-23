@@ -86,6 +86,8 @@ struct OpenCodeDeviceAuthService: Sendable {
 
     func authorize(
         _ authorization: OpenCodeDeviceAuthorization,
+        shouldContinuePolling: @Sendable () async -> Bool = { true },
+        onTokenReceived: @Sendable () async -> Void = {},
         sleep: @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
     ) async throws -> OpenCodeConsoleCredential {
         var interval = authorization.interval
@@ -93,12 +95,24 @@ struct OpenCodeDeviceAuthService: Sendable {
             try await sleep(interval)
             try Task.checkCancellation()
             guard Date() < authorization.expiresAt else { break }
-            switch try await poll(authorization) {
-            case .pending(let increase): interval += increase
+            // Snapshot before the request: a pending reply from before browser
+            // dismissal cannot substitute for the final post-dismissal check.
+            let continueAfterPending = await shouldContinuePolling()
+            switch try await poll(authorization, onTokenReceived: onTokenReceived) {
+            case .pending(let increase):
+                interval = try nextPollInterval(interval, increase: increase, shouldContinuePolling: continueAfterPending)
             case .authorized(let credential): return credential
             }
         }
         throw OpenCodeSignInError.expired
+    }
+
+    private func nextPollInterval(
+        _ interval: TimeInterval, increase: TimeInterval,
+        shouldContinuePolling: Bool
+    ) throws -> TimeInterval {
+        guard shouldContinuePolling else { throw OpenCodeSignInError.approvalNotReady }
+        return interval + increase
     }
 
     private enum PollResponse {
@@ -106,12 +120,15 @@ struct OpenCodeDeviceAuthService: Sendable {
         case authorized(OpenCodeConsoleCredential)
     }
 
-    private func poll(_ authorization: OpenCodeDeviceAuthorization) async throws -> PollResponse {
+    private func poll(
+        _ authorization: OpenCodeDeviceAuthorization,
+        onTokenReceived: @Sendable () async -> Void
+    ) async throws -> PollResponse {
         let (data, status) = try await send(path: "auth/device/token", payload: [
             "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
             "device_code": authorization.deviceCode, "client_id": Self.clientID,
         ])
-        if status == 200 { return .authorized(try await verifiedCredential(data)) }
+        if status == 200 { return .authorized(try await verifiedCredential(data, onTokenReceived: onTokenReceived)) }
         guard status == 400 else { throw OpenCodeSignInError.browserFailed }
         let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         return try Self.pendingResponse(error: object?["error"] as? String)
@@ -127,17 +144,23 @@ struct OpenCodeDeviceAuthService: Sendable {
         }
     }
 
-    private func verifiedCredential(_ data: Data) async throws -> OpenCodeConsoleCredential {
+    private func verifiedCredential(
+        _ data: Data, onTokenReceived: @Sendable () async -> Void
+    ) async throws -> OpenCodeConsoleCredential {
         let token = try JSONDecoder().decode(OpenCodeDeviceToken.self, from: data)
         guard let workspace = token.orgID, OpenCodeConsoleCredential.validWorkspace(workspace) else {
             throw OpenCodeSignInError.validationFailed
         }
+        try token.validate(workspaceID: workspace)
+        let issuedAt = Date()
+        await onTokenReceived()
+        try Task.checkCancellation()
         let identityData = try await get(path: "auth/session", accessToken: token.accessToken)
         let identity = try JSONDecoder().decode(OpenCodeConsoleIdentity.self, from: identityData)
         guard !identity.user.id.isEmpty, identity.orgID == nil || identity.orgID == workspace else {
             throw OpenCodeSignInError.validationFailed
         }
-        return try token.credential(workspaceID: workspace, userID: identity.user.id)
+        return try token.credential(workspaceID: workspace, userID: identity.user.id, now: issuedAt)
     }
 
     func get(path: String, accessToken: String, workspaceID: String? = nil) async throws -> Data {
@@ -186,11 +209,15 @@ struct OpenCodeDeviceToken: Decodable, Sendable {
         case orgID = "org_id"
     }
 
-    func credential(workspaceID: String, userID: String, now: Date = Date()) throws -> OpenCodeConsoleCredential {
+    func validate(workspaceID: String) throws {
         guard tokenType == "Bearer", !accessToken.isEmpty, !refreshToken.isEmpty,
               !accessToken.contains(where: \.isWhitespace), !refreshToken.contains(where: \.isWhitespace),
               expiresIn > 0, expiresIn.isFinite,
               orgID == nil || orgID == workspaceID else { throw OpenCodeSignInError.validationFailed }
+    }
+
+    func credential(workspaceID: String, userID: String, now: Date = Date()) throws -> OpenCodeConsoleCredential {
+        try validate(workspaceID: workspaceID)
         return OpenCodeConsoleCredential(
             kind: "opencode-console-v1", accessToken: accessToken, refreshToken: refreshToken,
             expiresAt: now.addingTimeInterval(expiresIn), workspaceID: workspaceID, userID: userID

@@ -25,8 +25,27 @@ final class OpenCodeSignInUITests: XCTestCase {
         app.buttons["Cancel"].tap()
         XCTAssertTrue(signIn.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Remove Saved Credential"].exists)
+        chooseWorkspace(in: app)
+        app.buttons["Connect this workspace"].tap()
+        XCTAssertTrue(app.staticTexts["Checking OpenCode approval"].waitForExistence(timeout: 5))
+        capture("Approval check can be canceled", app: app)
+        app.buttons["Approval not available"].tap()
+        XCTAssertTrue(app.buttons["Use browser sign-in"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[
+            "OpenCode approval is not available. Try signing in again. Your saved account was not changed."
+        ].exists)
+        capture("Unapproved browser return offers retry", app: app)
+        app.buttons["Use browser sign-in"].tap()
+        app.buttons["Choose Sample workspace"].tap()
+        app.buttons["Connect this workspace"].tap()
+        XCTAssertTrue(app.staticTexts["Checking OpenCode approval"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Remove Saved Credential"].exists)
         connect(in: app)
         capture("OpenCode connected", app: app)
+        connect(in: app, signInButton: "Reconnect OpenCode")
+        capture("OpenCode reconnected", app: app)
         app.buttons["Remove Saved Credential"].tap()
         XCTAssertTrue(signIn.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Remove Saved Credential"].exists)
@@ -43,7 +62,7 @@ final class OpenCodeSignInUITests: XCTestCase {
     func testVerificationFailureKeepsAccountDisconnectedAndAllowsRetry() {
         let app = launchAccountSettings(failsVerification: true)
         chooseWorkspace(in: app, browserButton: "Use private sign-in")
-        app.buttons["Connect this workspace"].tap()
+        finishApproval(in: app)
         let message = app.staticTexts[
             "OpenCode usage could not be verified. Check your workspace and try again. Your saved account was not changed."
         ]
@@ -76,8 +95,10 @@ final class OpenCodeSignInUITests: XCTestCase {
         return app
     }
 
-    private func chooseWorkspace(in app: XCUIApplication, browserButton: String = "Use browser sign-in") {
-        app.buttons["Sign in with OpenCode"].tap()
+    private func chooseWorkspace(
+        in app: XCUIApplication, browserButton: String = "Use browser sign-in", signInButton: String = "Sign in with OpenCode"
+    ) {
+        app.buttons[signInButton].tap()
         XCTAssertTrue(app.buttons[browserButton].waitForExistence(timeout: 5))
         app.buttons[browserButton].tap()
         XCTAssertTrue(app.buttons["Choose Sample workspace"].waitForExistence(timeout: 10))
@@ -85,14 +106,22 @@ final class OpenCodeSignInUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Connect this workspace"].wait(for: \.isEnabled, toEqual: true, timeout: 10))
     }
 
-    private func connect(in app: XCUIApplication) {
-        chooseWorkspace(in: app)
-        let connect = app.buttons["Connect this workspace"]
-        XCTAssertTrue(connect.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+    private func connect(in app: XCUIApplication, signInButton: String = "Sign in with OpenCode") {
+        chooseWorkspace(in: app, signInButton: signInButton)
         capture("Selected workspace", app: app)
-        connect.tap()
+        finishApproval(in: app)
         XCTAssertTrue(app.buttons["Remove Saved Credential"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Reconnect OpenCode"].exists)
+    }
+
+    private func finishApproval(in app: XCUIApplication) {
+        app.buttons["Connect this workspace"].tap()
+        XCTAssertTrue(app.staticTexts["Checking OpenCode approval"].waitForExistence(timeout: 5))
+        capture("Checking approval after browser return", app: app)
+        app.buttons["Receive synthetic token"].tap()
+        XCTAssertTrue(app.staticTexts["Verifying OpenCode account"].waitForExistence(timeout: 5))
+        capture("Token received with verification pending", app: app)
+        app.buttons["Finish synthetic verification"].tap()
     }
 
     private func capture(_ name: String, app: XCUIApplication) {

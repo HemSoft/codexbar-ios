@@ -108,6 +108,13 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- OpenCode sign-in now checks an approval already in progress when the browser
+  closes instead of immediately discarding it. The app returns from the browser
+  as soon as it receives a valid token and shows account-verification progress.
+  Unapproved or stalled checks offer a fresh attempt, and Cancel in the app
+  still stops sign-in without changing the saved account.
+  ([#358](https://github.com/HemSoft/codexbar-ios/issues/358))
+
 - GitHub Billing cards now keep Actions minutes visible when standard macOS
   runner usage is present, matching GitHub's included-usage total instead of
   showing a reconciliation warning. Actions minutes and storage also stay

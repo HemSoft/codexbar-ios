@@ -28,6 +28,114 @@ final class OpenCodeDeviceTransportTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(requests.allSatisfy { $0.value(forHTTPHeaderField: "Cookie") == nil })
     }
 
+    func testClosedBrowserStopsAfterOnePendingPollAtTheRequiredInterval() async throws {
+        let service = makeService([(400, #"{"error":"authorization_pending"}"#)])
+        defer { service.session.invalidateAndCancel() }
+        let delays = AuthRecordedDelays()
+        do {
+            _ = try await service.authorize(
+                authorization(), shouldContinuePolling: { false }, sleep: { await delays.append($0) }
+            )
+            XCTFail("An unapproved browser close must not keep polling")
+        } catch OpenCodeSignInError.approvalNotReady {
+            let recorded = await delays.values
+            XCTAssertEqual(recorded, [5])
+            XCTAssertEqual(AuthTestURLProtocol.state.requests.count, 1)
+        }
+    }
+
+    func testPendingReplyFromBeforeBrowserCloseStillGetsOneFreshApprovalCheck() async throws {
+        let service = makeService([
+            (400, #"{"error":"authorization_pending"}"#),
+            (200, Self.refreshedToken),
+            (200, #"{"user":{"id":"user_one"},"org_id":"wrk_one"}"#),
+        ])
+        defer { service.session.invalidateAndCancel() }
+        let delays = AuthRecordedDelays()
+        let credential = try await service.authorize(
+            authorization(),
+            // The browser closes after the first request starts, before its
+            // old pending response arrives. Only the next poll is current.
+            shouldContinuePolling: { AuthTestURLProtocol.state.requests.isEmpty },
+            sleep: { await delays.append($0) }
+        )
+        XCTAssertEqual(credential.userID, "user_one")
+        let recorded = await delays.values
+        XCTAssertEqual(recorded, [5, 5])
+        XCTAssertEqual(AuthTestURLProtocol.state.requests.filter { $0.url?.lastPathComponent == "token" }.count, 2)
+    }
+
+    func testClosedBrowserAcceptsApprovedGrantAndSignalsTokenBeforeIdentity() async throws {
+        let receivedToken = expectation(description: "Token receipt precedes identity verification")
+        let service = makeService([
+            (200, Self.refreshedToken),
+            (200, #"{"user":{"id":"user_one"},"org_id":"wrk_one"}"#),
+        ])
+        defer { service.session.invalidateAndCancel() }
+        let credential = try await service.authorize(
+            authorization(), shouldContinuePolling: { false },
+            onTokenReceived: {
+                XCTAssertEqual(AuthTestURLProtocol.state.requests.map { $0.url?.path }, ["/console/auth/device/token"])
+                receivedToken.fulfill()
+            },
+            sleep: { _ in }
+        )
+        await fulfillment(of: [receivedToken], timeout: 2)
+        XCTAssertEqual(credential.userID, "user_one")
+        XCTAssertEqual(credential.workspaceID, "wrk_one")
+        XCTAssertEqual(AuthTestURLProtocol.state.requests.count, 2)
+    }
+
+    func testMalformedTokenCannotSignalApprovalOrRequestIdentity() async throws {
+        for token in [
+            Self.refreshedToken.replacingOccurrences(of: "Bearer", with: "Basic"),
+            Self.refreshedToken.replacingOccurrences(of: "renewed-access", with: ""),
+            Self.refreshedToken.replacingOccurrences(of: "wrk_one", with: "invalid"),
+        ] {
+            let service = makeService([(200, token)])
+            defer { service.session.invalidateAndCancel() }
+            do {
+                _ = try await service.authorize(
+                    authorization(), onTokenReceived: { XCTFail("Malformed token is not approval") }, sleep: { _ in }
+                )
+                XCTFail("Malformed token must fail")
+            } catch OpenCodeSignInError.validationFailed {
+                XCTAssertEqual(AuthTestURLProtocol.state.requests.count, 1)
+            }
+        }
+    }
+
+    func testCancellationAfterTokenReceiptPreventsIdentityRequest() async throws {
+        let service = makeService([(200, Self.refreshedToken)])
+        defer { service.session.invalidateAndCancel() }
+        let authorization = authorization()
+        let task = Task {
+            try await service.authorize(
+                authorization, onTokenReceived: { withUnsafeCurrentTask { $0?.cancel() } }, sleep: { _ in }
+            )
+        }
+        do {
+            _ = try await task.value
+            XCTFail("Explicit cancellation must discard the token")
+        } catch is CancellationError {
+            XCTAssertEqual(AuthTestURLProtocol.state.requests.count, 1)
+        }
+    }
+
+    func testLocallyExpiredChallengeMakesNoTokenRequest() async throws {
+        let service = makeService([])
+        defer { service.session.invalidateAndCancel() }
+        let expired = OpenCodeDeviceAuthorization(
+            deviceCode: "expired", verificationURL: authorization().verificationURL, expiresAt: .distantPast, interval: 5
+        )
+        do {
+            _ = try await service.authorize(expired, sleep: { _ in XCTFail("Expired challenge must not wait") })
+            XCTFail("Expired challenge must fail")
+        } catch OpenCodeSignInError.expired {
+            XCTAssertTrue(AuthTestURLProtocol.state.requests.isEmpty)
+        }
+    }
+
     func testDeniedExpiredAndNetworkFailureDoNotProduceCredentials() async throws {
         for (status, body) in [
             (400, #"{"error":"access_denied"}"#), (400, #"{"error":"expired_token"}"#),
