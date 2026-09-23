@@ -1124,10 +1124,14 @@ final class ProviderSettingsViewModel: ObservableObject {
         isSigningInWithOpenCode = true
         let attemptID = UUID()
         openCodeAttemptID = attemptID
+        var isSynthetic = false
         #if DEBUG
-        if UITestFixtures.current != nil { openCodeSessionValidator = UITestOpenCodeSessionValidator() }
+        if UITestFixtures.current != nil {
+            isSynthetic = true
+            openCodeSessionValidator = UITestOpenCodeSessionValidator()
+        }
         #endif
-        openCodeBrowserSession = OpenCodeBrowserSignInSession { [weak self] result in
+        openCodeBrowserSession = OpenCodeBrowserSignInSession(isSynthetic: isSynthetic) { [weak self] result in
             self?.completeOpenCodeSignIn(result, attemptID: attemptID)
         }
     }

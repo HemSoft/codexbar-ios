@@ -4,9 +4,12 @@ OpenCode Go and Zen use browser approval. In account settings, choose **Sign in
 with OpenCode** or **Reconnect OpenCode**, then choose **Use browser sign-in**
 or **Use private sign-in**. Browser sign-in can use accounts already signed in
 on the device. Private sign-in starts a separate browser session. Check the
-OpenCode account and approve the workspace you want to track. CodexBar returns automatically, verifies available
-Go usage or Zen balance, then saves the credentials in that account's Keychain
-entry. No JSON, workspace ID, copied token, or desktop session is required.
+OpenCode account and approve the workspace you want to track. CodexBar closes the
+browser after receiving a valid device-grant token, then verifies the account
+and available Go usage or Zen balance before saving credentials in that account's
+Keychain entry. If the website reports approval but stays open, close the browser
+to let CodexBar check the current attempt. **Cancel** inside CodexBar stops
+sign-in. No JSON, workspace ID, copied token, or desktop session is required.
 
 Removing a saved credential disconnects that CodexBar account on this device.
 It does not revoke access at OpenCode. Account customization and history remain.
@@ -21,9 +24,18 @@ The initial embedded-browser implementation was rejected during review. Google
 Production sign-in uses `ASWebAuthenticationSession`. OpenCode explicitly selects
 whether it requests a private session; all other callers keep the presenter's
 private default. CodexBar does not inspect browser cookies, passwords, or page
-contents. Closing the browser returns to the session choices and cancels that
-attempt's polling. A retry creates a fresh device challenge; stale completion
-cannot finish the new attempt.
+contents. Closing the browser retains the current device exchange for one
+approval check, without opening another browser or issuing a second token
+request in parallel. The existing polling interval still applies. A pending reply
+from a request started before browser dismissal still permits one fresh check.
+A pending response to that post-close check returns to the choices; a valid token
+continues identity and usage verification in the app. The post-close deadline
+includes the remaining provider-required polling wait plus a 30-second response
+allowance. A `slow_down` reply updates that deadline before the next sleep.
+Polling sleeps are capped at the challenge's expiry. Denial, expiry and errors
+offer recovery without saving a connection. A retry creates a fresh challenge, and stale completion cannot
+finish the new attempt. Canceling in the app or removing the account immediately
+invalidates the attempt, including a pending identity or usage check.
 
 The current [OpenCode Console](https://opencode.ai/console/) provides a device
 approval flow. Its deployed [client schemas](https://opencode.ai/console/assets/index-CGGre-5H.js)
@@ -97,6 +109,30 @@ usage validation and again before saving. Legacy dashboard credentials have no
 saved Console user ID, so their existing workspace boundary remains the available
 reconnect check. Tokens and provider requests still use cookie-free networking.
 
+## Completion after website approval
+
+[Issue #358](https://github.com/HemSoft/codexbar-ios/issues/358) records a successful
+website approval followed by a browser that stayed open, cancellation, and a
+second attempt that worked. No first-attempt network trace exists. The website's
+message does not establish token receipt, verified usage or Keychain persistence.
+
+A local native regression reproduces an app-owned failure: browser dismissal
+previously canceled the authorization task and discarded an approved result
+still completing. The same staged test now completes that first attempt. Separate
+transport and native tests verify that token receipt closes the browser before
+the identity request completes, without reporting the account connected. These
+are controlled tests of the real polling and session modules, not a reproduction
+of Google's decision or proof of the original live delay.
+
+The stages are device challenge, browser approval, token exchange, identity
+verification, usage verification, and account-scoped persistence. The app shows
+**Checking OpenCode approval** on browser return and **Verifying OpenCode account**
+after token receipt. It does not log approval codes, tokens, browser URLs or
+provider identities to describe those stages. A browser close while approval is
+still unavailable returns to the choices with an explanation. Explicit app
+cancellation, expiry, denial, failed verification and failed storage never create
+a new connection.
+
 ## Local validation
 
 Run local auth and Console parsing regressions without adding automatic CI work:
@@ -107,8 +143,10 @@ DEVELOPER_DIR=/Applications/Xcode-27-beta.app/Contents/Developer \
 ```
 
 Run the same local-only target on an iPhone simulator to include the native
-system-browser factory checks. These construct sessions without opening a
-browser and verify the private default and both explicit OpenCode modes:
+system-browser factory and completion-lifecycle checks. They verify both browser
+modes, dismissal during an approved exchange, early browser return, explicit app
+cancellation, bounded post-close checks that honor long polling and slow-down
+intervals, and fresh retry with stale callbacks ignored. The tests do not open a real browser:
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode-27-beta.app/Contents/Developer \
@@ -126,7 +164,11 @@ automatic CI; the automatic iOS test file is unchanged.
 Its UUID-isolated fixture simulates browser approval and never opens a provider
 account or uses live credentials. It covers disconnected setup, cancellation,
 workspace selection, both browser choices, returning from a dismissed browser,
-credential removal, reconnection, relaunch, and verification failure. Synthetic screenshots are not proof of live Google or GitHub sign-in.
+approval-check and account-verification progress, cancellation while checking,
+credential removal, reconnection, relaunch, and verification failure. Synthetic
+screenshots prove those app states, not live Google or GitHub sign-in.
 
-Franz owns the final live-account sign-in and Go/Zen quota comparison. Those
-checks remain pending and are not a prerequisite for agent build delivery.
+Franz confirmed that setup eventually succeeded before this completion fix.
+First-pass reliability with the fix and Go/Zen quota comparison remain live
+checks for Franz, not prerequisites for independent validation and build delivery.
+Do not disconnect a working account merely to collect evidence.
