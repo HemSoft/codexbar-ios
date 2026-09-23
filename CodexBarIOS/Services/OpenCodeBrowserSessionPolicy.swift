@@ -149,12 +149,12 @@ final class OpenCodeBrowserSignInSession: ObservableObject, Identifiable {
 
     init(
         isSynthetic: Bool = false,
-        presenter: any OpenCodeBrowserPresenting = PrivateWebAuthenticationPresenter(),
-        makeClient: @escaping @Sendable () -> OpenCodeBrowserClient = OpenCodeBrowserClient.live,
+        presenter: (any OpenCodeBrowserPresenting)? = nil,
+        makeClient: @escaping @Sendable () -> OpenCodeBrowserClient = { OpenCodeBrowserClient.live() },
         approvalCheckTimeout: Duration = .seconds(30),
         completion: @escaping (Result<OpenCodeBrowserCredential, Error>) -> Void
     ) {
-        self.presenter = presenter
+        self.presenter = presenter ?? PrivateWebAuthenticationPresenter()
         self.makeClient = makeClient
         self.approvalCheckTimeout = approvalCheckTimeout
         self.completion = completion
