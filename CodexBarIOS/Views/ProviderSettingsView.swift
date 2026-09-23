@@ -355,7 +355,7 @@ struct ProviderSettingsView: View {
                     }
 
                     Text(
-                        "Sign in privately and choose your OpenCode workspace to track Go usage and Zen balance. "
+                        "Choose browser or private sign-in, then your OpenCode workspace to track Go usage and Zen balance. "
                             + "Your session stays in this account's Keychain entry. Removing it disconnects only this device."
                     )
                     .font(.footnote)

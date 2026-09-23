@@ -20,6 +20,13 @@ enum OpenCodeSignInError: LocalizedError {
     }
 }
 
+enum OpenCodeBrowserMode: Sendable {
+    case existingSession
+    case privateSession
+
+    var prefersEphemeralSession: Bool { self == .privateSession }
+}
+
 struct OpenCodeBrowserCredential {
     let workspaceID: String
     let session: String
@@ -30,9 +37,20 @@ protocol OpenCodeSessionValidating: Sendable {
 }
 
 struct OpenCodeSessionValidator: OpenCodeSessionValidating {
-    static func canReconnect(workspaceID: String, configuredWorkspace: String) -> Bool {
-        OpenCodeZenUsageProvider.normalizedWorkspaceId(from: configuredWorkspace)
+    static func canReconnect(
+        workspaceID: String,
+        configuredWorkspace: String,
+        credential: String? = nil,
+        savedCredential: String? = nil
+    ) -> Bool {
+        let matchesWorkspace = OpenCodeZenUsageProvider.normalizedWorkspaceId(from: configuredWorkspace)
             .map { $0 == workspaceID } ?? true
+        guard matchesWorkspace else { return false }
+        guard let saved = OpenCodeConsoleCredential.parse(savedCredential) else { return true }
+        guard let candidate = OpenCodeConsoleCredential.parse(credential) else { return false }
+        return saved.userID == candidate.userID
+            && saved.workspaceID == candidate.workspaceID
+            && candidate.workspaceID == workspaceID
     }
 
     static func hasVerifiedUsage(_ result: ProviderUsageResult) -> Bool {

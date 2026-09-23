@@ -47,7 +47,14 @@ building, testing, or releasing the app.
 
 ### Changed
 
-- OpenCode Go and Zen now use private system-browser approval with workspace
+- OpenCode sign-in now offers an explicit browser-session choice, so users can
+  use an existing browser login instead of always starting privately. Private
+  sign-in remains available, and closing the browser allows another attempt.
+  Reconnection also protects the saved Console user identity as well as its
+  workspace. Google may still require account verification.
+  ([#356](https://github.com/HemSoft/codexbar-ios/issues/356))
+
+- OpenCode Go and Zen now use system-browser approval with workspace
   selection instead of pasted JSON, cookies, or workspace IDs. Removing auth
   leaves a guided reconnect action and preserves account customization and
   history. Sessions are verified before being saved securely on the device.

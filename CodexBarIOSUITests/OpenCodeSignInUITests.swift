@@ -10,8 +10,18 @@ final class OpenCodeSignInUITests: XCTestCase {
         XCTAssertEqual(app.secureTextFields.count, 0)
         capture("OpenCode disconnected account", app: app)
         signIn.tap()
-        XCTAssertTrue(app.buttons["Choose Sample workspace"].waitForExistence(timeout: 10))
-        capture("Synthetic browser approval and workspace choice", app: app)
+        XCTAssertTrue(app.buttons["Use browser sign-in"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Use private sign-in"].exists)
+        capture("OpenCode browser choices", app: app)
+        app.buttons["Use browser sign-in"].tap()
+        XCTAssertTrue(app.staticTexts["Synthetic saved-session browser approval."].waitForExistence(timeout: 10))
+        capture("Saved-session browser approval", app: app)
+        app.buttons["Back to browser choices"].tap()
+        XCTAssertTrue(app.buttons["Use private sign-in"].waitForExistence(timeout: 5))
+        app.buttons["Use private sign-in"].tap()
+        XCTAssertTrue(app.staticTexts["Synthetic private browser approval."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Choose Sample workspace"].exists)
+        capture("Private browser retry", app: app)
         app.buttons["Cancel"].tap()
         XCTAssertTrue(signIn.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Remove Saved Credential"].exists)
@@ -32,7 +42,7 @@ final class OpenCodeSignInUITests: XCTestCase {
 
     func testVerificationFailureKeepsAccountDisconnectedAndAllowsRetry() {
         let app = launchAccountSettings(failsVerification: true)
-        chooseWorkspace(in: app)
+        chooseWorkspace(in: app, browserButton: "Use private sign-in")
         app.buttons["Connect this workspace"].tap()
         let message = app.staticTexts[
             "OpenCode usage could not be verified. Check your workspace and try again. Your saved account was not changed."
@@ -66,17 +76,17 @@ final class OpenCodeSignInUITests: XCTestCase {
         return app
     }
 
-    private func chooseWorkspace(in app: XCUIApplication) {
+    private func chooseWorkspace(in app: XCUIApplication, browserButton: String = "Use browser sign-in") {
         app.buttons["Sign in with OpenCode"].tap()
+        XCTAssertTrue(app.buttons[browserButton].waitForExistence(timeout: 5))
+        app.buttons[browserButton].tap()
         XCTAssertTrue(app.buttons["Choose Sample workspace"].waitForExistence(timeout: 10))
         app.buttons["Choose Sample workspace"].tap()
         XCTAssertTrue(app.buttons["Connect this workspace"].wait(for: \.isEnabled, toEqual: true, timeout: 10))
     }
 
     private func connect(in app: XCUIApplication) {
-        app.buttons["Sign in with OpenCode"].tap()
-        XCTAssertTrue(app.buttons["Choose Sample workspace"].waitForExistence(timeout: 10))
-        app.buttons["Choose Sample workspace"].tap()
+        chooseWorkspace(in: app)
         let connect = app.buttons["Connect this workspace"]
         XCTAssertTrue(connect.wait(for: \.isEnabled, toEqual: true, timeout: 10))
         capture("Selected workspace", app: app)
