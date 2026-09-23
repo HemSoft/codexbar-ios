@@ -1519,6 +1519,19 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 
+    func canReconnectOpenCodeSession(_ credential: String, workspaceID: String, accountID: String) -> Bool {
+        guard let current = configuration(accountID: accountID), current.providerID == .openCodeZen else { return false }
+        do {
+            let saved = try secretStore.readSecret(account: Self.keychainAccount(for: current))
+            return OpenCodeSessionValidator.canReconnect(
+                workspaceID: workspaceID, configuredWorkspace: current.openCodeWorkspaceId,
+                credential: credential, savedCredential: saved
+            )
+        } catch {
+            return false
+        }
+    }
+
     public func hasSecret(for providerID: ProviderID) -> Bool {
         hasSecret(for: configuration(for: providerID))
     }

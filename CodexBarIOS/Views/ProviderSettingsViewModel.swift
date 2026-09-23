@@ -1161,10 +1161,11 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func validateOpenCodeSession(_ candidate: OpenCodeBrowserCredential, attemptID: UUID) async {
         defer { finishOpenCodeAttempt(attemptID) }
-        guard OpenCodeSessionValidator.canReconnect(
-            workspaceID: candidate.workspaceID, configuredWorkspace: configuration.openCodeWorkspaceId
+        guard configurationStore.canReconnectOpenCodeSession(
+            candidate.session, workspaceID: candidate.workspaceID, accountID: accountID
         ) else {
-            openCodeCredentialMessage = "Choose the workspace already linked to this account. To track another workspace, add a separate OpenCode account."
+            openCodeCredentialMessage = "Choose the OpenCode user and workspace already linked to this account. "
+                + "To track another account, add a separate OpenCode account."
             return
         }
         var updated = configuration
@@ -1200,8 +1201,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     private func saveOpenCodeSession(_ credential: String, workspaceID: String) -> Bool {
         flushPendingChanges()
         guard var current = configurationStore.configuration(accountID: accountID) else { return false }
-        guard OpenCodeSessionValidator.canReconnect(workspaceID: workspaceID, configuredWorkspace: current.openCodeWorkspaceId) else {
-            openCodeCredentialMessage = "The account's workspace changed during sign-in. Try again."
+        guard configurationStore.canReconnectOpenCodeSession(credential, workspaceID: workspaceID, accountID: accountID) else {
+            openCodeCredentialMessage = "The saved OpenCode user or workspace changed during sign-in. Try again."
             return false
         }
         current.openCodeWorkspaceId = workspaceID

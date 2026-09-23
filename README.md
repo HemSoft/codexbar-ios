@@ -59,7 +59,9 @@ ownership. Manual analysis keeps its existing failure rules and artifacts.
 
 ## OpenCode sign-in
 
-OpenCode Go and Zen use private system-browser approval with workspace selection.
+OpenCode Go and Zen use system-browser approval with workspace selection.
+Choose browser sign-in to allow an existing browser login, or private sign-in
+to start a separate session. Google may still require identity verification.
 No credential JSON or workspace-ID entry is required. See
 [OpenCode sign-in](OPENCODE-SIGN-IN.md) for reconnection, local validation, and
 pending live-provider checks.

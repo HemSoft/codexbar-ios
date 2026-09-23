@@ -648,7 +648,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
     }
 
     @MainActor
-    func testOpenCodeZenDisplaysOnDashboardWhenKeyIsSavedBeforeWorkspace() {
+    func testOpenCodeZenDisplaysOnDashboardWhenKeyIsSavedBeforeWorkspace() throws {
         let suiteName = "CodexBarIOSTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         let secretStore = MemorySecretStore()
@@ -676,6 +676,16 @@ final class ConfigurationAndAuthTests: XCTestCase {
         XCTAssertFalse(store.isConfigured(openCodeZen))
         XCTAssertTrue(store.shouldDisplayOnDashboard(openCodeZen))
         XCTAssertEqual(store.statusText(for: openCodeZen), "Not configured - sign in with OpenCode to choose a workspace")
+        let credential = OpenCodeConsoleCredential(
+            kind: "opencode-console-v1", accessToken: "synthetic", refreshToken: "synthetic-refresh",
+            expiresAt: .distantFuture, workspaceID: "wrk_one", userID: "user_one"
+        )
+        let encoded = try credential.encoded()
+        XCTAssertTrue(store.canReconnectOpenCodeSession(encoded, workspaceID: "wrk_one", accountID: openCodeZen.id))
+        XCTAssertTrue(store.saveSecret(encoded, for: openCodeZen))
+        XCTAssertTrue(store.canReconnectOpenCodeSession(encoded, workspaceID: "wrk_one", accountID: openCodeZen.id))
+        XCTAssertFalse(store.canReconnectOpenCodeSession("invalid", workspaceID: "wrk_one", accountID: openCodeZen.id))
+        XCTAssertFalse(store.canReconnectOpenCodeSession(encoded, workspaceID: "wrk_other", accountID: openCodeZen.id))
     }
 
     @MainActor
@@ -1878,6 +1888,12 @@ final class ConfigurationAndAuthTests: XCTestCase {
         ) { _ in }
 
         XCTAssertTrue(session.prefersEphemeralWebBrowserSession)
+        let openCode = PrivateWebAuthenticationPresenter.makeSession(
+            url: URL(string: "https://opencode.ai/console/device")!,
+            prefersEphemeralSession: OpenCodeBrowserMode.existingSession.prefersEphemeralSession
+        ) { _ in }
+        XCTAssertFalse(openCode.prefersEphemeralWebBrowserSession)
+        XCTAssertTrue(OpenCodeBrowserMode.privateSession.prefersEphemeralSession)
     }
 #endif
 

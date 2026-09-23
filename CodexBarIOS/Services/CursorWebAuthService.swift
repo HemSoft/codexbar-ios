@@ -216,12 +216,16 @@ final class PrivateWebAuthenticationPresenter: NSObject, ASWebAuthenticationPres
     private var sessionGeneration = WebAuthenticationSessionGeneration()
     private var cancellationHandler: (() -> Void)?
 
-    func present(url: URL, onCancel: @escaping () -> Void) -> Bool {
+    func present(
+        url: URL,
+        prefersEphemeralSession: Bool = true,
+        onCancel: @escaping () -> Void
+    ) -> Bool {
         finish()
         let sessionID = sessionGeneration.start()
         cancellationHandler = onCancel
 
-        let session = Self.makeSession(url: url) { [weak self] _ in
+        let session = Self.makeSession(url: url, prefersEphemeralSession: prefersEphemeralSession) { [weak self] _ in
             Task { @MainActor in
                 self?.handleCompletion(sessionID: sessionID)
             }
@@ -254,6 +258,7 @@ final class PrivateWebAuthenticationPresenter: NSObject, ASWebAuthenticationPres
 
     static func makeSession(
         url: URL,
+        prefersEphemeralSession: Bool = true,
         completion: @escaping (Error?) -> Void
     ) -> ASWebAuthenticationSession {
         let session = ASWebAuthenticationSession(
@@ -262,7 +267,7 @@ final class PrivateWebAuthenticationPresenter: NSObject, ASWebAuthenticationPres
         ) { _, error in
             completion(error)
         }
-        session.prefersEphemeralWebBrowserSession = true
+        session.prefersEphemeralWebBrowserSession = prefersEphemeralSession
         return session
     }
 
