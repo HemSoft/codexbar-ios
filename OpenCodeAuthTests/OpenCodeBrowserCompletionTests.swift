@@ -94,6 +94,81 @@ final class OpenCodeBrowserCompletionTests: XCTestCase, @unchecked Sendable {
     }
 
     @MainActor
+    func testBrowserCloseWaitsThroughTheAdvertisedPollingInterval() async {
+        let browser = CompletionTestBrowser()
+        let polling = expectation(description: "Waiting for the provider interval")
+        let prematureEnd = expectation(description: "Must not end before the permitted poll")
+        prematureEnd.isInverted = true
+        let finished = expectation(description: "Client cleaned up")
+        let gate = CompletionTestGate()
+        var completed = false
+        let client = OpenCodeBrowserClient(
+            begin: {
+                OpenCodeDeviceAuthorization(
+                    deviceCode: "slow-device", verificationURL: Self.authorization.verificationURL,
+                    expiresAt: .distantFuture, interval: 60
+                )
+            },
+            authorize: { _, _ in
+                polling.fulfill()
+                await gate.wait()
+                return Self.credential
+            },
+            invalidate: { finished.fulfill() }
+        )
+        let session = OpenCodeBrowserSignInSession(
+            presenter: browser, makeClient: { client }, approvalCheckTimeout: .milliseconds(20),
+            completion: { _ in completed = true }
+        )
+        session.start(mode: .existingSession)
+        await fulfillment(of: [polling], timeout: 2)
+        let observation = session.$browserMode.dropFirst().sink { if $0 == nil { prematureEnd.fulfill() } }
+        browser.close()
+        await fulfillment(of: [prematureEnd], timeout: 0.06)
+        observation.cancel()
+        await gate.release()
+        await fulfillment(of: [finished], timeout: 2)
+        XCTAssertTrue(completed)
+    }
+
+    @MainActor
+    func testSlowDownReschedulesAnAlreadyOpenApprovalCheck() async {
+        let browser = CompletionTestBrowser()
+        let polling = expectation(description: "Old poll is in flight")
+        let prematureEnd = expectation(description: "Slow-down interval must be honored")
+        prematureEnd.isInverted = true
+        let finished = expectation(description: "Client cleaned up")
+        let gate = CompletionTestGate()
+        let callbacks = CompletionTestCallbacks()
+        var completed = false
+        let client = OpenCodeBrowserClient(
+            begin: { Self.authorization },
+            authorize: { _, value in
+                await callbacks.store(value)
+                await value.pollScheduled(0)
+                polling.fulfill()
+                await gate.wait()
+                return Self.credential
+            },
+            invalidate: { finished.fulfill() }
+        )
+        let session = OpenCodeBrowserSignInSession(
+            presenter: browser, makeClient: { client }, approvalCheckTimeout: .milliseconds(20),
+            completion: { _ in completed = true }
+        )
+        session.start(mode: .existingSession)
+        await fulfillment(of: [polling], timeout: 2)
+        let observation = session.$browserMode.dropFirst().sink { if $0 == nil { prematureEnd.fulfill() } }
+        browser.close()
+        await callbacks.schedulePoll(after: 65)
+        await fulfillment(of: [prematureEnd], timeout: 0.06)
+        observation.cancel()
+        await gate.release()
+        await fulfillment(of: [finished], timeout: 2)
+        XCTAssertTrue(completed)
+    }
+
+    @MainActor
     func testBrowserCloseCheckTimesOutAndIgnoresLateSuccess() async {
         let browser = CompletionTestBrowser()
         let completing = expectation(description: "Approval in flight")
@@ -103,7 +178,8 @@ final class OpenCodeBrowserCompletionTests: XCTestCase, @unchecked Sendable {
         var completions = 0
         let client = OpenCodeBrowserClient(
             begin: { Self.authorization },
-            authorize: { _, _ in
+            authorize: { _, callbacks in
+                await callbacks.pollScheduled(0)
                 completing.fulfill()
                 await gate.wait()
                 return Self.credential
@@ -213,6 +289,12 @@ private final class CompletionTestClients: @unchecked Sendable {
     private var clients: [OpenCodeBrowserClient]
     init(_ clients: [OpenCodeBrowserClient]) { self.clients = clients }
     func next() -> OpenCodeBrowserClient { lock.withLock { clients.removeFirst() } }
+}
+
+private actor CompletionTestCallbacks {
+    private var value: OpenCodeBrowserCallbacks?
+    func store(_ value: OpenCodeBrowserCallbacks) { self.value = value }
+    func schedulePoll(after delay: TimeInterval) async { await value?.pollScheduled(delay) }
 }
 
 private actor CompletionTestGate {

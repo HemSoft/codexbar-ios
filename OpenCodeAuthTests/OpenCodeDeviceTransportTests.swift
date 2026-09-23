@@ -65,6 +65,49 @@ final class OpenCodeDeviceTransportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(AuthTestURLProtocol.state.requests.filter { $0.url?.lastPathComponent == "token" }.count, 2)
     }
 
+    func testSlowDownPublishesTheNextPermittedPollBeforeWaiting() async throws {
+        let service = makeService([
+            (400, #"{"error":"slow_down"}"#),
+            (200, Self.refreshedToken),
+            (200, #"{"user":{"id":"user_one"},"org_id":"wrk_one"}"#),
+        ])
+        defer { service.session.invalidateAndCancel() }
+        let announced = AuthRecordedDelays()
+        let slept = AuthRecordedDelays()
+        let challenge = OpenCodeDeviceAuthorization(
+            deviceCode: "slow-device", verificationURL: authorization().verificationURL,
+            expiresAt: Date().addingTimeInterval(900), interval: 60
+        )
+        _ = try await service.authorize(
+            challenge, shouldContinuePolling: { AuthTestURLProtocol.state.requests.isEmpty },
+            onPollScheduled: { await announced.append($0) }, sleep: { await slept.append($0) }
+        )
+        let scheduled = await announced.values
+        let delays = await slept.values
+        XCTAssertEqual(scheduled, [60, 65])
+        XCTAssertEqual(delays, scheduled)
+        XCTAssertEqual(AuthTestURLProtocol.state.requests.filter { $0.url?.lastPathComponent == "token" }.count, 2)
+    }
+
+    func testPollingSleepDoesNotExtendPastChallengeExpiry() async throws {
+        let service = makeService([])
+        defer { service.session.invalidateAndCancel() }
+        let challenge = OpenCodeDeviceAuthorization(
+            deviceCode: "near-expiry", verificationURL: authorization().verificationURL,
+            expiresAt: Date().addingTimeInterval(10), interval: 60
+        )
+        do {
+            _ = try await service.authorize(challenge, sleep: { delay in
+                XCTAssertGreaterThan(delay, 0)
+                XCTAssertLessThanOrEqual(delay, 10)
+                throw CancellationError()
+            })
+            XCTFail("The bounded sleep should cancel this controlled attempt")
+        } catch is CancellationError {
+            XCTAssertTrue(AuthTestURLProtocol.state.requests.isEmpty)
+        }
+    }
+
     func testClosedBrowserAcceptsApprovedGrantAndSignalsTokenBeforeIdentity() async throws {
         let receivedToken = expectation(description: "Token receipt precedes identity verification")
         let service = makeService([

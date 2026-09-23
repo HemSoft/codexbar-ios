@@ -29,9 +29,11 @@ approval check, without opening another browser or issuing a second token
 request in parallel. The existing polling interval still applies. A pending reply
 from a request started before browser dismissal still permits one fresh check.
 A pending response to that post-close check returns to the choices; a valid token
-continues identity and usage verification in the app. The post-close approval check stops after 30 seconds
-if no token has arrived. Denial, expiry and errors offer recovery without saving
-a connection. A retry creates a fresh challenge, and stale completion cannot
+continues identity and usage verification in the app. The post-close deadline
+includes the remaining provider-required polling wait plus a 30-second response
+allowance. A `slow_down` reply updates that deadline before the next sleep.
+Polling sleeps are capped at the challenge's expiry. Denial, expiry and errors
+offer recovery without saving a connection. A retry creates a fresh challenge, and stale completion cannot
 finish the new attempt. Canceling in the app or removing the account immediately
 invalidates the attempt, including a pending identity or usage check.
 
@@ -143,8 +145,8 @@ DEVELOPER_DIR=/Applications/Xcode-27-beta.app/Contents/Developer \
 Run the same local-only target on an iPhone simulator to include the native
 system-browser factory and completion-lifecycle checks. They verify both browser
 modes, dismissal during an approved exchange, early browser return, explicit app
-cancellation, a bounded post-close check, and fresh retry with stale callbacks
-ignored. The tests do not open a real browser:
+cancellation, bounded post-close checks that honor long polling and slow-down
+intervals, and fresh retry with stale callbacks ignored. The tests do not open a real browser:
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode-27-beta.app/Contents/Developer \

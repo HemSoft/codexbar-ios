@@ -108,6 +108,7 @@ enum OpenCodeBrowserProgress {
 
 struct OpenCodeBrowserCallbacks: Sendable {
     var shouldContinuePolling: @Sendable () async -> Bool
+    var pollScheduled: @Sendable (TimeInterval) async -> Void
     var tokenReceived: @Sendable () async -> Void
 }
 
@@ -123,7 +124,7 @@ struct OpenCodeBrowserClient: Sendable {
             authorize: { authorization, callbacks in
                 try await service.authorize(
                     authorization, shouldContinuePolling: callbacks.shouldContinuePolling,
-                    onTokenReceived: callbacks.tokenReceived
+                    onPollScheduled: callbacks.pollScheduled, onTokenReceived: callbacks.tokenReceived
                 )
             },
             invalidate: { service.session.invalidateAndCancel() }
@@ -142,6 +143,8 @@ final class OpenCodeBrowserSignInSession: ObservableObject, Identifiable {
     private let presenter: any OpenCodeBrowserPresenting
     private let makeClient: @Sendable () -> OpenCodeBrowserClient
     private let approvalCheckTimeout: Duration
+    private let clock = ContinuousClock()
+    private var nextPollAt: ContinuousClock.Instant?
     private var browserCloseTask: Task<Void, Never>?
     private var completion: ((Result<OpenCodeBrowserCredential, Error>) -> Void)?
     private var task: Task<Void, Never>?
@@ -180,6 +183,7 @@ final class OpenCodeBrowserSignInSession: ObservableObject, Identifiable {
             let authorization = try await client.begin()
             try Task.checkCancellation()
             guard browserAttemptID == attemptID else { return }
+            pollScheduled(after: authorization.interval, attemptID: attemptID)
             guard presenter.present(
                 url: authorization.verificationURL,
                 prefersEphemeralSession: mode.prefersEphemeralSession,
@@ -199,12 +203,19 @@ final class OpenCodeBrowserSignInSession: ObservableObject, Identifiable {
     private func callbacks(attemptID: UUID) -> OpenCodeBrowserCallbacks {
         OpenCodeBrowserCallbacks(
             shouldContinuePolling: { [weak self] in await self?.mayContinuePolling(attemptID: attemptID) ?? false },
+            pollScheduled: { [weak self] delay in await self?.pollScheduled(after: delay, attemptID: attemptID) },
             tokenReceived: { [weak self] in await self?.receivedToken(attemptID: attemptID) }
         )
     }
 
     private func mayContinuePolling(attemptID: UUID) -> Bool {
         browserAttemptID == attemptID && progress == .waitingForApproval
+    }
+
+    private func pollScheduled(after delay: TimeInterval, attemptID: UUID) {
+        guard browserAttemptID == attemptID else { return }
+        nextPollAt = clock.now.advanced(by: .seconds(delay))
+        if progress == .checkingApproval { scheduleApprovalTimeout(attemptID: attemptID) }
     }
 
     private func receivedToken(attemptID: UUID) {
@@ -232,7 +243,15 @@ final class OpenCodeBrowserSignInSession: ObservableObject, Identifiable {
         // Keep the existing exchange so an issued, single-use grant is not
         // lost. An older pending reply still allows one post-close poll.
         progress = .checkingApproval
-        let timeout = approvalCheckTimeout
+        scheduleApprovalTimeout(attemptID: attemptID)
+    }
+
+    private func scheduleApprovalTimeout(attemptID: UUID) {
+        browserCloseTask?.cancel()
+        // The response allowance starts after the provider permits the poll.
+        // A slow_down reply can reschedule that instant while the check is open.
+        let remainingWait = nextPollAt.map { clock.now.duration(to: $0) } ?? .zero
+        let timeout = max(.zero, remainingWait) + approvalCheckTimeout
         browserCloseTask = Task { [weak self] in
             try? await Task.sleep(for: timeout)
             guard !Task.isCancelled else { return }
@@ -252,6 +271,7 @@ final class OpenCodeBrowserSignInSession: ObservableObject, Identifiable {
         task = nil
         browserCloseTask?.cancel()
         browserCloseTask = nil
+        nextPollAt = nil
         presenter.finish()
         progress = .waitingForApproval
         browserMode = nil

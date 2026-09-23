@@ -87,12 +87,15 @@ struct OpenCodeDeviceAuthService: Sendable {
     func authorize(
         _ authorization: OpenCodeDeviceAuthorization,
         shouldContinuePolling: @Sendable () async -> Bool = { true },
+        onPollScheduled: @Sendable (TimeInterval) async -> Void = { _ in },
         onTokenReceived: @Sendable () async -> Void = {},
         sleep: @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
     ) async throws -> OpenCodeConsoleCredential {
         var interval = authorization.interval
         while Date() < authorization.expiresAt {
-            try await sleep(interval)
+            let delay = min(interval, max(0, authorization.expiresAt.timeIntervalSinceNow))
+            await onPollScheduled(delay)
+            try await sleep(delay)
             try Task.checkCancellation()
             guard Date() < authorization.expiresAt else { break }
             // Snapshot before the request: a pending reply from before browser
