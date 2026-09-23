@@ -20,7 +20,7 @@ attachments and the accessibility hierarchy from the result bundle. Open the
 
 ## Journeys
 
-All six tests start with a new UUID storage namespace and use accessibility text
+All eleven tests start with a new UUID storage namespace and use accessibility text
 size 2, English labels, and the US locale. Navigation uses the real views and
 actions. Tests wait for settings destinations, keep text fields inside the
 visible form below its navigation bar, and wait for the keyboard before
@@ -75,6 +75,19 @@ it. Animations retain the normal app behavior.
     -only-testing:CodexBarIOSUITests/AccountJourneysUITests/testGitHubBillingPermissionDisclosure \
     -resultBundlePath build/github-billing-permissions.xcresult test
   ```
+
+- `testGitHubBillingProductSummaryAndRoutinePlacement` checks product summaries
+  and routine usage placement on the billing card.
+- `testGitHubBillingActionableWarningStaysInline` checks that an actionable
+  warning remains visible on the billing card.
+- `testGitHubBillingAllowanceStates` covers the synthetic billing allowance states.
+- `OpenCodeSignInUITests.testDisconnectedAccountOffersGuidedSignIn` exercises
+  setup, canceled approval, workspace choice, removal, reconnect, and relaunch.
+  Browser approval is synthetic, with no live provider account or credentials.
+- `OpenCodeSignInUITests.testVerificationFailureKeepsAccountDisconnectedAndAllowsRetry`
+  verifies that failed usage validation does not save a connection and permits
+  another attempt or cancellation. See [OpenCode sign-in](OPENCODE-SIGN-IN.md)
+  for local auth transport and quota regressions.
 
 The tests assert accessible names, values, selection state, and reachable tap
 targets. They cover app-owned account and usage navigation. Live website sign-in,
@@ -142,7 +155,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than six passed tests with zero skips or
+runner rejects anything other than eleven passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

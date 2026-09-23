@@ -104,13 +104,6 @@ struct ProviderSettingsView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }
-                } else if providerID == .openCodeZen {
-                    TextField(
-                        "Workspace ID",
-                        text: viewModel.binding(for: \.openCodeWorkspaceId, persistence: .debounced)
-                    )
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
                 }
             }
 
@@ -330,18 +323,15 @@ struct ProviderSettingsView: View {
                 } else if providerID == .gemini {
                     geminiAppsConnection
                 } else if providerID == .openCodeZen {
-                    SecureField(secretPlaceholder, text: $viewModel.secret)
-                        .textContentType(.password)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    Button(configurationStore.hasSecret(for: configuration) ? "Update and Refresh" : "Save and Refresh") {
-                        viewModel.saveOpenCodeCredential()
+                    Button(configurationStore.hasSecret(for: configuration) ? "Reconnect OpenCode" : "Sign in with OpenCode") {
+                        viewModel.startOpenCodeSignIn()
                     }
-                    .disabled(
-                        viewModel.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || viewModel.isRefreshingOpenCode
-                    )
+                    .disabled(viewModel.isSigningInWithOpenCode)
+
+                    if viewModel.isSigningInWithOpenCode {
+                        ProgressView("Connecting to OpenCode...")
+                        Button("Cancel Sign-In") { viewModel.cancelOpenCodeSignIn() }
+                    }
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button {
@@ -360,17 +350,14 @@ struct ProviderSettingsView: View {
 
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Remove Saved Credential", role: .destructive) {
-                            viewModel.removeSavedCredential(message: "OpenCode dashboard session removed.")
+                            viewModel.removeSavedCredential(message: "Disconnected on this device. Sign in to reconnect. Provider access was not revoked.")
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(
-                            "Enter the OpenCode workspace ID and dashboard auth value to track Zen balance and Go usage.",
-                            systemImage: "key"
-                        )
-                        Label("You can paste the Windows settings JSON or OPENCODE_GO_AUTH_COOKIE value.", systemImage: "checkmark.circle")
-                    }
+                    Text(
+                        "Sign in privately and choose your OpenCode workspace to track Go usage and Zen balance. "
+                            + "Your session stays in this account's Keychain entry. Removing it disconnects only this device."
+                    )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -511,6 +498,9 @@ struct ProviderSettingsView: View {
         .onDisappear {
             viewModel.flushPendingChanges()
             viewModel.cancelAuthentication()
+        }
+        .sheet(item: $viewModel.openCodeBrowserSession) { session in
+            OpenCodeBrowserSignInView(session: session)
         }
         .sheet(item: $viewModel.geminiBrowserSession, onDismiss: {
             if viewModel.needsGeminiAccountConfirmation { requestGeminiConfirmation(.appsReconnect) }

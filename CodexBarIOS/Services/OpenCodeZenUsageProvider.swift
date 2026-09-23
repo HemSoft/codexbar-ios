@@ -1,20 +1,21 @@
 import CryptoKit
 import Foundation
 
-private struct OpenCodeGoWindow {
+struct OpenCodeGoWindow {
     let stableKey: String
     let label: String
     let usagePercent: Double
     let resetInSeconds: TimeInterval
     let hasExactResetBoundary: Bool
+    var hasReset = true
 }
 
-private enum OpenCodeBalanceFetchOutcome {
+enum OpenCodeBalanceFetchOutcome {
     case value(Double)
     case failure(String)
 }
 
-private enum OpenCodeGoPageOutcome {
+enum OpenCodeGoPageOutcome {
     case subscribed([OpenCodeGoWindow])
     case notSubscribed
     case otherWorkspaceMember
@@ -40,14 +41,18 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         let storedSecret = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration))
+        if let credential = OpenCodeConsoleCredential.parse(storedSecret) {
+            return await OpenCodeConsoleUsageProvider(secretStore: secretStore)
+                .fetchUsage(credential: credential, configuration: configuration)
+        }
         guard let workspaceId = Self.normalizedWorkspaceId(from: configuration.openCodeWorkspaceId)
             ?? Self.workspaceId(fromCredentialPayload: storedSecret)
         else {
-            return failureResult("Not configured - enter OpenCode workspace ID.", configuration: configuration)
+            return failureResult("Not configured - sign in with OpenCode to choose a workspace.", configuration: configuration)
         }
 
         guard let balanceCredential = Self.normalizedAPIKey(from: storedSecret) else {
-            return failureResult("Not configured - enter OpenCode dashboard auth value.", configuration: configuration)
+            return failureResult("Disconnected - sign in with OpenCode.", configuration: configuration)
         }
         let goCredential = Self.normalizedGoCredential(from: storedSecret)
             ?? balanceCredential
@@ -143,8 +148,8 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
             case 200..<300:
                 if let text = String(data: data, encoding: .utf8), Self.looksLikeOpenAuthPage(text) {
                     let message = Self.looksLikeZenModelAPIKey(apiKey)
-                        ? "This is an OpenCode Zen model API key, not an OpenCode dashboard auth value. Refresh the saved dashboard session."
-                        : "OpenCode returned the sign-in page. Refresh the saved dashboard auth value."
+                        ? "This is an OpenCode Zen model API key, not an OpenCode dashboard auth value. Reconnect in account settings."
+                        : "OpenCode returned the sign-in page. Reconnect in account settings."
                     return .failure(message)
                 }
 
@@ -182,7 +187,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                     return .failure("Could not read the OpenCode Go dashboard response.")
                 }
                 if Self.looksLikeOpenAuthPage(text) {
-                    return .failure("OpenCode returned the sign-in page. Refresh the saved dashboard auth value.")
+                    return .failure("OpenCode returned the sign-in page. Reconnect in account settings.")
                 }
                 return Self.parseGoPage(text)
             case 401, 403:
@@ -800,7 +805,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
                 label: window.label,
                 used: window.usagePercent,
                 limit: 100,
-                resetsAt: fetchedAt.addingTimeInterval(window.resetInSeconds),
+                resetsAt: window.hasReset ? fetchedAt.addingTimeInterval(window.resetInSeconds) : nil,
                 resetDisplayStyle: .relativeWithLocalTime,
                 projectionCurrent: projectionPeriod == nil
                     ? nil
@@ -969,7 +974,7 @@ public final class OpenCodeZenUsageProvider: UsageProvider {
         )
     }
 
-    private static func buildCombinedResult(
+    static func buildCombinedResult(
         balance: OpenCodeBalanceFetchOutcome,
         goUsage: OpenCodeGoPageOutcome,
         configuration: ProviderAccountConfiguration,

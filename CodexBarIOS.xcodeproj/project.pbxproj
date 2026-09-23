@@ -52,6 +52,7 @@
 		10000000000000000000000F /* ProviderConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ProviderConfigurationStore.swift */; };
 		100000000000000000000010 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* SettingsView.swift */; };
 		100000000000000000000011 /* ProviderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* ProviderSettingsView.swift */; };
+		A35300000000000000000101 /* OpenCodeBrowserSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000102 /* OpenCodeBrowserSignInView.swift */; };
 		A29900000000000000000101 /* GeminiBrowserSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29900000000000000000102 /* GeminiBrowserSignInView.swift */; };
 		100000000000000000000012 /* CodexCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* CodexCredentials.swift */; };
 		100000000000000000000013 /* CodexCredentialsParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* CodexCredentialsParser.swift */; };
@@ -80,6 +81,9 @@
 		A31400000000000000000301 /* AntigravityUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000302 /* AntigravityUsageProvider.swift */; };
 		A31400000000000000000201 /* AntigravityQuotaParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000202 /* AntigravityQuotaParser.swift */; };
 		A31400000000000000000101 /* AntigravityCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000102 /* AntigravityCredentials.swift */; };
+		A35300000000000000000301 /* OpenCodeDeviceAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000302 /* OpenCodeDeviceAuthService.swift */; };
+		A35300000000000000000401 /* OpenCodeConsoleUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000402 /* OpenCodeConsoleUsageProvider.swift */; };
+		A35300000000000000000201 /* OpenCodeBrowserSessionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000202 /* OpenCodeBrowserSessionPolicy.swift */; };
 		A29900000000000000000001 /* GeminiBrowserSessionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */; };
 		10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003F /* MoonshotUsageProvider.swift */; };
 		100000000000000000000040 /* TokenEndpointErrorFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000040 /* TokenEndpointErrorFormatter.swift */; };
@@ -144,6 +148,7 @@
 		F31000000000000000000006 /* WatchDashboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* WatchDashboardSnapshot.swift */; };
 		F31000000000000000000007 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F32000000000000000000006 /* PrivacyInfo.xcprivacy */; };
 		F31000000000000000000008 /* CodexBarWatchWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F32000000000000000000008 /* CodexBarWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A35300000000000000000001 /* OpenCodeSignInUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000002 /* OpenCodeSignInUITests.swift */; };
 		A30700000000000000000001 /* AccountJourneysUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30700000000000000000011 /* AccountJourneysUITests.swift */; };
 		A30700000000000000000002 /* UITestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30700000000000000000012 /* UITestFixtures.swift */; };
 /* End PBXBuildFile section */
@@ -266,6 +271,7 @@
 		200000000000000000000011 /* ProviderConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderConfigurationStore.swift; sourceTree = "<group>"; };
 		200000000000000000000012 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		200000000000000000000013 /* ProviderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSettingsView.swift; sourceTree = "<group>"; };
+		A35300000000000000000102 /* OpenCodeBrowserSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeBrowserSignInView.swift; sourceTree = "<group>"; };
 		A29900000000000000000102 /* GeminiBrowserSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiBrowserSignInView.swift; sourceTree = "<group>"; };
 		200000000000000000000014 /* CodexCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexCredentials.swift; sourceTree = "<group>"; };
 		200000000000000000000015 /* CodexCredentialsParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexCredentialsParser.swift; sourceTree = "<group>"; };
@@ -294,6 +300,9 @@
 		A31400000000000000000302 /* AntigravityUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityUsageProvider.swift; sourceTree = "<group>"; };
 		A31400000000000000000202 /* AntigravityQuotaParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityQuotaParser.swift; sourceTree = "<group>"; };
 		A31400000000000000000102 /* AntigravityCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityCredentials.swift; sourceTree = "<group>"; };
+		A35300000000000000000302 /* OpenCodeDeviceAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeDeviceAuthService.swift; sourceTree = "<group>"; };
+		A35300000000000000000402 /* OpenCodeConsoleUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeConsoleUsageProvider.swift; sourceTree = "<group>"; };
+		A35300000000000000000202 /* OpenCodeBrowserSessionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeBrowserSessionPolicy.swift; sourceTree = "<group>"; };
 		A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiBrowserSessionPolicy.swift; sourceTree = "<group>"; };
 		20000000000000000000003F /* MoonshotUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonshotUsageProvider.swift; sourceTree = "<group>"; };
 		200000000000000000000040 /* TokenEndpointErrorFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEndpointErrorFormatter.swift; sourceTree = "<group>"; };
@@ -358,6 +367,7 @@
 		F32000000000000000000006 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F32000000000000000000007 /* CodexBarWatchWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodexBarWatchWidget.entitlements; sourceTree = "<group>"; };
 		F32000000000000000000008 /* CodexBarWatchWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CodexBarWatchWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A35300000000000000000002 /* OpenCodeSignInUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeSignInUITests.swift; sourceTree = "<group>"; };
 		A30700000000000000000011 /* AccountJourneysUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountJourneysUITests.swift; sourceTree = "<group>"; };
 		A30700000000000000000012 /* UITestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFixtures.swift; sourceTree = "<group>"; };
 		A30700000000000000000013 /* CodexBarIOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexBarIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -512,6 +522,9 @@
 				A31400000000000000000202 /* AntigravityQuotaParser.swift */,
 				A31400000000000000000102 /* AntigravityCredentials.swift */,
 				A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */,
+				A35300000000000000000202 /* OpenCodeBrowserSessionPolicy.swift */,
+				A35300000000000000000302 /* OpenCodeDeviceAuthService.swift */,
+				A35300000000000000000402 /* OpenCodeConsoleUsageProvider.swift */,
 				20000000000000000000003F /* MoonshotUsageProvider.swift */,
 				200000000000000000000040 /* TokenEndpointErrorFormatter.swift */,
 				200000000000000000000041 /* ProviderAuthSupport.swift */,
@@ -533,6 +546,7 @@
 				200000000000000000000038 /* WidgetBuilderView.swift */,
 				200000000000000000000013 /* ProviderSettingsView.swift */,
 				A29900000000000000000102 /* GeminiBrowserSignInView.swift */,
+				A35300000000000000000102 /* OpenCodeBrowserSignInView.swift */,
 				200000000000000000000043 /* ProviderSettingsViewModel.swift */,
 			);
 			path = Views;
@@ -661,6 +675,7 @@
 			isa = PBXGroup;
 			children = (
 				A30700000000000000000011 /* AccountJourneysUITests.swift */,
+				A35300000000000000000002 /* OpenCodeSignInUITests.swift */,
 			);
 			path = CodexBarIOSUITests;
 			sourceTree = "<group>";
@@ -955,6 +970,7 @@
 				100000000000000000000010 /* SettingsView.swift in Sources */,
 				100000000000000000000011 /* ProviderSettingsView.swift in Sources */,
 				A29900000000000000000101 /* GeminiBrowserSignInView.swift in Sources */,
+				A35300000000000000000101 /* OpenCodeBrowserSignInView.swift in Sources */,
 				100000000000000000000043 /* ProviderSettingsViewModel.swift in Sources */,
 				100000000000000000000012 /* CodexCredentials.swift in Sources */,
 				100000000000000000000013 /* CodexCredentialsParser.swift in Sources */,
@@ -986,6 +1002,9 @@
 				A31400000000000000000201 /* AntigravityQuotaParser.swift in Sources */,
 				A31400000000000000000101 /* AntigravityCredentials.swift in Sources */,
 				A29900000000000000000001 /* GeminiBrowserSessionPolicy.swift in Sources */,
+				A35300000000000000000201 /* OpenCodeBrowserSessionPolicy.swift in Sources */,
+				A35300000000000000000301 /* OpenCodeDeviceAuthService.swift in Sources */,
+				A35300000000000000000401 /* OpenCodeConsoleUsageProvider.swift in Sources */,
 				10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */,
 				100000000000000000000040 /* TokenEndpointErrorFormatter.swift in Sources */,
 				100000000000000000000041 /* ProviderAuthSupport.swift in Sources */,
@@ -1101,6 +1120,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A30700000000000000000001 /* AccountJourneysUITests.swift in Sources */,
+				A35300000000000000000001 /* OpenCodeSignInUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

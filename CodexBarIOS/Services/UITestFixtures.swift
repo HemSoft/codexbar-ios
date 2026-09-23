@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import SwiftUI
+import WebKit
 
 /// An explicit simulator-only launch contract. Never accepts a production defaults domain.
 @MainActor
@@ -853,6 +854,19 @@ private enum UITestFixtureError: LocalizedError {
         case .invalidCredential: "Only the synthetic UI test credential is accepted."
         case .refreshFailed: "Fixture refresh failed. Retry to recover."
         }
+    }
+}
+
+struct UITestOpenCodeSessionValidator: OpenCodeSessionValidating {
+    func validate(credential: String, configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        guard credential == "ui-test-credential" else { throw OpenCodeSignInError.validationFailed }
+        guard ProcessInfo.processInfo.environment["CODEXBAR_UI_TEST_OPENCODE_FAILURE"] != "1" else {
+            throw OpenCodeSignInError.validationFailed
+        }
+        return ProviderUsageResult(
+            accountID: configuration.id, providerID: .openCodeZen, title: configuration.displayName,
+            subtitle: "Synthetic OpenCode usage", bars: [], creditsRemaining: 25, fetchedAt: Date()
+        )
     }
 }
 

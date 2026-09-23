@@ -47,6 +47,14 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- OpenCode Go and Zen now use private system-browser approval with workspace
+  selection instead of pasted JSON, cookies, or workspace IDs. Removing auth
+  leaves a guided reconnect action and preserves account customization and
+  history. Sessions are verified before being saved securely on the device.
+  Normal renewal preserves cached usage and keeps a still-valid saved session
+  usable during temporary connection failures.
+  ([#353](https://github.com/HemSoft/codexbar-ios/issues/353))
+
 - GitHub Billing cards now show monthly allowance progress for personal Free
   and Pro plans and organization Free and Team plans. Covered metrics include
   eligible Actions minutes, Actions storage, Packages storage and data transfer,
@@ -186,6 +194,12 @@ building, testing, or releasing the app.
   ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))
 
 ### Developer Experience
+
+- Added local OpenCode authorization and quota regressions with the same pinned
+  strict lint plugin as the app, plus manual iPhone/iPad reconnect journeys.
+  The manual release runner now checks all eleven current UI journeys.
+  No automatic test suite or CI job was added.
+  ([#353](https://github.com/HemSoft/codexbar-ios/issues/353))
 
 - Added a manual GitHub Billing permission-disclosure UI journey and updated
   the release runner to require all six journeys on each simulator family.

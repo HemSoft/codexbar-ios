@@ -33,6 +33,15 @@ let package = Package(
         ),
     ],
     targets: [
+        // Local-only auth regressions; automatic CI continues running its existing smoke executable.
+        .testTarget(
+            name: "OpenCodeAuthTests",
+            dependencies: ["CodexBarIOS"],
+            path: "OpenCodeAuthTests",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
+            ]
+        ),
         .executableTarget(
             name: "UsageHistoryBenchmark",
             dependencies: ["CodexBarIOS"],

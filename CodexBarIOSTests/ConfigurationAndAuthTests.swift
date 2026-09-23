@@ -675,7 +675,7 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
         XCTAssertFalse(store.isConfigured(openCodeZen))
         XCTAssertTrue(store.shouldDisplayOnDashboard(openCodeZen))
-        XCTAssertEqual(store.statusText(for: openCodeZen), "Not configured - enter OpenCode workspace ID")
+        XCTAssertEqual(store.statusText(for: openCodeZen), "Not configured - sign in with OpenCode to choose a workspace")
     }
 
     @MainActor

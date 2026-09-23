@@ -1783,10 +1783,10 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         if configuration.providerID == .openCodeZen {
             if configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return "Not configured - enter OpenCode workspace ID"
+                return "Not configured - sign in with OpenCode to choose a workspace"
             }
 
-            return "Not configured - enter OpenCode dashboard auth value"
+            return "Disconnected - sign in with OpenCode"
         }
 
         if configuration.providerID == .openRouter {
