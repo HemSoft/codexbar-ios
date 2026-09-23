@@ -8,6 +8,23 @@ final class OpenCodeBrowserChoiceTests: XCTestCase {
         XCTAssertTrue(OpenCodeBrowserMode.privateSession.prefersEphemeralSession)
     }
 
+    #if canImport(UIKit)
+    @MainActor
+    func testNativeBrowserFactoryPreservesPrivateDefaultAndAllowsExplicitSharing() {
+        let url = URL(string: "https://opencode.ai/console/device")!
+        let defaultSession = PrivateWebAuthenticationPresenter.makeSession(url: url) { _ in }
+        XCTAssertTrue(defaultSession.prefersEphemeralWebBrowserSession)
+        let browserSession = PrivateWebAuthenticationPresenter.makeSession(
+            url: url, prefersEphemeralSession: OpenCodeBrowserMode.existingSession.prefersEphemeralSession
+        ) { _ in }
+        XCTAssertFalse(browserSession.prefersEphemeralWebBrowserSession)
+        let privateSession = PrivateWebAuthenticationPresenter.makeSession(
+            url: url, prefersEphemeralSession: OpenCodeBrowserMode.privateSession.prefersEphemeralSession
+        ) { _ in }
+        XCTAssertTrue(privateSession.prefersEphemeralWebBrowserSession)
+    }
+    #endif
+
     func testReconnectPreservesUserAndWorkspaceButAllowsTokenRenewal() throws {
         let saved = try credential().encoded()
         let renewed = try credential(accessToken: "renewed").encoded()
@@ -32,8 +49,11 @@ final class OpenCodeBrowserChoiceTests: XCTestCase {
         var account = store.addAccount(for: .openCodeZen)
         account.openCodeWorkspaceId = "wrk_one"
         let original = try credential().encoded()
+        XCTAssertTrue(store.canReconnectOpenCodeSession(original, workspaceID: "wrk_one", accountID: account.id))
         XCTAssertTrue(store.replaceCredential(original, for: account))
         XCTAssertTrue(store.canReconnectOpenCodeSession(original, workspaceID: "wrk_one", accountID: account.id))
+        XCTAssertFalse(store.canReconnectOpenCodeSession("invalid", workspaceID: "wrk_one", accountID: account.id))
+        XCTAssertFalse(store.canReconnectOpenCodeSession(original, workspaceID: "wrk_other", accountID: account.id))
         let otherUser = try credential(user: "other").encoded()
         XCTAssertTrue(store.replaceCredential(otherUser, for: account))
         XCTAssertFalse(store.canReconnectOpenCodeSession(original, workspaceID: "wrk_one", accountID: account.id))

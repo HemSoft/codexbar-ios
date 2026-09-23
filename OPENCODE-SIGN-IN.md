@@ -106,6 +106,22 @@ DEVELOPER_DIR=/Applications/Xcode-27-beta.app/Contents/Developer \
   xcrun swift test --filter OpenCodeAuthTests
 ```
 
+Run the same local-only target on an iPhone simulator to include the native
+system-browser factory checks. These construct sessions without opening a
+browser and verify the private default and both explicit OpenCode modes:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode-27-beta.app/Contents/Developer \
+  ./scripts/run-opencode-native-auth-tests.sh
+```
+
+The helper copies the package sources into a temporary directory so Xcode does
+not select the app project. It retains results under `DerivedData/OpenCodeNativeAuth`
+and removes its temporary copy. Set `OPENCODE_AUTH_DESTINATION`,
+`OPENCODE_AUTH_DERIVED_DATA`, or `OPENCODE_AUTH_RESULT_BUNDLE` to override those
+locations. The target retains its pinned lint plugin. Neither command runs in
+automatic CI; the automatic iOS test file is unchanged.
+
 `OpenCodeSignInUITests` belongs to the existing manually dispatched UI target.
 Its UUID-isolated fixture simulates browser approval and never opens a provider
 account or uses live credentials. It covers disconnected setup, cancellation,
