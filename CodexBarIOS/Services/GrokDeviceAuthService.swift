@@ -41,7 +41,7 @@ struct GrokDeviceChallenge: Sendable {
     let interval: TimeInterval
 }
 
-enum GrokAuthError: LocalizedError, Sendable {
+enum GrokAuthError: LocalizedError, Equatable, Sendable {
     case invalidResponse
     case denied
     case expired
@@ -155,9 +155,10 @@ struct GrokDeviceAuthService: Sendable {
         var request = URLRequest(url: Self.issuer.appending(path: "oauth2/userinfo"))
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         let (data, status) = try await send(request)
+        if status == 401 || status == 403 { throw GrokAuthError.unauthorized }
         guard status == 200,
               let identity = try? JSONDecoder().decode(GrokIdentity.self, from: data),
-              !identity.sub.isEmpty else { throw GrokAuthError.unauthorized }
+              !identity.sub.isEmpty else { throw GrokAuthError.invalidResponse }
         return identity
     }
 

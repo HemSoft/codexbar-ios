@@ -58,8 +58,11 @@ final class DashboardOrchestrator: ObservableObject {
             configurationStore: configurationStore
         )
 
-        configurationStore.credentialChanges.sink { [weak refreshService] accountID in
+        configurationStore.credentialChanges.sink { [weak refreshService, weak historyStore, weak configurationStore] accountID in
             refreshService?.invalidateCredentials(accountID: accountID)
+            if configurationStore?.configuration(accountID: accountID)?.providerID == .grok {
+                historyStore?.removeSnapshots(for: accountID)
+            }
         }.store(in: &cancellables)
         historyStore.migrateGoogleAccounts(
             links: configurationStore.confirmedGoogleAccountLinks,

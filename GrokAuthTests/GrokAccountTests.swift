@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import CodexBarIOS
@@ -11,15 +12,20 @@ final class GrokAccountTests: XCTestCase {
         let secrets = GrokTestSecrets()
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
         let account = store.addAccount(for: .grok)
+        var changed: [String] = []
+        let subscription = store.credentialChanges.sink { changed.append($0) }
+        defer { subscription.cancel() }
         XCTAssertFalse(store.isConfigured(account))
         let first = credential(subject: "first")
         let other = credential(subject: "other")
         XCTAssertTrue(store.canReconnectGrok(first, accountID: account.id))
         XCTAssertTrue(store.replaceCredential(try first.encoded(), for: account))
+        XCTAssertEqual(changed, [account.id])
         XCTAssertTrue(store.isConfigured(account))
         XCTAssertTrue(store.canReconnectGrok(first, accountID: account.id))
         XCTAssertFalse(store.canReconnectGrok(other, accountID: account.id))
         XCTAssertTrue(store.saveSecret("", for: account))
+        XCTAssertEqual(changed, [account.id, account.id])
         XCTAssertFalse(store.isConfigured(account))
         XCTAssertTrue(store.canReconnectGrok(other, accountID: account.id))
     }
@@ -32,12 +38,17 @@ final class GrokAccountTests: XCTestCase {
         let secrets = GrokTestSecrets()
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
         let account = store.addAccount(for: .grok)
+        var changed: [String] = []
+        let subscription = store.credentialChanges.sink { changed.append($0) }
+        defer { subscription.cancel() }
         secrets.failWrites = true
         XCTAssertFalse(store.replaceCredential(try credential(subject: "one").encoded(), for: account))
+        XCTAssertTrue(changed.isEmpty)
         XCTAssertFalse(store.isConfigured(account))
         secrets.failWrites = false
         XCTAssertTrue(store.replaceCredential(try credential(subject: "one").encoded(), for: account))
         XCTAssertTrue(store.removeAccount(account))
+        XCTAssertEqual(changed, [account.id, account.id])
         XCTAssertFalse(store.canReconnectGrok(credential(subject: "one"), accountID: account.id))
         XCTAssertNil(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)))
     }

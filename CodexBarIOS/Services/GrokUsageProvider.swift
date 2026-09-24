@@ -5,6 +5,12 @@ public final class GrokUsageProvider: UsageProvider {
     private static let refreshCoordinator = CredentialRefreshCoordinator<ProviderCredentialRefreshResult<GrokCredential>>()
     private static let creditsURL = URL(string: "https://cli-chat-proxy.grok.com/v1/billing?format=credits")!
 
+    private enum CredentialState {
+        case ready(GrokCredential)
+        case retry
+        case reconnect
+    }
+
     public let providerID = ProviderID.grok
     private let secretStore: SecretStore
     private let session: URLSession
@@ -26,9 +32,8 @@ public final class GrokUsageProvider: UsageProvider {
               let candidate = GrokCredential.parse(stored) else {
             return failure("Sign in with Grok to see consumer usage.", configuration: configuration)
         }
-        guard let credential = await currentCredential(candidate, keychainAccount: account) else {
-            return failure("Grok authorization expired or was removed. Reconnect in account settings.", configuration: configuration)
-        }
+        let state = await currentCredential(candidate, keychainAccount: account)
+        guard case .ready(let credential) = state else { return credentialFailure(state, configuration: configuration) }
         do {
             let result = try await fetchCandidate(credential, for: configuration)
             return try GrokCredentialLock.withLock {
@@ -37,8 +42,34 @@ public final class GrokUsageProvider: UsageProvider {
                 return result
             }
         } catch {
-            return failure("Grok usage could not be verified. Try refreshing or reconnecting.", configuration: configuration)
+            return usageFailure(error, configuration: configuration)
         }
+    }
+
+    private func credentialFailure(
+        _ state: CredentialState, configuration: ProviderAccountConfiguration
+    ) -> ProviderUsageResult {
+        switch state {
+        case .ready: failure("Grok usage could not be verified.", configuration: configuration)
+        case .retry: failure(
+            "Grok usage is temporarily unavailable. Try refreshing again.",
+            configuration: configuration, recoveryAction: .retryRefresh
+        )
+        case .reconnect: failure(
+            "Grok authorization expired or was removed. Reconnect in account settings.",
+            configuration: configuration
+        )
+        }
+    }
+
+    private func usageFailure(_ error: Error, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
+        if error as? GrokAuthError == .unauthorized {
+            return failure("Grok authorization was rejected. Reconnect in account settings.", configuration: configuration)
+        }
+        return failure(
+            "Grok usage could not be verified. Try refreshing again.",
+            configuration: configuration, recoveryAction: .retryRefresh
+        )
     }
 
     func fetchCandidate(
@@ -54,21 +85,26 @@ public final class GrokUsageProvider: UsageProvider {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.data(for: request)
         try Task.checkCancellation()
-        guard let response = response as? HTTPURLResponse, response.url == request.url,
-              response.statusCode == 200 else { throw GrokAuthError.unsupportedAccount }
+        guard let response = response as? HTTPURLResponse, response.url == request.url else {
+            throw GrokAuthError.invalidResponse
+        }
+        if response.statusCode == 401 || response.statusCode == 403 { throw GrokAuthError.unauthorized }
+        guard response.statusCode == 200 else { throw GrokAuthError.unsupportedAccount }
         return try Self.parseCredits(data, configuration: configuration, subject: identity.sub, now: Date())
     }
 
-    private func currentCredential(_ credential: GrokCredential, keychainAccount: String) async -> GrokCredential? {
-        guard credential.expiresAt <= Date().addingTimeInterval(60) else { return credential }
+    private func currentCredential(_ credential: GrokCredential, keychainAccount: String) async -> CredentialState {
+        guard credential.expiresAt <= Date().addingTimeInterval(60) else { return .ready(credential) }
         let outcome = await Self.refreshCoordinator.run(for: keychainAccount) { [self] in
             await self.refresh(credential, keychainAccount: keychainAccount)
         }
-        if case .success(let updated) = outcome, updated.subject == credential.subject { return updated }
-        if case .temporarilyUnavailable = outcome, credential.expiresAt > Date(),
-           let saved = try? secretStore.readSecret(account: keychainAccount),
-           GrokCredential.parse(saved) == credential { return credential }
-        return nil
+        if case .success(let updated) = outcome, updated.subject == credential.subject { return .ready(updated) }
+        if case .temporarilyUnavailable = outcome {
+            if credential.expiresAt > Date(), let saved = try? secretStore.readSecret(account: keychainAccount),
+               GrokCredential.parse(saved) == credential { return .ready(credential) }
+            return .retry
+        }
+        return .reconnect
     }
 
     private func refresh(
@@ -118,10 +154,13 @@ public final class GrokUsageProvider: UsageProvider {
         }
     }
 
-    private func failure(_ message: String, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
+    private func failure(
+        _ message: String, configuration: ProviderAccountConfiguration,
+        recoveryAction: ProviderUsageRecoveryAction = .reauthenticate
+    ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
-            subtitle: message, bars: [], failureMessage: message, recoveryAction: .reauthenticate,
+            subtitle: message, bars: [], failureMessage: message, recoveryAction: recoveryAction,
             fetchedAt: Date()
         )
     }

@@ -450,6 +450,9 @@ public final class UsageRefreshService: ObservableObject {
         _ cachedResult: ProviderUsageResult,
         for failureResult: ProviderUsageResult
     ) -> Bool {
+        if failureResult.providerID == .grok && failureResult.recoveryAction == .reauthenticate {
+            return false
+        }
         if let failureIdentity = failureResult.cacheIdentity {
             return cachedResult.cacheIdentity == failureIdentity
         }

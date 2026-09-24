@@ -62,6 +62,46 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
     }
 
     @MainActor
+    func testTransientFailuresOfferRetryButRejectedTokensOfferReconnect() async throws {
+        let suite = "GrokAuthTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = GrokTestSecrets()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+        let account = store.addAccount(for: .grok)
+        let key = ProviderConfigurationStore.keychainAccount(for: account)
+        let credential = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "access", refreshToken: "refresh",
+            expiresAt: Date().addingTimeInterval(3600), subject: "subject", email: nil
+        )
+        try secrets.saveSecret(credential.encoded(), account: key)
+        let unavailable = makeSession([(429, "{}")])
+        let retryUserInfo = try await GrokUsageProvider(secretStore: secrets, session: unavailable).fetchUsage(for: account)
+        XCTAssertEqual(retryUserInfo.recoveryAction, .retryRefresh)
+        unavailable.invalidateAndCancel()
+
+        let billingOutage = makeSession([(200, #"{"sub":"subject"}"#), (503, "{}")])
+        let retryBilling = try await GrokUsageProvider(secretStore: secrets, session: billingOutage).fetchUsage(for: account)
+        XCTAssertEqual(retryBilling.recoveryAction, .retryRefresh)
+        billingOutage.invalidateAndCancel()
+
+        let rejected = makeSession([(401, "{}")])
+        let reconnect = try await GrokUsageProvider(secretStore: secrets, session: rejected).fetchUsage(for: account)
+        XCTAssertEqual(reconnect.recoveryAction, .reauthenticate)
+        rejected.invalidateAndCancel()
+
+        let expired = GrokCredential(
+            kind: credential.kind, accessToken: credential.accessToken, refreshToken: credential.refreshToken,
+            expiresAt: Date().addingTimeInterval(-10), subject: credential.subject, email: nil
+        )
+        try secrets.saveSecret(expired.encoded(), account: key)
+        let renewalOutage = makeSession([(503, "{}")])
+        let retryRenewal = try await GrokUsageProvider(secretStore: secrets, session: renewalOutage).fetchUsage(for: account)
+        XCTAssertEqual(retryRenewal.recoveryAction, .retryRefresh)
+        renewalOutage.invalidateAndCancel()
+    }
+
+    @MainActor
     func testRenewalWithoutRotatedRefreshTokenKeepsSameAccountAndZeroUsage() async throws {
         let suite = "GrokAuthTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!

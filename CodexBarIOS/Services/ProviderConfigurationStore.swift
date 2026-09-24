@@ -754,7 +754,9 @@ public final class ProviderConfigurationStore: ObservableObject {
         do {
             let data = try JSONEncoder().encode(updatedConfigurations)
             try writeAccountSecret(credential, for: normalized)
-            if normalized.providerID == .gemini { credentialChanges.send(normalized.id) }
+            if normalized.providerID == .gemini || normalized.providerID == .grok {
+                credentialChanges.send(normalized.id)
+            }
             defaults.set(data, forKey: configurationsKey)
             configurations = updatedConfigurations
             if isNewAccount, metricLayouts[normalized.id] == nil {
@@ -797,6 +799,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                     credentialChanges.send(configuration.id)
                 }
                 try writeAccountSecret(nil, for: configuration)
+                if configuration.providerID == .grok { credentialChanges.send(configuration.id) }
                 configurations.removeAll { $0.id == configuration.id }
                 removedAccountIDs.insert(configuration.id)
                 removedAnyAccount = true
@@ -1501,7 +1504,9 @@ public final class ProviderConfigurationStore: ObservableObject {
         do {
             try writeAccountSecret(secret, for: configuration)
 
-            if configuration.providerID == .gemini { credentialChanges.send(configuration.id) }
+            if configuration.providerID == .gemini || configuration.providerID == .grok {
+                credentialChanges.send(configuration.id)
+            }
             lastError = nil
             refreshSecretAvailability()
             return true
