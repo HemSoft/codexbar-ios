@@ -50,26 +50,17 @@ final class GrokSignInUITests: XCTestCase {
         let bot = app.buttons["dashboard-metric-cursor.grok-bot-weekly"]
         XCTAssertTrue(grok.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(bot.exists, app.debugDescription)
-        keep("Grok and Cursor separate meters", app: app)
-        app.buttons["More options for Sample Grok"].tap()
-        let moreInformation = app.buttons["More information for Sample Grok"]
-        if moreInformation.waitForExistence(timeout: 3) {
-            moreInformation.tap()
-        } else {
-            // iPadOS beta may not expose a synthesized context menu.
-            app.terminate()
-            app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
-            app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION"] = "1"
-            app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"] = "ui-grok-connected"
-            app.launch()
-        }
-        XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10), app.debugDescription)
-        XCTAssertTrue(app.staticTexts["Usage breakdown"].exists)
-        keep("Grok product shares as information", app: app)
+        XCTAssertTrue(app.buttons["More options for SuperGrok Lite"].exists)
+        XCTAssertTrue(app.staticTexts["Extra Usage Credits"].exists, app.debugDescription)
+        XCTAssertFalse(app.staticTexts["On-demand spending"].exists)
+        XCTAssertFalse(app.staticTexts["On-demand cap"].exists)
+        keep("SuperGrok Lite beside Cursor", app: app)
+        if grok.frame.maxY > app.frame.height * 0.8 { app.swipeUp() }
+        keep("SuperGrok Lite weekly usage and credits", app: app)
         app.terminate()
 
         let noAllowance = launch(scenario: "grok-no-allowance")
-        XCTAssertTrue(noAllowance.staticTexts["No shared paid allowance was reported."].waitForExistence(timeout: 10))
+        XCTAssertTrue(noAllowance.staticTexts["No verified shared paid allowance was reported."].waitForExistence(timeout: 10))
         XCTAssertFalse(noAllowance.buttons["dashboard-metric-grok.included-usage"].exists)
         keep("Grok no eligible allowance", app: noAllowance)
     }

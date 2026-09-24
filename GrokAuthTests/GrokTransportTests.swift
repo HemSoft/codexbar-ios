@@ -96,7 +96,31 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(GrokTestProtocol.state.requests.map { $0.url?.host }, [
             "auth.x.ai", "auth.x.ai", "cli-chat-proxy.grok.com", "auth.x.ai",
             "cli-chat-proxy.grok.com", "auth.x.ai", "cli-chat-proxy.grok.com",
+            "cli-chat-proxy.grok.com",
         ])
+    }
+
+    func testSettingsTierComesFromVerifiedAccountNotBillingPayload() async throws {
+        let credential = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "access", refreshToken: "refresh",
+            expiresAt: Date().addingTimeInterval(3600), subject: "subject-one", email: nil
+        )
+        let session = makeSession([
+            (200, #"{"sub":"subject-one"}"#),
+            (200, #"{"config":{"isUnifiedBillingUser":true,"subscriptionTier":"SuperGrok Heavy"}}"#),
+            (200, #"{"subscriptionTierDisplay":"SuperGrok Lite"}"#),
+        ])
+        defer { session.invalidateAndCancel() }
+        let result = try await GrokUsageProvider(session: session).fetchCandidate(
+            credential, for: .defaultConfiguration(for: .grok)
+        )
+        XCTAssertEqual(result.verifiedGrokPlanName, "SuperGrok Lite")
+        XCTAssertEqual(GrokTestProtocol.state.requests.map { $0.url?.path }, [
+            "/oauth2/userinfo", "/v1/billing", "/v1/settings",
+        ])
+        XCTAssertTrue(GrokTestProtocol.state.requests.allSatisfy {
+            $0.value(forHTTPHeaderField: "Cookie") == nil
+        })
     }
 
     func testCandidateVerificationDoesNotRetryAChangedIdentity() async throws {
@@ -301,6 +325,7 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(saved.subject, old.subject)
         XCTAssertEqual(GrokTestProtocol.state.requests.map { $0.url?.path }, [
             "/oauth2/token", "/oauth2/userinfo", "/oauth2/userinfo", "/oauth2/userinfo", "/v1/billing",
+            "/v1/settings",
         ])
     }
 

@@ -1224,16 +1224,17 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
         var updated = configuration
         updated.authMethod = .browserSession
-        if !configuration.hasCustomAccountLabel, let email = credential.email, !email.isEmpty {
-            updated.accountLabel = email
-        }
         guard persistCredential(try credential.encoded(), with: updated) else {
             grokMessage = configurationStore.lastError ?? "Grok authorization could not be saved securely."
             return
         }
+        configurationStore.applyVerifiedGrokPlan(result)
+        configuration = configurationStore.configuration(accountID: accountID) ?? updated
         grokMessage = "Grok account connected."
         credentialsDidChange()
-        acceptUsageResult(result)
+        var titledResult = result
+        titledResult.title = configuration.displayName
+        acceptUsageResult(titledResult)
     }
 
     func startCursorSignIn() {

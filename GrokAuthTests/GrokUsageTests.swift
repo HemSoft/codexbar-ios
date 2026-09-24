@@ -18,16 +18,27 @@ final class GrokUsageTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(result.bars.first?.used, 0)
         XCTAssertEqual(result.bars.first?.stableKey, "included-usage")
         XCTAssertEqual(result.bars.first?.resetsAt, ISO8601DateFormatter().date(from: "2026-09-28T00:00:00Z"))
-        XCTAssertEqual(result.monetaryMetrics.map(\.minorUnits), [0, 210, 500])
-        XCTAssertEqual(result.cardInformationSections.first?.items.count, 1)
+        XCTAssertEqual(result.monetaryMetrics.map(\.minorUnits), [0])
+        XCTAssertTrue(result.cardInformationSections.isEmpty)
         XCTAssertEqual(result.cacheScope?.hasPrefix("consumer."), true)
     }
 
-    func testMonthlyAndWeeklyKeepTheSameMetricIdentity() throws {
-        let weekly = try parse(payload(percent: 23, period: "USAGE_PERIOD_TYPE_WEEKLY"))
+    func testMonthlyOrUnverifiedBillingIsNotAWeeklySubscriptionMeter() throws {
         let monthly = try parse(payload(percent: 23, period: "USAGE_PERIOD_TYPE_MONTHLY"))
-        XCTAssertEqual(weekly.bars.first?.stableKey, monthly.bars.first?.stableKey)
-        XCTAssertEqual(monthly.bars.first?.label, "Monthly included usage")
+        let unknown = try parse(#"{"config":{"creditUsagePercent":23,"prepaidBalance":{"val":200}}}"#)
+        XCTAssertTrue(monthly.bars.isEmpty)
+        XCTAssertTrue(unknown.bars.isEmpty)
+        XCTAssertTrue(unknown.monetaryMetrics.isEmpty)
+    }
+
+    func testPlanNameIsVerifiedMetadataNotAnAdditionalMetric() throws {
+        let result = try GrokUsageProvider.parseCredits(
+            Data(payload(percent: 0, period: "USAGE_PERIOD_TYPE_WEEKLY").utf8),
+            configuration: account, subject: "verified-user", now: now, verifiedPlanName: "SuperGrok Lite"
+        )
+        XCTAssertEqual(result.verifiedGrokPlanName, "SuperGrok Lite")
+        XCTAssertEqual(result.bars.count, 1)
+        XCTAssertTrue(result.monetaryMetrics.isEmpty)
     }
 
     func testMissingMalformedOrUnpaidAllowanceNeverBecomesZeroPercent() throws {

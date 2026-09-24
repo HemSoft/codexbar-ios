@@ -208,8 +208,10 @@ public struct CodexBankedRateLimitResets: Equatable, Sendable {
 public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let accountID: String
     public let providerID: ProviderID
-    public let title: String
+    public var title: String
     public let plan: ProviderPlanDescriptor?
+    /// Plan verified through the same Grok subject as this usage response; never a usage metric.
+    public let verifiedGrokPlanName: String?
     public let subtitle: String
     public let bars: [UsageBar]
     public let barsFetchedAt: Date?
@@ -236,6 +238,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         providerID: ProviderID,
         title: String,
         plan: ProviderPlanDescriptor? = nil,
+        verifiedGrokPlanName: String? = nil,
         subtitle: String,
         bars: [UsageBar],
         barsFetchedAt: Date? = nil,
@@ -261,6 +264,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.providerID = providerID
         self.title = title
         self.plan = plan
+        self.verifiedGrokPlanName = verifiedGrokPlanName
         self.subtitle = subtitle
         self.bars = bars
         self.barsFetchedAt = bars.isEmpty ? nil : (barsFetchedAt ?? fetchedAt)

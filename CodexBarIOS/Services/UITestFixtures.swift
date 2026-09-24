@@ -159,8 +159,8 @@ final class UITestFixtures {
 
     private static func seedGrokAccounts(in store: ProviderConfigurationStore) {
         let grok = ProviderAccountConfiguration(
-            id: "ui-grok-connected", providerID: .grok, accountLabel: "Sample Grok",
-            authMethod: .browserSession
+            id: "ui-grok-connected", providerID: .grok, accountLabel: "SuperGrok Lite",
+            grokGeneratedLabel: "SuperGrok Lite", authMethod: .browserSession
         )
         let cursor = ProviderAccountConfiguration(
             id: "ui-cursor-linked", providerID: .cursor, accountLabel: "Sample Cursor",
@@ -183,10 +183,11 @@ final class UITestFixtures {
             {"config":{"isUnifiedBillingUser":\(!unavailable),
             "creditUsagePercent":\(unavailable ? "null" : "31"),
             "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"},
-            "prepaidBalance":{"val":500},"productUsage":[
-            {"product":"GrokBuild","usagePercent":12},{"product":"GrokChat","usagePercent":19}]}}
+            "prepaidBalance":{"val":500}}}
             """.utf8)
-        return (try? GrokUsageProvider.parseCredits(data, configuration: account, subject: "synthetic-user", now: now))
+        return (try? GrokUsageProvider.parseCredits(
+            data, configuration: account, subject: "synthetic-user", now: now, verifiedPlanName: "SuperGrok Lite"
+        ))
             ?? ProviderUsageResult(
                 accountID: account.id, providerID: .grok, title: account.displayName,
                 subtitle: "Synthetic Grok usage unavailable", bars: [], fetchedAt: now

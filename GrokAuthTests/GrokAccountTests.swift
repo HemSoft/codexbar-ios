@@ -76,6 +76,63 @@ final class GrokAccountTests: XCTestCase {
         XCTAssertNil(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)))
     }
 
+    @MainActor
+    func testVerifiedPlanNamesRespectSubjectsCustomLabelsAndDuplicates() throws {
+        let suite = "GrokAuthTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults, secretStore: GrokTestSecrets(), widgetSnapshotDefaults: defaults
+        )
+        let first = store.addAccount(for: .grok)
+        let second = store.addAccount(for: .grok)
+        XCTAssertTrue(store.replaceCredential(try credential(subject: "one").encoded(), for: first))
+        XCTAssertTrue(store.replaceCredential(try credential(subject: "two").encoded(), for: second))
+        func result(_ account: ProviderAccountConfiguration, subject: String, plan: String?) throws -> ProviderUsageResult {
+            try GrokUsageProvider.parseCredits(
+                Data(#"{"config":{"isUnifiedBillingUser":true}}"#.utf8),
+                configuration: account, subject: subject, now: Date(), verifiedPlanName: plan
+            )
+        }
+        XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "two", plan: "SuperGrok Lite")))
+        XCTAssertTrue(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: "SuperGrok Lite")))
+        XCTAssertTrue(store.applyVerifiedGrokPlan(try result(second, subject: "two", plan: "SuperGrok Lite")))
+        XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "SuperGrok Lite")
+        XCTAssertEqual(store.configuration(accountID: second.id)?.accountLabel, "SuperGrok Lite 2")
+        XCTAssertTrue(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: "SuperGrok Plus")))
+        XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "SuperGrok Plus")
+        var custom = try XCTUnwrap(store.configuration(accountID: first.id))
+        custom.accountLabel = "My Grok"
+        XCTAssertTrue(store.update(custom))
+        XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: "SuperGrok Heavy")))
+        XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "My Grok")
+        XCTAssertFalse(store.applyVerifiedGrokPlan(try result(second, subject: "two", plan: nil)))
+        XCTAssertEqual(store.configuration(accountID: second.id)?.accountLabel, "SuperGrok Lite 2")
+    }
+
+    @MainActor
+    func testWidgetUsesCurrentGrokLabelEvenBeforeTheNextUsageFetch() throws {
+        let suite = "GrokAuthTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults, secretStore: GrokTestSecrets(), widgetSnapshotDefaults: defaults
+        )
+        let account = store.addAccount(for: .grok)
+        XCTAssertTrue(store.replaceCredential(try credential(subject: "one").encoded(), for: account))
+        let result = try GrokUsageProvider.parseCredits(
+            Data(#"{"config":{"isUnifiedBillingUser":true,"prepaidBalance":{"val":0}}}"#.utf8),
+            configuration: account, subject: "one", now: Date(), verifiedPlanName: "SuperGrok Lite"
+        )
+        XCTAssertTrue(store.applyVerifiedGrokPlan(result))
+        XCTAssertEqual(result.title, account.accountLabel)
+        let refresh = UsageRefreshService(providers: [], initialResults: [result])
+        refresh.updateGrokResultTitle("SuperGrok Lite", accountID: account.id)
+        XCTAssertEqual(refresh.results.first?.title, "SuperGrok Lite")
+        WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults)
+        XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.title, "SuperGrok Lite")
+    }
+
     private func credential(subject: String) -> GrokCredential {
         GrokCredential(
             kind: "grok-oauth-v1", accessToken: "fixture-token", refreshToken: "fixture-refresh",

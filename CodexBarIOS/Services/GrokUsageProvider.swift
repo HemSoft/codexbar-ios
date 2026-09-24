@@ -4,6 +4,7 @@ import Foundation
 public final class GrokUsageProvider: UsageProvider {
     private static let refreshCoordinator = CredentialRefreshCoordinator<ProviderCredentialRefreshResult<GrokCredential>>()
     private static let creditsURL = URL(string: "https://cli-chat-proxy.grok.com/v1/billing?format=credits")!
+    private static let settingsURL = URL(string: "https://cli-chat-proxy.grok.com/v1/settings")!
 
     private enum CredentialState {
         case ready(GrokCredential)
@@ -66,6 +67,12 @@ public final class GrokUsageProvider: UsageProvider {
         if error as? GrokAuthError == .unauthorized {
             return failure("Grok authorization was rejected. Reconnect in account settings.", configuration: configuration)
         }
+        if error as? GrokAuthError == .unsupportedAccount {
+            return failure(
+                "Grok subscription usage is not available for this account.",
+                configuration: configuration, recoveryAction: .retryRefresh
+            )
+        }
         return failure(
             "Grok usage could not be verified. Try refreshing again.",
             configuration: configuration, recoveryAction: .retryRefresh
@@ -93,7 +100,35 @@ public final class GrokUsageProvider: UsageProvider {
             throw GrokAuthError.temporarilyUnavailable
         }
         guard response.statusCode == 200 else { throw GrokAuthError.unsupportedAccount }
-        return try Self.parseCredits(data, configuration: configuration, subject: identity.sub, now: Date())
+        // Do not read settings for a malformed billing response; retry billing first.
+        let now = Date()
+        _ = try Self.parseCredits(data, configuration: configuration, subject: identity.sub, now: now)
+        // Settings are optional. The CLI reads the tier here, not from the credits response.
+        // A failed settings read must never turn a real usage response into a guessed plan.
+        let tier = await fetchPlanName(accessToken: credential.accessToken)
+        return try Self.parseCredits(
+            data, configuration: configuration, subject: identity.sub, now: now, verifiedPlanName: tier
+        )
+    }
+
+    private func fetchPlanName(accessToken: String) async -> String? {
+        var request = URLRequest(url: Self.settingsURL)
+        request.timeoutInterval = 8
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("xai-grok-cli", forHTTPHeaderField: "x-xai-token-auth")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        guard let (data, reply) = try? await session.data(for: request),
+              let response = reply as? HTTPURLResponse,
+              response.url == request.url, response.statusCode == 200,
+              let settings = try? JSONDecoder().decode(GrokRemoteSettings.self, from: data) else { return nil }
+        return Self.knownPlan(settings.subscriptionTierDisplay ?? settings.subscriptionTier)
+    }
+
+    private static func knownPlan(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        return ["SuperGrok Lite", "SuperGrok", "SuperGrok Plus", "SuperGrok Heavy"].first {
+            $0.caseInsensitiveCompare(value) == .orderedSame
+        }
     }
 
     func verifyCandidate(
@@ -210,22 +245,22 @@ public final class GrokUsageProvider: UsageProvider {
     }
 
     static func parseCredits(
-        _ data: Data, configuration: ProviderAccountConfiguration, subject: String, now: Date
+        _ data: Data, configuration: ProviderAccountConfiguration, subject: String, now: Date,
+        verifiedPlanName: String? = nil
     ) throws -> ProviderUsageResult {
         guard let response = try? JSONDecoder().decode(GrokCreditsResponse.self, from: data),
               let config = response.config else { throw GrokAuthError.invalidResponse }
         let period = config.currentPeriod
         let start = period?.start.flatMap(date)
         let end = period?.end.flatMap(date)
-        let supportedPeriod = ["USAGE_PERIOD_TYPE_WEEKLY", "USAGE_PERIOD_TYPE_MONTHLY"].contains(period?.type ?? "")
+        let supportedPeriod = period?.type == "USAGE_PERIOD_TYPE_WEEKLY"
         let activePeriod = supportedPeriod && start != nil && end != nil
             && start! <= now && end! > now
         let percent = config.creditUsagePercent
         let hasPercent = percent != nil && percent!.isFinite && percent! >= 0
-        let bar: UsageBar? = if activePeriod && hasPercent && config.isUnifiedBillingUser != false {
+        let bar: UsageBar? = if activePeriod && hasPercent && config.isUnifiedBillingUser == true {
             UsageBar(
-                stableKey: "included-usage", label: period?.type == "USAGE_PERIOD_TYPE_WEEKLY"
-                    ? "Weekly included usage" : "Monthly included usage",
+                stableKey: "included-usage", label: "Weekly subscription usage",
                 used: percent!, limit: 100, resetsAt: end,
                 projectionCurrent: percent!, projectionLimit: 100,
                 projectionPeriodStart: start, projectionPeriodEnd: end
@@ -234,20 +269,16 @@ public final class GrokUsageProvider: UsageProvider {
             nil
         }
         let reason = unavailableReason(config, supportedPeriod: supportedPeriod, activePeriod: activePeriod)
-        let balance = money(config.prepaidBalance, kind: .balance, label: "Extra Usage Credits")
-        let spent = money(config.onDemandUsed, kind: .spent, label: "On-demand spending")
-        let cap = money(config.onDemandCap, kind: .spendLimit, label: "On-demand cap")
-        let products = (config.productUsage ?? []).compactMap(productInformation)
+        let balance = config.isUnifiedBillingUser == true
+            ? money(config.prepaidBalance, kind: .balance, label: "Extra Usage Credits") : nil
         let cacheIdentity = Data(SHA256.hash(data: Data(subject.utf8))).base64EncodedString()
         return ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
-            subtitle: bar == nil ? reason : "Grok consumer usage",
+            verifiedGrokPlanName: knownPlan(verifiedPlanName),
+            subtitle: bar == nil ? reason : "Grok subscription usage",
             bars: bar.map { [$0] } ?? [],
-            monetaryMetrics: [balance, spent, cap].compactMap { $0 },
+            monetaryMetrics: [balance].compactMap { $0 },
             usageMessages: bar == nil ? [reason] : [],
-            cardInformationSections: products.isEmpty ? [] : [
-                ProviderCardInformationSection(id: "grok.products", title: "Usage breakdown", items: products),
-            ],
             cacheIdentity: cacheIdentity, cacheScope: "consumer.\(cacheIdentity)", fetchedAt: now
         )
     }
@@ -255,16 +286,10 @@ public final class GrokUsageProvider: UsageProvider {
     private static func unavailableReason(
         _ config: GrokCreditsConfig, supportedPeriod: Bool, activePeriod: Bool
     ) -> String {
-        if config.isUnifiedBillingUser == false { return "No shared paid allowance was reported." }
-        if !supportedPeriod { return "Grok did not report a supported usage period." }
+        if config.isUnifiedBillingUser != true { return "No verified shared paid allowance was reported." }
+        if !supportedPeriod { return "Grok did not report a weekly subscription period." }
         if !activePeriod { return "Grok did not report an active usage period." }
         return "Grok did not report included usage."
-    }
-
-    private static func productInformation(_ product: GrokProductUsage) -> ProviderCardInformationItem? {
-        guard let name = product.product?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
-              let value = product.usagePercent, value.isFinite, value >= 0 else { return nil }
-        return ProviderCardInformationItem(id: "grok.product.\(name)", label: name, detail: "\(value.formatted())%")
     }
 
     private static func date(_ text: String) -> Date? {
@@ -296,9 +321,6 @@ private struct GrokCreditsConfig: Decodable {
     let currentPeriod: GrokCreditsPeriod?
     let isUnifiedBillingUser: Bool?
     let prepaidBalance: GrokCreditsAmount?
-    let onDemandUsed: GrokCreditsAmount?
-    let onDemandCap: GrokCreditsAmount?
-    let productUsage: [GrokProductUsage]?
 }
 
 private struct GrokCreditsPeriod: Decodable {
@@ -311,7 +333,7 @@ private struct GrokCreditsAmount: Decodable {
     let val: Decimal?
 }
 
-private struct GrokProductUsage: Decodable {
-    let product: String?
-    let usagePercent: Double?
+private struct GrokRemoteSettings: Decodable {
+    let subscriptionTier: String?
+    let subscriptionTierDisplay: String?
 }
