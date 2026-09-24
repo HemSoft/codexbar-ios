@@ -1232,7 +1232,9 @@ final class ProviderSettingsViewModel: ObservableObject {
         configuration = configurationStore.configuration(accountID: accountID) ?? updated
         grokMessage = "Grok account connected."
         credentialsDidChange()
-        acceptUsageResult(result)
+        var titledResult = result
+        titledResult.title = configuration.displayName
+        acceptUsageResult(titledResult)
     }
 
     func startCursorSignIn() {

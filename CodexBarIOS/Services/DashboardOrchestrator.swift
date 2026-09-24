@@ -392,15 +392,20 @@ final class DashboardOrchestrator: ObservableObject {
         results: [ProviderUsageResult],
         preserving preservedAccountIDs: Set<String>
     ) async {
-        for result in results where result.providerID == .grok {
+        let titledResults = results.map { result in
+            guard result.providerID == .grok else { return result }
             configurationStore.applyVerifiedGrokPlan(result)
+            var titled = result
+            titled.title = configurationStore.configuration(accountID: result.accountID)?.displayName ?? result.title
+            refreshService.updateGrokResultTitle(titled.title, accountID: result.accountID)
+            return titled
         }
         historyStore.record(
-            results: results,
+            results: titledResults,
             severityThresholds: configurationStore.usageAlertSettings.severityThresholds,
             samplingInterval: configurationStore.historySamplingInterval.seconds
         )
-        await processUsageAlerts(results: results, preserving: preservedAccountIDs)
+        await processUsageAlerts(results: titledResults, preserving: preservedAccountIDs)
     }
 
     private func shouldRequestReviewAfterSuccessfulRefresh() -> Bool {

@@ -30,6 +30,13 @@ public final class UsageRefreshService: ObservableObject {
         self.results = initialResults
     }
 
+    /// Keep cached Grok observations in step with a newly verified account label.
+    func updateGrokResultTitle(_ title: String, accountID: String) {
+        guard let index = results.firstIndex(where: { $0.accountID == accountID && $0.providerID == .grok }),
+              results[index].title != title else { return }
+        results[index].title = title
+    }
+
     public var isRefreshing: Bool {
         !refreshingAccountIDs.isEmpty
     }

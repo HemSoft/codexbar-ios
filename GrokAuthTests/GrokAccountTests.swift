@@ -126,6 +126,9 @@ final class GrokAccountTests: XCTestCase {
         )
         XCTAssertTrue(store.applyVerifiedGrokPlan(result))
         XCTAssertEqual(result.title, account.accountLabel)
+        let refresh = UsageRefreshService(providers: [], initialResults: [result])
+        refresh.updateGrokResultTitle("SuperGrok Lite", accountID: account.id)
+        XCTAssertEqual(refresh.results.first?.title, "SuperGrok Lite")
         WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults)
         XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.title, "SuperGrok Lite")
     }
