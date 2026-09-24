@@ -14,7 +14,9 @@ final class GrokAccountTests: XCTestCase {
         let account = store.addAccount(for: .grok)
         var changed: [String] = []
         let subscription = store.credentialChanges.sink { changed.append($0) }
-        defer { subscription.cancel() }
+        var clearedHistory: [String] = []
+        let historySubscription = store.grokHistoryInvalidations.sink { clearedHistory.append($0) }
+        defer { subscription.cancel(); historySubscription.cancel() }
         XCTAssertFalse(store.isConfigured(account))
         let first = credential(subject: "first")
         let other = credential(subject: "other")
@@ -24,10 +26,31 @@ final class GrokAccountTests: XCTestCase {
         XCTAssertTrue(store.isConfigured(account))
         XCTAssertTrue(store.canReconnectGrok(first, accountID: account.id))
         XCTAssertFalse(store.canReconnectGrok(other, accountID: account.id))
+        XCTAssertTrue(store.replaceCredential(try first.encoded(), for: account))
+        XCTAssertTrue(clearedHistory.isEmpty)
         XCTAssertTrue(store.saveSecret("", for: account))
-        XCTAssertEqual(changed, [account.id, account.id])
+        XCTAssertEqual(clearedHistory, [account.id])
+        XCTAssertEqual(changed, [account.id, account.id, account.id])
         XCTAssertFalse(store.isConfigured(account))
         XCTAssertTrue(store.canReconnectGrok(other, accountID: account.id))
+    }
+
+    @MainActor
+    func testChangingVerifiedSubjectInvalidatesHistory() throws {
+        let suite = "GrokAuthTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults, secretStore: GrokTestSecrets(), widgetSnapshotDefaults: defaults
+        )
+        let account = store.addAccount(for: .grok)
+        var clearedHistory: [String] = []
+        let subscription = store.grokHistoryInvalidations.sink { clearedHistory.append($0) }
+        defer { subscription.cancel() }
+        XCTAssertTrue(store.replaceCredential(try credential(subject: "first").encoded(), for: account))
+        XCTAssertTrue(clearedHistory.isEmpty)
+        XCTAssertTrue(store.replaceCredential(try credential(subject: "other").encoded(), for: account))
+        XCTAssertEqual(clearedHistory, [account.id])
     }
 
     @MainActor

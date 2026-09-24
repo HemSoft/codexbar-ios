@@ -133,7 +133,9 @@ public final class GrokUsageProvider: UsageProvider {
             ("grant_type", "refresh_token"), ("refresh_token", credential.refreshToken),
             ("client_id", GrokDeviceAuthService.clientID),
         ])
-        guard status == 200 else { return [400, 401, 403].contains(status) ? .rejected : .temporarilyUnavailable }
+        guard status == 200 else {
+            return Self.isRejectedRenewal(data, status: status) ? .rejected : .temporarilyUnavailable
+        }
         guard let token = try? GrokDeviceAuthService.token(data) else { return .temporarilyUnavailable }
         let identity: GrokIdentity
         do {
@@ -148,6 +150,12 @@ public final class GrokUsageProvider: UsageProvider {
             expiresAt: Date().addingTimeInterval(token.expiresIn), subject: credential.subject,
             email: identity.email ?? credential.email
         ))
+    }
+
+    private static func isRejectedRenewal(_ data: Data, status: Int) -> Bool {
+        guard [400, 401, 403].contains(status),
+              let reply = try? JSONDecoder().decode(GrokRenewalError.self, from: data) else { return false }
+        return reply.error == "invalid_grant" || reply.error == "invalid_token"
     }
 
     private func saveRenewedCredential(
@@ -245,6 +253,10 @@ public final class GrokUsageProvider: UsageProvider {
         guard let cents = amount?.val, cents >= 0 else { return nil }
         return ProviderMonetaryMetric(kind: kind, label: label, minorUnits: cents, currencyCode: "USD", decimalPlaces: 2)
     }
+}
+
+private struct GrokRenewalError: Decodable {
+    let error: String
 }
 
 private struct GrokCreditsResponse: Decodable {

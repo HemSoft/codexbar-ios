@@ -131,7 +131,9 @@ struct GrokDeviceAuthService: Sendable {
                     interval = min(60, interval + 5)
                     continue
                 }
-                let identity = try await userInfo(accessToken: token.accessToken)
+                let identity = try await verifiedIdentity(
+                    accessToken: token.accessToken, deadline: challenge.expiresAt, sleep: sleep
+                )
                 return GrokCredential(
                     kind: "grok-oauth-v1", accessToken: token.accessToken,
                     refreshToken: refreshToken, expiresAt: Date().addingTimeInterval(token.expiresIn),
@@ -139,6 +141,26 @@ struct GrokDeviceAuthService: Sendable {
                 )
             }
             interval = try Self.nextPollingInterval(data, status: status, current: interval)
+        }
+        throw GrokAuthError.expired
+    }
+
+    private func verifiedIdentity(
+        accessToken: String, deadline: Date,
+        sleep: @Sendable (TimeInterval) async throws -> Void
+    ) async throws -> GrokIdentity {
+        var retryInterval: TimeInterval = 5
+        while Date() < deadline {
+            try Task.checkCancellation()
+            do {
+                return try await userInfo(accessToken: accessToken)
+            } catch let error as URLError where Self.isTransientNetworkError(error) {
+                // Keep the issued token and retry identity verification.
+            } catch GrokAuthError.temporarilyUnavailable {
+                // Rate limits and provider outages can recover before the challenge expires.
+            }
+            try await sleep(min(retryInterval, max(0, deadline.timeIntervalSinceNow)))
+            retryInterval = min(60, retryInterval + 5)
         }
         throw GrokAuthError.expired
     }

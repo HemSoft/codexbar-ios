@@ -426,6 +426,7 @@ enum CodexAccountIdentityValidation: Equatable {
 @MainActor
 public final class ProviderConfigurationStore: ObservableObject {
     let credentialChanges = PassthroughSubject<String, Never>()
+    let grokHistoryInvalidations = PassthroughSubject<String, Never>()
     @Published public private(set) var confirmedGoogleAccountLinks: [String: String]
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
     @Published public private(set) var groups: [ProviderAccountGroup]
@@ -1517,8 +1518,14 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     private func writeAccountSecret(_ value: String?, for configuration: ProviderAccountConfiguration) throws {
+        var changedGrokSubject = false
         let write = {
             let account = self.keychainAccount(for: configuration)
+            if configuration.providerID == .grok {
+                let previous = GrokCredential.parse(try self.secretStore.readSecret(account: account))?.subject
+                let replacement = GrokCredential.parse(value)?.subject
+                changedGrokSubject = previous != nil && previous != replacement
+            }
             if let value, !value.isEmpty {
                 try self.secretStore.saveSecret(value, account: account)
             } else {
@@ -1527,6 +1534,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
         if configuration.providerID == .grok {
             try GrokCredentialLock.withLock(write)
+            if changedGrokSubject { grokHistoryInvalidations.send(configuration.id) }
         } else {
             try write()
         }
@@ -2837,7 +2845,10 @@ extension ProviderConfigurationStore {
                     ($0.providerID == .gemini || $0.providerID == .grok)
                         && (keychainAccount(for: $0) == account
                             || Self.geminiCodingKeychainAccount(accountID: $0.id) == account)
-                }) { credentialChanges.send(configuration.id) }
+                }) {
+                    credentialChanges.send(configuration.id)
+                    if configuration.providerID == .grok { grokHistoryInvalidations.send(configuration.id) }
+                }
                 removedAccountIDs.formUnion(
                     configurations
                         .filter { keychainAccount(for: $0) == account }
