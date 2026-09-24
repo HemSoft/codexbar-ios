@@ -131,12 +131,13 @@ struct GrokDeviceAuthService: Sendable {
                     interval = min(60, interval + 5)
                     continue
                 }
+                let expiresAt = Date().addingTimeInterval(token.expiresIn)
                 let identity = try await verifiedIdentity(
                     accessToken: token.accessToken, deadline: challenge.expiresAt, sleep: sleep
                 )
                 return GrokCredential(
                     kind: "grok-oauth-v1", accessToken: token.accessToken,
-                    refreshToken: refreshToken, expiresAt: Date().addingTimeInterval(token.expiresIn),
+                    refreshToken: refreshToken, expiresAt: expiresAt,
                     subject: identity.sub, email: identity.email
                 )
             }

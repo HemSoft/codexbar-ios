@@ -233,28 +233,31 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
             kind: "grok-oauth-v1", accessToken: "old-access", refreshToken: "old-refresh",
             expiresAt: Date().addingTimeInterval(-10), subject: "subject-one", email: nil
         )
-        try secrets.saveSecret(old.encoded(), account: key)
         let start = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-86_400))
         let end = ISO8601DateFormatter().string(from: Date().addingTimeInterval(86_400))
         let billing = """
             {"config":{"isUnifiedBillingUser":true,"creditUsagePercent":0,
             "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"}}}
             """
-        let session = makeSession([
-            (200, #"{"access_token":"new-access","token_type":"Bearer","expires_in":3600}"#),
-            (200, #"{"sub":"subject-one"}"#),
-            (200, #"{"sub":"subject-one"}"#),
-            (200, billing),
-        ])
-        defer { session.invalidateAndCancel() }
-        let result = try await GrokUsageProvider(secretStore: secrets, session: session).fetchUsage(for: account)
-        XCTAssertNil(result.failureMessage)
-        XCTAssertEqual(result.bars.first?.used, 0)
-        let saved = try XCTUnwrap(GrokCredential.parse(try secrets.readSecret(account: key)))
-        XCTAssertEqual(saved.refreshToken, old.refreshToken)
-        XCTAssertEqual(saved.subject, old.subject)
-        XCTAssertEqual(saved.accessToken, "new-access")
-        XCTAssertEqual(GrokTestProtocol.state.requests.last?.url?.host, "cli-chat-proxy.grok.com")
+        for renewal in [
+            #"{"access_token":"new-access","token_type":"Bearer","expires_in":3600}"#,
+            #"{"access_token":"new-access","token_type":"Bearer","expires_in":3600,"refresh_token":""}"#,
+        ] {
+            try secrets.saveSecret(old.encoded(), account: key)
+            let session = makeSession([
+                (200, renewal), (200, #"{"sub":"subject-one"}"#),
+                (200, #"{"sub":"subject-one"}"#), (200, billing),
+            ])
+            defer { session.invalidateAndCancel() }
+            let result = try await GrokUsageProvider(secretStore: secrets, session: session).fetchUsage(for: account)
+            XCTAssertNil(result.failureMessage)
+            XCTAssertEqual(result.bars.first?.used, 0)
+            let saved = try XCTUnwrap(GrokCredential.parse(try secrets.readSecret(account: key)))
+            XCTAssertEqual(saved.refreshToken, old.refreshToken)
+            XCTAssertEqual(saved.subject, old.subject)
+            XCTAssertEqual(saved.accessToken, "new-access")
+            XCTAssertEqual(GrokTestProtocol.state.requests.last?.url?.host, "cli-chat-proxy.grok.com")
+        }
     }
 
     @MainActor

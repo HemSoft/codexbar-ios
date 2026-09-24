@@ -165,6 +165,7 @@ public final class GrokUsageProvider: UsageProvider {
             return Self.isRejectedRenewal(data, status: status) ? .rejected : .temporarilyUnavailable
         }
         guard let token = try? GrokDeviceAuthService.token(data) else { return .temporarilyUnavailable }
+        let expiresAt = Date().addingTimeInterval(token.expiresIn)
         let identity: GrokIdentity
         do {
             identity = try await auth.userInfo(accessToken: token.accessToken)
@@ -174,8 +175,8 @@ public final class GrokUsageProvider: UsageProvider {
         guard identity.sub == credential.subject else { return .rejected }
         return .success(GrokCredential(
             kind: credential.kind, accessToken: token.accessToken,
-            refreshToken: token.refreshToken ?? credential.refreshToken,
-            expiresAt: Date().addingTimeInterval(token.expiresIn), subject: credential.subject,
+            refreshToken: token.refreshToken.flatMap { $0.isEmpty ? nil : $0 } ?? credential.refreshToken,
+            expiresAt: expiresAt, subject: credential.subject,
             email: identity.email ?? credential.email
         ))
     }
