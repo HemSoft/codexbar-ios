@@ -90,7 +90,9 @@ it. Animations retain the normal app behavior.
   for local auth transport and quota regressions.
 - `GrokSignInUITests` exercises Grok's Add Account entry, synthetic approval,
   cancellation, reconnect and removal. A second journey shows the shared Grok
-  meter beside Cursor's separate Grok Bot meter and a no-allowance state.
+  meter beside Cursor's separate Grok Bot meter, a verified paid weekly period
+  whose omitted usage shows 0%, an explicit-null percentage that remains
+  unavailable, and a no-allowance state.
   Neither journey authorizes a real account or contacts xAI. On iPadOS versions
   that do not expose context-menu actions to XCTest, the More Information
   relaunch hook targets only the Grok account using

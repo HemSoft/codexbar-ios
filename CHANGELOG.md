@@ -121,6 +121,12 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Show 0% weekly Grok usage when a verified paid account has an active shared
+  weekly period and Grok reports no usage fields. The card says no usage was
+  reported; missing or conflicting usage on unverified accounts remains
+  unavailable. Grok now recognizes plan names returned by its settings service.
+  ([#363](https://github.com/HemSoft/codexbar-ios/issues/363))
+
 - OpenCode sign-in now checks an approval already in progress when the browser
   closes instead of immediately discarding it. The app returns from the browser
   as soon as it receives a valid token and shows account-verification progress.

@@ -118,9 +118,11 @@ public final class GrokUsageProvider: UsageProvider {
         request.setValue("xai-grok-cli", forHTTPHeaderField: "x-xai-token-auth")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         guard let (data, reply) = try? await session.data(for: request),
-              let response = reply as? HTTPURLResponse,
-              response.url == request.url, response.statusCode == 200,
-              let settings = try? JSONDecoder().decode(GrokRemoteSettings.self, from: data) else { return nil }
+              let response = reply as? HTTPURLResponse, response.url == request.url else { return nil }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard response.statusCode == 200,
+              let settings = try? decoder.decode(GrokRemoteSettings.self, from: data) else { return nil }
         return Self.knownPlan(settings.subscriptionTierDisplay ?? settings.subscriptionTier)
     }
 
@@ -258,11 +260,16 @@ public final class GrokUsageProvider: UsageProvider {
             && start! <= now && end! > now
         let percent = config.creditUsagePercent
         let hasPercent = percent != nil && percent!.isFinite && percent! >= 0
-        let bar: UsageBar? = if activePeriod && hasPercent && config.isUnifiedBillingUser == true {
+        // The first-party CLI renders an omitted percent as zero. Restrict that fallback to a
+        // verified paid tier and an active shared weekly pool with no other reported usage.
+        let inferredZero = !hasPercent && knownPlan(verifiedPlanName) != nil
+            && config.isUnifiedBillingUser == true && activePeriod && omitsUsage(data)
+        let includedPercent = hasPercent ? percent : inferredZero ? 0 : nil
+        let bar: UsageBar? = if activePeriod && includedPercent != nil && config.isUnifiedBillingUser == true {
             UsageBar(
                 stableKey: "included-usage", label: "Weekly subscription usage",
-                used: percent!, limit: 100, resetsAt: end,
-                projectionCurrent: percent!, projectionLimit: 100,
+                used: includedPercent!, limit: 100, resetsAt: end,
+                projectionCurrent: includedPercent!, projectionLimit: 100,
                 projectionPeriodStart: start, projectionPeriodEnd: end
             )
         } else {
@@ -275,12 +282,19 @@ public final class GrokUsageProvider: UsageProvider {
         return ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
             verifiedGrokPlanName: knownPlan(verifiedPlanName),
-            subtitle: bar == nil ? reason : "Grok subscription usage",
+            subtitle: bar == nil ? reason : inferredZero ? "No included usage reported by Grok." : "Grok subscription usage",
             bars: bar.map { [$0] } ?? [],
             monetaryMetrics: [balance].compactMap { $0 },
             usageMessages: bar == nil ? [reason] : [],
             cacheIdentity: cacheIdentity, cacheScope: "consumer.\(cacheIdentity)", fetchedAt: now
         )
+    }
+
+    private static func omitsUsage(_ data: Data) -> Bool {
+        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let config = object["config"] as? [String: Any] else { return false }
+        return ["creditUsagePercent", "productUsage", "used", "totalUsed", "monthlyLimit"]
+            .allSatisfy { config[$0] == nil }
     }
 
     private static func unavailableReason(

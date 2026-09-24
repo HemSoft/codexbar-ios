@@ -59,9 +59,28 @@ final class GrokSignInUITests: XCTestCase {
         keep("SuperGrok Lite weekly usage and credits", app: app)
         app.terminate()
 
+        let zero = launch(scenario: "grok-zero")
+        let zeroMeter = zero.buttons["dashboard-metric-grok.included-usage"]
+        XCTAssertTrue(zeroMeter.waitForExistence(timeout: 10), zero.debugDescription)
+        XCTAssertTrue(zeroMeter.label.contains("0%"), zeroMeter.label)
+        XCTAssertTrue(zero.staticTexts["No included usage reported by Grok."].exists)
+        XCTAssertTrue(zero.staticTexts["Extra Usage Credits"].exists)
+        XCTAssertTrue(zero.buttons["dashboard-metric-cursor.grok-bot-weekly"].exists)
+        if zeroMeter.frame.maxY > zero.frame.height * 0.8 { zero.swipeUp() }
+        keep("SuperGrok Lite zero weekly usage beside Cursor", app: zero)
+        zero.terminate()
+
+        let missing = launch(scenario: "grok-percent-unavailable")
+        XCTAssertTrue(missing.staticTexts["Grok did not report included usage."].waitForExistence(timeout: 10))
+        XCTAssertFalse(missing.buttons["dashboard-metric-grok.included-usage"].exists)
+        missing.swipeUp()
+        keep("Grok unavailable percentage stays distinct from zero", app: missing)
+        missing.terminate()
+
         let noAllowance = launch(scenario: "grok-no-allowance")
         XCTAssertTrue(noAllowance.staticTexts["No verified shared paid allowance was reported."].waitForExistence(timeout: 10))
         XCTAssertFalse(noAllowance.buttons["dashboard-metric-grok.included-usage"].exists)
+        noAllowance.swipeUp()
         keep("Grok no eligible allowance", app: noAllowance)
     }
 
