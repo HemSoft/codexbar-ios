@@ -66,6 +66,31 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         }
     }
 
+    func testCandidateReportsTemporaryProviderOutageWithoutSavingAConnection() async throws {
+        let credential = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "access", refreshToken: "refresh",
+            expiresAt: Date().addingTimeInterval(3600), subject: "subject", email: nil
+        )
+        let session = makeSession([(200, #"{"sub":"subject"}"#), (503, "{}")])
+        defer { session.invalidateAndCancel() }
+        let provider = GrokUsageProvider(session: session)
+        do {
+            _ = try await provider.fetchCandidate(credential, for: .defaultConfiguration(for: .grok))
+            XCTFail("A provider outage is not an unsupported account")
+        } catch GrokAuthError.temporarilyUnavailable {
+            XCTAssertEqual(GrokTestProtocol.state.requests.count, 2)
+        }
+        let identityOutage = makeSession([(503, "{}")])
+        defer { identityOutage.invalidateAndCancel() }
+        do {
+            _ = try await GrokUsageProvider(session: identityOutage)
+                .fetchCandidate(credential, for: .defaultConfiguration(for: .grok))
+            XCTFail("A userinfo outage is not rejected authorization")
+        } catch GrokAuthError.temporarilyUnavailable {
+            XCTAssertEqual(GrokTestProtocol.state.requests.count, 1)
+        }
+    }
+
     @MainActor
     func testTransientFailuresOfferRetryButRejectedTokensOfferReconnect() async throws {
         let suite = "GrokAuthTests.\(UUID())"

@@ -89,6 +89,9 @@ public final class GrokUsageProvider: UsageProvider {
             throw GrokAuthError.invalidResponse
         }
         if response.statusCode == 401 || response.statusCode == 403 { throw GrokAuthError.unauthorized }
+        if response.statusCode == 429 || (500...599).contains(response.statusCode) {
+            throw GrokAuthError.temporarilyUnavailable
+        }
         guard response.statusCode == 200 else { throw GrokAuthError.unsupportedAccount }
         return try Self.parseCredits(data, configuration: configuration, subject: identity.sub, now: Date())
     }

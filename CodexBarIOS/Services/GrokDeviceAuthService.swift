@@ -46,6 +46,7 @@ enum GrokAuthError: LocalizedError, Equatable, Sendable {
     case denied
     case expired
     case unauthorized
+    case temporarilyUnavailable
     case unsupportedAccount
 
     var errorDescription: String? {
@@ -54,6 +55,7 @@ enum GrokAuthError: LocalizedError, Equatable, Sendable {
         case .denied: "Grok sign-in was declined. No account was changed."
         case .expired: "Grok sign-in expired. Start another attempt."
         case .unauthorized: "Grok authorization failed. Sign in again."
+        case .temporarilyUnavailable: "Grok usage is temporarily unavailable. Try again."
         case .unsupportedAccount: "Grok consumer usage is not available for this account."
         }
     }
@@ -158,8 +160,8 @@ struct GrokDeviceAuthService: Sendable {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         let (data, status) = try await send(request)
         if status == 401 || status == 403 { throw GrokAuthError.unauthorized }
-        guard status == 200,
-              let identity = try? JSONDecoder().decode(GrokIdentity.self, from: data),
+        guard status == 200 else { throw GrokAuthError.temporarilyUnavailable }
+        guard let identity = try? JSONDecoder().decode(GrokIdentity.self, from: data),
               !identity.sub.isEmpty else { throw GrokAuthError.invalidResponse }
         return identity
     }
