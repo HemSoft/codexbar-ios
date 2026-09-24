@@ -178,10 +178,15 @@ final class UITestFixtures {
         let now = Date()
         let start = ISO8601DateFormatter().string(from: now.addingTimeInterval(-2 * 86_400))
         let end = ISO8601DateFormatter().string(from: now.addingTimeInterval(5 * 86_400))
-        let unavailable = scenario == "grok-no-allowance"
+        let noAllowance = scenario == "grok-no-allowance"
+        let percentField = switch scenario {
+        case "grok-zero": ""
+        case "grok-no-allowance", "grok-percent-unavailable": "\"creditUsagePercent\":null,"
+        default: "\"creditUsagePercent\":31,"
+        }
         let data = Data("""
-            {"config":{"isUnifiedBillingUser":\(!unavailable),
-            "creditUsagePercent":\(unavailable ? "null" : "31"),
+            {"config":{"isUnifiedBillingUser":\(!noAllowance),
+            \(percentField)
             "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"},
             "prepaidBalance":{"val":500}}}
             """.utf8)

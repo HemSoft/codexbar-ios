@@ -73,9 +73,12 @@ identity to monitor, approve the device request, and return to CodexBar. The
 app verifies the identity and reads the shared usage period before securely
 saving the account's token. A verified weekly paid pool and the remaining Extra
 Usage Credits balance appear as separate values when supplied. A verified plan
-name suggests the account label without replacing your edits. API spending and
-Cursor's Grok Bot allowance are not Grok subscription meters. If the CLI does
-not verify a consumer allowance, the card says it is unavailable. Disconnect
+name suggests the account label without replacing your edits. When the CLI omits
+all usage fields for a verified paid plan's active shared weekly period, the
+card shows 0% with "No included usage reported by Grok." An explicit null or
+conflicting usage remains unavailable. API spending and Cursor's Grok Bot
+allowance are not Grok subscription meters. If the CLI does not verify a
+consumer allowance, the card says it is unavailable. Disconnect
 removes only this device's saved credential. The Grok Build CLI client and
 credits endpoint are first-party CLI contracts, not a published third-party
 API; see [the provider contract](GROK-CONSUMER-CONTRACT.md). Live sign-in and

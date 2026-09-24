@@ -105,16 +105,26 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
             kind: "grok-oauth-v1", accessToken: "access", refreshToken: "refresh",
             expiresAt: Date().addingTimeInterval(3600), subject: "subject-one", email: nil
         )
+        let formatter = ISO8601DateFormatter()
+        let start = formatter.string(from: Date().addingTimeInterval(-86_400))
+        let end = formatter.string(from: Date().addingTimeInterval(86_400))
         let session = makeSession([
             (200, #"{"sub":"subject-one"}"#),
-            (200, #"{"config":{"isUnifiedBillingUser":true,"subscriptionTier":"SuperGrok Heavy"}}"#),
-            (200, #"{"subscriptionTierDisplay":"SuperGrok Lite"}"#),
+            (200, """
+                {"config":{"isUnifiedBillingUser":true,"subscriptionTier":"SuperGrok Heavy",
+                "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"},
+                "prepaidBalance":{"val":500}}}
+                """),
+            (200, #"{"subscription_tier_display":"SuperGrok Lite"}"#),
         ])
         defer { session.invalidateAndCancel() }
         let result = try await GrokUsageProvider(session: session).fetchCandidate(
             credential, for: .defaultConfiguration(for: .grok)
         )
         XCTAssertEqual(result.verifiedGrokPlanName, "SuperGrok Lite")
+        XCTAssertEqual(result.bars.first?.used, 0)
+        XCTAssertEqual(result.bars.first?.resetsAt, formatter.date(from: end))
+        XCTAssertEqual(result.monetaryMetrics.map(\.minorUnits), [500])
         XCTAssertEqual(GrokTestProtocol.state.requests.map { $0.url?.path }, [
             "/oauth2/userinfo", "/v1/billing", "/v1/settings",
         ])

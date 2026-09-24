@@ -41,6 +41,56 @@ final class GrokUsageTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(result.monetaryMetrics.isEmpty)
     }
 
+    func testOmittedUsageOnVerifiedPaidWeeklyPeriodShowsZero() throws {
+        let data = Data(#"""
+            {"config":{"isUnifiedBillingUser":true,
+            "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-09-21T00:00:00Z",
+            "end":"2026-09-28T00:00:00Z"},"prepaidBalance":{"val":500}}}
+            """#.utf8)
+        let result = try GrokUsageProvider.parseCredits(
+            data, configuration: account, subject: "verified-user", now: now,
+            verifiedPlanName: "SuperGrok Lite"
+        )
+        XCTAssertEqual(result.verifiedGrokPlanName, "SuperGrok Lite")
+        XCTAssertEqual(result.bars.first?.used, 0)
+        XCTAssertEqual(result.bars.first?.resetsAt, ISO8601DateFormatter().date(from: "2026-09-28T00:00:00Z"))
+        XCTAssertEqual(result.subtitle, "No included usage reported by Grok.")
+        XCTAssertEqual(result.monetaryMetrics.map(\.minorUnits), [500])
+        let unknownTier = try GrokUsageProvider.parseCredits(
+            data, configuration: account, subject: "verified-user", now: now
+        )
+        XCTAssertTrue(unknownTier.bars.isEmpty)
+        let free = try GrokUsageProvider.parseCredits(
+            data, configuration: account, subject: "verified-user", now: now, verifiedPlanName: "Free"
+        )
+        XCTAssertTrue(free.bars.isEmpty)
+        let other = try GrokUsageProvider.parseCredits(
+            data, configuration: account, subject: "another-user", now: now, verifiedPlanName: "SuperGrok Lite"
+        )
+        XCTAssertNotEqual(result.cacheIdentity, other.cacheIdentity)
+    }
+
+    func testOmittedPercentWithOtherUsageOrNullStaysUnavailable() throws {
+        let extras = [
+            #""productUsage":[],"#,
+            #""used":{"val":0},"#,
+            #""creditUsagePercent":null,"#,
+            #""creditUsagePercent":-1,"#,
+        ]
+        for extra in extras {
+            let data = Data(#"""
+                {"config":{"isUnifiedBillingUser":true,\#(extra)
+                "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-09-21T00:00:00Z",
+                "end":"2026-09-28T00:00:00Z"}}}
+                """#.utf8)
+            let result = try GrokUsageProvider.parseCredits(
+                data, configuration: account, subject: "verified-user", now: now,
+                verifiedPlanName: "SuperGrok Lite"
+            )
+            XCTAssertTrue(result.bars.isEmpty, extra)
+        }
+    }
+
     func testMissingMalformedOrUnpaidAllowanceNeverBecomesZeroPercent() throws {
         for percent in ["null", "-1", "\"bad\""] {
             let payload = payload(percent: percent, period: "USAGE_PERIOD_TYPE_WEEKLY")
