@@ -12,6 +12,7 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
             (503, "{}"),
             (200, "{not-json"),
             (400, "{not-json"),
+            (0, ""),
             (200, #"{"access_token":"access-one","refresh_token":"refresh-one","token_type":"Bearer","expires_in":3600}"#),
             (200, #"{"sub":"subject-one","email":"fixture@example.invalid"}"#),
         ])
@@ -22,11 +23,12 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(credential.subject, "subject-one")
         XCTAssertEqual(credential.email, "fixture@example.invalid")
         let recordedDelays = await delays.values
-        XCTAssertEqual(recordedDelays, [5, 5, 10, 15, 20, 25, 30])
+        XCTAssertEqual(recordedDelays, [5, 5, 10, 15, 20, 25, 30, 35])
         let requests = GrokTestProtocol.state.requests
         XCTAssertEqual(requests.map { $0.url?.path }, [
             "/oauth2/device/code", "/oauth2/token", "/oauth2/token", "/oauth2/token",
-            "/oauth2/token", "/oauth2/token", "/oauth2/token", "/oauth2/token", "/oauth2/userinfo",
+            "/oauth2/token", "/oauth2/token", "/oauth2/token", "/oauth2/token",
+            "/oauth2/token", "/oauth2/userinfo",
         ])
         XCTAssertEqual(requests.last?.value(forHTTPHeaderField: "Authorization"), "Bearer access-one")
         XCTAssertTrue(requests.allSatisfy { $0.value(forHTTPHeaderField: "Cookie") == nil })
@@ -220,6 +222,16 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
 
     @MainActor
     func testRemovalDuringRenewalCannotRestoreAnOldCredential() async throws {
+        try await assertCredentialStaysRemovedDuringRenewal(resetAll: false)
+    }
+
+    @MainActor
+    func testResetDuringRenewalCannotRestoreAnOldCredential() async throws {
+        try await assertCredentialStaysRemovedDuringRenewal(resetAll: true)
+    }
+
+    @MainActor
+    private func assertCredentialStaysRemovedDuringRenewal(resetAll: Bool) async throws {
         let suite = "GrokAuthTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -247,7 +259,11 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         let provider = GrokUsageProvider(secretStore: secrets, session: session)
         let task = Task { try await provider.fetchUsage(for: account) }
         await fulfillment(of: [refreshStarted], timeout: 5)
-        XCTAssertTrue(store.removeAccount(account))
+        if resetAll {
+            XCTAssertTrue(store.resetAccounts())
+        } else {
+            XCTAssertTrue(store.removeAccount(account))
+        }
         allowRefresh.signal()
         let result = try await task.value
         XCTAssertNotNil(result.failureMessage)
@@ -282,6 +298,10 @@ private final class GrokTestProtocol: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         guard let reply = Self.state.next(request) else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        if reply.0 == 0 {
+            client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
             return
         }
         let response = HTTPURLResponse(url: request.url!, statusCode: reply.0, httpVersion: nil, headerFields: nil)!

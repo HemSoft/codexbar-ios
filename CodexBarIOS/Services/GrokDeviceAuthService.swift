@@ -114,10 +114,17 @@ struct GrokDeviceAuthService: Sendable {
             try await sleep(min(interval, max(0, challenge.expiresAt.timeIntervalSinceNow)))
             try Task.checkCancellation()
             guard Date() < challenge.expiresAt else { break }
-            let (data, status) = try await post("oauth2/token", values: [
-                ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-                ("device_code", challenge.code), ("client_id", Self.clientID),
-            ])
+            let reply: (Data, Int)
+            do {
+                reply = try await post("oauth2/token", values: [
+                    ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+                    ("device_code", challenge.code), ("client_id", Self.clientID),
+                ])
+            } catch let error as URLError where Self.isTransientNetworkError(error) {
+                interval = min(60, interval + 5)
+                continue
+            }
+            let (data, status) = reply
             if status == 200 {
                 guard let token = try? Self.token(data),
                       let refreshToken = token.refreshToken, !refreshToken.isEmpty else {
@@ -134,6 +141,13 @@ struct GrokDeviceAuthService: Sendable {
             interval = try Self.nextPollingInterval(data, status: status, current: interval)
         }
         throw GrokAuthError.expired
+    }
+
+    private static func isTransientNetworkError(_ error: URLError) -> Bool {
+        [
+            URLError.Code.timedOut, .networkConnectionLost, .cannotConnectToHost,
+            .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet,
+        ].contains(error.code)
     }
 
     private static func nextPollingInterval(_ data: Data, status: Int, current: TimeInterval) throws -> TimeInterval {

@@ -2799,6 +2799,14 @@ extension ProviderConfigurationStore {
 }
 
 extension ProviderConfigurationStore {
+    private func deleteAccountSecret(_ account: String, grokAccounts: Set<String>) throws {
+        if grokAccounts.contains(account) {
+            try GrokCredentialLock.withLock { try secretStore.deleteSecret(account: account) }
+        } else {
+            try secretStore.deleteSecret(account: account)
+        }
+    }
+
     @discardableResult
     public func resetAccounts() -> Bool {
         guard allowConfigurationMutation() else {
@@ -2810,6 +2818,8 @@ extension ProviderConfigurationStore {
         var seenKeychainAccounts = Set<String>()
         let codingAccounts = configurations.filter { $0.providerID == .gemini }
             .map { Self.geminiCodingKeychainAccount(accountID: $0.id) }
+        let grokAccounts = Set(configurations.filter { $0.providerID == .grok }.map { keychainAccount(for: $0) })
+            .union([keychainAccount(for: .grok)])
         for account in configurations.map({ keychainAccount(for: $0) })
             + ProviderID.allCases.map({ keychainAccount(for: $0) })
             + codingAccounts
@@ -2822,9 +2832,11 @@ extension ProviderConfigurationStore {
         var failedKeychainAccounts = Set<String>()
         for account in accountsToDelete {
             do {
-                try secretStore.deleteSecret(account: account)
+                try deleteAccountSecret(account, grokAccounts: grokAccounts)
                 if let configuration = configurations.first(where: {
-                    $0.providerID == .gemini && (keychainAccount(for: $0) == account || Self.geminiCodingKeychainAccount(accountID: $0.id) == account)
+                    ($0.providerID == .gemini || $0.providerID == .grok)
+                        && (keychainAccount(for: $0) == account
+                            || Self.geminiCodingKeychainAccount(accountID: $0.id) == account)
                 }) { credentialChanges.send(configuration.id) }
                 removedAccountIDs.formUnion(
                     configurations
