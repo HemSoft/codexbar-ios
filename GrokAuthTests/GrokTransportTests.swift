@@ -72,6 +72,64 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         }
     }
 
+    func testCandidateVerificationRetriesTransientIdentityAndBillingFailuresWithoutRepeatingApproval() async throws {
+        let credential = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "issued-token", refreshToken: "issued-refresh",
+            expiresAt: Date().addingTimeInterval(3600), subject: "subject-one", email: nil
+        )
+        let session = makeSession([
+            (503, "{}"),
+            (200, #"{"sub":"subject-one"}"#), (0, ""),
+            (200, #"{"sub":"subject-one"}"#), (200, "{not-json"),
+            (200, #"{"sub":"subject-one"}"#), (200, #"{"config":{}}"#),
+        ])
+        defer { session.invalidateAndCancel() }
+        let delays = GrokDelayRecorder()
+        let result = try await GrokUsageProvider(session: session).verifyCandidate(
+            credential, for: .defaultConfiguration(for: .grok), retryUntil: Date().addingTimeInterval(120),
+            sleep: { await delays.record($0) }
+        )
+        XCTAssertNil(result.failureMessage)
+        let recordedDelays = await delays.values
+        XCTAssertEqual(recordedDelays, [5, 10, 15])
+        XCTAssertEqual(GrokTestProtocol.state.requests.map { $0.url?.host }, [
+            "auth.x.ai", "auth.x.ai", "cli-chat-proxy.grok.com", "auth.x.ai",
+            "cli-chat-proxy.grok.com", "auth.x.ai", "cli-chat-proxy.grok.com",
+        ])
+    }
+
+    func testCandidateVerificationDoesNotRetryAChangedIdentity() async throws {
+        let credential = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "issued-token", refreshToken: "issued-refresh",
+            expiresAt: Date().addingTimeInterval(3600), subject: "subject-one", email: nil
+        )
+        let session = makeSession([(200, #"{"sub":"subject-two"}"#)])
+        defer { session.invalidateAndCancel() }
+        let delays = GrokDelayRecorder()
+        do {
+            _ = try await GrokUsageProvider(session: session).verifyCandidate(
+                credential, for: .defaultConfiguration(for: .grok), retryUntil: Date().addingTimeInterval(120),
+                sleep: { await delays.record($0) }
+            )
+            XCTFail("A different identity must not be retried or accepted")
+        } catch GrokAuthError.unauthorized {
+            XCTAssertEqual(GrokTestProtocol.state.requests.count, 1)
+            let recordedDelays = await delays.values
+            XCTAssertEqual(recordedDelays, [])
+        }
+        let expired = makeSession([(503, "{}")])
+        defer { expired.invalidateAndCancel() }
+        do {
+            _ = try await GrokUsageProvider(session: expired).verifyCandidate(
+                credential, for: .defaultConfiguration(for: .grok), retryUntil: .distantPast,
+                sleep: { _ in XCTFail("Retry must stop at its deadline") }
+            )
+            XCTFail("A provider outage must not be mistaken for verified usage")
+        } catch GrokAuthError.temporarilyUnavailable {
+            XCTAssertEqual(GrokTestProtocol.state.requests.count, 1)
+        }
+    }
+
     func testCandidateReportsTemporaryProviderOutageWithoutSavingAConnection() async throws {
         let credential = GrokCredential(
             kind: "grok-oauth-v1", accessToken: "access", refreshToken: "refresh",

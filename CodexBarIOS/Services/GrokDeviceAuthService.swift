@@ -165,7 +165,7 @@ struct GrokDeviceAuthService: Sendable {
         throw GrokAuthError.expired
     }
 
-    private static func isTransientNetworkError(_ error: URLError) -> Bool {
+    static func isTransientNetworkError(_ error: URLError) -> Bool {
         [
             URLError.Code.timedOut, .networkConnectionLost, .cannotConnectToHost,
             .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet,

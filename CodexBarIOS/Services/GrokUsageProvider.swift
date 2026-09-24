@@ -96,6 +96,34 @@ public final class GrokUsageProvider: UsageProvider {
         return try Self.parseCredits(data, configuration: configuration, subject: identity.sub, now: Date())
     }
 
+    func verifyCandidate(
+        _ credential: GrokCredential, for configuration: ProviderAccountConfiguration,
+        retryUntil deadline: Date,
+        sleep: @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
+    ) async throws -> ProviderUsageResult {
+        var interval: TimeInterval = 5
+        while true {
+            try Task.checkCancellation()
+            do {
+                return try await fetchCandidate(credential, for: configuration)
+            } catch {
+                guard Self.isRetryableCandidateFailure(error), Date() < deadline else { throw error }
+                try await sleep(min(interval, max(0, deadline.timeIntervalSinceNow)))
+                interval = min(20, interval + 5)
+            }
+        }
+    }
+
+    private static func isRetryableCandidateFailure(_ error: Error) -> Bool {
+        if let authError = error as? GrokAuthError {
+            return authError == .temporarilyUnavailable || authError == .invalidResponse
+        }
+        if let networkError = error as? URLError {
+            return GrokDeviceAuthService.isTransientNetworkError(networkError)
+        }
+        return false
+    }
+
     private func currentCredential(_ credential: GrokCredential, keychainAccount: String) async -> CredentialState {
         guard credential.expiresAt <= Date().addingTimeInterval(60) else { return .ready(credential) }
         let outcome = await Self.refreshCoordinator.run(for: keychainAccount) { [self] in

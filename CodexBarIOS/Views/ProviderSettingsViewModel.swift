@@ -1213,8 +1213,10 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     private func verifyAndSaveGrok(_ credential: GrokCredential, attempt: UUID) async throws {
-        grokMessage = "Checking Grok consumer usage..."
-        let result = try await grokUsageProvider.fetchCandidate(credential, for: configuration)
+        grokMessage = "Checking Grok consumer usage. Temporary outages may take up to two minutes to retry..."
+        let result = try await grokUsageProvider.verifyCandidate(
+            credential, for: configuration, retryUntil: Date().addingTimeInterval(120)
+        )
         guard grokAttemptID == attempt, !Task.isCancelled else { return }
         guard configurationStore.canReconnectGrok(credential, accountID: accountID) else {
             grokMessage = "This entry belongs to another Grok account. Add a separate account to track this identity."
