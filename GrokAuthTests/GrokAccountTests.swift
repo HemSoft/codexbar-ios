@@ -110,6 +110,26 @@ final class GrokAccountTests: XCTestCase {
         XCTAssertEqual(store.configuration(accountID: second.id)?.accountLabel, "SuperGrok Lite 2")
     }
 
+    @MainActor
+    func testWidgetUsesCurrentGrokLabelEvenBeforeTheNextUsageFetch() throws {
+        let suite = "GrokAuthTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(
+            defaults: defaults, secretStore: GrokTestSecrets(), widgetSnapshotDefaults: defaults
+        )
+        let account = store.addAccount(for: .grok)
+        XCTAssertTrue(store.replaceCredential(try credential(subject: "one").encoded(), for: account))
+        let result = try GrokUsageProvider.parseCredits(
+            Data(#"{"config":{"isUnifiedBillingUser":true,"prepaidBalance":{"val":0}}}"#.utf8),
+            configuration: account, subject: "one", now: Date(), verifiedPlanName: "SuperGrok Lite"
+        )
+        XCTAssertTrue(store.applyVerifiedGrokPlan(result))
+        XCTAssertEqual(result.title, account.accountLabel)
+        WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults)
+        XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.title, "SuperGrok Lite")
+    }
+
     private func credential(subject: String) -> GrokCredential {
         GrokCredential(
             kind: "grok-oauth-v1", accessToken: "fixture-token", refreshToken: "fixture-refresh",
