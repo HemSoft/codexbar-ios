@@ -132,7 +132,12 @@ public final class GrokUsageProvider: UsageProvider {
         ])
         guard status == 200 else { return [400, 401, 403].contains(status) ? .rejected : .temporarilyUnavailable }
         guard let token = try? GrokDeviceAuthService.token(data) else { return .rejected }
-        let identity = try await auth.userInfo(accessToken: token.accessToken)
+        let identity: GrokIdentity
+        do {
+            identity = try await auth.userInfo(accessToken: token.accessToken)
+        } catch GrokAuthError.unauthorized {
+            return .rejected
+        }
         guard identity.sub == credential.subject else { return .rejected }
         return .success(GrokCredential(
             kind: credential.kind, accessToken: token.accessToken,

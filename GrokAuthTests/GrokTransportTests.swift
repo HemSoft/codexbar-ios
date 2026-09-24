@@ -99,6 +99,14 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         let retryRenewal = try await GrokUsageProvider(secretStore: secrets, session: renewalOutage).fetchUsage(for: account)
         XCTAssertEqual(retryRenewal.recoveryAction, .retryRefresh)
         renewalOutage.invalidateAndCancel()
+
+        let rejectedRenewal = makeSession([
+            (200, #"{"access_token":"renewed","token_type":"Bearer","expires_in":3600}"#),
+            (401, "{}"),
+        ])
+        let reconnectRenewal = try await GrokUsageProvider(secretStore: secrets, session: rejectedRenewal).fetchUsage(for: account)
+        XCTAssertEqual(reconnectRenewal.recoveryAction, .reauthenticate)
+        rejectedRenewal.invalidateAndCancel()
     }
 
     @MainActor
