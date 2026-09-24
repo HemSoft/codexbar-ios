@@ -185,6 +185,19 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(reconnect.recoveryAction, .reauthenticate)
         rejected.invalidateAndCancel()
 
+        let nearExpiry = GrokCredential(
+            kind: credential.kind, accessToken: credential.accessToken, refreshToken: credential.refreshToken,
+            expiresAt: Date().addingTimeInterval(5), subject: credential.subject, email: nil
+        )
+        try secrets.saveSecret(nearExpiry.encoded(), account: key)
+        let nearExpiryOutage = makeSession([(503, "{}"), (401, "{}")])
+        let retryNearExpiry = try await GrokUsageProvider(secretStore: secrets, session: nearExpiryOutage)
+            .fetchUsage(for: account)
+        XCTAssertEqual(retryNearExpiry.recoveryAction, .retryRefresh)
+        XCTAssertEqual(GrokTestProtocol.state.requests.count, 1)
+        XCTAssertEqual(try secrets.readSecret(account: key), try nearExpiry.encoded())
+        nearExpiryOutage.invalidateAndCancel()
+
         let expired = GrokCredential(
             kind: credential.kind, accessToken: credential.accessToken, refreshToken: credential.refreshToken,
             expiresAt: Date().addingTimeInterval(-10), subject: credential.subject, email: nil

@@ -130,11 +130,7 @@ public final class GrokUsageProvider: UsageProvider {
             await self.refresh(credential, keychainAccount: keychainAccount)
         }
         if case .success(let updated) = outcome, updated.subject == credential.subject { return .ready(updated) }
-        if case .temporarilyUnavailable = outcome {
-            if credential.expiresAt > Date(), let saved = try? secretStore.readSecret(account: keychainAccount),
-               GrokCredential.parse(saved) == credential { return .ready(credential) }
-            return .retry
-        }
+        if case .temporarilyUnavailable = outcome { return .retry }
         return .reconnect
     }
 
