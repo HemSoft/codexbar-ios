@@ -9,6 +9,7 @@ final class WidgetConfigurationTests: XCTestCase {
             (.codex, "codex"),
             (.copilot, "copilot"),
             (.claude, "claude"),
+            (.grok, "grok"),
             (.cursor, "cursor"),
             (.moonshot, "moonshot"),
             (.openCodeZen, "openCodeZen"),

@@ -8,6 +8,14 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added guided Grok consumer sign-in and a shared included-usage meter with
+  provider-reported reset time, optional Extra Usage Credits balance and
+  product breakdown. Grok stays separate from Cursor's models and Grok Bot;
+  unsupported or missing allowances never appear as zero usage. Temporary
+  outages offer Retry; rejected authorization asks you to reconnect. Removing
+  a Grok connection clears its previous usage and history.
+  ([#355](https://github.com/HemSoft/codexbar-ios/issues/355))
+
 - Added separate GitHub Billing accounts for personal allowances, organization
   spend, budgets, discounts, and month-end projections. Guided GitHub sign-in,
   account selection, permission disclosures, and account-scoped Keychain

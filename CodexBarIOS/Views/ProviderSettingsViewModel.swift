@@ -12,6 +12,12 @@ struct ProviderCredentialPresentation: Equatable {
     let securityMessage: String?
 }
 
+enum GrokFixtureStage: String, Identifiable {
+    case approval
+    case connected
+    var id: String { "grok-fixture-approval" }
+}
+
 @MainActor
 final class ProviderSettingsViewModel: ObservableObject {
     private struct CredentialValidationFeedback {
@@ -46,6 +52,9 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published private(set) var githubBillingMessage: String?
     @Published private(set) var githubBillingAuthError: String?
     @Published private(set) var isSigningInWithClaude = false
+    @Published private(set) var isSigningInWithGrok = false
+    @Published private(set) var grokMessage: String?
+    @Published var grokFixtureStage: GrokFixtureStage?
     @Published private(set) var isSigningInWithCursor = false
     @Published var geminiBrowserSession: GeminiBrowserSignInSession?
     @Published private(set) var isSigningInWithGemini = false
@@ -91,6 +100,11 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var githubBillingConnectionAttemptID: UUID?
     private var ignoresNextGitHubBillingAuthDismissal = false
     private let claudeAuthService: ClaudeWebAuthService
+    private let grokAuthService: GrokDeviceAuthService
+    private let grokUsageProvider: GrokUsageProvider
+    private var grokAuthPresenter = PrivateWebAuthenticationPresenter()
+    private var grokSignInTask: Task<Void, Never>?
+    private var grokAttemptID: UUID?
     private let cursorAuthService: CursorWebAuthService
     private let copilotUsageProvider: CopilotUsageProvider
     private var codexSignInTask: Task<Void, Never>?
@@ -125,6 +139,8 @@ final class ProviderSettingsViewModel: ObservableObject {
         githubBillingAuthService: any GitHubBillingWebAuthenticating = GitHubBillingWebAuthService(),
         githubBillingUsageProvider: GitHubBillingUsageProvider = GitHubBillingUsageProvider(),
         claudeAuthService: ClaudeWebAuthService = ClaudeWebAuthService(),
+        grokAuthService: GrokDeviceAuthService = GrokDeviceAuthService(),
+        grokUsageProvider: GrokUsageProvider = GrokUsageProvider(),
         cursorAuthService: CursorWebAuthService = CursorWebAuthService(),
         copilotUsageProvider: CopilotUsageProvider = CopilotUsageProvider()
     ) {
@@ -143,6 +159,8 @@ final class ProviderSettingsViewModel: ObservableObject {
         self.githubBillingAuthService = githubBillingAuthService
         self.githubBillingUsageProvider = githubBillingUsageProvider
         self.claudeAuthService = claudeAuthService
+        self.grokAuthService = grokAuthService
+        self.grokUsageProvider = grokUsageProvider
         self.cursorAuthService = cursorAuthService
         self.copilotUsageProvider = copilotUsageProvider
         self.configuration = configurationStore.configuration(accountID: accountID)
@@ -200,7 +218,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     var availableAuthMethods: [ProviderAuthMethod] {
         switch providerID {
-        case .codex, .claude, .cursor, .gemini, .githubBilling, .openCodeZen:
+        case .codex, .claude, .grok, .cursor, .gemini, .githubBilling, .openCodeZen:
             [.browserSession]
         case .antigravity:
             [.cliToken]
@@ -438,6 +456,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func cancelAuthentication() {
+        cancelGrokSignIn()
         cancelOpenCodeSignIn()
         cancelGoogleCodingSignIn()
         cancelGeminiSignIn()
@@ -519,6 +538,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func removeSavedCredential(message: String? = nil) {
+        if providerID == .grok { cancelGrokSignIn() }
         if providerID == .openCodeZen { cancelOpenCodeSignIn() }
         if providerID == .gemini { cancelGeminiSignIn() }
         if providerID == .githubBilling { cancelAuthentication() }
@@ -1097,6 +1117,125 @@ final class ProviderSettingsViewModel: ObservableObject {
         }
     }
 
+    func startGrokSignIn() {
+        guard providerID == .grok, grokAttemptID == nil else { return }
+        #if DEBUG
+        if UITestFixtures.current != nil {
+            grokAttemptID = UUID()
+            isSigningInWithGrok = true
+            grokMessage = "Synthetic browser approval. No live account or credentials."
+            grokFixtureStage = .approval
+            return
+        }
+        #endif
+        flushPendingChanges()
+        grokMessage = "Starting Grok sign-in..."
+        isSigningInWithGrok = true
+        let attempt = UUID()
+        grokAttemptID = attempt
+        grokSignInTask = Task { [weak self] in
+            await self?.connectGrok(attempt: attempt)
+        }
+    }
+
+    func cancelGrokSignIn() {
+        guard grokAttemptID != nil else { return }
+        grokAttemptID = nil
+        grokSignInTask?.cancel()
+        grokSignInTask = nil
+        grokAuthPresenter.finish()
+        grokFixtureStage = nil
+        isSigningInWithGrok = false
+        grokMessage = "Grok sign-in canceled. The saved account was not changed."
+    }
+
+    #if DEBUG
+    func completeSyntheticGrokSignIn() {
+        guard UITestFixtures.current != nil, grokAttemptID != nil, grokFixtureStage == .approval else { return }
+        guard persistCredential("ui-test-credential", with: configuration) else {
+            grokMessage = "Synthetic credential could not be saved."
+            cancelGrokSignIn()
+            return
+        }
+        grokFixtureStage = .connected
+        grokMessage = "Synthetic Grok account connected. No live provider was accessed."
+        credentialsDidChange()
+        acceptUsageResult(UITestFixtures.grokResult(for: configuration))
+    }
+
+    func rejectSyntheticGrokSignIn() {
+        cancelGrokSignIn()
+        grokMessage = "Synthetic authorization declined. No account was changed."
+    }
+
+    func finishSyntheticGrokSignIn() {
+        grokFixtureStage = nil
+        grokAttemptID = nil
+        isSigningInWithGrok = false
+    }
+    #endif
+
+    private func connectGrok(attempt: UUID) async {
+        defer {
+            if grokAttemptID == attempt {
+                grokAttemptID = nil
+                grokSignInTask = nil
+                isSigningInWithGrok = false
+            }
+        }
+        do {
+            guard let credential = try await authorizeGrok(attempt: attempt) else { return }
+            try await verifyAndSaveGrok(credential, attempt: attempt)
+        } catch {
+            if grokAttemptID == attempt {
+                grokMessage = error is CancellationError ? "Grok sign-in canceled." : error.localizedDescription
+            }
+        }
+        if grokAttemptID == attempt { grokAuthPresenter.finish() }
+    }
+
+    private func authorizeGrok(attempt: UUID) async throws -> GrokCredential? {
+        let challenge = try await grokAuthService.begin()
+        guard grokAttemptID == attempt, !Task.isCancelled else { return nil }
+        guard grokAuthPresenter.present(
+            url: challenge.approvalURL, prefersEphemeralSession: false,
+            onCancel: { [weak self] in
+                if self?.grokAttemptID == attempt {
+                    self?.grokMessage = "Checking Grok approval. Cancel here if you did not approve."
+                }
+            }
+        ) else { throw GrokAuthError.invalidResponse }
+        grokMessage = "Choose your Grok account and approve sign-in in the browser. Waiting for approval..."
+        let credential = try await grokAuthService.authorize(challenge)
+        guard grokAttemptID == attempt, !Task.isCancelled else { return nil }
+        grokAuthPresenter.finish()
+        return credential
+    }
+
+    private func verifyAndSaveGrok(_ credential: GrokCredential, attempt: UUID) async throws {
+        grokMessage = "Checking Grok consumer usage. Temporary outages may take up to two minutes to retry..."
+        let result = try await grokUsageProvider.verifyCandidate(
+            credential, for: configuration, retryUntil: Date().addingTimeInterval(120)
+        )
+        guard grokAttemptID == attempt, !Task.isCancelled else { return }
+        guard configurationStore.canReconnectGrok(credential, accountID: accountID) else {
+            grokMessage = "This entry belongs to another Grok account. Add a separate account to track this identity."
+            return
+        }
+        var updated = configuration
+        updated.authMethod = .browserSession
+        if !configuration.hasCustomAccountLabel, let email = credential.email, !email.isEmpty {
+            updated.accountLabel = email
+        }
+        guard persistCredential(try credential.encoded(), with: updated) else {
+            grokMessage = configurationStore.lastError ?? "Grok authorization could not be saved securely."
+            return
+        }
+        grokMessage = "Grok account connected."
+        credentialsDidChange()
+        acceptUsageResult(result)
+    }
+
     func startCursorSignIn() {
         guard cursorSignInTask == nil else { return }
         cursorSignInTask = Task { @MainActor in
@@ -1491,7 +1630,7 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     private func normalizedConfiguration(_ configuration: ProviderAccountConfiguration) -> ProviderAccountConfiguration {
         var normalized = configuration
-        if [.codex, .githubBilling, .claude, .cursor, .gemini, .openCodeZen].contains(configuration.providerID) {
+        if [.codex, .githubBilling, .claude, .grok, .cursor, .gemini, .openCodeZen].contains(configuration.providerID) {
             normalized.authMethod = .browserSession
         }
         return normalized

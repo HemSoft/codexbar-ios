@@ -426,6 +426,7 @@ enum CodexAccountIdentityValidation: Equatable {
 @MainActor
 public final class ProviderConfigurationStore: ObservableObject {
     let credentialChanges = PassthroughSubject<String, Never>()
+    let grokHistoryInvalidations = PassthroughSubject<String, Never>()
     @Published public private(set) var confirmedGoogleAccountLinks: [String: String]
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
     @Published public private(set) var groups: [ProviderAccountGroup]
@@ -753,12 +754,10 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         do {
             let data = try JSONEncoder().encode(updatedConfigurations)
-            if credential.isEmpty {
-                try secretStore.deleteSecret(account: keychainAccount(for: normalized))
-            } else {
-                try secretStore.saveSecret(credential, account: keychainAccount(for: normalized))
+            try writeAccountSecret(credential, for: normalized)
+            if normalized.providerID == .gemini || normalized.providerID == .grok {
+                credentialChanges.send(normalized.id)
             }
-            if normalized.providerID == .gemini { credentialChanges.send(normalized.id) }
             defaults.set(data, forKey: configurationsKey)
             configurations = updatedConfigurations
             if isNewAccount, metricLayouts[normalized.id] == nil {
@@ -800,7 +799,8 @@ public final class ProviderConfigurationStore: ObservableObject {
                     try secretStore.deleteSecret(account: Self.geminiCodingKeychainAccount(accountID: configuration.id))
                     credentialChanges.send(configuration.id)
                 }
-                try secretStore.deleteSecret(account: keychainAccount(for: configuration))
+                try writeAccountSecret(nil, for: configuration)
+                if configuration.providerID == .grok { credentialChanges.send(configuration.id) }
                 configurations.removeAll { $0.id == configuration.id }
                 removedAccountIDs.insert(configuration.id)
                 removedAnyAccount = true
@@ -1503,19 +1503,40 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         do {
-            if secret.isEmpty {
-                try secretStore.deleteSecret(account: keychainAccount(for: configuration))
-            } else {
-                try secretStore.saveSecret(secret, account: keychainAccount(for: configuration))
-            }
+            try writeAccountSecret(secret, for: configuration)
 
-            if configuration.providerID == .gemini { credentialChanges.send(configuration.id) }
+            if configuration.providerID == .gemini || configuration.providerID == .grok {
+                credentialChanges.send(configuration.id)
+            }
             lastError = nil
             refreshSecretAvailability()
             return true
         } catch {
             lastError = error.localizedDescription
             return false
+        }
+    }
+
+    private func writeAccountSecret(_ value: String?, for configuration: ProviderAccountConfiguration) throws {
+        var changedGrokSubject = false
+        let write = {
+            let account = self.keychainAccount(for: configuration)
+            if configuration.providerID == .grok {
+                let previous = GrokCredential.parse(try self.secretStore.readSecret(account: account))?.subject
+                let replacement = GrokCredential.parse(value)?.subject
+                changedGrokSubject = previous != nil && previous != replacement
+            }
+            if let value, !value.isEmpty {
+                try self.secretStore.saveSecret(value, account: account)
+            } else {
+                try self.secretStore.deleteSecret(account: account)
+            }
+        }
+        if configuration.providerID == .grok {
+            try GrokCredentialLock.withLock(write)
+            if changedGrokSubject { grokHistoryInvalidations.send(configuration.id) }
+        } else {
+            try write()
         }
     }
 
@@ -1527,6 +1548,17 @@ public final class ProviderConfigurationStore: ObservableObject {
                 workspaceID: workspaceID, configuredWorkspace: current.openCodeWorkspaceId,
                 credential: credential, savedCredential: saved
             )
+        } catch {
+            return false
+        }
+    }
+
+    func canReconnectGrok(_ candidate: GrokCredential, accountID: String) -> Bool {
+        guard let current = configuration(accountID: accountID), current.providerID == .grok else { return false }
+        do {
+            let stored = try secretStore.readSecret(account: Self.keychainAccount(for: current))
+            guard let stored else { return true }
+            return GrokCredential.parse(stored)?.subject == candidate.subject
         } catch {
             return false
         }
@@ -1645,7 +1677,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 && !configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
-        if configuration.requiresSecret || [.codex, .claude, .cursor, .gemini].contains(configuration.providerID) {
+        if configuration.requiresSecret || [.codex, .claude, .cursor, .gemini, .grok].contains(configuration.providerID) {
             return hasSecret(for: configuration)
         }
 
@@ -2320,7 +2352,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         switch configuration.providerID {
-        case .codex, .githubBilling, .cursor, .gemini:
+        case .codex, .githubBilling, .cursor, .gemini, .grok:
             normalized.authMethod = .browserSession
         case .antigravity:
             normalized.authMethod = .cliToken
@@ -2456,6 +2488,13 @@ public extension ProviderConfigurationStore {
                 id: AppStoreScreenshotFixtureID.claudeAccount,
                 providerID: .claude,
                 accountLabel: "Claude Pro",
+                groupID: usageGroup.id,
+                authMethod: .browserSession
+            ),
+            ProviderAccountConfiguration(
+                id: AppStoreScreenshotFixtureID.grokAccount,
+                providerID: .grok,
+                accountLabel: "Sample Grok",
                 groupID: usageGroup.id,
                 authMethod: .browserSession
             ),
@@ -2768,6 +2807,14 @@ extension ProviderConfigurationStore {
 }
 
 extension ProviderConfigurationStore {
+    private func deleteAccountSecret(_ account: String, grokAccounts: Set<String>) throws {
+        if grokAccounts.contains(account) {
+            try GrokCredentialLock.withLock { try secretStore.deleteSecret(account: account) }
+        } else {
+            try secretStore.deleteSecret(account: account)
+        }
+    }
+
     @discardableResult
     public func resetAccounts() -> Bool {
         guard allowConfigurationMutation() else {
@@ -2779,6 +2826,8 @@ extension ProviderConfigurationStore {
         var seenKeychainAccounts = Set<String>()
         let codingAccounts = configurations.filter { $0.providerID == .gemini }
             .map { Self.geminiCodingKeychainAccount(accountID: $0.id) }
+        let grokAccounts = Set(configurations.filter { $0.providerID == .grok }.map { keychainAccount(for: $0) })
+            .union([keychainAccount(for: .grok)])
         for account in configurations.map({ keychainAccount(for: $0) })
             + ProviderID.allCases.map({ keychainAccount(for: $0) })
             + codingAccounts
@@ -2791,10 +2840,15 @@ extension ProviderConfigurationStore {
         var failedKeychainAccounts = Set<String>()
         for account in accountsToDelete {
             do {
-                try secretStore.deleteSecret(account: account)
+                try deleteAccountSecret(account, grokAccounts: grokAccounts)
                 if let configuration = configurations.first(where: {
-                    $0.providerID == .gemini && (keychainAccount(for: $0) == account || Self.geminiCodingKeychainAccount(accountID: $0.id) == account)
-                }) { credentialChanges.send(configuration.id) }
+                    ($0.providerID == .gemini || $0.providerID == .grok)
+                        && (keychainAccount(for: $0) == account
+                            || Self.geminiCodingKeychainAccount(accountID: $0.id) == account)
+                }) {
+                    credentialChanges.send(configuration.id)
+                    if configuration.providerID == .grok { grokHistoryInvalidations.send(configuration.id) }
+                }
                 removedAccountIDs.formUnion(
                     configurations
                         .filter { keychainAccount(for: $0) == account }

@@ -302,7 +302,7 @@ public extension ProviderAccountConfiguration {
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .githubBilling:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
-        case .claude:
+        case .claude, .grok:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .antigravity:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .cliToken)

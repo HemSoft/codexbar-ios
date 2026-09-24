@@ -20,7 +20,7 @@ attachments and the accessibility hierarchy from the result bundle. Open the
 
 ## Journeys
 
-All eleven tests start with a new UUID storage namespace and use accessibility text
+All thirteen tests start with a new UUID storage namespace and use accessibility text
 size 2, English labels, and the US locale. Navigation uses the real views and
 actions. Tests wait for settings destinations, keep text fields inside the
 visible form below its navigation bar, and wait for the keyboard before
@@ -88,6 +88,13 @@ it. Animations retain the normal app behavior.
   verifies that failed usage validation does not save a connection and permits
   another attempt or cancellation. See [OpenCode sign-in](OPENCODE-SIGN-IN.md)
   for local auth transport and quota regressions.
+- `GrokSignInUITests` exercises Grok's Add Account entry, synthetic approval,
+  cancellation, reconnect and removal. A second journey shows the shared Grok
+  meter beside Cursor's separate Grok Bot meter and a no-allowance state.
+  Neither journey authorizes a real account or contacts xAI. On iPadOS versions
+  that do not expose context-menu actions to XCTest, the More Information
+  relaunch hook targets only the Grok account using
+  `CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT=ui-grok-connected`.
 
 The tests assert accessible names, values, selection state, and reachable tap
 targets. They cover app-owned account and usage navigation. Live website sign-in,
@@ -131,8 +138,8 @@ own UUIDs, so separate tests and devices cannot reuse each other's state.
 The fixture supplies this suite to account configuration, history, app review,
 app updates, GitHub preferences, and widget preferences. Its credential store
 uses the same suite and accepts only fixed synthetic test credentials. It never
-reads or writes Keychain. Only synthetic OpenRouter, combined Gemini, and GitHub
-Billing usage providers are registered. The production account form, group
+reads or writes Keychain. Only synthetic OpenRouter, combined Gemini, GitHub Billing, Grok and Cursor
+usage providers are registered. The production account form, group
 persistence, refresh service, dashboard, History, and URL handler still execute.
 
 The fixture disables lifecycle polling and bootstrap imports, uses a notifier
@@ -155,7 +162,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than eleven passed tests with zero skips or
+runner rejects anything other than thirteen passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

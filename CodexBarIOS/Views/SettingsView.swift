@@ -1669,6 +1669,8 @@ extension ProviderID {
             "creditcard"
         case .claude:
             "text.bubble"
+        case .grok:
+            "sparkle.magnifyingglass"
         case .openRouter:
             "network"
         case .openCodeZen:

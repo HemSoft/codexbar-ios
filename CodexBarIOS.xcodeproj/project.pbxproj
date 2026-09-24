@@ -83,6 +83,8 @@
 		A31400000000000000000101 /* AntigravityCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31400000000000000000102 /* AntigravityCredentials.swift */; };
 		A35300000000000000000301 /* OpenCodeDeviceAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000302 /* OpenCodeDeviceAuthService.swift */; };
 		A35300000000000000000401 /* OpenCodeConsoleUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000402 /* OpenCodeConsoleUsageProvider.swift */; };
+		A35500000000000000000101 /* GrokDeviceAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35500000000000000000102 /* GrokDeviceAuthService.swift */; };
+		A35500000000000000000201 /* GrokUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35500000000000000000202 /* GrokUsageProvider.swift */; };
 		A35300000000000000000201 /* OpenCodeBrowserSessionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000202 /* OpenCodeBrowserSessionPolicy.swift */; };
 		A29900000000000000000001 /* GeminiBrowserSessionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */; };
 		10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000003F /* MoonshotUsageProvider.swift */; };
@@ -149,6 +151,7 @@
 		F31000000000000000000007 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F32000000000000000000006 /* PrivacyInfo.xcprivacy */; };
 		F31000000000000000000008 /* CodexBarWatchWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F32000000000000000000008 /* CodexBarWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A35300000000000000000001 /* OpenCodeSignInUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000002 /* OpenCodeSignInUITests.swift */; };
+		A35500000000000000000301 /* GrokSignInUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35500000000000000000302 /* GrokSignInUITests.swift */; };
 		A30700000000000000000001 /* AccountJourneysUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30700000000000000000011 /* AccountJourneysUITests.swift */; };
 		A30700000000000000000002 /* UITestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30700000000000000000012 /* UITestFixtures.swift */; };
 /* End PBXBuildFile section */
@@ -302,6 +305,8 @@
 		A31400000000000000000102 /* AntigravityCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntigravityCredentials.swift; sourceTree = "<group>"; };
 		A35300000000000000000302 /* OpenCodeDeviceAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeDeviceAuthService.swift; sourceTree = "<group>"; };
 		A35300000000000000000402 /* OpenCodeConsoleUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeConsoleUsageProvider.swift; sourceTree = "<group>"; };
+		A35500000000000000000102 /* GrokDeviceAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokDeviceAuthService.swift; sourceTree = "<group>"; };
+		A35500000000000000000202 /* GrokUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokUsageProvider.swift; sourceTree = "<group>"; };
 		A35300000000000000000202 /* OpenCodeBrowserSessionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeBrowserSessionPolicy.swift; sourceTree = "<group>"; };
 		A29900000000000000000002 /* GeminiBrowserSessionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiBrowserSessionPolicy.swift; sourceTree = "<group>"; };
 		20000000000000000000003F /* MoonshotUsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonshotUsageProvider.swift; sourceTree = "<group>"; };
@@ -368,6 +373,7 @@
 		F32000000000000000000007 /* CodexBarWatchWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodexBarWatchWidget.entitlements; sourceTree = "<group>"; };
 		F32000000000000000000008 /* CodexBarWatchWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CodexBarWatchWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A35300000000000000000002 /* OpenCodeSignInUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeSignInUITests.swift; sourceTree = "<group>"; };
+		A35500000000000000000302 /* GrokSignInUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokSignInUITests.swift; sourceTree = "<group>"; };
 		A30700000000000000000011 /* AccountJourneysUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountJourneysUITests.swift; sourceTree = "<group>"; };
 		A30700000000000000000012 /* UITestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFixtures.swift; sourceTree = "<group>"; };
 		A30700000000000000000013 /* CodexBarIOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexBarIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -525,6 +531,8 @@
 				A35300000000000000000202 /* OpenCodeBrowserSessionPolicy.swift */,
 				A35300000000000000000302 /* OpenCodeDeviceAuthService.swift */,
 				A35300000000000000000402 /* OpenCodeConsoleUsageProvider.swift */,
+				A35500000000000000000102 /* GrokDeviceAuthService.swift */,
+				A35500000000000000000202 /* GrokUsageProvider.swift */,
 				20000000000000000000003F /* MoonshotUsageProvider.swift */,
 				200000000000000000000040 /* TokenEndpointErrorFormatter.swift */,
 				200000000000000000000041 /* ProviderAuthSupport.swift */,
@@ -676,6 +684,7 @@
 			children = (
 				A30700000000000000000011 /* AccountJourneysUITests.swift */,
 				A35300000000000000000002 /* OpenCodeSignInUITests.swift */,
+				A35500000000000000000302 /* GrokSignInUITests.swift */,
 			);
 			path = CodexBarIOSUITests;
 			sourceTree = "<group>";
@@ -1005,6 +1014,8 @@
 				A35300000000000000000201 /* OpenCodeBrowserSessionPolicy.swift in Sources */,
 				A35300000000000000000301 /* OpenCodeDeviceAuthService.swift in Sources */,
 				A35300000000000000000401 /* OpenCodeConsoleUsageProvider.swift in Sources */,
+				A35500000000000000000101 /* GrokDeviceAuthService.swift in Sources */,
+				A35500000000000000000201 /* GrokUsageProvider.swift in Sources */,
 				10000000000000000000003F /* MoonshotUsageProvider.swift in Sources */,
 				100000000000000000000040 /* TokenEndpointErrorFormatter.swift in Sources */,
 				100000000000000000000041 /* ProviderAuthSupport.swift in Sources */,
@@ -1121,6 +1132,7 @@
 			files = (
 				A30700000000000000000001 /* AccountJourneysUITests.swift in Sources */,
 				A35300000000000000000001 /* OpenCodeSignInUITests.swift in Sources */,
+				A35500000000000000000301 /* GrokSignInUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
