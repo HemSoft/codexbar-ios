@@ -298,6 +298,33 @@ struct ProviderSettingsView: View {
                         Text(claudeAuthError)
                             .foregroundStyle(.red)
                     }
+                } else if providerID == .grok {
+                    Button(configurationStore.hasSecret(for: configuration) ? "Reconnect Grok" : "Sign in with Grok") {
+                        viewModel.startGrokSignIn()
+                    }
+                    .disabled(viewModel.isSigningInWithGrok)
+                    .accessibilityIdentifier("grok-sign-in")
+
+                    if viewModel.isSigningInWithGrok {
+                        ProgressView("Waiting for Grok approval...")
+                        Button("Cancel Sign-In") { viewModel.cancelGrokSignIn() }
+                    }
+                    Text("Choose your Grok account in the browser. CodexBar reads consumer usage only; "
+                        + "it never purchases credits or links accounts. Tokens stay on this device in Keychain. "
+                        + "Grok Bot usage from Cursor remains separate.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    if configurationStore.hasSecret(for: configuration) {
+                        Button("Disconnect Grok", role: .destructive) {
+                            viewModel.removeSavedCredential()
+                        }
+                    }
+                    if let grokMessage = viewModel.grokMessage {
+                        Text(grokMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("grok-sign-in-status")
+                    }
                 } else if providerID == .cursor {
                     Button {
                         viewModel.startCursorSignIn()
@@ -499,6 +526,16 @@ struct ProviderSettingsView: View {
             viewModel.flushPendingChanges()
             viewModel.cancelAuthentication()
         }
+        #if DEBUG
+        .sheet(item: $viewModel.grokFixtureStage) { stage in
+            GrokSyntheticApprovalView(
+                stage: stage,
+                approve: { viewModel.completeSyntheticGrokSignIn() },
+                reject: { viewModel.rejectSyntheticGrokSignIn() },
+                finish: { viewModel.finishSyntheticGrokSignIn() }
+            )
+        }
+        #endif
         .sheet(item: $viewModel.openCodeBrowserSession) { session in
             OpenCodeBrowserSignInView(session: session)
         }
@@ -674,6 +711,43 @@ struct ProviderSettingsView: View {
     }
 
 }
+
+#if DEBUG
+private struct GrokSyntheticApprovalView: View {
+    let stage: GrokFixtureStage
+    let approve: () -> Void
+    let reject: () -> Void
+    let finish: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Image(systemName: "safari").font(.largeTitle)
+                Text(stage == .approval ? "Choose a Grok account" : "Grok account connected")
+                    .font(.headline)
+                Text("Synthetic approval. No live account, browser request, or credentials.")
+                    .font(.footnote)
+                if stage == .approval {
+                    Button("Approve sample account", action: approve)
+                        .buttonStyle(.borderedProminent)
+                    Button("Decline", action: reject)
+                } else {
+                    Button("Return to Grok settings", action: finish)
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding()
+            .navigationTitle("Grok sign-in")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { reject() }
+                }
+            }
+        }
+        .interactiveDismissDisabled()
+    }
+}
+#endif
 
 struct PresentedAuthURL: Identifiable {
     let id = UUID()

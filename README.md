@@ -11,7 +11,7 @@ The Windows reference implementation is checked out beside this repo at:
 ## Current Scope
 
 - SwiftUI dashboard with account-scoped usage cards for Codex, GitHub Copilot,
-  GitHub Billing, Claude, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot
+  GitHub Billing, Claude, Grok, Cursor, OpenRouter, OpenCode Go + Zen, Moonshot
   (Kimi), Greptile, and Google Gemini
 - Live provider adapters and settings for enabling accounts, choosing supported
   authentication methods, labeling accounts, and storing credentials in Keychain
@@ -65,6 +65,18 @@ to start a separate session. Google may still require identity verification.
 No credential JSON or workspace-ID entry is required. See
 [OpenCode sign-in](OPENCODE-SIGN-IN.md) for reconnection, local validation, and
 pending live-provider checks.
+
+## Grok sign-in
+
+Grok consumer usage uses guided approval in a system browser. Choose the Grok
+identity to monitor, approve the device request, and return to CodexBar. The
+app verifies the identity and reads the shared usage period before securely
+saving the account's token. Included usage, optional credit balance and
+product breakdown are kept separate from Cursor Models and Grok Bot. Disconnect
+removes only this device's saved credential. The Grok Build CLI client and
+credits endpoint are first-party CLI contracts, not a published third-party
+API; see [the provider contract](GROK-CONSUMER-CONTRACT.md). Live sign-in and
+quota comparison are pending with the account owner.
 
 ## GitHub Copilot Sign-In
 

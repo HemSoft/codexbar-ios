@@ -653,6 +653,7 @@ public extension UsageRefreshService {
                 CopilotUsageProvider(),
                 GitHubBillingUsageProvider(),
                 ClaudeUsageProvider(),
+                GrokUsageProvider(),
                 OpenRouterUsageProvider(),
                 OpenCodeZenUsageProvider(),
                 MoonshotUsageProvider(),

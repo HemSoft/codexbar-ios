@@ -5,6 +5,7 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
     case copilot
     case githubBilling
     case claude
+    case grok
     case openRouter
     case openCodeZen
     case moonshot
@@ -27,6 +28,8 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
             "GitHub Billing"
         case .claude:
             "Claude"
+        case .grok:
+            "Grok"
         case .openRouter:
             "OpenRouter"
         case .openCodeZen:
@@ -46,7 +49,7 @@ public enum ProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
 
     public var supportsPlanBadge: Bool {
         switch self {
-        case .codex, .copilot, .githubBilling, .claude:
+        case .codex, .copilot, .githubBilling, .claude, .grok:
             true
         case .openRouter, .openCodeZen, .moonshot, .cursor, .greptile, .gemini, .antigravity:
             false

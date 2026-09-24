@@ -256,16 +256,17 @@ struct ProviderUsageCard: View {
     @State private var resetFeedback: CodexBankedResetRedemptionFeedback?
     @State private var isResetActionUnavailable = false
     @State private var isCustomizingMetrics = false
-    @State private var isShowingMoreInformation = Self.presentsFixtureInformationSheetOnLaunch
+    @State private var isShowingMoreInformation = false
 
     /// Simulator-only fixture hook: the More Information sheet opens directly when
     /// a journey relaunches with CODEXBAR_UI_TEST_MORE_INFORMATION=1. Production
     /// builds keep the menu-only entry point.
-    private static var presentsFixtureInformationSheetOnLaunch: Bool {
+    private static func presentsFixtureInformationSheetOnLaunch(for accountID: String) -> Bool {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
-        guard environment["CODEXBAR_UI_TESTS"] == "1" else { return false }
-        return environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1"
+        guard environment["CODEXBAR_UI_TESTS"] == "1",
+              environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1" else { return false }
+        return environment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"].map { $0 == accountID } ?? true
         #else
         return false
         #endif
@@ -364,6 +365,9 @@ struct ProviderUsageCard: View {
                 : options
         }
         self.onMetricsDiscovered = onMetricsDiscovered
+        _isShowingMoreInformation = State(
+            initialValue: Self.presentsFixtureInformationSheetOnLaunch(for: result.accountID)
+        )
         _resetRedemptionController = StateObject(
             wrappedValue: CodexBankedResetRedemptionController(
                 retainedAttempt: retainedCodexResetAttempt,

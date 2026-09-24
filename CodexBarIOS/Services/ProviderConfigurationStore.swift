@@ -753,11 +753,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         do {
             let data = try JSONEncoder().encode(updatedConfigurations)
-            if credential.isEmpty {
-                try secretStore.deleteSecret(account: keychainAccount(for: normalized))
-            } else {
-                try secretStore.saveSecret(credential, account: keychainAccount(for: normalized))
-            }
+            try writeAccountSecret(credential, for: normalized)
             if normalized.providerID == .gemini { credentialChanges.send(normalized.id) }
             defaults.set(data, forKey: configurationsKey)
             configurations = updatedConfigurations
@@ -800,7 +796,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                     try secretStore.deleteSecret(account: Self.geminiCodingKeychainAccount(accountID: configuration.id))
                     credentialChanges.send(configuration.id)
                 }
-                try secretStore.deleteSecret(account: keychainAccount(for: configuration))
+                try writeAccountSecret(nil, for: configuration)
                 configurations.removeAll { $0.id == configuration.id }
                 removedAccountIDs.insert(configuration.id)
                 removedAnyAccount = true
@@ -1503,11 +1499,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         do {
-            if secret.isEmpty {
-                try secretStore.deleteSecret(account: keychainAccount(for: configuration))
-            } else {
-                try secretStore.saveSecret(secret, account: keychainAccount(for: configuration))
-            }
+            try writeAccountSecret(secret, for: configuration)
 
             if configuration.providerID == .gemini { credentialChanges.send(configuration.id) }
             lastError = nil
@@ -1519,6 +1511,22 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 
+    private func writeAccountSecret(_ value: String?, for configuration: ProviderAccountConfiguration) throws {
+        let write = {
+            let account = self.keychainAccount(for: configuration)
+            if let value, !value.isEmpty {
+                try self.secretStore.saveSecret(value, account: account)
+            } else {
+                try self.secretStore.deleteSecret(account: account)
+            }
+        }
+        if configuration.providerID == .grok {
+            try GrokCredentialLock.withLock(write)
+        } else {
+            try write()
+        }
+    }
+
     func canReconnectOpenCodeSession(_ credential: String, workspaceID: String, accountID: String) -> Bool {
         guard let current = configuration(accountID: accountID), current.providerID == .openCodeZen else { return false }
         do {
@@ -1527,6 +1535,17 @@ public final class ProviderConfigurationStore: ObservableObject {
                 workspaceID: workspaceID, configuredWorkspace: current.openCodeWorkspaceId,
                 credential: credential, savedCredential: saved
             )
+        } catch {
+            return false
+        }
+    }
+
+    func canReconnectGrok(_ candidate: GrokCredential, accountID: String) -> Bool {
+        guard let current = configuration(accountID: accountID), current.providerID == .grok else { return false }
+        do {
+            let stored = try secretStore.readSecret(account: Self.keychainAccount(for: current))
+            guard let stored else { return true }
+            return GrokCredential.parse(stored)?.subject == candidate.subject
         } catch {
             return false
         }
@@ -1645,7 +1664,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 && !configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
-        if configuration.requiresSecret || [.codex, .claude, .cursor, .gemini].contains(configuration.providerID) {
+        if configuration.requiresSecret || [.codex, .claude, .cursor, .gemini, .grok].contains(configuration.providerID) {
             return hasSecret(for: configuration)
         }
 
@@ -2320,7 +2339,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         switch configuration.providerID {
-        case .codex, .githubBilling, .cursor, .gemini:
+        case .codex, .githubBilling, .cursor, .gemini, .grok:
             normalized.authMethod = .browserSession
         case .antigravity:
             normalized.authMethod = .cliToken
@@ -2456,6 +2475,13 @@ public extension ProviderConfigurationStore {
                 id: AppStoreScreenshotFixtureID.claudeAccount,
                 providerID: .claude,
                 accountLabel: "Claude Pro",
+                groupID: usageGroup.id,
+                authMethod: .browserSession
+            ),
+            ProviderAccountConfiguration(
+                id: AppStoreScreenshotFixtureID.grokAccount,
+                providerID: .grok,
+                accountLabel: "Sample Grok",
                 groupID: usageGroup.id,
                 authMethod: .browserSession
             ),

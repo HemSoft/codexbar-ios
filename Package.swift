@@ -42,6 +42,14 @@ let package = Package(
                 .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
             ]
         ),
+        .testTarget(
+            name: "GrokAuthTests",
+            dependencies: ["CodexBarIOS"],
+            path: "GrokAuthTests",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
+            ]
+        ),
         .executableTarget(
             name: "UsageHistoryBenchmark",
             dependencies: ["CodexBarIOS"],

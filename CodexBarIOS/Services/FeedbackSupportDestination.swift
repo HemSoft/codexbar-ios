@@ -388,6 +388,8 @@ extension ProviderID {
             "GitHub Billing"
         case .claude:
             "Claude"
+        case .grok:
+            "Grok"
         case .openRouter:
             "OpenRouter"
         case .openCodeZen:

@@ -105,8 +105,8 @@ xcrun xcresulttool get test-results summary \
 # suite can otherwise make xcodebuild return success without testing the flows.
 if ! jq -e '
   .result == "Passed"
-  and .totalTestCount == 11
-  and .passedTests == 11
+  and .totalTestCount == 13
+  and .passedTests == 13
   and .failedTests == 0
   and .skippedTests == 0
   and .expectedFailures == 0

@@ -17,6 +17,7 @@ enum AppStoreScreenshotFixtureID {
     static let copilotAccount = "app-store-screenshots.copilot"
     static let githubBillingAccount = "app-store-screenshots.github-billing"
     static let claudeAccount = "app-store-screenshots.claude"
+    static let grokAccount = "app-store-screenshots.grok"
     static let cursorAccount = "app-store-screenshots.cursor"
     static let openRouterAccount = "app-store-screenshots.openrouter"
     static let openCodeZenAccount = "app-store-screenshots.opencodzen"

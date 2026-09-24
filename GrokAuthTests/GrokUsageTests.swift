@@ -1,0 +1,79 @@
+import Foundation
+import XCTest
+@testable import CodexBarIOS
+
+final class GrokUsageTests: XCTestCase, @unchecked Sendable {
+    private let now = ISO8601DateFormatter().date(from: "2026-09-23T12:00:00Z")!
+    private let account = ProviderAccountConfiguration.defaultConfiguration(for: .grok)
+
+    func testWeeklyUsageZeroAndFinancialValuesStaySeparate() throws {
+        let result = try parse(#"""
+            {"config":{"isUnifiedBillingUser":true,"creditUsagePercent":0,
+            "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-09-21T00:00:00Z",
+            "end":"2026-09-28T00:00:00Z"},"billingPeriodEnd":"2026-10-01T00:00:00Z",
+            "prepaidBalance":{"val":0},"onDemandUsed":{"val":210},"onDemandCap":{"val":500},
+            "productUsage":[{"product":"GrokBuild","usagePercent":0}]}}
+            """#)
+        XCTAssertEqual(result.bars.count, 1)
+        XCTAssertEqual(result.bars.first?.used, 0)
+        XCTAssertEqual(result.bars.first?.stableKey, "included-usage")
+        XCTAssertEqual(result.bars.first?.resetsAt, ISO8601DateFormatter().date(from: "2026-09-28T00:00:00Z"))
+        XCTAssertEqual(result.monetaryMetrics.map(\.minorUnits), [0, 210, 500])
+        XCTAssertEqual(result.cardInformationSections.first?.items.count, 1)
+        XCTAssertEqual(result.cacheScope?.hasPrefix("consumer."), true)
+    }
+
+    func testMonthlyAndWeeklyKeepTheSameMetricIdentity() throws {
+        let weekly = try parse(payload(percent: 23, period: "USAGE_PERIOD_TYPE_WEEKLY"))
+        let monthly = try parse(payload(percent: 23, period: "USAGE_PERIOD_TYPE_MONTHLY"))
+        XCTAssertEqual(weekly.bars.first?.stableKey, monthly.bars.first?.stableKey)
+        XCTAssertEqual(monthly.bars.first?.label, "Monthly included usage")
+    }
+
+    func testMissingMalformedOrUnpaidAllowanceNeverBecomesZeroPercent() throws {
+        for percent in ["null", "-1", "\"bad\""] {
+            let payload = payload(percent: percent, period: "USAGE_PERIOD_TYPE_WEEKLY")
+            if let result = try? parse(payload) { XCTAssertTrue(result.bars.isEmpty) }
+        }
+        let free = try parse(payload(percent: "0", period: "USAGE_PERIOD_TYPE_WEEKLY", unified: false))
+        XCTAssertTrue(free.bars.isEmpty)
+        let unknown = try parse(payload(percent: "0", period: "USAGE_PERIOD_TYPE_UNSPECIFIED"))
+        XCTAssertTrue(unknown.bars.isEmpty)
+        XCTAssertThrowsError(try parse(#"{"config":null}"#))
+    }
+
+    func testCacheBelongsToVerifiedSubjectNotTokenOrLabel() throws {
+        let data = Data(payload(percent: 11, period: "USAGE_PERIOD_TYPE_WEEKLY").utf8)
+        let first = try GrokUsageProvider.parseCredits(data, configuration: account, subject: "user-a", now: now)
+        let refreshed = try GrokUsageProvider.parseCredits(data, configuration: account, subject: "user-a", now: now)
+        let other = try GrokUsageProvider.parseCredits(data, configuration: account, subject: "user-b", now: now)
+        XCTAssertEqual(first.cacheIdentity, refreshed.cacheIdentity)
+        XCTAssertNotEqual(first.cacheIdentity, other.cacheIdentity)
+    }
+
+    func testDeviceApprovalURLRejectsCrossOriginOrDowngrade() {
+        XCTAssertNotNil(GrokDeviceAuthService.approvalURL("https://accounts.x.ai/oauth2/device?user_code=TEST"))
+        XCTAssertNil(GrokDeviceAuthService.approvalURL("http://accounts.x.ai/oauth2/device"))
+        XCTAssertNil(GrokDeviceAuthService.approvalURL("https://accounts.x.ai.evil.invalid/oauth2/device"))
+        XCTAssertNil(GrokDeviceAuthService.approvalURL("https://user@accounts.x.ai/oauth2/device"))
+    }
+
+    func testTokenRequiresBearerAndAllowsUnrotatedRefresh() throws {
+        let nonBearer = Data(#"{"access_token":"abc","refresh_token":"renew","token_type":"Basic","expires_in":3600}"#.utf8)
+        XCTAssertThrowsError(try GrokDeviceAuthService.token(nonBearer))
+        let token = try GrokDeviceAuthService.token(Data(#"{"access_token":"abc","token_type":"Bearer","expires_in":3600}"#.utf8))
+        XCTAssertNil(token.refreshToken)
+    }
+
+    private func parse(_ payload: String) throws -> ProviderUsageResult {
+        try GrokUsageProvider.parseCredits(Data(payload.utf8), configuration: account, subject: "verified-user", now: now)
+    }
+
+    private func payload(percent: Int, period: String) -> String {
+        payload(percent: String(percent), period: period)
+    }
+
+    private func payload(percent: String, period: String, unified: Bool = true) -> String {
+        #"{"config":{"isUnifiedBillingUser":\#(unified),"creditUsagePercent":\#(percent),"currentPeriod":{"type":"\#(period)","start":"2026-09-21T00:00:00Z","end":"2026-09-28T00:00:00Z"}}}"#
+    }
+}

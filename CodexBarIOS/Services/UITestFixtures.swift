@@ -65,6 +65,7 @@ final class UITestFixtures {
         let scenario = environment["CODEXBAR_UI_TEST_SCENARIO"]
         let recovery = scenario == "recovery"
         let githubBilling = scenario?.hasPrefix("github-billing") == true
+        let grok = scenario?.hasPrefix("grok") == true
         let googleSources = Self.googleSources(for: scenario)
         let google = !googleSources.isEmpty
         if google && configurationStore.configurations.isEmpty {
@@ -76,6 +77,9 @@ final class UITestFixtures {
         if githubBilling && configurationStore.configurations.isEmpty {
             Self.seedGitHubBillingAccounts(in: configurationStore, scenario: scenario)
         }
+        if grok && configurationStore.configurations.isEmpty {
+            Self.seedGrokAccounts(in: configurationStore)
+        }
         let results = configurationStore.configurations
             .filter(configurationStore.isConfigured)
             .map { configuration in
@@ -84,6 +88,11 @@ final class UITestFixtures {
                 }
                 if githubBilling {
                     return Self.githubBillingResult(for: configuration)
+                }
+                if grok {
+                    return configuration.providerID == .grok
+                        ? Self.grokResult(for: configuration, scenario: scenario)
+                        : Self.cursorResult(for: configuration)
                 }
                 return Self.result(
                     for: configuration,
@@ -95,8 +104,10 @@ final class UITestFixtures {
             providers = [UITestGoogleProvider(sources: googleSources)]
         } else if githubBilling {
             providers = [UITestGitHubBillingProvider()]
+        } else if grok {
+            providers = [UITestGrokProvider(scenario: scenario), UITestCursorProvider()]
         } else {
-            providers = [UITestUsageProvider(failsFirstRefresh: recovery)]
+            providers = [UITestUsageProvider(failsFirstRefresh: recovery), UITestGrokProvider(scenario: scenario)]
         }
         refreshService = UsageRefreshService(providers: providers, initialResults: results)
         if recovery && historyStore.snapshots.isEmpty {
@@ -144,6 +155,52 @@ final class UITestFixtures {
             _ = configurationStore.update(navigationAccount)
             _ = configurationStore.saveSecret("ui-test-credential", for: navigationAccount)
         }
+    }
+
+    private static func seedGrokAccounts(in store: ProviderConfigurationStore) {
+        let grok = ProviderAccountConfiguration(
+            id: "ui-grok-connected", providerID: .grok, accountLabel: "Sample Grok",
+            authMethod: .browserSession
+        )
+        let cursor = ProviderAccountConfiguration(
+            id: "ui-cursor-linked", providerID: .cursor, accountLabel: "Sample Cursor",
+            authMethod: .browserSession
+        )
+        for account in [grok, cursor] {
+            _ = store.update(account)
+            _ = store.saveSecret("ui-test-credential", for: account)
+        }
+    }
+
+    nonisolated static func grokResult(
+        for account: ProviderAccountConfiguration, scenario: String? = nil
+    ) -> ProviderUsageResult {
+        let now = Date()
+        let start = ISO8601DateFormatter().string(from: now.addingTimeInterval(-2 * 86_400))
+        let end = ISO8601DateFormatter().string(from: now.addingTimeInterval(5 * 86_400))
+        let unavailable = scenario == "grok-no-allowance"
+        let data = Data("""
+            {"config":{"isUnifiedBillingUser":\(!unavailable),
+            "creditUsagePercent":\(unavailable ? "null" : "31"),
+            "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"},
+            "prepaidBalance":{"val":500},"productUsage":[
+            {"product":"GrokBuild","usagePercent":12},{"product":"GrokChat","usagePercent":19}]}}
+            """.utf8)
+        return (try? GrokUsageProvider.parseCredits(data, configuration: account, subject: "synthetic-user", now: now))
+            ?? ProviderUsageResult(
+                accountID: account.id, providerID: .grok, title: account.displayName,
+                subtitle: "Synthetic Grok usage unavailable", bars: [], fetchedAt: now
+            )
+    }
+
+    nonisolated static func cursorResult(for account: ProviderAccountConfiguration) -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: account.id, providerID: .cursor, title: account.displayName,
+            subtitle: "Synthetic Cursor usage", bars: [
+                UsageBar(stableKey: "cursor-models", label: "Cursor Models", used: 21, limit: 100),
+                UsageBar(stableKey: "grok-bot-weekly", label: "Grok Bot weekly", used: 42, limit: 100),
+            ], fetchedAt: Date()
+        )
     }
 
     private static func seedGitHubBillingAccounts(
@@ -820,6 +877,22 @@ private actor UITestUsageProvider: UsageProvider {
             throw UITestFixtureError.refreshFailed
         }
         return UITestFixtures.result(for: configuration, balance: 60)
+    }
+}
+
+private actor UITestGrokProvider: UsageProvider {
+    nonisolated let providerID = ProviderID.grok
+    private let scenario: String?
+    init(scenario: String?) { self.scenario = scenario }
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        UITestFixtures.grokResult(for: configuration, scenario: scenario)
+    }
+}
+
+private actor UITestCursorProvider: UsageProvider {
+    nonisolated let providerID = ProviderID.cursor
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        UITestFixtures.cursorResult(for: configuration)
     }
 }
 
