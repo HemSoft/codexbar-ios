@@ -293,7 +293,7 @@ public extension DemoUsageProvider {
                 providerID: .grok,
                 bars: [
                     UsageBar(
-                        stableKey: "included-usage", label: "Weekly included usage",
+                        stableKey: "included-usage", label: "Weekly subscription usage",
                         used: 31, limit: 100, resetDescription: "Resets Monday"
                     ),
                 ],
@@ -303,15 +303,7 @@ public extension DemoUsageProvider {
                         currencyCode: "USD", decimalPlaces: 2
                     ),
                 ],
-                cardInformationSections: [
-                    ProviderCardInformationSection(
-                        id: "grok.products", title: "Usage breakdown", items: [
-                            ProviderCardInformationItem(id: "grok.product.GrokBuild", label: "Grok Build", detail: "12%"),
-                            ProviderCardInformationItem(id: "grok.product.GrokChat", label: "Grok Chat", detail: "19%"),
-                        ]
-                    ),
-                ],
-                subtitle: "Synthetic Grok consumer usage"
+                subtitle: "Synthetic Grok subscription usage"
             ),
             DemoUsageProvider(
                 providerID: .openRouter,

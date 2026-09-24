@@ -392,6 +392,9 @@ final class DashboardOrchestrator: ObservableObject {
         results: [ProviderUsageResult],
         preserving preservedAccountIDs: Set<String>
     ) async {
+        for result in results where result.providerID == .grok {
+            configurationStore.applyVerifiedGrokPlan(result)
+        }
         historyStore.record(
             results: results,
             severityThresholds: configurationStore.usageAlertSettings.severityThresholds,
@@ -625,6 +628,10 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
         errorMessage: String?
     ) -> ProviderUsageResult? {
         let definitions = GoogleUsageMetricCatalog.definitions(for: configuration.providerID)
+        if configuration.providerID == .grok, var observed {
+            observed.title = configuration.displayName
+            return observed
+        }
         guard !definitions.isEmpty, observed == nil || requiresSetup else { return observed }
         let status = requiresSetup ? "Setup required" : (isRefreshing ? "Loading" : "Unavailable")
         return ProviderUsageResult(

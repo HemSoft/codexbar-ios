@@ -8,10 +8,9 @@ building, testing, or releasing the app.
 
 ### Added
 
-- Added guided Grok consumer sign-in and a shared included-usage meter with
-  provider-reported reset time, optional Extra Usage Credits balance and
-  product breakdown. Grok stays separate from Cursor's models and Grok Bot;
-  unsupported or missing allowances never appear as zero usage. Temporary
+- Added guided Grok sign-in with a weekly paid-usage meter when verified, its
+  provider-reported reset, and the remaining Extra Usage Credits balance when
+  available. Grok stays separate from Cursor's models and Grok Bot. Temporary
   outages offer Retry; rejected authorization asks you to reconnect. Removing
   a Grok connection clears its previous usage and history.
   ([#355](https://github.com/HemSoft/codexbar-ios/issues/355))
@@ -54,6 +53,12 @@ building, testing, or releasing the app.
   ([#272](https://github.com/HemSoft/codexbar-ios/issues/272))
 
 ### Changed
+
+- Grok now shows at most two subscription values, never on-demand or API
+  spending as a substitute. A verified SuperGrok plan suggests the account
+  name without replacing a name you chose; missing weekly usage stays
+  unavailable rather than showing a guessed zero.
+  ([#361](https://github.com/HemSoft/codexbar-ios/issues/361))
 
 - OpenCode sign-in now offers an explicit browser-session choice, so users can
   use an existing browser login instead of always starting privately. Private

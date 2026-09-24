@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 public struct MetricCustomizationPreference: Codable, Equatable, Sendable {
@@ -672,6 +673,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             configuration.copilotAccountScope = copilotScope
         }
         configuration.accountLabel = suggestedAccountLabel(for: providerID)
+        if providerID == .grok { configuration.grokGeneratedLabel = configuration.accountLabel }
         guard allowConfigurationMutation() else {
             return configuration
         }
@@ -696,10 +698,14 @@ public final class ProviderConfigurationStore: ObservableObject {
             return false
         }
 
-        let normalized = Self.normalizedConfiguration(
+        var normalized = Self.normalizedConfiguration(
             configuration,
             validGroupIDs: Set(groups.map(\.id))
         )
+        if normalized.providerID == .grok, normalized.grokGeneratedLabel != nil,
+           normalized.accountLabel != normalized.grokGeneratedLabel {
+            normalized.grokGeneratedLabel = nil
+        }
         guard isAccountNameUnique(normalized) else {
             lastError = "Account names must be unique."
             return false
@@ -1551,6 +1557,29 @@ public final class ProviderConfigurationStore: ObservableObject {
         } catch {
             return false
         }
+    }
+
+    /// Apply a plan only after the result's verified subject matches the saved credential.
+    /// The generated-label marker prevents a refresh from replacing a user's rename.
+    @discardableResult
+    func applyVerifiedGrokPlan(_ result: ProviderUsageResult) -> Bool {
+        guard result.providerID == .grok, result.failureMessage == nil,
+              let plan = result.verifiedGrokPlanName,
+              let current = configuration(accountID: result.accountID), current.providerID == .grok,
+              let credential = try? GrokCredentialLock.withLock({
+                  GrokCredential.parse(try secretStore.readSecret(account: Self.keychainAccount(for: current)))
+              }),
+              Data(SHA256.hash(data: Data(credential.subject.utf8))).base64EncodedString() == result.cacheIdentity,
+              let generated = current.grokGeneratedLabel, current.accountLabel == generated else { return false }
+        var candidate = current
+        var suffix = 1
+        repeat {
+            candidate.accountLabel = suffix == 1 ? plan : "\(plan) \(suffix)"
+            suffix += 1
+        } while !isAccountNameUnique(candidate)
+        guard candidate.accountLabel != current.accountLabel else { return true }
+        candidate.grokGeneratedLabel = candidate.accountLabel
+        return update(candidate)
     }
 
     func canReconnectGrok(_ candidate: GrokCredential, accountID: String) -> Bool {

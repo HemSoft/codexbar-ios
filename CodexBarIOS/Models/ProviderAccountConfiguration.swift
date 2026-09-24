@@ -5,6 +5,8 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
     public let providerID: ProviderID
     public var isEnabled: Bool
     public var accountLabel: String
+    /// Last automatically generated Grok label. A different label belongs to the user.
+    public var grokGeneratedLabel: String?
     public var groupID: String?
     public var showsHistory: Bool
     public var authMethod: ProviderAuthMethod
@@ -24,6 +26,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         providerID: ProviderID,
         isEnabled: Bool = true,
         accountLabel: String = "",
+        grokGeneratedLabel: String? = nil,
         groupID: String? = nil,
         showsHistory: Bool = true,
         authMethod: ProviderAuthMethod,
@@ -41,6 +44,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         self.providerID = providerID
         self.isEnabled = isEnabled
         self.accountLabel = accountLabel
+        self.grokGeneratedLabel = grokGeneratedLabel
         self.groupID = groupID
         self.showsHistory = showsHistory
         self.authMethod = authMethod
@@ -133,6 +137,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
             providerID: providerID,
             isEnabled: isEnabled,
             accountLabel: accountLabel,
+            grokGeneratedLabel: grokGeneratedLabel,
             groupID: groupID,
             showsHistory: showsHistory,
             authMethod: authMethod,
@@ -153,6 +158,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         case providerID
         case isEnabled
         case accountLabel
+        case grokGeneratedLabel
         case groupID
         case showsHistory
         case authMethod
@@ -174,6 +180,7 @@ public struct ProviderAccountConfiguration: Identifiable, Equatable, Codable, Se
         self.providerID = providerID
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.accountLabel = try container.decodeIfPresent(String.self, forKey: .accountLabel) ?? ""
+        self.grokGeneratedLabel = try container.decodeIfPresent(String.self, forKey: .grokGeneratedLabel)
         self.groupID = try container.decodeIfPresent(String.self, forKey: .groupID)
         self.showsHistory = try container.decodeIfPresent(Bool.self, forKey: .showsHistory) ?? true
         self.authMethod = try container.decode(ProviderAuthMethod.self, forKey: .authMethod)
