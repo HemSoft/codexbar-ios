@@ -117,9 +117,10 @@ struct GrokDeviceAuthService: Sendable {
                 ("device_code", challenge.code), ("client_id", Self.clientID),
             ])
             if status == 200 {
-                let token = try Self.token(data)
-                guard let refreshToken = token.refreshToken, !refreshToken.isEmpty else {
-                    throw GrokAuthError.invalidResponse
+                guard let token = try? Self.token(data),
+                      let refreshToken = token.refreshToken, !refreshToken.isEmpty else {
+                    interval = min(60, interval + 5)
+                    continue
                 }
                 let identity = try await userInfo(accessToken: token.accessToken)
                 return GrokCredential(
@@ -134,9 +135,10 @@ struct GrokDeviceAuthService: Sendable {
     }
 
     private static func nextPollingInterval(_ data: Data, status: Int, current: TimeInterval) throws -> TimeInterval {
-        guard status == 400,
-              let reply = try? JSONDecoder().decode(TokenError.self, from: data) else {
-            throw GrokAuthError.unauthorized
+        if status == 429 || (500...599).contains(status) { return min(60, current + 5) }
+        guard status == 400 else { throw GrokAuthError.unauthorized }
+        guard let reply = try? JSONDecoder().decode(TokenError.self, from: data) else {
+            return min(60, current + 5)
         }
         if reply.error == "authorization_pending" { return current }
         if reply.error == "slow_down" { return min(60, current + 5) }

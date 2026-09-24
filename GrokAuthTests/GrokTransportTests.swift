@@ -8,6 +8,10 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
             (200, #"{"device_code":"synthetic","verification_uri_complete":"https://accounts.x.ai/oauth2/device?user_code=TEST","expires_in":1800,"interval":5}"#),
             (400, #"{"error":"authorization_pending"}"#),
             (400, #"{"error":"slow_down"}"#),
+            (429, "{}"),
+            (503, "{}"),
+            (200, "{not-json"),
+            (400, "{not-json"),
             (200, #"{"access_token":"access-one","refresh_token":"refresh-one","token_type":"Bearer","expires_in":3600}"#),
             (200, #"{"sub":"subject-one","email":"fixture@example.invalid"}"#),
         ])
@@ -18,10 +22,11 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(credential.subject, "subject-one")
         XCTAssertEqual(credential.email, "fixture@example.invalid")
         let recordedDelays = await delays.values
-        XCTAssertEqual(recordedDelays, [5, 5, 10])
+        XCTAssertEqual(recordedDelays, [5, 5, 10, 15, 20, 25, 30])
         let requests = GrokTestProtocol.state.requests
         XCTAssertEqual(requests.map { $0.url?.path }, [
-            "/oauth2/device/code", "/oauth2/token", "/oauth2/token", "/oauth2/token", "/oauth2/userinfo",
+            "/oauth2/device/code", "/oauth2/token", "/oauth2/token", "/oauth2/token",
+            "/oauth2/token", "/oauth2/token", "/oauth2/token", "/oauth2/token", "/oauth2/userinfo",
         ])
         XCTAssertEqual(requests.last?.value(forHTTPHeaderField: "Authorization"), "Bearer access-one")
         XCTAssertTrue(requests.allSatisfy { $0.value(forHTTPHeaderField: "Cookie") == nil })
@@ -99,6 +104,11 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         let retryRenewal = try await GrokUsageProvider(secretStore: secrets, session: renewalOutage).fetchUsage(for: account)
         XCTAssertEqual(retryRenewal.recoveryAction, .retryRefresh)
         renewalOutage.invalidateAndCancel()
+
+        let malformedRenewal = makeSession([(200, "{not-json")])
+        let retryMalformed = try await GrokUsageProvider(secretStore: secrets, session: malformedRenewal).fetchUsage(for: account)
+        XCTAssertEqual(retryMalformed.recoveryAction, .retryRefresh)
+        malformedRenewal.invalidateAndCancel()
 
         let rejectedRenewal = makeSession([
             (200, #"{"access_token":"renewed","token_type":"Bearer","expires_in":3600}"#),
