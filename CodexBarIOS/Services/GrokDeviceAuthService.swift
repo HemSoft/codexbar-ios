@@ -146,9 +146,9 @@ struct GrokDeviceAuthService: Sendable {
         throw GrokAuthError.expired
     }
 
-    private func verifiedIdentity(
+    func verifiedIdentity(
         accessToken: String, deadline: Date,
-        sleep: @Sendable (TimeInterval) async throws -> Void
+        sleep: @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
     ) async throws -> GrokIdentity {
         var retryInterval: TimeInterval = 5
         while Date() < deadline {

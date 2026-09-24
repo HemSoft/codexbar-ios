@@ -168,7 +168,10 @@ public final class GrokUsageProvider: UsageProvider {
         let expiresAt = Date().addingTimeInterval(token.expiresIn)
         let identity: GrokIdentity
         do {
-            identity = try await auth.userInfo(accessToken: token.accessToken)
+            identity = try await auth.verifiedIdentity(
+                accessToken: token.accessToken,
+                deadline: min(expiresAt, Date().addingTimeInterval(90))
+            )
         } catch GrokAuthError.unauthorized {
             return .rejected
         }

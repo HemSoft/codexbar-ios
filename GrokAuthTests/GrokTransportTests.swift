@@ -261,6 +261,37 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
     }
 
     @MainActor
+    func testRotatedRefreshTokenSurvivesTransientIdentityFailure() async throws {
+        let suite = "GrokAuthTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = GrokTestSecrets()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+        let account = store.addAccount(for: .grok)
+        let key = ProviderConfigurationStore.keychainAccount(for: account)
+        let old = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "old-access", refreshToken: "old-refresh",
+            expiresAt: Date().addingTimeInterval(-10), subject: "subject-one", email: nil
+        )
+        try secrets.saveSecret(old.encoded(), account: key)
+        let session = makeSession([
+            (200, #"{"access_token":"new-access","refresh_token":"new-refresh","token_type":"Bearer","expires_in":3600}"#),
+            (503, "{}"), (200, #"{"sub":"subject-one"}"#),
+            (200, #"{"sub":"subject-one"}"#), (200, #"{"config":{}}"#),
+        ])
+        defer { session.invalidateAndCancel() }
+        let result = try await GrokUsageProvider(secretStore: secrets, session: session).fetchUsage(for: account)
+        XCTAssertNil(result.failureMessage)
+        let saved = try XCTUnwrap(GrokCredential.parse(try secrets.readSecret(account: key)))
+        XCTAssertEqual(saved.accessToken, "new-access")
+        XCTAssertEqual(saved.refreshToken, "new-refresh")
+        XCTAssertEqual(saved.subject, old.subject)
+        XCTAssertEqual(GrokTestProtocol.state.requests.map { $0.url?.path }, [
+            "/oauth2/token", "/oauth2/userinfo", "/oauth2/userinfo", "/oauth2/userinfo", "/v1/billing",
+        ])
+    }
+
+    @MainActor
     func testRemovalDuringBillingCannotPublishAnOldAccountResult() async throws {
         let suite = "GrokAuthTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
