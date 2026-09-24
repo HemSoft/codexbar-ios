@@ -17,6 +17,7 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
             (0, ""),
             (429, "{}"),
             (503, "{}"),
+            (200, "{not-json"),
             (200, #"{"sub":"subject-one","email":"fixture@example.invalid"}"#),
         ])
         defer { service.session.invalidateAndCancel() }
@@ -26,13 +27,13 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(credential.subject, "subject-one")
         XCTAssertEqual(credential.email, "fixture@example.invalid")
         let recordedDelays = await delays.values
-        XCTAssertEqual(recordedDelays, [5, 5, 10, 15, 20, 25, 30, 35, 5, 10, 15])
+        XCTAssertEqual(recordedDelays, [5, 5, 10, 15, 20, 25, 30, 35, 5, 10, 15, 20])
         let requests = GrokTestProtocol.state.requests
         XCTAssertEqual(requests.map { $0.url?.path }, [
             "/oauth2/device/code", "/oauth2/token", "/oauth2/token", "/oauth2/token",
             "/oauth2/token", "/oauth2/token", "/oauth2/token", "/oauth2/token",
             "/oauth2/token", "/oauth2/userinfo", "/oauth2/userinfo",
-            "/oauth2/userinfo", "/oauth2/userinfo",
+            "/oauth2/userinfo", "/oauth2/userinfo", "/oauth2/userinfo",
         ])
         XCTAssertEqual(requests.last?.value(forHTTPHeaderField: "Authorization"), "Bearer access-one")
         XCTAssertTrue(requests.allSatisfy { $0.value(forHTTPHeaderField: "Cookie") == nil })

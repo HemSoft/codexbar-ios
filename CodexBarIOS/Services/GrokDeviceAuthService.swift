@@ -158,6 +158,8 @@ struct GrokDeviceAuthService: Sendable {
                 // Keep the issued token and retry identity verification.
             } catch GrokAuthError.temporarilyUnavailable {
                 // Rate limits and provider outages can recover before the challenge expires.
+            } catch GrokAuthError.invalidResponse {
+                // A truncated response is not a rejection of the issued token.
             }
             try await sleep(min(retryInterval, max(0, deadline.timeIntervalSinceNow)))
             retryInterval = min(60, retryInterval + 5)
