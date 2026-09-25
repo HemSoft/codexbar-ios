@@ -79,6 +79,9 @@ final class UITestFixtures {
         }
         if grok && configurationStore.configurations.isEmpty {
             Self.seedGrokAccounts(in: configurationStore)
+            if scenario?.hasPrefix("grok-existing") == true || scenario == "grok-custom-order" {
+                Self.seedSavedGrokLayout(in: configurationStore, scenario: scenario)
+            }
         }
         let results = configurationStore.configurations
             .filter(configurationStore.isConfigured)
@@ -172,6 +175,27 @@ final class UITestFixtures {
         }
     }
 
+    private static func seedSavedGrokLayout(in store: ProviderConfigurationStore, scenario: String?) {
+        let accountID = "ui-grok-connected"
+        let weekly = "grok.included-usage"
+        let credits = "grok.monetary.balance.usd"
+        _ = store.reconcileMetricLayout(accountID: accountID, availableMetricIDs: [credits])
+        store.updateMetricWidth(.full, accountID: accountID, metricID: credits)
+        guard scenario != "grok-existing-credits-only" else { return }
+        store.updateVisualizationStyle(.circularRing, accountID: accountID, metricID: weekly)
+        // Simulate the pre-fix saved order after a previous release appended weekly usage.
+        store.replaceMetricLayout(
+            AccountMetricLayout(
+                orderedMetricIDs: [credits, weekly],
+                preferences: store.metricLayouts[accountID]?.preferences ?? [:]
+            ),
+            accountID: accountID
+        )
+        if scenario == "grok-custom-order" {
+            store.updateMetricOrder([credits, weekly], accountID: accountID)
+        }
+    }
+
     nonisolated static func grokResult(
         for account: ProviderAccountConfiguration, scenario: String? = nil
     ) -> ProviderUsageResult {
@@ -180,8 +204,9 @@ final class UITestFixtures {
         let end = ISO8601DateFormatter().string(from: now.addingTimeInterval(5 * 86_400))
         let noAllowance = scenario == "grok-no-allowance"
         let percentField = switch scenario {
-        case "grok-zero": ""
-        case "grok-no-allowance", "grok-percent-unavailable": "\"creditUsagePercent\":null,"
+        case "grok-zero", "grok-existing-zero": ""
+        case "grok-no-allowance", "grok-percent-unavailable", "grok-existing-percent-unavailable":
+            "\"creditUsagePercent\":null,"
         default: "\"creditUsagePercent\":31,"
         }
         let data = Data("""
