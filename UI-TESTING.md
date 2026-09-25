@@ -52,6 +52,9 @@ it. Animations retain the normal app behavior.
   reset caption on the dashboard. It reaches all six settings switches
   in that account, moves, resizes, restyles and hides Gemini Models weekly
   independently, then relaunches and restores that choice through Customize Card.
+- `testSavedGeminiRingIsSelectedInVisualizationMenu` changes Gemini Models weekly
+  to a ring, relaunches, and verifies the Visualization menu marks the saved
+  style as selected. It retains a screenshot of the selected menu.
 - `testGeminiOnlyDashboardShowsCodingSetupAndKeepsSelectionOnRelaunch` starts
   with only Gemini Apps connected. All four coding choices stay visible with
   Setup required in the same Gemini card. It hides a coding metric, refreshes,
@@ -167,7 +170,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than fourteen passed tests with zero skips or
+runner rejects anything other than fifteen passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

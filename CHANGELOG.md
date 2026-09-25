@@ -121,6 +121,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Show which visualization is selected in a metric's Customize Card menu,
+  including after hiding, restoring, and relaunching the card.
+  ([#346](https://github.com/HemSoft/codexbar-ios/issues/346))
+
 - Place Grok weekly subscription usage above Extra Usage Credits on existing
   accounts whose saved order came from metric discovery. A deliberate card
   reorder made afterward stays in place; balances and weekly percentages

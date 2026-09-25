@@ -301,6 +301,28 @@ final class AccountJourneysUITests: XCTestCase {
         app.tap()
     }
 
+    func testSavedGeminiRingIsSelectedInVisualizationMenu() throws {
+        let app = launch(scenario: "google-six")
+        let weekly = app.buttons["customize-metric-antigravity.gemini-weekly"]
+        openCodingCustomizer(in: app)
+        tap(weekly, in: app)
+        tap(app.buttons["Visualization"], in: app)
+        tap(app.buttons["Circular ring"], in: app)
+        tap(app.buttons["Done"], in: app)
+
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launch()
+        openCodingCustomizer(in: app)
+        tap(weekly, in: app)
+        tap(app.buttons["Visualization"], in: app)
+        XCTAssertTrue(app.buttons["Circular ring"].isSelected, app.debugDescription)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Saved Gemini ring selected after relaunch"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testGeminiOnlyDashboardShowsCodingSetupAndKeepsSelectionOnRelaunch() throws {
         let app = launch(scenario: "google-apps-only")
         assertGoogleMetric("gemini.five-hour", contains: "12%", in: app)
