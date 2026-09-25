@@ -1197,6 +1197,8 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         destinationLayout.version = AccountMetricLayout.currentVersion
         destinationLayout.orderedMetricIDs = copiedMetrics.map(\.destinationMetricID) + destinationOnlyOrder
+        // Copying an order is an explicit choice, even if the source inherited its order.
+        destinationLayout.hasCustomMetricOrder = true
         for metric in copiedMetrics {
             guard var preference = sourceLayout.preferences[metric.sourceMetricID] else {
                 continue
