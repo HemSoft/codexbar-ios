@@ -118,7 +118,7 @@ public struct MetricTilePreference: Codable, Equatable, Sendable {
 }
 
 public struct AccountMetricLayout: Codable, Equatable, Sendable {
-    public static let currentVersion = 3
+    public static let currentVersion = 4
 
     public var version: Int
     public var orderedMetricIDs: [String]

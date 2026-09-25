@@ -206,6 +206,21 @@ final class GrokAccountTests: XCTestCase {
         )
     }
 
+    func testCustomOrderUsesNewSchemaAndOlderLayoutsDefaultToInheritedOrder() throws {
+        let current = AccountMetricLayout(
+            orderedMetricIDs: ["grok.monetary.balance.usd", "grok.included-usage"],
+            hasCustomMetricOrder: true
+        )
+        XCTAssertEqual(current.version, 4)
+        XCTAssertTrue(try JSONDecoder().decode(
+            AccountMetricLayout.self, from: JSONEncoder().encode(current)
+        ).hasCustomMetricOrder)
+        let old = Data(#"{"version":3,"orderedMetricIDs":["grok.monetary.balance.usd","grok.included-usage"]}"#.utf8)
+        let decoded = try JSONDecoder().decode(AccountMetricLayout.self, from: old)
+        XCTAssertEqual(decoded.version, 3)
+        XCTAssertFalse(decoded.hasCustomMetricOrder)
+    }
+
     private func credential(subject: String) -> GrokCredential {
         GrokCredential(
             kind: "grok-oauth-v1", accessToken: "fixture-token", refreshToken: "fixture-refresh",
