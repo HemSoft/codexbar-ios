@@ -84,18 +84,79 @@ final class GrokSignInUITests: XCTestCase {
         keep("Grok no eligible allowance", app: noAllowance)
     }
 
-    private func launch(scenario: String) -> XCUIApplication {
+    func testSavedGrokLayoutAndWeeklyStates() {
+        let runID = UUID().uuidString
+        let existing = launch(scenario: "grok-existing", runID: runID)
+        assertWeeklyBeforeCredits(in: existing, percent: "31%")
+        keepGrok("Existing Grok saved credits-first order migrated", app: existing)
+        existing.terminate()
+
+        let restored = launch(scenario: "grok-existing", runID: runID, reset: false)
+        assertWeeklyBeforeCredits(in: restored, percent: "31%")
+        restored.terminate()
+
+        let creditsOnly = launch(scenario: "grok-existing-credits-only")
+        assertWeeklyBeforeCredits(in: creditsOnly, percent: "31%")
+        keepGrok("Previously saved Grok credits-only layout", app: creditsOnly)
+        creditsOnly.terminate()
+
+        let fresh = launch(scenario: "grok")
+        assertWeeklyBeforeCredits(in: fresh, percent: "31%")
+        keepGrok("Fresh Grok weekly before credits", app: fresh)
+        fresh.terminate()
+
+        let zero = launch(scenario: "grok-existing-zero")
+        assertWeeklyBeforeCredits(in: zero, percent: "0%")
+        XCTAssertTrue(zero.staticTexts["No included usage reported by Grok."].exists)
+        keepGrok("Existing Grok zero weekly before credits", app: zero)
+        zero.terminate()
+
+        let unavailable = launch(scenario: "grok-existing-percent-unavailable")
+        XCTAssertTrue(unavailable.staticTexts["Grok did not report included usage."].waitForExistence(timeout: 10))
+        XCTAssertFalse(unavailable.buttons["dashboard-metric-grok.included-usage"].exists)
+        XCTAssertTrue(unavailable.buttons["dashboard-metric-grok.monetary.balance.usd"].exists)
+        keepGrok("Existing Grok unavailable weekly with independent credits", app: unavailable)
+        unavailable.terminate()
+
+        let custom = launch(scenario: "grok-custom-order")
+        let weekly = custom.buttons["dashboard-metric-grok.included-usage"]
+        let credits = custom.buttons["dashboard-metric-grok.monetary.balance.usd"]
+        XCTAssertTrue(weekly.waitForExistence(timeout: 10))
+        XCTAssertTrue(credits.exists)
+        XCTAssertLessThan(credits.frame.minY, weekly.frame.minY)
+        keepGrok("Deliberate credits-first Grok order retained", app: custom)
+    }
+
+    private func assertWeeklyBeforeCredits(in app: XCUIApplication, percent: String) {
+        let weekly = app.buttons["dashboard-metric-grok.included-usage"]
+        let credits = app.buttons["dashboard-metric-grok.monetary.balance.usd"]
+        XCTAssertTrue(weekly.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(credits.exists, app.debugDescription)
+        XCTAssertTrue(weekly.label.contains(percent), weekly.label)
+        XCTAssertTrue(credits.label.contains("$5.00"), credits.label)
+        XCTAssertLessThan(weekly.frame.minY, credits.frame.minY)
+        XCTAssertTrue(app.buttons["dashboard-metric-cursor.grok-bot-weekly"].exists)
+    }
+
+    private func launch(scenario: String, runID: String = UUID().uuidString, reset: Bool = true) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchEnvironment = [
             "CODEXBAR_UI_TESTS": "1",
-            "CODEXBAR_UI_TEST_RUN_ID": UUID().uuidString,
-            "CODEXBAR_UI_TEST_RESET": "1",
+            "CODEXBAR_UI_TEST_RUN_ID": runID,
+            "CODEXBAR_UI_TEST_RESET": reset ? "1" : "0",
             "CODEXBAR_UI_TEST_SCENARIO": scenario,
         ]
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         return app
+    }
+
+    private func keepGrok(_ name: String, app: XCUIApplication) {
+        let credits = app.buttons["dashboard-metric-grok.monetary.balance.usd"]
+        for _ in 0..<4 where credits.frame.maxY > app.frame.maxY - 40 { app.swipeUp() }
+        XCTAssertLessThan(credits.frame.maxY, app.frame.maxY - 40)
+        keep(name, app: app)
     }
 
     private func keep(_ name: String, app: XCUIApplication) {

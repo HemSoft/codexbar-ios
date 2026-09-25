@@ -121,6 +121,11 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Place Grok weekly subscription usage above Extra Usage Credits on existing
+  accounts whose saved order came from metric discovery. A deliberate card
+  reorder made afterward stays in place; balances and weekly percentages
+  remain separate. ([#365](https://github.com/HemSoft/codexbar-ios/issues/365))
+
 - Show 0% weekly Grok usage when a verified paid account has an active shared
   weekly period and Grok reports no usage fields. The card says no usage was
   reported; missing or conflicting usage on unverified accounts remains

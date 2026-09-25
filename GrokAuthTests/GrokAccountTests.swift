@@ -133,6 +133,94 @@ final class GrokAccountTests: XCTestCase {
         XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.title, "SuperGrok Lite")
     }
 
+    @MainActor
+    func testSavedCreditsFirstGrokLayoutMigratesAndRetainsOtherPreferences() throws {
+        let suite = "GrokAuthTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let credits = "grok.monetary.balance.usd"
+        let weekly = "grok.included-usage"
+        let account = "grok.saved"
+        let other = "cursor.saved"
+        let secrets = GrokTestSecrets()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        _ = store.reconcileMetricLayout(accountID: account, availableMetricIDs: [credits])
+        store.updateMetricVisibility(false, accountID: account, metricID: credits)
+        store.updateMetricWidth(.half, accountID: account, metricID: credits)
+        store.updateVisualizationStyle(.circularRing, accountID: account, metricID: credits)
+        _ = store.reconcileMetricLayout(accountID: other, availableMetricIDs: ["cursor.models"])
+        store.updateMetricVisibility(false, accountID: other, metricID: "cursor.models")
+        let creditsPreference = store.metricLayouts[account]?.preferences[credits]
+        let otherLayout = store.metricLayouts[other]
+
+        XCTAssertEqual(store.metricOrder(accountID: account, availableMetricIDs: [weekly, credits]), [weekly, credits])
+        var legacy = try XCTUnwrap(store.metricLayouts[account])
+        legacy.orderedMetricIDs = [credits, weekly]
+        store.replaceMetricLayout(legacy, accountID: account)
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        XCTAssertEqual(restored.metricOrder(accountID: account, availableMetricIDs: [weekly, credits]), [weekly, credits])
+        XCTAssertEqual(restored.metricLayouts[account]?.preferences[credits], creditsPreference)
+        XCTAssertEqual(restored.metricLayouts[other], otherLayout)
+        XCTAssertEqual(restored.metricOrder(accountID: account, availableMetricIDs: [credits]), [weekly, credits])
+    }
+
+    @MainActor
+    func testExplicitGrokReorderSurvivesDiscoveryAndReload() throws {
+        let suite = "GrokAuthTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let credits = "grok.monetary.balance.usd"
+        let weekly = "grok.included-usage"
+        let account = "grok.saved"
+        let secrets = GrokTestSecrets()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        _ = store.reconcileMetricLayout(accountID: account, availableMetricIDs: [weekly, credits])
+        store.updateMetricOrder([credits, weekly], accountID: account)
+        store.updateMetricWidth(.full, accountID: account, metricID: weekly)
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        XCTAssertTrue(try XCTUnwrap(restored.metricLayouts[account]).hasCustomMetricOrder)
+        XCTAssertEqual(restored.metricOrder(accountID: account, availableMetricIDs: [weekly, credits]), [credits, weekly])
+        XCTAssertEqual(restored.metricWidth(accountID: account, metricID: weekly), .full)
+    }
+
+    @MainActor
+    func testCopiedGrokOrderRemainsExplicitAfterReconciliation() throws {
+        let suite = "GrokAuthTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let weekly = "grok.included-usage"
+        let credits = "grok.monetary.balance.usd"
+        let secrets = GrokTestSecrets()
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        _ = store.reconcileMetricLayout(accountID: "grok.source", availableMetricIDs: [weekly, credits])
+        store.updateMetricOrder([credits, weekly], accountID: "grok.source")
+        store.copyMetricLayout(
+            from: "grok.source", to: "grok.destination",
+            destinationAvailableMetricIDs: [weekly, credits]
+        )
+        let restored = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        XCTAssertTrue(try XCTUnwrap(restored.metricLayouts["grok.destination"]).hasCustomMetricOrder)
+        XCTAssertEqual(
+            restored.metricOrder(accountID: "grok.destination", availableMetricIDs: [weekly, credits]),
+            [credits, weekly]
+        )
+    }
+
+    func testCustomOrderUsesNewSchemaAndOlderLayoutsDefaultToInheritedOrder() throws {
+        let current = AccountMetricLayout(
+            orderedMetricIDs: ["grok.monetary.balance.usd", "grok.included-usage"],
+            hasCustomMetricOrder: true
+        )
+        XCTAssertEqual(current.version, 4)
+        XCTAssertTrue(try JSONDecoder().decode(
+            AccountMetricLayout.self, from: JSONEncoder().encode(current)
+        ).hasCustomMetricOrder)
+        let old = Data(#"{"version":3,"orderedMetricIDs":["grok.monetary.balance.usd","grok.included-usage"]}"#.utf8)
+        let decoded = try JSONDecoder().decode(AccountMetricLayout.self, from: old)
+        XCTAssertEqual(decoded.version, 3)
+        XCTAssertFalse(decoded.hasCustomMetricOrder)
+    }
+
     private func credential(subject: String) -> GrokCredential {
         GrokCredential(
             kind: "grok-oauth-v1", accessToken: "fixture-token", refreshToken: "fixture-refresh",

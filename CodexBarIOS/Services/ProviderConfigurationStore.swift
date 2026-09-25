@@ -118,26 +118,30 @@ public struct MetricTilePreference: Codable, Equatable, Sendable {
 }
 
 public struct AccountMetricLayout: Codable, Equatable, Sendable {
-    public static let currentVersion = 3
+    public static let currentVersion = 4
 
     public var version: Int
     public var orderedMetricIDs: [String]
     public var preferences: [String: MetricTilePreference]
     public var usesLegacyFullWidthDefaults: Bool
     public var hasAppliedGitHubActionsMetricGrouping: Bool
+    /// Set by an explicit drag/reorder, not by metric discovery or presentation edits.
+    public var hasCustomMetricOrder: Bool
 
     public init(
         version: Int = AccountMetricLayout.currentVersion,
         orderedMetricIDs: [String] = [],
         preferences: [String: MetricTilePreference] = [:],
         usesLegacyFullWidthDefaults: Bool = false,
-        hasAppliedGitHubActionsMetricGrouping: Bool = false
+        hasAppliedGitHubActionsMetricGrouping: Bool = false,
+        hasCustomMetricOrder: Bool = false
     ) {
         self.version = version
         self.orderedMetricIDs = orderedMetricIDs
         self.preferences = preferences
         self.usesLegacyFullWidthDefaults = usesLegacyFullWidthDefaults
         self.hasAppliedGitHubActionsMetricGrouping = hasAppliedGitHubActionsMetricGrouping
+        self.hasCustomMetricOrder = hasCustomMetricOrder
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -146,6 +150,7 @@ public struct AccountMetricLayout: Codable, Equatable, Sendable {
         case preferences
         case usesLegacyFullWidthDefaults
         case hasAppliedGitHubActionsMetricGrouping
+        case hasCustomMetricOrder
     }
 
     public init(from decoder: Decoder) throws {
@@ -169,6 +174,7 @@ public struct AccountMetricLayout: Codable, Equatable, Sendable {
             Bool.self,
             forKey: .hasAppliedGitHubActionsMetricGrouping
         ) ?? false
+        hasCustomMetricOrder = try container.decodeIfPresent(Bool.self, forKey: .hasCustomMetricOrder) ?? false
     }
 }
 
@@ -392,6 +398,25 @@ private enum GitHubBillingMetricPreferenceCompatibility {
     }
 }
 
+private enum GrokMetricPreferenceCompatibility {
+    private static let weeklyID = "grok.included-usage"
+    private static let creditsID = "grok.monetary.balance.usd"
+
+    static func groupWeeklyBeforeCredits(
+        layout: inout AccountMetricLayout,
+        availableMetricIDs: [String]
+    ) {
+        guard !layout.hasCustomMetricOrder,
+              availableMetricIDs.contains(weeklyID),
+              availableMetricIDs.contains(creditsID),
+              let weeklyIndex = layout.orderedMetricIDs.firstIndex(of: weeklyID),
+              let creditsIndex = layout.orderedMetricIDs.firstIndex(of: creditsID),
+              creditsIndex < weeklyIndex else { return }
+        layout.orderedMetricIDs.remove(at: weeklyIndex)
+        layout.orderedMetricIDs.insert(weeklyID, at: creditsIndex)
+    }
+}
+
 private enum MetricPreferenceCompatibility {
     static func migrate(
         layout: inout AccountMetricLayout,
@@ -412,6 +437,10 @@ private enum MetricPreferenceCompatibility {
         availableMetricIDs: [String]
     ) {
         GitHubBillingMetricPreferenceCompatibility.groupActionsMetrics(
+            layout: &layout,
+            availableMetricIDs: availableMetricIDs
+        )
+        GrokMetricPreferenceCompatibility.groupWeeklyBeforeCredits(
             layout: &layout,
             availableMetricIDs: availableMetricIDs
         )
@@ -1168,6 +1197,8 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         destinationLayout.version = AccountMetricLayout.currentVersion
         destinationLayout.orderedMetricIDs = copiedMetrics.map(\.destinationMetricID) + destinationOnlyOrder
+        // Copying an order is an explicit choice, even if the source inherited its order.
+        destinationLayout.hasCustomMetricOrder = true
         for metric in copiedMetrics {
             guard var preference = sourceLayout.preferences[metric.sourceMetricID] else {
                 continue
@@ -1206,6 +1237,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         layout.version = AccountMetricLayout.currentVersion
         layout.orderedMetricIDs = mergedOrder
+        layout.hasCustomMetricOrder = true
         for metricID in reorderedMetricIDs {
             var preference = layout.preferences[metricID] ?? MetricTilePreference(
                 width: layout.usesLegacyFullWidthDefaults ? .full : .automatic,
