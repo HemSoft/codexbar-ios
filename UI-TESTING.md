@@ -167,7 +167,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than thirteen passed tests with zero skips or
+runner rejects anything other than fourteen passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.
