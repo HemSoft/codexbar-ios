@@ -3922,11 +3922,12 @@ final class DashboardAndSettingsTests: XCTestCase {
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: secretStore)
         let first = store.addAccount(for: .codex)
         let second = store.addAccount(for: .codex)
+        let firstPayload = #"{"https://api.openai.com/auth":{"chatgpt_account_id":"chatgpt-first"}}"#
+            .base64URLEncodedForTest()
+        let firstToken = "header.\(firstPayload).signature"
         XCTAssertTrue(
             store.saveSecret(
-                CodexCredentialsParser.storedCredential(
-                    from: CodexCredentials(accessToken: "first-token", accountID: "chatgpt-first")
-                ),
+                CodexCredentialsParser.storedCredential(from: CodexCredentials(accessToken: firstToken)),
                 for: first
             )
         )
@@ -3965,7 +3966,7 @@ final class DashboardAndSettingsTests: XCTestCase {
             )
         )
         XCTAssertEqual(firstCredentials.accountID, "chatgpt-first")
-        XCTAssertEqual(firstCredentials.accessToken, "first-token")
+        XCTAssertEqual(firstCredentials.accessToken, firstToken)
         XCTAssertEqual(secondCredentials.accountID, "chatgpt-second")
         XCTAssertEqual(secondCredentials.accessToken, "second-token")
         XCTAssertNil(viewModel.codexAuthError)
@@ -4019,8 +4020,11 @@ final class DashboardAndSettingsTests: XCTestCase {
         first.accountLabel = "Personal Codex"
         XCTAssertTrue(store.update(first))
         let second = store.addAccount(for: .codex)
+        let firstPayload = #"{"https://api.openai.com/auth":{"chatgpt_account_id":"private-provider-id"}}"#
+            .base64URLEncodedForTest()
+        let firstToken = "header.\(firstPayload).signature"
         let firstCredential = CodexCredentialsParser.storedCredential(
-            from: CodexCredentials(accessToken: "first-token", accountID: "private-provider-id")
+            from: CodexCredentials(accessToken: firstToken)
         )
         let secondCredential = CodexCredentialsParser.storedCredential(
             from: CodexCredentials(accessToken: "second-token", accountID: "second-provider-id")

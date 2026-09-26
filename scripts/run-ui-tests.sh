@@ -101,17 +101,17 @@ xcodebuild \
 xcrun xcresulttool get test-results summary \
   --path "$result_bundle" > "$run_dir/summary.json"
 
-# All fifteen named UI journeys must run on each destination. A skipped or empty
+# All sixteen named UI journeys must run on each destination. A skipped or empty
 # suite can otherwise make xcodebuild return success without testing the flows.
 if ! jq -e '
   .result == "Passed"
-  and .totalTestCount == 15
-  and .passedTests == 15
+  and .totalTestCount == 16
+  and .passedTests == 16
   and .failedTests == 0
   and .skippedTests == 0
   and .expectedFailures == 0
 ' "$run_dir/summary.json" > /dev/null; then
   cat "$run_dir/summary.json" >&2
-  echo "Expected all fifteen UI journeys to pass with zero skips on $device_name." >&2
+  echo "Expected all sixteen UI journeys to pass with zero skips on $device_name." >&2
   exit 1
 fi

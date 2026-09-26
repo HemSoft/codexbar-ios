@@ -305,6 +305,46 @@ final class AccountJourneysUITests: XCTestCase {
         app.tap()
     }
 
+    func testTwoCodexAccountsKeepSeparateUsageAfterRelaunch() throws {
+        let app = launch(scenario: "codex-two")
+        let personal = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@",
+            "dashboard-metric-codex.five-hour", "12%"
+        )).firstMatch
+        let work = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@",
+            "dashboard-metric-codex.five-hour", "62%"
+        )).firstMatch
+        XCTAssertTrue(personal.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(work.waitForExistence(timeout: 10), app.debugDescription)
+        openAccountsAndGroups(in: app)
+        XCTAssertTrue(app.otherElements["Personal Codex"].exists, app.debugDescription)
+        XCTAssertTrue(app.otherElements["Work Codex"].exists, app.debugDescription)
+        let accountsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        accountsScreenshot.name = "Two separate Codex accounts in Settings"
+        accountsScreenshot.lifetime = .keepAlways
+        add(accountsScreenshot)
+        tap(app.buttons["Add Account"], in: app)
+        XCTAssertTrue(app.navigationBars["Choose a Provider"].waitForExistence(timeout: 5))
+        let setupScreenshot = XCTAttachment(screenshot: app.screenshot())
+        setupScreenshot.name = "Add Account provider selection with two Codex accounts"
+        setupScreenshot.lifetime = .keepAlways
+        add(setupScreenshot)
+
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launch()
+        XCTAssertTrue(personal.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(work.waitForExistence(timeout: 10), app.debugDescription)
+        reveal(work, in: app)
+        app.swipeUp()
+        XCTAssertTrue(work.isHittable)
+        let usageScreenshot = XCTAttachment(screenshot: app.screenshot())
+        usageScreenshot.name = "Distinct Codex usage after relaunch"
+        usageScreenshot.lifetime = .keepAlways
+        add(usageScreenshot)
+    }
+
     func testSavedGeminiRingIsSelectedInVisualizationMenu() throws {
         let app = launch(scenario: "google-six")
         let weekly = app.buttons["customize-metric-antigravity.gemini-weekly"]

@@ -215,19 +215,7 @@ public final class CodexWebAuthService: Sendable {
     }
 
     public static func accountID(from token: String) -> String? {
-        let parts = token.split(separator: ".")
-        guard parts.count >= 2 else {
-            return nil
-        }
-
-        guard
-            let payloadData = Data(base64URLString: String(parts[1])),
-            let root = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
-        else {
-            return nil
-        }
-
-        return root["chatgpt_account_id"] as? String
+        CodexCredentialsParser.accountID(from: token)
     }
 
     private func exchangeCodeForTokens(
@@ -279,20 +267,5 @@ extension CodexWebAuthService: CodexWebAuthenticating {}
 private extension URLComponents {
     func queryItemValue(named name: String) -> String? {
         queryItems?.first { $0.name == name }?.value
-    }
-}
-
-private extension Data {
-    init?(base64URLString: String) {
-        var base64 = base64URLString
-            .replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-
-        let padding = base64.count % 4
-        if padding > 0 {
-            base64.append(String(repeating: "=", count: 4 - padding))
-        }
-
-        self.init(base64Encoded: base64)
     }
 }

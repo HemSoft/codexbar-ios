@@ -121,6 +121,11 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Allow a second, distinct ChatGPT / Codex account to connect when ChatGPT
+  returns its account identity in the current sign-in token format. Existing
+  saved accounts can be verified without reconnecting; duplicate accounts
+  remain blocked. ([#368](https://github.com/HemSoft/codexbar-ios/issues/368))
+
 - Show which visualization is selected in a metric's Customize Card menu,
   including after hiding, restoring, and relaunching the card.
   ([#346](https://github.com/HemSoft/codexbar-ios/issues/346))

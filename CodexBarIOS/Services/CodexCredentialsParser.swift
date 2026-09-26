@@ -98,8 +98,19 @@ public enum CodexCredentialsParser {
         }
     }
 
-    private static func accountID(from token: String) -> String? {
-        jwtPayload(from: token)?["chatgpt_account_id"] as? String
+    static func accountID(from token: String) -> String? {
+        guard let claims = jwtPayload(from: token) else {
+            return nil
+        }
+        let authClaims = claims["https://api.openai.com/auth"] as? [String: Any]
+        let nestedID = authClaims?["chatgpt_account_id"] as? String
+        let flatID = claims["chatgpt_account_id"] as? String
+        guard nestedID == nil || flatID == nil || nestedID == flatID,
+              let accountID = nestedID ?? flatID,
+              !accountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return accountID
     }
 
     private static func jwtPayload(from token: String) -> [String: Any]? {
