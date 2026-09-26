@@ -3067,17 +3067,16 @@ private struct MetricVisualizationCustomizationView: View {
             let styles = supportedStyles(for: metric)
             if !styles.isEmpty {
                 Menu("Visualization") {
-                    ForEach(styles) { style in
-                        Button {
+                    Picker("Visualization", selection: Binding(
+                        get: { visualizationStyleForMetric(metric.id) },
+                        set: { style in
                             performChange {
                                 onUpdateVisualizationStyle(metric.id, style)
                             }
-                        } label: {
-                            if visualizationStyleForMetric(metric.id) == style {
-                                Label(style.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(style.displayName)
-                            }
+                        }
+                    )) {
+                        ForEach(styles) { style in
+                            Text(style.displayName).tag(style)
                         }
                     }
                 }
