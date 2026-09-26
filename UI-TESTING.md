@@ -53,6 +53,10 @@ it. Animations retain the normal app behavior.
   in that account, moves, resizes, restyles and hides Gemini Models weekly
   independently, then relaunches and restores that choice through Customize Card.
   It retains a screenshot of the restored, selected ring menu.
+- `testTwoCodexAccountsKeepSeparateUsageAfterRelaunch` uses two synthetic
+  ChatGPT identities with separate saved credentials and different usage. It
+  captures the account list, Add Account provider picker, and distinct cards
+  after relaunch. The fixture never contacts ChatGPT or proves live sign-in.
 - `testSavedGeminiRingIsSelectedInVisualizationMenu` changes Gemini Models weekly
   to a ring, relaunches, and verifies the Visualization menu marks the saved
   style as selected. It retains a screenshot of the selected menu.
@@ -171,7 +175,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than fifteen passed tests with zero skips or
+runner rejects anything other than sixteen passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

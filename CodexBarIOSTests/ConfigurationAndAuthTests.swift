@@ -1213,7 +1213,8 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
     func testCodexAuthExtractsChatGPTAccountID() {
         let header = #"{"alg":"none"}"#.base64URLEncodedForTest()
-        let payload = #"{"chatgpt_account_id":"account-id"}"#.base64URLEncodedForTest()
+        let payload = #"{"https://api.openai.com/auth":{"chatgpt_account_id":"account-id"}}"#
+            .base64URLEncodedForTest()
         let token = "\(header).\(payload).signature"
 
         XCTAssertEqual(CodexWebAuthService.accountID(from: token), "account-id")
@@ -1234,7 +1235,8 @@ final class ConfigurationAndAuthTests: XCTestCase {
 
     func testCodexCredentialsParserReadsAccountIDFromAccessJWT() throws {
         let header = #"{"alg":"none"}"#.base64URLEncodedForTest()
-        let payload = #"{"chatgpt_account_id":"access-account"}"#.base64URLEncodedForTest()
+        let payload = #"{"https://api.openai.com/auth":{"chatgpt_account_id":"access-account"}}"#
+            .base64URLEncodedForTest()
         let accessToken = "\(header).\(payload).signature"
 
         let credentials = try XCTUnwrap(CodexCredentialsParser.parse("""

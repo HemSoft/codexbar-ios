@@ -66,10 +66,14 @@ final class UITestFixtures {
         let recovery = scenario == "recovery"
         let githubBilling = scenario?.hasPrefix("github-billing") == true
         let grok = scenario?.hasPrefix("grok") == true
+        let codex = scenario == "codex-two"
         let googleSources = Self.googleSources(for: scenario)
         let google = !googleSources.isEmpty
         if google && configurationStore.configurations.isEmpty {
             Self.seedGoogleAccounts(in: configurationStore, sources: googleSources)
+        }
+        if codex && configurationStore.configurations.isEmpty {
+            Self.seedCodexAccounts(in: configurationStore)
         }
         if recovery && configurationStore.configurations.isEmpty {
             Self.seedRecoveryAccount(in: configurationStore)
@@ -89,6 +93,9 @@ final class UITestFixtures {
                 if google {
                     return Self.googleResult(for: configuration, sources: googleSources, stage: 0)
                 }
+                if codex {
+                    return Self.codexResult(for: configuration)
+                }
                 if githubBilling {
                     return Self.githubBillingResult(for: configuration)
                 }
@@ -105,6 +112,8 @@ final class UITestFixtures {
         let providers: [any UsageProvider]
         if google {
             providers = [UITestGoogleProvider(sources: googleSources)]
+        } else if codex {
+            providers = [UITestCodexProvider()]
         } else if githubBilling {
             providers = [UITestGitHubBillingProvider()]
         } else if grok {
@@ -133,6 +142,39 @@ final class UITestFixtures {
             watchSnapshotCoordinator: watchSnapshotCoordinator
         )
         .dynamicTypeSize(.accessibility2)
+    }
+
+    nonisolated static func codexCredential(for identity: String) -> String {
+        let payload = Data(#"{"https://api.openai.com/auth":{"chatgpt_account_id":"\#(identity)"}}"#.utf8)
+            .base64EncodedString()
+        return CodexCredentialsParser.storedCredential(from: CodexCredentials(
+            accessToken: "header.\(payload).signature"
+        ))
+    }
+
+    private static func seedCodexAccounts(in store: ProviderConfigurationStore) {
+        for (identity, label) in [("personal", "Personal Codex"), ("work", "Work Codex")] {
+            let account = ProviderAccountConfiguration(
+                id: "ui-codex-\(identity)", providerID: .codex,
+                accountLabel: label, authMethod: .browserSession
+            )
+            _ = store.update(account)
+            _ = store.saveSecret(codexCredential(for: identity), for: account)
+        }
+    }
+
+    nonisolated static func codexResult(for account: ProviderAccountConfiguration) -> ProviderUsageResult {
+        let used = account.id == "ui-codex-personal" ? 12.0 : 62.0
+        return ProviderUsageResult(
+            accountID: account.id, providerID: .codex, title: account.displayName,
+            subtitle: "Synthetic Codex usage",
+            bars: [
+                UsageBar(
+                    stableKey: "five-hour", label: "Five-hour usage", used: used, limit: 100,
+                    resetsAt: Date().addingTimeInterval(18_000), resetDisplayStyle: .relativeWithLocalTime
+                ),
+            ], fetchedAt: Date()
+        )
     }
 
     private static func seedRecoveryAccount(in configurationStore: ProviderConfigurationStore) {
@@ -880,7 +922,8 @@ private struct UITestSecretStore: SecretStore {
     func saveSecret(_ secret: String, account: String) throws {
         let coding = try? AntigravityCredentials.parse(secret)
         let expectedCoding = try AntigravityCredentials.parse(UITestFixtures.codingCredential)
-        guard secret == "ui-test-credential" || coding == expectedCoding else {
+        let codex = ["personal", "work"].contains { secret == UITestFixtures.codexCredential(for: $0) }
+        guard secret == "ui-test-credential" || coding == expectedCoding || codex else {
             throw UITestFixtureError.invalidCredential
         }
         UserDefaults(suiteName: suite)?.set(secret, forKey: "fixture-secret.\(account)")
@@ -908,6 +951,13 @@ private actor UITestUsageProvider: UsageProvider {
             throw UITestFixtureError.refreshFailed
         }
         return UITestFixtures.result(for: configuration, balance: 60)
+    }
+}
+
+private actor UITestCodexProvider: UsageProvider {
+    nonisolated let providerID = ProviderID.codex
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        UITestFixtures.codexResult(for: configuration)
     }
 }
 

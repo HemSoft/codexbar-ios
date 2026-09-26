@@ -66,6 +66,17 @@ No credential JSON or workspace-ID entry is required. See
 [OpenCode sign-in](OPENCODE-SIGN-IN.md) for reconnection, local validation, and
 pending live-provider checks.
 
+## ChatGPT / Codex sign-in
+
+Choose **Settings → Accounts & Groups → Add Account → ChatGPT / Codex** to add
+another Codex account. Sign in with the distinct ChatGPT identity in the private
+browser session. CodexBar keeps each account's credential and usage separate
+and checks the returned account identity before connecting a second entry. If
+ChatGPT returns an identity already connected, neither saved account changes.
+If the identity cannot be verified, sign in again on the existing account and
+retry; CodexBar does not assume an unknown identity is different. A legacy
+single account remains usable without reauthentication.
+
 ## Grok sign-in
 
 Grok consumer usage uses guided approval in a system browser. Choose the Grok
