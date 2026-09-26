@@ -52,6 +52,7 @@ it. Animations retain the normal app behavior.
   reset caption on the dashboard. It reaches all six settings switches
   in that account, moves, resizes, restyles and hides Gemini Models weekly
   independently, then relaunches and restores that choice through Customize Card.
+  It retains a screenshot of the restored, selected ring menu.
 - `testSavedGeminiRingIsSelectedInVisualizationMenu` changes Gemini Models weekly
   to a ring, relaunches, and verifies the Visualization menu marks the saved
   style as selected. It retains a screenshot of the selected menu.

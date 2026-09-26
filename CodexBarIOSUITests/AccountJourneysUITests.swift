@@ -298,6 +298,10 @@ final class AccountJourneysUITests: XCTestCase {
         tap(first, in: app)
         tap(app.buttons["Visualization"], in: app)
         XCTAssertTrue(app.buttons["Circular ring"].isSelected, app.debugDescription)
+        let restoredScreenshot = XCTAttachment(screenshot: app.screenshot())
+        restoredScreenshot.name = "Restored Gemini ring selected after relaunch"
+        restoredScreenshot.lifetime = .keepAlways
+        add(restoredScreenshot)
         app.tap()
     }
 
