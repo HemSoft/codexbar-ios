@@ -23,6 +23,19 @@ public struct CodexPKCEPair: Equatable, Sendable {
     public let codeChallenge: String
 }
 
+enum CodexBrowserMode: Sendable {
+    case existingSession
+    case privateSession
+
+    var prefersEphemeralSession: Bool { self == .privateSession }
+}
+
+@MainActor
+protocol CodexBrowserPresenting: AnyObject {
+    func present(url: URL, prefersEphemeralSession: Bool, onCancel: @escaping () -> Void) -> Bool
+    func finish()
+}
+
 @MainActor
 protocol CodexWebAuthenticating {
     func signIn(
@@ -46,7 +59,7 @@ public final class CodexWebAuthService: Sendable {
             case .couldNotStartCallbackServer:
                 "Could not start the local login callback server."
             case .couldNotStartBrowserSession:
-                "Could not open a private ChatGPT sign-in session."
+                "Could not open a ChatGPT sign-in session."
             case .missingAuthorizationCode:
                 "ChatGPT sign-in did not return an authorization code."
             case .stateMismatch:

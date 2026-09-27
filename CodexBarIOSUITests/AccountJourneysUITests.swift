@@ -330,6 +330,18 @@ final class AccountJourneysUITests: XCTestCase {
         setupScreenshot.name = "Add Account provider selection with two Codex accounts"
         setupScreenshot.lifetime = .keepAlways
         add(setupScreenshot)
+        tap(app.buttons["ChatGPT / Codex"], in: app)
+        let connectAnother = app.buttons["Connect a Different ChatGPT Account"]
+        reveal(connectAnother, in: app)
+        tap(connectAnother, in: app)
+        XCTAssertTrue(app.buttons["Use browser sign-in"].waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.buttons["Use private sign-in"].exists)
+        let browserChoiceScreenshot = XCTAttachment(screenshot: app.screenshot())
+        browserChoiceScreenshot.name = "Codex browser choices for second account"
+        browserChoiceScreenshot.lifetime = .keepAlways
+        add(browserChoiceScreenshot)
+        tap(app.alerts.buttons["Cancel"], in: app)
+        XCTAssertTrue(connectAnother.exists)
 
         app.terminate()
         app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"

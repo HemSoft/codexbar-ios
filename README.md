@@ -69,13 +69,17 @@ pending live-provider checks.
 ## ChatGPT / Codex sign-in
 
 Choose **Settings → Accounts & Groups → Add Account → ChatGPT / Codex** to add
-another Codex account. Sign in with the distinct ChatGPT identity in the private
-browser session. CodexBar keeps each account's credential and usage separate
-and checks the returned account identity before connecting a second entry. If
-ChatGPT returns an identity already connected, neither saved account changes.
-If the identity cannot be verified, sign in again on the existing account and
-retry; CodexBar does not assume an unknown identity is different. A legacy
-single account remains usable without reauthentication.
+another Codex account. Choose browser sign-in to use the device's usual browser
+session, or private sign-in to start a separate session. If Google does not
+recognize the private session, try browser sign-in; Google may still require
+identity verification. Select the intended ChatGPT account, since an existing
+browser login may select the first account automatically. CodexBar keeps each
+credential and usage result separate and checks the returned identity before
+connecting a second entry. If ChatGPT returns an identity already connected,
+neither saved account changes. If identity cannot be verified, sign in again
+on the existing account and retry; CodexBar does not assume an unknown
+identity is different. A legacy single account remains usable without
+reauthentication.
 
 ## Grok sign-in
 

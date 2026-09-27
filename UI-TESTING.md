@@ -55,8 +55,9 @@ it. Animations retain the normal app behavior.
   It retains a screenshot of the restored, selected ring menu.
 - `testTwoCodexAccountsKeepSeparateUsageAfterRelaunch` uses two synthetic
   ChatGPT identities with separate saved credentials and different usage. It
-  captures the account list, Add Account provider picker, and distinct cards
-  after relaunch. The fixture never contacts ChatGPT or proves live sign-in.
+  captures the account list, Add Account provider picker, the normal/private
+  browser choices for another Codex account, and distinct cards after relaunch.
+  It never contacts ChatGPT or proves Google accepted a live sign-in.
 - `testSavedGeminiRingIsSelectedInVisualizationMenu` changes Gemini Models weekly
   to a ring, relaunches, and verifies the Visualization menu marks the saved
   style as selected. It retains a screenshot of the selected menu.
