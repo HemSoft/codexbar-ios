@@ -108,7 +108,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     private let cursorAuthService: CursorWebAuthService
     private let copilotUsageProvider: CopilotUsageProvider
     private var codexSignInTask: Task<Void, Never>?
-    private var codexAuthPresenter = PrivateWebAuthenticationPresenter()
+    private let codexAuthPresenter: any CodexBrowserPresenting
     private var cursorSignInTask: Task<Void, Never>?
     private var cursorAuthPresenter = PrivateWebAuthenticationPresenter()
     private var debugAutostartedCopilotAuth = false
@@ -135,6 +135,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil,
         codexAuthService: any CodexWebAuthenticating = CodexWebAuthService(),
+        codexAuthPresenter: (any CodexBrowserPresenting)? = nil,
         copilotAuthService: any CopilotWebAuthenticating = CopilotWebAuthService(),
         githubBillingAuthService: any GitHubBillingWebAuthenticating = GitHubBillingWebAuthService(),
         githubBillingUsageProvider: GitHubBillingUsageProvider = GitHubBillingUsageProvider(),
@@ -155,6 +156,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         self.onAccountRefresh = onAccountRefresh
         self.onCredentialRefresh = onCredentialRefresh ?? onAccountRefresh
         self.codexAuthService = codexAuthService
+        self.codexAuthPresenter = codexAuthPresenter ?? PrivateWebAuthenticationPresenter()
         self.copilotAuthService = copilotAuthService
         self.githubBillingAuthService = githubBillingAuthService
         self.githubBillingUsageProvider = githubBillingUsageProvider
@@ -780,14 +782,14 @@ final class ProviderSettingsViewModel: ObservableObject {
         isSigningInWithGemini = false
     }
 
-    func startCodexSignIn() {
+    func startCodexSignIn(mode: CodexBrowserMode) {
         guard codexSignInTask == nil else { return }
         codexSignInTask = Task { @MainActor in
-            await self.signInWithCodex()
+            await self.signInWithCodex(mode: mode)
         }
     }
 
-    func signInWithCodex() async {
+    func signInWithCodex(mode: CodexBrowserMode = .privateSession) async {
         isSigningInWithCodex = true
         credentialError = nil
         codexAuthError = nil
@@ -799,9 +801,11 @@ final class ProviderSettingsViewModel: ObservableObject {
 
         do {
             let result = try await codexAuthService.signIn { url in
-                self.codexAuthPresenter.present(url: url) {
-                    self.codexSignInTask?.cancel()
-                }
+                self.codexAuthPresenter.present(
+                    url: url,
+                    prefersEphemeralSession: mode.prefersEphemeralSession,
+                    onCancel: { self.codexSignInTask?.cancel() }
+                )
             }
 
             switch configurationStore.validateCodexAccountIdentity(

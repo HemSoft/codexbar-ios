@@ -7,6 +7,7 @@ struct ProviderSettingsView: View {
     private let latestUsageResult: ProviderUsageResult?
     @State private var pendingGeminiConfirmation: GeminiConfirmation?
     @State private var isConfirmingGoogleAccount = false
+    @State private var isChoosingCodexBrowser = false
 
     private enum GeminiConfirmation {
         case codingSignIn
@@ -110,7 +111,7 @@ struct ProviderSettingsView: View {
             Section {
                 if providerID == .codex {
                     Button {
-                        viewModel.startCodexSignIn()
+                        isChoosingCodexBrowser = true
                     } label: {
                         if viewModel.isSigningInWithCodex {
                             ProgressView()
@@ -119,12 +120,19 @@ struct ProviderSettingsView: View {
                         }
                     }
                     .disabled(viewModel.isSigningInWithCodex)
+                    .alert("Choose how to sign in", isPresented: $isChoosingCodexBrowser) {
+                        Button("Use browser sign-in") { viewModel.startCodexSignIn(mode: .existingSession) }
+                        Button("Use private sign-in") { viewModel.startCodexSignIn(mode: .privateSession) }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Choose the intended ChatGPT account. CodexBar checks its identity before saving.")
+                    }
 
                     Text(
-                        viewModel.hasOtherCodexAccounts
-                            ? "A private sign-in session keeps the active Safari account from being reused. "
-                                + "Choose the distinct ChatGPT identity you want this Codex entry to track."
-                            : "ChatGPT sign-in opens in a private browser session so you can choose the intended identity."
+                        "Browser sign-in can use accounts already signed in on this device. "
+                            + "Private sign-in starts a separate session. If Google does not recognize "
+                            + "the private session, try browser sign-in and choose the intended ChatGPT account. "
+                            + "Google may still require identity verification."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)

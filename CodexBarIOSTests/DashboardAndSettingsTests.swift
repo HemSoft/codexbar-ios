@@ -3897,21 +3897,22 @@ final class DashboardAndSettingsTests: XCTestCase {
             secretStore: FailingDeleteSecretStore()
         )
         let configuration = store.addAccount(for: .codex)
+        let presenter = StubCodexBrowserPresenter()
         let viewModel = ProviderSettingsViewModel(
             configurationStore: store,
             accountID: configuration.id,
-            codexAuthService: CodexWebAuthService(
-                callbackTimeoutNanoseconds: 10_000_000,
-                preferredCallbackPorts: [0]
-            )
+            codexAuthService: CodexWebAuthService(preferredCallbackPorts: [0]),
+            codexAuthPresenter: presenter
         )
         viewModel.removeSavedCredential()
         XCTAssertNotNil(viewModel.credentialError)
 
-        await viewModel.signInWithCodex()
-
+        await viewModel.signInWithCodex(mode: .existingSession)
         XCTAssertNil(viewModel.credentialError)
         XCTAssertNotNil(viewModel.codexAuthError)
+        await viewModel.signInWithCodex(mode: .privateSession)
+        XCTAssertEqual(presenter.prefersEphemeralSessions, [false, true])
+        XCTAssertFalse(viewModel.isSigningInWithCodex)
     }
 
     @MainActor
@@ -4361,6 +4362,18 @@ private struct StaleRefreshHarness {
     func removeDefaults() {
         defaults.removePersistentDomain(forName: suiteName)
     }
+}
+
+@MainActor
+private final class StubCodexBrowserPresenter: CodexBrowserPresenting {
+    private(set) var prefersEphemeralSessions: [Bool] = []
+
+    func present(url: URL, prefersEphemeralSession: Bool, onCancel: @escaping () -> Void) -> Bool {
+        prefersEphemeralSessions.append(prefersEphemeralSession)
+        return false
+    }
+
+    func finish() {}
 }
 
 @MainActor

@@ -211,7 +211,7 @@ public final class CursorWebAuthService: Sendable {
 
 #if canImport(AuthenticationServices) && canImport(UIKit)
 @MainActor
-final class PrivateWebAuthenticationPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
+final class PrivateWebAuthenticationPresenter: NSObject, ASWebAuthenticationPresentationContextProviding, CodexBrowserPresenting {
     private var session: ASWebAuthenticationSession?
     private var sessionGeneration = WebAuthenticationSessionGeneration()
     private var cancellationHandler: (() -> Void)?
