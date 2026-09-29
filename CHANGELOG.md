@@ -250,6 +250,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Isolated Gemini browser cookie-read decisions for local synthetic regression
+  tests without changing sign-in screens, credential storage, or automatic CI
+  test suites. Loading, stale callbacks, cancellation, and repeated account-page
+  returns remain guarded by the same browser and cookie policy.
+  ([#374](https://github.com/HemSoft/codexbar-ios/issues/374))
+
 - Prepared version `1.4.0 (4)` across the app, widgets, Watch companion, and
   test targets. Updated local App Store copy for current providers and guided
   sign-in, with an evidence map and explicit remaining release gates. No binary
