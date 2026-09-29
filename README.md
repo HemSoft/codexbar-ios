@@ -36,9 +36,17 @@ The Windows reference implementation is checked out beside this repo at:
 
 ## Requirements
 
-- Xcode 16 or later
+- Xcode 26 or later for App Store submissions
 - iOS 17 or later
 - watchOS 10 or later for the companion app
+
+## Release preparation
+
+Version 1.3 is the current App Store release. Version 1.4.0 build 4 is in
+repository preparation, not uploaded or submitted. See the
+[App Store tracker](APP-STORE.md) and
+[1.4.0 preparation record](release-assets/1.4.0/README.md) for the source
+boundary, release copy, and checks still required before submission.
 
 ## Local validation
 

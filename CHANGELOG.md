@@ -54,6 +54,12 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Corrected the privacy policy's GitHub Billing permission description to
+  explain the existing organization-administration scope and its broader
+  capabilities. CodexBar's billing requests remain read-only; this update
+  does not request additional permissions.
+  ([#371](https://github.com/HemSoft/codexbar-ios/issues/371))
+
 - Grok now shows at most two subscription values, never on-demand or API
   spending as a substitute. A verified SuperGrok plan suggests the account
   name without replacing a name you chose; missing weekly usage stays
@@ -243,6 +249,12 @@ building, testing, or releasing the app.
   ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))
 
 ### Developer Experience
+
+- Prepared version `1.4.0 (4)` across the app, widgets, Watch companion, and
+  test targets. Updated local App Store copy for current providers and guided
+  sign-in, with an evidence map and explicit remaining release gates. No binary
+  has been uploaded or submitted for review.
+  ([#371](https://github.com/HemSoft/codexbar-ios/issues/371))
 
 - Added local OpenCode authorization and quota regressions with the same pinned
   strict lint plugin as the app, plus manual iPhone/iPad reconnect journeys.

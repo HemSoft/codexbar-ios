@@ -1,6 +1,6 @@
 # CodexBar Privacy Policy
 
-Effective date: September 17, 2026
+Effective date: September 29, 2026
 
 CodexBar Usage Monitor is a local dashboard for monitoring AI provider usage, limits, and API balances. It does not require a CodexBar account and does not send your provider credentials or usage data to HemSoft servers.
 
@@ -79,14 +79,16 @@ and the account tokens returned for your session are stored in the iOS
 Keychain.
 
 GitHub Billing is authorized and stored separately from GitHub Copilot. It asks
-GitHub for `repo`, `read:org`, and `user` OAuth scopes so it can read the
+GitHub for `repo`, `admin:org`, and `user` OAuth scopes so it can read the
 selected user's plan and billing usage, discover organizations they administer,
-and classify billed repository usage as public or private. GitHub's `repo`
-scope permits repository changes, and the `user` scope required by personal
-billing also permits profile changes, reading private email addresses, and
-following or unfollowing users through its included `user:email` and
-`user:follow` scopes. CodexBar does not request email addresses or change
-profiles, follows, or repositories. Its data requests are read-only.
+read organization plan details, and classify billed repository usage as public
+or private. GitHub's `repo` scope permits repository changes. The `admin:org`
+scope also permits organization and team changes; CodexBar uses it only to read
+organization plan details. The `user` scope required by personal billing also
+permits profile changes, reading private email addresses, and following or
+unfollowing users through its included `user:email` and `user:follow` scopes.
+CodexBar does not request email addresses or change profiles, follows,
+repositories, organizations, or teams. Its data requests are read-only.
 CodexBar sends the token only to GitHub's API and OAuth token endpoints. Billing
 amounts, repository names returned with usage, organization names, and derived
 allowance or budget readings may be stored locally in dashboard history,
