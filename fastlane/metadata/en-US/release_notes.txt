@@ -1,9 +1,12 @@
-CodexBar 1.3 makes service incidents, usage alerts, and History easier to understand.
+CodexBar 1.4.0 adds more provider metrics, guided sign-in, and longer usage history.
 
-- Opt in to GitHub service-status monitoring with an accessible incident banner and deduplicated incident, escalation, and recovery notifications.
-- Choose how often regular refreshes add samples to History.
-- See the provider, account, metric, value, and configured threshold in usage alerts.
-- See newly granted banked Codex resets sooner.
-- Keep over-limit History charts readable above the 100% allowance line.
+- Connect Google Gemini and see Gemini Apps, Gemini Models, and Other models in one account, with separate five-hour and weekly limits, reset times, and usage projections where available.
+- Connect Grok to see verified paid weekly usage and Extra Usage Credits when available, separately from Cursor's Grok Bot allowance.
+- Monitor GitHub Billing through its own sign-in, with personal and organization spending, included allowances, budgets, and month-end projections where supported.
+- Connect OpenCode Go and Zen through browser approval and workspace selection, without pasting credentials.
+- Choose browser or private sign-in for ChatGPT / Codex and OpenCode. Distinct Codex accounts stay separate, and duplicate identities remain blocked.
+- Track every Codex usage window the service reports, including separate Codex Spark limits, and choose which metrics appear on each card.
+- See Cursor Models, Other Models, and Grok Bot usage separately. Over-limit readings remain visible above 100%.
+- Explore up to 90 days of daily usage history alongside recent detailed samples. The latest History value stays in sync with successful refreshes.
 
-GitHub status checks use GitHub's public endpoint without account credentials or provider usage data. Monitoring state stays on your device.
+This update also improves Greptile quota reporting, saved-account and History recovery, Settings navigation, and card customization. Metrics depend on the connected provider and account; missing data is not replaced with guessed usage.
