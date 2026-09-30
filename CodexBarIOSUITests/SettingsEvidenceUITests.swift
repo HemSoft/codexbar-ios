@@ -73,8 +73,15 @@ final class SettingsEvidenceUITests: XCTestCase {
                 XCTAssertEqual(recovery.value as? String, "0")
             }
             capture(granted ? "settings-notifications-granted" : "settings-notifications-denied")
+            tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
+            XCTAssertTrue(app.buttons["Open settings"].waitForExistence(timeout: 5))
+            openSettings(app)
+            select("alerts", in: app)
+            XCTAssertEqual(app.switches["Monitor GitHub Service Status"].firstMatch.value as? String, "1")
             tapSwitch(app.switches["Monitor GitHub Service Status"].firstMatch, in: app)
+            reveal(incident, in: app)
             XCTAssertFalse(incident.isEnabled)
+            reveal(recovery, in: app)
             XCTAssertFalse(recovery.isEnabled)
             capture("settings-monitor-disabled-\(granted)")
             app.terminate()
@@ -130,7 +137,12 @@ final class SettingsEvidenceUITests: XCTestCase {
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<12 {
             if element.exists && element.isHittable { return }
-            app.swipeUp()
+            let visibleTop = app.navigationBars.allElementsBoundByIndex.map { $0.frame.maxY }.max() ?? 0
+            if element.exists && element.frame.midY < visibleTop {
+                app.swipeDown()
+            } else {
+                app.swipeUp()
+            }
         }
         capture("settings-unreachable-control")
         XCTFail("Unreachable Settings control: \(element). UI: \(app.debugDescription)")
