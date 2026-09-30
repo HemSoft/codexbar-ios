@@ -136,9 +136,9 @@ exclusions; watch has 101 scored declarations and no unmatched declarations.
 These are platform-specific counts, so shared source can appear in both.
 
 The initial ceilings below are captured as exact line counts and decision
-counts in `scripts/function-risk/baseline.json`. Six production risks remain;
-this change establishes measurement and a gate without claiming to fix them.
-Before the next production release, handle the following four bounded work
+counts in `scripts/function-risk/baseline.json`. Six production functions
+exceeded 30 in the initial baseline. The measurement gate alone did not fix
+them. Before the next production release, handle the following four bounded work
 items through the repository's issue-first workflow, starting with sign-in and
 pagination. Review the remaining ceilings in each item and lower or remove
 entries only after fresh coverage proves the improvement.
@@ -201,3 +201,58 @@ suite, or CI workflow changes. The fresh report has no gate errors and only
 the two unchanged, hash-locked non-iOS fallback exceptions documented above.
 Final exact-candidate release validation remains in
 [#373](https://github.com/HemSoft/codexbar-ios/issues/373).
+
+## Greptile pagination remediation
+
+Issue [#375](https://github.com/HemSoft/codexbar-ios/issues/375) removes a redundant
+empty-page branch without changing scan completeness, deduplication, page and
+offset limits, provider failures, cancellation, reported quotas and reset dates,
+or account-scoped credentials and cached results.
+
+An empty page has `nextOffset == offset`. If that reaches a known total, the
+earlier total check already returns success or an incomplete-scan failure based
+on the unique review count. Otherwise an empty page is a short page, since the
+constructor clamps page size to at least one. The existing short-page rule
+succeeds only for an unknown total and rejects an outstanding known total.
+The removed branch therefore had no additional outcome.
+
+The before report is `function-risk-ios` from
+[main run 36650036897](https://github.com/HemSoft/codexbar-ios/actions/runs/36650036897),
+source `7740d1de489b5c06560828a512f0ab831f197966`. The after report is the same
+artifact from [run 36651946794](https://github.com/HemSoft/codexbar-ios/actions/runs/36651946794),
+PR source `3cdd4557f7783f97e049ddf801257a71164a18f5`. Actions measured merge revision
+`bb412f39042532fbf16150215529833ecca6d364`; its verified parents are that source
+and the unchanged default branch, and its tree matches the source exactly.
+Both reports use Xcode 26.6 build 17F113, Swift 6.3.3, and SwiftLint 0.65.1.
+Both iOS suites pass 711 tests with zero failures or skips.
+
+| Declaration | Decisions | Covered / executable lines | CRAP |
+| --- | ---: | ---: | ---: |
+| `GreptileUsageProvider.fetchUsage(for:)` before | 20 | 96 / 137 | 30.721359533288506 |
+| `GreptileUsageProvider.fetchUsage(for:)` after | 18 | 96 / 129 | 23.423975247462486 |
+
+The exact after score is `1862370/79507`. No production function was renamed,
+added, or moved. The reduction removes duplicate decisions and executable lines;
+it does not combine local macOS test coverage with the iOS report.
+
+Thirteen explicit local synthetic HTTP regressions cover empty, short, and full
+pages, unknown and reported zero totals, clamped page sizes, duplicate/truncated
+pages, both scan limits, HTTP/parser/transport failures, actual task cancellation,
+missing/unreadable credentials, reported quota/reset fields, independent account
+credentials and counts, and preservation of each account's last complete result.
+They use no live provider credentials or network fallback. Run them separately:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcrun swift test --filter GreptilePaginationRegressionTests
+```
+
+Remove only the resolved Greptile entry from the iOS high-risk baseline. Future
+scores above 30 now fail the normal threshold instead of inheriting its old
+ceiling. Other ceilings, fallback exceptions, exclusions, tool pins, automatic
+test suites, and CI workflows are unchanged. The fresh iOS and watch reports
+have no gate errors; the two hash-locked non-iOS fallbacks are unchanged.
+The dashboard and Settings work remains in
+[#376](https://github.com/HemSoft/codexbar-ios/issues/376) and
+[#377](https://github.com/HemSoft/codexbar-ios/issues/377). Final exact-candidate
+release validation remains in [#373](https://github.com/HemSoft/codexbar-ios/issues/373).

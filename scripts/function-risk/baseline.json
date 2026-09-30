@@ -8,14 +8,6 @@
   "platforms": {
     "ios": {
       "high_risk": {
-        "CodexBarIOS/Services/GreptileUsageProvider.swift::GreptileUsageProvider.public func fetchUsage ( for configuration : ProviderAccountConfiguration ) async throws -> ProviderUsageResult": {
-          "complexity": 20,
-          "covered_lines": 96,
-          "crap_exact": "78995460/2571353",
-          "executable_lines": 137,
-          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
-          "target": "CodexBarIOS.app"
-        },
         "CodexBarIOS/Views/ProviderUsageCard.swift::ProviderUsageCard.private func metricTile ( _ item : ProviderMetricTileGridItem ) -> some View": {
           "complexity": 12,
           "covered_lines": 0,

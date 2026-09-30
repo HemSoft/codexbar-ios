@@ -23,6 +23,7 @@ final class GreptileHTTPFixture: @unchecked Sendable {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [GreptileFixtureProtocol.self]
         configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
         self.session = URLSession(configuration: configuration)
         GreptileFixtureProtocol.registry.register(self)
     }

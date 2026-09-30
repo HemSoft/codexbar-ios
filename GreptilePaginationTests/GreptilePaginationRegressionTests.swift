@@ -4,14 +4,16 @@ import XCTest
 
 final class GreptilePaginationRegressionTests: XCTestCase, @unchecked Sendable {
     func testEmptyFirstPageWithUnknownOrZeroTotalDoesNotInventUsage() async throws {
-        for total in [nil, 0] as [Int?] {
-            let fixture = GreptileHTTPFixture([try GreptileHTTPFixture.page([], total: total)])
-            defer { fixture.invalidate() }
-            let result = try await fixture.provider().fetchUsage(for: GreptileHTTPFixture.account)
-            XCTAssertNil(result.failureMessage)
-            XCTAssertTrue(result.bars.isEmpty)
-            XCTAssertEqual(fixture.requests.count, 1)
-            XCTAssertTrue(result.usageMessages.contains { $0.contains("no completed review activity") })
+        for pageSize in [0, 1, 2, 100] {
+            for total in [nil, 0] as [Int?] {
+                let fixture = GreptileHTTPFixture([try GreptileHTTPFixture.page([], total: total)])
+                defer { fixture.invalidate() }
+                let result = try await fixture.provider(pageSize: pageSize).fetchUsage(for: GreptileHTTPFixture.account)
+                XCTAssertNil(result.failureMessage)
+                XCTAssertTrue(result.bars.isEmpty)
+                XCTAssertEqual(fixture.requests.count, 1)
+                XCTAssertTrue(result.usageMessages.contains { $0.contains("no completed review activity") })
+            }
         }
     }
 
