@@ -127,6 +127,11 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Enlarged account-menu tap targets so opening a menu at accessibility text
+  sizes does not collapse the card on iPad. Account settings and Customize Card
+  remain available without changing the card's saved layout.
+  ([#381](https://github.com/HemSoft/codexbar-ios/issues/381))
+
 - Offer a normal-browser or private sign-in choice when connecting ChatGPT /
   Codex accounts. A familiar browser session may help when Google rejects a
   private login as an unfamiliar device; Google can still require identity

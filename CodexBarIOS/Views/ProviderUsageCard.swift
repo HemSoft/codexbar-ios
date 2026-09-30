@@ -205,7 +205,7 @@ private struct ProviderMetricTileDetailPresentation: Identifiable {
 
 struct ProviderUsageCard: View {
     private static let headerControlSpacing: CGFloat = 8
-    private static let menuControlSize: CGFloat = 28
+    private static let menuControlSize: CGFloat = 44
     private static let severityDotSize: CGFloat = 10
     private static let chevronSlotSize: CGFloat = 13
     private static var menuTrailingOffset: CGFloat {
