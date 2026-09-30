@@ -7,32 +7,7 @@
   "measured_source_revision": "78b6a213c53ae4a90e61cd4802d31aafbeb91e35",
   "platforms": {
     "ios": {
-      "high_risk": {
-        "CodexBarIOS/Views/SettingsView.swift::SettingsView.@ ViewBuilder private func settingsDestinationView ( _ destination : SettingsDestination ) -> some View": {
-          "complexity": 6,
-          "covered_lines": 0,
-          "crap_exact": "42/1",
-          "executable_lines": 16,
-          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
-          "target": "CodexBarIOS.app"
-        },
-        "CodexBarIOS/Views/SettingsView.swift::SettingsView.private func summary ( for destination : SettingsDestination ) -> String": {
-          "complexity": 6,
-          "covered_lines": 0,
-          "crap_exact": "42/1",
-          "executable_lines": 32,
-          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
-          "target": "CodexBarIOS.app"
-        },
-        "CodexBarIOS/Views/SettingsView.swift::SettingsView.private func updateGitHubStatusNotificationSetting ( isEnabled : Bool , recovery : Bool )": {
-          "complexity": 7,
-          "covered_lines": 0,
-          "crap_exact": "56/1",
-          "executable_lines": 46,
-          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
-          "target": "CodexBarIOS.app"
-        }
-      },
+      "high_risk": {},
       "unmatched": {
         "CodexBarIOS/Services/WatchSnapshotCoordinator.swift::PhoneWatchConnectivityCoordinator.func activate ( onSnapshotNeeded : @ escaping @ MainActor ( _ force : Bool ) -> Void )::alternative-2": {
           "complexity": 0,

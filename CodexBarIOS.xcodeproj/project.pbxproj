@@ -23,6 +23,8 @@
 		100000000000000000000003 /* ProviderID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* ProviderID.swift */; };
 		100000000000000000000004 /* ProviderUsageResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* ProviderUsageResult.swift */; };
 		A37600000000000000000001 /* ProviderMetricTileContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37600000000000000000002 /* ProviderMetricTileContent.swift */; };
+		A37700000000000000000001 /* SettingsPresentationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37700000000000000000002 /* SettingsPresentationModels.swift */; };
+		A37700000000000000000003 /* GitHubStatusNotificationAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37700000000000000000004 /* GitHubStatusNotificationAuthorization.swift */; };
 		100000000000000000000005 /* UsageBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000005 /* UsageBar.swift */; };
 		100000000000000000000006 /* UsageSeverity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000006 /* UsageSeverity.swift */; };
 		100000000000000000000007 /* UsageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000007 /* UsageProvider.swift */; };
@@ -155,6 +157,7 @@
 		A35300000000000000000001 /* OpenCodeSignInUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000002 /* OpenCodeSignInUITests.swift */; };
 		A35500000000000000000301 /* GrokSignInUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35500000000000000000302 /* GrokSignInUITests.swift */; };
 		A30700000000000000000001 /* AccountJourneysUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30700000000000000000011 /* AccountJourneysUITests.swift */; };
+		A37700000000000000000005 /* SettingsEvidenceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37700000000000000000006 /* SettingsEvidenceUITests.swift */; };
 		A30700000000000000000002 /* UITestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30700000000000000000012 /* UITestFixtures.swift */; };
 /* End PBXBuildFile section */
 
@@ -250,6 +253,8 @@
 		200000000000000000000003 /* ProviderID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderID.swift; sourceTree = "<group>"; };
 		200000000000000000000004 /* ProviderUsageResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderUsageResult.swift; sourceTree = "<group>"; };
 		A37600000000000000000002 /* ProviderMetricTileContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderMetricTileContent.swift; sourceTree = "<group>"; };
+		A37700000000000000000002 /* SettingsPresentationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPresentationModels.swift; sourceTree = "<group>"; };
+		A37700000000000000000004 /* GitHubStatusNotificationAuthorization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubStatusNotificationAuthorization.swift; sourceTree = "<group>"; };
 		200000000000000000000005 /* UsageBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageBar.swift; sourceTree = "<group>"; };
 		200000000000000000000006 /* UsageSeverity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageSeverity.swift; sourceTree = "<group>"; };
 		200000000000000000000007 /* UsageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageProvider.swift; sourceTree = "<group>"; };
@@ -379,6 +384,7 @@
 		A35300000000000000000002 /* OpenCodeSignInUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeSignInUITests.swift; sourceTree = "<group>"; };
 		A35500000000000000000302 /* GrokSignInUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokSignInUITests.swift; sourceTree = "<group>"; };
 		A30700000000000000000011 /* AccountJourneysUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountJourneysUITests.swift; sourceTree = "<group>"; };
+		A37700000000000000000006 /* SettingsEvidenceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsEvidenceUITests.swift; sourceTree = "<group>"; };
 		A30700000000000000000012 /* UITestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFixtures.swift; sourceTree = "<group>"; };
 		A30700000000000000000013 /* CodexBarIOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexBarIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -473,6 +479,8 @@
 				200000000000000000000003 /* ProviderID.swift */,
 				200000000000000000000004 /* ProviderUsageResult.swift */,
 				A37600000000000000000002 /* ProviderMetricTileContent.swift */,
+				A37700000000000000000002 /* SettingsPresentationModels.swift */,
+				A37700000000000000000004 /* GitHubStatusNotificationAuthorization.swift */,
 				A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */,
 				200000000000000000000005 /* UsageBar.swift */,
 				200000000000000000000006 /* UsageSeverity.swift */,
@@ -689,6 +697,7 @@
 			isa = PBXGroup;
 			children = (
 				A30700000000000000000011 /* AccountJourneysUITests.swift */,
+				A37700000000000000000006 /* SettingsEvidenceUITests.swift */,
 				A35300000000000000000002 /* OpenCodeSignInUITests.swift */,
 				A35500000000000000000302 /* GrokSignInUITests.swift */,
 			);
@@ -969,6 +978,8 @@
 				100000000000000000000003 /* ProviderID.swift in Sources */,
 				100000000000000000000004 /* ProviderUsageResult.swift in Sources */,
 				A37600000000000000000001 /* ProviderMetricTileContent.swift in Sources */,
+				A37700000000000000000001 /* SettingsPresentationModels.swift in Sources */,
+				A37700000000000000000003 /* GitHubStatusNotificationAuthorization.swift in Sources */,
 				A31900000000000000000001 /* GoogleUsageMetricCatalog.swift in Sources */,
 				100000000000000000000005 /* UsageBar.swift in Sources */,
 				100000000000000000000006 /* UsageSeverity.swift in Sources */,
@@ -1139,6 +1150,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A30700000000000000000001 /* AccountJourneysUITests.swift in Sources */,
+				A37700000000000000000005 /* SettingsEvidenceUITests.swift in Sources */,
 				A35300000000000000000001 /* OpenCodeSignInUITests.swift in Sources */,
 				A35500000000000000000301 /* GrokSignInUITests.swift in Sources */,
 			);

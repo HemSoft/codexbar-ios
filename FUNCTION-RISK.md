@@ -252,8 +252,7 @@ scores above 30 now fail the normal threshold instead of inheriting its old
 ceiling. Other ceilings, fallback exceptions, exclusions, tool pins, automatic
 test suites, and CI workflows are unchanged. The fresh iOS and watch reports
 have no gate errors; the two hash-locked non-iOS fallbacks are unchanged.
-Dashboard remediation is documented below. Settings work remains in
-[#377](https://github.com/HemSoft/codexbar-ios/issues/377). Final exact-candidate
+Dashboard and Settings remediation are documented below. Final exact-candidate
 release validation remains in [#373](https://github.com/HemSoft/codexbar-ios/issues/373).
 
 ## Dashboard metric-dispatch remediation
@@ -316,6 +315,79 @@ Its future scores above 30 now fail the normal threshold instead of inheriting
 the initial ceiling of 156. All other ceilings, fallback hashes, tool pins,
 exclusions, automatic test suites and CI workflows remain unchanged. Both fresh
 platform reports have no errors, with only the same two hash-locked non-iOS
-fallbacks. Settings remediation and final release checks remain in
-[#377](https://github.com/HemSoft/codexbar-ios/issues/377) and
+fallbacks. Settings remediation is documented below. Final release checks remain
+in [#373](https://github.com/HemSoft/codexbar-ios/issues/373).
+
+## Settings dispatch and permission remediation
+
+Issue [#377](https://github.com/HemSoft/codexbar-ios/issues/377) introduces typed
+Settings data/preference/help routes with one immutable complete mapping inside
+`SettingsContentRoute.resolve(_:)`. Bounded summary and SwiftUI dispatch retain
+all six existing forms. Existing category summary formatters move unchanged.
+A per-kind UUID coordinator rejects obsolete authorization results; valid results
+still update the latest settings rather than a captured start snapshot.
+
+The before report is from [main run 36666411389](https://github.com/HemSoft/codexbar-ios/actions/runs/36666411389),
+source `5cca1be5ab2375b36ef6a9d4a15fa032a2087c04`. The fresh after report is from
+[PR run 36676926106](https://github.com/HemSoft/codexbar-ios/actions/runs/36676926106),
+head `1bb295ba0c0796d936f3ede76db285107de54b89`. The measured merge revision
+`bd8e5ebfddc3b823fbcf0be19254d76d6abaa513` has the verified base/head parents and
+exact source tree `e004a856aae30b0fae0c994a7d6493ddd984742f`. Both reports use
+Xcode 26.6 build 17F113, Swift 6.3.3 and SwiftLint 0.65.1. Both iOS suites pass
+all 711 native tests with zero failures or skips.
+
+| Declaration | Decisions | Covered / executable lines | Exact CRAP |
+| --- | ---: | ---: | ---: |
+| `SettingsView.summary(for:)` before | 6 | 0 / 32 | 42/1 |
+| `SettingsView.summary(for:)` after | 3 | 0 / 13 | 12/1 |
+| `SettingsView.settingsDestinationView(_:)` before | 6 | 0 / 16 | 42/1 |
+| `SettingsView.settingsDestinationView(_:)` after | 3 | 0 / 10 | 12/1 |
+| `SettingsView.updateGitHubStatusNotificationSetting(isEnabled:recovery:)` before | 7 | 0 / 46 | 56/1 |
+| `SettingsView.updateGitHubStatusNotificationSetting(isEnabled:recovery:)` after | 2 | 0 / 21 | 6/1 |
+| `SettingsView.dataSummary(for:)` | 2 | 0 / 11 | 6/1 |
+| `SettingsView.preferenceSummary(for:)` | 3 | 0 / 20 | 12/1 |
+| `SettingsView.dataSettingsView(_:)` | 2 | 0 / 8 | 6/1 |
+| `SettingsView.preferenceSettingsView(_:)` | 3 | 0 / 10 | 12/1 |
+| `SettingsContentRoute.resolve(_:)` | 1 | 0 / 14 | 2/1 |
+| `GitHubStatusNotificationPreference.updating(_:isEnabled:)` | 2 | 0 / 10 | 6/1 |
+| `GitHubStatusNotificationAuthorization.isPending(_:)` | 0 | 0 / 3 | 0/1 |
+| `GitHubStatusNotificationAuthorization.begin(_:)` | 0 | 0 / 5 | 0/1 |
+| `GitHubStatusNotificationAuthorization.cancel(_:)` | 0 | 0 / 3 | 0/1 |
+| `GitHubStatusNotificationAuthorization.cancelAll()` | 0 | 0 / 3 | 0/1 |
+| `GitHubStatusNotificationAuthorization.complete(_:granted:)` | 1 | 0 / 5 | 2/1 |
+| `GitHubStatusNotificationAuthorization.permissionMessage(granted:)` | 0 | 0 / 3 | 0/1 |
+| `SettingsCategorySummary.accounts(accountCount:groupCount:)` relocated | 0 | 3 / 3 | 0/1 |
+| `SettingsCategorySummary.dashboard(appearance:ordering:refreshInterval:historySamplingInterval:)` relocated | 0 | 4 / 4 | 0/1 |
+| `SettingsCategorySummary.alerts(isEnabled:githubStatusEnabled:warningThreshold:criticalThreshold:)` relocated | 2 | 11 / 12 | 865/432 |
+| `SettingsCategorySummary.help(installedVersion:availableVersion:)` relocated | 1 | 6 / 6 | 1/1 |
+| `SettingsCategorySummary.count(_:singular:)` relocated | 0 | 3 / 3 | 0/1 |
+
+All twenty resulting/relocated production functions score at most 12, with nonzero
+executable-line denominators. The changed view functions and new pure interfaces
+remain uncovered by native unit tests; this is a decision-complexity reduction,
+not increased iOS coverage. No dispatch or permission decision is hidden in an
+unmeasured accessor, renamed out of policy, or placed in fixture infrastructure.
+
+Seventeen explicit local Foundation regressions cover complete routing, exact
+summaries, separate notification kinds and view state, denial, cancellation,
+superseded/repeated completions, and updates to the latest preferences:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcrun swift test --filter SettingsPresentationRegressionTests
+```
+
+Three additional manual-only UI journeys exercise the existing categories,
+Done/Back and pending group validation, injected granted/denied authorization,
+saved choices across closing/reopening Settings, and monitor-disable behavior on
+both device families. The manual runner requires nineteen total journeys; its
+zero-skip and exact-count gate remains strict. Automatic suites, jobs, triggers,
+matrices, retries, destinations, timeouts and workflows are unchanged. Synthetic
+media and macOS regressions are not native coverage or live permission proof.
+
+Remove only the three resolved Settings baseline entries after this evidence.
+Future production scores above 30 fail the normal threshold; no high-risk ceiling
+remains on either platform. Original historical metadata, tool pins, exclusions
+and both hash-locked non-iOS fallbacks are preserved. Both fresh platform reports
+have zero errors. Final exact-candidate release validation remains separate in
 [#373](https://github.com/HemSoft/codexbar-ios/issues/373).

@@ -1077,7 +1077,9 @@ struct UITestOpenCodeSessionValidator: OpenCodeSessionValidating {
 
 @MainActor
 final class UITestNotifier: UsageAlertNotifying, GitHubStatusNotifying {
-    func requestAuthorization() async -> Bool { false }
+    func requestAuthorization() async -> Bool {
+        ProcessInfo.processInfo.environment["CODEXBAR_UI_TEST_NOTIFICATION_GRANTED"] == "1"
+    }
     func deliver(_ notification: UsageAlertNotification) async throws {}
     func deliverGitHubStatus(_ notification: GitHubStatusNotification) async throws {}
 }
