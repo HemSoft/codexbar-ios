@@ -250,6 +250,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Isolated Settings category routing and notification-request decisions for
+  local synthetic regression tests. Category summaries, Done/Back navigation,
+  pending group edits, and independent notification choices retain their
+  existing behavior. Automatic test suites and workflows are unchanged.
+  ([#377](https://github.com/HemSoft/codexbar-ios/issues/377))
+
 - Isolated dashboard tile selection for local synthetic regression tests.
   Metric values, missing and stale states, supporting details, customization,
   accessibility labels, and History behavior are unchanged.

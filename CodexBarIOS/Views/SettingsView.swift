@@ -2,64 +2,6 @@ import StoreKit
 import SwiftUI
 import UIKit
 
-enum SettingsInitialRoute: Hashable {
-    case accounts
-
-    var destination: SettingsDestination {
-        switch self {
-        case .accounts:
-            .accountsAndGroups
-        }
-    }
-}
-
-enum SettingsDestination: String, CaseIterable, Identifiable, Hashable {
-    case accountsAndGroups
-    case dashboard
-    case alerts
-    case widgets
-    case helpAndAbout
-    case dataAndRecovery
-
-    var id: Self {
-        self
-    }
-
-    var title: String {
-        switch self {
-        case .accountsAndGroups:
-            "Accounts & Groups"
-        case .dashboard:
-            "Dashboard"
-        case .alerts:
-            "Alerts"
-        case .widgets:
-            "Widgets"
-        case .helpAndAbout:
-            "Help & About"
-        case .dataAndRecovery:
-            "Data & Recovery"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .accountsAndGroups:
-            "person.2"
-        case .dashboard:
-            "rectangle.3.group"
-        case .alerts:
-            "bell"
-        case .widgets:
-            "square.grid.2x2"
-        case .helpAndAbout:
-            "questionmark.circle"
-        case .dataAndRecovery:
-            "externaldrive.badge.exclamationmark"
-        }
-    }
-}
-
 struct SettingsHomeLayout: Equatable {
     let attentionDestination: SettingsDestination?
     let routineDestinations: [SettingsDestination]
@@ -204,51 +146,6 @@ enum SettingsDoneToolbarPolicy {
     }
 }
 
-enum SettingsCategorySummary {
-    static func accounts(accountCount: Int, groupCount: Int) -> String {
-        "\(count(accountCount, singular: "account")) · \(count(groupCount, singular: "group"))"
-    }
-
-    static func dashboard(
-        appearance: AppAppearance,
-        ordering: DashboardOrderingMode,
-        refreshInterval: AutoRefreshInterval,
-        historySamplingInterval: HistorySamplingInterval
-    ) -> String {
-        "\(appearance.displayName) · \(ordering.displayName) · \(refreshInterval.displayName) refresh · "
-            + "\(historySamplingInterval.displayName) history"
-    }
-
-    static func alerts(
-        isEnabled: Bool,
-        githubStatusEnabled: Bool = false,
-        warningThreshold: Double,
-        criticalThreshold: Double
-    ) -> String {
-        guard isEnabled || githubStatusEnabled else {
-            return "Off"
-        }
-        guard isEnabled else {
-            return "GitHub status on"
-        }
-        let warningPercent = Int((warningThreshold * 100).rounded())
-        let criticalPercent = Int((criticalThreshold * 100).rounded())
-        let statusSuffix = githubStatusEnabled ? " · GitHub status on" : ""
-        return "On · Warning \(warningPercent)% · Critical \(criticalPercent)%\(statusSuffix)"
-    }
-
-    static func help(installedVersion: String, availableVersion: String?) -> String {
-        if let availableVersion {
-            return "Version \(availableVersion) available"
-        }
-        return installedVersion
-    }
-
-    private static func count(_ value: Int, singular: String) -> String {
-        "\(value) \(singular)\(value == 1 ? "" : "s")"
-    }
-}
-
 struct SettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @ObservedObject var appUpdateController: AppUpdateController
@@ -271,8 +168,7 @@ struct SettingsView: View {
     @State private var isConfirmingGroupReplacement = false
     @State private var alertPermissionMessage: String?
     @State private var githubStatusPermissionMessage: String?
-    @State private var githubIncidentAuthorizationRequestID: UUID?
-    @State private var githubRecoveryAuthorizationRequestID: UUID?
+    @State private var githubNotificationAuthorization = GitHubStatusNotificationAuthorization()
     @State private var addAccountFlowRequest: AddAccountFlowRequest?
     @State private var addAccountRefreshState = AddAccountRefreshState()
     @State private var newGroupName = ""
@@ -539,12 +435,33 @@ struct SettingsView: View {
     }
 
     private func summary(for destination: SettingsDestination) -> String {
-        switch destination {
+        switch SettingsContentRoute.resolve(destination) {
+        case let .data(section):
+            dataSummary(for: section)
+        case let .preferences(section):
+            preferenceSummary(for: section)
+        case .helpAndAbout:
+            SettingsCategorySummary.help(
+                installedVersion: appUpdateController.installedVersion.displayText,
+                availableVersion: appUpdateController.availableRelease?.version
+            )
+        }
+    }
+
+    private func dataSummary(for section: SettingsContentRoute.DataSection) -> String {
+        switch section {
         case .accountsAndGroups:
             SettingsCategorySummary.accounts(
                 accountCount: configurationStore.visibleConfigurations.count,
                 groupCount: configurationStore.groups.count
             )
+        case .dataAndRecovery:
+            recoveryState.summary
+        }
+    }
+
+    private func preferenceSummary(for section: SettingsContentRoute.PreferenceSection) -> String {
+        switch section {
         case .dashboard:
             SettingsCategorySummary.dashboard(
                 appearance: configurationStore.appAppearance,
@@ -561,31 +478,40 @@ struct SettingsView: View {
             )
         case .widgets:
             configurationStore.widgetRefreshInterval.displayName
-        case .helpAndAbout:
-            SettingsCategorySummary.help(
-                installedVersion: appUpdateController.installedVersion.displayText,
-                availableVersion: appUpdateController.availableRelease?.version
-            )
-        case .dataAndRecovery:
-            recoveryState.summary
         }
     }
 
     @ViewBuilder
     private func settingsDestinationView(_ destination: SettingsDestination) -> some View {
-        switch destination {
+        switch SettingsContentRoute.resolve(destination) {
+        case let .data(section):
+            dataSettingsView(section)
+        case let .preferences(section):
+            preferenceSettingsView(section)
+        case .helpAndAbout:
+            helpAndAboutSettings
+        }
+    }
+
+    @ViewBuilder
+    private func dataSettingsView(_ section: SettingsContentRoute.DataSection) -> some View {
+        switch section {
         case .accountsAndGroups:
             accountsAndGroupsSettings
+        case .dataAndRecovery:
+            dataAndRecoverySettings
+        }
+    }
+
+    @ViewBuilder
+    private func preferenceSettingsView(_ section: SettingsContentRoute.PreferenceSection) -> some View {
+        switch section {
         case .dashboard:
             dashboardSettings
         case .alerts:
             alertSettings
         case .widgets:
             widgetSettings
-        case .helpAndAbout:
-            helpAndAboutSettings
-        case .dataAndRecovery:
-            dataAndRecoverySettings
         }
     }
 
@@ -1092,8 +1018,7 @@ struct SettingsView: View {
                 if isEnabled {
                     Task { await onGitHubStatusRefresh() }
                 } else {
-                    githubIncidentAuthorizationRequestID = nil
-                    githubRecoveryAuthorizationRequestID = nil
+                    githubNotificationAuthorization.cancelAll()
                     githubStatusPermissionMessage = nil
                 }
             }
@@ -1126,7 +1051,7 @@ struct SettingsView: View {
         Binding(
             get: {
                 githubStatusPreferences.settings.sendsIncidentNotifications
-                    || githubIncidentAuthorizationRequestID != nil
+                    || githubNotificationAuthorization.isPending(.incident)
             },
             set: { isEnabled in
                 updateGitHubStatusNotificationSetting(isEnabled: isEnabled, recovery: false)
@@ -1138,7 +1063,7 @@ struct SettingsView: View {
         Binding(
             get: {
                 githubStatusPreferences.settings.sendsRecoveryNotifications
-                    || githubRecoveryAuthorizationRequestID != nil
+                    || githubNotificationAuthorization.isPending(.recovery)
             },
             set: { isEnabled in
                 updateGitHubStatusNotificationSetting(isEnabled: isEnabled, recovery: true)
@@ -1154,49 +1079,24 @@ struct SettingsView: View {
     }
 
     private func updateGitHubStatusNotificationSetting(isEnabled: Bool, recovery: Bool) {
+        let preference: GitHubStatusNotificationPreference = recovery ? .recovery : .incident
         guard isEnabled else {
-            if recovery {
-                githubRecoveryAuthorizationRequestID = nil
-            } else {
-                githubIncidentAuthorizationRequestID = nil
-            }
-            var settings = githubStatusPreferences.settings
-            if recovery {
-                settings.sendsRecoveryNotifications = false
-            } else {
-                settings.sendsIncidentNotifications = false
-            }
-            githubStatusPreferences.updateSettings(settings)
+            githubNotificationAuthorization.cancel(preference)
+            githubStatusPreferences.updateSettings(
+                preference.updating(githubStatusPreferences.settings, isEnabled: false)
+            )
             githubStatusPermissionMessage = nil
             return
         }
 
-        let requestID = UUID()
-        if recovery {
-            githubRecoveryAuthorizationRequestID = requestID
-        } else {
-            githubIncidentAuthorizationRequestID = requestID
-        }
-
+        let request = githubNotificationAuthorization.begin(preference)
         Task {
             let granted = await onAlertAuthorizationRequest()
-            let activeRequestID = recovery
-                ? githubRecoveryAuthorizationRequestID
-                : githubIncidentAuthorizationRequestID
-            guard activeRequestID == requestID else { return }
-            if recovery {
-                githubRecoveryAuthorizationRequestID = nil
-            } else {
-                githubIncidentAuthorizationRequestID = nil
-            }
-            var settings = githubStatusPreferences.settings
-            if recovery {
-                settings.sendsRecoveryNotifications = granted
-            } else {
-                settings.sendsIncidentNotifications = granted
-            }
-            githubStatusPreferences.updateSettings(settings)
-            githubStatusPermissionMessage = granted ? nil : "Notifications are disabled for CodexBar."
+            guard let currentResult = githubNotificationAuthorization.complete(request, granted: granted) else { return }
+            githubStatusPreferences.updateSettings(
+                preference.updating(githubStatusPreferences.settings, isEnabled: currentResult)
+            )
+            githubStatusPermissionMessage = GitHubStatusNotificationAuthorization.permissionMessage(granted: currentResult)
         }
     }
 
