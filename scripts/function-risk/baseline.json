@@ -8,14 +8,6 @@
   "platforms": {
     "ios": {
       "high_risk": {
-        "CodexBarIOS/Views/ProviderUsageCard.swift::ProviderUsageCard.private func metricTile ( _ item : ProviderMetricTileGridItem ) -> some View": {
-          "complexity": 12,
-          "covered_lines": 0,
-          "crap_exact": "156/1",
-          "executable_lines": 95,
-          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
-          "target": "CodexBarIOS.app"
-        },
         "CodexBarIOS/Views/SettingsView.swift::SettingsView.@ ViewBuilder private func settingsDestinationView ( _ destination : SettingsDestination ) -> some View": {
           "complexity": 6,
           "covered_lines": 0,
