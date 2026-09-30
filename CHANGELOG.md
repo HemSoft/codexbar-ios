@@ -253,7 +253,9 @@ building, testing, or releasing the app.
 - Isolated Settings category routing and notification-request decisions for
   local synthetic regression tests. Category summaries, Done/Back navigation,
   pending group edits, and independent notification choices retain their
-  existing behavior. Automatic test suites and workflows are unchanged.
+  existing behavior. Added three manual-only Settings UI journeys and kept the
+  manual runner's exact-count gate in sync. Automatic test suites and workflows
+  are unchanged.
   ([#377](https://github.com/HemSoft/codexbar-ios/issues/377))
 
 - Isolated dashboard tile selection for local synthetic regression tests.

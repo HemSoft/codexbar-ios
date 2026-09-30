@@ -110,6 +110,25 @@ it. Animations retain the normal app behavior.
   credits-first layouts, relaunch persistence, fresh order, 0% and unavailable
   weeks, and an explicit credits-first reorder on iPhone and iPad.
 
+- `SettingsEvidenceUITests.testEverySettingsDestinationAndDoneBack` captures
+  root summaries and all six existing destinations, then checks Done/Back.
+- `SettingsEvidenceUITests.testPendingDuplicateGroupBlocksDoneUntilCorrected`
+  checks that a duplicate pending group blocks Done, then corrects the name
+  and verifies both saved groups after closing and reopening Settings.
+- `SettingsEvidenceUITests.testSyntheticGrantedAndDeniedNotificationFeedback`
+  injects granted and denied authorization results for incident and recovery
+  notifications, checks feedback and saved preferences across closing/reopening,
+  then disables monitoring and verifies the controls are disabled.
+
+Local-only Foundation regressions cover exact destination mapping, summary
+formatting, independent UUID requests, denial, cancellation, superseded and
+repeated completions, separate view state, and updates to the latest preferences:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcrun swift test --filter SettingsPresentationRegressionTests
+```
+
 The tests assert accessible names, values, selection state, and reachable tap
 targets. They cover app-owned account and usage navigation. Live website sign-in,
 provider API contracts, and VoiceOver speech remain separate verification.
@@ -156,9 +175,10 @@ reads or writes Keychain. Only synthetic OpenRouter, combined Gemini, GitHub Bil
 usage providers are registered. The production account form, group
 persistence, refresh service, dashboard, History, and URL handler still execute.
 
-The fixture disables lifecycle polling and bootstrap imports, uses a notifier
-that does nothing, and injects widget publishers and a Watch sender that do
-nothing. A URLProtocol blocks unexpected URLSession traffic. No credentials,
+The fixture disables lifecycle polling and bootstrap imports. Its notifier
+never delivers notifications and denies authorization by default; the explicit
+simulator-only `CODEXBAR_UI_TEST_NOTIFICATION_GRANTED=1` flag supplies a synthetic
+grant for Settings evidence. Widget publishers and the Watch sender do nothing. A URLProtocol blocks unexpected URLSession traffic. No credentials,
 provider account, Watch pairing, notification permission, or external network
 service is needed. DEBUG fixture functions have an explicit exclusion in the
 function-risk policy because they are test infrastructure. The production risk
@@ -176,7 +196,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than sixteen passed tests with zero skips or
+runner rejects anything other than nineteen passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.
