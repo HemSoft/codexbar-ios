@@ -252,7 +252,70 @@ scores above 30 now fail the normal threshold instead of inheriting its old
 ceiling. Other ceilings, fallback exceptions, exclusions, tool pins, automatic
 test suites, and CI workflows are unchanged. The fresh iOS and watch reports
 have no gate errors; the two hash-locked non-iOS fallbacks are unchanged.
-The dashboard and Settings work remains in
-[#376](https://github.com/HemSoft/codexbar-ios/issues/376) and
+Dashboard remediation is documented below. Settings work remains in
 [#377](https://github.com/HemSoft/codexbar-ios/issues/377). Final exact-candidate
 release validation remains in [#373](https://github.com/HemSoft/codexbar-ios/issues/373).
+
+## Dashboard metric-dispatch remediation
+
+Issue [#376](https://github.com/HemSoft/codexbar-ios/issues/376) extracts a pure
+`ProviderMetricTileContent` interface for selecting valid metric data and
+supporting details. The original tile function keeps its identity, button/detail
+action, common container, and accessibility modifiers. Bounded SwiftUI renderers
+consume the resolved data without changing fonts, formats, layout, or existing
+usage/reset/projection/severity/history decisions.
+
+The before `function-risk-ios` report is from
+[main run 36655524851](https://github.com/HemSoft/codexbar-ios/actions/runs/36655524851),
+source `7925e6019e4410d778560f423f80cbc04565ca44`. The fresh after report is from
+[run 36658247013](https://github.com/HemSoft/codexbar-ios/actions/runs/36658247013),
+PR source `3c2cbc424caefab88e9b3af9cdf88e8a3c6b839d`. Its measured merge revision
+`279f1b880aeac48539cc1899dd68297c90021913` has verified default/source parents and
+the exact PR tree. Both reports use Xcode 26.6 build 17F113, Swift 6.3.3, and
+SwiftLint 0.65.1; both iOS suites pass all 711 tests with zero failures or skips.
+
+| Declaration | Decisions | Covered / executable lines | CRAP |
+| --- | ---: | ---: | ---: |
+| `ProviderUsageCard.metricTile(_:)` before | 9 | 0 / 74 | 90 |
+| `ProviderUsageCard.metricTile(_:)` after | 0 | 0 / 23 | 0 |
+| `ProviderUsageCard.metricTileContent(_:)` | 5 | 0 / 14 | 30 |
+| `ProviderUsageCard.unavailableTileContent(label:reason:)` | 0 | 0 / 8 | 0 |
+| `ProviderUsageCard.creditsTileContent(label:value:detail:)` | 1 | 0 / 18 | 2 |
+| `ProviderUsageCard.monetaryTileContent(metric:detail:)` | 1 | 0 / 18 | 2 |
+| `ProviderMetricTileContent.resolve(metric:result:isFullWidth:)` | 4 | 0 / 12 | 20 |
+| `ProviderMetricTileContent.resolveUsageBar(index:result:)` | 1 | 0 / 4 | 2 |
+| `ProviderMetricTileContent.resolveCredits(result:isFullWidth:)` | 1 | 0 / 7 | 2 |
+| `ProviderMetricTileContent.resolveMonetary(index:result:isFullWidth:)` | 1 | 0 / 5 | 2 |
+
+All nine affected/resulting declarations are scored with nonzero executable-line
+denominators. None is moved to an unmeasured accessor or renamed to escape the
+baseline. This is bounded decomposition with a testable data-selection interface,
+not increased iOS unit coverage or a claim that every branch is covered. The
+local macOS tests and manually exercised UI states are not mixed into the iOS
+coverage or presented as live provider proof.
+
+Thirteen explicit local regressions exercise raw over-limit/reset/projection
+values, missing and reported zero credits, stale/current/partial-failure policy,
+invalid indices, all monetary kinds and their original precision/identity,
+full-width supporting details, unavailable reasons, and account isolation:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcrun swift test --filter MetricTileContentRegressionTests
+```
+
+The UI evidence also uses explicitly launched mixed-metric scenes in the existing
+DEBUG-only, UUID-isolated, network-blocked `UITestFixtures` infrastructure. That
+file was already excluded as test infrastructure; no exclusion or policy changed,
+and no production selection or rendering logic is placed there. Existing manual
+UI journeys exercise saved order, width/style/visibility, relaunch and recovery.
+Current-head media and commands are recorded in the PR's Validation section.
+
+Remove only the resolved `metricTile(_:)` high-risk entry after this fresh proof.
+Its future scores above 30 now fail the normal threshold instead of inheriting
+the initial ceiling of 156. All other ceilings, fallback hashes, tool pins,
+exclusions, automatic test suites and CI workflows remain unchanged. Both fresh
+platform reports have no errors, with only the same two hash-locked non-iOS
+fallbacks. Settings remediation and final release checks remain in
+[#377](https://github.com/HemSoft/codexbar-ios/issues/377) and
+[#373](https://github.com/HemSoft/codexbar-ios/issues/373).

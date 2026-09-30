@@ -64,6 +64,10 @@ final class UITestFixtures {
 
         let scenario = environment["CODEXBAR_UI_TEST_SCENARIO"]
         let recovery = scenario == "recovery"
+        let metricEvidence = scenario?.hasPrefix("metric-evidence-") == true
+        if metricEvidence && configurationStore.configurations.isEmpty {
+            Self.seedMetricEvidenceAccount(in: configurationStore)
+        }
         let githubBilling = scenario?.hasPrefix("github-billing") == true
         let grok = scenario?.hasPrefix("grok") == true
         let codex = scenario == "codex-two"
@@ -90,6 +94,9 @@ final class UITestFixtures {
         let results = configurationStore.configurations
             .filter(configurationStore.isConfigured)
             .map { configuration in
+                if metricEvidence {
+                    return Self.metricEvidenceResult(for: configuration, scenario: scenario ?? "")
+                }
                 if google {
                     return Self.googleResult(for: configuration, sources: googleSources, stage: 0)
                 }
@@ -174,6 +181,50 @@ final class UITestFixtures {
                     resetsAt: Date().addingTimeInterval(18_000), resetDisplayStyle: .relativeWithLocalTime
                 ),
             ], fetchedAt: Date()
+        )
+    }
+
+    /// Existing UUID-isolated, network-blocked UI infrastructure only. No live account data.
+    private static func seedMetricEvidenceAccount(in store: ProviderConfigurationStore) {
+        let account = ProviderAccountConfiguration(
+            id: "ui-metric-evidence", providerID: .openRouter,
+            accountLabel: "Synthetic Metrics", authMethod: .apiKey
+        )
+        _ = store.update(account)
+        _ = store.saveSecret("ui-test-credential", for: account)
+    }
+
+    nonisolated private static func metricEvidenceResult(
+        for account: ProviderAccountConfiguration, scenario: String
+    ) -> ProviderUsageResult {
+        let now = Date()
+        let stale = scenario.hasSuffix("-stale")
+        let bars: [UsageBar] = scenario.hasSuffix("-money") || scenario.hasSuffix("-balance") ? [] : [
+            UsageBar(
+                stableKey: "synthetic-over-limit", label: "Synthetic included usage", used: 125, limit: 100,
+                resetDescription: "Resets in 2 hours", showProjectionOnCurrentBar: true,
+                projectionDescriptionOverride: "Projected to reach 180%", projectionSignificanceOverride: .warning
+            ),
+        ]
+        let money: [ProviderMonetaryMetric] = scenario.hasSuffix("-balance") ? [] : [
+            ProviderMonetaryMetric(
+                kind: .grossSpend, label: "Synthetic gross spend", minorUnits: Decimal(1248),
+                currencyCode: "USD", decimalPlaces: 2, detail: "Reported gross amount before discounts"
+            ),
+            ProviderMonetaryMetric(
+                kind: .spent, label: "Synthetic net spend", minorUnits: Decimal(1199),
+                currencyCode: "USD", decimalPlaces: 2, detail: "Reported net amount after discounts"
+            ),
+        ]
+        return ProviderUsageResult(
+            accountID: account.id, providerID: account.providerID, title: account.displayName,
+            subtitle: "Synthetic metric-rendering evidence. No live provider access.",
+            bars: bars, barsFetchedAt: stale ? now.addingTimeInterval(-300) : now,
+            creditsRemaining: scenario.hasSuffix("-money") ? nil : 53.25,
+            creditsFetchedAt: stale ? now.addingTimeInterval(-300) : now,
+            monetaryMetrics: money,
+            failureMessage: stale ? "Synthetic provider failure. Showing cached observations." : nil,
+            fetchedAt: now
         )
     }
 
