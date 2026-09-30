@@ -45,6 +45,7 @@ final class SettingsEvidenceUITests: XCTestCase {
         openSettings(app)
         select("accountsAndGroups", in: app)
         XCTAssertTrue(app.textFields.containing(NSPredicate(format: "value == %@", "Corrected Group")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields.containing(NSPredicate(format: "value == %@", "Fixture Group")).firstMatch.waitForExistence(timeout: 5))
         capture("settings-corrected-groups")
         app.terminate()
     }
