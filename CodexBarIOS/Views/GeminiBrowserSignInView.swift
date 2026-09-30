@@ -10,9 +10,8 @@ final class GeminiBrowserSignInSession: NSObject, ObservableObject, Identifiable
     @Published private(set) var canGoBack = false
     @Published private(set) var message: String?
     private var completion: ((Result<String, Error>) -> Void)?
-    private var isReadingCookies = false
     private var didStart = false
-    private var returnState = GeminiBrowserReturnState()
+    private var inspectionState = GeminiBrowserInspectionState()
     private var navigationRevision = 0
 
     init(completion: @escaping (Result<String, Error>) -> Void) {
@@ -69,28 +68,34 @@ final class GeminiBrowserSignInSession: NSObject, ObservableObject, Identifiable
         inspectSession()
     }
 
+    private func inspectionContext() -> GeminiBrowserInspectionContext {
+        GeminiBrowserInspectionContext(
+            isActive: completion != nil, isLoading: webView.isLoading,
+            url: webView.url, navigationRevision: navigationRevision
+        )
+    }
+
     private func inspectSession() {
-        guard completion != nil, !isReadingCookies, !webView.isLoading,
-              GeminiBrowserSessionPolicy.canReturnToUsage(from: webView.url) else { return }
-        isReadingCookies = true
-        let revision = navigationRevision
+        guard let revision = inspectionState.begin(in: inspectionContext()) else { return }
         webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
             guard let self else { return }
-            self.isReadingCookies = false
-            guard self.completion != nil, !self.webView.isLoading, self.navigationRevision == revision,
-                  GeminiBrowserSessionPolicy.canReturnToUsage(from: self.webView.url) else { return }
-            do {
-                guard let credential = try GeminiBrowserSessionPolicy.storedCredential(from: cookies) else { return }
-                if GeminiBrowserSessionPolicy.isUsagePage(self.webView.url) {
-                    self.finish(.success(credential))
-                } else if self.returnState.shouldReturn(for: credential) {
-                    self.openUsage()
-                } else {
-                    self.message = "Google returned to your account page. Finish signing in, then choose Gemini Usage to retry."
-                }
-            } catch {
-                self.finish(.failure(GeminiSignInError.ambiguousSession))
-            }
+            let action = self.inspectionState.complete(cookies: cookies, revision: revision, in: self.inspectionContext())
+            self.apply(action)
+        }
+    }
+
+    private func apply(_ action: GeminiBrowserInspectionState.Action) {
+        switch action {
+        case .ignore:
+            break
+        case let .credential(credential):
+            finish(.success(credential))
+        case .openUsage:
+            openUsage()
+        case .explainRepeatedReturn:
+            message = "Google returned to your account page. Finish signing in, then choose Gemini Usage to retry."
+        case .ambiguousSession:
+            finish(.failure(GeminiSignInError.ambiguousSession))
         }
     }
 

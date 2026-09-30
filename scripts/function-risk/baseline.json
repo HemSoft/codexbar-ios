@@ -16,14 +16,6 @@
           "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
           "target": "CodexBarIOS.app"
         },
-        "CodexBarIOS/Views/GeminiBrowserSignInView.swift::GeminiBrowserSignInSession.private func inspectSession ( )": {
-          "complexity": 7,
-          "covered_lines": 0,
-          "crap_exact": "56/1",
-          "executable_lines": 24,
-          "reason": "Existing production risk measured for #306; bounded remediation plan in FUNCTION-RISK.md.",
-          "target": "CodexBarIOS.app"
-        },
         "CodexBarIOS/Views/ProviderUsageCard.swift::ProviderUsageCard.private func metricTile ( _ item : ProviderMetricTileGridItem ) -> some View": {
           "complexity": 12,
           "covered_lines": 0,
