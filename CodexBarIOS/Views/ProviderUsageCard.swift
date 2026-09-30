@@ -1145,58 +1145,7 @@ struct ProviderUsageCard: View {
             metricDetailPresentation = ProviderMetricTileDetailPresentation(metricID: item.metric.id)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                switch item.metric.kind {
-                case let .usageBar(index):
-                    if result.bars.indices.contains(index) {
-                        usageTileContent(item, bar: result.bars[index])
-                    }
-                case let .unavailableUsage(reason):
-                    Text(item.metric.label)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    Text(reason)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                case .creditsRemaining:
-                    if let creditsRemaining = result.creditsRemaining {
-                        Text(item.metric.label)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Text(CodexBarCurrencyText.format(creditsRemaining))
-                            .font(.system(.title3, design: .rounded, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .monospacedDigit()
-                            .minimumScaleFactor(0.7)
-                            .lineLimit(1)
-
-                        if item.width == .full {
-                            supportingText(result.hasCurrentCredits ? "Current balance" : "Last known balance")
-                        }
-                    }
-                case let .monetary(index):
-                    if result.monetaryMetrics.indices.contains(index) {
-                        let metric = result.monetaryMetrics[index]
-                        Text(metric.label)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Text(metric.formattedAmount())
-                            .font(.system(.title3, design: .rounded, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .monospacedDigit()
-                            .minimumScaleFactor(0.65)
-                            .lineLimit(1)
-
-                        if item.width == .full, let detail = metric.detail {
-                            supportingText(detail)
-                        }
-                    }
-                }
+                metricTileContent(item)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(12)
@@ -1213,6 +1162,72 @@ struct ProviderUsageCard: View {
         .accessibilityLabel(metricAccessibilityLabel(item.metric))
         .accessibilityHint(Self.metricDetailAccessibilityHint)
         .accessibilityAddTraits(.isButton)
+    }
+
+    @ViewBuilder
+    private func metricTileContent(_ item: ProviderMetricTileGridItem) -> some View {
+        switch ProviderMetricTileContent.resolve(metric: item.metric, result: result, isFullWidth: item.width == .full) {
+        case let .usageBar(bar):
+            usageTileContent(item, bar: bar)
+        case let .unavailableUsage(reason):
+            unavailableTileContent(label: item.metric.label, reason: reason)
+        case let .creditsRemaining(value, detail):
+            creditsTileContent(label: item.metric.label, value: value, detail: detail)
+        case let .monetary(metric, detail):
+            monetaryTileContent(metric: metric, detail: detail)
+        case .empty:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private func unavailableTileContent(label: String, reason: String) -> some View {
+        Text(label)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.primary)
+        Text(reason)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private func creditsTileContent(label: String, value: Double, detail: String?) -> some View {
+        Text(label)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+
+        Text(CodexBarCurrencyText.format(value))
+            .font(.system(.title3, design: .rounded, weight: .semibold))
+            .foregroundStyle(.primary)
+            .monospacedDigit()
+            .minimumScaleFactor(0.7)
+            .lineLimit(1)
+
+        if let detail {
+            supportingText(detail)
+        }
+    }
+
+    @ViewBuilder
+    private func monetaryTileContent(metric: ProviderMonetaryMetric, detail: String?) -> some View {
+        Text(metric.label)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+
+        Text(metric.formattedAmount())
+            .font(.system(.title3, design: .rounded, weight: .semibold))
+            .foregroundStyle(.primary)
+            .monospacedDigit()
+            .minimumScaleFactor(0.65)
+            .lineLimit(1)
+
+        if let detail {
+            supportingText(detail)
+        }
     }
 
     private func usageTileContent(_ item: ProviderMetricTileGridItem, bar: UsageBar) -> some View {
