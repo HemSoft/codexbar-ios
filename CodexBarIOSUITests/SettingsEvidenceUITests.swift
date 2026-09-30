@@ -11,9 +11,19 @@ final class SettingsEvidenceUITests: XCTestCase {
         let app = launch()
         openSettings(app)
         capture("settings-home")
-        let destinations = ["accountsAndGroups", "dashboard", "alerts", "widgets", "helpAndAbout", "dataAndRecovery"]
-        for destination in destinations {
+        let destinations = [
+            ("accountsAndGroups", "Accounts & Groups", "Add Account"),
+            ("dashboard", "Dashboard", "Appearance"),
+            ("alerts", "Alerts", "Usage Alerts"),
+            ("widgets", "Widgets", "Widget Builder"),
+            ("helpAndAbout", "Help & About", "Feedback & Support"),
+            ("dataAndRecovery", "Data & Recovery", "Reset Accounts"),
+        ]
+        for (destination, title, controlLabel) in destinations {
             select(destination, in: app)
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+            let control = renderedControl(for: destination, in: app)
+            XCTAssertTrue(control.waitForExistence(timeout: 5), "Missing \(controlLabel) in \(title)")
             capture("settings-\(destination)")
             returnToCategories(app)
         }
@@ -95,6 +105,18 @@ final class SettingsEvidenceUITests: XCTestCase {
             XCTAssertFalse(recovery.isEnabled)
             capture("settings-monitor-disabled-\(granted)")
             app.terminate()
+        }
+    }
+
+    private func renderedControl(for destination: String, in app: XCUIApplication) -> XCUIElement {
+        switch destination {
+        case "accountsAndGroups": app.buttons["Add Account"].firstMatch
+        case "dashboard": app.staticTexts["Appearance"].firstMatch
+        case "alerts": app.switches["Usage Alerts"].firstMatch
+        case "widgets": app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Widget Builder")).firstMatch
+        case "helpAndAbout": app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Feedback & Support")).firstMatch
+        case "dataAndRecovery": app.buttons["Reset Accounts"].firstMatch
+        default: app.otherElements["Unmapped Settings destination"].firstMatch
         }
     }
 
