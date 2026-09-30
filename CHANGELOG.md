@@ -250,6 +250,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Simplified Greptile's end-of-page decisions and added local synthetic
+  pagination regressions. Empty and short pages retain the same complete-scan
+  checks, quota handling, and protection for last known account data. Automatic
+  test suites and CI workflows are unchanged.
+  ([#375](https://github.com/HemSoft/codexbar-ios/issues/375))
+
 - Isolated Gemini browser cookie-read decisions for local synthetic regression
   tests without changing sign-in screens, credential storage, or automatic CI
   test suites. Loading, stale callbacks, cancellation, and repeated account-page

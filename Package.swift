@@ -33,7 +33,15 @@ let package = Package(
         ),
     ],
     targets: [
-        // Local-only auth regressions; automatic CI continues running its existing smoke executable.
+        // Local-only regressions; automatic CI continues running its existing smoke executable.
+        .testTarget(
+            name: "GreptilePaginationTests",
+            dependencies: ["CodexBarIOS"],
+            path: "GreptilePaginationTests",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
+            ]
+        ),
         .testTarget(
             name: "GeminiAuthTests",
             dependencies: ["CodexBarIOS"],

@@ -164,16 +164,8 @@ public final class GreptileUsageProvider: UsageProvider {
                         configuration: configuration
                     )
                 }
-                if page.reviews.isEmpty {
-                    if expectedTotal == nil || offset >= expectedTotal ?? 0 {
-                        return successResult(
-                            counts: counts,
-                            quota: quota,
-                            configuration: configuration
-                        )
-                    }
-                    return incompletePaginationFailure(configuration: configuration)
-                }
+                // Empty pages are short pages too. A known total reached by
+                // this offset has already taken the complete-scan path above.
                 if page.reviews.count < pageSize {
                     if expectedTotal == nil {
                         return successResult(
