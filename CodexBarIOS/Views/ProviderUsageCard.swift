@@ -2332,10 +2332,10 @@ struct ProviderUsageHistoryDetailView: View {
                         .foregroundStyle(Color.secondary.opacity(0.15))
                     AxisTick()
                     AxisValueLabel(
-                        anchor: value.index == 0
+                        anchor: value.count > 1 && value.index == 0
                             ? .topLeading
-                            : value.index == value.count - 1 ? .topTrailing : .top,
-                        collisionResolution: .greedy
+                            : value.count > 1 && value.index == value.count - 1 ? .topTrailing : .top,
+                        collisionResolution: .greedy(priority: value.index == value.count - 1 ? 1 : 0)
                     ) {
                         if let date = value.as(Date.self) {
                             Text(axisDateText(for: date))
