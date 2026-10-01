@@ -2332,7 +2332,9 @@ struct ProviderUsageHistoryDetailView: View {
                         .foregroundStyle(Color.secondary.opacity(0.15))
                     AxisTick()
                     AxisValueLabel(
-                        anchor: value.index == 0 ? .topLeading : .topTrailing,
+                        anchor: value.index == 0
+                            ? .topLeading
+                            : value.index == value.count - 1 ? .topTrailing : .top,
                         collisionResolution: .greedy
                     ) {
                         if let date = value.as(Date.self) {
