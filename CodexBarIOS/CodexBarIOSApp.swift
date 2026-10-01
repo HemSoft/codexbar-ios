@@ -61,7 +61,10 @@ struct CodexBarIOSApp: App {
             }
 
             let results = AppStoreScreenshotFixtures.results(for: configurationStore)
-            let historyStore = AppStoreScreenshotFixtures.historyStore(for: results)
+            let historyStore = AppStoreScreenshotFixtures.historyStore(
+                for: results,
+                extendedRange: screenshotConfiguration.scene == .history
+            )
             AppStoreScreenshotFixtures.seedWidgetPreview(
                 results: results,
                 configurationStore: configurationStore

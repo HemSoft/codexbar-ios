@@ -153,7 +153,10 @@ enum AppStoreScreenshotFixtures {
         }
     }
 
-    static func historyStore(for results: [ProviderUsageResult]) -> UsageHistoryStore {
+    static func historyStore(
+        for results: [ProviderUsageResult],
+        extendedRange: Bool = false
+    ) -> UsageHistoryStore {
         let suiteName = "com.hemsoft.CodexBarIOS.appStoreScreenshotHistory"
         let defaults = UserDefaults(suiteName: suiteName) ?? .standard
         defaults.removePersistentDomain(forName: suiteName)
@@ -163,7 +166,9 @@ enum AppStoreScreenshotFixtures {
             return store
         }
 
-        let fractions = (0..<90).map { 0.22 + Double($0) / 89 * 0.38 }
+        let fractions = extendedRange
+            ? (0..<90).map { 0.22 + Double($0) / 89 * 0.38 }
+            : [0.22, 0.29, 0.35, 0.41, 0.48, 0.52, 0.56, 0.60]
         let latestDate = captureDate
         for (index, fraction) in fractions.enumerated() {
             let capturedAt = latestDate.addingTimeInterval(TimeInterval(index - fractions.count + 1) * 24 * 60 * 60)

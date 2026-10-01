@@ -32,12 +32,14 @@ def main():
     parser.add_argument('--name', required=True)
     parser.add_argument('--os', default='latest')
     args = parser.parse_args()
-    data = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', '--json']))
-    sdk = subprocess.check_output(['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version'], text=True).strip()
     try:
+        data = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', '--json']))
+        sdk = subprocess.check_output(['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version'], text=True).strip()
         print(select_device(data, args.name, args.os, sdk))
-    except ValueError as error:
-        parser.exit(1, f'{error}\n')
+    except subprocess.CalledProcessError as error:
+        parser.exit(1, f'Simulator discovery command failed ({error.returncode}): {" ".join(error.cmd)}\n')
+    except (ValueError, OSError) as error:
+        parser.exit(1, f'Simulator discovery failed: {error}\n')
 
 
 if __name__ == '__main__':

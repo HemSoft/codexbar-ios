@@ -7,6 +7,9 @@ import re
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
+import io
+import contextlib
 import struct
 import zlib
 
@@ -182,6 +185,20 @@ enum MetricTileWidthPreference { case half }
         data["devices"][new][0]["isAvailable"] = False
         with self.assertRaisesRegex(ValueError, "No available"):
             selector.select_device(data, "Same Phone", "latest", "27.0")
+
+    def test_selector_command_failures_exit_without_a_traceback(self):
+        spec = importlib.util.spec_from_file_location("selector_errors", ROOT / "scripts/select-ios-screenshot-simulator.py")
+        selector = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(selector)
+        for error in (subprocess.CalledProcessError(72, ["xcrun", "simctl"]), OSError("tool missing")):
+            output = io.StringIO()
+            with mock.patch("sys.argv", ["selector", "--name", "Fixture"]), \
+                    mock.patch.object(selector.subprocess, "check_output", side_effect=error), \
+                    contextlib.redirect_stderr(output), self.assertRaises(SystemExit) as result:
+                selector.main()
+            self.assertEqual(result.exception.code, 1)
+            self.assertIn("Simulator discovery", output.getvalue())
+            self.assertNotIn("Traceback", output.getvalue())
 
     def test_source_boundaries_fail_with_a_specific_error(self):
         self.assertEqual(source_boundary("left-boundary-right", "-boundary-"), ("left", "right"))
