@@ -77,6 +77,48 @@ enum MetricTileWidthPreference { case half }
                            env=env, check=True)
             subprocess.run([str(path / "contract")], env=env, check=True)
 
+    def test_fixed_monthly_fixture_captions_preserve_metric_fields(self):
+        fixture = (ROOT / "CodexBarIOS/Services/AppStoreScreenshotFixtures.swift").read_text()
+        helper = fixture.split("    private static func captureBars", 1)[1].split("    static func historyStore", 1)[0]
+        usage = (ROOT / "CodexBarIOS/Models/UsageBar.swift").read_text()
+        # Compile the actual stored fields, initializer, and capture helper.
+        bar = "public struct UsageBar" + usage.split("public struct UsageBar", 1)[1].split("    public var fractionUsed", 1)[0] + "}\n"
+        fields = re.findall(r"public let (\w+):", bar)
+        preserved = [x for x in fields if x not in ("resetDescription", "resetsAt", "resetDisplayStyle")]
+        checks = "\n".join(f"precondition(output.{x} == input.{x})" for x in preserved)
+        source = "import Foundation\npublic enum UsageResetDisplayStyle: Equatable, Sendable { case verbatim, relative }\n"
+        source += "public enum UsageProjectionSignificance: Equatable, Sendable { case warning }\n" + bar
+        source += "enum Fixture { static func captureBars" + helper + "}\n"
+        source += r'''
+@main struct Contract {
+    static func main() {
+        let stamp = Date(timeIntervalSince1970: 100)
+        for caption in ["Resets Aug 1", "Resets Oct 1", "Resets in 2h", "Resets Monday"] {
+            let input = UsageBar(stableKey: "fixed", label: "Monthly", used: 24, limit: 100,
+                resetDescription: caption, resetsAt: stamp, resetDisplayStyle: .relative,
+                fractionlessUsageText: "usage", projectionCurrent: 12, projectionLimit: 30,
+                projectionPeriodStart: stamp, projectionPeriodEnd: stamp,
+                showProjectionOnCurrentBar: true, projectionDescriptionOverride: "projection",
+                projectionSignificanceOverride: .warning)
+            let output = Fixture.captureBars([input])[0]
+            CHECKS
+            if ["Resets Aug 1", "Resets Oct 1"].contains(caption) {
+                precondition(output.resetDescription == "Resets next month")
+                precondition(output.resetsAt == nil && output.resetDisplayStyle == .verbatim)
+            } else { precondition(output == input) }
+        }
+        precondition(Fixture.captureBars([]).isEmpty)
+    }
+}
+'''.replace("CHECKS", checks)
+        env = dict(os.environ, DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer")
+        with tempfile.TemporaryDirectory(prefix="codexbar-monthly-fixture-") as directory:
+            path = Path(directory)
+            (path / "Contract.swift").write_text(source)
+            subprocess.run(["xcrun", "swiftc", "-parse-as-library", str(path / "Contract.swift"),
+                            "-o", str(path / "contract")], env=env, check=True)
+            subprocess.run([str(path / "contract")], env=env, check=True)
+
     def test_watch_flattening_removes_alpha_without_resizing(self):
         script = (ROOT / "scripts/flatten-storefront-image.sh").read_text()
         swift = script.split("<<'SWIFT'\n", 1)[1].split("\nSWIFT", 1)[0]

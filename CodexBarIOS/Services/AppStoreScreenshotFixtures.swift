@@ -121,7 +121,7 @@ enum AppStoreScreenshotFixtures {
                     : configuration.displayName,
                 plan: sample.plan,
                 subtitle: sample.subtitle,
-                bars: captureBars(sample.bars, providerID: sample.providerID),
+                bars: captureBars(sample.bars),
                 creditsRemaining: sample.creditsRemaining,
                 monetaryMetrics: sample.monetaryMetrics,
                 usageMessages: sample.usageMessages,
@@ -132,10 +132,10 @@ enum AppStoreScreenshotFixtures {
         }
     }
 
-    private static func captureBars(_ bars: [UsageBar], providerID: ProviderID) -> [UsageBar] {
-        guard providerID == .cursor || providerID == .githubBilling else { return bars }
-        return bars.map { bar in
-            UsageBar(
+    private static func captureBars(_ bars: [UsageBar]) -> [UsageBar] {
+        bars.map { bar in
+            guard ["Resets Aug 1", "Resets Oct 1"].contains(bar.resetDescription ?? "") else { return bar }
+            return UsageBar(
                 id: bar.id, stableKey: bar.stableKey, label: bar.label,
                 used: bar.used, limit: bar.limit,
                 resetDescription: "Resets next month",
