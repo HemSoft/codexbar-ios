@@ -42,7 +42,10 @@ class CITriggerPolicyTests(unittest.TestCase):
 
     def test_ui_job_runs_only_after_a_successful_manual_gate(self) -> None:
         ui_job = job_block(self.workflow, "ios-ui-tests")
-        self.assertIn("    name: Full iOS UI validation\n", ui_job)
+        self.assertIn(
+            "    name: ${{ inputs.ui_validation_mode == 'account-menu-comparison' "
+            "&& 'Account menu comparison' || 'Full iOS UI validation' }}\n", ui_job,
+        )
         self.assertIn(
             "    if: ${{ github.event_name == 'workflow_dispatch' && success() }}\n",
             ui_job,

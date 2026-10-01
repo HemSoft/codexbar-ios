@@ -255,6 +255,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added a manually dispatched account-menu comparison on the pinned toolchain.
+  It retains baseline outcomes and requires the candidate's original Google
+  journey to pass on iPhone and iPad. This focused diagnosis does not replace
+  the nineteen-journey release gate or add automatic CI work.
+  ([#381](https://github.com/HemSoft/codexbar-ios/issues/381))
+
 - Isolated Settings category routing and notification-request decisions for
   local synthetic regression tests. Category summaries, Done/Back navigation,
   pending group edits, and independent notification choices retain their
