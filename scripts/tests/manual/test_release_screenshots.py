@@ -78,7 +78,7 @@ enum MetricTileWidthPreference { case half }
             subprocess.run([str(path / "contract")], env=env, check=True)
 
     def test_watch_flattening_removes_alpha_without_resizing(self):
-        script = (ROOT / "scripts/capture-watch-app-store-screenshots.sh").read_text()
+        script = (ROOT / "scripts/flatten-storefront-image.sh").read_text()
         swift = script.split("<<'SWIFT'\n", 1)[1].split("\nSWIFT", 1)[0]
 
         def chunk(kind, data):
@@ -108,6 +108,7 @@ enum MetricTileWidthPreference { case half }
             self.assertIn('OUTPUT_DIR="${OUTPUT_DIR:-', text)
             self.assertIn('DERIVED_DATA="${DERIVED_DATA:-', text)
             self.assertIn('-skipPackagePluginValidation', text)
+            self.assertIn('scripts/flatten-storefront-image.sh', text)
         self.assertIn('release-assets/1.4.0/screenshots', watch)
         self.assertNotIn('release-assets/1.2/screenshots', watch)
         self.assertFalse((Path(__file__).parent / "__init__.py").exists())

@@ -121,13 +121,33 @@ enum AppStoreScreenshotFixtures {
                     : configuration.displayName,
                 plan: sample.plan,
                 subtitle: sample.subtitle,
-                bars: sample.bars,
+                bars: captureBars(sample.bars, providerID: sample.providerID),
                 creditsRemaining: sample.creditsRemaining,
                 monetaryMetrics: sample.monetaryMetrics,
                 usageMessages: sample.usageMessages,
                 dashboardUsageMessages: sample.dashboardUsageMessages,
                 cardInformationSections: sample.cardInformationSections,
                 fetchedAt: capturedAt
+            )
+        }
+    }
+
+    private static func captureBars(_ bars: [UsageBar], providerID: ProviderID) -> [UsageBar] {
+        guard providerID == .cursor || providerID == .githubBilling else { return bars }
+        return bars.map { bar in
+            UsageBar(
+                id: bar.id, stableKey: bar.stableKey, label: bar.label,
+                used: bar.used, limit: bar.limit,
+                resetDescription: "Resets next month",
+                resetDisplayStyle: .verbatim,
+                fractionlessUsageText: bar.fractionlessUsageText,
+                projectionCurrent: bar.projectionCurrent,
+                projectionLimit: bar.projectionLimit,
+                projectionPeriodStart: bar.projectionPeriodStart,
+                projectionPeriodEnd: bar.projectionPeriodEnd,
+                showProjectionOnCurrentBar: bar.showProjectionOnCurrentBar,
+                projectionDescriptionOverride: bar.projectionDescriptionOverride,
+                projectionSignificanceOverride: bar.projectionSignificanceOverride
             )
         }
     }

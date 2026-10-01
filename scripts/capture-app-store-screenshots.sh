@@ -35,7 +35,8 @@ SCENES=(
 mkdir -p "$OUTPUT_DIR" "$FASTLANE_OUTPUT_DIR"
 
 echo "Removing stale generated screenshots..."
-rm -f "$OUTPUT_DIR"/*.png "$FASTLANE_OUTPUT_DIR"/*.png
+rm -f "$OUTPUT_DIR"/iphone_*.png "$OUTPUT_DIR"/ipad_*.png
+rm -f "$FASTLANE_OUTPUT_DIR"/*_iphone_6_9_*.png "$FASTLANE_OUTPUT_DIR"/*_ipad_13_*.png
 
 echo "Building CodexBarIOS for Simulator..."
 xcodebuild \
@@ -106,6 +107,7 @@ verify_dimensions() {
   local expected_height="$3"
   local actual_width
   local actual_height
+  local has_alpha
 
   actual_width="$(sips -g pixelWidth "$image_path" 2>/dev/null | awk '/pixelWidth/ {print $2}')"
   actual_height="$(sips -g pixelHeight "$image_path" 2>/dev/null | awk '/pixelHeight/ {print $2}')"
@@ -115,7 +117,12 @@ verify_dimensions() {
     return 1
   fi
 
-  echo "Verified $(basename "$image_path") at ${actual_width}x${actual_height}"
+  has_alpha="$(sips -g hasAlpha "$image_path" 2>/dev/null | awk '/hasAlpha/ {print $2}')"
+  if [[ "$has_alpha" != "no" ]]; then
+    echo "Expected opaque storefront PNG: $image_path hasAlpha=$has_alpha" >&2
+    return 1
+  fi
+  echo "Verified $(basename "$image_path") at ${actual_width}x${actual_height}, no alpha"
 }
 
 capture_scene() {
@@ -125,7 +132,9 @@ capture_scene() {
   local appearance="$4"
   local expected_width="$5"
   local expected_height="$6"
-  local output_path="$OUTPUT_DIR/${family}_${scene}_${appearance}.png"
+  local ordinal="$7"
+  local output_path="$OUTPUT_DIR/$(printf '%s_%02d_%s_%s' "${family%%-*}" "$ordinal" "$scene" "$appearance").png"
+  local raw_path="$OUTPUT_DIR/.raw-${family}-${scene}-$$.png"
   local data_container
   local ready_file
 
@@ -141,7 +150,9 @@ capture_scene() {
     --app-store-settle-seconds "$SCREENSHOT_SETTLE_SECONDS" >/dev/null
 
   wait_for_scene_ready "$ready_file" "$scene"
-  xcrun simctl io "$booted_device" screenshot --type=png "$output_path"
+  xcrun simctl io "$booted_device" screenshot --type=png "$raw_path"
+  "$ROOT_DIR/scripts/flatten-storefront-image.sh" "$raw_path" "$output_path"
+  rm -f "$raw_path"
   verify_dimensions "$output_path" "$expected_width" "$expected_height"
 }
 
@@ -154,6 +165,7 @@ capture_for_device() {
   local scene_entry
   local scene
   local appearance
+  local ordinal=0
 
   booted_device="$(simulator_udid "$device_name")"
   if [[ -z "$booted_device" ]]; then
@@ -168,7 +180,8 @@ capture_for_device() {
 
   for scene_entry in "${SCENES[@]}"; do
     IFS=":" read -r scene appearance <<< "$scene_entry"
-    capture_scene "$booted_device" "$family" "$scene" "$appearance" "$expected_width" "$expected_height"
+    ordinal=$((ordinal + 1))
+    capture_scene "$booted_device" "$family" "$scene" "$appearance" "$expected_width" "$expected_height" "$ordinal"
   done
 }
 
@@ -184,10 +197,10 @@ mirror_fastlane_screenshots() {
     IFS=":" read -r scene appearance <<< "$scene_entry"
     padded="$(printf "%02d" "$number")"
 
-    source_path="$OUTPUT_DIR/${IPHONE_FAMILY}_${scene}_${appearance}.png"
+    source_path="$OUTPUT_DIR/iphone_${padded}_${scene}_${appearance}.png"
     cp "$source_path" "$FASTLANE_OUTPUT_DIR/${padded}_iphone_6_9_${scene}_${appearance}.png"
 
-    source_path="$OUTPUT_DIR/${IPAD_FAMILY}_${scene}_${appearance}.png"
+    source_path="$OUTPUT_DIR/ipad_${padded}_${scene}_${appearance}.png"
     cp "$source_path" "$FASTLANE_OUTPUT_DIR/${padded}_ipad_13_${scene}_${appearance}.png"
 
     number=$((number + 1))
