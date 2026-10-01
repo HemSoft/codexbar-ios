@@ -3,8 +3,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DERIVED_DATA="$ROOT_DIR/build/AppStoreWatchScreenshots"
-OUTPUT_DIR="$ROOT_DIR/release-assets/1.2/screenshots"
+DERIVED_DATA="${DERIVED_DATA:-$ROOT_DIR/build/AppStoreWatchScreenshots}"
+OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/release-assets/1.4.0/screenshots}"
 APP_BUNDLE_ID="com.hemsoft.CodexBarIOS.watchkitapp"
 APP_PATH="$DERIVED_DATA/Build/Products/Debug-watchsimulator/CodexBarWatch.app"
 DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -17,7 +17,7 @@ WATCH_DEVICE_NAME_PATTERN="${WATCH_DEVICE_NAME_PATTERN:-\\((44|45|46|49)mm\\)$}"
 export DEVELOPER_DIR
 
 if ! command -v sips >/dev/null 2>&1; then
-  echo "The macOS sips utility is required to flatten screenshots." >&2
+  echo "The macOS sips utility is required to inspect screenshots." >&2
   exit 1
 fi
 
@@ -100,10 +100,39 @@ verify_dimensions() {
   esac
 }
 
+flatten_screenshot() {
+  xcrun swift - "$1" "$2" <<'SWIFT'
+import Foundation
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
+
+let arguments = CommandLine.arguments
+let input = URL(fileURLWithPath: arguments[1])
+let output = URL(fileURLWithPath: arguments[2])
+guard let source = CGImageSourceCreateWithURL(input as CFURL, nil),
+      let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
+      let context = CGContext(
+          data: nil, width: image.width, height: image.height,
+          bitsPerComponent: 8, bytesPerRow: image.width * 4,
+          space: CGColorSpaceCreateDeviceRGB(),
+          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+      ) else { fatalError("Cannot decode or flatten screenshot") }
+let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+context.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
+context.fill(bounds)
+context.draw(image, in: bounds)
+guard let flattened = context.makeImage(),
+      let destination = CGImageDestinationCreateWithURL(output as CFURL, UTType.png.identifier as CFString, 1, nil)
+else { fatalError("Cannot encode opaque screenshot") }
+CGImageDestinationAddImage(destination, flattened, nil)
+guard CGImageDestinationFinalize(destination) else { fatalError("Cannot write opaque screenshot") }
+SWIFT
+}
+
 for scene_entry in "${SCENES[@]}"; do
   IFS=":" read -r scene filename <<< "$scene_entry"
   raw_path="$temporary_directory/$filename"
-  opaque_path="$temporary_directory/${filename%.png}.bmp"
   output_path="$OUTPUT_DIR/$filename"
 
   echo "Capturing privacy-safe Watch scene: $scene"
@@ -115,8 +144,7 @@ for scene_entry in "${SCENES[@]}"; do
     --app-store-settle-seconds "$SCREENSHOT_SETTLE_SECONDS" >/dev/null
   wait_for_scene_ready "$scene"
   xcrun simctl io "$watch_device_id" screenshot --type=png "$raw_path"
-  sips -s format bmp "$raw_path" --out "$opaque_path" >/dev/null
-  sips -s format png "$opaque_path" --out "$output_path" >/dev/null
+  flatten_screenshot "$raw_path" "$output_path"
   verify_dimensions "$output_path"
 done
 

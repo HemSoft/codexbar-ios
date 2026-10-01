@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DERIVED_DATA="$ROOT_DIR/build/AppStoreScreenshots"
-OUTPUT_DIR="$ROOT_DIR/AppStore/Screenshots"
-FASTLANE_OUTPUT_DIR="$ROOT_DIR/fastlane/screenshots/en-US"
+DERIVED_DATA="${DERIVED_DATA:-$ROOT_DIR/build/AppStoreScreenshots}"
+OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/AppStore/Screenshots}"
+FASTLANE_OUTPUT_DIR="${FASTLANE_OUTPUT_DIR:-$ROOT_DIR/fastlane/screenshots/en-US}"
 APP_BUNDLE_ID="com.hemsoft.CodexBarIOS"
 APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphonesimulator/CodexBarIOS.app"
 DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -15,6 +15,7 @@ export DEVELOPER_DIR
 
 PHONE_DEVICE="${PHONE_DEVICE:-iPhone 17 Pro Max}"
 IPAD_DEVICE="${IPAD_DEVICE:-iPad Pro 13-inch (M5)}"
+IOS_SIMULATOR_OS="${IOS_SIMULATOR_OS:-latest}"
 IPHONE_FAMILY="iphone-17-pro-max"
 IPAD_FAMILY="ipad-pro-13-m5"
 SCREENSHOT_SETTLE_SECONDS="${SCREENSHOT_SETTLE_SECONDS:-2}"
@@ -22,6 +23,9 @@ SCREENSHOT_SETTLE_SECONDS="${SCREENSHOT_SETTLE_SECONDS:-2}"
 SCENES=(
   "dashboard-overview:light"
   "dashboard-dark:dark"
+  "gemini:light"
+  "grok:dark"
+  "github-billing:light"
   "widget-builder:light"
   "accounts:dark"
   "provider-copilot:light"
@@ -38,8 +42,9 @@ xcodebuild \
   -project "$ROOT_DIR/CodexBarIOS.xcodeproj" \
   -scheme CodexBarIOS \
   -configuration Debug \
-  -destination "platform=iOS Simulator,name=$PHONE_DEVICE" \
+  -destination "platform=iOS Simulator,name=$PHONE_DEVICE,OS=$IOS_SIMULATOR_OS" \
   -derivedDataPath "$DERIVED_DATA" \
+  -skipPackagePluginValidation \
   build
 
 simulator_udid() {

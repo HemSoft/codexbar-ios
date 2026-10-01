@@ -4,6 +4,9 @@ import Foundation
 enum AppStoreScreenshotScene: String {
     case dashboardOverview = "dashboard-overview"
     case dashboardDark = "dashboard-dark"
+    case gemini
+    case grok
+    case githubBilling = "github-billing"
     case widgetBuilder = "widget-builder"
     case accounts
     case providerCopilot = "provider-copilot"
@@ -83,9 +86,24 @@ struct AppStoreScreenshotConfiguration {
 
 @MainActor
 enum AppStoreScreenshotFixtures {
+    private static let captureDate = Date()
+
+    static func featureAccount(for scene: AppStoreScreenshotScene, in store: ProviderConfigurationStore) {
+        switch scene {
+        case .gemini:
+            store.updateDashboardCardOrder([AppStoreScreenshotFixtureID.geminiAccount])
+            for definition in GoogleUsageMetricCatalog.definitions(for: .gemini) {
+                store.updateMetricWidth(.half, accountID: AppStoreScreenshotFixtureID.geminiAccount, metricID: definition.id)
+            }
+        case .grok: store.updateDashboardCardOrder([AppStoreScreenshotFixtureID.grokAccount])
+        case .githubBilling: store.updateDashboardCardOrder([AppStoreScreenshotFixtureID.githubBillingAccount])
+        default: break
+        }
+    }
+
     static func results(for configurationStore: ProviderConfigurationStore) -> [ProviderUsageResult] {
         let samples = Dictionary(uniqueKeysWithValues: DemoUsageProvider.samples.map { ($0.providerID, $0) })
-        let capturedAt = Date(timeIntervalSince1970: 1_783_680_000)
+        let capturedAt = captureDate
 
         return configurationStore.visibleConfigurations.compactMap { configuration in
             guard let sample = samples[configuration.providerID] else {
@@ -124,8 +142,8 @@ enum AppStoreScreenshotFixtures {
             return store
         }
 
-        let fractions = [0.22, 0.29, 0.35, 0.41, 0.48, 0.52, 0.56, 0.60]
-        let latestDate = Date(timeIntervalSince1970: 1_783_680_000)
+        let fractions = (0..<90).map { 0.22 + Double($0) / 89 * 0.38 }
+        let latestDate = captureDate
         for (index, fraction) in fractions.enumerated() {
             let capturedAt = latestDate.addingTimeInterval(TimeInterval(index - fractions.count + 1) * 24 * 60 * 60)
             let bars = result.bars.enumerated().map { barIndex, bar in

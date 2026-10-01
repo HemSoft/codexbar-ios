@@ -50,6 +50,10 @@ struct CodexBarIOSApp: App {
                     AppStoreScreenshotFixtureID.claudeAccount,
                 ])
             }
+            AppStoreScreenshotFixtures.featureAccount(
+                for: screenshotConfiguration.scene,
+                in: configurationStore
+            )
             if DebugUsageAlertMode.isEnabled {
                 configurationStore.updateUsageAlertsEnabled(true)
                 configurationStore.updateUsageAlertWarningThreshold(0.65)
@@ -158,9 +162,7 @@ struct CodexBarIOSApp: App {
     @ViewBuilder
     private func screenshotRootView(for scene: AppStoreScreenshotScene) -> some View {
         switch scene {
-        case .dashboardOverview:
-            mainContentView(performsLifecycleWork: false)
-        case .dashboardDark:
+        case .dashboardOverview, .dashboardDark, .gemini, .grok, .githubBilling:
             mainContentView(performsLifecycleWork: false)
         case .widgetBuilder:
             NavigationStack {
@@ -177,7 +179,10 @@ struct CodexBarIOSApp: App {
             NavigationStack {
                 ProviderSettingsView(
                     configurationStore: configurationStore,
-                    accountID: AppStoreScreenshotFixtureID.copilotAccount
+                    accountID: AppStoreScreenshotFixtureID.copilotAccount,
+                    initialUsageResult: refreshService.results.first {
+                        $0.accountID == AppStoreScreenshotFixtureID.copilotAccount
+                    }
                 )
             }
         case .history:
