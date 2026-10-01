@@ -2,24 +2,27 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-09-29
+Status last reviewed: 2026-10-01
 
 ## Current Status
 
 - Version `1.3 (3)` is the current distributed release. Read-only App Store
-  Connect inspection on September 29, 2026 confirms its selected build is
+  Connect inspection on October 1, 2026 confirms its selected build is
   `VALID`, no newer version or build exists, and all review submissions are
   complete. Apple's public US listing also reports version `1.3`.
-- Version `1.4.0 (4)` is in repository preparation under
-  [issue #371](https://github.com/HemSoft/codexbar-ios/issues/371), not uploaded
-  or submitted. Build 4 is available at the time of the check; recheck before
+- Version `1.4.0 (4)` preparation continues under
+  [release issue #373](https://github.com/HemSoft/codexbar-ios/issues/373).
+  [PR #372](https://github.com/HemSoft/codexbar-ios/pull/372), the four required
+  risk reductions, and the iPad-menu fix are merged. No final candidate is
+  frozen, and no 1.4.0 binary is uploaded or submitted. Build 4 is available at the time of the check; recheck before
   any upload. The changelog stays Unreleased until the final candidate is ready.
   See the [1.4.0 preparation record](release-assets/1.4.0/README.md) for the
   source boundary, copy-to-changelog mapping, and outstanding release gates.
 - App builds, installs, and launches on the connected development iPhone.
 - Main dashboard, provider settings, widget support, and snapshot trend improvements are on `main`.
-- The embedded Apple Watch companion provides a live, read-only dashboard
-  synchronized from iPhone.
+- The embedded Apple Watch companion shows presentation-only snapshots
+  synchronized from iPhone. It does not fetch provider data or receive
+  credentials; system scheduling controls background refresh.
 - Development signing is stable through the dedicated CodexBar keychain documented in `AGENTS.md`.
 - Apple Developer Program membership is confirmed under `franz_hemmer@hotmail.com`, active for one year from 2026-07-05.
 - App Store Connect app record is created as `CodexBar Usage Monitor` with app ID `6787769891`.
@@ -42,10 +45,10 @@ Status last reviewed: 2026-09-29
   iPad, and Apple Watch storefront captures are prepared in
   `release-assets/1.2`.
 - Version 1.3 build `1.3 (3)` is publicly available. Apple's public lookup
-  response reports a release timestamp of 2026-08-24 at 17:21:45 UTC,
-  re-verified on 2026-08-25. The repository's 1.3.0 changelog snapshot remains
-  dated 2026-08-23, and the App Store "What's New" copy is in
-  `fastlane/metadata/en-US/release_notes.txt`.
+  response reports a release time of August 24, 2026 at 1:21:45 PM EDT,
+  re-verified on August 25. The repository's 1.3.0 changelog snapshot remains
+  dated August 23. Local `fastlane/metadata/en-US/release_notes.txt` now contains
+  proposed 1.4.0 copy, not the distributed 1.3 text.
 
 ## Apple Requirements To Keep Current
 
@@ -176,10 +179,20 @@ Scene order:
 
 1. `dashboard-overview` in light appearance
 2. `dashboard-dark` in dark appearance
-3. `widget-builder` in light appearance
-4. `accounts` in dark appearance
-5. `provider-copilot` in light appearance
-6. `history` in dark appearance
+3. `gemini` in light appearance
+4. `grok` in dark appearance
+5. `github-billing` in light appearance
+6. `widget-builder` in light appearance
+7. `accounts` in dark appearance
+8. `provider-copilot` in light appearance
+9. `history` in dark appearance
+
+The three new scenes put the selected synthetic account first in the actual
+Dashboard. They do not call live provider services or change customer setup.
+Use `OUTPUT_DIR`, `FASTLANE_OUTPUT_DIR`, and `DERIVED_DATA` to keep generated
+files isolated. Watch capture defaults to `release-assets/1.4.0/screenshots`
+and accepts `OUTPUT_DIR` and `DERIVED_DATA` overrides; it never needs to modify
+published 1.2 assets.
 
 Required output sizes:
 
