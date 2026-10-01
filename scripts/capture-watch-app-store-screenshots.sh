@@ -3,8 +3,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DERIVED_DATA="$ROOT_DIR/build/AppStoreWatchScreenshots"
-OUTPUT_DIR="$ROOT_DIR/release-assets/1.2/screenshots"
+DERIVED_DATA="${DERIVED_DATA:-$ROOT_DIR/build/AppStoreWatchScreenshots}"
+OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/release-assets/1.4.0/screenshots}"
 APP_BUNDLE_ID="com.hemsoft.CodexBarIOS.watchkitapp"
 APP_PATH="$DERIVED_DATA/Build/Products/Debug-watchsimulator/CodexBarWatch.app"
 DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -17,13 +17,13 @@ WATCH_DEVICE_NAME_PATTERN="${WATCH_DEVICE_NAME_PATTERN:-\\((44|45|46|49)mm\\)$}"
 export DEVELOPER_DIR
 
 if ! command -v sips >/dev/null 2>&1; then
-  echo "The macOS sips utility is required to flatten screenshots." >&2
+  echo "The macOS sips utility is required to inspect screenshots." >&2
   exit 1
 fi
 
 SCENES=(
-  "overview:13-watch-dashboard-overview.png"
-  "balances:14-watch-dashboard-balances.png"
+  "overview:watch_01_overview.png"
+  "balances:watch_02_balances.png"
 )
 
 temporary_directory="$(mktemp -d "${TMPDIR:-/tmp}/codexbar-watch-screenshots.XXXXXX")"
@@ -103,7 +103,6 @@ verify_dimensions() {
 for scene_entry in "${SCENES[@]}"; do
   IFS=":" read -r scene filename <<< "$scene_entry"
   raw_path="$temporary_directory/$filename"
-  opaque_path="$temporary_directory/${filename%.png}.bmp"
   output_path="$OUTPUT_DIR/$filename"
 
   echo "Capturing privacy-safe Watch scene: $scene"
@@ -115,8 +114,7 @@ for scene_entry in "${SCENES[@]}"; do
     --app-store-settle-seconds "$SCREENSHOT_SETTLE_SECONDS" >/dev/null
   wait_for_scene_ready "$scene"
   xcrun simctl io "$watch_device_id" screenshot --type=png "$raw_path"
-  sips -s format bmp "$raw_path" --out "$opaque_path" >/dev/null
-  sips -s format png "$opaque_path" --out "$output_path" >/dev/null
+  "$ROOT_DIR/scripts/flatten-storefront-image.sh" "$raw_path" "$output_path"
   verify_dimensions "$output_path"
 done
 

@@ -2609,7 +2609,9 @@ public extension ProviderConfigurationStore {
         defaults.set(DashboardOrderingMode.manual.rawValue, forKey: DefaultsKey.dashboardOrderingMode)
         defaults.set(configurations.map(\.id), forKey: DefaultsKey.dashboardCardOrder)
 
-        let accounts = Set(configurations.map(Self.keychainAccount(for:)))
+        let accounts = Set(configurations.map(Self.keychainAccount(for:))).union([
+            Self.geminiCodingKeychainAccount(accountID: AppStoreScreenshotFixtureID.geminiAccount),
+        ])
         return ProviderConfigurationStore(defaults: defaults, secretStore: AppStoreScreenshotSecretStore(accounts: accounts))
     }
 }

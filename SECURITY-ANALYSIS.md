@@ -194,6 +194,49 @@ changed the source snapshot. The subsequent extraction build timed out, so the
 current source still needs a fresh manual analysis and baseline review under
 issue #325. The older replay is not a passing analysis of the current tree.
 
+## Release re-review for 1.4.0
+
+The [October 1 full analysis](https://github.com/HemSoft/codexbar-ios/actions/runs/36823093844)
+examined merged source `7d466be0e507435168c3474e6f19e8fd2b973f3a`. CodeQL 2.26.4
+and the unchanged Swift query pack extracted all 103 tracked production files
+with zero compiler/reach errors and no SARIF extraction diagnostics. The job
+failed because the old baseline's production snapshot was stale, as intended.
+Its raw SARIF still reports exactly three severity-7.5 findings, not zero.
+
+Under [release issue #373](https://github.com/HemSoft/codexbar-ios/issues/373),
+the raw diagnostics, their locations/data flows, and current consumers were
+reviewed before renewing the exact identities:
+
+- OpenCode's SHA256 digest still identifies the workspace and session pair for
+  in-memory cache equality. The result remains non-Codable, and History,
+  widgets, and Watch snapshots do not retain that field. The newer Grok plan
+  verification consumer checks `.grok` on both result and configuration before
+  comparing a Grok subject digest; it cannot authenticate using an OpenCode
+  cache digest. The diagnostic is now at OpenCode line 134.
+- Collapsed dashboard preferences still store configuration-validated local
+  IDs, never provider credentials or account identities. New accounts still
+  use provider-plus-UUID IDs. The diagnostic is now at store line 2372.
+- The private UI-test secret store now permits the literal fixture marker,
+  the parsed fixed synthetic coding credential, and the exact two synthetic
+  personal/work Codex strings. It rejects other parsed credentials. The
+  simulator-only DEBUG guard, required UUID defaults namespace, and network
+  blocker remain intact. These fixtures grant no provider access. The earlier
+  literal-only rationale is no longer sufficient; the renewed entry describes
+  the actual guard. The diagnostic is now at fixture line 980.
+
+The reviewed source commit is
+`ba2cb11306ab94c238b93cba3174a7bc44616ca5`, including the additional DEBUG-only
+storefront routing and data preparation. Extended History seeding is restricted
+to its explicit screenshot scene. That restriction does not change the three
+finding sites, accepted synthetic values, launch guards, or cache-digest consumers. The baseline binds all production
+sources to snapshot
+`03da988048ac3e4d9976df750a7f8113d385b866087a4e4a418e7ccfffb158b1`.
+No analyzer pin, severity threshold, matching rule, extraction requirement, or
+exclusion changes. Local replay of the fresh merged-source diagnostics checks
+these identities; it is not fresh hosted extraction of the preparation branch.
+A full manual hosted run must pass on that branch before this renewed baseline
+is described as passing, and the eventual merged candidate needs its own run.
+
 ## Maintaining reviewed findings
 
 Each exception pins the exact rule, severity, message, primary location, and a

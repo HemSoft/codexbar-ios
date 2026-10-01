@@ -255,6 +255,15 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Refreshed release-copy preparation and added privacy-safe Gemini, Grok, and
+  GitHub Billing storefront capture scenes. Screenshot output directories can
+  be isolated, and Watch captures no longer overwrite the published 1.2 set.
+  Native-size PNGs have no alpha, and fixture dates no longer expire. Updated
+  the release workflow's companion skill names and re-reviewed the exact
+  security findings without changing analyzer pins or automatic CI work.
+  Final-candidate validation and Apple upload remain separate release steps.
+  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
+
 - Added a manually dispatched account-menu comparison on the pinned toolchain.
   It retains baseline outcomes and requires the candidate's original Google
   journey to pass on iPhone and iPad. This focused diagnosis does not replace
