@@ -4,6 +4,9 @@ import Foundation
 enum AppStoreScreenshotScene: String {
     case dashboardOverview = "dashboard-overview"
     case dashboardDark = "dashboard-dark"
+    case gemini
+    case grok
+    case githubBilling = "github-billing"
     case widgetBuilder = "widget-builder"
     case accounts
     case providerCopilot = "provider-copilot"
@@ -83,9 +86,24 @@ struct AppStoreScreenshotConfiguration {
 
 @MainActor
 enum AppStoreScreenshotFixtures {
+    private static let captureDate = Date()
+
+    static func featureAccount(for scene: AppStoreScreenshotScene, in store: ProviderConfigurationStore) {
+        switch scene {
+        case .gemini:
+            store.updateDashboardCardOrder([AppStoreScreenshotFixtureID.geminiAccount])
+            for definition in GoogleUsageMetricCatalog.definitions(for: .gemini) {
+                store.updateMetricWidth(.half, accountID: AppStoreScreenshotFixtureID.geminiAccount, metricID: definition.id)
+            }
+        case .grok: store.updateDashboardCardOrder([AppStoreScreenshotFixtureID.grokAccount])
+        case .githubBilling: store.updateDashboardCardOrder([AppStoreScreenshotFixtureID.githubBillingAccount])
+        default: break
+        }
+    }
+
     static func results(for configurationStore: ProviderConfigurationStore) -> [ProviderUsageResult] {
         let samples = Dictionary(uniqueKeysWithValues: DemoUsageProvider.samples.map { ($0.providerID, $0) })
-        let capturedAt = Date(timeIntervalSince1970: 1_783_680_000)
+        let capturedAt = captureDate
 
         return configurationStore.visibleConfigurations.compactMap { configuration in
             guard let sample = samples[configuration.providerID] else {
@@ -103,7 +121,7 @@ enum AppStoreScreenshotFixtures {
                     : configuration.displayName,
                 plan: sample.plan,
                 subtitle: sample.subtitle,
-                bars: sample.bars,
+                bars: captureBars(sample.bars, providerID: sample.providerID),
                 creditsRemaining: sample.creditsRemaining,
                 monetaryMetrics: sample.monetaryMetrics,
                 usageMessages: sample.usageMessages,
@@ -114,7 +132,31 @@ enum AppStoreScreenshotFixtures {
         }
     }
 
-    static func historyStore(for results: [ProviderUsageResult]) -> UsageHistoryStore {
+    private static func captureBars(_ bars: [UsageBar], providerID: ProviderID) -> [UsageBar] {
+        let monthlyProvider = [ProviderID.cursor, .githubBilling].contains(providerID)
+        return bars.map { bar in
+            guard monthlyProvider || bar.label.localizedCaseInsensitiveContains("monthly") else { return bar }
+            return UsageBar(
+                id: bar.id, stableKey: bar.stableKey, label: bar.label,
+                used: bar.used, limit: bar.limit,
+                resetDescription: "Resets next month",
+                resetDisplayStyle: .verbatim,
+                fractionlessUsageText: bar.fractionlessUsageText,
+                projectionCurrent: bar.projectionCurrent,
+                projectionLimit: bar.projectionLimit,
+                projectionPeriodStart: bar.projectionPeriodStart,
+                projectionPeriodEnd: bar.projectionPeriodEnd,
+                showProjectionOnCurrentBar: bar.showProjectionOnCurrentBar,
+                projectionDescriptionOverride: bar.projectionDescriptionOverride,
+                projectionSignificanceOverride: bar.projectionSignificanceOverride
+            )
+        }
+    }
+
+    static func historyStore(
+        for results: [ProviderUsageResult],
+        extendedRange: Bool = false
+    ) -> UsageHistoryStore {
         let suiteName = "com.hemsoft.CodexBarIOS.appStoreScreenshotHistory"
         let defaults = UserDefaults(suiteName: suiteName) ?? .standard
         defaults.removePersistentDomain(forName: suiteName)
@@ -124,8 +166,10 @@ enum AppStoreScreenshotFixtures {
             return store
         }
 
-        let fractions = [0.22, 0.29, 0.35, 0.41, 0.48, 0.52, 0.56, 0.60]
-        let latestDate = Date(timeIntervalSince1970: 1_783_680_000)
+        let fractions = extendedRange
+            ? (0..<90).map { 0.22 + Double($0) / 89 * 0.38 }
+            : [0.22, 0.29, 0.35, 0.41, 0.48, 0.52, 0.56, 0.60]
+        let latestDate = captureDate
         for (index, fraction) in fractions.enumerated() {
             let capturedAt = latestDate.addingTimeInterval(TimeInterval(index - fractions.count + 1) * 24 * 60 * 60)
             let bars = result.bars.enumerated().map { barIndex, bar in

@@ -9,4 +9,4 @@ CodexBar 1.4.0 adds more provider metrics, guided sign-in, and longer usage hist
 - See Cursor Models, Other Models, and Grok Bot usage separately. Over-limit readings remain visible above 100%.
 - Explore up to 90 days of daily usage history alongside recent detailed samples. The latest History value stays in sync with successful refreshes.
 
-This update also improves Greptile quota reporting, saved-account and History recovery, Settings navigation, and card customization. Metrics depend on the connected provider and account; missing data is not replaced with guessed usage.
+This update also improves Greptile quota reporting, saved-account and History recovery, Settings navigation, and card customization. Account menus are easier to open on iPad without collapsing the card. Metrics depend on the connected provider and account; missing data is not replaced with guessed usage.

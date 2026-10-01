@@ -2,7 +2,7 @@
 name: app-store-release
 description: "V1.0 - Commands: Prepare, Upload, Submit, Resume. Prepare, validate, upload, and submit CodexBar production releases through App Store review."
 disable-model-invocation: true
-compatibility: Requires macOS, Xcode, PowerShell 7, git, GitHub and App Store Connect access, CodexBar signing authority for upload stages, plus the issue-to-mergeable-pr, pr-processor, control-in-app-browser, and unslop skills.
+compatibility: Requires macOS, Xcode, PowerShell 7, git, GitHub and App Store Connect access, CodexBar signing authority for upload stages, plus the perfection, issue-to-pr, process-pr, playwright-cli, and unslop skills.
 hooks:
   PostToolUse:
     - matcher: "Read|Write|Edit"
@@ -74,11 +74,15 @@ revocation, account roles, or a material release-policy choice.
 - Invoke the repository `perfection` skill for its seven local lint,
   strict-concurrency, build, and test gates. Verify separate readiness checks
   documented by the skill and the live repository requirements.
-- Invoke `issue-to-mergeable-pr` for release-tracker changes and
-  `pr-processor` when resuming their review gate. Do not bypass checks,
+- Invoke `issue-to-pr` for release-tracker changes and
+  `process-pr` when resuming their review gate. Do not bypass checks,
   reviews, or merge protections.
-- Invoke `control-in-app-browser` for App Store Connect so an authenticated,
-  claimed tab can be inspected before each write and left on the final result.
+- Prefer direct read-only App Store Connect APIs when they provide the needed
+  evidence. Invoke `playwright-cli` when the rendered authenticated page is
+  required. Follow its attached-browser identity and tab-ownership checks,
+  inspect the exact origin before each write, and leave the task tab on the
+  final result. Use Pi computer controls only when browser automation cannot
+  reach the required window.
 - Invoke `unslop` for customer copy. Product and privacy claims still require
   evidence from the shipping build and repository.
 
