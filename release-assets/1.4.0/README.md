@@ -92,7 +92,10 @@ History, provider results, setup, or metric customization defaults.
 An interaction recording is omitted because this change prepares static
 storefront states and image processing. It changes no customer interaction,
 navigation, animation, or timing. Final merged-candidate recapture and live
-checks remain separate.
+checks remain separate. The native History chart still clips its trailing
+x-axis date label, tracked in [#386](https://github.com/HemSoft/codexbar-ios/issues/386).
+These previews do not pass final no-clipped-text asset approval. Resolve that
+UI defect or explicitly omit the affected scene before upload.
 
 The [fresh security diagnostic](https://github.com/HemSoft/codexbar-ios/actions/runs/36823093844)
 failed closed against its stale baseline. It extracted all 103 production

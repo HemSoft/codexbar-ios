@@ -38,32 +38,33 @@ echo "Removing stale generated screenshots..."
 rm -f "$OUTPUT_DIR"/iphone_*.png "$OUTPUT_DIR"/ipad_*.png
 rm -f "$FASTLANE_OUTPUT_DIR"/*_iphone_6_9_*.png "$FASTLANE_OUTPUT_DIR"/*_ipad_13_*.png
 
-echo "Building CodexBarIOS for Simulator..."
-xcodebuild \
-  -project "$ROOT_DIR/CodexBarIOS.xcodeproj" \
-  -scheme CodexBarIOS \
-  -configuration Debug \
-  -destination "platform=iOS Simulator,name=$PHONE_DEVICE,OS=$IOS_SIMULATOR_OS" \
-  -derivedDataPath "$DERIVED_DATA" \
-  -skipPackagePluginValidation \
-  build
+RAW_CAPTURE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/codexbar-ios-raw.XXXXXX")"
+finish_capture() {
+  local status=$?
+  if [[ "$status" -eq 0 ]]; then
+    rm -rf "$RAW_CAPTURE_DIR"
+  else
+    echo "Failed raw captures retained outside storefront output: $RAW_CAPTURE_DIR" >&2
+  fi
+}
+trap finish_capture EXIT
 
 simulator_udid() {
-  local device_name="$1"
-  xcrun simctl list devices available | awk -v expected="$device_name" '
-    {
-      line = $0
-      sub(/^[[:space:]]*/, "", line)
-      if (match(line, / \([A-F0-9-]+\)/)) {
-        name = substr(line, 1, RSTART - 1)
-        if (name == expected) {
-          udid = substr(line, RSTART + 2, RLENGTH - 3)
-          print udid
-          exit
-        }
-      }
-    }
-  '
+  "$ROOT_DIR/scripts/select-ios-screenshot-simulator.py" --name "$1" --os "$IOS_SIMULATOR_OS"
+}
+
+build_app() {
+  local phone_id
+  phone_id="$(simulator_udid "$PHONE_DEVICE")"
+  echo "Building CodexBarIOS for Simulator $phone_id..."
+  xcodebuild \
+    -project "$ROOT_DIR/CodexBarIOS.xcodeproj" \
+    -scheme CodexBarIOS \
+    -configuration Debug \
+    -destination "platform=iOS Simulator,id=$phone_id" \
+    -derivedDataPath "$DERIVED_DATA" \
+    -skipPackagePluginValidation \
+    build
 }
 
 boot_device() {
@@ -134,7 +135,7 @@ capture_scene() {
   local expected_height="$6"
   local ordinal="$7"
   local output_path="$OUTPUT_DIR/$(printf '%s_%02d_%s_%s' "${family%%-*}" "$ordinal" "$scene" "$appearance").png"
-  local raw_path="$OUTPUT_DIR/.raw-${family}-${scene}-$$.png"
+  local raw_path="$RAW_CAPTURE_DIR/${family}-${scene}.png"
   local data_container
   local ready_file
 
@@ -207,6 +208,7 @@ mirror_fastlane_screenshots() {
   done
 }
 
+build_app
 capture_for_device "$PHONE_DEVICE" "$IPHONE_FAMILY" "1320" "2868"
 capture_for_device "$IPAD_DEVICE" "$IPAD_FAMILY" "2064" "2752"
 mirror_fastlane_screenshots

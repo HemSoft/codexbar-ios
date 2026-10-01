@@ -172,7 +172,10 @@ cat "$(xcrun simctl get_app_container <device-udid> com.hemsoft.CodexBarIOS data
 The script polls a marker in the app's simulator data container, with a timeout, instead of
 using a fixed delay. It deletes stale generated PNGs from both
 `AppStore/Screenshots` and `fastlane/screenshots/en-US`, builds once for the
-simulator, then performs a clean uninstall/install/launch cycle for every scene.
+simulator, then performs a clean uninstall/install per device and a fresh
+launch for each scene. Simulator selection filters the requested runtime and
+active SDK, and the build uses that same selected phone UDID. Failed raw
+captures remain in a unique temporary directory outside storefront output.
 Status bars are forced to `9:41` with full battery before capture.
 
 Scene order:
@@ -201,8 +204,9 @@ Required output sizes:
 | iPhone | iPhone 17 Pro Max | `1320x2868` |
 | iPad | iPad Pro 13-inch (M5) | `2064x2752` |
 
-Primary generated filenames include family, scene, and appearance, for example
-`iphone-17-pro-max_dashboard-overview_light.png`. The final ordered Fastlane
+Primary generated filenames include family, order, scene, and appearance, for
+example `iphone_01_dashboard-overview_light.png` and
+`ipad_01_dashboard-overview_light.png`. The final ordered Fastlane
 copies use stable numbered names in `fastlane/screenshots/en-US`, with iPhone
 and iPad files sharing the same scene number.
 

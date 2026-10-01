@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Explicit local-only screenshot contract checks; not automatic test discovery."""
 import os
+import importlib.util
 from pathlib import Path
 import re
 import subprocess
@@ -10,6 +11,14 @@ import struct
 import zlib
 
 ROOT = Path(__file__).resolve().parents[3]
+DEVELOPER_DIR = os.environ.get("DEVELOPER_DIR", "/Applications/Xcode.app/Contents/Developer")
+
+
+def source_boundary(text, marker):
+    if text.count(marker) != 1:
+        raise AssertionError(f"Expected exactly one source boundary: {marker!r}")
+    before, _, after = text.partition(marker)
+    return before, after
 
 
 class ReleaseScreenshotContractTests(unittest.TestCase):
@@ -17,13 +26,13 @@ class ReleaseScreenshotContractTests(unittest.TestCase):
         fixture = (ROOT / "CodexBarIOS/Services/AppStoreScreenshotFixtures.swift").read_text()
         # Compile the real configuration/parser and featured-account helper.
         # The store spy observes routing only; native captures prove rendering.
-        source = fixture.split("    static func results", 1)[0] + "}\n#endif\n"
+        source = source_boundary(fixture, "    static func results")[0] + "}\n#endif\n"
         scenes = re.findall(r'^  "([^:]+):(?:light|dark)"$',
                             (ROOT / "scripts/capture-app-store-screenshots.sh").read_text(), re.M)
         self.assertEqual(len(scenes), 9)
         self.assertEqual(len(set(scenes)), 9)
         catalog = (ROOT / "CodexBarIOS/Models/GoogleUsageMetricCatalog.swift").read_text()
-        source += catalog.split("    public static func metrics", 1)[0] + "}\n"
+        source += source_boundary(catalog, "    public static func metrics")[0] + "}\n"
         source += r'''
 public enum ProviderID: String, Sendable { case gemini, antigravity, other }
 enum MetricTileWidthPreference { case half }
@@ -67,7 +76,7 @@ enum MetricTileWidthPreference { case half }
     }
 }
 '''.replace("SCENES", str(scenes).replace("'", '"'))
-        env = dict(os.environ, DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer")
+        env = dict(os.environ, DEVELOPER_DIR=DEVELOPER_DIR)
         with tempfile.TemporaryDirectory(prefix="codexbar-screenshot-contract-") as directory:
             path = Path(directory)
             (path / "Contract.swift").write_text(source)
@@ -79,39 +88,49 @@ enum MetricTileWidthPreference { case half }
 
     def test_fixed_monthly_fixture_captions_preserve_metric_fields(self):
         fixture = (ROOT / "CodexBarIOS/Services/AppStoreScreenshotFixtures.swift").read_text()
-        helper = fixture.split("    private static func captureBars", 1)[1].split("    static func historyStore", 1)[0]
+        helper = source_boundary(source_boundary(fixture, "    private static func captureBars")[1],
+                                 "    static func historyStore")[0]
         usage = (ROOT / "CodexBarIOS/Models/UsageBar.swift").read_text()
         # Compile the actual stored fields, initializer, and capture helper.
-        bar = "public struct UsageBar" + usage.split("public struct UsageBar", 1)[1].split("    public var fractionUsed", 1)[0] + "}\n"
+        bar = "public struct UsageBar" + source_boundary(source_boundary(usage, "public struct UsageBar")[1],
+                                                       "    public var fractionUsed")[0] + "}\n"
         fields = re.findall(r"public let (\w+):", bar)
         preserved = [x for x in fields if x not in ("resetDescription", "resetsAt", "resetDisplayStyle")]
         checks = "\n".join(f"precondition(output.{x} == input.{x})" for x in preserved)
         source = "import Foundation\npublic enum UsageResetDisplayStyle: Equatable, Sendable { case verbatim, relative }\n"
         source += "public enum UsageProjectionSignificance: Equatable, Sendable { case warning }\n" + bar
+        source += "enum ProviderID { case cursor, githubBilling, other }\n"
         source += "enum Fixture { static func captureBars" + helper + "}\n"
         source += r'''
 @main struct Contract {
     static func main() {
         let stamp = Date(timeIntervalSince1970: 100)
-        for caption in ["Resets Aug 1", "Resets Oct 1", "Resets in 2h", "Resets Monday"] {
-            let input = UsageBar(stableKey: "fixed", label: "Monthly", used: 24, limit: 100,
+        let cases: [(ProviderID, String, String, Bool)] = [
+            (.cursor, "Models", "Resets Nov 1", true),
+            (.githubBilling, "Actions minutes", "Resets Jan 1", true),
+            (.other, "MONTHLY limit", "Resets Dec 1", true),
+            (.other, "Five-hour", "Resets Aug 1", false),
+            (.other, "Weekly", "Resets Monday", false)
+        ]
+        for (provider, label, caption, monthly) in cases {
+            let input = UsageBar(stableKey: "fixed", label: label, used: 24, limit: 100,
                 resetDescription: caption, resetsAt: stamp, resetDisplayStyle: .relative,
                 fractionlessUsageText: "usage", projectionCurrent: 12, projectionLimit: 30,
                 projectionPeriodStart: stamp, projectionPeriodEnd: stamp,
                 showProjectionOnCurrentBar: true, projectionDescriptionOverride: "projection",
                 projectionSignificanceOverride: .warning)
-            let output = Fixture.captureBars([input])[0]
+            let output = Fixture.captureBars([input], providerID: provider)[0]
             CHECKS
-            if ["Resets Aug 1", "Resets Oct 1"].contains(caption) {
+            if monthly {
                 precondition(output.resetDescription == "Resets next month")
                 precondition(output.resetsAt == nil && output.resetDisplayStyle == .verbatim)
             } else { precondition(output == input) }
         }
-        precondition(Fixture.captureBars([]).isEmpty)
+        precondition(Fixture.captureBars([], providerID: .other).isEmpty)
     }
 }
 '''.replace("CHECKS", checks)
-        env = dict(os.environ, DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer")
+        env = dict(os.environ, DEVELOPER_DIR=DEVELOPER_DIR)
         with tempfile.TemporaryDirectory(prefix="codexbar-monthly-fixture-") as directory:
             path = Path(directory)
             (path / "Contract.swift").write_text(source)
@@ -131,7 +150,7 @@ enum MetricTileWidthPreference { case half }
         png += chunk(b"IDAT", zlib.compress(
             b"\0\xff\0\0\0\0\xff\0\xff\0\0\0\xff\x80\xff\xff\xff\xff"))
         png += chunk(b"IEND", b"")
-        env = dict(os.environ, DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer")
+        env = dict(os.environ, DEVELOPER_DIR=DEVELOPER_DIR)
         with tempfile.TemporaryDirectory(prefix="codexbar-watch-png-") as directory:
             input_path, output_path = Path(directory) / "alpha.png", Path(directory) / "opaque.png"
             input_path.write_bytes(png)
@@ -141,10 +160,42 @@ enum MetricTileWidthPreference { case half }
             self.assertEqual(struct.unpack(">II", output[16:24]), (2, 2))
             self.assertEqual(output[25], 2, "PNG must be RGB, not RGBA")
 
+    def test_simulator_selection_binds_name_runtime_and_sdk(self):
+        spec = importlib.util.spec_from_file_location("ios_selector", ROOT / "scripts/select-ios-screenshot-simulator.py")
+        selector = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(selector)
+        old, new = "com.apple.CoreSimulator.SimRuntime.iOS-26-5", "com.apple.CoreSimulator.SimRuntime.iOS-27-0"
+        data = {"runtimes": [
+            {"identifier": old, "version": "26.5", "isAvailable": True},
+            {"identifier": new, "version": "27.0", "isAvailable": True}
+        ], "devices": {
+            old: [{"name": "Same Phone", "udid": "old-id", "isAvailable": True}],
+            new: [{"name": "Same Phone", "udid": "new-id", "isAvailable": True}]
+        }}
+        self.assertEqual(selector.select_device(data, "Same Phone", "26.5", "27.0"), "old-id")
+        self.assertEqual(selector.select_device(data, "Same Phone", "latest", "26.5"), "old-id")
+        self.assertEqual(selector.select_device(data, "Same Phone", "latest", "27.0"), "new-id")
+        with self.assertRaisesRegex(ValueError, "compatible"):
+            selector.select_device(data, "Same Phone", "27.0", "26.5")
+        with self.assertRaisesRegex(ValueError, "No available"):
+            selector.select_device(data, "Missing", "26.5", "27.0")
+        data["devices"][new][0]["isAvailable"] = False
+        with self.assertRaisesRegex(ValueError, "No available"):
+            selector.select_device(data, "Same Phone", "latest", "27.0")
+
+    def test_source_boundaries_fail_with_a_specific_error(self):
+        self.assertEqual(source_boundary("left-boundary-right", "-boundary-"), ("left", "right"))
+        for source in ("missing", "duplicate duplicate"):
+            with self.assertRaisesRegex(AssertionError, "source boundary"):
+                source_boundary(source, "duplicate")
+
     def test_capture_outputs_and_toolchain_selection_remain_explicit(self):
         ios = (ROOT / "scripts/capture-app-store-screenshots.sh").read_text()
         watch = (ROOT / "scripts/capture-watch-app-store-screenshots.sh").read_text()
-        self.assertIn('OS=$IOS_SIMULATOR_OS', ios)
+        self.assertIn('--os "$IOS_SIMULATOR_OS"', ios)
+        self.assertIn('platform=iOS Simulator,id=$phone_id', ios)
+        self.assertIn('local raw_path="$RAW_CAPTURE_DIR/', ios)
+        self.assertNotIn('local raw_path="$OUTPUT_DIR/.raw', ios)
         self.assertIn('IOS_SIMULATOR_OS="${IOS_SIMULATOR_OS:-latest}"', ios)
         for text in (ios, watch):
             self.assertIn('OUTPUT_DIR="${OUTPUT_DIR:-', text)
