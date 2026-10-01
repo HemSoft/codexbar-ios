@@ -2,15 +2,15 @@
   "status": "preparation-preview-not-final-candidate",
   "version": "1.4.0",
   "build": "4",
-  "reviewedSourceCommit": "fe25e46943100107309e4e9feced6fab0561d50a",
-  "sourceSnapshotSha256": "a57ad8aca55f7d135dd3ad850d931a1863c95e0112d54aea6f36ec265559b07b",
+  "reviewedSourceCommit": "30f47ceed073bd784f9c383ffa17fe330dcf10fd",
+  "sourceSnapshotSha256": "1b8218d56e64cd4b9b26b14a6e3303647aaf763240814ccbc89a7adc42839bc3",
   "captureWorktreeDirty": true,
   "xcode": "Xcode 27.0 / 27A266a",
   "runtime": "iOS 26.5 / watchOS 26.5",
   "textSize": "system default",
   "locale": "en-US",
   "data": "synthetic accounts, no live-provider verification",
-  "inspectedAt": "2026-10-01T03:40:54.649991-04:00",
+  "inspectedAt": "2026-10-01T04:19:38.632036-04:00",
   "iphoneIpadTime": "9:41",
   "watchTime": "actual system clock; simctl status_bar override is unsupported on watchOS",
   "images": [
@@ -111,7 +111,7 @@
       "width": 1320,
       "height": 2868,
       "alpha": false,
-      "sha256": "55397181bb6ba15dd98c9f8401d841b804728bbc9674afacb690397b4dc1c86f"
+      "sha256": "84e388a579ed3b120772ce92e9b3c7d61aeac7de9f6fba971103bf56aec6b18c"
     },
     {
       "path": "screenshots/ipad_01_dashboard-overview_light.png",
@@ -210,7 +210,7 @@
       "width": 2064,
       "height": 2752,
       "alpha": false,
-      "sha256": "2170a3595b931d2ebd004dc0181c95b8c0b1191872e222811d1daaa7eca62341"
+      "sha256": "6b4a426f934e17bf1339bdc5058d6169ec38bffa3beadff3c50a76bc34d563a3"
     },
     {
       "path": "screenshots/watch_01_overview.png",
