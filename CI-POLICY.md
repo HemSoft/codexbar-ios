@@ -128,7 +128,7 @@ current thresholds.
 Do not run the full CI gate for routine pull requests, including UI changes.
 After the intended release changes have merged, select a release-candidate
 branch or tag, record its resolved SHA, and dispatch the gate once. The dispatch
-first runs the five automatic jobs. If they pass, `Full iOS UI validation` runs all six
+first runs the five automatic jobs. If they pass, `Full iOS UI validation` runs all nineteen
 journeys on both iPhone and iPad. A failed iPhone family does not suppress the
 iPad family or its retained failure artifacts.
 
@@ -196,6 +196,43 @@ after merge, record the affected commit and choose a corrective PR or revert;
 do not turn an incomplete run into release evidence. Manual runs are not a
 substitute for the required correctness checks, and pending manual evidence
 must remain visible in issue #325 until its criteria are met.
+
+## Focused account-menu comparison
+
+The existing manual `CI` dispatch also accepts `ui_validation_mode=account-menu-comparison`.
+This names the manual job `Account menu comparison`, never `Full iOS UI validation`.
+It runs only the complete original Google customization/relaunch journey on each
+family for an exact ancestor baseline and the dispatched candidate. Automatic
+pull-request/main jobs, their destinations and timeouts are unchanged. The four
+existing CI policy tests retain the same assertions; only the expected manual job
+name accounts for this selector.
+
+```sh
+gh workflow run ci.yml --repo HemSoft/codexbar-ios \
+  --ref <candidate-branch-or-tag> \
+  -f ui_validation_mode=account-menu-comparison \
+  -f comparison_base_sha=<exact-40-character-ancestor-sha>
+```
+
+The runner requires the Xcode pin from `scripts/function-risk/policy.json`, checks
+the dispatched candidate SHA and baseline ancestry, and archives both exact source
+revisions. Each source/family uses a fresh owned simulator, without retries. The
+candidate must pass exactly one journey with no skips or expected failures on
+both families. A baseline pass is retained as a non-reproduction; only the exact
+known Configure Account menu assertion may be classified as a reproduced baseline
+failure. Other assertions, simulator failures and missing summaries fail the
+comparison. Inspect `comparison.json`, all four summaries/logs/result bundles,
+screenshots and the candidate iPad recording in the existing UI artifact.
+
+A focused comparison is not release evidence. Default `full` dispatch still runs
+the billing fixtures and all nineteen journeys per family, including the existing
+both-destinations and exact-count guards.
+
+Run the new lightweight classifier/device-selection regressions explicitly locally:
+
+```sh
+python3 -m unittest discover -s scripts/tests/manual -p 'test_account_menu_comparison.py' -v
+```
 
 ## Recheck the policy
 

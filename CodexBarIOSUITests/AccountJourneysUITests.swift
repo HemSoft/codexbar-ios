@@ -264,6 +264,14 @@ final class AccountJourneysUITests: XCTestCase {
         openGoogleAccount("Gemini Fixture", in: app)
         assertMetricSwitches(Self.allGoogleMetricIDs, in: app)
         dismissAccountSettings(in: app)
+        let appsMetric = app.buttons["dashboard-metric-gemini.five-hour"]
+        XCTAssertTrue(appsMetric.waitForExistence(timeout: 5), "Opening the menu must not collapse the card")
+        let disclosure = app.buttons["Gemini Fixture, Gemini Apps and coding usage"]
+        tap(disclosure, in: app)
+        XCTAssertTrue(appsMetric.waitForNonExistence(timeout: 5))
+        tap(disclosure, in: app)
+        XCTAssertTrue(appsMetric.waitForExistence(timeout: 5))
+        keepBillingScreenshot("google-card-expanded-after-disclosure", of: app)
 
         openCodingCustomizer(in: app)
         let weekly = "antigravity.gemini-weekly"
@@ -478,13 +486,22 @@ final class AccountJourneysUITests: XCTestCase {
 
     private func openGoogleAccount(_ name: String, in app: XCUIApplication) {
         tap(app.buttons["More options for \(name)"], in: app)
-        tap(app.buttons["Configure account \(name)"], in: app)
+        let configure = app.buttons["Configure account \(name)"]
+        XCTAssertTrue(configure.waitForExistence(timeout: 5), app.debugDescription)
+        keepBillingScreenshot("google-account-menu", of: app)
+        tap(configure, in: app)
+        XCTAssertTrue(app.collectionViews["provider-account-settings-form"].waitForExistence(timeout: 5))
+        keepBillingScreenshot("google-account-settings", of: app)
     }
 
     private func openCodingCustomizer(in app: XCUIApplication) {
         tap(app.buttons["More options for Gemini Fixture"], in: app)
-        tap(app.buttons["Customize Card…"], in: app)
+        let customize = app.buttons["Customize Card…"]
+        XCTAssertTrue(customize.waitForExistence(timeout: 5), app.debugDescription)
+        keepBillingScreenshot("google-customize-menu", of: app)
+        tap(customize, in: app)
         XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
+        keepBillingScreenshot("google-customizer", of: app)
     }
 
     private func dismissAccountSettings(in app: XCUIApplication) {
