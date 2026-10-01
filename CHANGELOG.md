@@ -127,6 +127,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Keep History chart dates readable at the chart edges on iPhone and iPad,
+  including larger text sizes, without changing usage values or range selection.
+  ([#386](https://github.com/HemSoft/codexbar-ios/issues/386))
+
 - Enlarged account-menu tap targets so opening a menu at accessibility text
   sizes does not collapse the card on iPad. Account settings and Customize Card
   remain available without changing the card's saved layout.

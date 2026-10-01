@@ -2331,9 +2331,16 @@ struct ProviderUsageHistoryDetailView: View {
                     AxisGridLine()
                         .foregroundStyle(Color.secondary.opacity(0.15))
                     AxisTick()
-                    AxisValueLabel {
+                    AxisValueLabel(
+                        anchor: value.count > 1 && value.index == 0
+                            ? .topLeading
+                            : value.count > 1 && value.index == value.count - 1 ? .topTrailing : .top,
+                        collisionResolution: .greedy(priority: value.index == value.count - 1 ? 1 : 0)
+                    ) {
                         if let date = value.as(Date.self) {
                             Text(axisDateText(for: date))
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
