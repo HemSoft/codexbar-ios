@@ -225,10 +225,12 @@ reviewed before renewing the exact identities:
   the actual guard. The diagnostic is now at fixture line 980.
 
 The reviewed source commit is
-`30f47ceed073bd784f9c383ffa17fe330dcf10fd`, including the additional DEBUG-only
-storefront routing and data preparation. The baseline binds all production
+`ba2cb11306ab94c238b93cba3174a7bc44616ca5`, including the additional DEBUG-only
+storefront routing and data preparation. Extended History seeding is restricted
+to its explicit screenshot scene. That restriction does not change the three
+finding sites, accepted synthetic values, launch guards, or cache-digest consumers. The baseline binds all production
 sources to snapshot
-`1b8218d56e64cd4b9b26b14a6e3303647aaf763240814ccbc89a7adc42839bc3`.
+`03da988048ac3e4d9976df750a7f8113d385b866087a4e4a418e7ccfffb158b1`.
 No analyzer pin, severity threshold, matching rule, extraction requirement, or
 exclusion changes. Local replay of the fresh merged-source diagnostics checks
 these identities; it is not fresh hosted extraction of the preparation branch.
