@@ -140,6 +140,22 @@ The tests assert accessible names, values, selection state, and reachable tap
 targets. They cover app-owned account and usage navigation. Live website sign-in,
 provider API contracts, and VoiceOver speech remain separate verification.
 
+## Claude window-label regressions
+
+Run the local-only parser and downstream-identity coverage with synthetic Pro
+and Max 20x data:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcrun swift test --filter ClaudeWindowLabelTests
+```
+
+These regressions cover legacy, structured, and unified-header windows,
+`seven_day_oauth_apps`, idle and scoped sessions, percentages and reset times,
+saved metric layouts, history, alert identity, widget tile IDs, and Watch
+snapshots. They do not add tests to either automatic unit suite or establish
+live provider results.
+
 ## GitHub Billing API fixtures
 
 The separate manual fixture harness exercises personal Free and Pro allowances,
