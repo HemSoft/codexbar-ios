@@ -309,11 +309,15 @@ configuration IDs, and the private UI-test store accepts only fixed synthetic
 credentials behind the simulator-only, UUID-isolated, network-blocked launch
 contract. The credits fixtures do not change those boundaries.
 
-The baseline now binds that reviewed production snapshot and the exact updated
-SARIF identities. Its three exceptions, rationales, severity threshold, analyzer
-versions and source-reach requirements are unchanged. Replaying the retained
-SARIF and source-reach CSV passes with three accepted findings and zero blocking
-findings. This local replay is not a claim that the failed hosted job passed.
+Subsequent copy-layout and history-eligibility fixes were reviewed at
+`f8ef6d2c482bbc8242790564f3215cf23e19bf61`. They change no credential boundary
+or consumer involved in these three findings. The baseline binds that production
+snapshot and the exact updated SARIF identities. Its three exceptions,
+rationales, severity threshold, analyzer versions and source-reach requirements
+are unchanged. Replaying the retained evidence accepts the three known findings
+with zero blocking findings. This replay is not a new analysis of changed files
+and does not make the failed hosted job pass. Fresh hosted analysis remains
+pending.
 
 ## Reproduce the positive test
 
