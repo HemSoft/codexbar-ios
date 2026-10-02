@@ -160,9 +160,16 @@ final class CodexCreditsPoolTests: XCTestCase {
         history.record(results: [countOnly], now: now)
         XCTAssertTrue(history.snapshots(for: countOnly.accountID).isEmpty)
         XCTAssertTrue(history.historySeries(for: countOnly).points.isEmpty)
+        XCTAssertTrue(history.historySeriesOptions(for: countOnly).isEmpty)
+        XCTAssertTrue(GoogleUsageMetricCatalog.layoutCopyMetricIDs(for: .codex, result: countOnly).isEmpty)
+        let unavailableOnly = ProviderUsageResult(providerID: .codex, title: "Synthetic", subtitle: "", bars: [],
+                                                 unavailableUsageMetrics: [metricID: "Credits unavailable"], fetchedAt: now)
+        XCTAssertTrue(GoogleUsageMetricCatalog.layoutCopyMetricIDs(for: .codex, result: unavailableOnly).isEmpty)
         history.record(results: [mixed], now: now)
         XCTAssertEqual(history.snapshots(for: mixed.accountID).last?.bars.count, 2)
         XCTAssertEqual(try XCTUnwrap(history.historySeries(for: mixed).points.last).value, 0.34, accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(history.historySeries(for: countOnly).points.last).value, 0.34, accuracy: 0.000001)
+        XCTAssertFalse(history.historySeriesOptions(for: countOnly).isEmpty, "Existing quota history remains available")
     }
 
     @MainActor

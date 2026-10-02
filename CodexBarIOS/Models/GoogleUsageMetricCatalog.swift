@@ -67,7 +67,9 @@ public enum GoogleUsageMetricCatalog {
     }
 
     public static func layoutCopyMetricIDs(for providerID: ProviderID, result: ProviderUsageResult?) -> [String] {
-        guard providerID != .codex || result?.hasSuccessfulRefreshHistory == true else { return [] }
+        guard providerID != .codex
+            || (result?.hasSuccessfulRefreshHistory == true && result?.usageHistoryBars().isEmpty == false)
+        else { return [] }
         return metrics(for: providerID, result: result).map(\.id)
     }
 
