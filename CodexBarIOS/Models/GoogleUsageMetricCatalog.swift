@@ -41,6 +41,9 @@ public enum GoogleUsageMetricCatalog {
         result: ProviderUsageResult? = nil,
         missingReason: String = "Setup required"
     ) -> [ProviderUsageMetric] {
+        if providerID == .cursor {
+            return cursorMetrics(result: result, missingReason: missingReason)
+        }
         let matchingResult = result?.providerID == providerID ? result : nil
         let observed = matchingResult?.availableMetrics ?? []
         let definitions = definitions(for: providerID)
@@ -57,6 +60,21 @@ public enum GoogleUsageMetricCatalog {
             }
             return ProviderUsageMetric(id: metricID, label: definition.label, kind: kind)
         } + observed.filter { !knownIDs.contains($0.id) }
+    }
+
+    private static func cursorMetrics(result: ProviderUsageResult?, missingReason: String) -> [ProviderUsageMetric] {
+        let matching = result?.providerID == .cursor ? result : nil
+        let observed = matching?.availableMetrics ?? []
+        let known: [ProviderUsageMetric] = CursorUsageIdentity.spendingChoices.map { choice in
+            let id = "cursor.\(choice.key)"
+            if let metric = observed.first(where: { $0.id == id }) {
+                return metric
+            }
+            let reason = matching?.unavailableUsageMetrics[id] ?? missingReason
+            return ProviderUsageMetric(id: id, label: choice.label, kind: .unavailableUsage(reason))
+        }
+        let knownIDs = Set(known.map(\.id))
+        return known + observed.filter { !knownIDs.contains($0.id) }
     }
 
     public static func setupDescription(for providerID: ProviderID) -> String? {

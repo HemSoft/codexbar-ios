@@ -19,7 +19,7 @@ final class GrokUsageTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(result.bars.first?.stableKey, "included-usage")
         XCTAssertEqual(result.bars.first?.resetsAt, ISO8601DateFormatter().date(from: "2026-09-28T00:00:00Z"))
         XCTAssertEqual(result.monetaryMetrics.map(\.minorUnits), [0])
-        XCTAssertTrue(result.cardInformationSections.isEmpty)
+        XCTAssertEqual(result.cardInformationSections.first?.id, "grok.consumer-source")
         XCTAssertEqual(result.cacheScope?.hasPrefix("consumer."), true)
     }
 

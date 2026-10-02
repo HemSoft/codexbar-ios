@@ -28,6 +28,7 @@ final class UITestFixtures {
     let statusPreferences: GitHubStatusPreferences
     let statusMonitor: GitHubStatusMonitor
     let appUpdateController: AppUpdateController
+    private let usesDefaultText: Bool
 
     private lazy var widgetSnapshotCoordinator = WidgetSnapshotCoordinator(
         refreshService: refreshService,
@@ -51,6 +52,7 @@ final class UITestFixtures {
             defaults.removePersistentDomain(forName: suite)
         }
         self.defaults = defaults
+        usesDefaultText = environment["CODEXBAR_UI_TEST_DEFAULT_TEXT"] == "1"
         URLProtocol.registerClass(UITestNetworkBlocker.self)
         configurationStore = ProviderConfigurationStore(
             defaults: defaults,
@@ -109,7 +111,7 @@ final class UITestFixtures {
                 if grok {
                     return configuration.providerID == .grok
                         ? Self.grokResult(for: configuration, scenario: scenario)
-                        : Self.cursorResult(for: configuration)
+                        : Self.cursorResult(for: configuration, scenario: scenario)
                 }
                 return Self.result(
                     for: configuration,
@@ -124,7 +126,7 @@ final class UITestFixtures {
         } else if githubBilling {
             providers = [UITestGitHubBillingProvider()]
         } else if grok {
-            providers = [UITestGrokProvider(scenario: scenario), UITestCursorProvider()]
+            providers = [UITestGrokProvider(scenario: scenario), UITestCursorProvider(scenario: scenario)]
         } else {
             providers = [UITestUsageProvider(failsFirstRefresh: recovery), UITestGrokProvider(scenario: scenario)]
         }
@@ -148,7 +150,7 @@ final class UITestFixtures {
             widgetSnapshotCoordinator: widgetSnapshotCoordinator,
             watchSnapshotCoordinator: watchSnapshotCoordinator
         )
-        .dynamicTypeSize(.accessibility2)
+        .dynamicTypeSize(usesDefaultText ? .large : .accessibility2)
     }
 
     nonisolated static func codexCredential(for identity: String) -> String {
@@ -297,16 +299,19 @@ final class UITestFixtures {
         let end = ISO8601DateFormatter().string(from: now.addingTimeInterval(5 * 86_400))
         let noAllowance = scenario == "grok-no-allowance"
         let percentField = switch scenario {
-        case "grok-zero", "grok-existing-zero": ""
-        case "grok-no-allowance", "grok-percent-unavailable", "grok-existing-percent-unavailable":
+        case "grok-zero", "grok-existing-zero", "grok-spending-zero": ""
+        case "grok-spending-reported-zero": "\"creditUsagePercent\":0,"
+        case "grok-no-allowance", "grok-percent-unavailable", "grok-existing-percent-unavailable",
+             "grok-spending-unavailable":
             "\"creditUsagePercent\":null,"
         default: "\"creditUsagePercent\":31,"
         }
+        let balance = scenario == "grok-spending" ? "{}" : #"{"val":500}"#
         let data = Data("""
             {"config":{"isUnifiedBillingUser":\(!noAllowance),
             \(percentField)
             "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"},
-            "prepaidBalance":{"val":500}}}
+            "prepaidBalance":\(balance)}}
             """.utf8)
         return (try? GrokUsageProvider.parseCredits(
             data, configuration: account, subject: "synthetic-user", now: now, verifiedPlanName: "SuperGrok Lite"
@@ -317,13 +322,36 @@ final class UITestFixtures {
             )
     }
 
-    nonisolated static func cursorResult(for account: ProviderAccountConfiguration) -> ProviderUsageResult {
-        ProviderUsageResult(
+    nonisolated static func cursorResult(
+        for account: ProviderAccountConfiguration, scenario: String? = nil
+    ) -> ProviderUsageResult {
+        if scenario?.hasPrefix("grok-spending") == true {
+            return cursorSpendingResult(for: account, unavailable: scenario == "grok-spending-unavailable")
+        }
+        return ProviderUsageResult(
             accountID: account.id, providerID: .cursor, title: account.displayName,
             subtitle: "Synthetic Cursor usage", bars: [
                 UsageBar(stableKey: "cursor-models", label: "Cursor Models", used: 21, limit: 100),
                 UsageBar(stableKey: "grok-bot-weekly", label: "Grok Bot weekly", used: 42, limit: 100),
             ], fetchedAt: Date()
+        )
+    }
+
+    private nonisolated static func cursorSpendingResult(
+        for account: ProviderAccountConfiguration, unavailable: Bool
+    ) -> ProviderUsageResult {
+        let now = Date()
+        let reset = ISO8601DateFormatter().string(from: now.addingTimeInterval(86_400))
+        let spending = unavailable ? "" : #","spendLimitUsage":{"individualLimit":2000,"individualUsed":2003}"#
+        let primary = Data(#"{"planUsage":{"autoPercentUsed":0,"apiPercentUsed":0}\#(spending)}"#.utf8)
+        let weekly = unavailable ? nil : Data(#"""
+            {"hasNonZeroIncludedLimit":true,"usagePercent":100,"nextResetTimestampUtc":"\#(reset)"}
+            """#.utf8)
+        return CursorUsageProvider.parseUsage(
+            primary, grokBotUsageData: weekly, configuration: account, fetchedAt: now
+        ) ?? ProviderUsageResult(
+            accountID: account.id, providerID: .cursor, title: account.displayName,
+            subtitle: "Synthetic replay unavailable", bars: [], fetchedAt: now
         )
     }
 
@@ -1023,8 +1051,10 @@ private actor UITestGrokProvider: UsageProvider {
 
 private actor UITestCursorProvider: UsageProvider {
     nonisolated let providerID = ProviderID.cursor
+    private let scenario: String?
+    init(scenario: String?) { self.scenario = scenario }
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
-        UITestFixtures.cursorResult(for: configuration)
+        UITestFixtures.cursorResult(for: configuration, scenario: scenario)
     }
 }
 

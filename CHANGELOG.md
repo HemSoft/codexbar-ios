@@ -54,6 +54,11 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Label Grok's narrowly inferred zero separately from provider-reported weekly
+  usage, and identify its consumer billing connection as separate from Cursor
+  Bot and developer API spending.
+  ([#388](https://github.com/HemSoft/codexbar-ios/issues/388))
+
 - Corrected the privacy policy's GitHub Billing permission description to
   explain the existing organization-administration scope and its broader
   capabilities. CodexBar's billing requests remain read-only; this update
@@ -126,6 +131,13 @@ building, testing, or releasing the app.
   ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
 
 ### Fixed
+
+- Restore Cursor on-demand spending when the provider reports spend without
+  remaining allowance, including amounts above the spending cap. Keep all four
+  Cursor metric choices visible during partial refreshes without inventing
+  values or resetting saved visibility. Grok also recognizes a provider's empty
+  credits object as its documented zero balance.
+  ([#388](https://github.com/HemSoft/codexbar-ios/issues/388))
 
 - Keep History chart dates readable at the chart edges on iPhone and iPad,
   including larger text sizes, without changing usage values or range selection.
