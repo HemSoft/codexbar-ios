@@ -70,7 +70,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
             if scenario == "codex-credits-failure" {
                 let refresh = app.buttons["Refresh usage"]
                 tap(refresh, in: app)
-                XCTAssertTrue(app.staticTexts.matching(identifier: "Synthetic refresh failed").firstMatch.waitForExistence(timeout: 10), app.debugDescription)
+                XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Synthetic refresh failed")).firstMatch.waitForExistence(timeout: 10), app.debugDescription)
                 XCTAssertTrue(app.buttons[poolID].label.contains("62,500 credits"), app.buttons[poolID].label)
                 XCTAssertTrue(app.buttons[poolID].label.contains("stale"), app.buttons[poolID].label)
                 reveal(app.buttons[poolID], in: app)
