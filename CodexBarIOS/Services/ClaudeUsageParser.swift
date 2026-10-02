@@ -390,7 +390,9 @@ public enum ClaudeUsageParser {
                     stableKey: definition.stableBarKey,
                     percent: percent,
                     reset: reset
-                )
+                ),
+                legacyWidgetKey: definition.stableBarKey == "session" && hasScopedSessionLimit
+                    ? "other-models-5-hour-usage-limit" : nil
             ))
             if let legacySemanticKey = definition.legacySemanticKey {
                 semanticKeys.insert(legacySemanticKey)
@@ -608,7 +610,8 @@ public enum ClaudeUsageParser {
         durationSeconds: TimeInterval,
         fetchedAt: Date,
         dateTimeFormatter: UserFacingDateTimeFormatter,
-        projectionDescriptionOverride: String? = nil
+        projectionDescriptionOverride: String? = nil,
+        legacyWidgetKey: String? = nil
     ) -> UsageBar {
         return UsageBar(
             stableKey: stableKey,
@@ -627,7 +630,8 @@ public enum ClaudeUsageParser {
             projectionPeriodStart: reset?.addingTimeInterval(-durationSeconds),
             projectionPeriodEnd: reset,
             showProjectionOnCurrentBar: reset != nil,
-            projectionDescriptionOverride: projectionDescriptionOverride
+            projectionDescriptionOverride: projectionDescriptionOverride,
+            legacyWidgetKey: legacyWidgetKey
         )
     }
 

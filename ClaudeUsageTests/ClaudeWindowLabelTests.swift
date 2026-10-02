@@ -134,7 +134,7 @@ final class ClaudeWindowLabelTests: XCTestCase {
     }
 
     @MainActor
-    func testSharedSessionWidgetIDUsesScopedKeysInsteadOfDisplayWording() throws {
+    func testSharedSessionWidgetIDUsesExplicitKeyInsteadOfDisplayWording() throws {
         let suite = "ClaudeWindowLabelTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -143,7 +143,12 @@ final class ClaudeWindowLabelTests: XCTestCase {
         XCTAssertTrue(store.saveSecret("synthetic", for: account))
         for scoped in [false, true] {
             for label in ["5-hour", "Other models 5-hour", "Localized shared window"] {
-                var bars = [UsageBar(stableKey: "session", label: label, used: 42, limit: 100)]
+                var bars = [
+                    UsageBar(
+                        stableKey: "session", label: label, used: 42, limit: 100,
+                        legacyWidgetKey: scoped ? "other-models-5-hour-usage-limit" : nil
+                    ),
+                ]
                 if scoped {
                     bars.append(UsageBar(stableKey: "session-scoped-fable", label: "Fable current session", used: 12, limit: 100))
                 }
@@ -158,6 +163,38 @@ final class ClaudeWindowLabelTests: XCTestCase {
                 XCTAssertEqual(tile.label, label)
             }
         }
+    }
+
+    @MainActor
+    func testMixedLegacySessionKeepsSavedTileWhenScopedSessionIsHidden() throws {
+        let suite = "ClaudeWindowLabelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: ClaudeFixtureSecretStore())
+        let account = store.addAccount(for: .claude)
+        XCTAssertTrue(store.saveSecret("synthetic", for: account))
+        let parsed = try XCTUnwrap(ClaudeUsageParser.parse(Data(#"""
+            {"five_hour":{"utilization":42},"seven_day":{"utilization":64},
+            "limits":[{"kind":"session","percent":12,"scope":{"model":{"display_name":"Fable"}}}]}
+            """#.utf8), subscriptionType: "max_20x", fetchedAt: now))
+        XCTAssertEqual(parsed.bars.map(\.stableKey), ["session-scoped-fable", "session", "weekly-all"])
+        let all = ProviderUsageResult(
+            accountID: account.id, providerID: .claude, title: "Synthetic Claude",
+            subtitle: "Synthetic", bars: parsed.bars, fetchedAt: now
+        )
+        WidgetSnapshotPublisher.publish(results: [all], configurationStore: store, snapshotDefaults: defaults, now: now)
+        let before = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first)
+        XCTAssertEqual(before.bars[1].id, "\(account.id).1.5-hour-usage-limit")
+        let filtered = ProviderUsageResult(
+            accountID: account.id, providerID: .claude, title: all.title,
+            subtitle: all.subtitle, bars: Array(parsed.bars.dropFirst()), fetchedAt: now
+        )
+        WidgetSnapshotPublisher.publish(results: [filtered], configurationStore: store, snapshotDefaults: defaults, now: now)
+        let snapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        let saved = try XCTUnwrap(snapshot.builderTile(resolvingSavedID: "bar.\(account.id).1.5-hour-usage-limit"))
+        XCTAssertEqual(saved.title, "5-hour")
+        XCTAssertEqual(saved.value, "42%")
+        XCTAssertEqual(saved.fractionUsed, 0.42)
     }
 
     private func assertWindows(_ result: ProviderUsageResult) throws {

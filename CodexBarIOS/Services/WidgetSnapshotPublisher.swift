@@ -55,10 +55,7 @@ enum WidgetSnapshotPublisher {
                                 providerID: result.providerID,
                                 bar: bar,
                                 index: index,
-                                metricID: metricID,
-                                hasScopedSessionLimit: result.bars.contains {
-                                    $0.stableKey?.hasPrefix("session-scoped-") == true
-                                }
+                                metricID: metricID
                             ),
                             metricID: metricID,
                             label: bar.label,
@@ -175,8 +172,7 @@ enum WidgetSnapshotPublisher {
         providerID: ProviderID,
         bar: UsageBar,
         index: Int,
-        metricID: String,
-        hasScopedSessionLimit: Bool
+        metricID: String
     ) -> String {
         // Visible Claude window labels must not change saved widget tile IDs.
         if providerID == .claude,
@@ -184,8 +180,7 @@ enum WidgetSnapshotPublisher {
                 || bar.stableKey?.hasPrefix("session-scoped-") == true {
             let legacyLabel: String
             if bar.stableKey == "session" {
-                legacyLabel = hasScopedSessionLimit
-                    ? "Other models 5-hour usage limit" : "5-hour usage limit"
+                legacyLabel = bar.legacyWidgetKey ?? "5-hour usage limit"
             } else {
                 legacyLabel = bar.label.replacingOccurrences(
                     of: "current session",
