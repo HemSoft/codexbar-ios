@@ -41,7 +41,9 @@ same as a present empty object.
   valid reported spend in their unavailable explanation without an active meter.
   Zero cap means no spending allowance; a negative cap is invalid. A missing
   cap alone is not proof of unlimited spending. Disabled accounts use account
-  status instead of stale per-metric response reasons.
+  status instead of stale per-metric response reasons. Valid spend-only responses
+  still produce those choices when no active bar exists. A negative cap cannot
+  manufacture legacy fallback spend.
 - Cursor's Bot `usagePercent` is optional in the first-party schema. An absent
   or malformed percent stays unavailable. Explicit zero is a reported value.
   Team-pooled and absent included allowances retain their separate states.

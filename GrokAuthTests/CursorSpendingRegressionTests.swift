@@ -79,6 +79,27 @@ final class CursorSpendingRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(disabledCapped.unavailableUsageMetrics["cursor.on-demand"], "Spend \(try currency(120)); disabled")
         let invalidCap = try currentResult(spending: ["individualLimit": -1, "individualUsed": 120])
         XCTAssertEqual(invalidCap.unavailableUsageMetrics["cursor.on-demand"], "Spend \(try currency(120)); invalid spending cap")
+        for cap in [nil, -1, 0, 2000] as [Int?] {
+            for enabled in [nil, false, true] as [Bool?] {
+                var spending = ["individualUsed": 120]
+                spending["individualLimit"] = cap
+                let weekly = enabled.map { "{\"onDemandSettings\":{\"enabled\":\($0)}}" }
+                let spendOnly = try currentResult(spending: spending, weekly: weekly, includesPlan: false)
+                if enabled != false && cap == 2000 {
+                    XCTAssertEqual(spendOnly.bars.map(\.used), [120])
+                } else {
+                    XCTAssertTrue(spendOnly.bars.isEmpty)
+                    let reason = try XCTUnwrap(spendOnly.unavailableUsageMetrics["cursor.on-demand"])
+                    XCTAssertTrue(reason.contains(try currency(120)))
+                    XCTAssertFalse(reason.contains("spend not reported"))
+                }
+                XCTAssertEqual(GoogleUsageMetricCatalog.metrics(for: .cursor, result: spendOnly).count, 4)
+            }
+        }
+        XCTAssertNil(CursorUsageProvider.parseUsage(
+            Data(#"{"spendLimitUsage":{"individualLimit":-1,"individualRemaining":-120}}"#.utf8),
+            configuration: .defaultConfiguration(for: .cursor)
+        ))
         XCTAssertNil(CursorUsageProvider.parseUsage(
             Data(#"{"planUsage":"malformed","spendLimitUsage":{"individualLimit":2000,"individualUsed":120}}"#.utf8),
             configuration: .defaultConfiguration(for: .cursor)
@@ -135,8 +156,11 @@ final class CursorSpendingRegressionTests: XCTestCase, @unchecked Sendable {
         return try XCTUnwrap(formatter.string(from: NSNumber(value: cents / 100)))
     }
 
-    private func currentResult(spending: Any? = nil, weekly: String? = nil) throws -> ProviderUsageResult {
-        var response: [String: Any] = ["planUsage": ["autoPercentUsed": 0, "apiPercentUsed": 0]]
+    private func currentResult(
+        spending: Any? = nil, weekly: String? = nil, includesPlan: Bool = true
+    ) throws -> ProviderUsageResult {
+        var response: [String: Any] = [:]
+        if includesPlan { response["planUsage"] = ["autoPercentUsed": 0, "apiPercentUsed": 0] }
         response["spendLimitUsage"] = spending
         return try XCTUnwrap(CursorUsageProvider.parseUsage(
             JSONSerialization.data(withJSONObject: response),

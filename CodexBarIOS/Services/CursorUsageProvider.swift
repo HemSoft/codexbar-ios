@@ -132,7 +132,7 @@ public final class CursorUsageProvider: UsageProvider {
            let grokBotBar = buildGrokBotUsageBar(grokBotUsageData, fetchedAt: fetchedAt) {
             bars.append(grokBotBar)
         }
-        guard !bars.isEmpty else {
+        guard !bars.isEmpty || usage.spendLimitUsage?.used != nil else {
             return nil
         }
 
@@ -543,7 +543,7 @@ private struct CursorSpendLimitUsage: Decodable {
 
     var used: Double? {
         if hasReportedUsed { return individualUsed.flatMap { $0 >= 0 ? $0 : nil } }
-        guard let individualLimit, let individualRemaining else { return nil }
+        guard let individualLimit, let individualRemaining, individualLimit >= 0 else { return nil }
         return max(0, individualLimit - individualRemaining)
     }
 
