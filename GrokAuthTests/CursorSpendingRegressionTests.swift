@@ -65,6 +65,16 @@ final class CursorSpendingRegressionTests: XCTestCase, @unchecked Sendable {
         }
         let noCap = try currentResult(spending: ["individualUsed": 120])
         XCTAssertEqual(noCap.unavailableUsageMetrics["cursor.on-demand"], "Spend $1.20; cap not reported")
+        let noAllowance = try currentResult(spending: ["individualLimit": 0, "individualUsed": 120])
+        XCTAssertEqual(noAllowance.unavailableUsageMetrics["cursor.on-demand"], "Spend $1.20; no spending allowance")
+        let disabled = try currentResult(
+            spending: ["individualUsed": 120], weekly: #"{"onDemandSettings":{"enabled":false}}"#
+        )
+        XCTAssertEqual(disabled.unavailableUsageMetrics["cursor.on-demand"], "Spend $1.20; disabled")
+        XCTAssertNil(CursorUsageProvider.parseUsage(
+            Data(#"{"planUsage":"malformed","spendLimitUsage":{"individualLimit":2000,"individualUsed":120}}"#.utf8),
+            configuration: .defaultConfiguration(for: .cursor)
+        ))
     }
 
     func testLegacyRemainingAndExplicitWeeklyEligibilityRetainTheirMeaning() throws {
@@ -84,7 +94,7 @@ final class CursorSpendingRegressionTests: XCTestCase, @unchecked Sendable {
     }
 
     func testGrokMissingNullAndMalformedMoneyNeverBecomeMeasuredZero() throws {
-        for amount in [NSNull(), ["val": NSNull()], ["unexpected": 0], ["val": "bad"]] as [Any] {
+        for amount in [NSNull(), ["val": NSNull()], ["unexpected": 0], ["val": "bad"], "malformed"] as [Any] {
             let config: [String: Any] = [
                 "isUnifiedBillingUser": true, "creditUsagePercent": 31, "prepaidBalance": amount,
                 "currentPeriod": [
@@ -101,6 +111,11 @@ final class CursorSpendingRegressionTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(result.bars.first?.used, 31)
             XCTAssertFalse(result.bars.first?.label.localizedCaseInsensitiveContains("inferred") == true)
         }
+        let extended = Data(#"{"config":{"isUnifiedBillingUser":true,"prepaidBalance":{"val":125,"futureMetadata":"ignored"}}}"#.utf8)
+        let result = try GrokUsageProvider.parseCredits(
+            extended, configuration: .defaultConfiguration(for: .grok), subject: "fixture-consumer", now: Date()
+        )
+        XCTAssertEqual(result.monetaryMetrics.first?.minorUnits, 125)
     }
 
     private func currentResult(spending: Any? = nil, weekly: String? = nil) throws -> ProviderUsageResult {

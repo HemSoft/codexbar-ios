@@ -362,10 +362,20 @@ private struct GrokCreditsAmount: Decodable {
     init(from decoder: Decoder) throws {
         // The first-party CLI's Cent wire model documents an empty object as proto3 zero.
         // Missing/null amounts remain absent; malformed/nonempty objects never become zero.
-        let container = try decoder.singleValueContainer()
-        let values = try? container.decode([String: Decimal?].self)
-        val = values?.isEmpty == true ? 0 : values?["val"] ?? nil
+        guard let container = try? decoder.container(keyedBy: GrokCreditsKey.self) else {
+            val = nil
+            return
+        }
+        val = container.allKeys.isEmpty ? 0 : try? container.decode(Decimal.self, forKey: GrokCreditsKey("val"))
     }
+}
+
+private struct GrokCreditsKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+    init(_ stringValue: String) { self.stringValue = stringValue }
+    init?(stringValue: String) { self.init(stringValue) }
+    init?(intValue: Int) { return nil }
 }
 
 private struct GrokRemoteSettings: Decodable {

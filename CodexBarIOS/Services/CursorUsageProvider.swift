@@ -262,11 +262,15 @@ public final class CursorUsageProvider: UsageProvider {
     }
 
     private static func onDemandUnavailableReason(_ spending: CursorSpendLimitUsage?, grokBotData: Data?) -> String {
-        if onDemandEnabled(grokBotData) == false { return "Disabled" }
+        let reason = onDemandUnavailableState(spending, enabled: onDemandEnabled(grokBotData))
+        guard let used = spending?.used else { return reason }
+        return "Spend \(formatCents(used)); \(reason.lowercased())"
+    }
+
+    private static func onDemandUnavailableState(_ spending: CursorSpendLimitUsage?, enabled: Bool?) -> String {
+        if enabled == false { return "Disabled" }
         guard let spending else { return "Not reported" }
-        guard let limit = spending.individualLimit else {
-            return spending.used.map { "Spend \(formatCents($0)); cap not reported" } ?? "Spending cap not reported"
-        }
+        guard let limit = spending.individualLimit else { return "Cap not reported" }
         if limit == 0 { return "No spending allowance" }
         return "Spend not reported"
     }
@@ -488,7 +492,7 @@ private struct CursorCurrentPeriodUsage: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         billingCycleStart = try? container.decode(String.self, forKey: .billingCycleStart)
         billingCycleEnd = try? container.decode(String.self, forKey: .billingCycleEnd)
-        planUsage = try? container.decode(CursorPlanUsage.self, forKey: .planUsage)
+        planUsage = try container.decodeIfPresent(CursorPlanUsage.self, forKey: .planUsage)
         spendLimitUsage = try? container.decode(CursorSpendLimitUsage.self, forKey: .spendLimitUsage)
     }
 }

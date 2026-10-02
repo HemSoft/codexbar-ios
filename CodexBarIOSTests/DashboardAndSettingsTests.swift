@@ -2657,11 +2657,11 @@ final class DashboardAndSettingsTests: XCTestCase {
 
         XCTAssertEqual(
             viewModel.availableMetrics.map(\.id),
-            [cursorModelsID, otherModelsID, grokBotID]
+            [cursorModelsID, otherModelsID, grokBotID, "cursor.on-demand"]
         )
         XCTAssertEqual(
             viewModel.availableMetrics.map(\.label),
-            ["Cursor Models", "Other Models", "Grok Bot weekly"]
+            ["Cursor Models", "Other Models", "Grok Bot weekly", "On-demand spending"]
         )
         XCTAssertTrue(viewModel.isMetricVisible(cursorModelsID))
         XCTAssertTrue(viewModel.isMetricVisible(otherModelsID))
@@ -2688,7 +2688,9 @@ final class DashboardAndSettingsTests: XCTestCase {
         )
         viewModel.synchronizeUsageResult(partialResult)
 
-        XCTAssertEqual(viewModel.availableMetrics.map(\.id), [cursorModelsID, grokBotID])
+        XCTAssertEqual(viewModel.availableMetrics.map(\.id), [
+            cursorModelsID, otherModelsID, grokBotID, "cursor.on-demand",
+        ])
         XCTAssertEqual(
             store.visualizationStyle(accountID: configuration.id, metricID: otherModelsID),
             .circularRing
@@ -2749,7 +2751,10 @@ final class DashboardAndSettingsTests: XCTestCase {
             initialUsageResult: result
         )
 
-        XCTAssertEqual(viewModel.availableMetrics.map(\.id), [metricID])
+        XCTAssertEqual(viewModel.availableMetrics.map(\.id), [
+            CursorUsageIdentity.cursorModelsMetricID, CursorUsageIdentity.otherModelsMetricID,
+            metricID, "cursor.on-demand",
+        ])
         XCTAssertTrue(viewModel.isMetricVisible(metricID))
 
         viewModel.setMetricVisibility(false, metricID: metricID)
