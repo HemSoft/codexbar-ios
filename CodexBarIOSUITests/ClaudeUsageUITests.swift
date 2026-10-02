@@ -34,12 +34,12 @@ final class ClaudeUsageUITests: XCTestCase {
             XCTAssertTrue(app.buttons["Show Weekly"].exists, app.debugDescription)
             tap(app.buttons["Done"], in: app)
             XCTAssertTrue(app.navigationBars["Customize Card"].waitForNonExistence(timeout: 5))
-            XCTAssertFalse(weekly.exists)
+            XCTAssertTrue(weekly.waitForNonExistence(timeout: 5), app.debugDescription)
             app.terminate()
 
             let restored = launch(scenario: scenario, runID: runID, reset: false)
             XCTAssertTrue(restored.buttons["dashboard-metric-claude.session"].waitForExistence(timeout: 10))
-            XCTAssertFalse(restored.buttons["dashboard-metric-claude.weekly-all"].exists)
+            XCTAssertTrue(restored.buttons["dashboard-metric-claude.weekly-all"].waitForNonExistence(timeout: 5))
             restored.terminate()
         }
     }
