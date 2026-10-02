@@ -99,32 +99,7 @@ final class UITestFixtures {
         }
         let results = configurationStore.configurations
             .filter(configurationStore.isConfigured)
-            .map { configuration in
-                if metricEvidence {
-                    return Self.metricEvidenceResult(for: configuration, scenario: scenario ?? "")
-                }
-                if google {
-                    return Self.googleResult(for: configuration, sources: googleSources, stage: 0)
-                }
-                if codex {
-                    return Self.codexResult(for: configuration)
-                }
-                if claude {
-                    return Self.claudeResult(for: configuration, scenario: scenario)
-                }
-                if githubBilling {
-                    return Self.githubBillingResult(for: configuration)
-                }
-                if grok {
-                    return configuration.providerID == .grok
-                        ? Self.grokResult(for: configuration, scenario: scenario)
-                        : Self.cursorResult(for: configuration, scenario: scenario)
-                }
-                return Self.result(
-                    for: configuration,
-                    balance: configuration.id.hasPrefix("ui-navigation-") ? 90 : 25
-                )
-            }
+            .map { Self.initialResult(for: $0, scenario: scenario, googleSources: googleSources) }
         let providers: [any UsageProvider]
         if google {
             providers = [UITestGoogleProvider(sources: googleSources)]
@@ -143,6 +118,26 @@ final class UITestFixtures {
         if recovery && historyStore.snapshots.isEmpty {
             seedHistory()
         }
+    }
+
+    nonisolated private static func initialResult(
+        for configuration: ProviderAccountConfiguration, scenario: String?, googleSources: [ProviderID]
+    ) -> ProviderUsageResult {
+        if scenario?.hasPrefix("metric-evidence-") == true {
+            return metricEvidenceResult(for: configuration, scenario: scenario ?? "")
+        }
+        if !googleSources.isEmpty {
+            return googleResult(for: configuration, sources: googleSources, stage: 0)
+        }
+        if scenario == "codex-two" { return codexResult(for: configuration) }
+        if scenario?.hasPrefix("claude-") == true { return claudeResult(for: configuration, scenario: scenario) }
+        if scenario?.hasPrefix("github-billing") == true { return githubBillingResult(for: configuration) }
+        if scenario?.hasPrefix("grok") == true {
+            return configuration.providerID == .grok
+                ? grokResult(for: configuration, scenario: scenario)
+                : cursorResult(for: configuration, scenario: scenario)
+        }
+        return result(for: configuration, balance: configuration.id.hasPrefix("ui-navigation-") ? 90 : 25)
     }
 
     func contentView() -> some View {
