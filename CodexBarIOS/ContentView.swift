@@ -638,9 +638,9 @@ struct ContentView: View {
         configurationStore: ProviderConfigurationStore
     ) -> MetricLayoutCopyDestination? {
         guard destination.id != source.accountID, destination.configuration.providerID == source.providerID else { return nil }
-        let metricIDs = GoogleUsageMetricCatalog.metrics(
+        let metricIDs = GoogleUsageMetricCatalog.layoutCopyMetricIDs(
             for: destination.configuration.providerID, result: destination.result
-        ).map(\.id)
+        )
         guard !metricIDs.isEmpty else { return nil }
         return MetricLayoutCopyDestination(
             id: destination.id, title: destination.configuration.displayName, availableMetricIDs: metricIDs,

@@ -56,7 +56,9 @@ final class CodexCreditsPoolTests: XCTestCase {
         let result = try XCTUnwrap(CodexUsageParser.parse(data, fetchedAt: now, locale: Locale(identifier: "de_DE")))
         XCTAssertEqual(result.bars.first?.usageText, "62.500,5 credits")
         XCTAssertEqual(result.availableMetrics.first?.id, metricID)
-        XCTAssertNil(CodexUsageParser.parse(Data(#"{"credits":{"has_credits":false,"unlimited":false,"balance":null}}"#.utf8)))
+        let absent = try XCTUnwrap(CodexUsageParser.parse(Data(#"{"credits":{"has_credits":false,"unlimited":false,"balance":null}}"#.utf8)))
+        XCTAssertTrue(absent.bars.isEmpty)
+        XCTAssertEqual(absent.configurableMetrics.first?.kind, .unavailableUsage("Credits unavailable"))
     }
 
     @MainActor
@@ -93,6 +95,10 @@ final class CodexCreditsPoolTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: CreditsFixtureSecretStore())
+        _ = store.reconcileMetricLayout(accountID: "one", availableMetricIDs: [metricID])
+        XCTAssertFalse(store.isMetricLayoutCustomized(accountID: "one", availableMetricIDs: [metricID]))
+        XCTAssertTrue(GoogleUsageMetricCatalog.layoutCopyMetricIDs(for: .codex, result: nil).isEmpty)
+        XCTAssertEqual(GoogleUsageMetricCatalog.layoutCopyMetricIDs(for: .codex, result: try parse(credits: NSNull())).count, 3)
         store.updateMetricWidth(.full, accountID: "one", metricID: metricID)
         XCTAssertFalse(store.isMetricVisible(accountID: "one", metricID: metricID))
         store.updateMetricOrder([metricID], accountID: "two")
@@ -140,6 +146,51 @@ final class CodexCreditsPoolTests: XCTestCase {
         store.updateMetricVisibility(false, accountID: account.id, metricID: metricID)
         WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults, now: now)
         XCTAssertNotNil(WidgetSnapshotStore.loadSnapshot(defaults: defaults).builderTile(resolvingSavedID: savedID))
+    }
+
+    @MainActor
+    func testCreditCountsNeverEnterQuotaHistory() throws {
+        let suite = "CodexCreditHistory.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let history = UsageHistoryStore(defaults: defaults)
+        let mixed = try parse(credits: ["has_credits": true, "unlimited": false, "balance": "62500"])
+        let countOnly = ProviderUsageResult(providerID: .codex, title: "Synthetic", subtitle: "",
+                                           bars: [try XCTUnwrap(mixed.bars.last)], fetchedAt: now)
+        history.record(results: [countOnly], now: now)
+        XCTAssertTrue(history.snapshots(for: countOnly.accountID).isEmpty)
+        XCTAssertTrue(history.historySeries(for: countOnly).points.isEmpty)
+        history.record(results: [mixed], now: now)
+        XCTAssertEqual(history.snapshots(for: mixed.accountID).last?.bars.count, 2)
+        XCTAssertEqual(try XCTUnwrap(history.historySeries(for: mixed).points.last).value, 0.34, accuracy: 0.000001)
+    }
+
+    @MainActor
+    func testWatchTextStatesRespectExistingVisibilityPolicy() throws {
+        let suite = "CodexCreditsWatch.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: CreditsFixtureSecretStore())
+        let account = store.addAccount(for: .codex)
+        XCTAssertTrue(store.saveSecret("synthetic", for: account))
+        for (unlimited, expected) in [(true, "Unlimited credits"), (false, "Credits unavailable")] {
+            let parsed = try parse(credits: ["has_credits": unlimited, "unlimited": unlimited, "balance": NSNull()])
+            let result = ProviderUsageResult(accountID: account.id, providerID: .codex, title: "Synthetic", subtitle: "",
+                                             bars: parsed.bars, unavailableUsageMetrics: parsed.unavailableUsageMetrics, fetchedAt: now)
+            store.updateMetricVisibility(true, accountID: account.id, metricID: metricID)
+            let metric = try XCTUnwrap(WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: now)
+                .accounts.first?.metrics.first { $0.id == metricID })
+            XCTAssertEqual(metric.exactValue, expected)
+            XCTAssertNil(metric.usedFraction)
+            XCTAssertEqual(metric.visualizationStyle, .largeNumeric)
+            store.updateMetricVisibility(false, accountID: account.id, metricID: metricID)
+            XCTAssertFalse(WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: now)
+                .accounts.first?.metrics.contains { $0.id == metricID } ?? false)
+            store.updateWatchMetricVisibility(.show, accountID: account.id, metricID: metricID)
+            XCTAssertTrue(WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: now)
+                .accounts.first?.metrics.contains { $0.id == metricID } ?? false)
+            store.updateWatchMetricVisibility(.inherit, accountID: account.id, metricID: metricID)
+        }
     }
 
     private func parse(credits: Any) throws -> ProviderUsageResult {

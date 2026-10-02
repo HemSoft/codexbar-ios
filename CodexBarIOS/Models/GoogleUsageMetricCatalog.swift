@@ -32,7 +32,7 @@ public enum GoogleUsageMetricCatalog {
         case .antigravity:
             codingDefinitions
         case .codex:
-            [Definition(sourceProviderID: .codex, key: "credits-pool", label: "Credits pool", window: "balance")]
+            [Definition(sourceProviderID: .codex, key: CodexUsageParser.creditsPoolStableKey, label: "Credits pool", window: "balance")]
         default:
             []
         }
@@ -64,6 +64,11 @@ public enum GoogleUsageMetricCatalog {
         }
         let additional = observed.filter { !knownIDs.contains($0.id) }
         return providerID == .codex ? additional + known : known + additional
+    }
+
+    public static func layoutCopyMetricIDs(for providerID: ProviderID, result: ProviderUsageResult?) -> [String] {
+        guard providerID != .codex || result?.hasSuccessfulRefreshHistory == true else { return [] }
+        return metrics(for: providerID, result: result).map(\.id)
     }
 
     private static func cursorMetrics(result: ProviderUsageResult?, missingReason: String) -> [ProviderUsageMetric] {

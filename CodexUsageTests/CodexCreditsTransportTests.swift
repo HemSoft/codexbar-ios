@@ -44,6 +44,19 @@ final class CodexCreditsTransportTests: XCTestCase {
         XCTAssertEqual(absent.unavailableUsageMetrics[CodexUsageParser.creditsPoolMetricID], "Credits unavailable")
     }
 
+    func testCreditOnlySuccessfulAbsenceClearsThePreviousBalance() async throws {
+        let account = ProviderAccountConfiguration(id: "credit-only-\(UUID().uuidString)", providerID: .codex,
+                                                  accountLabel: "Credit-only", authMethod: .browserSession)
+        let service = UsageRefreshService(providers: [makeProvider(accounts: [account])])
+        await service.refresh(configurations: [account])
+        XCTAssertEqual(service.results.first?.bars.last?.used, 62500)
+        await service.refresh(configurations: [account])
+        let absent = try XCTUnwrap(service.results.first)
+        XCTAssertNil(absent.failureMessage)
+        XCTAssertTrue(absent.bars.isEmpty)
+        XCTAssertEqual(absent.unavailableUsageMetrics[CodexUsageParser.creditsPoolMetricID], "Credits unavailable")
+    }
+
     private func makeProvider(accounts: [ProviderAccountConfiguration]) -> CodexUsageProvider {
         let credentials = Dictionary(uniqueKeysWithValues: accounts.map {
             (ProviderConfigurationStore.keychainAccount(for: $0),
@@ -85,10 +98,10 @@ private class CreditsReadOnlyURLProtocol: URLProtocol, @unchecked Sendable {
             let balance = identity.hasSuffix("work") ? "770" : "62500"
             let credits = identity.hasSuffix("unlimited")
                 ? #"{"has_credits":true,"unlimited":true,"balance":null}"#
-                : (identity.hasPrefix("failure-") && count >= 3
+                : ((identity.hasPrefix("failure-") && count >= 3) || (identity.hasPrefix("credit-only-") && count >= 2)
                    ? #"{"has_credits":true,"unlimited":false,"balance":null}"#
                    : #"{"has_credits":true,"unlimited":false,"balance":"\#(balance)"}"#)
-            body = #"""
+            body = identity.hasPrefix("credit-only-") ? #"{"credits":\#(credits)}"# : #"""
             {"credits":\#(credits),"rate_limit":{"primary_window":{
             "used_percent":12,"reset_at":1893456000,"limit_window_seconds":18000}}}
             """#

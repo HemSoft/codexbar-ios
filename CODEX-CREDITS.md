@@ -54,11 +54,13 @@ quota refreshes. Live same-account balance comparison remains pending for Franz.
   no percentage, severity threshold, quota projection, or automatic balance
   alert. Watch visibility inherits the iPhone choice unless explicitly
   overridden. Independent saved widget selections are not removed by hiding
-  the dashboard metric.
+  the dashboard metric. Unlimited and unavailable Watch values remain text-only
+  and follow the same visibility policy. Credit counts are excluded from quota
+  history rather than shown as a made-up zero percent.
 
 ## Local validation
 
-Nine local-only Foundation regressions cover parsing, formatting, read-only
+Twelve local-only Foundation regressions cover parsing, formatting, read-only
 transport, account scoping, reset metadata, failed refresh, persisted defaults,
 reordering, temporary absence, widget identity, and Watch visibility:
 

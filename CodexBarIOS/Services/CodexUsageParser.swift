@@ -3,6 +3,7 @@ import Foundation
 
 public enum CodexUsageParser {
     public static let creditsPoolMetricID = "codex.credits-pool"
+    static let creditsPoolStableKey = "credits-pool"
     private static let fiveHourDurationSeconds = 18_000
     private static let weeklyDurationSeconds = 604_800
     private static let maximumWindowDurationSeconds = 315_360_000
@@ -70,7 +71,7 @@ public enum CodexUsageParser {
 
         let creditsPool = creditsPoolBar(from: root["credits"], locale: locale)
         let creditsReason = creditsPoolUnavailableReason(from: root["credits"])
-        guard !windows.isEmpty || resetCredits != nil || creditsPool != nil || creditsReason == "Unlimited credits" else {
+        guard !windows.isEmpty || resetCredits != nil || root.keys.contains("credits") else {
             return nil
         }
 
@@ -151,7 +152,7 @@ public enum CodexUsageParser {
         }
         let number = balance.formatted(.number.precision(.significantDigits(1...38)).locale(locale))
         return UsageBar(
-            stableKey: "credits-pool",
+            stableKey: creditsPoolStableKey,
             label: "Credits pool",
             used: NSDecimalNumber(decimal: balance).doubleValue,
             limit: 0,

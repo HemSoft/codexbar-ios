@@ -1123,8 +1123,8 @@ public final class ProviderConfigurationStore: ObservableObject {
         if storedOrder != availableMetricIDs + unavailableOrder {
             return true
         }
-        return layout.preferences.values.contains { preference in
-            !preference.isVisible
+        return layout.preferences.contains { metricID, preference in
+            preference.isVisible != Self.defaultMetricVisibility(metricID)
                 || preference.visualizationStyle != nil
                 || preference.width != .automatic
                 || preference.watchVisibility != .inherit
