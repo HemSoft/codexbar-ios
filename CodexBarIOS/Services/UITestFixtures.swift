@@ -72,7 +72,7 @@ final class UITestFixtures {
         }
         let githubBilling = scenario?.hasPrefix("github-billing") == true
         let grok = scenario?.hasPrefix("grok") == true
-        let codex = scenario == "codex-two"
+        let codex = scenario?.hasPrefix("codex-") == true
         let claude = scenario?.hasPrefix("claude-") == true
         if claude && configurationStore.configurations.isEmpty {
             Self.seedClaudeAccount(in: configurationStore)
@@ -104,7 +104,7 @@ final class UITestFixtures {
         if google {
             providers = [UITestGoogleProvider(sources: googleSources)]
         } else if codex {
-            providers = [UITestCodexProvider()]
+            providers = [UITestCodexProvider(scenario: scenario)]
         } else if claude {
             providers = [UITestClaudeProvider(scenario: scenario)]
         } else if githubBilling {
@@ -129,7 +129,7 @@ final class UITestFixtures {
         if !googleSources.isEmpty {
             return googleResult(for: configuration, sources: googleSources, stage: 0)
         }
-        if scenario == "codex-two" { return codexResult(for: configuration) }
+        if scenario?.hasPrefix("codex-") == true { return codexResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("claude-") == true { return claudeResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("github-billing") == true { return githubBillingResult(for: configuration) }
         if scenario?.hasPrefix("grok") == true {
@@ -176,8 +176,13 @@ final class UITestFixtures {
         }
     }
 
-    nonisolated static func codexResult(for account: ProviderAccountConfiguration) -> ProviderUsageResult {
+    nonisolated static func codexResult(
+        for account: ProviderAccountConfiguration, scenario: String? = nil
+    ) -> ProviderUsageResult {
         let used = account.id == "ui-codex-personal" ? 12.0 : 62.0
+        if scenario?.hasPrefix("codex-credits") == true {
+            return codexCreditsResult(for: account, scenario: scenario ?? "", used: used)
+        }
         return ProviderUsageResult(
             accountID: account.id, providerID: .codex, title: account.displayName,
             subtitle: "Synthetic Codex usage",
@@ -187,6 +192,37 @@ final class UITestFixtures {
                     resetsAt: Date().addingTimeInterval(18_000), resetDisplayStyle: .relativeWithLocalTime
                 ),
             ], fetchedAt: Date()
+        )
+    }
+
+    nonisolated private static func codexCreditsResult(
+        for account: ProviderAccountConfiguration, scenario: String, used: Double
+    ) -> ProviderUsageResult {
+        let credits: String
+        switch scenario {
+        case "codex-credits-zero":
+            credits = #"{"has_credits":false,"unlimited":false,"balance":"0"}"#
+        case "codex-credits-unlimited":
+            credits = #"{"has_credits":true,"unlimited":true,"balance":null}"#
+        case "codex-credits-unavailable":
+            credits = #"{"has_credits":true,"unlimited":false,"balance":null}"#
+        default:
+            let balance = account.id == "ui-codex-personal" ? "62500" : "770"
+            credits = #"{"has_credits":true,"unlimited":false,"balance":"\#(balance)"}"#
+        }
+        let now = Date()
+        let payload = #"""
+        {"credits":\#(credits),"rate_limit":{
+        "primary_window":{"used_percent":\#(used),"reset_at":\#(Int(now.timeIntervalSince1970) + 7200),"limit_window_seconds":18000},
+        "secondary_window":{"used_percent":34,"reset_at":\#(Int(now.timeIntervalSince1970) + 259200),"limit_window_seconds":604800}}}
+        """#
+        guard let parsed = CodexUsageParser.parse(Data(payload.utf8), fetchedAt: now, locale: Locale(identifier: "en_US")) else {
+            preconditionFailure("Invalid synthetic Codex credits fixture")
+        }
+        return ProviderUsageResult(
+            accountID: account.id, providerID: .codex, title: account.displayName,
+            subtitle: "Synthetic Codex usage", bars: parsed.bars,
+            unavailableUsageMetrics: parsed.unavailableUsageMetrics, fetchedAt: parsed.fetchedAt
         )
     }
 
@@ -1070,8 +1106,16 @@ private actor UITestUsageProvider: UsageProvider {
 
 private actor UITestCodexProvider: UsageProvider {
     nonisolated let providerID = ProviderID.codex
+    private let scenario: String?
+    init(scenario: String?) { self.scenario = scenario }
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
-        UITestFixtures.codexResult(for: configuration)
+        if scenario == "codex-credits-failure" {
+            return ProviderUsageResult(
+                accountID: configuration.id, providerID: .codex, title: configuration.displayName,
+                subtitle: "Synthetic refresh failed", bars: [], failureMessage: "Synthetic refresh failed", fetchedAt: Date()
+            )
+        }
+        return UITestFixtures.codexResult(for: configuration, scenario: scenario)
     }
 }
 

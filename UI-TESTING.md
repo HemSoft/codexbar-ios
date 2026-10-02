@@ -29,6 +29,14 @@ keyboard must still appear before typing. Scroll gestures stay inside the
 containing scroll view so an iPad sheet scrolls instead of the dashboard behind
 it. Animations retain the normal app behavior.
 
+- `CodexCreditsPoolUITests.testOptInBalanceStatesAndSavedAccountChoices`
+  uses isolated synthetic Codex accounts through the production parser. It
+  checks the off-by-default Settings switch, 62,500 credits, zero, unavailable,
+  unlimited and failed-refresh states, Customize Card synchronization, relaunch,
+  restoration and two-account isolation at accessibility text size. Screenshots
+  cover Settings and the dashboard. Run locally with
+  `-only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests`; it never contacts OpenAI.
+
 - `ClaudeUsageUITests.testWindowLabelsAndSavedCustomizationForProAndMax`
   uses synthetic Pro and Max 20x responses through the real Claude parser. It
   captures both "5-hour" and "Weekly" with percentages and resets on the
@@ -219,7 +227,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than twenty passed tests with zero skips or
+runner rejects anything other than twenty-one passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

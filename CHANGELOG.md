@@ -8,6 +8,11 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Added an optional Codex Credits pool metric. Turn it on in account Settings
+  or Customize Card to see the reported balance in credits, not dollars. It
+  stays off by default and saves each account's choice independently.
+  ([#391](https://github.com/HemSoft/codexbar-ios/issues/391))
+
 - Added guided Grok sign-in with a weekly paid-usage meter when verified, its
   provider-reported reset, and the remaining Extra Usage Credits balance when
   available. Grok stays separate from Cursor's models and Grok Bot. Temporary

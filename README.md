@@ -89,6 +89,13 @@ on the existing account and retry; CodexBar does not assume an unknown
 identity is different. A legacy single account remains usable without
 reauthentication.
 
+**Credits pool** is off by default. To show the reported remaining credits,
+open **Settings → Accounts & Groups → your Codex account → Metrics** and turn
+it on, or show it in Customize Card. Choices stay separate for each account
+and survive relaunch and missing data. Counts are credits, not dollars;
+missing data stays unavailable and explicit unlimited status is labeled.
+See [Codex credits](CODEX-CREDITS.md) for the read-only source and limitations.
+
 ## Grok sign-in
 
 Grok consumer usage uses guided approval in a system browser. Choose the Grok

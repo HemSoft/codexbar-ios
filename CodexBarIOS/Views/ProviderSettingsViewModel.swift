@@ -343,7 +343,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     var availableMetrics: [ProviderUsageMetric] {
-        let hasCatalog = providerID == .cursor || !GoogleUsageMetricCatalog.definitions(for: providerID).isEmpty
+        let hasCatalog = providerID == .cursor
+            || (providerID != .codex && !GoogleUsageMetricCatalog.definitions(for: providerID).isEmpty)
         return GoogleUsageMetricCatalog.metrics(
             for: providerID,
             result: hasCatalog && !canRefreshMetrics ? nil : usageResult,

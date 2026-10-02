@@ -2554,8 +2554,10 @@ final class DashboardAndSettingsTests: XCTestCase {
                 "Weekly limit",
                 "GPT-5.3-Codex-Spark · 5-hour limit",
                 "GPT-5.3-Codex-Spark · Weekly limit",
+                "Credits pool",
             ]
         )
+        XCTAssertFalse(viewModel.isMetricVisible("codex.credits-pool"))
         for metricID in metricIDs {
             viewModel.setMetricVisibility(false, metricID: metricID)
             XCTAssertFalse(viewModel.isMetricVisible(metricID))
@@ -2600,10 +2602,11 @@ final class DashboardAndSettingsTests: XCTestCase {
             fetchedAt: Date(timeIntervalSince1970: 2_000_000_100)
         )
         reloadedViewModel.synchronizeUsageResult(synchronizedResult)
-        XCTAssertEqual(reloadedViewModel.availableMetrics.map(\.label), ["GPT-5.3-Codex-Spark · Weekly limit"])
+        XCTAssertEqual(reloadedViewModel.availableMetrics.map(\.label), ["GPT-5.3-Codex-Spark · Weekly limit", "Credits pool"])
 
         reloadedViewModel.synchronizeUsageResult(nil)
-        XCTAssertTrue(reloadedViewModel.availableMetrics.isEmpty)
+        XCTAssertEqual(reloadedViewModel.availableMetrics.map(\.label), ["Credits pool"])
+        XCTAssertFalse(reloadedViewModel.isMetricVisible("codex.credits-pool"))
     }
 
     @MainActor
