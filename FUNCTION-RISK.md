@@ -380,8 +380,10 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 Three additional manual-only UI journeys exercise the existing categories,
 Done/Back and pending group validation, injected granted/denied authorization,
 saved choices across closing/reopening Settings, and monitor-disable behavior on
-both device families. The manual runner requires nineteen total journeys; its
-zero-skip and exact-count gate remains strict. Automatic suites, jobs, triggers,
+both device families. This remediation raised the manual runner to nineteen
+journeys. Issue [#384](https://github.com/HemSoft/codexbar-ios/issues/384) later
+added the twentieth journey for Claude window labels; the zero-skip and
+exact-count gate remains strict. Automatic suites, jobs, triggers,
 matrices, retries, destinations, timeouts and workflows are unchanged. Synthetic
 media and macOS regressions are not native coverage or live permission proof.
 

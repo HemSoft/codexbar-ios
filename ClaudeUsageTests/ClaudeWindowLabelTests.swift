@@ -133,6 +133,33 @@ final class ClaudeWindowLabelTests: XCTestCase {
         XCTAssertEqual(watchMetrics.last?.visualizationStyle, .circularRing)
     }
 
+    @MainActor
+    func testSharedSessionWidgetIDUsesScopedKeysInsteadOfDisplayWording() throws {
+        let suite = "ClaudeWindowLabelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: ClaudeFixtureSecretStore())
+        let account = store.addAccount(for: .claude)
+        XCTAssertTrue(store.saveSecret("synthetic", for: account))
+        for scoped in [false, true] {
+            for label in ["5-hour", "Other models 5-hour", "Localized shared window"] {
+                var bars = [UsageBar(stableKey: "session", label: label, used: 42, limit: 100)]
+                if scoped {
+                    bars.append(UsageBar(stableKey: "session-scoped-fable", label: "Fable current session", used: 12, limit: 100))
+                }
+                let result = ProviderUsageResult(
+                    accountID: account.id, providerID: .claude, title: "Synthetic Claude",
+                    subtitle: "Synthetic", bars: bars, fetchedAt: now
+                )
+                WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults, now: now)
+                let tile = try XCTUnwrap(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.bars.first)
+                let suffix = scoped ? "other-models-5-hour-usage-limit" : "5-hour-usage-limit"
+                XCTAssertEqual(tile.id, "\(account.id).0.\(suffix)")
+                XCTAssertEqual(tile.label, label)
+            }
+        }
+    }
+
     private func assertWindows(_ result: ProviderUsageResult) throws {
         XCTAssertEqual(result.bars.map(\.label), ["5-hour", "Weekly"])
         XCTAssertEqual(result.bars.map(\.stableKey), ["session", "weekly-all"])

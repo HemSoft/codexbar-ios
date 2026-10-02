@@ -19,9 +19,8 @@ final class ClaudeUsageUITests: XCTestCase {
             XCTAssertTrue(weekly.label.contains("Resets"), weekly.label)
             keep("\(scenario) dashboard", app: app)
 
-            app.buttons["More options for Synthetic Claude"].tap()
-            XCTAssertTrue(app.buttons["Customize Card…"].waitForExistence(timeout: 5), app.debugDescription)
-            app.buttons["Customize Card…"].tap()
+            tap(app.buttons["More options for Synthetic Claude"], in: app)
+            tap(app.buttons["Customize Card…"], in: app)
             XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
             let sessionChoice = app.buttons["customize-metric-claude.session"]
             let weeklyChoice = app.buttons["customize-metric-claude.weekly-all"]
@@ -30,11 +29,10 @@ final class ClaudeUsageUITests: XCTestCase {
             XCTAssertTrue(sessionChoice.label.contains("5-hour"), sessionChoice.label)
             XCTAssertTrue(weeklyChoice.label.contains("Weekly"), weeklyChoice.label)
             keep("\(scenario) Customize Card", app: app)
-            weeklyChoice.tap()
-            XCTAssertTrue(app.buttons["Hide"].waitForExistence(timeout: 5), app.debugDescription)
-            app.buttons["Hide"].tap()
+            tap(weeklyChoice, in: app)
+            tap(app.buttons["Hide"], in: app)
             XCTAssertTrue(app.buttons["Show Weekly"].exists, app.debugDescription)
-            app.buttons["Done"].tap()
+            tap(app.buttons["Done"], in: app)
             XCTAssertTrue(app.navigationBars["Customize Card"].waitForNonExistence(timeout: 5))
             XCTAssertFalse(weekly.exists)
             app.terminate()
@@ -58,6 +56,16 @@ final class ClaudeUsageUITests: XCTestCase {
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         return app
+    }
+
+    private func tap(_ element: XCUIElement, in app: XCUIApplication) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5), app.debugDescription)
+        let customizer = app.scrollViews["metric-customization-scroll"]
+        let scrollView = customizer.exists ? customizer : app.scrollViews.firstMatch
+        for _ in 0..<4 where !element.isHittable { scrollView.swipeUp() }
+        XCTAssertTrue(element.isEnabled, app.debugDescription)
+        XCTAssertTrue(element.wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
+        element.tap()
     }
 
     private func keep(_ name: String, app: XCUIApplication) {
