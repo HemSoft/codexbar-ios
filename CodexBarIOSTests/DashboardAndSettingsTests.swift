@@ -1600,7 +1600,7 @@ final class DashboardAndSettingsTests: XCTestCase {
         XCTAssertNotEqual(snapshot.accounts[0].providerName, snapshot.accounts[0].accountLabel)
         XCTAssertEqual(
             snapshot.accounts[0].metrics.map(\.visualizationStyle),
-            WatchMetricVisualizationStyle.allCases
+            WatchMetricVisualizationStyle.allCases.filter { $0 != .statusText }
         )
         XCTAssertEqual(snapshot.accounts[0].metrics.map(\.usedFraction), [0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
         let encodedText = try XCTUnwrap(String(data: snapshot.encoded(), encoding: .utf8))
