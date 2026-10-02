@@ -255,7 +255,7 @@ enum WatchSnapshotPublisher {
               let status = result.unavailableUsageMetrics[CodexUsageParser.creditsPoolMetricID] else { return nil }
         return WatchMetricSnapshot(
             id: CodexUsageParser.creditsPoolMetricID, label: "Credits pool", exactValue: status,
-            fetchedAt: result.fetchedAt, visualizationStyle: .largeNumeric
+            fetchedAt: result.fetchedAt, visualizationStyle: .statusText
         )
     }
 

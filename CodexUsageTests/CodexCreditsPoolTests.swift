@@ -182,7 +182,9 @@ final class CodexCreditsPoolTests: XCTestCase {
                 .accounts.first?.metrics.first { $0.id == metricID })
             XCTAssertEqual(metric.exactValue, expected)
             XCTAssertNil(metric.usedFraction)
-            XCTAssertEqual(metric.visualizationStyle, .largeNumeric)
+            XCTAssertEqual(metric.visualizationStyle, .statusText)
+            XCTAssertEqual(metric.visualizationStyle.resolvedForWatch(allowsGauge: false), .statusText)
+            XCTAssertFalse(metric.visualizationStyle.showsHeaderExactValueOnWatch(allowsGauge: false))
             store.updateMetricVisibility(false, accountID: account.id, metricID: metricID)
             XCTAssertFalse(WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: now)
                 .accounts.first?.metrics.contains { $0.id == metricID } ?? false)
@@ -190,6 +192,8 @@ final class CodexCreditsPoolTests: XCTestCase {
             XCTAssertTrue(WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: now)
                 .accounts.first?.metrics.contains { $0.id == metricID } ?? false)
             store.updateWatchMetricVisibility(.inherit, accountID: account.id, metricID: metricID)
+            XCTAssertFalse(WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: now)
+                .accounts.first?.metrics.contains { $0.id == metricID } ?? false)
         }
     }
 

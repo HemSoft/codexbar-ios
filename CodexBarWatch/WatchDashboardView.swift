@@ -120,6 +120,11 @@ private struct WatchMetricVisualization: View {
                     tint: tint
                 )
                     .frame(height: 34)
+            case .statusText:
+                Text(sample.exactValue)
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             case .largeNumeric:
                 Text(sample.exactValue)
                     .font(.title3.bold().monospacedDigit())
