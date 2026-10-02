@@ -41,4 +41,26 @@ The [first-party CLI display](https://github.com/xai-org/grok-build/blob/f0e3be1
 
 The CLI settings endpoint is optional and may fail or change. No verified tier means the existing account label stays put. A newly generated label is marked as generated so only it may change on a subsequent verified tier; the app never rewrites a custom label. Identical plan names receive unique suffixes per account. Neither UI fixtures nor this public-source analysis establish a live subscription result. Franz owns the comparison of Lite weekly usage/reset and Extra Usage Credits with Grok Settings > Usage; it remains pending.
 
+## October 1 update: inferred usage and zero credits
+
+[Issue #388](https://github.com/HemSoft/codexbar-ios/issues/388) keeps the same
+verified-subject, unified-billing, paid-plan and active-period restrictions.
+An omitted-usage zero now labels its meter "Weekly usage inferred" and says
+that it follows Grok's CLI convention, not a reported measurement. An explicit
+numeric zero remains reported usage. Missing, null, malformed, unverified and
+unsupported values remain separate unavailable states.
+
+The [pinned first-party Cent model](https://github.com/xai-org/grok-build/blob/2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8/crates/codegen/xai-grok-shell/src/extensions/billing.rs)
+explicitly defaults a present empty USD-cents object to zero because proto3
+JSON omits zero-valued scalars. CodexBar now accepts that representation for
+Extra Usage Credits. Missing or null money and malformed nonempty objects do
+not become zero and do not erase an independently valid weekly percent.
+This is a source-contract correction, not evidence of Franz's account balance.
+
+The card identifies the consumer billing connection as separate from Cursor
+Bot and developer API billing. It creates no linked grant or additional Bot
+meter. [Cursor's contract](CURSOR-SPENDING-CONTRACT.md) records its separate
+spending fields and the installed first-party evidence for this correction.
+The live weekly percentage, reset and balance comparison remains pending.
+
 Before merge, complete local auth/parser regressions and iPhone/iPad UI evidence, plus required checks and reviews. Do not request Franz's credentials.

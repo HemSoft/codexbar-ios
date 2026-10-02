@@ -52,8 +52,12 @@ final class GrokSignInUITests: XCTestCase {
         XCTAssertTrue(bot.exists, app.debugDescription)
         XCTAssertTrue(app.buttons["More options for SuperGrok Lite"].exists)
         XCTAssertTrue(app.staticTexts["Extra Usage Credits"].exists, app.debugDescription)
-        XCTAssertFalse(app.staticTexts["On-demand spending"].exists)
-        XCTAssertFalse(app.staticTexts["On-demand cap"].exists)
+        let grokMetricIDs = Set(app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "dashboard-metric-grok.")
+        ).allElementsBoundByIndex.map(\.identifier))
+        XCTAssertEqual(grokMetricIDs, [
+            "dashboard-metric-grok.included-usage", "dashboard-metric-grok.monetary.balance.usd",
+        ])
         keep("SuperGrok Lite beside Cursor", app: app)
         if grok.frame.maxY > app.frame.height * 0.8 { app.swipeUp() }
         keep("SuperGrok Lite weekly usage and credits", app: app)

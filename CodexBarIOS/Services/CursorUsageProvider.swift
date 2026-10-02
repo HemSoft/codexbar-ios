@@ -142,6 +142,7 @@ public final class CursorUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: "Cursor plan usage",
             bars: bars,
+            unavailableUsageMetrics: unavailableMetrics(usage, grokBotData: grokBotUsageData, bars: bars),
             cardInformationSections: buildUsageInformationSections(usage.planUsage),
             fetchedAt: fetchedAt
         )
@@ -224,8 +225,7 @@ public final class CursorUsageProvider: UsageProvider {
             let onDemand = usage.spendLimitUsage,
             let limit = onDemand.individualLimit,
             limit > 0,
-            let remaining = onDemand.individualRemaining {
-            let used = max(0, limit - remaining)
+            let used = onDemand.used {
             bars.append(UsageBar(
                 stableKey: "on-demand",
                 label: "On-demand \(formatCents(used)) / \(formatCents(limit))",
@@ -243,6 +243,53 @@ public final class CursorUsageProvider: UsageProvider {
         }
 
         return bars
+    }
+
+    private static func unavailableMetrics(
+        _ usage: CursorCurrentPeriodUsage, grokBotData: Data?, bars: [UsageBar]
+    ) -> [String: String] {
+        let observed = Set(bars.compactMap(\.stableKey))
+        var missing = Dictionary(uniqueKeysWithValues: CursorUsageIdentity.spendingChoices
+            .filter { !observed.contains($0.key) }
+            .map { ("cursor.\($0.key)", "Not reported") })
+        if !observed.contains("grok-bot-weekly") {
+            missing["cursor.grok-bot-weekly"] = grokBotUnavailableReason(grokBotData)
+        }
+        if !observed.contains("on-demand") {
+            missing["cursor.on-demand"] = onDemandUnavailableReason(usage.spendLimitUsage, grokBotData: grokBotData)
+        }
+        return missing
+    }
+
+    private static func onDemandUnavailableReason(_ spending: CursorSpendLimitUsage?, grokBotData: Data?) -> String {
+        if onDemandEnabled(grokBotData) == false { return "Disabled" }
+        guard let spending else { return "Not reported" }
+        guard let limit = spending.individualLimit else {
+            return spending.used.map { "Spend \(formatCents($0)); cap not reported" } ?? "Spending cap not reported"
+        }
+        if limit == 0 { return "No spending allowance" }
+        return "Spend not reported"
+    }
+
+    private static func onDemandEnabled(_ data: Data?) -> Bool? {
+        guard let data else { return nil }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return (try? decoder.decode(CursorSpendingSettings.self, from: data))?.onDemandSettings?.enabled
+    }
+
+    private static func grokBotUnavailableReason(_ data: Data?) -> String {
+        guard let data else { return "Optional refresh unavailable" }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let usage = try? decoder.decode(CursorGrokBotUsage.self, from: data) else {
+            return "Invalid optional response"
+        }
+        if usage.usesPooledEnterpriseAllowance == true { return "Team-managed allowance" }
+        if usage.hasNonZeroIncludedLimit == false || usage.includedLimitZero == true {
+            return "No included allowance"
+        }
+        return "Not reported"
     }
 
     private static func buildGrokBotUsageBar(_ data: Data, fetchedAt: Date) -> UsageBar? {
@@ -432,6 +479,18 @@ private struct CursorCurrentPeriodUsage: Decodable {
     let billingCycleEnd: String?
     let planUsage: CursorPlanUsage?
     let spendLimitUsage: CursorSpendLimitUsage?
+
+    private enum CodingKeys: String, CodingKey {
+        case billingCycleStart, billingCycleEnd, planUsage, spendLimitUsage
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        billingCycleStart = try? container.decode(String.self, forKey: .billingCycleStart)
+        billingCycleEnd = try? container.decode(String.self, forKey: .billingCycleEnd)
+        planUsage = try? container.decode(CursorPlanUsage.self, forKey: .planUsage)
+        spendLimitUsage = try? container.decode(CursorSpendLimitUsage.self, forKey: .spendLimitUsage)
+    }
 }
 
 private struct CursorBillingPeriod {
@@ -472,6 +531,40 @@ private struct CursorPlanUsage: Decodable {
 private struct CursorSpendLimitUsage: Decodable {
     let individualLimit: Double?
     let individualRemaining: Double?
+    let individualUsed: Double?
+    private let hasReportedUsed: Bool
+
+    var used: Double? {
+        if hasReportedUsed { return individualUsed.flatMap { $0 >= 0 ? $0 : nil } }
+        guard let individualLimit, let individualRemaining else { return nil }
+        return max(0, individualLimit - individualRemaining)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case individualLimit, individualRemaining, individualUsed
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        individualLimit = Self.cents(.individualLimit, from: container)
+        individualRemaining = Self.cents(.individualRemaining, from: container)
+        individualUsed = Self.cents(.individualUsed, from: container)
+        hasReportedUsed = container.contains(.individualUsed)
+    }
+
+    private static func cents(_ key: CodingKeys, from container: KeyedDecodingContainer<CodingKeys>) -> Double? {
+        guard let value = try? container.decode(Double.self, forKey: key),
+              value.isFinite, Int32(exactly: value) != nil else { return nil }
+        return value
+    }
+}
+
+private struct CursorSpendingSettings: Decodable {
+    let onDemandSettings: CursorOnDemandSettings?
+}
+
+private struct CursorOnDemandSettings: Decodable {
+    let enabled: Bool?
 }
 
 private struct CursorGrokBotUsage: Decodable {

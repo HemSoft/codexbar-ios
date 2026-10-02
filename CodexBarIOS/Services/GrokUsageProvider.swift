@@ -267,7 +267,8 @@ public final class GrokUsageProvider: UsageProvider {
         let includedPercent = hasPercent ? percent : inferredZero ? 0 : nil
         let bar: UsageBar? = if activePeriod && includedPercent != nil && config.isUnifiedBillingUser == true {
             UsageBar(
-                stableKey: "included-usage", label: "Weekly subscription usage",
+                stableKey: "included-usage",
+                label: inferredZero ? "Weekly usage inferred" : "Weekly subscription usage",
                 used: includedPercent!, limit: 100, resetsAt: end,
                 projectionCurrent: includedPercent!, projectionLimit: 100,
                 projectionPeriodStart: start, projectionPeriodEnd: end
@@ -282,10 +283,22 @@ public final class GrokUsageProvider: UsageProvider {
         return ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
             verifiedGrokPlanName: knownPlan(verifiedPlanName),
-            subtitle: bar == nil ? reason : inferredZero ? "No included usage reported by Grok." : "Grok subscription usage",
+            subtitle: bar == nil ? reason : inferredZero ? "No included usage reported by Grok." : "Direct Grok subscription usage",
             bars: bar.map { [$0] } ?? [],
             monetaryMetrics: [balance].compactMap { $0 },
-            usageMessages: bar == nil ? [reason] : [],
+            usageMessages: bar == nil ? [reason] : inferredZero
+                ? ["Inferred zero from Grok's CLI convention, not a reported measurement."] : [],
+            cardInformationSections: [
+                ProviderCardInformationSection(
+                    id: "grok.consumer-source", title: "Billing source",
+                    items: [
+                        ProviderCardInformationItem(
+                            id: "grok.consumer-source.ledger", label: "Grok consumer connection",
+                            detail: "Separate from Cursor Grok Bot and xAI developer API billing."
+                        ),
+                    ]
+                ),
+            ],
             cacheIdentity: cacheIdentity, cacheScope: "consumer.\(cacheIdentity)", fetchedAt: now
         )
     }
@@ -345,6 +358,14 @@ private struct GrokCreditsPeriod: Decodable {
 
 private struct GrokCreditsAmount: Decodable {
     let val: Decimal?
+
+    init(from decoder: Decoder) throws {
+        // The first-party CLI's Cent wire model documents an empty object as proto3 zero.
+        // Missing/null amounts remain absent; malformed/nonempty objects never become zero.
+        let container = try decoder.singleValueContainer()
+        let values = try? container.decode([String: Decimal?].self)
+        val = values?.isEmpty == true ? 0 : values?["val"] ?? nil
+    }
 }
 
 private struct GrokRemoteSettings: Decodable {
