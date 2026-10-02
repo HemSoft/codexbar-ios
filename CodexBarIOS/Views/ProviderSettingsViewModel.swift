@@ -343,9 +343,10 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     var availableMetrics: [ProviderUsageMetric] {
-        GoogleUsageMetricCatalog.metrics(
+        let hasCatalog = providerID == .cursor || !GoogleUsageMetricCatalog.definitions(for: providerID).isEmpty
+        return GoogleUsageMetricCatalog.metrics(
             for: providerID,
-            result: !GoogleUsageMetricCatalog.definitions(for: providerID).isEmpty && !canRefreshMetrics ? nil : usageResult,
+            result: hasCatalog && !canRefreshMetrics ? nil : usageResult,
             missingReason: configuration.isEnabled
                 ? (canRefreshMetrics ? "Unavailable" : "Setup required") : "Account disabled"
         )

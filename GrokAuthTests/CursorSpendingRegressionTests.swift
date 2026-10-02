@@ -29,7 +29,7 @@ final class CursorSpendingRegressionTests: XCTestCase, @unchecked Sendable {
             let spend = try XCTUnwrap(result.bars.first { $0.stableKey == "on-demand" })
             XCTAssertEqual(spend.used, 2003)
             XCTAssertEqual(spend.limit, 2000)
-            XCTAssertTrue(spend.label.contains("20.03"))
+            XCTAssertTrue(spend.label.contains(try currency(2003)))
         }
     }
 
@@ -64,13 +64,21 @@ final class CursorSpendingRegressionTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(result.bars.map(\.used), [0, 0])
         }
         let noCap = try currentResult(spending: ["individualUsed": 120])
-        XCTAssertEqual(noCap.unavailableUsageMetrics["cursor.on-demand"], "Spend $1.20; cap not reported")
+        XCTAssertEqual(noCap.unavailableUsageMetrics["cursor.on-demand"], "Spend \(try currency(120)); cap not reported")
         let noAllowance = try currentResult(spending: ["individualLimit": 0, "individualUsed": 120])
-        XCTAssertEqual(noAllowance.unavailableUsageMetrics["cursor.on-demand"], "Spend $1.20; no spending allowance")
+        XCTAssertEqual(noAllowance.unavailableUsageMetrics["cursor.on-demand"], "Spend \(try currency(120)); no spending allowance")
         let disabled = try currentResult(
             spending: ["individualUsed": 120], weekly: #"{"onDemandSettings":{"enabled":false}}"#
         )
-        XCTAssertEqual(disabled.unavailableUsageMetrics["cursor.on-demand"], "Spend $1.20; disabled")
+        XCTAssertEqual(disabled.unavailableUsageMetrics["cursor.on-demand"], "Spend \(try currency(120)); disabled")
+        let disabledCapped = try currentResult(
+            spending: ["individualLimit": 2000, "individualUsed": 120],
+            weekly: #"{"onDemandSettings":{"enabled":false}}"#
+        )
+        XCTAssertEqual(disabledCapped.bars.map(\.stableKey), ["cursor-models", "other-models"])
+        XCTAssertEqual(disabledCapped.unavailableUsageMetrics["cursor.on-demand"], "Spend \(try currency(120)); disabled")
+        let invalidCap = try currentResult(spending: ["individualLimit": -1, "individualUsed": 120])
+        XCTAssertEqual(invalidCap.unavailableUsageMetrics["cursor.on-demand"], "Spend \(try currency(120)); invalid spending cap")
         XCTAssertNil(CursorUsageProvider.parseUsage(
             Data(#"{"planUsage":"malformed","spendLimitUsage":{"individualLimit":2000,"individualUsed":120}}"#.utf8),
             configuration: .defaultConfiguration(for: .cursor)
@@ -116,6 +124,15 @@ final class CursorSpendingRegressionTests: XCTestCase, @unchecked Sendable {
             extended, configuration: .defaultConfiguration(for: .grok), subject: "fixture-consumer", now: Date()
         )
         XCTAssertEqual(result.monetaryMetrics.first?.minorUnits, 125)
+    }
+
+    private func currency(_ cents: Double) throws -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return try XCTUnwrap(formatter.string(from: NSNumber(value: cents / 100)))
     }
 
     private func currentResult(spending: Any? = nil, weekly: String? = nil) throws -> ProviderUsageResult {

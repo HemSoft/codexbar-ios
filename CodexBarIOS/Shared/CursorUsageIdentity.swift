@@ -4,11 +4,16 @@ enum CursorUsageIdentity {
     static let cursorModelsMetricID = "cursor.\(cursorModelsStableKey)"
     static let otherModelsMetricID = "cursor.\(otherModelsStableKey)"
 
+    static let grokBotWeeklyStableKey = "grok-bot-weekly"
+    static let onDemandStableKey = "on-demand"
+    static let grokBotWeeklyMetricID = "cursor.\(grokBotWeeklyStableKey)"
+    static let onDemandMetricID = "cursor.\(onDemandStableKey)"
+
     static let spendingChoices = [
         (key: cursorModelsStableKey, label: "Cursor Models"),
         (key: otherModelsStableKey, label: "Other Models"),
-        (key: "grok-bot-weekly", label: "Grok Bot weekly"),
-        (key: "on-demand", label: "On-demand spending"),
+        (key: grokBotWeeklyStableKey, label: "Grok Bot weekly"),
+        (key: onDemandStableKey, label: "On-demand spending"),
     ]
 
     static let legacyCursorModelsStableKey = "auto"

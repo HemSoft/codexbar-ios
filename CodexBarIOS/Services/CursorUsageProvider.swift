@@ -127,7 +127,7 @@ public final class CursorUsageProvider: UsageProvider {
             return nil
         }
 
-        var bars = buildUsageBars(usage, fetchedAt: fetchedAt)
+        var bars = buildUsageBars(usage, fetchedAt: fetchedAt, onDemandEnabled: onDemandEnabled(grokBotUsageData))
         if let grokBotUsageData,
            let grokBotBar = buildGrokBotUsageBar(grokBotUsageData, fetchedAt: fetchedAt) {
             bars.append(grokBotBar)
@@ -194,7 +194,9 @@ public final class CursorUsageProvider: UsageProvider {
         return token.isEmpty ? nil : token
     }
 
-    private static func buildUsageBars(_ usage: CursorCurrentPeriodUsage, fetchedAt: Date) -> [UsageBar] {
+    private static func buildUsageBars(
+        _ usage: CursorCurrentPeriodUsage, fetchedAt: Date, onDemandEnabled: Bool?
+    ) -> [UsageBar] {
         var bars: [UsageBar] = []
         let reset = parseUnixMilliseconds(usage.billingCycleEnd)
         let resetDescription = reset.map { formatReset($0, now: fetchedAt) }
@@ -222,12 +224,13 @@ public final class CursorUsageProvider: UsageProvider {
         }
 
         if
+            onDemandEnabled != false,
             let onDemand = usage.spendLimitUsage,
             let limit = onDemand.individualLimit,
             limit > 0,
             let used = onDemand.used {
             bars.append(UsageBar(
-                stableKey: "on-demand",
+                stableKey: CursorUsageIdentity.onDemandStableKey,
                 label: "On-demand \(formatCents(used)) / \(formatCents(limit))",
                 used: used,
                 limit: limit,
@@ -252,11 +255,11 @@ public final class CursorUsageProvider: UsageProvider {
         var missing = Dictionary(uniqueKeysWithValues: CursorUsageIdentity.spendingChoices
             .filter { !observed.contains($0.key) }
             .map { ("cursor.\($0.key)", "Not reported") })
-        if !observed.contains("grok-bot-weekly") {
-            missing["cursor.grok-bot-weekly"] = grokBotUnavailableReason(grokBotData)
+        if !observed.contains(CursorUsageIdentity.grokBotWeeklyStableKey) {
+            missing[CursorUsageIdentity.grokBotWeeklyMetricID] = grokBotUnavailableReason(grokBotData)
         }
-        if !observed.contains("on-demand") {
-            missing["cursor.on-demand"] = onDemandUnavailableReason(usage.spendLimitUsage, grokBotData: grokBotData)
+        if !observed.contains(CursorUsageIdentity.onDemandStableKey) {
+            missing[CursorUsageIdentity.onDemandMetricID] = onDemandUnavailableReason(usage.spendLimitUsage, grokBotData: grokBotData)
         }
         return missing
     }
@@ -272,7 +275,7 @@ public final class CursorUsageProvider: UsageProvider {
         guard let spending else { return "Not reported" }
         guard let limit = spending.individualLimit else { return "Cap not reported" }
         if limit == 0 { return "No spending allowance" }
-        return "Spend not reported"
+        return limit < 0 ? "Invalid spending cap" : "Spend not reported"
     }
 
     private static func onDemandEnabled(_ data: Data?) -> Bool? {
@@ -317,7 +320,7 @@ public final class CursorUsageProvider: UsageProvider {
             && reset.map { fetchedAt < $0 } == true
 
         return UsageBar(
-            stableKey: "grok-bot-weekly",
+            stableKey: CursorUsageIdentity.grokBotWeeklyStableKey,
             label: "Grok Bot weekly",
             used: usedPercent,
             limit: 100,

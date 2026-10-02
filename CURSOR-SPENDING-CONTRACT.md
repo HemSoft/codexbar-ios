@@ -36,10 +36,12 @@ same as a present empty object.
   signed 32-bit cents schema permits over-cap spend. Invalid reported spend
   cannot fall back to a fabricated value. Older responses without that field
   retain the existing limit-minus-remaining calculation.
-- A finite positive cap produces the existing spending bar. A missing cap
-  stays unavailable and preserves reported spend in its explanation. Zero cap
-  means no spending allowance. A missing cap alone is not proof of unlimited
-  spending. Explicit optional `enabled: false` identifies disabled spending.
+- A finite positive cap produces the existing spending bar unless the provider
+  explicitly disables spending. Missing, zero, negative and disabled caps keep
+  valid reported spend in their unavailable explanation without an active meter.
+  Zero cap means no spending allowance; a negative cap is invalid. A missing
+  cap alone is not proof of unlimited spending. Disabled accounts use account
+  status instead of stale per-metric response reasons.
 - Cursor's Bot `usagePercent` is optional in the first-party schema. An absent
   or malformed percent stays unavailable. Explicit zero is a reported value.
   Team-pooled and absent included allowances retain their separate states.
