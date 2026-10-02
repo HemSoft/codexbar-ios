@@ -90,7 +90,7 @@ public struct CodexBarWidgetSnapshot: Codable, Equatable, Sendable {
                 id: "claude",
                 title: "Claude",
                 subtitle: "Pro",
-                barLabel: "All models",
+                barLabel: "Weekly",
                 fractionUsed: 0.58
             ),
             previewUsageProvider(

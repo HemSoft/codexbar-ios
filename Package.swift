@@ -35,6 +35,14 @@ let package = Package(
     targets: [
         // Local-only regressions; automatic CI continues running its existing smoke executable.
         .testTarget(
+            name: "ClaudeUsageTests",
+            dependencies: ["CodexBarIOS"],
+            path: "ClaudeUsageTests",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins"),
+            ]
+        ),
+        .testTarget(
             name: "SettingsPresentationTests",
             dependencies: ["CodexBarIOS"],
             path: "SettingsPresentationTests",

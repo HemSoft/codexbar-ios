@@ -14,9 +14,9 @@ defensively and optional values are omitted when absent or malformed.
 
 | CodexBar display | Provider field | Behavior when unavailable |
 | --- | --- | --- |
-| Current session percentage | `limits[kind=session].percent`, then `five_hour.utilization` | Omitted |
-| Current session reset | `limits[kind=session].resets_at`, then `five_hour.resets_at` | `Starts when a message is sent` only when the provider reports zero percent with no reset |
-| All models percentage/reset | `limits[kind=weekly_all]`, then `seven_day` | Omitted |
+| 5-hour percentage | `limits[kind=session].percent`, then `five_hour.utilization` | Omitted |
+| 5-hour reset | `limits[kind=session].resets_at`, then `five_hour.resets_at` | `Starts when a message is sent` only when the provider reports zero percent with no reset |
+| Weekly percentage/reset | `limits[kind=weekly_all]`, then `seven_day` or `seven_day_oauth_apps` | Omitted |
 | Usage credits enabled | `spend.enabled`, then `extra_usage.is_enabled` | State is not inferred |
 | Usage credits spent | `spend.used`, then `extra_usage.used_credits` | Omitted |
 | Monthly spend limit | `spend.limit`, then `extra_usage.monthly_limit` | Omitted |
@@ -26,6 +26,22 @@ defensively and optional values are omitted when absent or malformed.
 | Spend reset | Not exposed in verified OAuth response shapes | Omitted |
 | Promotional amount/expiry | Not exposed as a stable, provider-described OAuth field | Omitted |
 | Temporary-limit notice | Not exposed as a stable, provider-described OAuth field | Omitted; codenames and plan labels are not interpreted as promotions |
+
+## Window labels and plans
+
+The shared session window is labeled "5-hour"; the all-model weekly allowance
+is labeled "Weekly". Unified `5h` and `7d` rate-limit headers use the same
+labels. Scoped limits retain their model names, and a shared session alongside
+scoped sessions keeps its "Other models" qualifier. Metric keys and legacy
+widget tile IDs do not depend on these new display labels.
+
+Anthropic's [Max plan documentation](https://support.claude.com/en/articles/11049741-what-is-the-max-plan)
+states that both Max tiers have a five-hour session reset and an all-model
+weekly limit. The $200 tier increases the per-session allowance, not its
+window length. Parsing follows the returned window kind rather than price or
+plan name. Local synthetic Pro and Max 20x fixtures verify the labels and
+unchanged percentages, resets, and saved identities. Live same-account Pro
+and Max quota comparisons remain pending for Franz.
 
 ## Redacted regression shape
 

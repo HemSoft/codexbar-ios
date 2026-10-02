@@ -54,6 +54,11 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Name Claude's shared usage windows "5-hour" and "Weekly" so their reset
+  periods are clear on the dashboard and in metric selection. Saved layouts,
+  widgets, and Watch selections keep their existing metric identities.
+  ([#384](https://github.com/HemSoft/codexbar-ios/issues/384))
+
 - Label Grok's narrowly inferred zero separately from provider-reported weekly
   usage, and identify its consumer billing connection as separate from Cursor
   Bot and developer API spending.

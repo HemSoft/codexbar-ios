@@ -174,16 +174,21 @@ enum WidgetSnapshotPublisher {
         index: Int,
         metricID: String
     ) -> String {
-        // Keep saved Claude session tiles stable after matching the first-party
-        // "Current session" display label, including model-scoped sessions.
+        // Visible Claude window labels must not change saved widget tile IDs.
         if providerID == .claude,
             bar.stableKey == "session"
                 || bar.stableKey?.hasPrefix("session-scoped-") == true {
-            let legacyLabel = bar.label.replacingOccurrences(
-                of: "current session",
-                with: "5-hour usage limit",
-                options: .caseInsensitive
-            )
+            let legacyLabel: String
+            if bar.stableKey == "session" {
+                legacyLabel = bar.label.hasPrefix("Other models")
+                    ? "Other models 5-hour usage limit" : "5-hour usage limit"
+            } else {
+                legacyLabel = bar.label.replacingOccurrences(
+                    of: "current session",
+                    with: "5-hour usage limit",
+                    options: .caseInsensitive
+                )
+            }
             let suffix = normalizedBarLabel(legacyLabel)
             return "\(accountID).\(index).\(suffix)"
         }

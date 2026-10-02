@@ -3613,7 +3613,7 @@ final class ProviderParsingTests: XCTestCase {
                 accessibilityLabel: "Pro"
             )
         )
-        XCTAssertEqual(result.bars.map(\.label), ["Current session", "All models"])
+        XCTAssertEqual(result.bars.map(\.label), ["5-hour", "Weekly"])
         XCTAssertEqual(result.bars.map(\.used), [42, 81])
         XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%"])
         let resetDescription = try XCTUnwrap(result.bars.first?.resetDescription)
@@ -3643,7 +3643,7 @@ final class ProviderParsingTests: XCTestCase {
             Data(#"{"limits":[{"kind":"session","percent":0,"resets_at":null,"is_active":false}]}"#.utf8),
             subscriptionType: "pro"
         ))
-        XCTAssertEqual(idle.bars.first?.label, "Current session")
+        XCTAssertEqual(idle.bars.first?.label, "5-hour")
         XCTAssertEqual(idle.bars.first?.used, 0)
         XCTAssertNil(idle.bars.first?.resetsAt)
         XCTAssertEqual(
@@ -3655,7 +3655,7 @@ final class ProviderParsingTests: XCTestCase {
             Data(#"{"five_hour":{"utilization":13,"resets_at":"2030-01-01T02:00:00Z"}}"#.utf8),
             subscriptionType: "pro"
         ))
-        XCTAssertEqual(active.bars.first?.label, "Current session")
+        XCTAssertEqual(active.bars.first?.label, "5-hour")
         XCTAssertEqual(active.bars.first?.used, 13)
         XCTAssertNotNil(active.bars.first?.resetsAt)
         XCTAssertNil(active.bars.first?.projectionDescriptionOverride)
@@ -3691,7 +3691,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "pro"
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Current session", "All models"])
+        XCTAssertEqual(result.bars.map(\.label), ["5-hour", "Weekly"])
         XCTAssertEqual(result.bars.map(\.used), [0, 13])
         XCTAssertEqual(
             result.monetaryMetrics.map(\.kind),
@@ -3778,7 +3778,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "pro"
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Current session"])
+        XCTAssertEqual(result.bars.map(\.label), ["5-hour"])
         XCTAssertEqual(result.bars.map(\.used), [13])
         XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.spendLimit])
         XCTAssertEqual(result.monetaryMetrics.first?.amount, Decimal(40))
@@ -3794,7 +3794,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "pro"
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Current session"])
+        XCTAssertEqual(result.bars.map(\.label), ["5-hour"])
         XCTAssertEqual(result.bars.map(\.used), [13])
         XCTAssertTrue(result.monetaryMetrics.isEmpty)
     }
@@ -3805,7 +3805,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "pro"
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Current session", "All models"])
+        XCTAssertEqual(result.bars.map(\.label), ["5-hour", "Weekly"])
         XCTAssertEqual(result.bars.map(\.used), [13, 36])
         XCTAssertEqual(result.monetaryMetrics.map(\.kind), [.balance])
         XCTAssertEqual(result.monetaryMetrics.map(\.amount), [Decimal(10)])
@@ -3818,7 +3818,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "pro"
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["Current session", "All models"])
+        XCTAssertEqual(result.bars.map(\.label), ["5-hour", "Weekly"])
         XCTAssertEqual(result.bars.map(\.used), [13, 36])
         XCTAssertEqual(result.bars.map(\.resetsAt), [nil, nil])
     }
@@ -3829,7 +3829,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "pro"
         ))
 
-        XCTAssertEqual(preferredSpend.bars.map(\.label), ["Current session"])
+        XCTAssertEqual(preferredSpend.bars.map(\.label), ["5-hour"])
         XCTAssertEqual(preferredSpend.bars.map(\.used), [13])
         XCTAssertEqual(
             preferredSpend.monetaryMetrics.map(\.kind),
@@ -3971,7 +3971,7 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.bars.map(\.label), [
-            "Other models current session",
+            "Other models 5-hour",
             "Fable current session",
         ])
         XCTAssertEqual(result.bars.map(\.used), [27, 64])
@@ -4006,7 +4006,7 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertEqual(legacyAndScoped.bars.map(\.label), [
             "Fable current session",
-            "Current session",
+            "5-hour",
         ])
         XCTAssertEqual(legacyAndScoped.bars.map(\.used), [44, 31])
         XCTAssertEqual(
@@ -4030,7 +4030,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "max",
             fetchedAt: fetchedAt
         ))
-        XCTAssertEqual(inactiveScoped.bars.map(\.label), ["Current session"])
+        XCTAssertEqual(inactiveScoped.bars.map(\.label), ["5-hour"])
         XCTAssertEqual(inactiveScoped.bars.map(\.used), [25])
     }
 
@@ -4053,8 +4053,8 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.bars.map(\.label), [
-            "Current session",
-            "All models",
+            "5-hour",
+            "Weekly",
             "Fable weekly usage limit",
         ])
         XCTAssertEqual(result.bars.map(\.used), [11, 9, 5])
@@ -4089,7 +4089,7 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "max"
         ))
 
-        XCTAssertEqual(result.bars.map(\.label), ["All models"])
+        XCTAssertEqual(result.bars.map(\.label), ["Weekly"])
         XCTAssertEqual(result.bars.map(\.used), [14])
         XCTAssertEqual(result.bars.map(\.stableKey), ["weekly-all"])
     }
@@ -4432,8 +4432,8 @@ final class ProviderParsingTests: XCTestCase {
             subscriptionType: "max"
         ))
 
-        XCTAssertEqual(unscopedResult.bars.first?.label, "Current session")
-        XCTAssertEqual(scopedResult.bars.first?.label, "Other models current session")
+        XCTAssertEqual(unscopedResult.bars.first?.label, "5-hour")
+        XCTAssertEqual(scopedResult.bars.first?.label, "Other models 5-hour")
         XCTAssertEqual(unscopedResult.bars.first?.stableKey, "session")
         XCTAssertEqual(scopedResult.bars.first?.stableKey, "session")
         XCTAssertEqual(legacyResult.bars.first?.stableKey, "session")
@@ -4477,8 +4477,8 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.bars.map(\.label), [
-            "Current session",
-            "All models",
+            "5-hour",
+            "Weekly",
             "Fable weekly usage limit",
             "Future Model weekly usage limit",
             "Claude Sonnet 4.5 weekly usage limit",
@@ -4643,7 +4643,7 @@ final class ProviderParsingTests: XCTestCase {
 
         XCTAssertEqual(result.title, "Claude")
         XCTAssertNil(result.plan)
-        XCTAssertEqual(result.bars.map(\.label), ["Current session"])
+        XCTAssertEqual(result.bars.map(\.label), ["5-hour"])
         XCTAssertEqual(result.bars.first?.stableKey, "session")
         XCTAssertEqual(result.bars.first?.used, 25)
         XCTAssertEqual(result.bars.first?.projectionCurrent, 0.25)

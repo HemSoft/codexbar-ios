@@ -73,6 +73,10 @@ final class UITestFixtures {
         let githubBilling = scenario?.hasPrefix("github-billing") == true
         let grok = scenario?.hasPrefix("grok") == true
         let codex = scenario == "codex-two"
+        let claude = scenario?.hasPrefix("claude-") == true
+        if claude && configurationStore.configurations.isEmpty {
+            Self.seedClaudeAccount(in: configurationStore)
+        }
         let googleSources = Self.googleSources(for: scenario)
         let google = !googleSources.isEmpty
         if google && configurationStore.configurations.isEmpty {
@@ -105,6 +109,9 @@ final class UITestFixtures {
                 if codex {
                     return Self.codexResult(for: configuration)
                 }
+                if claude {
+                    return Self.claudeResult(for: configuration, scenario: scenario)
+                }
                 if githubBilling {
                     return Self.githubBillingResult(for: configuration)
                 }
@@ -123,6 +130,8 @@ final class UITestFixtures {
             providers = [UITestGoogleProvider(sources: googleSources)]
         } else if codex {
             providers = [UITestCodexProvider()]
+        } else if claude {
+            providers = [UITestClaudeProvider(scenario: scenario)]
         } else if githubBilling {
             providers = [UITestGitHubBillingProvider()]
         } else if grok {
@@ -183,6 +192,37 @@ final class UITestFixtures {
                     resetsAt: Date().addingTimeInterval(18_000), resetDisplayStyle: .relativeWithLocalTime
                 ),
             ], fetchedAt: Date()
+        )
+    }
+
+    private static func seedClaudeAccount(in store: ProviderConfigurationStore) {
+        let account = ProviderAccountConfiguration(
+            id: "ui-claude", providerID: .claude,
+            accountLabel: "Synthetic Claude", authMethod: .browserSession
+        )
+        _ = store.update(account)
+        _ = store.saveSecret("ui-test-credential", for: account)
+    }
+
+    nonisolated static func claudeResult(
+        for account: ProviderAccountConfiguration, scenario: String?
+    ) -> ProviderUsageResult {
+        let now = Date()
+        let sessionReset = ISO8601DateFormatter().string(from: now.addingTimeInterval(7_200))
+        let weeklyReset = ISO8601DateFormatter().string(from: now.addingTimeInterval(3 * 86_400))
+        let data = Data("""
+            {"five_hour":{"utilization":42,"resets_at":"\(sessionReset)"},
+            "seven_day":{"utilization":64,"resets_at":"\(weeklyReset)"}}
+            """.utf8)
+        guard let parsed = ClaudeUsageParser.parse(
+            data, subscriptionType: scenario == "claude-max" ? "max_20x" : "pro", fetchedAt: now
+        ) else {
+            preconditionFailure("Synthetic Claude windows must parse")
+        }
+        return ProviderUsageResult(
+            accountID: account.id, providerID: .claude, title: account.displayName,
+            plan: parsed.plan, subtitle: "Synthetic Claude usage. No live account.",
+            bars: parsed.bars, fetchedAt: now
         )
     }
 
@@ -1037,6 +1077,15 @@ private actor UITestCodexProvider: UsageProvider {
     nonisolated let providerID = ProviderID.codex
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         UITestFixtures.codexResult(for: configuration)
+    }
+}
+
+private actor UITestClaudeProvider: UsageProvider {
+    nonisolated let providerID = ProviderID.claude
+    private let scenario: String?
+    init(scenario: String?) { self.scenario = scenario }
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        UITestFixtures.claudeResult(for: configuration, scenario: scenario)
     }
 }
 
