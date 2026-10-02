@@ -54,7 +54,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                 keep("credits-customize-on", app: app)
                 tap(choice, in: app)
                 tap(app.buttons["Hide"], in: app)
-                XCTAssertTrue(app.buttons["Show Credits pool"].waitForExistence(timeout: 5), app.debugDescription)
+                reveal(app.buttons["Show Credits pool"], in: app)
                 tap(app.buttons["Done"], in: app)
                 XCTAssertTrue(app.buttons[poolID].waitForNonExistence(timeout: 5), app.debugDescription)
                 openAccount("Personal Codex", in: app)
@@ -107,8 +107,8 @@ final class CodexCreditsPoolUITests: XCTestCase {
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        XCTAssertTrue(element.waitForExistence(timeout: 5), app.debugDescription)
-        if element.isHittable && app.navigationBars.buttons[element.label].exists { return }
+        _ = element.waitForExistence(timeout: 1)
+        if element.exists && element.isHittable && app.navigationBars.buttons[element.label].exists { return }
         let customizer = app.scrollViews["metric-customization-scroll"]
         let settings = app.collectionViews["provider-account-settings-form"]
         let container = customizer.exists ? customizer : (settings.exists ? settings : app.scrollViews.firstMatch)
@@ -121,8 +121,8 @@ final class CodexCreditsPoolUITests: XCTestCase {
             let top = max(container.frame.minY, bars.map(\.maxY).max() ?? container.frame.minY)
             let viewport = CGRect(x: container.frame.minX, y: top, width: container.frame.width,
                                   height: max(0, container.frame.maxY - top)).insetBy(dx: 4, dy: 4)
-            if element.isHittable && viewport.contains(element.frame) { return }
-            let upward = element.frame.midY > viewport.midY
+            if element.exists && element.isHittable && viewport.contains(element.frame) { return }
+            let upward = !element.exists || element.frame.midY > viewport.midY
             let start = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.65 : 0.35))
             let end = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.4 : 0.6))
             start.press(forDuration: 0.05, thenDragTo: end)
