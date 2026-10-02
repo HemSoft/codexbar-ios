@@ -390,7 +390,9 @@ public enum ClaudeUsageParser {
                     stableKey: definition.stableBarKey,
                     percent: percent,
                     reset: reset
-                )
+                ),
+                legacyWidgetKey: definition.stableBarKey == "session" && hasScopedSessionLimit
+                    ? "other-models-5-hour-usage-limit" : nil
             ))
             if let legacySemanticKey = definition.legacySemanticKey {
                 semanticKeys.insert(legacySemanticKey)
@@ -406,7 +408,7 @@ public enum ClaudeUsageParser {
         appendLegacyBar(
             key: "session",
             stableBarKey: "session",
-            label: "Current session",
+            label: "5-hour",
             window: usage.fiveHour,
             durationSeconds: 18_000,
             semanticKeys: &semanticKeys,
@@ -417,7 +419,7 @@ public enum ClaudeUsageParser {
         appendLegacyBar(
             key: ClaudeUsageIdentity.allModelsWeeklyStableKey,
             stableBarKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
-            label: "All models",
+            label: "Weekly",
             window: usage.sevenDay ?? usage.sevenDayOAuthApps,
             durationSeconds: 604_800,
             semanticKeys: &semanticKeys,
@@ -503,7 +505,7 @@ public enum ClaudeUsageParser {
         var bars: [UsageBar] = []
         if let bar = usageBarFromHeaders(
             stableKey: "session",
-            label: "Current session",
+            label: "5-hour",
             utilizationKey: "anthropic-ratelimit-unified-5h-utilization",
             resetKey: "anthropic-ratelimit-unified-5h-reset",
             durationSeconds: 18_000,
@@ -516,7 +518,7 @@ public enum ClaudeUsageParser {
 
         if let bar = usageBarFromHeaders(
             stableKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
-            label: "All models",
+            label: "Weekly",
             utilizationKey: "anthropic-ratelimit-unified-7d-utilization",
             resetKey: "anthropic-ratelimit-unified-7d-reset",
             durationSeconds: 604_800,
@@ -608,7 +610,8 @@ public enum ClaudeUsageParser {
         durationSeconds: TimeInterval,
         fetchedAt: Date,
         dateTimeFormatter: UserFacingDateTimeFormatter,
-        projectionDescriptionOverride: String? = nil
+        projectionDescriptionOverride: String? = nil,
+        legacyWidgetKey: String? = nil
     ) -> UsageBar {
         return UsageBar(
             stableKey: stableKey,
@@ -627,7 +630,8 @@ public enum ClaudeUsageParser {
             projectionPeriodStart: reset?.addingTimeInterval(-durationSeconds),
             projectionPeriodEnd: reset,
             showProjectionOnCurrentBar: reset != nil,
-            projectionDescriptionOverride: projectionDescriptionOverride
+            projectionDescriptionOverride: projectionDescriptionOverride,
+            legacyWidgetKey: legacyWidgetKey
         )
     }
 
@@ -1002,8 +1006,8 @@ public enum ClaudeUsageParser {
                 key: "session",
                 stableBarKey: "session",
                 label: hasScopedSessionLimit
-                    ? "Other models current session"
-                    : "Current session",
+                    ? "Other models 5-hour"
+                    : "5-hour",
                 duration: 18_000,
                 legacyFallbackKey: "session",
                 legacySemanticKey: nil,
@@ -1017,7 +1021,7 @@ public enum ClaudeUsageParser {
             return StructuredLimitDefinition(
                 key: ClaudeUsageIdentity.allModelsWeeklyStableKey,
                 stableBarKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
-                label: "All models",
+                label: "Weekly",
                 duration: 604_800,
                 legacyFallbackKey: ClaudeUsageIdentity.allModelsWeeklyStableKey,
                 legacySemanticKey: nil,

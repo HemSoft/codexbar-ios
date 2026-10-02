@@ -29,6 +29,13 @@ keyboard must still appear before typing. Scroll gestures stay inside the
 containing scroll view so an iPad sheet scrolls instead of the dashboard behind
 it. Animations retain the normal app behavior.
 
+- `ClaudeUsageUITests.testWindowLabelsAndSavedCustomizationForProAndMax`
+  uses synthetic Pro and Max 20x responses through the real Claude parser. It
+  captures both "5-hour" and "Weekly" with percentages and resets on the
+  dashboard, checks the same labels in Customize Card, and verifies a hidden
+  weekly metric stays hidden after relaunch. It never contacts Anthropic.
+  Run this journey locally with `-only-testing:CodexBarIOSUITests/ClaudeUsageUITests`.
+
 - `testAccountSetupPersistsGroupAndCredentialAtAccessibilitySize` starts with
   no accounts or groups, adds a group through Settings, opens Add Account,
   chooses OpenRouter, selects its group, and saves a synthetic key.
@@ -133,6 +140,22 @@ The tests assert accessible names, values, selection state, and reachable tap
 targets. They cover app-owned account and usage navigation. Live website sign-in,
 provider API contracts, and VoiceOver speech remain separate verification.
 
+## Claude window-label regressions
+
+Run the local-only parser and downstream-identity coverage with synthetic Pro
+and Max 20x data:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcrun swift test --filter ClaudeWindowLabelTests
+```
+
+These regressions cover legacy, structured, and unified-header windows,
+`seven_day_oauth_apps`, idle and scoped sessions, percentages and reset times,
+saved metric layouts, history, alert identity, widget tile IDs, and Watch
+snapshots. They do not add tests to either automatic unit suite or establish
+live provider results.
+
 ## GitHub Billing API fixtures
 
 The separate manual fixture harness exercises personal Free and Pro allowances,
@@ -171,7 +194,7 @@ own UUIDs, so separate tests and devices cannot reuse each other's state.
 The fixture supplies this suite to account configuration, history, app review,
 app updates, GitHub preferences, and widget preferences. Its credential store
 uses the same suite and accepts only fixed synthetic test credentials. It never
-reads or writes Keychain. Only synthetic OpenRouter, combined Gemini, GitHub Billing, Grok and Cursor
+reads or writes Keychain. Only synthetic OpenRouter, Claude, Codex, combined Gemini, GitHub Billing, Grok and Cursor
 usage providers are registered. The production account form, group
 persistence, refresh service, dashboard, History, and URL handler still execute.
 
@@ -196,7 +219,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than nineteen passed tests with zero skips or
+runner rejects anything other than twenty passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

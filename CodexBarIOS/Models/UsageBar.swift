@@ -35,6 +35,8 @@ public struct UsageProjectionDescriptionParts: Equatable, Sendable {
 public struct UsageBar: Identifiable, Equatable, Sendable {
     public let id: UUID
     public let stableKey: String?
+    /// Legacy widget suffix when provider semantics distinguish a shared remainder.
+    public let legacyWidgetKey: String?
     public let label: String
     public let used: Double
     public let limit: Double
@@ -66,10 +68,12 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         projectionPeriodEnd: Date? = nil,
         showProjectionOnCurrentBar: Bool = false,
         projectionDescriptionOverride: String? = nil,
-        projectionSignificanceOverride: UsageProjectionSignificance? = nil
+        projectionSignificanceOverride: UsageProjectionSignificance? = nil,
+        legacyWidgetKey: String? = nil
     ) {
         self.id = id
         self.stableKey = stableKey
+        self.legacyWidgetKey = legacyWidgetKey
         self.label = label
         self.used = used
         self.limit = limit
