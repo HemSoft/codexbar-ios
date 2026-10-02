@@ -87,7 +87,7 @@ final class DashboardOrchestrator: ObservableObject {
     var dashboardCardItems: [DashboardProviderCardItem] {
         let configurations = configurationStore.visibleConfigurations.filter {
             configurationStore.shouldDisplayOnDashboard($0)
-                || ($0.isEnabled && !GoogleUsageMetricCatalog.definitions(for: $0.providerID).isEmpty)
+                || ($0.isEnabled && $0.providerID != .codex && !GoogleUsageMetricCatalog.definitions(for: $0.providerID).isEmpty)
         } + GoogleUsageMetricCatalog.missingSourceConfigurations(in: configurationStore.configurations)
         return DashboardProviderCardItem.items(
             configurations: configurations,
@@ -637,7 +637,7 @@ struct DashboardProviderCardItem: Identifiable, Equatable {
             observed.title = configuration.displayName
             return observed
         }
-        guard !definitions.isEmpty, observed == nil || requiresSetup else { return observed }
+        guard configuration.providerID != .codex, !definitions.isEmpty, observed == nil || requiresSetup else { return observed }
         let status = requiresSetup ? "Setup required" : (isRefreshing ? "Loading" : "Unavailable")
         return ProviderUsageResult(
             accountID: configuration.id,

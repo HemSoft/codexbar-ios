@@ -382,8 +382,11 @@ Done/Back and pending group validation, injected granted/denied authorization,
 saved choices across closing/reopening Settings, and monitor-disable behavior on
 both device families. This remediation raised the manual runner to nineteen
 journeys. Issue [#384](https://github.com/HemSoft/codexbar-ios/issues/384) later
-added the twentieth journey for Claude window labels; the zero-skip and
-exact-count gate remains strict. Automatic suites, jobs, triggers,
+added the twentieth journey for Claude window labels, and
+[#391](https://github.com/HemSoft/codexbar-ios/issues/391) adds the twenty-first
+for Codex Credits pool. The zero-skip and exact-count gate remains strict.
+Twelve credit parsing, transport and persistence regressions run only through
+`xcrun swift test --filter CodexUsageTests`, not the automatic smoke executable. Automatic suites, jobs, triggers,
 matrices, retries, destinations, timeouts and workflows are unchanged. Synthetic
 media and macOS regressions are not native coverage or live permission proof.
 

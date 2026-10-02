@@ -156,6 +156,7 @@
 		F31000000000000000000008 /* CodexBarWatchWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F32000000000000000000008 /* CodexBarWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A35300000000000000000001 /* OpenCodeSignInUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35300000000000000000002 /* OpenCodeSignInUITests.swift */; };
 		A38400000000000000000001 /* ClaudeUsageUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A38400000000000000000002 /* ClaudeUsageUITests.swift */; };
+		A39100000000000000000001 /* CodexCreditsPoolUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A39100000000000000000002 /* CodexCreditsPoolUITests.swift */; };
 		A35500000000000000000301 /* GrokSignInUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35500000000000000000302 /* GrokSignInUITests.swift */; };
 		A30700000000000000000001 /* AccountJourneysUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30700000000000000000011 /* AccountJourneysUITests.swift */; };
 		A37700000000000000000005 /* SettingsEvidenceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37700000000000000000006 /* SettingsEvidenceUITests.swift */; };
@@ -384,6 +385,7 @@
 		F32000000000000000000008 /* CodexBarWatchWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CodexBarWatchWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A35300000000000000000002 /* OpenCodeSignInUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeSignInUITests.swift; sourceTree = "<group>"; };
 		A38400000000000000000002 /* ClaudeUsageUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageUITests.swift; sourceTree = "<group>"; };
+		A39100000000000000000002 /* CodexCreditsPoolUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexCreditsPoolUITests.swift; sourceTree = "<group>"; };
 		A35500000000000000000302 /* GrokSignInUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokSignInUITests.swift; sourceTree = "<group>"; };
 		A30700000000000000000011 /* AccountJourneysUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountJourneysUITests.swift; sourceTree = "<group>"; };
 		A37700000000000000000006 /* SettingsEvidenceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsEvidenceUITests.swift; sourceTree = "<group>"; };
@@ -702,6 +704,7 @@
 				A37700000000000000000006 /* SettingsEvidenceUITests.swift */,
 				A35300000000000000000002 /* OpenCodeSignInUITests.swift */,
 				A38400000000000000000002 /* ClaudeUsageUITests.swift */,
+				A39100000000000000000002 /* CodexCreditsPoolUITests.swift */,
 				A35500000000000000000302 /* GrokSignInUITests.swift */,
 			);
 			path = CodexBarIOSUITests;
@@ -1156,6 +1159,7 @@
 				A37700000000000000000005 /* SettingsEvidenceUITests.swift in Sources */,
 				A35300000000000000000001 /* OpenCodeSignInUITests.swift in Sources */,
 				A38400000000000000000001 /* ClaudeUsageUITests.swift in Sources */,
+				A39100000000000000000001 /* CodexCreditsPoolUITests.swift in Sources */,
 				A35500000000000000000301 /* GrokSignInUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -317,6 +317,11 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         hasFreshBars ? enabledBarIndices.map { bars[$0] } : []
     }
 
+    public func usageHistoryBars() -> [UsageBar] {
+        guard providerID == .codex else { return bars }
+        return bars.filter { $0.stableKey != CodexUsageParser.creditsPoolStableKey }
+    }
+
     public var hasFreshCredits: Bool {
         creditsRemaining == nil || creditsFetchedAt == fetchedAt
     }

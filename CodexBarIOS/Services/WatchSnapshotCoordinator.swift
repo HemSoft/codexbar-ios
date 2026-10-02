@@ -137,6 +137,9 @@ enum WatchSnapshotPublisher {
                 }
 
                 var availableMetrics = barMetrics + monetaryMetrics
+                if let poolStatus = creditsPoolStatusMetric(for: result) {
+                    availableMetrics.append(poolStatus)
+                }
                 let creditsMetricID = "\(result.providerID.rawValue).credits-remaining"
                 if let creditsRemaining = result.freshCreditsRemaining {
                     availableMetrics.append(
@@ -244,6 +247,15 @@ enum WatchSnapshotPublisher {
             manualOrder: configurationStore.dashboardCardOrder,
             now: now,
             severityThresholds: configurationStore.usageAlertSettings.severityThresholds
+        )
+    }
+
+    private static func creditsPoolStatusMetric(for result: ProviderUsageResult) -> WatchMetricSnapshot? {
+        guard result.providerID == .codex,
+              let status = result.unavailableUsageMetrics[CodexUsageParser.creditsPoolMetricID] else { return nil }
+        return WatchMetricSnapshot(
+            id: CodexUsageParser.creditsPoolMetricID, label: "Credits pool", exactValue: status,
+            fetchedAt: result.fetchedAt, visualizationStyle: .statusText
         )
     }
 

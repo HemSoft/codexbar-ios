@@ -204,7 +204,7 @@ public struct UsageHistorySnapshot: Identifiable, Equatable, Codable, Sendable {
         includesCredits: Bool,
         includesMonetaryMetrics: Bool
     ) {
-        let recordableBars = includesBars ? result.bars : []
+        let recordableBars = includesBars ? result.usageHistoryBars() : []
         let monetaryMetrics = includesMonetaryMetrics ? result.monetaryMetrics : []
         self.id = "\(result.accountID).\(capturedAt.timeIntervalSince1970)"
         self.accountID = result.accountID
@@ -782,7 +782,7 @@ public final class UsageHistoryStore: ObservableObject {
         }
 
         let recordableResults = results.filter { result in
-            let hasFreshBars = result.hasFreshBars && !result.bars.isEmpty
+            let hasFreshBars = result.hasFreshBars && !result.usageHistoryBars().isEmpty
             return result.freshCreditsRemaining != nil || hasFreshBars || !result.monetaryMetrics.isEmpty
         }
         guard !recordableResults.isEmpty else {
@@ -900,9 +900,10 @@ public final class UsageHistoryStore: ObservableObject {
             severityThresholds: severityThresholds
         )
         let hasUsageHistory = accountSnapshots.contains { !$0.bars.isEmpty }
-        if (result.hasFreshBars && !result.bars.isEmpty)
-            || (!result.bars.isEmpty && hasUsageHistory)
-            || (result.providerID == .greptile && hasUsageHistory) {
+        let currentUsageBars = result.usageHistoryBars()
+        if (result.hasFreshBars && !currentUsageBars.isEmpty)
+            || (!currentUsageBars.isEmpty && hasUsageHistory)
+            || ([ProviderID.greptile, .codex].contains(result.providerID) && hasUsageHistory) {
             return usageSeries(
                 for: result,
                 snapshots: accountSnapshots,
@@ -1029,7 +1030,10 @@ public final class UsageHistoryStore: ObservableObject {
     ) -> UsageHistorySeries {
         var pointsByTimestamp: [Date: UsageHistoryPoint] = [:]
         for snapshot in snapshots {
-            guard let value = snapshot.bars.map(\.historyFractionUsed).max() else {
+            let quotaBars = snapshot.bars.filter {
+                snapshot.providerID != .codex || $0.stableKey != CodexUsageParser.creditsPoolStableKey
+            }
+            guard let value = quotaBars.map(\.historyFractionUsed).max() else {
                 continue
             }
             let point = UsageHistoryPoint(
@@ -1285,7 +1289,7 @@ public final class UsageHistoryStore: ObservableObject {
         )
         var options: [UsageHistorySeriesOption] = []
 
-        if (result.hasFreshBars && !result.bars.isEmpty)
+        if (result.hasFreshBars && !result.usageHistoryBars().isEmpty)
             || accountSnapshots.contains(where: { !$0.bars.isEmpty }) {
             if result.providerID == .cursor {
                 options.append(contentsOf: cursorUsageSeriesOptions(
@@ -1382,7 +1386,7 @@ public final class UsageHistoryStore: ObservableObject {
             ))
         }
 
-        return options.isEmpty
+        return options.isEmpty && result.providerID != .codex
             ? [
                 UsageHistorySeriesOption(
                     id: "primary",

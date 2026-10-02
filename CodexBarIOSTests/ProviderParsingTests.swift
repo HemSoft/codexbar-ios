@@ -3071,6 +3071,7 @@ final class ProviderParsingTests: XCTestCase {
         let payload = """
         {
           "plan_type": "plus",
+          "credits": {"has_credits": true, "unlimited": false, "balance": "62500"},
           "rate_limit": {
             "primary_window": {
               "used_percent": 42,
@@ -3089,7 +3090,8 @@ final class ProviderParsingTests: XCTestCase {
         let result = try XCTUnwrap(CodexUsageParser.parse(
             Data(payload.utf8),
             fetchedAt: fetchedAt,
-            dateTimeFormatter: formatter
+            dateTimeFormatter: formatter,
+            locale: Locale(identifier: "en_US")
         ))
 
         XCTAssertEqual(result.title, "ChatGPT / Codex")
@@ -3101,9 +3103,11 @@ final class ProviderParsingTests: XCTestCase {
                 accessibilityLabel: "Plus"
             )
         )
-        XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit"])
-        XCTAssertEqual(result.bars.map(\.used), [42, 81])
-        XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%"])
+        XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit", "Credits pool"])
+        XCTAssertEqual(result.bars.map(\.used), [42, 81, 62500])
+        XCTAssertEqual(result.bars.map(\.usageText), ["42%", "81%", "62,500 credits"])
+        XCTAssertTrue(try XCTUnwrap(result.bars.last).isUnboundedNumeric)
+        XCTAssertEqual(result.configurableMetrics.last?.id, "codex.credits-pool")
         XCTAssertTrue(result.usageMessages.isEmpty)
         let resetDescription = try XCTUnwrap(result.bars.first?.resetDescription)
         XCTAssertTrue(resetDescription.hasPrefix("Resets 1d 0h (Tue 1:00"))

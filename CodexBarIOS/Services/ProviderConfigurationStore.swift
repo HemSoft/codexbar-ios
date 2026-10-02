@@ -1004,7 +1004,11 @@ public final class ProviderConfigurationStore: ObservableObject {
     }
 
     public func isMetricVisible(accountID: String, metricID: String) -> Bool {
-        metricLayouts[accountID]?.preferences[metricID]?.isVisible ?? true
+        metricLayouts[accountID]?.preferences[metricID]?.isVisible ?? Self.defaultMetricVisibility(metricID)
+    }
+
+    private static func defaultMetricVisibility(_ metricID: String) -> Bool {
+        metricID != CodexUsageParser.creditsPoolMetricID
     }
 
     public func watchVisibilityPolicy(
@@ -1072,6 +1076,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         layout.version = AccountMetricLayout.currentVersion
         for metricID in availableMetricIDs where layout.preferences[metricID] == nil {
             layout.preferences[metricID] = MetricTilePreference(
+                isVisible: Self.defaultMetricVisibility(metricID),
                 width: layout.usesLegacyFullWidthDefaults ? .full : .automatic,
                 isNewlyDiscovered: !layout.usesLegacyFullWidthDefaults
             )
@@ -1118,8 +1123,8 @@ public final class ProviderConfigurationStore: ObservableObject {
         if storedOrder != availableMetricIDs + unavailableOrder {
             return true
         }
-        return layout.preferences.values.contains { preference in
-            !preference.isVisible
+        return layout.preferences.contains { metricID, preference in
+            preference.isVisible != Self.defaultMetricVisibility(metricID)
                 || preference.visualizationStyle != nil
                 || preference.width != .automatic
                 || preference.watchVisibility != .inherit
@@ -1152,7 +1157,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         )
         let preferences = Dictionary(
             uniqueKeysWithValues: metricIDs.map {
-                ($0, MetricTilePreference(isNewlyDiscovered: false))
+                ($0, MetricTilePreference(isVisible: Self.defaultMetricVisibility($0), isNewlyDiscovered: false))
             }
         )
         replaceMetricLayout(
@@ -1207,7 +1212,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             destinationLayout.preferences[metric.destinationMetricID] = preference
         }
         for metricID in destinationOnlyOrder where destinationLayout.preferences[metricID] == nil {
-            destinationLayout.preferences[metricID] = MetricTilePreference()
+            destinationLayout.preferences[metricID] = MetricTilePreference(isVisible: Self.defaultMetricVisibility(metricID))
         }
         replaceMetricLayout(destinationLayout, accountID: destinationAccountID)
     }
@@ -1240,6 +1245,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         layout.hasCustomMetricOrder = true
         for metricID in reorderedMetricIDs {
             var preference = layout.preferences[metricID] ?? MetricTilePreference(
+                isVisible: Self.defaultMetricVisibility(metricID),
                 width: layout.usesLegacyFullWidthDefaults ? .full : .automatic,
                 isNewlyDiscovered: !layout.usesLegacyFullWidthDefaults
             )
@@ -1405,6 +1411,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
         let usesLegacyDefaults = metricLayouts[accountID]?.usesLegacyFullWidthDefaults == true
         return MetricTilePreference(
+            isVisible: Self.defaultMetricVisibility(metricID),
             width: usesLegacyDefaults ? .full : .automatic,
             isNewlyDiscovered: !usesLegacyDefaults
         )

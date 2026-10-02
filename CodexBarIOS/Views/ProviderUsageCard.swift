@@ -1015,7 +1015,7 @@ struct ProviderUsageCard: View {
 
     var showsHistory: Bool {
         isHistoryEnabled && (result.creditsRemaining != nil
-            || !result.bars.isEmpty
+            || !result.usageHistoryBars().isEmpty
             || !result.monetaryMetrics.isEmpty
             || !history.points.isEmpty)
     }

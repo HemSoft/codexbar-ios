@@ -2,6 +2,8 @@ import CoreFoundation
 import Foundation
 
 public enum CodexUsageParser {
+    public static let creditsPoolMetricID = "codex.credits-pool"
+    static let creditsPoolStableKey = "credits-pool"
     private static let fiveHourDurationSeconds = 18_000
     private static let weeklyDurationSeconds = 604_800
     private static let maximumWindowDurationSeconds = 315_360_000
@@ -9,7 +11,8 @@ public enum CodexUsageParser {
     public static func parse(
         _ data: Data,
         fetchedAt: Date = Date(),
-        dateTimeFormatter: UserFacingDateTimeFormatter = .current
+        dateTimeFormatter: UserFacingDateTimeFormatter = .current,
+        locale: Locale = .autoupdatingCurrent
     ) -> ProviderUsageResult? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
@@ -66,7 +69,9 @@ public enum CodexUsageParser {
             includesEmpty: false
         )
 
-        guard !windows.isEmpty || resetCredits != nil else {
+        let creditsPool = creditsPoolBar(from: root["credits"], locale: locale)
+        let creditsReason = creditsPoolUnavailableReason(from: root["credits"])
+        guard !windows.isEmpty || resetCredits != nil || root.keys.contains("credits") else {
             return nil
         }
 
@@ -92,7 +97,7 @@ public enum CodexUsageParser {
             return $0.usedPercent.bitPattern < $1.usedPercent.bitPattern
         }
         var stableKeyOccurrences: [String: Int] = [:]
-        let bars = windows.map { window in
+        var bars = windows.map { window in
             let baseStableKey = stableKey(for: window)
             let occurrence = stableKeyOccurrences[baseStableKey, default: 0] + 1
             stableKeyOccurrences[baseStableKey] = occurrence
@@ -119,16 +124,74 @@ public enum CodexUsageParser {
                 showProjectionOnCurrentBar: true
             )
         }
+        if let creditsPool {
+            bars.append(creditsPool)
+        }
         return ProviderUsageResult(
             providerID: .codex,
             title: ProviderID.codex.displayName,
             plan: planDescriptor(planType: root["plan_type"] as? String),
             subtitle: "Live ChatGPT usage",
             bars: bars,
+            unavailableUsageMetrics: creditsPool == nil ? [creditsPoolMetricID: creditsReason] : [:],
             usageMessages: [],
             codexBankedRateLimitResets: resetCredits,
             fetchedAt: fetchedAt
         )
+    }
+
+    private static func creditsPoolBar(from value: Any?, locale: Locale) -> UsageBar? {
+        guard
+            let credits = value as? [String: Any],
+            let unlimited = strictBoolean(credits["unlimited"]),
+            strictBoolean(credits["has_credits"]) != nil,
+            !unlimited,
+            let balance = creditBalance(credits["balance"])
+        else {
+            return nil
+        }
+        let number = balance.formatted(.number.precision(.significantDigits(1...38)).locale(locale))
+        return UsageBar(
+            stableKey: creditsPoolStableKey,
+            label: "Credits pool",
+            used: NSDecimalNumber(decimal: balance).doubleValue,
+            limit: 0,
+            fractionlessUsageText: "\(number) \(balance == 1 ? "credit" : "credits")"
+        )
+    }
+
+    private static func creditsPoolUnavailableReason(from value: Any?) -> String {
+        guard let credits = value as? [String: Any], strictBoolean(credits["has_credits"]) != nil else {
+            return "Credits unavailable"
+        }
+        return strictBoolean(credits["unlimited"]) == true ? "Unlimited credits" : "Credits unavailable"
+    }
+
+    private static func strictBoolean(_ value: Any?) -> Bool? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+            return nil
+        }
+        return number.boolValue
+    }
+
+    private static func creditBalance(_ value: Any?) -> Decimal? {
+        let text: String
+        if let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() {
+            text = number.stringValue
+        } else if let string = value as? String {
+            text = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            return nil
+        }
+        guard
+            text.range(of: #"^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"#, options: .regularExpression) != nil,
+            let balance = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")),
+            !balance.isNaN,
+            balance >= 0
+        else {
+            return nil
+        }
+        return balance
     }
 
     public static func parseResetCredits(

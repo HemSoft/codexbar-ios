@@ -62,6 +62,7 @@ public enum WatchMetricVisualizationStyle: String, CaseIterable, Equatable, Send
     case circularRing
     case semicircularDial
     case largeNumeric
+    case statusText
 
     public func resolvedForWatch(allowsGauge: Bool) -> WatchMetricVisualizationStyle {
         if self == .automatic {
@@ -77,7 +78,7 @@ public enum WatchMetricVisualizationStyle: String, CaseIterable, Equatable, Send
         switch resolvedForWatch(allowsGauge: allowsGauge) {
         case .automatic, .linearBar, .segmentedBar:
             true
-        case .circularRing, .semicircularDial, .largeNumeric:
+        case .circularRing, .semicircularDial, .largeNumeric, .statusText:
             false
         }
     }

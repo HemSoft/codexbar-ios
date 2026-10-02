@@ -1,6 +1,6 @@
 import Foundation
 
-/// Known quota choices are independent of whether the latest fetch returned a value.
+/// Known metric choices are independent of whether the latest fetch returned a value.
 public enum GoogleUsageMetricCatalog {
     static let disabledReason = "Disabled"
 
@@ -31,6 +31,8 @@ public enum GoogleUsageMetricCatalog {
             appsDefinitions + codingDefinitions
         case .antigravity:
             codingDefinitions
+        case .codex:
+            [Definition(sourceProviderID: .codex, key: CodexUsageParser.creditsPoolStableKey, label: "Credits pool", window: "balance")]
         default:
             []
         }
@@ -48,7 +50,7 @@ public enum GoogleUsageMetricCatalog {
         let observed = matchingResult?.availableMetrics ?? []
         let definitions = definitions(for: providerID)
         let knownIDs = Set(definitions.map(\.id))
-        return definitions.map { definition in
+        let known = definitions.map { definition in
             let metricID = definition.id
             let unavailableReason = matchingResult?.unavailableUsageMetrics[metricID]
             let kind: ProviderUsageMetricKind
@@ -59,7 +61,16 @@ public enum GoogleUsageMetricCatalog {
                     ?? .unavailableUsage(unavailableReason ?? missingReason)
             }
             return ProviderUsageMetric(id: metricID, label: definition.label, kind: kind)
-        } + observed.filter { !knownIDs.contains($0.id) }
+        }
+        let additional = observed.filter { !knownIDs.contains($0.id) }
+        return providerID == .codex ? additional + known : known + additional
+    }
+
+    public static func layoutCopyMetricIDs(for providerID: ProviderID, result: ProviderUsageResult?) -> [String] {
+        guard providerID != .codex
+            || (result?.hasSuccessfulRefreshHistory == true && result?.usageHistoryBars().isEmpty == false)
+        else { return [] }
+        return metrics(for: providerID, result: result).map(\.id)
     }
 
     private static func cursorMetrics(result: ProviderUsageResult?, missingReason: String) -> [ProviderUsageMetric] {
