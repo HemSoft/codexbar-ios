@@ -293,6 +293,28 @@ Historical pull-request analyses normally recorded GitHub's test merge SHA and
 `refs/pull/<number>/merge`. Match those records to the corresponding run instead
 of treating a test merge as the branch head.
 
+## Review for the opt-in Codex credits pool
+
+The [manual analysis](https://github.com/HemSoft/codexbar-ios/actions/runs/36983494276)
+finished on October 2, 2026 at 4:59 AM EDT for production commit
+`ace90929a3babcbc25b3b2a54d2438168b986e0b`. It extracted all 103 production
+Swift files with no compiler or extraction errors. Its three severity-7.5
+findings match the existing reviewed contexts. The final job failed because
+the baseline's source snapshot was stale, not because extraction failed.
+
+The production tree is identical at reviewed commit
+`7c4eb9fd11c8eb2a3e5497ee7268a7e9534c2f06`. Review confirmed that the OpenCode
+hash remains an ephemeral cache-equality value, collapsed IDs remain local
+configuration IDs, and the private UI-test store accepts only fixed synthetic
+credentials behind the simulator-only, UUID-isolated, network-blocked launch
+contract. The credits fixtures do not change those boundaries.
+
+The baseline now binds that reviewed production snapshot and the exact updated
+SARIF identities. Its three exceptions, rationales, severity threshold, analyzer
+versions and source-reach requirements are unchanged. Replaying the retained
+SARIF and source-reach CSV passes with three accepted findings and zero blocking
+findings. This local replay is not a claim that the failed hosted job passed.
+
 ## Reproduce the positive test
 
 The positive test uses `scripts/security-analysis/fixtures/Positive.swift` to
