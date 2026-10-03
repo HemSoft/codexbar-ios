@@ -85,8 +85,8 @@ final class GreptileAllowanceUITests: XCTestCase {
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        XCTAssertTrue(element.waitForExistence(timeout: 5), app.debugDescription)
-        if element.isHittable && app.frame.insetBy(dx: 4, dy: 4).contains(element.frame) { return }
+        _ = element.waitForExistence(timeout: 1)
+        if element.exists && element.isHittable && app.frame.insetBy(dx: 4, dy: 4).contains(element.frame) { return }
         let form = app.collectionViews["provider-account-settings-form"]
         let container = form.exists ? form : app.scrollViews.firstMatch
         for _ in 0..<12 {
@@ -96,8 +96,8 @@ final class GreptileAllowanceUITests: XCTestCase {
             let top = max(container.frame.minY, bars.map(\.maxY).max() ?? container.frame.minY)
             let viewport = CGRect(x: container.frame.minX, y: top, width: container.frame.width,
                                   height: max(0, container.frame.maxY - top)).insetBy(dx: 4, dy: 4)
-            if element.isHittable && viewport.contains(element.frame) { return }
-            let upward = element.frame.midY > viewport.midY
+            if element.exists && element.isHittable && viewport.contains(element.frame) { return }
+            let upward = !element.exists || element.frame.midY > viewport.midY
             let start = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.65 : 0.35))
             let end = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.4 : 0.6))
             start.press(forDuration: 0.05, thenDragTo: end)
