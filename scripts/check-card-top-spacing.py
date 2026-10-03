@@ -26,7 +26,7 @@ def measure(path: Path, scale: int, theme: str) -> dict:
     top = next((y for y in range(120 * scale, min(500 * scale, image.height - 20 * scale))
                 if all(surface(image.getpixel((24 * scale, y + dy))) for dy in range(20 * scale))), None)
     if top is None:
-        raise ValueError("First card surface not found; use a loaded, unscrolled fixture")
+        raise ValueError(f"First card surface not found for theme '{theme}'; check --theme and use a loaded, unscrolled fixture")
 
     def title_ink(pixel):
         return max(pixel) < 80 if theme == "light" else min(pixel) > 190
@@ -45,7 +45,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("images", type=Path, nargs="+")
     parser.add_argument("--scale", type=int, choices=(2, 3), required=True)
-    parser.add_argument("--theme", choices=("light", "dark"), default="light")
+    parser.add_argument("--theme", choices=("light", "dark"), default="light",
+                        help="Theme of every supplied screenshot; run light and dark batches separately")
     args = parser.parse_args()
     results = [measure(path, args.scale, args.theme) for path in args.images]
     print(json.dumps(results, indent=2))

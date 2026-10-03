@@ -45,13 +45,19 @@ it. Animations retain the normal app behavior.
   ```sh
   python3 scripts/check-card-top-spacing.py --scale 3 <iphone-default-light.png>
   python3 scripts/check-card-top-spacing.py --scale 2 <ipad-default-light.png>
+  python3 scripts/manual-tests/test_card_top_spacing.py -v
   ```
 
   The expected native portrait widths are 1206 and 2064 pixels. Use `--theme
   dark` for dark captures. The check rejects a title gap outside 14–28 points;
   the pre-fix default-light captures measure about 48 points. It requires a
-  loaded, unscrolled Codex fixture, not an arbitrary screenshot. UI journeys
-  separately cover navigation, other cards and layout choices.
+  loaded, unscrolled Codex fixture, not an arbitrary screenshot. Use one theme
+  per invocation; a missing surface error names `--theme` so a mismatched flag
+  is not confused with an unloaded fixture. The six local-only helper tests
+  verify both scales/themes, inclusive bounds and fail-closed behavior against
+  generated images. They validate the algorithm, not the app layout, and stay
+  outside automatic CI discovery. UI journeys separately cover navigation,
+  other cards and layout choices.
 
 - `GreptileAllowanceUITests.testReviewHistoryAndBillingAvailabilityStates`
   runs the production Greptile transport/parser against an intercepted synthetic
