@@ -29,6 +29,15 @@ keyboard must still appear before typing. Scroll gestures stay inside the
 containing scroll view so an iPad sheet scrolls instead of the dashboard behind
 it. Animations retain the normal app behavior.
 
+- `GreptileAllowanceUITests.testReviewHistoryAndBillingAvailabilityStates`
+  runs the production Greptile transport/parser against an intercepted synthetic
+  endpoint. It captures review-history-only dashboard, review statuses and
+  account metrics, then checks empty activity, an explicit hypothetical returned
+  review quota, and HTTP failure. Missing billing data never becomes a zero
+  credit balance or an assumed Free allowance. Run locally with
+  `-only-testing:CodexBarIOSUITests/GreptileAllowanceUITests`. Every non-fixture
+  network request is blocked.
+
 - `CodexCreditsPoolUITests.testThirtyDayWindowLabelAndSavedVisibility`
   feeds a synthetic Free account's 2,592,000-second window through the real
   Codex parser. It captures "30-day usage limit" on the dashboard, Settings,
@@ -235,7 +244,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than twenty-two passed tests with zero skips or
+runner rejects anything other than twenty-three passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.
