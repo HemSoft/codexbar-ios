@@ -59,6 +59,11 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Clarify that Greptile review history is not a remaining credit balance, and
+  that missing billing data does not mean zero credits. Account allowance and
+  reset dates are shown only when returned, never assumed from the Free plan.
+  ([#395](https://github.com/HemSoft/codexbar-ios/issues/395))
+
 - Describe Codex's 30-day usage window in days instead of showing a confusing
   "720 hour usage limit". Usage values, reset times, and saved metric choices
   stay unchanged. ([#393](https://github.com/HemSoft/codexbar-ios/issues/393))

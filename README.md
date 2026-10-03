@@ -18,7 +18,9 @@ The Windows reference implementation is checked out beside this repo at:
 - Usage history and charts, configurable usage alerts, and home-screen and
   lock-screen widgets
 - Read-only Greptile review-activity tracking through an organization API key,
-  with completed reviews kept distinct from pull requests and billing credits
+  with completed reviews kept distinct from pull requests and billing credits.
+  The [Greptile allowance investigation](GREPTILE-USAGE.md) explains why its
+  published review tools do not establish an account's remaining credits
 - One Google Gemini account with six usage metrics for Gemini Apps, Gemini Models,
   and Other models, with separate five-hour and weekly limits for each source
 - An embedded watchOS companion with a live, read-only dashboard that mirrors

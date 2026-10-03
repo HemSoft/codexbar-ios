@@ -632,8 +632,10 @@ public final class GreptileUsageProvider: UsageProvider {
         } else {
             usageMessages = [
                 counts.completed > 0
-                    ? "Greptile did not return billing allowance data for this request."
-                    : "Greptile returned no completed review activity and no billing allowance.",
+                    ? "This connection shows review history, not your remaining credits. "
+                        + "Greptile did not return billing allowance data for this request."
+                    : "Greptile returned no completed review activity and no billing allowance. "
+                        + "Missing billing data is not a zero balance.",
             ]
         }
 

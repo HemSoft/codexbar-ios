@@ -74,6 +74,10 @@ final class UITestFixtures {
         let grok = scenario?.hasPrefix("grok") == true
         let codex = scenario?.hasPrefix("codex-") == true
         let claude = scenario?.hasPrefix("claude-") == true
+        let greptile = scenario?.hasPrefix("greptile-") == true
+        if greptile && configurationStore.configurations.isEmpty {
+            Self.seedGreptileAccount(in: configurationStore)
+        }
         if claude && configurationStore.configurations.isEmpty {
             Self.seedClaudeAccount(in: configurationStore)
         }
@@ -103,6 +107,8 @@ final class UITestFixtures {
         let providers: [any UsageProvider]
         if google {
             providers = [UITestGoogleProvider(sources: googleSources)]
+        } else if greptile {
+            providers = [UITestGreptileProvider(secretStore: UITestSecretStore(suite: suite))]
         } else if codex {
             providers = [UITestCodexProvider(scenario: scenario)]
         } else if claude {
@@ -128,6 +134,12 @@ final class UITestFixtures {
         }
         if !googleSources.isEmpty {
             return googleResult(for: configuration, sources: googleSources, stage: 0)
+        }
+        if scenario?.hasPrefix("greptile-") == true {
+            return ProviderUsageResult(
+                accountID: configuration.id, providerID: .greptile, title: configuration.displayName,
+                subtitle: "Waiting for synthetic Greptile response", bars: []
+            )
         }
         if scenario?.hasPrefix("codex-") == true { return codexResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("claude-") == true { return claudeResult(for: configuration, scenario: scenario) }
@@ -174,6 +186,31 @@ final class UITestFixtures {
             _ = store.update(account)
             _ = store.saveSecret(codexCredential(for: identity), for: account)
         }
+    }
+
+    private static func seedGreptileAccount(in store: ProviderConfigurationStore) {
+        var account = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        account.id = "ui-greptile-free"
+        account.accountLabel = "Greptile Free Fixture"
+        account.authMethod = .apiKey
+        _ = store.update(account)
+        _ = store.saveSecret("ui-test-credential", for: account)
+    }
+
+    nonisolated static func greptilePayload(scenario: String) -> Data {
+        let reviews = #"[{"id":"synthetic-first","status":"COMPLETED"},"#
+            + #"{"id":"synthetic-second","status":"COMPLETED"},{"id":"synthetic-skipped","status":"SKIPPED"}]"#
+        let payload: String
+        switch scenario {
+        case "greptile-empty":
+            payload = #"{"result":{"codeReviews":[],"total":0}}"#
+        case "greptile-returned-quota":
+            // Compatibility case only: these optional quota fields are not in the published response schema.
+            payload = #"{"result":{"codeReviews":\#(reviews),"total":3,"billingUsage":{"reviewsUsed":3,"includedReviews":17,"billingPeriodStart":"2030-01-01T00:00:00Z","billingPeriodEnd":"2030-01-31T00:00:00Z","plan":"Starter"}}}"#
+        default:
+            payload = #"{"result":{"codeReviews":\#(reviews),"total":3}}"#
+        }
+        return Data(payload.utf8)
     }
 
     nonisolated static func codexResult(
@@ -1225,12 +1262,42 @@ private final class UITestWatchSender: WatchSnapshotSending {
     func publish(_ snapshot: WatchDashboardSnapshot, force: Bool) -> Bool { false }
 }
 
+private struct UITestGreptileProvider: UsageProvider {
+    let providerID = ProviderID.greptile
+    let secretStore: any SecretStore
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async -> ProviderUsageResult {
+        let settings = URLSessionConfiguration.ephemeral
+        settings.protocolClasses = [UITestNetworkBlocker.self]
+        settings.httpCookieStorage = nil
+        settings.urlCredentialStorage = nil
+        let session = URLSession(configuration: settings)
+        defer { session.invalidateAndCancel() }
+        return await GreptileUsageProvider(
+            secretStore: secretStore, session: session,
+            endpoint: URL(string: "https://greptile-fixture.invalid/mcp")!
+        ).fetchUsage(for: configuration)
+    }
+}
+
 /// Defense in depth: unexpected URLSession traffic must never reach a provider.
 private final class UITestNetworkBlocker: URLProtocol, @unchecked Sendable {
     override static func canInit(with request: URLRequest) -> Bool { true }
     override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+        let scenario = ProcessInfo.processInfo.environment["CODEXBAR_UI_TEST_SCENARIO"] ?? ""
+        guard request.url?.absoluteString == "https://greptile-fixture.invalid/mcp",
+              scenario.hasPrefix("greptile-") else {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: scenario == "greptile-failure" ? 503 : 200,
+            httpVersion: nil, headerFields: nil
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: UITestFixtures.greptilePayload(scenario: scenario))
+        client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
 }
