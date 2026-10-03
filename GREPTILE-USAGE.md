@@ -118,6 +118,8 @@ remain in the same local-only target; automatic native test counts are unchanged
 
 The manual `GreptileAllowanceUITests` journey drives the same production
 transport/parser through an intercepted synthetic endpoint on iPhone and iPad.
+Its activity fixture supplies hypothetical 12-of-50 credit-named metadata. With
+no supported credit contract, that metadata must not become a quota or plan.
 It checks dashboard copy, review statuses and account metrics, empty activity,
 a hypothetical returned review quota, and provider failure. Its quota fixture
 is deliberately 3 of 17 **reviews**, not an assumed real Free allowance.

@@ -9,6 +9,7 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertTrue(note.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(app.buttons["dashboard-metric-greptile.completed-reviews"].exists)
         XCTAssertFalse(app.buttons["dashboard-metric-greptile.review-quota"].exists)
+        XCTAssertFalse(app.staticTexts["Starter"].exists)
         reveal(note, in: app)
         keep("greptile-free-history-only", app: app)
         tap(app.buttons["More options for Greptile Free Fixture"], in: app)

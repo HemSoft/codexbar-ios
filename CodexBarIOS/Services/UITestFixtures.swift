@@ -208,7 +208,9 @@ final class UITestFixtures {
             // Compatibility case only: these optional quota fields are not in the published response schema.
             payload = #"{"result":{"codeReviews":\#(reviews),"total":3,"billingUsage":{"reviewsUsed":3,"includedReviews":17,"billingPeriodStart":"2030-01-01T00:00:00Z","billingPeriodEnd":"2030-01-31T00:00:00Z","plan":"Starter"}}}"#
         default:
-            payload = #"{"result":{"codeReviews":\#(reviews),"total":3}}"#
+            // Hypothetical credit fields must not become a quota without a supported unit contract.
+            payload = #"{"result":{"codeReviews":\#(reviews),"total":3,"#
+                + #""billingUsage":{"creditsUsed":12,"includedCredits":50,"plan":"Starter"}}}"#
         }
         return Data(payload.utf8)
     }
