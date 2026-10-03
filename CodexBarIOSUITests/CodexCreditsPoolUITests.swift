@@ -81,6 +81,49 @@ final class CodexCreditsPoolUITests: XCTestCase {
         }
     }
 
+    func testThirtyDayWindowLabelAndSavedVisibility() {
+        continueAfterFailure = false
+        let scenario = "codex-free-thirty-day"
+        let runID = UUID().uuidString
+        var app = launch(scenario: scenario, runID: runID)
+        let metricID = "codex.window-2592000"
+        let dashboardID = "dashboard-metric-\(metricID)"
+        let quota = app.buttons[dashboardID]
+        XCTAssertTrue(quota.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(quota.label.contains("30-day usage limit"), quota.label)
+        XCTAssertTrue(quota.label.contains("12%"), quota.label)
+        XCTAssertFalse(quota.label.contains("720 hour"), quota.label)
+        reveal(quota, in: app)
+        keep("codex-free-thirty-day-dashboard", app: app)
+        openAccount("Personal Codex", in: app)
+        let toggle = app.switches["account-metric-visibility-\(metricID)"]
+        reveal(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertTrue(app.staticTexts["30-day usage limit"].exists, app.debugDescription)
+        keep("codex-free-thirty-day-settings", app: app)
+        app.terminate()
+        app = launch(scenario: scenario, runID: runID, reset: false)
+        tap(app.buttons["More options for Personal Codex"], in: app)
+        tap(app.buttons["Customize Card…"], in: app)
+        XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
+        let choice = app.buttons["customize-metric-\(metricID)"]
+        reveal(choice, in: app)
+        XCTAssertTrue(app.staticTexts["30-day usage limit"].exists, app.debugDescription)
+        keep("codex-free-thirty-day-customize", app: app)
+        tap(choice, in: app)
+        tap(app.buttons["Hide"], in: app)
+        tap(app.buttons["Done"], in: app)
+        XCTAssertTrue(app.buttons[dashboardID].waitForNonExistence(timeout: 5), app.debugDescription)
+        app.terminate()
+        app = launch(scenario: scenario, runID: runID, reset: false)
+        XCTAssertFalse(app.buttons[dashboardID].exists)
+        openAccount("Personal Codex", in: app)
+        let savedToggle = app.switches["account-metric-visibility-\(metricID)"]
+        reveal(savedToggle, in: app)
+        XCTAssertEqual(savedToggle.value as? String, "0", "The saved thirty-day choice must survive relaunch")
+        app.terminate()
+    }
+
     private func launch(scenario: String, runID: String, reset: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment = [

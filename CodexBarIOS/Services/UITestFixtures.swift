@@ -180,6 +180,9 @@ final class UITestFixtures {
         for account: ProviderAccountConfiguration, scenario: String? = nil
     ) -> ProviderUsageResult {
         let used = account.id == "ui-codex-personal" ? 12.0 : 62.0
+        if scenario == "codex-free-thirty-day" {
+            return codexThirtyDayResult(for: account, used: used)
+        }
         if scenario?.hasPrefix("codex-credits") == true {
             return codexCreditsResult(for: account, scenario: scenario ?? "", used: used)
         }
@@ -192,6 +195,20 @@ final class UITestFixtures {
                     resetsAt: Date().addingTimeInterval(18_000), resetDisplayStyle: .relativeWithLocalTime
                 ),
             ], fetchedAt: Date()
+        )
+    }
+
+    nonisolated private static func codexThirtyDayResult(
+        for account: ProviderAccountConfiguration, used: Double
+    ) -> ProviderUsageResult {
+        let now = Date()
+        let payload = #"{"plan_type":"free","rate_limit":{"primary_window":{"used_percent":\#(used),"reset_at":\#(Int(now.timeIntervalSince1970) + 864000),"limit_window_seconds":2592000}}}"#
+        guard let parsed = CodexUsageParser.parse(Data(payload.utf8), fetchedAt: now) else {
+            preconditionFailure("Invalid synthetic Codex thirty-day fixture")
+        }
+        return ProviderUsageResult(
+            accountID: account.id, providerID: .codex, title: account.displayName, plan: parsed.plan,
+            subtitle: "Synthetic Codex Free usage. No live account.", bars: parsed.bars, fetchedAt: parsed.fetchedAt
         )
     }
 
