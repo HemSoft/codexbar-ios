@@ -29,6 +29,42 @@ keyboard must still appear before typing. Scroll gestures stay inside the
 containing scroll view so an iPad sheet scrolls instead of the dashboard behind
 it. Animations retain the normal app behavior.
 
+- `CodexCreditsPoolUITests.testCompactCardHeadersAndIndependentControls`
+  captures expanded/collapsed cards in light/dark appearance at default and
+  accessibility text size 2, with and without plan badges. It checks 44-point
+  menu targets, independent expansion, metric details, Customize Card, a saved
+  half-width ring and a long account title after relaunch, plus stale refresh.
+  Run locally with
+  `-only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testCompactCardHeadersAndIndependentControls`.
+  This journey is manual/release-only, not part of automatic PR or main CI.
+
+  The native journey checks controls and saves captures. It does not assert
+  the title's rendered ink position; the separate local pixel command is the
+  pass/fail spacing regression check and must accompany spacing validation.
+  This avoids treating an accessibility container's frame as the title ink.
+
+  The local-only pixel check needs Python 3 and Pillow. Export its PNG
+  attachments, then measure the first unscrolled Codex card's title gap:
+
+  ```sh
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xcresulttool \
+    export attachments --path <result.xcresult> --output-path <attachments-dir>
+  python3 scripts/check-card-top-spacing.py --scale 3 <iphone-default-light.png>
+  python3 scripts/check-card-top-spacing.py --scale 2 <ipad-default-light.png>
+  python3 scripts/manual-tests/test_card_top_spacing.py -v
+  ```
+
+  The expected native portrait widths are 1206 and 2064 pixels. Use `--theme
+  dark` for dark captures. The check rejects a title gap outside 14–28 points;
+  the pre-fix default-light captures measure about 48 points. It requires a
+  loaded, unscrolled Codex fixture, not an arbitrary screenshot. Use one theme
+  per invocation; a missing surface error names `--theme` so a mismatched flag
+  is not confused with an unloaded fixture. The six local-only helper tests
+  verify both scales/themes, inclusive bounds and fail-closed behavior against
+  generated images. They validate the algorithm, not the app layout, and stay
+  outside automatic CI discovery. UI journeys separately cover navigation,
+  other cards and layout choices.
+
 - `GreptileAllowanceUITests.testReviewHistoryAndBillingAvailabilityStates`
   runs the production Greptile transport/parser against an intercepted synthetic
   endpoint. It captures review-history-only dashboard, review statuses and
@@ -244,7 +280,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than twenty-three passed tests with zero skips or
+runner rejects anything other than twenty-four passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

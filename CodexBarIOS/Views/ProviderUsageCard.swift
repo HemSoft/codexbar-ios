@@ -474,7 +474,7 @@ struct ProviderUsageCard: View {
     }
 
     private var cardHeader: some View {
-        ZStack(alignment: .trailing) {
+        ZStack(alignment: Alignment(horizontal: .trailing, vertical: .firstTextBaseline)) {
             Button(action: toggleExpansion) {
                 HStack(alignment: .firstTextBaseline, spacing: Self.headerControlSpacing) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -527,6 +527,9 @@ struct ProviderUsageCard: View {
 
                     Color.clear
                         .frame(width: Self.menuControlSize, height: Self.menuControlSize)
+                        // A non-text view defaults its text baseline to its bottom edge.
+                        // Reserve the full hit area without pushing the heading below it.
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] }
 
                     Circle()
                         .fill(cardSeverity.tint)
@@ -589,6 +592,7 @@ struct ProviderUsageCard: View {
                     .background(Color(.secondarySystemGroupedBackground))
             }
             .padding(.trailing, Self.menuTrailingOffset)
+            .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] }
             .accessibilityLabel("More options for \(result.title)")
         }
     }

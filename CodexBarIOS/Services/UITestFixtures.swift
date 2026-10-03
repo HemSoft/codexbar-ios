@@ -59,6 +59,9 @@ final class UITestFixtures {
             secretStore: UITestSecretStore(suite: suite),
             widgetSnapshotDefaults: defaults
         )
+        if let dark = environment["CODEXBAR_UI_TEST_DARK"] {
+            configurationStore.updateAppAppearance(dark == "1" ? .dark : .light)
+        }
         historyStore = UsageHistoryStore(defaults: defaults)
         statusPreferences = GitHubStatusPreferences(defaults: defaults)
         statusMonitor = GitHubStatusMonitor(preferences: statusPreferences, notifier: notifier)
