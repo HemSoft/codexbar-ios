@@ -117,7 +117,12 @@ final class CodexCreditsPoolUITests: XCTestCase {
         XCTAssertTrue(app.buttons.matching(quotaPredicate).firstMatch.waitForNonExistence(timeout: 5), app.debugDescription)
         app.terminate()
         app = launch(scenario: scenario, runID: runID, reset: false)
-        XCTAssertFalse(app.buttons.matching(quotaPredicate).firstMatch.exists)
+        let refreshedCard = app.buttons.matching(NSPredicate(
+            format: "label CONTAINS %@ AND label CONTAINS %@",
+            "Personal Codex", "Synthetic Codex Free usage. No live account."
+        )).firstMatch
+        XCTAssertTrue(refreshedCard.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.buttons.matching(quotaPredicate).firstMatch.waitForNonExistence(timeout: 5), app.debugDescription)
         openAccount("Personal Codex", in: app)
         let savedToggle = app.switches["account-metric-visibility-\(metricID)"]
         reveal(savedToggle, in: app)
