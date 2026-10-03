@@ -203,14 +203,14 @@ final class CodexCreditsPoolUITests: XCTestCase {
         tap(app.buttons["Customize Card…"], in: app)
         XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
         tap(app.buttons["customize-metric-codex.window-18000"], in: app)
-        tap(app.buttons["Tile Width"], in: app)
-        tap(app.buttons["Half"], in: app)
+        tapMenuChoice("Tile Width", in: app)
+        tapMenuChoice("Half", in: app)
         tap(app.buttons["customize-metric-codex.window-18000"], in: app)
-        tap(app.buttons["Visualization"], in: app)
-        tap(app.buttons["Circular ring"], in: app)
+        tapMenuChoice("Visualization", in: app)
+        tapMenuChoice("Circular ring", in: app)
         tap(app.buttons["customize-metric-codex.window-604800"], in: app)
-        tap(app.buttons["Tile Width"], in: app)
-        tap(app.buttons["Half"], in: app)
+        tapMenuChoice("Tile Width", in: app)
+        tapMenuChoice("Half", in: app)
         keep("spacing-customize-half-ring", app: app)
         tap(app.buttons["Done"], in: app)
         XCTAssertTrue(quota.waitForExistence(timeout: 5))
@@ -241,6 +241,15 @@ final class CodexCreditsPoolUITests: XCTestCase {
         XCTAssertEqual(quota.frame.width, savedWidth, accuracy: 1)
         XCTAssertEqual(quota.frame.minY, weekly.frame.minY, accuracy: 1)
         keep("spacing-long-heading-saved-layout", app: app)
+    }
+
+    private func tapMenuChoice(_ label: String, in app: XCUIApplication) {
+        let choice = app.buttons[label]
+        // Popup choices are outside the customizer's scroll subtree. Scrolling
+        // that underlying view can dismiss a submenu before it finishes opening.
+        XCTAssertTrue(choice.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(choice.isHittable, app.debugDescription)
+        choice.tap()
     }
 
     private func launch(scenario: String, runID: String, reset: Bool = true) -> XCUIApplication {
