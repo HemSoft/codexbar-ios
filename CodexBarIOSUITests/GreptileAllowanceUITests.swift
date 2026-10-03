@@ -12,21 +12,15 @@ final class GreptileAllowanceUITests: XCTestCase {
         reveal(note, in: app)
         keep("greptile-free-history-only", app: app)
         tap(app.buttons["More options for Greptile Free Fixture"], in: app)
-        tap(app.buttons["More Information…"], in: app)
+        tap(app.buttons["More information for Greptile Free Fixture"], in: app)
         XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Review statuses"].exists)
         XCTAssertTrue(app.staticTexts["Completed"].exists)
         keep("greptile-free-review-statuses", app: app)
         tap(app.buttons["Done"].firstMatch, in: app)
-        tap(app.buttons["Open settings"], in: app)
-        tap(app.descendants(matching: .any)["settings-accountsAndGroups"].firstMatch, in: app)
-        XCTAssertTrue(app.navigationBars["Accounts & Groups"].waitForExistence(timeout: 10))
-        tap(app.otherElements["Greptile Free Fixture"], in: app)
-        XCTAssertTrue(app.navigationBars["Greptile Free Fixture"].waitForExistence(timeout: 10))
+        keepAccountSettings("greptile-free", in: app)
         let metric = app.switches["account-metric-visibility-greptile.completed-reviews"]
-        reveal(metric, in: app)
         XCTAssertEqual(metric.value as? String, "1")
-        keep("greptile-free-account-metrics", app: app)
         app.terminate()
 
         checkState("greptile-empty", message: "Missing billing data is not a zero balance", metric: nil)
@@ -39,6 +33,7 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertFalse(failed.buttons["dashboard-metric-greptile.completed-reviews"].exists)
         XCTAssertFalse(failed.buttons["dashboard-metric-greptile.review-quota"].exists)
         keep("greptile-provider-failure", app: failed)
+        keepAccountSettings("greptile-failure", in: failed)
         failed.terminate()
     }
 
@@ -68,7 +63,19 @@ final class GreptileAllowanceUITests: XCTestCase {
         }
         reveal(note, in: app)
         keep(scenario, app: app)
+        keepAccountSettings(scenario, in: app)
         app.terminate()
+    }
+
+    private func keepAccountSettings(_ scenario: String, in app: XCUIApplication) {
+        tap(app.buttons["Open settings"], in: app)
+        tap(app.descendants(matching: .any)["settings-accountsAndGroups"].firstMatch, in: app)
+        XCTAssertTrue(app.navigationBars["Accounts & Groups"].waitForExistence(timeout: 10))
+        tap(app.otherElements["Greptile Free Fixture"], in: app)
+        XCTAssertTrue(app.navigationBars["Greptile Free Fixture"].waitForExistence(timeout: 10))
+        let section = app.staticTexts["Metrics"].firstMatch
+        reveal(section, in: app)
+        keep("\(scenario)-account-metrics", app: app)
     }
 
     private func tap(_ element: XCUIElement, in app: XCUIApplication) {
