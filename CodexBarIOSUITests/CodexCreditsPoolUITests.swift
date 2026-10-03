@@ -88,7 +88,8 @@ final class CodexCreditsPoolUITests: XCTestCase {
         var app = launch(scenario: scenario, runID: runID)
         let metricID = "codex.window-2592000"
         let dashboardID = "dashboard-metric-\(metricID)"
-        let quota = app.buttons[dashboardID]
+        let quotaPredicate = NSPredicate(format: "identifier == %@ AND label CONTAINS %@", dashboardID, "12%")
+        let quota = app.buttons.matching(quotaPredicate).firstMatch
         XCTAssertTrue(quota.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(quota.label.contains("30-day usage limit"), quota.label)
         XCTAssertTrue(quota.label.contains("12%"), quota.label)
@@ -113,10 +114,10 @@ final class CodexCreditsPoolUITests: XCTestCase {
         tap(choice, in: app)
         tap(app.buttons["Hide"], in: app)
         tap(app.buttons["Done"], in: app)
-        XCTAssertTrue(app.buttons[dashboardID].waitForNonExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.buttons.matching(quotaPredicate).firstMatch.waitForNonExistence(timeout: 5), app.debugDescription)
         app.terminate()
         app = launch(scenario: scenario, runID: runID, reset: false)
-        XCTAssertFalse(app.buttons[dashboardID].exists)
+        XCTAssertFalse(app.buttons.matching(quotaPredicate).firstMatch.exists)
         openAccount("Personal Codex", in: app)
         let savedToggle = app.switches["account-metric-visibility-\(metricID)"]
         reveal(savedToggle, in: app)
