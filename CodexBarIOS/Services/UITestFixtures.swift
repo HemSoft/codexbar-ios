@@ -189,10 +189,10 @@ final class UITestFixtures {
     }
 
     private static func seedGreptileAccount(in store: ProviderConfigurationStore) {
-        var account = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
-        account.id = "ui-greptile-free"
-        account.accountLabel = "Greptile Free Fixture"
-        account.authMethod = .apiKey
+        let account = ProviderAccountConfiguration(
+            id: "ui-greptile-free", providerID: .greptile,
+            accountLabel: "Greptile Free Fixture", authMethod: .apiKey
+        )
         _ = store.update(account)
         _ = store.saveSecret("ui-test-credential", for: account)
     }
@@ -1273,10 +1273,13 @@ private struct UITestGreptileProvider: UsageProvider {
         settings.urlCredentialStorage = nil
         let session = URLSession(configuration: settings)
         defer { session.invalidateAndCancel() }
-        return await GreptileUsageProvider(
+        guard let provider = try? GreptileUsageProvider(
             secretStore: secretStore, session: session,
             endpoint: URL(string: "https://greptile-fixture.invalid/mcp")!
-        ).fetchUsage(for: configuration)
+        ) else {
+            preconditionFailure("Invalid synthetic Greptile provider configuration")
+        }
+        return await provider.fetchUsage(for: configuration)
     }
 }
 
