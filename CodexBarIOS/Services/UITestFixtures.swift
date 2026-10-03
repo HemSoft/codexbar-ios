@@ -138,7 +138,7 @@ final class UITestFixtures {
         if scenario?.hasPrefix("greptile-") == true {
             return ProviderUsageResult(
                 accountID: configuration.id, providerID: .greptile, title: configuration.displayName,
-                subtitle: "Waiting for synthetic Greptile response", bars: []
+                subtitle: "Waiting for synthetic Greptile response", bars: [], fetchedAt: Date()
             )
         }
         if scenario?.hasPrefix("codex-") == true { return codexResult(for: configuration, scenario: scenario) }
@@ -1266,20 +1266,18 @@ private struct UITestGreptileProvider: UsageProvider {
     let providerID = ProviderID.greptile
     let secretStore: any SecretStore
 
-    func fetchUsage(for configuration: ProviderAccountConfiguration) async -> ProviderUsageResult {
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         let settings = URLSessionConfiguration.ephemeral
         settings.protocolClasses = [UITestNetworkBlocker.self]
         settings.httpCookieStorage = nil
         settings.urlCredentialStorage = nil
         let session = URLSession(configuration: settings)
         defer { session.invalidateAndCancel() }
-        guard let provider = try? GreptileUsageProvider(
+        let provider = GreptileUsageProvider(
             secretStore: secretStore, session: session,
             endpoint: URL(string: "https://greptile-fixture.invalid/mcp")!
-        ) else {
-            preconditionFailure("Invalid synthetic Greptile provider configuration")
-        }
-        return await provider.fetchUsage(for: configuration)
+        )
+        return try await provider.fetchUsage(for: configuration)
     }
 }
 
