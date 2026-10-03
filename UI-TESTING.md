@@ -38,11 +38,17 @@ it. Animations retain the normal app behavior.
   `-only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testCompactCardHeadersAndIndependentControls`.
   This journey is manual/release-only, not part of automatic PR or main CI.
 
+  The native journey checks controls and saves captures. It does not assert
+  the title's rendered ink position; the separate local pixel command is the
+  pass/fail spacing regression check and must accompany spacing validation.
+  This avoids treating an accessibility container's frame as the title ink.
+
   The local-only pixel check needs Python 3 and Pillow. Export its PNG
-  attachments with `xcrun xcresulttool export attachments`, then measure the
-  first unscrolled Codex card's title gap:
+  attachments, then measure the first unscrolled Codex card's title gap:
 
   ```sh
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun xcresulttool \
+    export attachments --path <result.xcresult> --output-path <attachments-dir>
   python3 scripts/check-card-top-spacing.py --scale 3 <iphone-default-light.png>
   python3 scripts/check-card-top-spacing.py --scale 2 <ipad-default-light.png>
   python3 scripts/manual-tests/test_card_top_spacing.py -v

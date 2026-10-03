@@ -248,7 +248,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
         // Popup choices are outside the customizer's scroll subtree. Scrolling
         // that underlying view can dismiss a submenu before it finishes opening.
         XCTAssertTrue(choice.waitForExistence(timeout: 5), app.debugDescription)
-        XCTAssertTrue(choice.isHittable, app.debugDescription)
+        XCTAssertTrue(choice.wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
         choice.tap()
     }
 
