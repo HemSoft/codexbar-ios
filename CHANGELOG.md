@@ -59,6 +59,10 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Describe Codex's 30-day usage window in days instead of showing a confusing
+  "720 hour usage limit". Usage values, reset times, and saved metric choices
+  stay unchanged. ([#393](https://github.com/HemSoft/codexbar-ios/issues/393))
+
 - Name Claude's shared usage windows "5-hour" and "Weekly" so their reset
   periods are clear on the dashboard and in metric selection. Saved layouts,
   widgets, and Watch selections keep their existing metric identities.
