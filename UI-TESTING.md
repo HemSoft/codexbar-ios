@@ -29,6 +29,30 @@ keyboard must still appear before typing. Scroll gestures stay inside the
 containing scroll view so an iPad sheet scrolls instead of the dashboard behind
 it. Animations retain the normal app behavior.
 
+- `CodexCreditsPoolUITests.testCompactCardHeadersAndIndependentControls`
+  captures expanded/collapsed cards in light/dark appearance at default and
+  accessibility text size 2, with and without plan badges. It checks 44-point
+  menu targets, independent expansion, metric details, Customize Card, a saved
+  half-width ring and a long account title after relaunch, plus stale refresh.
+  Run locally with
+  `-only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testCompactCardHeadersAndIndependentControls`.
+  This journey is manual/release-only, not part of automatic PR or main CI.
+
+  The local-only pixel check needs Python 3 and Pillow. Export its PNG
+  attachments with `xcrun xcresulttool export attachments`, then measure the
+  first unscrolled Codex card's title gap:
+
+  ```sh
+  python3 scripts/check-card-top-spacing.py --scale 3 <iphone-default-light.png>
+  python3 scripts/check-card-top-spacing.py --scale 2 <ipad-default-light.png>
+  ```
+
+  The expected native portrait widths are 1206 and 2064 pixels. Use `--theme
+  dark` for dark captures. The check rejects a title gap outside 14–28 points;
+  the pre-fix default-light captures measure about 48 points. It requires a
+  loaded, unscrolled Codex fixture, not an arbitrary screenshot. UI journeys
+  separately cover navigation, other cards and layout choices.
+
 - `GreptileAllowanceUITests.testReviewHistoryAndBillingAvailabilityStates`
   runs the production Greptile transport/parser against an intercepted synthetic
   endpoint. It captures review-history-only dashboard, review statuses and
@@ -244,7 +268,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than twenty-three passed tests with zero skips or
+runner rejects anything other than twenty-four passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

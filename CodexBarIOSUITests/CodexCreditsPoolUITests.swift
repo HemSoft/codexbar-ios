@@ -130,6 +130,119 @@ final class CodexCreditsPoolUITests: XCTestCase {
         app.terminate()
     }
 
+    func testCompactCardHeadersAndIndependentControls() {
+        continueAfterFailure = false
+        for defaultText in [true, false] {
+            for dark in [false, true] {
+                let app = launchSpacingFixture(defaultText: defaultText, dark: dark)
+                let quota = personalQuota(in: app)
+                XCTAssertTrue(quota.waitForExistence(timeout: 10), app.debugDescription)
+                let menu = app.buttons["More options for Personal Codex"]
+                XCTAssertGreaterThanOrEqual(menu.frame.width, 44)
+                XCTAssertGreaterThanOrEqual(menu.frame.height, 44)
+                keep("spacing-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
+                let disclosure = app.otherElements["Personal Codex, Synthetic Codex usage, Normal status"]
+                XCTAssertTrue(disclosure.exists, app.debugDescription)
+                XCTAssertEqual(disclosure.value as? String, "Expanded", app.debugDescription)
+                disclosure.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()
+                XCTAssertTrue(quota.waitForNonExistence(timeout: 5))
+                XCTAssertEqual(disclosure.value as? String, "Collapsed")
+                keep("spacing-collapsed-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
+                disclosure.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()
+                XCTAssertTrue(quota.waitForExistence(timeout: 5))
+                if defaultText && !dark { exerciseSpacingNavigation(in: app) }
+                app.terminate()
+
+                let badge = launchSpacingFixture(defaultText: defaultText, dark: dark, scenario: "codex-free-thirty-day")
+                let thirtyDay = badge.buttons.matching(NSPredicate(
+                    format: "identifier == %@ AND label CONTAINS %@", "dashboard-metric-codex.window-2592000", "12%"
+                )).firstMatch
+                XCTAssertTrue(thirtyDay.waitForExistence(timeout: 10), badge.debugDescription)
+                let badgeMenu = badge.buttons["More options for Personal Codex"]
+                XCTAssertGreaterThanOrEqual(badgeMenu.frame.height, 44)
+                keep("spacing-badge-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: badge)
+                badge.terminate()
+            }
+        }
+        let stale = launchSpacingFixture(defaultText: true, dark: false, scenario: "codex-credits-failure")
+        XCTAssertTrue(personalQuota(in: stale).waitForExistence(timeout: 10))
+        tap(stale.buttons["Refresh usage"], in: stale)
+        let failure = stale.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Synthetic refresh failed")).firstMatch
+        XCTAssertTrue(failure.waitForExistence(timeout: 10), stale.debugDescription)
+        XCTAssertTrue(personalQuota(in: stale).label.contains("stale"))
+        keep("spacing-stale", app: stale)
+        stale.terminate()
+    }
+
+    private func launchSpacingFixture(defaultText: Bool, dark: Bool, scenario: String = "codex-credits") -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment = [
+            "CODEXBAR_UI_TESTS": "1", "CODEXBAR_UI_TEST_RUN_ID": UUID().uuidString,
+            "CODEXBAR_UI_TEST_RESET": "1", "CODEXBAR_UI_TEST_SCENARIO": scenario,
+            "CODEXBAR_UI_TEST_DEFAULT_TEXT": defaultText ? "1" : "0",
+            "CODEXBAR_UI_TEST_DARK": dark ? "1" : "0",
+        ]
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-AppleInterfaceStyle", dark ? "Dark" : "Light"]
+        app.launch()
+        return app
+    }
+
+    private func personalQuota(in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@", "dashboard-metric-codex.window-18000", "12%"
+        )).firstMatch
+    }
+
+    private func exerciseSpacingNavigation(in app: XCUIApplication) {
+        let quota = personalQuota(in: app)
+        tap(quota, in: app)
+        XCTAssertTrue(app.navigationBars["Metric Details"].waitForExistence(timeout: 5), app.debugDescription)
+        keep("spacing-metric-details", app: app)
+        tap(app.buttons["Done"], in: app)
+        tap(app.buttons["More options for Personal Codex"], in: app)
+        tap(app.buttons["Customize Card…"], in: app)
+        XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
+        tap(app.buttons["customize-metric-codex.window-18000"], in: app)
+        tap(app.buttons["Tile Width"], in: app)
+        tap(app.buttons["Half"], in: app)
+        tap(app.buttons["customize-metric-codex.window-18000"], in: app)
+        tap(app.buttons["Visualization"], in: app)
+        tap(app.buttons["Circular ring"], in: app)
+        tap(app.buttons["customize-metric-codex.window-604800"], in: app)
+        tap(app.buttons["Tile Width"], in: app)
+        tap(app.buttons["Half"], in: app)
+        keep("spacing-customize-half-ring", app: app)
+        tap(app.buttons["Done"], in: app)
+        XCTAssertTrue(quota.waitForExistence(timeout: 5))
+        XCTAssertTrue(quota.label.contains("12%"))
+        let weekly = app.buttons.matching(identifier: "dashboard-metric-codex.window-604800").firstMatch
+        XCTAssertLessThan(quota.frame.width, app.frame.width * 0.6)
+        XCTAssertEqual(quota.frame.minY, weekly.frame.minY, accuracy: 1)
+        XCTAssertEqual(quota.frame.height, weekly.frame.height, accuracy: 1)
+        let savedWidth = quota.frame.width
+        keep("spacing-half-ring-dashboard", app: app)
+        openAccount("Personal Codex", in: app)
+        let title = "Personal Codex with a deliberately long account heading"
+        let field = app.textFields["account-label"]
+        tap(field, in: app)
+        if !app.keyboards.firstMatch.waitForExistence(timeout: 3) { field.tap() }
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        field.typeText(" with a deliberately long account heading")
+        tap(app.navigationBars.buttons["Accounts & Groups"], in: app)
+        XCTAssertTrue(app.navigationBars["Accounts & Groups"].waitForExistence(timeout: 5))
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launch()
+        XCTAssertTrue(quota.waitForExistence(timeout: 10), app.debugDescription)
+        let renamedMenu = app.buttons["More options for \(title)"]
+        XCTAssertTrue(renamedMenu.exists, app.debugDescription)
+        XCTAssertGreaterThanOrEqual(renamedMenu.frame.height, 44)
+        XCTAssertTrue(quota.label.contains("12%"))
+        XCTAssertEqual(quota.frame.width, savedWidth, accuracy: 1)
+        XCTAssertEqual(quota.frame.minY, weekly.frame.minY, accuracy: 1)
+        keep("spacing-long-heading-saved-layout", app: app)
+    }
+
     private func launch(scenario: String, runID: String, reset: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment = [

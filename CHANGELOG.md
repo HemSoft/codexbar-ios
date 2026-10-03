@@ -151,6 +151,10 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Removed excess blank space above dashboard account headings while keeping
+  the account menu's full touch target and saved metric layouts.
+  ([#398](https://github.com/HemSoft/codexbar-ios/issues/398))
+
 - Restore Cursor on-demand spending when the provider reports spend without
   remaining allowance, including amounts above the spending cap. Keep all four
   Cursor metric choices visible during partial refreshes without inventing
