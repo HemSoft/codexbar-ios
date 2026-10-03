@@ -141,7 +141,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(menu.frame.width, 44)
                 XCTAssertGreaterThanOrEqual(menu.frame.height, 44)
                 keep("spacing-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
-                let disclosure = app.otherElements["Personal Codex, Synthetic Codex usage, Normal status"]
+                let disclosure = app.descendants(matching: .any)["Personal Codex, Synthetic Codex usage, Normal status"]
                 XCTAssertTrue(disclosure.exists, app.debugDescription)
                 XCTAssertEqual(disclosure.value as? String, "Expanded", app.debugDescription)
                 disclosure.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()
