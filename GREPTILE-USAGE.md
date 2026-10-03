@@ -123,6 +123,9 @@ no supported credit contract, that metadata must not become a quota or plan.
 It checks dashboard copy, review statuses and account metrics, empty activity,
 a hypothetical returned review quota, and provider failure. Its quota fixture
 is deliberately 3 of 17 **reviews**, not an assumed real Free allowance.
+The journey also forces the iPad simulator menu-relaunch workaround on both
+families. That hook refreshes through the real provider before asserting sheet
+content, rather than presenting a preconstructed or empty result.
 Every other network request is blocked. See [UI testing](UI-TESTING.md) for the
 focused command and release-only full-run guard.
 

@@ -121,6 +121,12 @@ final class UITestFixtures {
             providers = [UITestUsageProvider(failsFirstRefresh: recovery), UITestGrokProvider(scenario: scenario)]
         }
         refreshService = UsageRefreshService(providers: providers, initialResults: results)
+        if greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1" {
+            // The relaunch hook must fill the sheet from the real provider, not the waiting placeholder.
+            let service = refreshService
+            let accounts = configurationStore.configurations
+            Task { await service.refresh(configurations: accounts) }
+        }
         if recovery && historyStore.snapshots.isEmpty {
             seedHistory()
         }

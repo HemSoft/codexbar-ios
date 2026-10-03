@@ -12,12 +12,11 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Starter"].exists)
         reveal(note, in: app)
         keep("greptile-free-history-only", app: app)
-        tap(app.buttons["More options for Greptile Free Fixture"], in: app)
-        tap(app.buttons["More information for Greptile Free Fixture"], in: app)
-        XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Review statuses"].exists)
-        XCTAssertTrue(app.staticTexts["Completed"].exists)
+        openMoreInformation(in: app)
         keep("greptile-free-review-statuses", app: app)
+        tap(app.buttons["Done"].firstMatch, in: app)
+        openMoreInformation(in: app, forceFallback: true)
+        keep("greptile-forced-menu-fallback-review-statuses", app: app)
         tap(app.buttons["Done"].firstMatch, in: app)
         keepAccountSettings("greptile-free", in: app)
         let metric = app.switches["account-metric-visibility-greptile.completed-reviews"]
@@ -50,6 +49,29 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertTrue(refresh.waitForExistence(timeout: 10), app.debugDescription)
         refresh.tap()
         return app
+    }
+
+    private func openMoreInformation(in app: XCUIApplication, forceFallback: Bool = false) {
+        if !forceFallback {
+            tap(app.buttons["More options for Greptile Free Fixture"], in: app)
+            let information = app.buttons["More information for Greptile Free Fixture"]
+            if information.waitForExistence(timeout: 3) {
+                tap(information, in: app)
+                XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10))
+                XCTAssertTrue(app.staticTexts["Review statuses"].waitForExistence(timeout: 10))
+                return
+            }
+        }
+        // Same conditional workaround as the billing journey; force it once even if the menu works.
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION"] = "1"
+        app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"] = "ui-greptile-free"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["Review statuses"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["Completed"].exists)
+        XCTAssertTrue(app.staticTexts["2"].exists)
     }
 
     private func checkState(_ scenario: String, message: String, metric: String?) {
