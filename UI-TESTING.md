@@ -178,6 +178,17 @@ it. Animations retain the normal app behavior.
   credits-first layouts, relaunch persistence, fresh order, 0% and unavailable
   weeks, and an explicit credits-first reorder on iPhone and iPad.
 
+- `GrokSignInUITests.testCursorFreshPercentagesBotAndSavedChoices` drives the
+  real Cursor request builder, transport and parser against a network-blocked
+  synthetic replay. Its cache-aware loader returns old zeros for the previous
+  request policy and fresh fractional Cursor usage plus 3% Other Models for a
+  reload. A valid Bot response takes 2.5 seconds, beyond the old two-second
+  deadline. The journey checks 1%/3%, weekly Bot data, details, all four choices,
+  saved ring/width/hide/show, failed-refresh retention and a forbidden Bot
+  response on iPhone and iPad. This replay proves request-policy and deadline
+  handling, not that the affected live response was cached. No account cookies,
+  tokens or outbound provider networking are used. It is manual/release-only.
+
 - `SettingsEvidenceUITests.testEverySettingsDestinationAndDoneBack` captures
   root summaries and all six existing destinations, then checks Done/Back.
 - `SettingsEvidenceUITests.testPendingDuplicateGroupBlocksDoneUntilCorrected`
@@ -280,7 +291,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than twenty-four passed tests with zero skips or
+runner rejects anything other than twenty-five passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

@@ -44,6 +44,8 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
     public let resetsAt: Date?
     public let resetDisplayStyle: UsageResetDisplayStyle
     public let fractionlessUsageText: String?
+    /// Presentation only. Measured usage, fractions and forecasts retain their original precision.
+    public let usesMinimumPositivePercent: Bool
     public let projectionCurrent: Double?
     public let projectionLimit: Double?
     public let projectionPeriodStart: Date?
@@ -69,7 +71,8 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         showProjectionOnCurrentBar: Bool = false,
         projectionDescriptionOverride: String? = nil,
         projectionSignificanceOverride: UsageProjectionSignificance? = nil,
-        legacyWidgetKey: String? = nil
+        legacyWidgetKey: String? = nil,
+        usesMinimumPositivePercent: Bool = false
     ) {
         self.id = id
         self.stableKey = stableKey
@@ -81,6 +84,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         self.resetsAt = resetsAt
         self.resetDisplayStyle = resetDisplayStyle
         self.fractionlessUsageText = fractionlessUsageText
+        self.usesMinimumPositivePercent = usesMinimumPositivePercent
         self.projectionCurrent = projectionCurrent
         self.projectionLimit = projectionLimit
         self.projectionPeriodStart = projectionPeriodStart
@@ -149,7 +153,11 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
             return "0%"
         }
 
-        return "\(Int((used / limit * 100).rounded()))%"
+        let percent = used / limit * 100
+        if usesMinimumPositivePercent && used > 0 && percent < 1 {
+            return "1%"
+        }
+        return "\(Int(percent.rounded()))%"
     }
 
     public func metricIdentifier(providerID: ProviderID, index: Int) -> String {

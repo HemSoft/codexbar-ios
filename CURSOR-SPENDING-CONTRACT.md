@@ -56,6 +56,61 @@ same as a present empty object.
 - Present empty Grok money means provider zero. Missing, null, or malformed
   money does not become zero and cannot erase independently valid weekly usage.
 
+## Percentage and refresh parity
+
+Verified October 3, 2026 EDT for [issue #400](https://github.com/HemSoft/codexbar-ios/issues/400).
+
+The same installed first-party client carries `planUsage.autoPercentUsed` and
+`apiPercentUsed` into its included-usage display. Its `VLo` and `B9h` helpers
+use a displayed minimum of 1 for any positive percentage below 1. CodexBar now
+applies that minimum to the two model categories and More Information. This is
+presentation only: 0.1 remains 0.1 used out of 100, including History, fractions,
+forecasts, widgets and Watch. Reported zero remains zero. Existing over-cap
+values remain visible rather than being clipped to 100. Other providers and
+Bot's existing percentage policy are unchanged.
+
+The official client's response `enabled` flag controls its usage-message
+visibility; `applyCurrentPeriodUsageResponse` still copies supplied plan values
+when that flag is false. It is not evidence of zero or no included allowance.
+CodexBar does not discard valid category values based on that display flag or
+infer a missing split from aggregate spend. Both standard camel-case and
+original protobuf snake-case category fields are accepted.
+
+Usage requests are bearer-only, bypass local HTTP cache, and disable automatic
+cookie handling. The default session is ephemeral with no cookie storage or
+URL cache. This prevents a refresh from intentionally choosing a locally
+cached response or adding another browser/account cookie. It does not prove
+that HTTP cache or cookies caused the affected live snapshot's zero values.
+
+The independent Bot read now has a five-second cancellable deadline and a
+six-second transport backstop, with no retry. The later backstop lets the task
+deadline own cancellation rather than race URLSession's timeout. A valid 2.5-second reply survives; the previous default
+dropped it. Timeout, transport failure, invalid response, rejected session,
+forbidden access and rate limiting retain distinct bounded explanations where
+verified. Missing percent and explicit absent/team allowances retain the old
+unavailable semantics. All four customization choices remain present even when
+no numeric Bot bar can be built. A deliberately hidden metric stays hidden.
+
+A read-only phone snapshot on October 3 at 8:42 PM EDT had two zero fractions
+and no numeric Bot bar, versus Franz's reported 1%/3%. The source wire response,
+identity and simultaneous billing context were not captured. A temporary,
+opt-in whitelisted probe build installed, but iOS rejected launch because the
+phone was locked. No credentials were exported, and the probe is removed from
+the delivered source. Automated replays prove the app-side presentation,
+request-policy and deadline corrections. They do not establish the particular
+live response's cause. Franz owns the delivered build's live comparison.
+
+Local regression command:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcrun swift test --filter 'GrokAuthTests.Cursor'
+```
+
+New tests remain in the local-only SwiftPM target; automatic native test counts
+and the five automatic jobs do not change. The Cursor UI journey is included
+only in local or explicitly dispatched release validation.
+
 ## Validation boundary
 
 Local regressions replay these first-party schemas with synthetic account data.

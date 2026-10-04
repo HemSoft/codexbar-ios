@@ -12,14 +12,14 @@ public final class CursorUsageProvider: UsageProvider {
 
     public convenience init(
         secretStore: SecretStore = KeychainService(),
-        session: URLSession = .shared,
+        session: URLSession? = nil,
         usageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")!,
         grokBotUsageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus")!,
-        grokBotRequestTimeout: Duration = .seconds(2)
+        grokBotRequestTimeout: Duration = .seconds(5)
     ) {
         self.init(
             secretStore: secretStore,
-            session: session,
+            session: session ?? Self.isolatedSession(),
             usageEndpoint: usageEndpoint,
             grokBotUsageEndpoint: grokBotUsageEndpoint,
             grokBotRequestTimeout: grokBotRequestTimeout,
@@ -43,6 +43,21 @@ public final class CursorUsageProvider: UsageProvider {
         self.waitForGrokBotTimeout = waitForGrokBotTimeout
     }
 
+    private static func isolatedSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        return URLSession(configuration: configuration)
+    }
+
+    private struct OptionalUsageResponse: Sendable {
+        let data: Data?
+        let unavailableReason: String?
+    }
+
+    private static let botTimeoutReason = "Grok Bot refresh timed out. Refresh to try again."
+
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         guard
             let storedSecret = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
@@ -61,10 +76,12 @@ public final class CursorUsageProvider: UsageProvider {
 
             switch httpResponse.statusCode {
             case 200..<300:
+                let optional = await grokBotData
                 return Self.parseUsage(
                     data,
-                    grokBotUsageData: await grokBotData,
-                    configuration: configuration
+                    grokBotUsageData: optional.data,
+                    configuration: configuration,
+                    grokBotFailureReason: optional.unavailableReason
                 )
                     ?? failureResult("Could not parse Cursor usage.", configuration: configuration)
             case 401, 403:
@@ -79,25 +96,36 @@ public final class CursorUsageProvider: UsageProvider {
         }
     }
 
-    private func fetchGrokBotUsage(accessToken: String) async -> Data? {
+    private func fetchGrokBotUsage(accessToken: String) async -> OptionalUsageResponse {
         let session = session
-        let request = makeUsageRequest(endpoint: grokBotUsageEndpoint, accessToken: accessToken)
+        var request = makeUsageRequest(endpoint: grokBotUsageEndpoint, accessToken: accessToken)
         let timeout = grokBotRequestTimeout
+        let parts = timeout.components
+        // Let the task deadline own cancellation; transport timeout is a later backstop.
+        request.timeoutInterval = max(1, Double(parts.seconds) + Double(parts.attoseconds) / 1e18 + 1)
+        let timedRequest = request
         let waitForTimeout = waitForGrokBotTimeout
 
-        return await withTaskGroup(of: Data?.self) { group in
+        return await withTaskGroup(of: OptionalUsageResponse.self) { group in
             group.addTask {
-                let response = try? await session.data(for: request)
-                return Self.successfulResponseData(response)
+                do {
+                    return Self.optionalResponse(try await session.data(for: timedRequest))
+                } catch {
+                    let timedOut = (error as? URLError)?.code == .timedOut
+                    return OptionalUsageResponse(
+                        data: nil,
+                        unavailableReason: timedOut ? Self.botTimeoutReason : "Could not refresh Grok Bot. Refresh to try again."
+                    )
+                }
             }
             group.addTask {
                 try? await waitForTimeout(timeout)
-                return nil
+                return OptionalUsageResponse(data: nil, unavailableReason: Self.botTimeoutReason)
             }
 
-            let data = await group.next() ?? nil
+            let response = await group.next() ?? OptionalUsageResponse(data: nil, unavailableReason: Self.botTimeoutReason)
             group.cancelAll()
-            return data
+            return response
         }
     }
 
@@ -108,11 +136,14 @@ public final class CursorUsageProvider: UsageProvider {
     private func makeUsageRequest(endpoint: URL, accessToken: String) -> URLRequest {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.httpShouldHandleCookies = false
         request.httpBody = Data("{}".utf8)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("1", forHTTPHeaderField: "Connect-Protocol-Version")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.setValue("CodexBarIOS/1.0", forHTTPHeaderField: "User-Agent")
         return request
     }
@@ -121,9 +152,12 @@ public final class CursorUsageProvider: UsageProvider {
         _ data: Data,
         grokBotUsageData: Data? = nil,
         configuration: ProviderAccountConfiguration,
-        fetchedAt: Date = Date()
+        fetchedAt: Date = Date(),
+        grokBotFailureReason: String? = nil
     ) -> ProviderUsageResult? {
-        guard let usage = try? JSONDecoder().decode(CursorCurrentPeriodUsage.self, from: data) else {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let usage = try? decoder.decode(CursorCurrentPeriodUsage.self, from: data) else {
             return nil
         }
 
@@ -142,24 +176,29 @@ public final class CursorUsageProvider: UsageProvider {
             title: configuration.displayName,
             subtitle: "Cursor plan usage",
             bars: bars,
-            unavailableUsageMetrics: unavailableMetrics(usage, grokBotData: grokBotUsageData, bars: bars),
+            unavailableUsageMetrics: unavailableMetrics(
+                usage, grokBotData: grokBotUsageData, bars: bars, grokBotFailureReason: grokBotFailureReason
+            ),
             cardInformationSections: buildUsageInformationSections(usage.planUsage),
             fetchedAt: fetchedAt
         )
     }
 
-    private static func successfulResponseData(_ response: (Data, URLResponse)?) -> Data? {
-        guard let response else {
-            return nil
-        }
+    private static func optionalResponse(_ response: (Data, URLResponse)) -> OptionalUsageResponse {
         let (data, urlResponse) = response
-        guard
-            let httpResponse = urlResponse as? HTTPURLResponse,
-            (200..<300).contains(httpResponse.statusCode)
-        else {
-            return nil
+        guard let httpResponse = urlResponse as? HTTPURLResponse else {
+            return OptionalUsageResponse(data: nil, unavailableReason: "Invalid Grok Bot response")
         }
-        return data
+        if (200..<300).contains(httpResponse.statusCode) {
+            return OptionalUsageResponse(data: data, unavailableReason: nil)
+        }
+        let reason = switch httpResponse.statusCode {
+        case 401: "Grok Bot session was rejected. Reconnect Cursor."
+        case 403: "Cursor did not permit Grok Bot usage."
+        case 429: "Grok Bot refresh was rate limited. Try again later."
+        default: "Grok Bot is temporarily unavailable. Refresh to try again."
+        }
+        return OptionalUsageResponse(data: nil, unavailableReason: reason)
     }
 
     static func normalizedAccessToken(from storedSecret: String?) -> String? {
@@ -249,14 +288,14 @@ public final class CursorUsageProvider: UsageProvider {
     }
 
     private static func unavailableMetrics(
-        _ usage: CursorCurrentPeriodUsage, grokBotData: Data?, bars: [UsageBar]
+        _ usage: CursorCurrentPeriodUsage, grokBotData: Data?, bars: [UsageBar], grokBotFailureReason: String?
     ) -> [String: String] {
         let observed = Set(bars.compactMap(\.stableKey))
         var missing = Dictionary(uniqueKeysWithValues: CursorUsageIdentity.spendingChoices
             .filter { !observed.contains($0.key) }
             .map { ("cursor.\($0.key)", "Not reported") })
         if !observed.contains(CursorUsageIdentity.grokBotWeeklyStableKey) {
-            missing[CursorUsageIdentity.grokBotWeeklyMetricID] = grokBotUnavailableReason(grokBotData)
+            missing[CursorUsageIdentity.grokBotWeeklyMetricID] = grokBotFailureReason ?? grokBotUnavailableReason(grokBotData)
         }
         if !observed.contains(CursorUsageIdentity.onDemandStableKey) {
             missing[CursorUsageIdentity.onDemandMetricID] = onDemandUnavailableReason(usage.spendLimitUsage, grokBotData: grokBotData)
@@ -360,7 +399,8 @@ public final class CursorUsageProvider: UsageProvider {
             projectionLimit: billingPeriod == nil ? nil : 1,
             projectionPeriodStart: billingPeriod?.start,
             projectionPeriodEnd: billingPeriod?.end,
-            showProjectionOnCurrentBar: billingPeriod != nil
+            showProjectionOnCurrentBar: billingPeriod != nil,
+            usesMinimumPositivePercent: true
         )
     }
 
@@ -447,7 +487,8 @@ public final class CursorUsageProvider: UsageProvider {
     }
 
     private static func formatPercent(_ value: Double) -> String {
-        "\(Int(max(value, 0).rounded()))%"
+        let displayed = value > 0 && value < 1 ? 1 : max(value, 0)
+        return "\(Int(displayed.rounded()))%"
     }
 
     private static func formatCents(_ cents: Double) -> String {

@@ -131,6 +131,111 @@ final class GrokSignInUITests: XCTestCase {
         keepGrok("Deliberate credits-first Grok order retained", app: custom)
     }
 
+    func testCursorFreshPercentagesBotAndSavedChoices() {
+        let runID = UUID().uuidString
+        let app = launch(scenario: "grok-cursor-parity", runID: runID)
+        assertCursor(in: app, botText: "41%")
+        keep("Cursor fresh one and three with weekly Bot", app: app)
+        let disclosure = app.buttons["Synthetic Cursor, Cursor plan usage"]
+        disclosure.tap()
+        XCTAssertTrue(app.buttons["dashboard-metric-cursor.cursor-models"].waitForNonExistence(timeout: 5))
+        disclosure.tap()
+        assertCursor(in: app, botText: "41%")
+        app.buttons["dashboard-metric-cursor.cursor-models"].tap()
+        XCTAssertTrue(app.navigationBars["Metric Details"].waitForExistence(timeout: 5))
+        keep("Cursor fractional percentage detail", app: app)
+        app.buttons["Done"].tap()
+        openCursorCustomizer(in: app)
+        for key in ["cursor-models", "other-models", "grok-bot-weekly", "on-demand"] {
+            XCTAssertTrue(app.buttons["customize-metric-cursor.\(key)"].exists, app.debugDescription)
+        }
+        keep("Cursor all four customization choices", app: app)
+        let models = app.buttons["customize-metric-cursor.cursor-models"]
+        models.tap()
+        tapChoice("Tile Width", in: app)
+        tapChoice("Half", in: app)
+        models.tap()
+        tapChoice("Visualization", in: app)
+        tapChoice("Circular ring", in: app)
+        app.buttons["customize-metric-cursor.grok-bot-weekly"].tap()
+        tapChoice("Hide", in: app)
+        keep("Cursor Bot deliberately hidden", app: app)
+        app.buttons["Done"].tap()
+        XCTAssertFalse(app.buttons["dashboard-metric-cursor.grok-bot-weekly"].exists)
+        keep("Cursor saved ring and hidden Bot dashboard", app: app)
+        app.terminate()
+
+        let restored = launch(scenario: "grok-cursor-parity", runID: runID, reset: false)
+        let modelsRestored = loadedCursorModels(in: restored)
+        XCTAssertTrue(modelsRestored.waitForExistence(timeout: 10), restored.debugDescription)
+        XCTAssertFalse(restored.buttons["dashboard-metric-cursor.grok-bot-weekly"].exists)
+        let otherRestored = restored.buttons["dashboard-metric-cursor.other-models"]
+        XCTAssertTrue(otherRestored.wait(for: \.isHittable, toEqual: true, timeout: 5), restored.debugDescription)
+        XCTAssertTrue(modelsRestored.wait(for: \.isHittable, toEqual: true, timeout: 5), restored.debugDescription)
+        XCTAssertLessThan(modelsRestored.frame.width, otherRestored.frame.width)
+        XCTAssertGreaterThan(modelsRestored.frame.height, otherRestored.frame.height)
+        openCursorCustomizer(in: restored)
+        let show = restored.buttons["Show Grok Bot weekly"]
+        for _ in 0..<4 where !show.isHittable { restored.swipeUp() }
+        XCTAssertTrue(show.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        show.tap()
+        keep("Cursor hidden Bot restored from saved customization", app: restored)
+        restored.buttons["Done"].tap()
+        assertCursor(in: restored, botText: "41%")
+        restored.buttons["Refresh usage"].tap()
+        XCTAssertTrue(restored.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Fixture refresh failed"))
+            .firstMatch.waitForExistence(timeout: 10), restored.debugDescription)
+        XCTAssertTrue(modelsRestored.label.contains("1%"), modelsRestored.label)
+        XCTAssertTrue(restored.buttons["dashboard-metric-cursor.other-models"].label.contains("3%"))
+        XCTAssertTrue(modelsRestored.label.contains("stale"), modelsRestored.label)
+        keep("Cursor failed refresh retains measured usage as stale", app: restored)
+        restored.buttons["Refresh usage"].tap()
+        let recovered = restored.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@", "dashboard-metric-cursor.cursor-models", "fresh"
+        )).firstMatch
+        XCTAssertTrue(recovered.waitForExistence(timeout: 10), restored.debugDescription)
+        assertCursor(in: restored, botText: "41%")
+        keep("Cursor recovered measured usage and saved layout", app: restored)
+        restored.terminate()
+
+        let unavailable = launch(scenario: "grok-cursor-parity-unavailable")
+        assertCursor(in: unavailable, botText: "Cursor did not permit Grok Bot usage.")
+        keep("Cursor unavailable Bot does not become zero or erase models", app: unavailable)
+        openCursorCustomizer(in: unavailable)
+        XCTAssertTrue(unavailable.buttons["customize-metric-cursor.grok-bot-weekly"].exists)
+        keep("Cursor unavailable Bot remains customizable", app: unavailable)
+    }
+
+    private func assertCursor(in app: XCUIApplication, botText: String) {
+        let models = loadedCursorModels(in: app)
+        let other = app.buttons["dashboard-metric-cursor.other-models"]
+        let bot = app.buttons["dashboard-metric-cursor.grok-bot-weekly"]
+        XCTAssertTrue(models.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(other.label.contains("3%"), other.label)
+        XCTAssertTrue(bot.label.contains(botText), bot.label)
+        XCTAssertTrue(app.buttons["dashboard-metric-cursor.on-demand"].exists)
+    }
+
+    private func loadedCursorModels(in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@", "dashboard-metric-cursor.cursor-models", "1%"
+        )).firstMatch
+    }
+
+    private func openCursorCustomizer(in app: XCUIApplication) {
+        let menu = app.buttons["More options for Synthetic Cursor"]
+        XCTAssertTrue(menu.wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
+        menu.tap()
+        tapChoice("Customize Card…", in: app)
+        XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
+    }
+
+    private func tapChoice(_ label: String, in app: XCUIApplication) {
+        let choice = app.buttons[label].firstMatch
+        XCTAssertTrue(choice.wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
+        choice.tap()
+    }
+
     private func assertWeeklyBeforeCredits(in app: XCUIApplication, percent: String) {
         let weekly = app.buttons["dashboard-metric-grok.included-usage"]
         let credits = app.buttons["dashboard-metric-grok.monetary.balance.usd"]
@@ -150,7 +255,9 @@ final class GrokSignInUITests: XCTestCase {
             "CODEXBAR_UI_TEST_RUN_ID": runID,
             "CODEXBAR_UI_TEST_RESET": reset ? "1" : "0",
             "CODEXBAR_UI_TEST_SCENARIO": scenario,
+            "CODEXBAR_UI_TEST_DEFAULT_TEXT": scenario.hasPrefix("grok-cursor-parity") ? "1" : "0",
         ]
+        if scenario.hasPrefix("grok-cursor-parity") { app.launchEnvironment["CODEXBAR_UI_TEST_DARK"] = "0" }
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         return app
