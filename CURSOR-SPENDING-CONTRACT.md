@@ -82,8 +82,9 @@ URL cache. This prevents a refresh from intentionally choosing a locally
 cached response or adding another browser/account cookie. It does not prove
 that HTTP cache or cookies caused the affected live snapshot's zero values.
 
-The independent Bot read now has a five-second request timeout and cancellable
-deadline, with no retry. A valid 2.5-second reply survives; the previous default
+The independent Bot read now has a five-second cancellable deadline and a
+six-second transport backstop, with no retry. The later backstop lets the task
+deadline own cancellation rather than race URLSession's timeout. A valid 2.5-second reply survives; the previous default
 dropped it. Timeout, transport failure, invalid response, rejected session,
 forbidden access and rate limiting retain distinct bounded explanations where
 verified. Missing percent and explicit absent/team allowances retain the old

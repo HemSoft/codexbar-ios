@@ -101,7 +101,8 @@ public final class CursorUsageProvider: UsageProvider {
         var request = makeUsageRequest(endpoint: grokBotUsageEndpoint, accessToken: accessToken)
         let timeout = grokBotRequestTimeout
         let parts = timeout.components
-        request.timeoutInterval = max(0.001, Double(parts.seconds) + Double(parts.attoseconds) / 1e18)
+        // Let the task deadline own cancellation; transport timeout is a later backstop.
+        request.timeoutInterval = max(1, Double(parts.seconds) + Double(parts.attoseconds) / 1e18 + 1)
         let timedRequest = request
         let waitForTimeout = waitForGrokBotTimeout
 
