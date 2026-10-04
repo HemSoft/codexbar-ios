@@ -105,12 +105,18 @@ final class ProviderSettingsViewModel: ObservableObject {
     private var grokAuthPresenter = PrivateWebAuthenticationPresenter()
     private var grokSignInTask: Task<Void, Never>?
     private var grokAttemptID: UUID?
-    private let cursorAuthService: CursorWebAuthService
+    private let cursorAuthService: any CursorWebAuthenticating
     private let copilotUsageProvider: CopilotUsageProvider
     private var codexSignInTask: Task<Void, Never>?
     private let codexAuthPresenter: any CodexBrowserPresenting
     private var cursorSignInTask: Task<Void, Never>?
-    private var cursorAuthPresenter = PrivateWebAuthenticationPresenter()
+    private var cursorAuthPresenter: any CodexBrowserPresenting = PrivateWebAuthenticationPresenter()
+    #if DEBUG
+    @Published var cursorFixtureStage: GrokFixtureStage?
+    private var cursorFixtureFlow: UITestCursorAuthFlow?
+    func approveSyntheticCursorSignIn() { cursorFixtureFlow?.approve() }
+    func cancelSyntheticCursorSignIn() { cursorSignInTask?.cancel(); cursorFixtureFlow?.finish() }
+    #endif
     private var debugAutostartedCopilotAuth = false
     private var pendingPersistenceTask: Task<Void, Never>?
     private var pendingConfiguration: ProviderAccountConfiguration?
@@ -142,7 +148,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         claudeAuthService: ClaudeWebAuthService = ClaudeWebAuthService(),
         grokAuthService: GrokDeviceAuthService = GrokDeviceAuthService(),
         grokUsageProvider: GrokUsageProvider = GrokUsageProvider(),
-        cursorAuthService: CursorWebAuthService = CursorWebAuthService(),
+        cursorAuthService: any CursorWebAuthenticating = CursorWebAuthService(),
         copilotUsageProvider: CopilotUsageProvider = CopilotUsageProvider()
     ) {
         self.configurationStore = configurationStore
@@ -163,11 +169,24 @@ final class ProviderSettingsViewModel: ObservableObject {
         self.claudeAuthService = claudeAuthService
         self.grokAuthService = grokAuthService
         self.grokUsageProvider = grokUsageProvider
+        #if DEBUG
+        if UITestFixtures.current != nil,
+           ProcessInfo.processInfo.environment["CODEXBAR_UI_TEST_SCENARIO"]?.hasPrefix("grok-cursor-session") == true {
+            let fixture = UITestCursorAuthFlow()
+            self.cursorFixtureFlow = fixture
+            self.cursorAuthService = fixture
+            self.cursorAuthPresenter = fixture
+        } else { self.cursorAuthService = cursorAuthService }
+        #else
         self.cursorAuthService = cursorAuthService
+        #endif
         self.copilotUsageProvider = copilotUsageProvider
         self.configuration = configurationStore.configuration(accountID: accountID)
             ?? ProviderID(rawValue: accountID).map(ProviderAccountConfiguration.defaultConfiguration)
             ?? .defaultConfiguration(for: .codex)
+        #if DEBUG
+        cursorFixtureFlow?.stageChanged = { [weak self] in self?.cursorFixtureStage = $0 }
+        #endif
     }
 
     var providerID: ProviderID {
@@ -1512,10 +1531,11 @@ final class ProviderSettingsViewModel: ObservableObject {
 
         do {
             let result = try await cursorAuthService.signIn { url in
-                self.cursorAuthPresenter.present(url: url) {
+                self.cursorAuthPresenter.present(url: url, prefersEphemeralSession: true) {
                     self.cursorSignInTask?.cancel()
                 }
             }
+            try Task.checkCancellation()
             flushPendingChanges()
             guard let connected = configurationStore.connectCursorAccount(
                 configuration,

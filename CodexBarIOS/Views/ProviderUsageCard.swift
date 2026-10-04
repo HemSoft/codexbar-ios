@@ -606,11 +606,14 @@ struct ProviderUsageCard: View {
             if showsRecoveryAction {
                 Button(action: onRetry) {
                     Label(recoveryActionTitle, systemImage: recoveryActionSystemImage)
+                        .frame(minHeight: result.providerID == .cursor ? 44 : nil)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .accessibilityHint(recoveryAccessibilityHint)
             }
+
+            CursorStaleUsageNotice(result: result)
 
             if let recoveryStatusMessage {
                 Text(recoveryStatusMessage)
@@ -1037,9 +1040,11 @@ struct ProviderUsageCard: View {
         case .retryRefresh:
             "Retry"
         case .signIn:
-            result.providerID == .claude ? "Sign in with Claude" : "Open account settings"
+            result.providerID == .cursor ? "Sign in with Cursor"
+                : result.providerID == .claude ? "Sign in with Claude" : "Open account settings"
         case .reauthenticate:
-            result.providerID == .claude ? "Sign in again" : "Update credentials"
+            result.providerID == .cursor ? "Reconnect Cursor"
+                : result.providerID == .claude ? "Sign in again" : "Update credentials"
         }
     }
 
@@ -1865,6 +1870,7 @@ struct ProviderUsagePlaceholderCard: View {
                 } else {
                     Button(action: onRetry) {
                         Label(recoveryActionTitle, systemImage: recoveryActionSystemImage)
+                            .frame(minHeight: configuration.providerID == .cursor ? 44 : nil)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -1919,9 +1925,11 @@ struct ProviderUsagePlaceholderCard: View {
         case .retryRefresh:
             "Retry"
         case .signIn:
-            configuration.providerID == .claude ? "Sign in with Claude" : "Open account settings"
+            configuration.providerID == .cursor ? "Sign in with Cursor"
+                : configuration.providerID == .claude ? "Sign in with Claude" : "Open account settings"
         case .reauthenticate:
-            configuration.providerID == .claude ? "Sign in again" : "Update credentials"
+            configuration.providerID == .cursor ? "Reconnect Cursor"
+                : configuration.providerID == .claude ? "Sign in again" : "Update credentials"
         }
     }
 

@@ -456,6 +456,7 @@ enum CodexAccountIdentityValidation: Equatable {
 @MainActor
 public final class ProviderConfigurationStore: ObservableObject {
     let credentialChanges = PassthroughSubject<String, Never>()
+    let cursorHistoryInvalidations = PassthroughSubject<String, Never>()
     let grokHistoryInvalidations = PassthroughSubject<String, Never>()
     @Published public private(set) var confirmedGoogleAccountLinks: [String: String]
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
@@ -1757,33 +1758,6 @@ public final class ProviderConfigurationStore: ObservableObject {
         return statusText(for: configuration)
     }
 
-    public func cursorAccountLabelAfterIdentityChange(for configuration: ProviderAccountConfiguration) -> String {
-        guard configuration.providerID == .cursor else {
-            return configuration.accountLabel
-        }
-
-        let currentLabel = configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard currentLabel.isEmpty || Self.looksLikeEmailAddress(currentLabel) else {
-            return configuration.accountLabel
-        }
-
-        let base = ProviderID.cursor.displayName
-        let otherNames = configurations
-            .filter { $0.id != configuration.id }
-            .map(\.displayName)
-        if !otherNames.contains(where: { $0.localizedCaseInsensitiveCompare(base) == .orderedSame }) {
-            return ""
-        }
-
-        var index = 2
-        while otherNames.contains(where: {
-            $0.localizedCaseInsensitiveCompare("\(base) \(index)") == .orderedSame
-        }) {
-            index += 1
-        }
-        return "\(base) \(index)"
-    }
-
     @discardableResult
     public func connectCursorAccount(
         _ configuration: ProviderAccountConfiguration,
@@ -1806,7 +1780,10 @@ public final class ProviderConfigurationStore: ObservableObject {
             return nil
         }
 
+        let identityChanged: Bool
         do {
+            let previous = try secretStore.readSecret(account: keychainAccount(for: configuration))
+            identityChanged = Self.cursorIdentityChanged(previous: previous, replacement: credential)
             try secretStore.saveSecret(credential, account: keychainAccount(for: configuration))
         } catch {
             lastError = error.localizedDescription
@@ -1817,6 +1794,8 @@ public final class ProviderConfigurationStore: ObservableObject {
             refreshSecretAvailability()
             return nil
         }
+        if identityChanged { cursorHistoryInvalidations.send(configuration.id) }
+        credentialChanges.send(configuration.id)
         lastError = nil
         refreshSecretAvailability()
         return connectedConfiguration
@@ -1849,6 +1828,8 @@ public final class ProviderConfigurationStore: ObservableObject {
             return nil
         }
 
+        cursorHistoryInvalidations.send(configuration.id)
+        credentialChanges.send(configuration.id)
         lastError = nil
         refreshSecretAvailability()
         return disconnectedConfiguration
@@ -2637,6 +2618,28 @@ private struct AppStoreScreenshotSecretStore: SecretStore {
 #endif
 
 public extension ProviderConfigurationStore {
+    func cursorAccountLabelAfterIdentityChange(for configuration: ProviderAccountConfiguration) -> String {
+        guard configuration.providerID == .cursor else { return configuration.accountLabel }
+        let currentLabel = configuration.accountLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard currentLabel.isEmpty || Self.looksLikeEmailAddress(currentLabel) else { return configuration.accountLabel }
+        let base = ProviderID.cursor.displayName
+        let otherNames = configurations.filter { $0.id != configuration.id }.map(\.displayName)
+        if !otherNames.contains(where: { $0.localizedCaseInsensitiveCompare(base) == .orderedSame }) { return "" }
+        var index = 2
+        while otherNames.contains(where: { $0.localizedCaseInsensitiveCompare("\(base) \(index)") == .orderedSame }) {
+            index += 1
+        }
+        return "\(base) \(index)"
+    }
+
+    private static func cursorIdentityChanged(previous: String?, replacement: String) -> Bool {
+        guard let previous else { return false }
+        // Account IDs here came from browser authorization, never unsigned token claims.
+        guard let previousID = CursorSessionCredential(storedSecret: previous)?.authID,
+              let replacementID = CursorSessionCredential(storedSecret: replacement)?.authID else { return true }
+        return previousID != replacementID
+    }
+
     /// Save a missing Google source only when the user opens its setup controls.
     func prepareDashboardAccountForSetup(
         _ configuration: ProviderAccountConfiguration

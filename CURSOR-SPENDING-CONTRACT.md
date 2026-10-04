@@ -120,3 +120,53 @@ The original screenshot demonstrates the reference display, not the phone's
 failing wire response. Franz owns the affected-account comparison after the
 build is delivered. No new Groq integration, grant linking, purchases, manual
 credential import, or automatic CI test expansion belongs to this change.
+
+## Session renewal and reconnection
+
+For [issue #402](https://github.com/HemSoft/codexbar-ios/issues/402), the same
+first-party client checks the saved token's numeric JWT `exp` before use and
+starts renewal within its 1,272-hour, 53-day lifetime window. It renews through `POST https://api2.cursor.sh/oauth/token`. Its JSON request uses
+`grant_type: refresh_token`, the published public client ID and a refresh grant.
+The response returns `access_token`, may return `refresh_token`, and can require
+logout with `shouldLogout`. Without a rotated refresh token, the first-party
+client uses the new access token as its next grant. No live credential was read
+to inspect this contract.
+
+CodexBar treats an ended numeric lifetime as a renewal hint, not authenticated
+identity. Unsigned `sub` and other JWT identity claims are never used to choose
+an account. With a saved refresh grant, the same early lifetime window and primary HTTP
+401/403 can perform at most one renewal and one subsequent quota read. If early
+renewal fails while the token remains unexpired, independently valid primary
+usage can still succeed, including fresh zero. That attempt cannot be repeated
+within the same refresh. An ended lifetime or primary rejection requires recovery. A verified
+`shouldLogout: true` response also requires reconnection even when its HTTP
+status is 200; it cannot fall back to zero quota from the old credential. Renewal requests
+have a 15-second timeout, no cache or cookies, and the default session rejects
+redirects. Keychain replacement is serialized with phone reconnection and only
+occurs while the original account credential is still current. Canceled work
+cannot rotate credentials or publish a result.
+
+When no grant exists, or renewal is rejected, malformed, unavailable or cannot
+be saved, a reconnect action is shown. It opens the existing private browser
+sign-in from account Settings, without sign-out, credential import or OAuth
+settings. Canceled sign-in leaves the saved account unchanged. Successful
+browser replacement invalidates prior in-flight observations; a different or
+unknown saved identity clears the previous account's history. Known same-account
+reconnection preserves history and saved metric choices.
+
+Collection failures retain same-account measured values with their original
+measurement timestamp and an explicit last-known-data warning, or show no
+readings when none exist. Failed results are excluded from successful-refresh
+History, forecasts and quota alerts. Widgets and Watch receive the same stale
+status and measurement time. Bot-only authorization or transport failure does
+not reject independently valid primary usage. A valid current 0% / 0% response
+is still fresh zero and never triggers reconnection by itself.
+
+The October 4 phone capture established HTTP 200 with explicit 0% / 0% at the
+response boundary. Franz later reported that sign-out/sign-in restored usage,
+and corrected the earlier comparison to 1% / 13%. Neither observation proves
+expiration or an account switch. There is no independently verified marker for
+an unusable yet unexpired or opaque credential returning a successful zero-only
+response. This implementation does not invent one. Local regressions cover the
+verified lifetime/rejection handling contract, not that earlier live mechanism.
+Live renewal and quota parity remain pending Franz's account testing.

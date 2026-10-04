@@ -128,7 +128,8 @@ final class UITestFixtures {
         }
         refreshService = UsageRefreshService(providers: providers, initialResults: results)
         if (greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1")
-            || scenario?.hasPrefix("grok-cursor-parity") == true {
+            || scenario?.hasPrefix("grok-cursor-parity") == true
+            || scenario?.hasPrefix("grok-cursor-session") == true {
             // These routes must load the real provider before evidence is captured.
             let service = refreshService
             let accounts = configurationStore.configurations
@@ -157,7 +158,7 @@ final class UITestFixtures {
         if scenario?.hasPrefix("codex-") == true { return codexResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("claude-") == true { return claudeResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("github-billing") == true { return githubBillingResult(for: configuration) }
-        if scenario?.hasPrefix("grok-cursor-parity") == true {
+        if scenario?.hasPrefix("grok-cursor-parity") == true || scenario?.hasPrefix("grok-cursor-session") == true {
             return ProviderUsageResult(
                 accountID: configuration.id, providerID: .cursor, title: configuration.displayName,
                 subtitle: "Waiting for synthetic Cursor response", bars: [], fetchedAt: Date()
@@ -402,7 +403,7 @@ final class UITestFixtures {
     }
 
     private static func seedGrokAccounts(in store: ProviderConfigurationStore, scenario: String?) {
-        let cursorOnly = scenario?.hasPrefix("grok-cursor-parity") == true
+        let cursorOnly = scenario?.hasPrefix("grok-cursor-parity") == true || scenario?.hasPrefix("grok-cursor-session") == true
         let grok = ProviderAccountConfiguration(
             id: "ui-grok-connected", providerID: .grok, accountLabel: "SuperGrok Lite",
             grokGeneratedLabel: "SuperGrok Lite", authMethod: .browserSession
@@ -413,7 +414,9 @@ final class UITestFixtures {
         )
         for account in cursorOnly ? [cursor] : [grok, cursor] {
             _ = store.update(account)
-            _ = store.saveSecret("ui-test-credential", for: account)
+            let secret = scenario?.hasPrefix("grok-cursor-session") == true
+                ? cursorSessionCredential(expired: scenario?.contains("no-prior") == true) : "ui-test-credential"
+            _ = store.saveSecret(secret, for: account)
         }
     }
 
@@ -467,6 +470,18 @@ final class UITestFixtures {
                 accountID: account.id, providerID: .grok, title: account.displayName,
                 subtitle: "Synthetic Grok usage unavailable", bars: [], fetchedAt: now
             )
+    }
+
+    nonisolated static func cursorSessionToken(expired: Bool) -> String {
+        let payload = Data("{\"exp\":\(expired ? 1 : 2_524_608_000)}".utf8).base64EncodedString()
+            .replacingOccurrences(of: "=", with: "").replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+        return "eyJhbGciOiJIUzI1NiJ9.\(payload).synthetic-signature"
+    }
+
+    nonisolated static func cursorSessionCredential(expired: Bool) -> String {
+        CursorWebAuthResult(
+            accessToken: cursorSessionToken(expired: expired), refreshToken: nil, authID: "ui-cursor-owner", userID: nil
+        ).storedCredential
     }
 
     nonisolated static func cursorResult(
@@ -1149,7 +1164,8 @@ private struct UITestSecretStore: SecretStore {
         let coding = try? AntigravityCredentials.parse(secret)
         let expectedCoding = try AntigravityCredentials.parse(UITestFixtures.codingCredential)
         let codex = ["personal", "work"].contains { secret == UITestFixtures.codexCredential(for: $0) }
-        guard secret == "ui-test-credential" || coding == expectedCoding || codex else {
+        let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }
+        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor else {
             throw UITestFixtureError.invalidCredential
         }
         UserDefaults(suiteName: suite)?.set(secret, forKey: "fixture-secret.\(account)")
@@ -1225,11 +1241,16 @@ private actor UITestCursorProvider: UsageProvider {
     }
 
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
-        guard let scenario, scenario.hasPrefix("grok-cursor-parity") else {
+        guard let scenario, scenario.hasPrefix("grok-cursor-parity") || scenario.hasPrefix("grok-cursor-session") else {
             return UITestFixtures.cursorResult(for: configuration, scenario: scenario)
         }
         stage += 1
-        if stage == 2 { throw UITestFixtureError.refreshFailed }
+        if stage == 2 && scenario.hasPrefix("grok-cursor-parity") { throw UITestFixtureError.refreshFailed }
+        if stage == 2 && scenario.contains("session-stale") {
+            try secretStore.saveSecret(
+                UITestFixtures.cursorSessionCredential(expired: true), account: ProviderConfigurationStore.keychainAccount(for: configuration)
+            )
+        }
         let settings = URLSessionConfiguration.ephemeral
         settings.protocolClasses = [UITestCursorParityProtocol.self]
         settings.httpCookieStorage = nil
@@ -1264,10 +1285,10 @@ private final class UITestCursorParityProtocol: URLProtocol, @unchecked Sendable
         if url.lastPathComponent == "GetCurrentPeriodUsage" {
             let fresh = request.cachePolicy == .reloadIgnoringLocalCacheData
             complete(status: 200, body: fresh
-                     ? #"{"planUsage":{"autoPercentUsed":0.1,"apiPercentUsed":3}}"#
+                     ? Self.currentBody(for: url)
                      : #"{"planUsage":{"autoPercentUsed":0,"apiPercentUsed":0}}"#)
         } else if url.lastPathComponent == "GetSandUsageStatus" {
-            if url.path.contains("unavailable") {
+            if url.path.contains("unavailable") || url.path.contains("grok-cursor-session") {
                 complete(status: 403, body: "{}")
             } else {
                 let reset = ISO8601DateFormatter().string(from: Date().addingTimeInterval(5 * 86_400))
@@ -1281,6 +1302,12 @@ private final class UITestCursorParityProtocol: URLProtocol, @unchecked Sendable
         }
     }
 
+    private static func currentBody(for url: URL) -> String {
+        if url.path.contains("session-zero") { return #"{"planUsage":{"autoPercentUsed":0,"apiPercentUsed":0}}"# }
+        if url.path.contains("grok-cursor-session") { return #"{"planUsage":{"autoPercentUsed":0.1,"apiPercentUsed":13}}"# }
+        return #"{"planUsage":{"autoPercentUsed":0.1,"apiPercentUsed":3}}"#
+    }
+
     private func complete(status: Int, body: String) {
         lock.withLock {
             guard !stopped, let url = request.url,
@@ -1289,6 +1316,43 @@ private final class UITestCursorParityProtocol: URLProtocol, @unchecked Sendable
             client?.urlProtocol(self, didLoad: Data(body.utf8))
             client?.urlProtocolDidFinishLoading(self)
         }
+    }
+}
+
+@MainActor
+final class UITestCursorAuthFlow: CursorWebAuthenticating, CodexBrowserPresenting {
+    var stageChanged: ((GrokFixtureStage?) -> Void)?
+    private var continuation: CheckedContinuation<CursorWebAuthResult, Error>?
+
+    func present(url: URL, prefersEphemeralSession: Bool, onCancel: @escaping () -> Void) -> Bool {
+        stageChanged?(.approval)
+        return true
+    }
+
+    func signIn(presentAuthorizationURL: @escaping @MainActor (URL) -> Bool) async throws -> CursorWebAuthResult {
+        guard presentAuthorizationURL(CursorWebAuthService.authorizationURL(uuid: "synthetic", codeChallenge: "synthetic")) else {
+            throw CursorWebAuthService.AuthError.couldNotStartBrowserSession
+        }
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation = $0 }
+        } onCancel: { Task { @MainActor in self.finish() } }
+    }
+
+    func approve() {
+        let waiting = continuation
+        continuation = nil
+        waiting?.resume(returning: CursorWebAuthResult(
+            accessToken: UITestFixtures.cursorSessionToken(expired: false), refreshToken: nil,
+            authID: "ui-cursor-owner", userID: nil
+        ))
+    }
+
+    func finish() {
+        let waiting = continuation
+        continuation = nil
+        waiting?.resume(throwing: CancellationError())
+        stageChanged?(nil)
     }
 }
 

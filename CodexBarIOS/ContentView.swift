@@ -444,6 +444,7 @@ struct ContentView: View {
                     initialUsageResult: orchestrator.dashboardCardItems.first {
                         $0.id == presentation.accountID
                     }?.result,
+                    startsCursorSignIn: presentation.startsCursorSignIn,
                     onCredentialsChanged: {
                         accountConfigurationNavigation.credentialsChanged()
                     },
@@ -853,15 +854,19 @@ struct ContentView: View {
         case .claudeSignIn:
             claudeAuthenticationController.startSignIn(for: item.configuration)
         case .accountSettings:
-            configureDashboardAccount(item.configuration)
+            configureDashboardAccount(item.configuration, startsCursorSignIn: item.configuration.providerID == .cursor)
         }
     }
 
-    private func configureDashboardAccount(_ configuration: ProviderAccountConfiguration) {
+    private func configureDashboardAccount(
+        _ configuration: ProviderAccountConfiguration, startsCursorSignIn: Bool = false
+    ) {
         guard let saved = configurationStore.prepareDashboardAccountForSetup(configuration) else { return }
         let needsGoogleSetup = [.gemini, .antigravity].contains(saved.providerID)
             && !configurationStore.isConfigured(saved)
-        accountConfigurationNavigation.present(accountID: saved.id, refreshOnDismiss: !needsGoogleSetup)
+        accountConfigurationNavigation.present(
+            accountID: saved.id, refreshOnDismiss: !needsGoogleSetup, startsCursorSignIn: startsCursorSignIn
+        )
     }
 
     private func toggleDashboardCardExpansion(_ accountID: String) {
@@ -1097,6 +1102,7 @@ struct DashboardDeepLinkNavigationState: Equatable {
 
 struct DashboardAccountConfigurationPresentation: Identifiable, Equatable {
     let accountID: String
+    var startsCursorSignIn = false
 
     var id: String {
         accountID
@@ -1141,9 +1147,9 @@ struct DashboardAccountConfigurationNavigationState: Equatable {
     private(set) var presentation: DashboardAccountConfigurationPresentation?
     private var accountIDAwaitingDismissalRefresh: String?
 
-    mutating func present(accountID: String, refreshOnDismiss: Bool = true) {
+    mutating func present(accountID: String, refreshOnDismiss: Bool = true, startsCursorSignIn: Bool = false) {
         guard presentation?.accountID != accountID else { return }
-        presentation = DashboardAccountConfigurationPresentation(accountID: accountID)
+        presentation = DashboardAccountConfigurationPresentation(accountID: accountID, startsCursorSignIn: startsCursorSignIn)
         accountIDAwaitingDismissalRefresh = refreshOnDismiss ? accountID : nil
     }
 

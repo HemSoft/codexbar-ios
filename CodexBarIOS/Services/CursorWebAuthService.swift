@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 #if canImport(AuthenticationServices) && canImport(UIKit)
 import AuthenticationServices
@@ -33,7 +34,201 @@ public struct CursorWebAuthResult: Equatable, Sendable {
     }
 }
 
-public final class CursorWebAuthService: Sendable {
+struct CursorSessionCredential: Sendable {
+    let accessToken: String
+    let refreshToken: String?
+    let authID: String?
+    let userID: String?
+    let storedSecret: String
+
+    init?(storedSecret: String) {
+        guard let accessToken = Self.validToken(CursorUsageProvider.normalizedAccessToken(from: storedSecret)) else { return nil }
+        let saved = try? JSONDecoder().decode(SavedSession.self, from: Data(storedSecret.utf8))
+        self.accessToken = accessToken
+        self.refreshToken = saved?.refreshToken
+        self.authID = saved?.authID?.isEmpty == false ? saved?.authID : nil
+        self.userID = saved?.userID
+        self.storedSecret = storedSecret
+    }
+
+    static func validToken(_ token: String?) -> String? {
+        guard let token = token?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else { return nil }
+        guard !token.contains(where: \.isWhitespace), !token.hasPrefix("{") else { return nil }
+        return token
+    }
+
+    // JWT lifetime is a renewal hint only. No unsigned identity claim authorizes an account.
+    func needsRenewal(at date: Date) -> Bool {
+        guard let expiry = Self.expiration(of: accessToken) else { return false }
+        return expiry <= date.timeIntervalSince1970
+    }
+
+    func shouldAttemptEarlyRenewal(at date: Date) -> Bool {
+        guard let refreshToken, !refreshToken.isEmpty, let expiry = Self.expiration(of: accessToken) else { return false }
+        // Cursor 3.22.7's first-party ypr lifetime window, in seconds.
+        return expiry <= date.timeIntervalSince1970 + 1272 * 60 * 60
+    }
+
+    var cacheIdentity: String {
+        let identity = authID ?? storedSecret
+        return SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func expiration(of token: String) -> Double? {
+        let pieces = token.split(separator: ".", omittingEmptySubsequences: false)
+        guard pieces.count == 3, pieces[1].count < 16_384 else { return nil }
+        let payload = String(pieces[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        let padded = payload + String(repeating: "=", count: (4 - payload.count % 4) % 4)
+        return expiration(in: Data(base64Encoded: padded))
+    }
+
+    private static func expiration(in payload: Data?) -> Double? {
+        guard let payload, let claims = try? JSONDecoder().decode(LifetimeClaim.self, from: payload) else { return nil }
+        guard let expiry = claims.exp, expiry.isFinite, expiry > 0 else { return nil }
+        return expiry
+    }
+
+    private struct LifetimeClaim: Decodable { let exp: Double? }
+    private struct SavedSession: Decodable {
+        let refreshToken: String?
+        let authID: String?
+        let userID: String?
+        enum CodingKeys: String, CodingKey {
+            case refreshToken
+            case authID = "authId"
+            case userID = "userId"
+        }
+    }
+}
+
+enum CursorSessionFailure: Error, Equatable {
+    case needsRenewal, rejected, invalidated, renewalUnavailable, persistenceFailed, changed
+
+    var message: String {
+        switch self {
+        case .needsRenewal: "Cursor sign-in needs renewal. Reconnect to refresh usage."
+        case .rejected, .invalidated: "Cursor rejected this sign-in. Reconnect to refresh usage."
+        default: renewalFailureMessage
+        }
+    }
+
+    private var renewalFailureMessage: String {
+        switch self {
+        case .persistenceFailed: "Could not securely save renewed Cursor sign-in. Reconnect to try again."
+        case .changed: "Cursor account changed during refresh. Refresh the current account."
+        default: "Could not renew Cursor sign-in. Reconnect to refresh usage."
+        }
+    }
+
+    var recoveryAction: ProviderUsageRecoveryAction { self == .changed ? .retryRefresh : .reauthenticate }
+}
+
+struct CursorSessionRenewal: Sendable {
+    let secretStore: SecretStore
+    let session: URLSession
+
+    func renew(_ credential: CursorSessionCredential, account: String) async throws -> CursorSessionCredential {
+        try Task.checkCancellation()
+        guard let refreshToken = credential.refreshToken, !refreshToken.isEmpty else {
+            throw CursorSessionFailure.needsRenewal
+        }
+        let (data, response) = try await session.data(for: Self.request(refreshToken: refreshToken))
+        try Task.checkCancellation()
+        try Self.validate(response)
+        let updated = try Self.updatedCredential(data, replacing: credential)
+        try await persist(updated, replacing: credential, account: account)
+        return updated
+    }
+
+    private static func request(refreshToken: String) -> URLRequest {
+        // Public first-party desktop renewal contract. The client ID is not a secret.
+        var request = URLRequest(url: URL(string: "https://api2.cursor.sh/oauth/token")!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.httpShouldHandleCookies = false
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.httpBody = try? JSONEncoder().encode([
+            "grant_type": "refresh_token", "client_id": "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB", "refresh_token": refreshToken,
+        ])
+        return request
+    }
+
+    private static func validate(_ response: URLResponse) throws {
+        guard let response = response as? HTTPURLResponse else { throw CursorSessionFailure.renewalUnavailable }
+        if [400, 401, 403].contains(response.statusCode) { throw CursorSessionFailure.rejected }
+        guard (200..<300).contains(response.statusCode) else { throw CursorSessionFailure.renewalUnavailable }
+    }
+
+    private static func updatedCredential(
+        _ data: Data, replacing credential: CursorSessionCredential
+    ) throws -> CursorSessionCredential {
+        // Honor the verified invalidation directive even if another optional field is malformed.
+        if (try? JSONDecoder().decode(LogoutDirective.self, from: data))?.shouldLogout == true {
+            throw CursorSessionFailure.invalidated
+        }
+        guard let reply = try? JSONDecoder().decode(RenewalResponse.self, from: data) else {
+            throw CursorSessionFailure.renewalUnavailable
+        }
+        if reply.error != nil { throw CursorSessionFailure.rejected }
+        return try Self.credential(from: reply, replacing: credential)
+    }
+
+    private static func credential(
+        from reply: RenewalResponse, replacing original: CursorSessionCredential
+    ) throws -> CursorSessionCredential {
+        guard let token = CursorSessionCredential.validToken(reply.accessToken) else {
+            throw CursorSessionFailure.renewalUnavailable
+        }
+        // The refresh grant binds the account. Preserve saved metadata, never infer identity from JWT claims.
+        let result = CursorWebAuthResult(
+            accessToken: token, refreshToken: reply.refreshToken ?? token, authID: original.authID, userID: original.userID
+        )
+        guard let credential = CursorSessionCredential(storedSecret: result.storedCredential),
+              !credential.needsRenewal(at: Date()) else { throw CursorSessionFailure.rejected }
+        return credential
+    }
+
+    @MainActor
+    private func persist(
+        _ updated: CursorSessionCredential, replacing original: CursorSessionCredential, account: String
+    ) throws {
+        try Task.checkCancellation()
+        guard try secretStore.readSecret(account: account) == original.storedSecret else { throw CursorSessionFailure.changed }
+        do { try secretStore.saveSecret(updated.storedSecret, account: account) } catch {
+            throw CursorSessionFailure.persistenceFailed
+        }
+    }
+
+    private struct LogoutDirective: Decodable { let shouldLogout: Bool? }
+
+    private struct RenewalResponse: Decodable {
+        let accessToken: String?
+        let refreshToken: String?
+        let error: String?
+        enum CodingKeys: String, CodingKey {
+            case accessToken = "access_token"
+            case refreshToken = "refresh_token"
+            case error
+        }
+    }
+}
+
+final class CursorRejectRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) { completionHandler(nil) }
+}
+
+public protocol CursorWebAuthenticating: Sendable {
+    @MainActor
+    func signIn(presentAuthorizationURL: @escaping @MainActor (URL) -> Bool) async throws -> CursorWebAuthResult
+}
+
+public final class CursorWebAuthService: CursorWebAuthenticating {
     public enum AuthError: LocalizedError, Equatable {
         case missingToken
         case couldNotStartBrowserSession
