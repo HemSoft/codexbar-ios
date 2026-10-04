@@ -4,7 +4,11 @@ import XCTest
 
 final class CursorParityRegressionTests: XCTestCase, @unchecked Sendable {
     func testIncludedPercentDisplayMatchesCursorWithoutChangingMeasuredValues() throws {
-        for (percent, expected) in [(0.0, "0%"), (0.1, "1%"), (0.49, "1%"), (0.5, "1%"), (0.99, "1%"), (1, "1%"), (3, "3%"), (135, "135%")] {
+        let cases: [(Double, String)] = [
+            (0, "0%"), (.leastNonzeroMagnitude, "1%"), (0.1, "1%"), (0.49, "1%"),
+            (0.5, "1%"), (0.99, "1%"), (1, "1%"), (3, "3%"), (135, "135%"),
+        ]
+        for (percent, expected) in cases {
             let data = Data("{\"planUsage\":{\"autoPercentUsed\":\(percent),\"apiPercentUsed\":3}}".utf8)
             let result = try XCTUnwrap(CursorUsageProvider.parseUsage(data, configuration: .defaultConfiguration(for: .cursor)))
             let bar = try XCTUnwrap(result.bars.first)

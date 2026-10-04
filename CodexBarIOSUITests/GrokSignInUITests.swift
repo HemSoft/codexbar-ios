@@ -164,6 +164,9 @@ final class GrokSignInUITests: XCTestCase {
         let modelsRestored = loadedCursorModels(in: restored)
         XCTAssertTrue(modelsRestored.waitForExistence(timeout: 10), restored.debugDescription)
         XCTAssertFalse(restored.buttons["dashboard-metric-cursor.grok-bot-weekly"].exists)
+        let otherRestored = restored.buttons["dashboard-metric-cursor.other-models"]
+        XCTAssertLessThan(modelsRestored.frame.width, otherRestored.frame.width)
+        XCTAssertGreaterThan(modelsRestored.frame.height, otherRestored.frame.height)
         openCursorCustomizer(in: restored)
         let show = restored.buttons["Show Grok Bot weekly"]
         for _ in 0..<4 where !show.isHittable { restored.swipeUp() }
@@ -172,12 +175,20 @@ final class GrokSignInUITests: XCTestCase {
         keep("Cursor hidden Bot restored from saved customization", app: restored)
         restored.buttons["Done"].tap()
         assertCursor(in: restored, botText: "41%")
-        restored.swipeDown()
+        restored.buttons["Refresh usage"].tap()
         XCTAssertTrue(restored.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Fixture refresh failed"))
             .firstMatch.waitForExistence(timeout: 10), restored.debugDescription)
         XCTAssertTrue(modelsRestored.label.contains("1%"), modelsRestored.label)
         XCTAssertTrue(restored.buttons["dashboard-metric-cursor.other-models"].label.contains("3%"))
+        XCTAssertTrue(modelsRestored.label.contains("stale"), modelsRestored.label)
         keep("Cursor failed refresh retains measured usage as stale", app: restored)
+        restored.buttons["Refresh usage"].tap()
+        let recovered = restored.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@", "dashboard-metric-cursor.cursor-models", "fresh"
+        )).firstMatch
+        XCTAssertTrue(recovered.waitForExistence(timeout: 10), restored.debugDescription)
+        assertCursor(in: restored, botText: "41%")
+        keep("Cursor recovered measured usage and saved layout", app: restored)
         restored.terminate()
 
         let unavailable = launch(scenario: "grok-cursor-parity-unavailable")

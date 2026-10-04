@@ -154,7 +154,7 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         }
 
         let percent = used / limit * 100
-        if usesMinimumPositivePercent && percent > 0 && percent < 1 {
+        if usesMinimumPositivePercent && used > 0 && percent < 1 {
             return "1%"
         }
         return "\(Int(percent.rounded()))%"
