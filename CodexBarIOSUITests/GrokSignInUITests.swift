@@ -136,6 +136,11 @@ final class GrokSignInUITests: XCTestCase {
         let app = launch(scenario: "grok-cursor-parity", runID: runID)
         assertCursor(in: app, botText: "41%")
         keep("Cursor fresh one and three with weekly Bot", app: app)
+        let disclosure = app.buttons["Synthetic Cursor, Cursor plan usage"]
+        disclosure.tap()
+        XCTAssertFalse(app.buttons["dashboard-metric-cursor.cursor-models"].exists)
+        disclosure.tap()
+        assertCursor(in: app, botText: "41%")
         app.buttons["dashboard-metric-cursor.cursor-models"].tap()
         XCTAssertTrue(app.navigationBars["Metric Details"].waitForExistence(timeout: 5))
         keep("Cursor fractional percentage detail", app: app)
