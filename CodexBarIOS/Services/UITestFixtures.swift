@@ -129,7 +129,7 @@ final class UITestFixtures {
         refreshService = UsageRefreshService(providers: providers, initialResults: results)
         if (greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1")
             || scenario?.hasPrefix("grok-cursor-parity") == true
-            || scenario?.hasPrefix("grok-cursor-session") == true {
+            || Self.isCursorSessionScenario(scenario) {
             // These routes must load the real provider before evidence is captured.
             let service = refreshService
             let accounts = configurationStore.configurations
@@ -137,6 +137,14 @@ final class UITestFixtures {
         }
         if recovery && historyStore.snapshots.isEmpty {
             seedHistory()
+        }
+    }
+
+    nonisolated static func isCursorSessionScenario(_ scenario: String?) -> Bool {
+        switch scenario {
+        case "grok-cursor-session-stale", "grok-cursor-session-stale-dark-large",
+             "grok-cursor-session-no-prior", "grok-cursor-session-zero-dark-large": true
+        default: false
         }
     }
 
@@ -158,7 +166,7 @@ final class UITestFixtures {
         if scenario?.hasPrefix("codex-") == true { return codexResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("claude-") == true { return claudeResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("github-billing") == true { return githubBillingResult(for: configuration) }
-        if scenario?.hasPrefix("grok-cursor-parity") == true || scenario?.hasPrefix("grok-cursor-session") == true {
+        if scenario?.hasPrefix("grok-cursor-parity") == true || Self.isCursorSessionScenario(scenario) {
             return ProviderUsageResult(
                 accountID: configuration.id, providerID: .cursor, title: configuration.displayName,
                 subtitle: "Waiting for synthetic Cursor response", bars: [], fetchedAt: Date()
@@ -403,7 +411,7 @@ final class UITestFixtures {
     }
 
     private static func seedGrokAccounts(in store: ProviderConfigurationStore, scenario: String?) {
-        let cursorOnly = scenario?.hasPrefix("grok-cursor-parity") == true || scenario?.hasPrefix("grok-cursor-session") == true
+        let cursorOnly = scenario?.hasPrefix("grok-cursor-parity") == true || Self.isCursorSessionScenario(scenario)
         let grok = ProviderAccountConfiguration(
             id: "ui-grok-connected", providerID: .grok, accountLabel: "SuperGrok Lite",
             grokGeneratedLabel: "SuperGrok Lite", authMethod: .browserSession
@@ -414,8 +422,8 @@ final class UITestFixtures {
         )
         for account in cursorOnly ? [cursor] : [grok, cursor] {
             _ = store.update(account)
-            let secret = scenario?.hasPrefix("grok-cursor-session") == true
-                ? cursorSessionCredential(expired: scenario?.contains("no-prior") == true) : "ui-test-credential"
+            let secret = Self.isCursorSessionScenario(scenario)
+                ? cursorSessionCredential(expired: scenario == "grok-cursor-session-no-prior") : "ui-test-credential"
             _ = store.saveSecret(secret, for: account)
         }
     }
@@ -1241,12 +1249,12 @@ private actor UITestCursorProvider: UsageProvider {
     }
 
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
-        guard let scenario, scenario.hasPrefix("grok-cursor-parity") || scenario.hasPrefix("grok-cursor-session") else {
+        guard let scenario, scenario.hasPrefix("grok-cursor-parity") || UITestFixtures.isCursorSessionScenario(scenario) else {
             return UITestFixtures.cursorResult(for: configuration, scenario: scenario)
         }
         stage += 1
         if stage == 2 && scenario.hasPrefix("grok-cursor-parity") { throw UITestFixtureError.refreshFailed }
-        if stage == 2 && scenario.contains("session-stale") {
+        if stage == 2 && ["grok-cursor-session-stale", "grok-cursor-session-stale-dark-large"].contains(scenario) {
             try secretStore.saveSecret(
                 UITestFixtures.cursorSessionCredential(expired: true), account: ProviderConfigurationStore.keychainAccount(for: configuration)
             )
@@ -1288,7 +1296,7 @@ private final class UITestCursorParityProtocol: URLProtocol, @unchecked Sendable
                      ? Self.currentBody(for: url)
                      : #"{"planUsage":{"autoPercentUsed":0,"apiPercentUsed":0}}"#)
         } else if url.lastPathComponent == "GetSandUsageStatus" {
-            if url.path.contains("unavailable") || url.path.contains("grok-cursor-session") {
+            if url.path.contains("unavailable") || url.pathComponents.contains(where: { UITestFixtures.isCursorSessionScenario($0) }) {
                 complete(status: 403, body: "{}")
             } else {
                 let reset = ISO8601DateFormatter().string(from: Date().addingTimeInterval(5 * 86_400))
@@ -1303,8 +1311,12 @@ private final class UITestCursorParityProtocol: URLProtocol, @unchecked Sendable
     }
 
     private static func currentBody(for url: URL) -> String {
-        if url.path.contains("session-zero") { return #"{"planUsage":{"autoPercentUsed":0,"apiPercentUsed":0}}"# }
-        if url.path.contains("grok-cursor-session") { return #"{"planUsage":{"autoPercentUsed":0.1,"apiPercentUsed":13}}"# }
+        if url.pathComponents.contains("grok-cursor-session-zero-dark-large") {
+            return #"{"planUsage":{"autoPercentUsed":0,"apiPercentUsed":0}}"#
+        }
+        if url.pathComponents.contains(where: { UITestFixtures.isCursorSessionScenario($0) }) {
+            return #"{"planUsage":{"autoPercentUsed":0.1,"apiPercentUsed":13}}"#
+        }
         return #"{"planUsage":{"autoPercentUsed":0.1,"apiPercentUsed":3}}"#
     }
 

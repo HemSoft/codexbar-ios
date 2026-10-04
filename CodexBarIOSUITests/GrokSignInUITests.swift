@@ -140,7 +140,7 @@ final class GrokSignInUITests: XCTestCase {
         XCTAssertFalse(unavailableModels.label.contains("%"), unavailableModels.label)
         keep("Cursor no prior data is unavailable", app: unavailable)
         unavailable.terminate()
-        let zero = launch(scenario: "grok-cursor-session-zero-dark-large")
+        let zero = launch(scenario: "grok-cursor-session-zero-dark-large", darkAccessibility: true)
         let models = zero.buttons["dashboard-metric-cursor.cursor-models"]
         XCTAssertTrue(models.waitForExistence(timeout: 10), zero.debugDescription)
         XCTAssertTrue(models.label.contains("0%"), models.label)
@@ -150,7 +150,7 @@ final class GrokSignInUITests: XCTestCase {
     }
 
     private func exerciseCursorReconnect(suffix: String) {
-        let app = launch(scenario: "grok-cursor-session-stale\(suffix)")
+        let app = launch(scenario: "grok-cursor-session-stale\(suffix)", darkAccessibility: suffix == "-dark-large")
         let fresh = app.buttons.matching(NSPredicate(
             format: "identifier == %@ AND label CONTAINS %@", "dashboard-metric-cursor.cursor-models", "fresh"
         )).firstMatch
@@ -310,7 +310,9 @@ final class GrokSignInUITests: XCTestCase {
         XCTAssertTrue(app.buttons["dashboard-metric-cursor.grok-bot-weekly"].exists)
     }
 
-    private func launch(scenario: String, runID: String = UUID().uuidString, reset: Bool = true) -> XCUIApplication {
+    private func launch(
+        scenario: String, runID: String = UUID().uuidString, reset: Bool = true, darkAccessibility: Bool = false
+    ) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchEnvironment = [
@@ -318,10 +320,10 @@ final class GrokSignInUITests: XCTestCase {
             "CODEXBAR_UI_TEST_RUN_ID": runID,
             "CODEXBAR_UI_TEST_RESET": reset ? "1" : "0",
             "CODEXBAR_UI_TEST_SCENARIO": scenario,
-            "CODEXBAR_UI_TEST_DEFAULT_TEXT": scenario.hasPrefix("grok-cursor") && !scenario.contains("large") ? "1" : "0",
+            "CODEXBAR_UI_TEST_DEFAULT_TEXT": scenario.hasPrefix("grok-cursor") && !darkAccessibility ? "1" : "0",
         ]
         if scenario.hasPrefix("grok-cursor") {
-            app.launchEnvironment["CODEXBAR_UI_TEST_DARK"] = scenario.contains("dark") ? "1" : "0"
+            app.launchEnvironment["CODEXBAR_UI_TEST_DARK"] = darkAccessibility ? "1" : "0"
         }
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()

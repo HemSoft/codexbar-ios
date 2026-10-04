@@ -89,6 +89,8 @@ public final class CursorUsageProvider: UsageProvider {
         }
     }
 
+    private static let earlyRenewalBackoff = CursorEarlyRenewalBackoff()
+
     private struct PreparedSession {
         let credential: CursorSessionCredential
         let attemptedRenewal: Bool
@@ -105,10 +107,15 @@ public final class CursorUsageProvider: UsageProvider {
     }
 
     private func prepareEarlyRenewal(_ credential: CursorSessionCredential, account: String) async throws -> PreparedSession {
+        let key = account + "." + CursorSessionCredential.digest(credential.storedSecret)
+        guard await Self.earlyRenewalBackoff.permits(key: key, at: Date()) else {
+            return PreparedSession(credential: credential, attemptedRenewal: true)
+        }
         do {
             return PreparedSession(credential: try await renew(credential, account: account), attemptedRenewal: true)
         } catch {
             try Self.validateEarlyRenewalFailure(error)
+            await Self.earlyRenewalBackoff.deferAttempt(key: key, at: Date())
             // An unavailable early grant is not proof that an unexpired primary session is invalid.
             return PreparedSession(credential: credential, attemptedRenewal: true)
         }

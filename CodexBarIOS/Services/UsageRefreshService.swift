@@ -76,10 +76,11 @@ public final class UsageRefreshService: ObservableObject {
     }
 
     /// Invalidate credential-dependent values before a replacement or disconnect can start another refresh.
-    public func invalidateCredentials(accountID: String) {
+    public func invalidateCredentials(accountID: String, preserveCachedResult: Bool = false) {
         if currentConfigurationsByAccountID[accountID] != nil || refreshingAccountIDs.contains(accountID) {
             refreshGenerationsByAccountID[accountID] = UUID()
         }
+        if preserveCachedResult { return }
         let remainingAccountIDs = Set(results.map(\.accountID))
             .union(refreshErrorsByAccountID.keys)
             .subtracting([accountID])

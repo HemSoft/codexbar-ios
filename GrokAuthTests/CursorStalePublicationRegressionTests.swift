@@ -47,21 +47,81 @@ final class CursorStalePublicationRegressionTests: XCTestCase {
         var changes = 0
         var histories = 0
         let credentials = fixture.store.credentialChanges.sink { _ in changes += 1 }
+        let sameIdentity = fixture.store.cursorSameIdentityReconnects.sink { _ in changes += 1 }
         let history = fixture.store.cursorHistoryInvalidations.sink { _ in histories += 1 }
-        defer { credentials.cancel(); history.cancel() }
+        defer { credentials.cancel(); sameIdentity.cancel(); history.cancel() }
         let first = CursorWebAuthResult(accessToken: "synthetic-a", refreshToken: nil, authID: "owner-a", userID: nil)
         let renewal = CursorWebAuthResult(accessToken: "synthetic-a-renewed", refreshToken: nil, authID: "owner-a", userID: nil)
         let other = CursorWebAuthResult(accessToken: "synthetic-b", refreshToken: nil, authID: "owner-b", userID: nil)
         XCTAssertNotNil(fixture.store.connectCursorAccount(account, credential: first.storedCredential))
         XCTAssertNotNil(fixture.store.connectCursorAccount(account, credential: renewal.storedCredential))
         XCTAssertEqual(changes, 2)
-        XCTAssertEqual(histories, 0)
+        XCTAssertEqual(histories, 1, "Missing previous credential is an unknown identity")
         XCTAssertNotNil(fixture.store.connectCursorAccount(account, credential: other.storedCredential))
         XCTAssertEqual(changes, 3)
-        XCTAssertEqual(histories, 1)
+        XCTAssertEqual(histories, 2)
         XCTAssertNotNil(fixture.store.disconnectCursorAccount(account))
         XCTAssertEqual(changes, 4)
-        XCTAssertEqual(histories, 2)
+        XCTAssertEqual(histories, 3)
+    }
+
+    func testSameIdentityReconnectRetainsMeasuredCacheUntilQuotaIsVerified() async throws {
+        let fixture = try makeStore()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suite) }
+        let first = CursorWebAuthResult(accessToken: "synthetic-a", refreshToken: nil, authID: "owner-a", userID: nil)
+        XCTAssertTrue(fixture.store.saveSecret(first.storedCredential, for: fixture.account))
+        let credential = try XCTUnwrap(CursorSessionCredential(storedSecret: first.storedCredential))
+        let measuredAt = Date(timeIntervalSince1970: 1_790_000_000)
+        let good = try XCTUnwrap(CursorUsageProvider.parseUsage(
+            Data(#"{"planUsage":{"autoPercentUsed":0.1,"apiPercentUsed":13}}"#.utf8),
+            configuration: fixture.account, fetchedAt: measuredAt, cacheIdentity: credential.cacheIdentity
+        ))
+        let failed = ProviderUsageResult(accountID: fixture.account.id, providerID: .cursor,
+            title: "Synthetic", subtitle: "Unavailable", bars: [], failureMessage: "Unavailable",
+            cacheIdentity: credential.cacheIdentity, fetchedAt: Date())
+        let service = UsageRefreshService(providers: [CursorFixedFailure(result: failed)], initialResults: [good])
+        let changed = fixture.store.credentialChanges.sink { service.invalidateCredentials(accountID: $0) }
+        let sameIdentity = fixture.store.cursorSameIdentityReconnects.sink {
+            service.invalidateCredentials(accountID: $0, preserveCachedResult: true)
+        }
+        defer { changed.cancel(); sameIdentity.cancel() }
+        let renewed = CursorWebAuthResult(accessToken: "synthetic-b", refreshToken: nil, authID: "owner-a", userID: nil)
+        XCTAssertNotNil(fixture.store.connectCursorAccount(fixture.account, credential: renewed.storedCredential))
+        await service.refresh(configurations: [fixture.account])
+        XCTAssertEqual(service.results.first?.bars.map(\.used), [0.1, 13])
+        XCTAssertEqual(service.results.first?.fetchedAt, measuredAt)
+        XCTAssertFalse(service.results.first?.hasCurrentBars == true)
+    }
+
+    func testSameIdentityReconnectDiscardsInflightOldQuotaWithoutPurgingCache() async throws {
+        let fixture = try makeStore()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suite) }
+        let original = CursorWebAuthResult(accessToken: "synthetic-a", refreshToken: nil, authID: "owner-a", userID: nil)
+        XCTAssertTrue(fixture.store.saveSecret(original.storedCredential, for: fixture.account))
+        let identity = try XCTUnwrap(CursorSessionCredential(storedSecret: original.storedCredential)).cacheIdentity
+        let good = try XCTUnwrap(CursorUsageProvider.parseUsage(
+            Data(#"{"planUsage":{"autoPercentUsed":0.1,"apiPercentUsed":13}}"#.utf8),
+            configuration: fixture.account, cacheIdentity: identity
+        ))
+        let oldZero = try XCTUnwrap(CursorUsageProvider.parseUsage(
+            Data(#"{"planUsage":{"autoPercentUsed":0,"apiPercentUsed":0}}"#.utf8),
+            configuration: fixture.account, cacheIdentity: identity
+        ))
+        let gate = CursorSuspendedQuota()
+        let service = UsageRefreshService(providers: [gate], initialResults: [good])
+        let changed = fixture.store.credentialChanges.sink { service.invalidateCredentials(accountID: $0) }
+        let same = fixture.store.cursorSameIdentityReconnects.sink {
+            service.invalidateCredentials(accountID: $0, preserveCachedResult: true)
+        }
+        defer { changed.cancel(); same.cancel() }
+        let refresh = Task { await service.refresh(configurations: [fixture.account]) }
+        for await _ in gate.started.stream { break }
+        let replacement = CursorWebAuthResult(accessToken: "synthetic-b", refreshToken: nil, authID: "owner-a", userID: nil)
+        XCTAssertNotNil(fixture.store.connectCursorAccount(fixture.account, credential: replacement.storedCredential))
+        await gate.finish(oldZero)
+        await refresh.value
+        XCTAssertEqual(service.results.first?.bars.map(\.used), [0.1, 13])
+        XCTAssertEqual(service.results.first?.fetchedAt, good.fetchedAt)
     }
 
     private func makeStore() throws -> (
@@ -76,6 +136,20 @@ final class CursorStalePublicationRegressionTests: XCTestCase {
         XCTAssertTrue(store.update(account))
         return (store, defaults, suite, account)
     }
+}
+
+private actor CursorSuspendedQuota: UsageProvider {
+    nonisolated let providerID = ProviderID.cursor
+    nonisolated let started = AsyncStream.makeStream(of: Void.self)
+    private var pending: CheckedContinuation<ProviderUsageResult, Never>?
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        await withCheckedContinuation { continuation in
+            pending = continuation
+            started.continuation.yield(())
+            started.continuation.finish()
+        }
+    }
+    func finish(_ result: ProviderUsageResult) { pending?.resume(returning: result); pending = nil }
 }
 
 private struct CursorFixedFailure: UsageProvider {

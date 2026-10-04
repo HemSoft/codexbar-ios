@@ -26,6 +26,7 @@ final class CursorSessionRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(result.failureMessage)
         XCTAssertEqual(result.bars.map(\.usageText), ["0%", "0%"])
         XCTAssertEqual(result.configurableMetrics.count, 4)
+        XCTAssertTrue(CursorSessionReplay.state.requests.contains { $0.url?.lastPathComponent == "GetSandUsageStatus" })
         XCTAssertNotEqual(result.recoveryAction, .reauthenticate)
     }
 

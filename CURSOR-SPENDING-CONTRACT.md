@@ -138,21 +138,26 @@ an account. With a saved refresh grant, the same early lifetime window and prima
 401/403 can perform at most one renewal and one subsequent quota read. If early
 renewal fails while the token remains unexpired, independently valid primary
 usage can still succeed, including fresh zero. That attempt cannot be repeated
-within the same refresh. An ended lifetime or primary rejection requires recovery. A verified
-`shouldLogout: true` response also requires reconnection even when its HTTP
+within the same refresh. Failed early grants back off for 15 minutes per account and credential
+fingerprint; expiry still requires renewal immediately. An ended lifetime or primary rejection
+requires browser recovery only if its single renewal cannot restore valid usage. A verified
+`shouldLogout: true` renewal response also requires reconnection even when its HTTP
 status is 200; it cannot fall back to zero quota from the old credential. Renewal requests
 have a 15-second timeout, no cache or cookies, and the default session rejects
 redirects. Keychain replacement is serialized with phone reconnection and only
 occurs while the original account credential is still current. Canceled work
-cannot rotate credentials or publish a result.
+cannot rotate credentials or publish newly fetched usage.
 
-When no grant exists, or renewal is rejected, malformed, unavailable or cannot
-be saved, a reconnect action is shown. It opens the existing private browser
+When an ended or rejected session cannot be recovered with renewal, or renewed
+credentials cannot be saved, a reconnect action is shown. It opens the existing private browser
 sign-in from account Settings, without sign-out, credential import or OAuth
 settings. Canceled sign-in leaves the saved account unchanged. Successful
 browser replacement invalidates prior in-flight observations; a different or
-unknown saved identity clears the previous account's history. Known same-account
-reconnection preserves history and saved metric choices.
+unknown saved identity, including a missing previous secret, clears the previous account's history.
+Known same-account reconnection preserves measured cache, history and saved metric choices while
+invalidating prior in-flight work. Saved browser `authId` or `userId` supplies continuity. For
+renewal without either identifier, the app preserves its existing cache fingerprint in the saved
+credential. This fingerprint is not an account claim and never authorizes access.
 
 Collection failures retain same-account measured values with their original
 measurement timestamp and an explicit last-known-data warning, or show no

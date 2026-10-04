@@ -1062,13 +1062,9 @@ struct ProviderUsageCard: View {
         case .retryRefresh:
             "Retries refreshing usage for \(result.title)"
         case .signIn:
-            result.providerID == .claude
-                ? "Starts Claude sign-in for \(result.title)"
-                : "Opens account settings for \(result.title)"
+            ProviderSignInAccessibility.hint(providerID: result.providerID, title: result.title, reconnecting: false)
         case .reauthenticate:
-            result.providerID == .claude
-                ? "Replaces the rejected Claude credential for \(result.title)"
-                : "Opens account settings to replace credentials for \(result.title)"
+            ProviderSignInAccessibility.hint(providerID: result.providerID, title: result.title, reconnecting: true)
         }
     }
 
@@ -1942,13 +1938,9 @@ struct ProviderUsagePlaceholderCard: View {
         case .retryRefresh:
             "Retries refreshing usage for \(configuration.displayName)"
         case .signIn:
-            configuration.providerID == .claude
-                ? "Starts Claude sign-in for \(configuration.displayName)"
-                : "Opens account settings for \(configuration.displayName)"
+            ProviderSignInAccessibility.hint(providerID: configuration.providerID, title: configuration.displayName, reconnecting: false)
         case .reauthenticate:
-            configuration.providerID == .claude
-                ? "Replaces the rejected Claude credential for \(configuration.displayName)"
-                : "Opens account settings to replace credentials for \(configuration.displayName)"
+            ProviderSignInAccessibility.hint(providerID: configuration.providerID, title: configuration.displayName, reconnecting: true)
         }
     }
 

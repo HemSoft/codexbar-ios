@@ -40,6 +40,7 @@ struct CursorSessionCredential: Sendable {
     let authID: String?
     let userID: String?
     let storedSecret: String
+    private let savedUsageIdentity: String?
 
     init?(storedSecret: String) {
         guard let accessToken = Self.validToken(CursorUsageProvider.normalizedAccessToken(from: storedSecret)) else { return nil }
@@ -47,7 +48,8 @@ struct CursorSessionCredential: Sendable {
         self.accessToken = accessToken
         self.refreshToken = saved?.refreshToken
         self.authID = saved?.authID?.isEmpty == false ? saved?.authID : nil
-        self.userID = saved?.userID
+        self.userID = saved?.userID?.isEmpty == false ? saved?.userID : nil
+        self.savedUsageIdentity = saved?.usageIdentity
         self.storedSecret = storedSecret
     }
 
@@ -69,9 +71,15 @@ struct CursorSessionCredential: Sendable {
         return expiry <= date.timeIntervalSince1970 + 1272 * 60 * 60
     }
 
+    var savedAccountIdentity: String? { authID ?? userID }
+
     var cacheIdentity: String {
-        let identity = authID ?? storedSecret
-        return SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
+        if authID == nil && userID == nil, let savedUsageIdentity { return savedUsageIdentity }
+        return Self.digest(authID ?? userID ?? storedSecret)
+    }
+
+    static func digest(_ value: String) -> String {
+        SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     private static func expiration(of token: String) -> Double? {
@@ -93,8 +101,9 @@ struct CursorSessionCredential: Sendable {
         let refreshToken: String?
         let authID: String?
         let userID: String?
+        let usageIdentity: String?
         enum CodingKeys: String, CodingKey {
-            case refreshToken
+            case refreshToken, usageIdentity
             case authID = "authId"
             case userID = "userId"
         }
@@ -186,9 +195,20 @@ struct CursorSessionRenewal: Sendable {
         let result = CursorWebAuthResult(
             accessToken: token, refreshToken: reply.refreshToken ?? token, authID: original.authID, userID: original.userID
         )
-        guard let credential = CursorSessionCredential(storedSecret: result.storedCredential),
+        let stored = try storedCredential(result, usageIdentity: original.cacheIdentity)
+        guard let credential = CursorSessionCredential(storedSecret: stored),
               !credential.needsRenewal(at: Date()) else { throw CursorSessionFailure.rejected }
         return credential
+    }
+
+    private static func storedCredential(_ result: CursorWebAuthResult, usageIdentity: String) throws -> String {
+        guard var payload = try JSONSerialization.jsonObject(with: Data(result.storedCredential.utf8)) as? [String: Any] else {
+            throw CursorSessionFailure.renewalUnavailable
+        }
+        payload["usageIdentity"] = usageIdentity
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        guard let stored = String(data: data, encoding: .utf8) else { throw CursorSessionFailure.renewalUnavailable }
+        return stored
     }
 
     @MainActor
@@ -213,6 +233,20 @@ struct CursorSessionRenewal: Sendable {
             case refreshToken = "refresh_token"
             case error
         }
+    }
+}
+
+actor CursorEarlyRenewalBackoff {
+    private var nextAttempts: [String: Date] = [:]
+
+    func permits(key: String, at date: Date) -> Bool {
+        nextAttempts = nextAttempts.filter { $0.value > date }
+        return nextAttempts[key] == nil
+    }
+
+    func deferAttempt(key: String, at date: Date) {
+        if nextAttempts.count >= 128 { nextAttempts.removeAll() }
+        nextAttempts[key] = date.addingTimeInterval(15 * 60)
     }
 }
 

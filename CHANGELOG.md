@@ -158,9 +158,8 @@ building, testing, or releasing the app.
 
 ### Fixed
 
-- Renew Cursor sign-in before its saved lifetime ends, following Cursor's
-  renewal window when a refresh grant is available. Primary rejection also
-  attempts one renewal. Otherwise, Reconnect Cursor
+- Keep Cursor usage up to date by renewing sign-in automatically when possible.
+  When needed, Reconnect Cursor
   opens guided sign-in without requiring sign-out. Failed refreshes keep
   measured usage visibly stale rather than replacing it with fresh zeros.
   Valid zero usage and a Bot-only failure do not request reconnection.

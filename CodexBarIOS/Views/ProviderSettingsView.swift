@@ -751,6 +751,16 @@ struct ProviderSettingsView: View {
 
 }
 
+enum ProviderSignInAccessibility {
+    static func hint(providerID: ProviderID, title: String, reconnecting: Bool) -> String {
+        if providerID == .cursor { return "Starts private Cursor sign-in for \(title)" }
+        if providerID == .claude {
+            return reconnecting ? "Replaces the rejected Claude credential for \(title)" : "Starts Claude sign-in for \(title)"
+        }
+        return reconnecting ? "Opens account settings to replace credentials for \(title)" : "Opens account settings for \(title)"
+    }
+}
+
 struct CursorStaleUsageNotice: View {
     let result: ProviderUsageResult
     var body: some View {

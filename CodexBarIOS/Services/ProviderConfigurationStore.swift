@@ -457,6 +457,7 @@ enum CodexAccountIdentityValidation: Equatable {
 public final class ProviderConfigurationStore: ObservableObject {
     let credentialChanges = PassthroughSubject<String, Never>()
     let cursorHistoryInvalidations = PassthroughSubject<String, Never>()
+    let cursorSameIdentityReconnects = PassthroughSubject<String, Never>()
     let grokHistoryInvalidations = PassthroughSubject<String, Never>()
     @Published public private(set) var confirmedGoogleAccountLinks: [String: String]
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
@@ -1794,8 +1795,12 @@ public final class ProviderConfigurationStore: ObservableObject {
             refreshSecretAvailability()
             return nil
         }
-        if identityChanged { cursorHistoryInvalidations.send(configuration.id) }
-        credentialChanges.send(configuration.id)
+        if identityChanged {
+            cursorHistoryInvalidations.send(configuration.id)
+            credentialChanges.send(configuration.id)
+        } else {
+            cursorSameIdentityReconnects.send(configuration.id)
+        }
         lastError = nil
         refreshSecretAvailability()
         return connectedConfiguration
@@ -2633,10 +2638,10 @@ public extension ProviderConfigurationStore {
     }
 
     private static func cursorIdentityChanged(previous: String?, replacement: String) -> Bool {
-        guard let previous else { return false }
+        guard let previous else { return true }
         // Account IDs here came from browser authorization, never unsigned token claims.
-        guard let previousID = CursorSessionCredential(storedSecret: previous)?.authID,
-              let replacementID = CursorSessionCredential(storedSecret: replacement)?.authID else { return true }
+        guard let previousID = CursorSessionCredential(storedSecret: previous)?.savedAccountIdentity,
+              let replacementID = CursorSessionCredential(storedSecret: replacement)?.savedAccountIdentity else { return true }
         return previousID != replacementID
     }
 

@@ -3,6 +3,18 @@ import XCTest
 @testable import CodexBarIOS
 
 final class CursorRenewalRegressionTests: XCTestCase, @unchecked Sendable {
+    func testEarlyRenewalBackoffExpiresAndSeparatesCredentialKeys() async {
+        let backoff = CursorEarlyRenewalBackoff()
+        let now = Date(timeIntervalSince1970: 1000)
+        await backoff.deferAttempt(key: "synthetic-old", at: now)
+        let before = await backoff.permits(key: "synthetic-old", at: now.addingTimeInterval(899))
+        let other = await backoff.permits(key: "synthetic-new", at: now)
+        let expired = await backoff.permits(key: "synthetic-old", at: now.addingTimeInterval(900))
+        XCTAssertFalse(before)
+        XCTAssertTrue(other)
+        XCTAssertTrue(expired)
+    }
+
     func testFirstPartyEarlyRenewalWindowAvoidsOldTokenZeroResponse() async throws {
         let token = CursorSessionRegressionTests.token(expiration: Int(Date().timeIntervalSince1970) + 5 * 86_400)
         let fixture = CursorRenewalFixture(accessToken: token)
@@ -22,6 +34,25 @@ final class CursorRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(result.bars.map(\.used), [0, 0])
         XCTAssertEqual(fixture.state.refreshCount, 1)
         XCTAssertEqual(try fixture.saved(), fixture.original)
+        let repeated = try await fixture.fetch()
+        XCTAssertNil(repeated.failureMessage)
+        XCTAssertEqual(repeated.bars.map(\.used), [0, 0])
+        XCTAssertEqual(fixture.state.refreshCount, 1, "Automatic refresh must back off the rejected early grant")
+    }
+
+    func testRenewalWithoutAuthIDKeepsCacheIdentity() async throws {
+        let fixture = CursorRenewalFixture()
+        let original = CursorWebAuthResult(accessToken: CursorSessionRegressionTests.token(expiration: 1),
+                                          refreshToken: "synthetic-refresh", authID: nil, userID: nil).storedCredential
+        try fixture.secrets.saveSecret(original, account: fixture.key)
+        let before = try XCTUnwrap(CursorSessionCredential(storedSecret: original))
+        _ = try await fixture.fetch()
+        let after = try XCTUnwrap(CursorSessionCredential(storedSecret: try XCTUnwrap(fixture.saved())))
+        XCTAssertEqual(after.cacheIdentity, before.cacheIdentity)
+        let withUser = CursorWebAuthResult(accessToken: "synthetic-a", refreshToken: nil, authID: nil, userID: "saved-user")
+        let otherToken = CursorWebAuthResult(accessToken: "synthetic-b", refreshToken: nil, authID: nil, userID: "saved-user")
+        XCTAssertEqual(CursorSessionCredential(storedSecret: withUser.storedCredential)?.cacheIdentity,
+                       CursorSessionCredential(storedSecret: otherToken.storedCredential)?.cacheIdentity)
     }
 
     func testFailedEarlyRenewalAndPrimaryRejectionCannotRepeatGrant() async throws {
@@ -66,6 +97,15 @@ final class CursorRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertNotNil(result.failureMessage)
         XCTAssertEqual(try fixture.saved(), fixture.original)
         XCTAssertFalse(fixture.state.paths.contains("GetCurrentPeriodUsage"))
+    }
+
+    func testFirstPartyNoRotatedGrantStoresNewAccessAsNextGrant() async throws {
+        let fixture = CursorRenewalFixture()
+        fixture.state.refreshReply = (200, "{\"access_token\":\"\(fixture.freshToken)\"}")
+        let result = try await fixture.fetch()
+        XCTAssertNil(result.failureMessage)
+        let saved = try XCTUnwrap(CursorSessionCredential(storedSecret: try XCTUnwrap(fixture.saved())))
+        XCTAssertEqual(saved.refreshToken, fixture.freshToken)
     }
 
     func testExpiredSessionIsRenewedBeforeReadingQuota() async throws {
