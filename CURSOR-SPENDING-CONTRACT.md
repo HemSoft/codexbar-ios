@@ -102,7 +102,7 @@ live response's cause. Franz owns the delivered build's live comparison.
 Local regression command:
 
 ```sh
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \\
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   xcrun swift test --filter 'GrokAuthTests.Cursor'
 ```
 

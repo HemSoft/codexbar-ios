@@ -138,7 +138,7 @@ final class GrokSignInUITests: XCTestCase {
         keep("Cursor fresh one and three with weekly Bot", app: app)
         let disclosure = app.buttons["Synthetic Cursor, Cursor plan usage"]
         disclosure.tap()
-        XCTAssertFalse(app.buttons["dashboard-metric-cursor.cursor-models"].exists)
+        XCTAssertTrue(app.buttons["dashboard-metric-cursor.cursor-models"].waitForNonExistence(timeout: 5))
         disclosure.tap()
         assertCursor(in: app, botText: "41%")
         app.buttons["dashboard-metric-cursor.cursor-models"].tap()
@@ -170,6 +170,8 @@ final class GrokSignInUITests: XCTestCase {
         XCTAssertTrue(modelsRestored.waitForExistence(timeout: 10), restored.debugDescription)
         XCTAssertFalse(restored.buttons["dashboard-metric-cursor.grok-bot-weekly"].exists)
         let otherRestored = restored.buttons["dashboard-metric-cursor.other-models"]
+        XCTAssertTrue(otherRestored.wait(for: \.isHittable, toEqual: true, timeout: 5), restored.debugDescription)
+        XCTAssertTrue(modelsRestored.wait(for: \.isHittable, toEqual: true, timeout: 5), restored.debugDescription)
         XCTAssertLessThan(modelsRestored.frame.width, otherRestored.frame.width)
         XCTAssertGreaterThan(modelsRestored.frame.height, otherRestored.frame.height)
         openCursorCustomizer(in: restored)
