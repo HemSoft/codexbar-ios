@@ -99,7 +99,7 @@ final class UITestFixtures {
             Self.seedGitHubBillingAccounts(in: configurationStore, scenario: scenario)
         }
         if grok && configurationStore.configurations.isEmpty {
-            Self.seedGrokAccounts(in: configurationStore)
+            Self.seedGrokAccounts(in: configurationStore, scenario: scenario)
             if scenario?.hasPrefix("grok-existing") == true || scenario == "grok-custom-order" {
                 Self.seedSavedGrokLayout(in: configurationStore, scenario: scenario)
             }
@@ -119,13 +119,17 @@ final class UITestFixtures {
         } else if githubBilling {
             providers = [UITestGitHubBillingProvider()]
         } else if grok {
-            providers = [UITestGrokProvider(scenario: scenario), UITestCursorProvider(scenario: scenario)]
+            providers = [
+                UITestGrokProvider(scenario: scenario),
+                UITestCursorProvider(scenario: scenario, secretStore: UITestSecretStore(suite: suite)),
+            ]
         } else {
             providers = [UITestUsageProvider(failsFirstRefresh: recovery), UITestGrokProvider(scenario: scenario)]
         }
         refreshService = UsageRefreshService(providers: providers, initialResults: results)
-        if greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1" {
-            // The relaunch hook must fill the sheet from the real provider, not the waiting placeholder.
+        if (greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1")
+            || scenario?.hasPrefix("grok-cursor-parity") == true {
+            // These routes must load the real provider before evidence is captured.
             let service = refreshService
             let accounts = configurationStore.configurations
             Task { await service.refresh(configurations: accounts) }
@@ -153,6 +157,12 @@ final class UITestFixtures {
         if scenario?.hasPrefix("codex-") == true { return codexResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("claude-") == true { return claudeResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("github-billing") == true { return githubBillingResult(for: configuration) }
+        if scenario?.hasPrefix("grok-cursor-parity") == true {
+            return ProviderUsageResult(
+                accountID: configuration.id, providerID: .cursor, title: configuration.displayName,
+                subtitle: "Waiting for synthetic Cursor response", bars: [], fetchedAt: Date()
+            )
+        }
         if scenario?.hasPrefix("grok") == true {
             return configuration.providerID == .grok
                 ? grokResult(for: configuration, scenario: scenario)
@@ -391,16 +401,17 @@ final class UITestFixtures {
         }
     }
 
-    private static func seedGrokAccounts(in store: ProviderConfigurationStore) {
+    private static func seedGrokAccounts(in store: ProviderConfigurationStore, scenario: String?) {
+        let cursorOnly = scenario?.hasPrefix("grok-cursor-parity") == true
         let grok = ProviderAccountConfiguration(
             id: "ui-grok-connected", providerID: .grok, accountLabel: "SuperGrok Lite",
             grokGeneratedLabel: "SuperGrok Lite", authMethod: .browserSession
         )
         let cursor = ProviderAccountConfiguration(
-            id: "ui-cursor-linked", providerID: .cursor, accountLabel: "Sample Cursor",
+            id: "ui-cursor-linked", providerID: .cursor, accountLabel: cursorOnly ? "Synthetic Cursor" : "Sample Cursor",
             authMethod: .browserSession
         )
-        for account in [grok, cursor] {
+        for account in cursorOnly ? [cursor] : [grok, cursor] {
             _ = store.update(account)
             _ = store.saveSecret("ui-test-credential", for: account)
         }
@@ -1205,9 +1216,79 @@ private actor UITestGrokProvider: UsageProvider {
 private actor UITestCursorProvider: UsageProvider {
     nonisolated let providerID = ProviderID.cursor
     private let scenario: String?
-    init(scenario: String?) { self.scenario = scenario }
+    private let secretStore: UITestSecretStore
+    private var stage = 0
+
+    init(scenario: String?, secretStore: UITestSecretStore) {
+        self.scenario = scenario
+        self.secretStore = secretStore
+    }
+
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
-        UITestFixtures.cursorResult(for: configuration, scenario: scenario)
+        guard let scenario, scenario.hasPrefix("grok-cursor-parity") else {
+            return UITestFixtures.cursorResult(for: configuration, scenario: scenario)
+        }
+        stage += 1
+        if stage == 2 { throw UITestFixtureError.refreshFailed }
+        let settings = URLSessionConfiguration.ephemeral
+        settings.protocolClasses = [UITestCursorParityProtocol.self]
+        settings.httpCookieStorage = nil
+        settings.httpShouldSetCookies = false
+        let session = URLSession(configuration: settings)
+        defer { session.invalidateAndCancel() }
+        let base = "https://cursor-parity-fixture.invalid/\(scenario)/"
+        return try await CursorUsageProvider(
+            secretStore: secretStore, session: session,
+            usageEndpoint: URL(string: "\(base)GetCurrentPeriodUsage")!,
+            grokBotUsageEndpoint: URL(string: "\(base)GetSandUsageStatus")!
+        ).fetchUsage(for: configuration)
+    }
+}
+
+private final class UITestCursorParityProtocol: URLProtocol, @unchecked Sendable {
+    private let lock = NSRecursiveLock()
+    private var stopped = false
+    private var pending: DispatchWorkItem?
+
+    override static func canInit(with request: URLRequest) -> Bool { true }
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {
+        lock.withLock { stopped = true; pending?.cancel(); pending = nil }
+    }
+
+    override func startLoading() {
+        guard let url = request.url, url.host == "cursor-parity-fixture.invalid" else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        if url.lastPathComponent == "GetCurrentPeriodUsage" {
+            let fresh = request.cachePolicy == .reloadIgnoringLocalCacheData
+            complete(status: 200, body: fresh
+                     ? #"{"planUsage":{"autoPercentUsed":0.1,"apiPercentUsed":3}}"#
+                     : #"{"planUsage":{"autoPercentUsed":0,"apiPercentUsed":0}}"#)
+        } else if url.lastPathComponent == "GetSandUsageStatus" {
+            if url.path.contains("unavailable") {
+                complete(status: 403, body: "{}")
+            } else {
+                let reset = ISO8601DateFormatter().string(from: Date().addingTimeInterval(5 * 86_400))
+                let body = #"{"hasNonZeroIncludedLimit":true,"usagePercent":41,"nextResetTimestampUtc":"\#(reset)"}"#
+                let work = DispatchWorkItem { [weak self] in self?.complete(status: 200, body: body) }
+                lock.withLock { pending = work }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 2.5, execute: work)
+            }
+        } else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+        }
+    }
+
+    private func complete(status: Int, body: String) {
+        lock.withLock {
+            guard !stopped, let url = request.url,
+                  let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil) else { return }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(body.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+        }
     }
 }
 

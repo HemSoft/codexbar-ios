@@ -59,6 +59,13 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Cursor model usage follows Cursor's minimum 1% display for small positive
+  usage, while History and forecasts retain the measured values. Refreshes
+  bypass local HTTP cache and cookies. Grok Bot has more time to respond and
+  reports failed, rejected or timed-out reads without erasing model usage or
+  its saved metric choice.
+  ([#400](https://github.com/HemSoft/codexbar-ios/issues/400))
+
 - Clarify that Greptile review history is not a remaining credit balance, and
   that missing billing data does not mean zero credits. Account allowance and
   reset dates are shown only when returned, never assumed from the Free plan.

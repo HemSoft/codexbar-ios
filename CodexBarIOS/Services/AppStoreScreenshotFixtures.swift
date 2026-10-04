@@ -148,7 +148,8 @@ enum AppStoreScreenshotFixtures {
                 projectionPeriodEnd: bar.projectionPeriodEnd,
                 showProjectionOnCurrentBar: bar.showProjectionOnCurrentBar,
                 projectionDescriptionOverride: bar.projectionDescriptionOverride,
-                projectionSignificanceOverride: bar.projectionSignificanceOverride
+                projectionSignificanceOverride: bar.projectionSignificanceOverride,
+                usesMinimumPositivePercent: bar.usesMinimumPositivePercent
             )
         }
     }
