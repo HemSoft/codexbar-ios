@@ -208,7 +208,7 @@ final class GrokSignInUITests: XCTestCase {
         let menu = app.buttons["More options for Synthetic Cursor"]
         XCTAssertTrue(menu.wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
         menu.tap()
-        tapChoice("Customize Card", in: app)
+        tapChoice("Customize Card…", in: app)
         XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
     }
 
