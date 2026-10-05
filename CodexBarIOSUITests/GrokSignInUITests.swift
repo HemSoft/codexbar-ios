@@ -131,6 +131,69 @@ final class GrokSignInUITests: XCTestCase {
         keepGrok("Deliberate credits-first Grok order retained", app: custom)
     }
 
+    func testCursorStaleSignInReconnectCancellationAndValidZero() {
+        for suffix in ["", "-dark-large"] { exerciseCursorReconnect(suffix: suffix) }
+        let unavailable = launch(scenario: "grok-cursor-session-no-prior")
+        XCTAssertTrue(unavailable.buttons["Reconnect Cursor"].waitForExistence(timeout: 10), unavailable.debugDescription)
+        let unavailableModels = unavailable.buttons["dashboard-metric-cursor.cursor-models"]
+        XCTAssertTrue(unavailableModels.label.contains("Usage unavailable"), unavailableModels.label)
+        XCTAssertFalse(unavailableModels.label.contains("%"), unavailableModels.label)
+        keep("Cursor no prior data is unavailable", app: unavailable)
+        unavailable.terminate()
+        let zero = launch(scenario: "grok-cursor-session-zero-dark-large", darkAccessibility: true)
+        let models = zero.buttons["dashboard-metric-cursor.cursor-models"]
+        XCTAssertTrue(models.waitForExistence(timeout: 10), zero.debugDescription)
+        XCTAssertTrue(models.label.contains("0%"), models.label)
+        XCTAssertTrue(zero.buttons["dashboard-metric-cursor.other-models"].label.contains("0%"))
+        XCTAssertFalse(zero.buttons["Reconnect Cursor"].exists)
+        keep("Cursor valid zero with Bot rejection dark accessibility", app: zero)
+    }
+
+    private func exerciseCursorReconnect(suffix: String) {
+        let app = launch(scenario: "grok-cursor-session-stale\(suffix)", darkAccessibility: suffix == "-dark-large")
+        let fresh = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@", "dashboard-metric-cursor.cursor-models", "fresh"
+        )).firstMatch
+        XCTAssertTrue(fresh.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(fresh.label.contains("1%"), fresh.label)
+        keep("Cursor before session invalidation\(suffix)", app: app)
+        app.buttons["Refresh usage"].tap()
+        let reconnect = app.buttons["Reconnect Cursor"]
+        XCTAssertTrue(reconnect.waitForExistence(timeout: 10), app.debugDescription)
+        let models = app.buttons["dashboard-metric-cursor.cursor-models"]
+        XCTAssertTrue(models.label.contains("stale"), models.label)
+        XCTAssertTrue(models.label.contains("1%"), models.label)
+        XCTAssertTrue(app.buttons["dashboard-metric-cursor.other-models"].label.contains("13%"))
+        XCTAssertTrue(app.staticTexts["cursor-stale-measurement-time"].exists)
+        keep("Cursor retained stale data and reconnect\(suffix)", app: app)
+        for _ in 0..<4 where !reconnect.isHittable { app.swipeUp() }
+        XCTAssertTrue(reconnect.isHittable, app.debugDescription)
+        XCTAssertGreaterThanOrEqual(reconnect.frame.height, 44)
+        reconnect.tap()
+        XCTAssertTrue(app.navigationBars["Synthetic Cursor sign-in"].waitForExistence(timeout: 10), app.debugDescription)
+        keep("Cursor guided synthetic account selection\(suffix)", app: app)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.staticTexts["Cursor sign-in canceled. The existing account was not changed."]
+            .waitForExistence(timeout: 10), app.debugDescription)
+        keep("Cursor reconnect canceled without signing out\(suffix)", app: app)
+        let form = app.collectionViews["provider-account-settings-form"]
+        let settingsReconnect = form.buttons["Reconnect Cursor"]
+        for _ in 0..<5 where !settingsReconnect.isHittable { form.swipeUp() }
+        XCTAssertTrue(settingsReconnect.isHittable, app.debugDescription)
+        settingsReconnect.tap()
+        XCTAssertTrue(app.buttons["cursor-synthetic-approve"].waitForExistence(timeout: 5))
+        app.buttons["cursor-synthetic-approve"].tap()
+        XCTAssertTrue(app.buttons["Switch Cursor Account"].waitForExistence(timeout: 10), app.debugDescription)
+        keep("Cursor successful reconnect settings\(suffix)", app: app)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(fresh.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(fresh.label.contains("1%"), fresh.label)
+        XCTAssertFalse(app.buttons["Reconnect Cursor"].exists)
+        XCTAssertTrue(app.buttons["dashboard-metric-cursor.other-models"].label.contains("13%"))
+        keep("Cursor recovered fresh usage\(suffix)", app: app)
+        app.terminate()
+    }
+
     func testCursorFreshPercentagesBotAndSavedChoices() {
         let runID = UUID().uuidString
         let app = launch(scenario: "grok-cursor-parity", runID: runID)
@@ -247,7 +310,9 @@ final class GrokSignInUITests: XCTestCase {
         XCTAssertTrue(app.buttons["dashboard-metric-cursor.grok-bot-weekly"].exists)
     }
 
-    private func launch(scenario: String, runID: String = UUID().uuidString, reset: Bool = true) -> XCUIApplication {
+    private func launch(
+        scenario: String, runID: String = UUID().uuidString, reset: Bool = true, darkAccessibility: Bool = false
+    ) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchEnvironment = [
@@ -255,9 +320,11 @@ final class GrokSignInUITests: XCTestCase {
             "CODEXBAR_UI_TEST_RUN_ID": runID,
             "CODEXBAR_UI_TEST_RESET": reset ? "1" : "0",
             "CODEXBAR_UI_TEST_SCENARIO": scenario,
-            "CODEXBAR_UI_TEST_DEFAULT_TEXT": scenario.hasPrefix("grok-cursor-parity") ? "1" : "0",
+            "CODEXBAR_UI_TEST_DEFAULT_TEXT": scenario.hasPrefix("grok-cursor") && !darkAccessibility ? "1" : "0",
         ]
-        if scenario.hasPrefix("grok-cursor-parity") { app.launchEnvironment["CODEXBAR_UI_TEST_DARK"] = "0" }
+        if scenario.hasPrefix("grok-cursor") {
+            app.launchEnvironment["CODEXBAR_UI_TEST_DARK"] = darkAccessibility ? "1" : "0"
+        }
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         return app

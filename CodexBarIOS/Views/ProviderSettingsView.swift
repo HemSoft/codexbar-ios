@@ -5,6 +5,8 @@ struct ProviderSettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @StateObject private var viewModel: ProviderSettingsViewModel
     private let latestUsageResult: ProviderUsageResult?
+    private let startsCursorSignIn: Bool
+    @State private var didAutoStartCursorSignIn = false
     @State private var pendingGeminiConfirmation: GeminiConfirmation?
     @State private var isConfirmingGoogleAccount = false
     @State private var isChoosingCodexBrowser = false
@@ -19,6 +21,7 @@ struct ProviderSettingsView: View {
         configurationStore: ProviderConfigurationStore,
         accountID: String,
         initialUsageResult: ProviderUsageResult? = nil,
+        startsCursorSignIn: Bool = false,
         onCredentialsChanged: @escaping @MainActor () -> Void = {},
         onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
         onAccountIdentityChanged: @escaping @MainActor () -> Void = {},
@@ -27,6 +30,7 @@ struct ProviderSettingsView: View {
     ) {
         self.configurationStore = configurationStore
         self.latestUsageResult = initialUsageResult
+        self.startsCursorSignIn = startsCursorSignIn
         self._viewModel = StateObject(
             wrappedValue: ProviderSettingsViewModel(
                 configurationStore: configurationStore,
@@ -340,7 +344,9 @@ struct ProviderSettingsView: View {
                         if viewModel.isSigningInWithCursor {
                             ProgressView()
                         } else {
-                            Text(configurationStore.hasSecret(for: configuration) ? "Switch Cursor Account" : "Sign in with Cursor")
+                            Text(viewModel.usageResult?.recoveryAction == .reauthenticate
+                                 ? "Reconnect Cursor"
+                                 : configurationStore.hasSecret(for: configuration) ? "Switch Cursor Account" : "Sign in with Cursor")
                         }
                     }
                     .disabled(viewModel.isSigningInWithCursor)
@@ -515,7 +521,9 @@ struct ProviderSettingsView: View {
             }
 
             Section {
-                Text(configurationStore.statusText(for: configuration))
+                Text(providerID == .cursor && viewModel.usageResult?.recoveryAction == .reauthenticate
+                     ? "Cursor sign-in needs reconnection. Last known usage is not current."
+                     : configurationStore.statusText(for: configuration))
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Current Status")
@@ -525,6 +533,10 @@ struct ProviderSettingsView: View {
         .navigationTitle(configuration.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            if startsCursorSignIn && !didAutoStartCursorSignIn {
+                didAutoStartCursorSignIn = true
+                viewModel.startCursorSignIn()
+            }
             await viewModel.prepare()
         }
         .onChange(of: latestUsageResult) { _, result in
@@ -535,6 +547,25 @@ struct ProviderSettingsView: View {
             viewModel.cancelAuthentication()
         }
         #if DEBUG
+        .sheet(item: $viewModel.cursorFixtureStage) { _ in
+            NavigationStack {
+                Form {
+                    Section {
+                        Text("Choose the sample Cursor account to reconnect.")
+                        Button("Use sample Cursor account") { viewModel.approveSyntheticCursorSignIn() }
+                            .accessibilityIdentifier("cursor-synthetic-approve")
+                    } footer: {
+                        Text("Simulator fixture. No live Cursor account is accessed.")
+                    }
+                }
+                .navigationTitle("Synthetic Cursor sign-in")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { viewModel.cancelSyntheticCursorSignIn() }
+                    }
+                }
+            }
+        }
         .sheet(item: $viewModel.grokFixtureStage) { stage in
             GrokSyntheticApprovalView(
                 stage: stage,
@@ -718,6 +749,29 @@ struct ProviderSettingsView: View {
         }
     }
 
+}
+
+enum ProviderSignInAccessibility {
+    static func hint(providerID: ProviderID, title: String, reconnecting: Bool) -> String {
+        if providerID == .cursor { return "Starts private Cursor sign-in for \(title)" }
+        if providerID == .claude {
+            return reconnecting ? "Replaces the rejected Claude credential for \(title)" : "Starts Claude sign-in for \(title)"
+        }
+        return reconnecting ? "Opens account settings to replace credentials for \(title)" : "Opens account settings for \(title)"
+    }
+}
+
+struct CursorStaleUsageNotice: View {
+    let result: ProviderUsageResult
+    var body: some View {
+        if result.providerID == .cursor && !result.hasCurrentBars && !result.bars.isEmpty {
+            Text("Stale usage from \(UserFacingDateTimeFormatter.current.dateAndTime(result.barsFetchedAt ?? result.fetchedAt))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("cursor-stale-measurement-time")
+        }
+    }
 }
 
 #if DEBUG

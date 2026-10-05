@@ -606,11 +606,14 @@ struct ProviderUsageCard: View {
             if showsRecoveryAction {
                 Button(action: onRetry) {
                     Label(recoveryActionTitle, systemImage: recoveryActionSystemImage)
+                        .frame(minHeight: result.providerID == .cursor ? 44 : nil)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .accessibilityHint(recoveryAccessibilityHint)
             }
+
+            CursorStaleUsageNotice(result: result)
 
             if let recoveryStatusMessage {
                 Text(recoveryStatusMessage)
@@ -1037,9 +1040,11 @@ struct ProviderUsageCard: View {
         case .retryRefresh:
             "Retry"
         case .signIn:
-            result.providerID == .claude ? "Sign in with Claude" : "Open account settings"
+            result.providerID == .cursor ? "Sign in with Cursor"
+                : result.providerID == .claude ? "Sign in with Claude" : "Open account settings"
         case .reauthenticate:
-            result.providerID == .claude ? "Sign in again" : "Update credentials"
+            result.providerID == .cursor ? "Reconnect Cursor"
+                : result.providerID == .claude ? "Sign in again" : "Update credentials"
         }
     }
 
@@ -1057,13 +1062,9 @@ struct ProviderUsageCard: View {
         case .retryRefresh:
             "Retries refreshing usage for \(result.title)"
         case .signIn:
-            result.providerID == .claude
-                ? "Starts Claude sign-in for \(result.title)"
-                : "Opens account settings for \(result.title)"
+            ProviderSignInAccessibility.hint(providerID: result.providerID, title: result.title, reconnecting: false)
         case .reauthenticate:
-            result.providerID == .claude
-                ? "Replaces the rejected Claude credential for \(result.title)"
-                : "Opens account settings to replace credentials for \(result.title)"
+            ProviderSignInAccessibility.hint(providerID: result.providerID, title: result.title, reconnecting: true)
         }
     }
 
@@ -1865,6 +1866,7 @@ struct ProviderUsagePlaceholderCard: View {
                 } else {
                     Button(action: onRetry) {
                         Label(recoveryActionTitle, systemImage: recoveryActionSystemImage)
+                            .frame(minHeight: configuration.providerID == .cursor ? 44 : nil)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -1919,9 +1921,11 @@ struct ProviderUsagePlaceholderCard: View {
         case .retryRefresh:
             "Retry"
         case .signIn:
-            configuration.providerID == .claude ? "Sign in with Claude" : "Open account settings"
+            configuration.providerID == .cursor ? "Sign in with Cursor"
+                : configuration.providerID == .claude ? "Sign in with Claude" : "Open account settings"
         case .reauthenticate:
-            configuration.providerID == .claude ? "Sign in again" : "Update credentials"
+            configuration.providerID == .cursor ? "Reconnect Cursor"
+                : configuration.providerID == .claude ? "Sign in again" : "Update credentials"
         }
     }
 
@@ -1934,13 +1938,9 @@ struct ProviderUsagePlaceholderCard: View {
         case .retryRefresh:
             "Retries refreshing usage for \(configuration.displayName)"
         case .signIn:
-            configuration.providerID == .claude
-                ? "Starts Claude sign-in for \(configuration.displayName)"
-                : "Opens account settings for \(configuration.displayName)"
+            ProviderSignInAccessibility.hint(providerID: configuration.providerID, title: configuration.displayName, reconnecting: false)
         case .reauthenticate:
-            configuration.providerID == .claude
-                ? "Replaces the rejected Claude credential for \(configuration.displayName)"
-                : "Opens account settings to replace credentials for \(configuration.displayName)"
+            ProviderSignInAccessibility.hint(providerID: configuration.providerID, title: configuration.displayName, reconnecting: true)
         }
     }
 

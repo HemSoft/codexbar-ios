@@ -178,6 +178,17 @@ it. Animations retain the normal app behavior.
   credits-first layouts, relaunch persistence, fresh order, 0% and unavailable
   weeks, and an explicit credits-first reorder on iPhone and iPad.
 
+- `GrokSignInUITests.testCursorStaleSignInReconnectCancellationAndValidZero`
+  checks a lifetime-ended synthetic session through the real Cursor provider,
+  retained stale values, no-prior-data unavailability and fresh zero with a
+  Bot-only rejection. It drives the normal Settings sign-in controller with
+  a simulator-only authorization replacement, including account selection,
+  cancellation without sign-out and successful return. Light/default and
+  dark/accessibility-size-2 captures use isolated credentials, not a live
+  browser or account. Run locally with
+  `-only-testing:CodexBarIOSUITests/GrokSignInUITests/testCursorStaleSignInReconnectCancellationAndValidZero`.
+  This journey is manual/release-only; automatic native test counts stay unchanged.
+
 - `GrokSignInUITests.testCursorFreshPercentagesBotAndSavedChoices` drives the
   real Cursor request builder, transport and parser against a network-blocked
   synthetic replay. Its cache-aware loader returns old zeros for the previous
@@ -291,7 +302,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than twenty-five passed tests with zero skips or
+runner rejects anything other than twenty-six passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

@@ -61,6 +61,12 @@ final class DashboardOrchestrator: ObservableObject {
         configurationStore.credentialChanges.sink { [weak refreshService] accountID in
             refreshService?.invalidateCredentials(accountID: accountID)
         }.store(in: &cancellables)
+        configurationStore.cursorSameIdentityReconnects.sink { [weak refreshService] accountID in
+            refreshService?.invalidateCredentials(accountID: accountID, preserveCachedResult: true)
+        }.store(in: &cancellables)
+        configurationStore.cursorHistoryInvalidations.sink { [weak historyStore] accountID in
+            historyStore?.removeSnapshots(for: accountID)
+        }.store(in: &cancellables)
         configurationStore.grokHistoryInvalidations.sink { [weak historyStore] accountID in
             historyStore?.removeSnapshots(for: accountID)
         }.store(in: &cancellables)

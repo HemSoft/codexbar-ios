@@ -158,6 +158,13 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Keep Cursor usage up to date by renewing sign-in automatically when possible.
+  When needed, Reconnect Cursor
+  opens guided sign-in without requiring sign-out. Failed refreshes keep
+  measured usage visibly stale rather than replacing it with fresh zeros.
+  Valid zero usage and a Bot-only failure do not request reconnection.
+  ([#402](https://github.com/HemSoft/codexbar-ios/issues/402))
+
 - Removed excess blank space above dashboard account headings while keeping
   the account menu's full touch target and saved metric layouts.
   ([#398](https://github.com/HemSoft/codexbar-ios/issues/398))

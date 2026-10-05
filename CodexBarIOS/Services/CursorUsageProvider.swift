@@ -48,7 +48,7 @@ public final class CursorUsageProvider: UsageProvider {
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
-        return URLSession(configuration: configuration)
+        return URLSession(configuration: configuration, delegate: CursorRejectRedirects(), delegateQueue: nil)
     }
 
     private struct OptionalUsageResponse: Sendable {
@@ -59,40 +59,129 @@ public final class CursorUsageProvider: UsageProvider {
     private static let botTimeoutReason = "Grok Bot refresh timed out. Refresh to try again."
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
-        guard
-            let storedSecret = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
-            let accessToken = Self.normalizedAccessToken(from: storedSecret),
-            !accessToken.isEmpty
-        else {
-            return failureResult("Not configured - sign in with Cursor.", configuration: configuration)
+        let account = ProviderConfigurationStore.keychainAccount(for: configuration)
+        guard let storedSecret = try secretStore.readSecret(account: account),
+              let credential = CursorSessionCredential(storedSecret: storedSecret) else {
+            return failureResult(
+                "Not configured - sign in with Cursor.", configuration: configuration,
+                recoveryAction: .signIn, cacheIdentity: "unconfigured"
+            )
         }
-
         do {
-            async let grokBotData = fetchGrokBotUsage(accessToken: accessToken)
-            let (data, response) = try await session.data(for: makeUsageRequest(accessToken: accessToken))
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return failureResult("Cursor usage returned an invalid response.", configuration: configuration)
+            try Task.checkCancellation()
+            let prepared = try await prepareSession(credential, account: account)
+            if prepared.attemptedRenewal {
+                return try await collectUsage(for: configuration, credential: prepared.credential)
             }
-
-            switch httpResponse.statusCode {
-            case 200..<300:
-                let optional = await grokBotData
-                return Self.parseUsage(
-                    data,
-                    grokBotUsageData: optional.data,
-                    configuration: configuration,
-                    grokBotFailureReason: optional.unavailableReason
-                )
-                    ?? failureResult("Could not parse Cursor usage.", configuration: configuration)
-            case 401, 403:
-                return failureResult("Cursor rejected this session token. Sign in again.", configuration: configuration)
-            case 429:
-                return failureResult("Cursor rate limit reached. Try again later.", configuration: configuration)
-            default:
-                return failureResult("Cursor usage returned HTTP \(httpResponse.statusCode).", configuration: configuration)
-            }
+            return try await collectWithRenewal(for: configuration, credential: prepared.credential, account: account)
+        } catch let failure as CursorSessionFailure {
+            return failureResult(
+                failure.message, configuration: configuration, recoveryAction: failure.recoveryAction,
+                cacheIdentity: failure == .changed ? "superseded" : credential.cacheIdentity
+            )
+        } catch let failure as CollectionFailure {
+            return failureResult(failure.message, configuration: configuration, cacheIdentity: credential.cacheIdentity)
         } catch {
-            return failureResult(error.localizedDescription, configuration: configuration)
+            return failureResult(
+                Task.isCancelled ? "Cursor refresh canceled." : "Could not refresh Cursor usage. Try again.",
+                configuration: configuration, cacheIdentity: credential.cacheIdentity
+            )
+        }
+    }
+
+    private static let earlyRenewalBackoff = CursorEarlyRenewalBackoff()
+
+    private struct PreparedSession {
+        let credential: CursorSessionCredential
+        let attemptedRenewal: Bool
+    }
+
+    private func prepareSession(_ credential: CursorSessionCredential, account: String) async throws -> PreparedSession {
+        if credential.needsRenewal(at: Date()) {
+            return PreparedSession(credential: try await renew(credential, account: account), attemptedRenewal: true)
+        }
+        guard credential.shouldAttemptEarlyRenewal(at: Date()) else {
+            return PreparedSession(credential: credential, attemptedRenewal: false)
+        }
+        return try await prepareEarlyRenewal(credential, account: account)
+    }
+
+    private func prepareEarlyRenewal(_ credential: CursorSessionCredential, account: String) async throws -> PreparedSession {
+        let key = account + "." + CursorSessionCredential.digest(credential.storedSecret)
+        guard await Self.earlyRenewalBackoff.permits(key: key, at: Date()) else {
+            return PreparedSession(credential: credential, attemptedRenewal: false)
+        }
+        do {
+            return PreparedSession(credential: try await renew(credential, account: account), attemptedRenewal: true)
+        } catch {
+            try Self.validateEarlyRenewalFailure(error)
+            await Self.earlyRenewalBackoff.deferAttempt(key: key, at: Date())
+            // An unavailable early grant is not proof that an unexpired primary session is invalid.
+            return PreparedSession(credential: credential, attemptedRenewal: true)
+        }
+    }
+
+    private static func validateEarlyRenewalFailure(_ error: Error) throws {
+        if Task.isCancelled { throw CancellationError() }
+        if let failure = error as? CursorSessionFailure, [.changed, .persistenceFailed, .invalidated].contains(failure) { throw failure }
+    }
+
+    private func collectWithRenewal(
+        for configuration: ProviderAccountConfiguration, credential: CursorSessionCredential, account: String
+    ) async throws -> ProviderUsageResult {
+        do { return try await collectUsage(for: configuration, credential: credential) } catch let failure as CursorSessionFailure
+            where failure == .rejected || failure == .needsRenewal {
+            guard credential.refreshToken != nil else { throw failure }
+            let updated = try await renew(credential, account: account)
+            // Exactly one renewal and one retry. A second rejection requires browser reconnection.
+            return try await collectUsage(for: configuration, credential: updated)
+        }
+    }
+
+    private func renew(_ credential: CursorSessionCredential, account: String) async throws -> CursorSessionCredential {
+        do {
+            return try await CursorSessionRenewal(secretStore: secretStore, session: session).renew(credential, account: account)
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            if let failure = error as? CursorSessionFailure { throw failure }
+            throw CursorSessionFailure.renewalUnavailable
+        }
+    }
+
+    private func collectUsage(
+        for configuration: ProviderAccountConfiguration, credential: CursorSessionCredential
+    ) async throws -> ProviderUsageResult {
+        try Task.checkCancellation()
+        if credential.needsRenewal(at: Date()) { throw CursorSessionFailure.needsRenewal }
+        async let grokBotData = fetchGrokBotUsage(accessToken: credential.accessToken)
+        let (data, response) = try await session.data(for: makeUsageRequest(accessToken: credential.accessToken))
+        try Self.validatePrimaryResponse(response)
+        let optional = await grokBotData
+        try Task.checkCancellation()
+        if credential.needsRenewal(at: Date()) { throw CursorSessionFailure.needsRenewal }
+        guard try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration))
+                == credential.storedSecret else { throw CursorSessionFailure.changed }
+        guard let result = Self.parseUsage(
+            data, grokBotUsageData: optional.data, configuration: configuration,
+            grokBotFailureReason: optional.unavailableReason, cacheIdentity: credential.cacheIdentity
+        ) else { throw URLError(.cannotParseResponse) }
+        return result
+    }
+
+    private static func validatePrimaryResponse(_ response: URLResponse) throws {
+        guard let response = response as? HTTPURLResponse else { throw CollectionFailure.invalidResponse }
+        if [401, 403].contains(response.statusCode) { throw CursorSessionFailure.rejected }
+        guard (200..<300).contains(response.statusCode) else { throw CollectionFailure.httpStatus(response.statusCode) }
+    }
+
+    private enum CollectionFailure: Error {
+        case invalidResponse, httpStatus(Int)
+        var message: String {
+            switch self {
+            case .invalidResponse: "Cursor usage returned an invalid response."
+            case .httpStatus(429): "Cursor rate limit reached. Try again later."
+            case .httpStatus(let status): "Cursor usage returned HTTP \(status)."
+            }
         }
     }
 
@@ -136,6 +225,7 @@ public final class CursorUsageProvider: UsageProvider {
     private func makeUsageRequest(endpoint: URL, accessToken: String) -> URLRequest {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        request.timeoutInterval = 15
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.httpShouldHandleCookies = false
         request.httpBody = Data("{}".utf8)
@@ -153,7 +243,8 @@ public final class CursorUsageProvider: UsageProvider {
         grokBotUsageData: Data? = nil,
         configuration: ProviderAccountConfiguration,
         fetchedAt: Date = Date(),
-        grokBotFailureReason: String? = nil
+        grokBotFailureReason: String? = nil,
+        cacheIdentity: String? = nil
     ) -> ProviderUsageResult? {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -180,6 +271,7 @@ public final class CursorUsageProvider: UsageProvider {
                 usage, grokBotData: grokBotUsageData, bars: bars, grokBotFailureReason: grokBotFailureReason
             ),
             cardInformationSections: buildUsageInformationSections(usage.planUsage),
+            cacheIdentity: cacheIdentity,
             fetchedAt: fetchedAt
         )
     }
@@ -505,15 +597,17 @@ public final class CursorUsageProvider: UsageProvider {
         return formatter
     }()
 
-    private func failureResult(_ message: String, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
+    private func failureResult(
+        _ message: String, configuration: ProviderAccountConfiguration,
+        recoveryAction: ProviderUsageRecoveryAction = .retryRefresh, cacheIdentity: String? = nil
+    ) -> ProviderUsageResult {
         ProviderUsageResult(
-            accountID: configuration.id,
-            providerID: .cursor,
-            title: configuration.displayName,
-            subtitle: message,
-            bars: [],
-            failureMessage: message,
-            fetchedAt: Date()
+            accountID: configuration.id, providerID: .cursor, title: configuration.displayName,
+            subtitle: message, bars: [],
+            unavailableUsageMetrics: recoveryAction == .reauthenticate ? Dictionary(uniqueKeysWithValues:
+                CursorUsageIdentity.spendingChoices.map { ("cursor.\($0.key)", "Usage unavailable. Reconnect Cursor.") }
+            ) : [:],
+            failureMessage: message, recoveryAction: recoveryAction, cacheIdentity: cacheIdentity, fetchedAt: Date()
         )
     }
 }
