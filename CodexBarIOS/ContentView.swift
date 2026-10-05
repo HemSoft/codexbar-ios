@@ -443,11 +443,11 @@ struct ContentView: View {
                     startsCursorSignIn: presentation.startsCursorSignIn,
                     onCredentialsChanged: { accountID in
                         dashboardSettingsChangedAccountIDs.insert(accountID)
-                        accountConfigurationNavigation.credentialsChanged()
+                        if accountID == presentation.accountID { accountConfigurationNavigation.credentialsChanged() }
                     },
                     onRefreshInputsChanged: { accountID in
                         dashboardSettingsChangedAccountIDs.insert(accountID)
-                        accountConfigurationNavigation.refreshInputsChanged()
+                        if accountID == presentation.accountID { accountConfigurationNavigation.refreshInputsChanged() }
                     },
                     onAccountIdentityChanged: { accountID in
                         historyStore.removeSnapshots(for: accountID)
