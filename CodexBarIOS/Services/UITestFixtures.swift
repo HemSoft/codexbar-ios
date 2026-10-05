@@ -227,15 +227,18 @@ final class UITestFixtures {
             accountLabel: "Greptile Free Fixture", authMethod: scenario.hasPrefix("greptile-renewal-") ? .browserSession : .apiKey
         )
         _ = store.update(account)
-        let credential = GreptileSessionCredentials(
+        _ = store.saveSecret(account.authMethod == .browserSession ? (try? greptileCredential.encoded()) ?? "" : "ui-test-credential", for: account)
+        if ProcessInfo.processInfo.environment["CODEXBAR_UI_TEST_FULL_WIDTH"] == "1" {
+            store.updateMetricWidth(.full, accountID: account.id, metricID: GreptileUsageIdentity.completedReviewsMetricID)
+        }
+    }
+
+    nonisolated static var greptileCredential: GreptileSessionCredentials {
+        return GreptileSessionCredentials(
             version: 1, subject: "synthetic-user",
             organization: GreptileOrganization(tenantExternalId: "synthetic-org", name: "Synthetic organization"),
             cookies: [GreptileSessionCookie(name: "__Secure-authjs.session-token", value: "synthetic-cookie", expiresAt: nil)]
         )
-        _ = store.saveSecret(account.authMethod == .browserSession ? (try? credential.encoded()) ?? "" : "ui-test-credential", for: account)
-        if ProcessInfo.processInfo.environment["CODEXBAR_UI_TEST_FULL_WIDTH"] == "1" {
-            store.updateMetricWidth(.full, accountID: account.id, metricID: GreptileUsageIdentity.completedReviewsMetricID)
-        }
     }
 
     nonisolated static func greptilePayload(scenario: String) -> Data {
@@ -1186,7 +1189,8 @@ private struct UITestSecretStore: SecretStore {
         let expectedCoding = try AntigravityCredentials.parse(UITestFixtures.codingCredential)
         let codex = ["personal", "work"].contains { secret == UITestFixtures.codexCredential(for: $0) }
         let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }
-        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor else {
+        let greptile = GreptileSessionCredentials.parse(secret) == UITestFixtures.greptileCredential
+        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile else {
             throw UITestFixtureError.invalidCredential
         }
         UserDefaults(suiteName: suite)?.set(secret, forKey: "fixture-secret.\(account)")

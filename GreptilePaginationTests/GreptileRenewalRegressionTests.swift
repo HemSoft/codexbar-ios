@@ -166,6 +166,28 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
     }
 
     @MainActor
+    func testFreshRenewalDoesNotMakeFailedReviewHistoryCurrent() async throws {
+        let fixture = GreptileHTTPFixture([
+            try identity(), .payload(try billing(["kind": "free", "currentPeriod": ["end": "2030-02-01T00:00:00Z"]])),
+            try GreptileHTTPFixture.page(["first"], total: 1),
+            try identity(), .payload(try billing(["kind": "free", "currentPeriod": ["end": "2030-03-01T00:00:00Z"]])),
+            .payload(Data("{}".utf8), status: 503),
+        ])
+        defer { fixture.invalidate() }
+        let service = UsageRefreshService(providers: [try provider(fixture, credential: credential())])
+        let account = browserAccount()
+        await service.refresh(configurations: [account])
+        let original = try XCTUnwrap(service.results.first?.greptileAllowanceRenewal?.renewsAt)
+        await service.refresh(configurations: [account])
+        let result = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(result.bars.first?.used, 1)
+        XCTAssertFalse(result.hasCurrentBars)
+        XCTAssertTrue(result.subtitle.contains("last known data"))
+        XCTAssertNotEqual(result.greptileAllowanceRenewal?.renewsAt, original)
+        XCTAssertEqual(result.greptileAllowanceRenewal?.isStale, false)
+    }
+
+    @MainActor
     func testRefreshFailurePreservesStaleDateAndNextSuccessReplacesIt() async throws {
         let first = try billing(["kind": "free", "currentPeriod": ["end": "2030-02-01T00:00:00Z"]])
         let next = try billing(["kind": "free", "currentPeriod": ["end": "2030-03-01T00:00:00Z"]])

@@ -424,7 +424,6 @@ public final class UsageRefreshService: ObservableObject {
             || !failureResult.bars.isEmpty
             || !failureResult.monetaryMetrics.isEmpty
             || failureResult.codexBankedRateLimitResets != nil
-            || failureResult.greptileAllowanceRenewal != nil
             || failureResult.preserveCachedBarsOnFailure
             || failureResult.preserveCachedCreditsOnFailure
         let dataResult: ProviderUsageResult
