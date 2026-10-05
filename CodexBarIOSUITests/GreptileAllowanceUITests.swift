@@ -188,7 +188,7 @@ final class GreptileAllowanceUITests: XCTestCase {
             reveal(add, in: app)
             XCTAssertTrue(add.exists)
             XCTAssertFalse(app.secureTextFields.firstMatch.exists)
-            XCTAssertFalse(app.buttons["Sign in to Greptile"].exists)
+            XCTAssertFalse(app.buttons["greptile-account-sign-in"].exists)
             keep("greptile-renewal-legacy-account-settings", app: app)
         }
         let section = app.staticTexts["Metrics"].firstMatch

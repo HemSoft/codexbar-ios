@@ -386,6 +386,7 @@ struct ProviderSettingsView: View {
                             viewModel.startGreptileSignIn()
                         }
                         .disabled(viewModel.isSigningInWithGreptile)
+                        .accessibilityIdentifier("greptile-account-sign-in")
                     }
                     if viewModel.isSigningInWithGreptile {
                         ProgressView("Connecting to Greptile…")

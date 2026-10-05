@@ -49,7 +49,7 @@ struct GreptileDashboardClient: Sendable {
         return identity
     }
 
-    func billingState(for credential: GreptileSessionCredentials) async throws -> GreptileDashboardState {
+    func billingState(for credential: GreptileSessionCredentials, timeout: TimeInterval = 15) async throws -> GreptileDashboardState {
         let input = try JSONSerialization.data(withJSONObject: [
             "0": ["json": ["tenantExternalId": credential.organization.id]],
         ])
@@ -59,13 +59,13 @@ struct GreptileDashboardClient: Sendable {
             URLQueryItem(name: "input", value: String(data: input, encoding: .utf8)),
         ]
         guard let url = components.url else { throw GreptileSignInError.invalidSession }
-        return try Self.parseBillingState(try await read(url: url, credential: credential))
+        return try Self.parseBillingState(try await read(url: url, credential: credential, timeout: timeout))
     }
 
     func verifyConnection(for credential: GreptileSessionCredentials) async throws {
         _ = try await verifiedIdentity(for: credential)
         do {
-            _ = try await billingState(for: credential)
+            _ = try await billingState(for: credential, timeout: 5)
         } catch let error as GreptileSignInError where error.requiresAuthentication {
             throw error
         } catch is CancellationError {
@@ -77,8 +77,8 @@ struct GreptileDashboardClient: Sendable {
         }
     }
 
-    private func read(url: URL, credential: GreptileSessionCredentials) async throws -> Data {
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+    private func read(url: URL, credential: GreptileSessionCredentials, timeout: TimeInterval = 15) async throws -> Data {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         request.httpShouldHandleCookies = false
         request.setValue(try credential.cookieHeader(), forHTTPHeaderField: "Cookie")
         request.setValue("application/json", forHTTPHeaderField: "Accept")

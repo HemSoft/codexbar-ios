@@ -84,6 +84,7 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
             let client = GreptileDashboardClient(session: fixture.session, baseURL: fixture.endpoint)
             try await client.verifyConnection(for: credential())
             XCTAssertEqual(fixture.requests.count, 2)
+            XCTAssertEqual(fixture.requests.last?.timeoutInterval, 5)
         }
     }
 
