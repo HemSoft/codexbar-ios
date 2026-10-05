@@ -238,6 +238,132 @@ only redacted field names, units, scope and behavior against the same account's
 dashboard. No upgrade, purchase, billable review, private-endpoint probe,
 billing-session scrape or exported credential was used for this investigation.
 
+## Starter renewal API investigation, October 5, 2026
+
+Research for [#406](https://github.com/HemSoft/codexbar-ios/issues/406), after
+the request to investigate beyond published MCP documentation. **A renewal
+boundary for the actual free 50-credit allowance is available through the
+signed-in dashboard API.** The earlier investigations did not inspect that
+response and do not establish that a renewal date is impossible to retrieve.
+
+### Verified dashboard read contract
+
+The normal [Usage dashboard](https://app.greptile.com/-/settings/usage) loads
+`billing.getState`, `billing.getCodeReviewBillingPeriods` and
+`billing.getSubscriptionInfo` through its tRPC read transport. After normal
+sign-in, the existing HemSoft session returned HTTP 200 for this standalone
+read, without an Authorization header:
+
+```text
+GET https://app.greptile.com/api/trpc/billing.getState
+    ?batch=1&input=<URL-encoded JSON below>
+
+{"0":{"json":{"tenantExternalId":"<selected-organization-external-id>"}}}
+```
+
+The tRPC response is an array. The provider result is under
+`[0].result.data.json`, with the following confirmed fields. This example
+redacts the account's numeric usage and timestamps; it is a shape description,
+not a literal fixture or complete response:
+
+```json
+{
+  "kind": "free",
+  "includedCreditsPerPeriod": 50,
+  "used": "<returned numeric usage>",
+  "coveredAuthorLimit": 1,
+  "entitlements": ["CODE_REVIEWS"],
+  "currentPeriod": {
+    "start": "<provider ISO 8601 timestamp>",
+    "end": "<provider ISO 8601 timestamp>"
+  }
+}
+```
+
+`currentPeriod.end` is the provider's current free-credit period boundary.
+It is usable as the next renewal date without guessing a calendar rule.
+The Usage page derives its current-period label from this same state.
+`billing.getCodeReviewBillingPeriods` returned matching `startTime` and
+`endTime`; `billing.getSubscriptionInfo.codeReview` also returned matching
+`periodStart` and `periodEnd`. The state itself identifies `kind: free` and
+50 included credits, so the conclusion does not depend on interpreting a paid
+subscription. The separate legacy API-product subscription period differed
+and must not be used for code-review renewal.
+
+These procedures were observed in the site's own requests before being read
+independently. The [first-party Usage client](https://app.greptile.com/_next/static/chunks/app/%28main%29/%28app%29/%5BtenantId%5D/%5Bnamespace%5D/settings/usage/page-3b7e8e0246253aca.js)
+confirms organization-scoped inputs and preference for `getState.currentPeriod`
+when choosing the current usage range. The bundle path identifies the inspected
+deployment; it is not a stable API or application dependency.
+
+### Authentication and public API boundaries
+
+The successful tRPC request used the existing same-origin browser session.
+The session's Greptile token, supplied as Bearer authorization with browser
+cookies omitted, returned HTTP 401 `UNAUTHORIZED` from the same billing read.
+That is a result for this session token, not proof that every API key or OAuth
+token is rejected. API-key access to this route remains unverified.
+
+The token successfully authorized the official CLI's
+`GET https://api.greptile.com/v1/me`. The raw server response contained only
+identity, email and memberships, with no billing field. The CLI's validator
+strips unknown fields, so inspecting the raw response was necessary.
+The [official CLI repository](https://github.com/greptileai/cli/tree/7ecf571512567faf3cf496775ee131468a45c03a)
+points to the [published 3.6.1 package](https://registry.npmjs.org/greptile/3.6.1),
+whose bundled source was inspected without installing or executing it.
+The [tarball](https://registry.npmjs.org/greptile/-/greptile-3.6.1.tgz) SHA-256
+is `0f7db04d1e614fe51846e50ad07930d75137cd670f54b4bce2502dc5fb7895ea`.
+
+An authenticated read-only `tools/list` request to
+`https://api.greptile.com/mcp` returned 21 tools, matching the
+[fixed first-party catalog](https://github.com/greptileai/codex-plugin/blob/7227d753ae64efe571fd3e9d1a139d2e24bd4102/chatgpt-app-submission.json).
+No tool in that live catalog exposes billing or renewal. The public
+[OAuth resource metadata](https://api.greptile.com/.well-known/oauth-protected-resource)
+establishes read/write scopes, not a separate billing-read grant.
+
+The distinction is now concrete. A first-party internal dashboard API returns
+the free renewal boundary. A supported public API-key or MCP billing contract
+has not been established. Native integration must provide a normal guided
+sign-in and securely retain account-scoped authorization. It must not require
+users to copy cookies, export credentials, enter dates, or buy a plan. Verify
+which authentication the native client can retain and use before selecting
+its transport; do not claim that an API key supplies this response.
+
+### Existing quota notices as corroboration
+
+GitHub's [pull-request review API](https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request)
+also exposes provider-authored quota messages without triggering another review.
+Greptile's [open-source quota notice](https://github.com/designedbyomar/designedbyomar/pull/101#pullrequestreview-5420549724)
+names October 17 as an automatic resume date after 100 repository-level credits
+were exhausted. Another [open-source notice](https://github.com/kwilson21/kaillera-next/pull/38#pullrequestreview-5332627493)
+names October 20. Those are different allowances and cannot supply the Starter
+renewal date. The prose omits the year, time and time zone.
+
+Eight sampled [free-50 notices](https://github.com/ashraftown/pingstats/pull/22#pullrequestreview-5420659823)
+reported exhaustion without a renewal date. The notice itself does not name
+Starter; the [pricing page](https://www.greptile.com/pricing) supplies that plan's
+50-credit entitlement. The 39 indexed HemSoft PRs with Greptile reviews were
+also checked, covering 690 review records. Their exhaustion notices, including
+[CodexBar PR 114](https://github.com/HemSoft/codexbar/pull/114#pullrequestreview-5402317998)
+and [HS Buddy PR 632](https://github.com/HemSoft/hs-buddy/pull/632#pullrequestreview-5097510720),
+did not supply dates. Publication times are not renewal times. Search coverage
+is limited by GitHub's index and repository visibility.
+
+### Delivery status
+
+The authenticated dashboard contract and live MCP catalog were verified on
+October 5, 2026. Only normal read requests were used. No review was triggered,
+credits consumed, purchase made, billing setting changed, or secret printed.
+Private account identifiers and session credentials are excluded from these
+notes. Account-specific timestamps and a dashboard capture are retained only
+in local research evidence.
+
+This finding supersedes the earlier lack of an authenticated renewal contract.
+It does not change the app or complete #406. The remaining implementation work
+is guided account-scoped authentication, renewal parsing independent of the
+credit balance, honest missing/stale-date behavior, and dashboard/detail-sheet
+presentation. Phone integration and same-account app comparison remain pending.
+
 ### Compatibility check
 
 Inspection of `makeReviewsRequest` and `reviewQuota(in:)` in
