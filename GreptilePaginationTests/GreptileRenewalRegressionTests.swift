@@ -73,6 +73,38 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(arguments["organization"] as? String, "fixture-org")
     }
 
+    func testVerifiedConnectionSurvivesNonAuthenticationBillingFailures() async throws {
+        for reply in [
+            GreptileHTTPFixture.Reply.failure(URLError(.timedOut)),
+            .payload(Data("{}".utf8), status: 503),
+            .payload(Data("malformed".utf8)),
+        ] {
+            let fixture = GreptileHTTPFixture([try identity(), reply])
+            defer { fixture.invalidate() }
+            let client = GreptileDashboardClient(session: fixture.session, baseURL: fixture.endpoint)
+            try await client.verifyConnection(for: credential())
+            XCTAssertEqual(fixture.requests.count, 2)
+        }
+    }
+
+    func testConnectionStillRejectsExpiredWrongAndCanceledSessions() async throws {
+        for replies in [
+            [try identity(), .payload(Data("{}".utf8), status: 401)],
+            [try identity(subject: "another-user")],
+            [try identity(), .failure(URLError(.cancelled))],
+        ] {
+            let fixture = GreptileHTTPFixture(replies)
+            defer { fixture.invalidate() }
+            let client = GreptileDashboardClient(session: fixture.session, baseURL: fixture.endpoint)
+            do {
+                try await client.verifyConnection(for: credential())
+                XCTFail("Rejected or canceled sessions must not complete setup.")
+            } catch {
+                XCTAssertTrue((error as? GreptileSignInError)?.requiresAuthentication == true || error is URLError)
+            }
+        }
+    }
+
     func testMissingMalformedAndUnrelatedPeriodsNeverInventADate() throws {
         for state: [String: Any] in [
             ["kind": "free"],

@@ -158,6 +158,14 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Accounts & Groups"].waitForExistence(timeout: 10))
         tap(app.otherElements["Greptile Free Fixture"], in: app)
         XCTAssertTrue(app.navigationBars["Greptile Free Fixture"].waitForExistence(timeout: 10))
+        if scenario == "greptile-free" {
+            let add = app.buttons["Add Greptile account for renewal"]
+            reveal(add, in: app)
+            XCTAssertTrue(add.exists)
+            XCTAssertFalse(app.secureTextFields.firstMatch.exists)
+            XCTAssertFalse(app.buttons["Sign in with Greptile"].exists)
+            keep("greptile-renewal-legacy-account-settings", app: app)
+        }
         let section = app.staticTexts["Metrics"].firstMatch
         reveal(section, in: app)
         keep("\(scenario)-account-metrics", app: app)

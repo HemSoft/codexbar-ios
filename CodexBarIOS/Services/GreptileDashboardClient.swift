@@ -62,6 +62,21 @@ struct GreptileDashboardClient: Sendable {
         return try Self.parseBillingState(try await read(url: url, credential: credential))
     }
 
+    func verifyConnection(for credential: GreptileSessionCredentials) async throws {
+        _ = try await verifiedIdentity(for: credential)
+        do {
+            _ = try await billingState(for: credential)
+        } catch let error as GreptileSignInError where error.requiresAuthentication {
+            throw error
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw error
+        } catch {
+            try Task.checkCancellation()
+        }
+    }
+
     private func read(url: URL, credential: GreptileSessionCredentials) async throws -> Data {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpShouldHandleCookies = false

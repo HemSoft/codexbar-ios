@@ -158,8 +158,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
             guard let self else { return }
             defer { self.finishVerification(revision: revision) }
             do {
-                _ = try await self.client.verifiedIdentity(for: credential)
-                _ = try await self.client.billingState(for: credential)
+                try await self.client.verifyConnection(for: credential)
                 guard !Task.isCancelled, self.completion != nil else { return }
                 self.finish(.success(credential))
             } catch {
