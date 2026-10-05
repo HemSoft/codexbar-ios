@@ -59,6 +59,7 @@ final class GreptileAllowanceUITests: XCTestCase {
             let missing = scenario.hasSuffix("missing") || scenario.hasSuffix("malformed")
             XCTAssertEqual(app.staticTexts["greptile-renewal-date"].firstMatch.exists, !missing)
             XCTAssertFalse(app.buttons["dashboard-metric-greptile.review-quota"].exists)
+            if missing { XCTAssertFalse(app.buttons["greptile-renewal-connect"].exists) }
             reveal(label, in: app)
             keep("\(scenario)-\(full ? "full-dark-large" : "compact-light")", app: app)
             app.terminate()

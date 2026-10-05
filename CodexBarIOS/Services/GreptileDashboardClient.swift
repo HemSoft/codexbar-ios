@@ -73,12 +73,12 @@ struct GreptileDashboardClient: Sendable {
     }
 
     static func parseBillingState(_ data: Data) throws -> GreptileDashboardState {
-        guard let array = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+        guard let array = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]],
               array.count == 1,
               let result = array[0]["result"] as? [String: Any],
               let data = result["data"] as? [String: Any],
               let state = data["json"] as? [String: Any],
-              let kind = state["kind"] as? String else { throw GreptileSignInError.unavailable }
+              let kind = state["kind"] as? String else { throw GreptileSignInError.invalidBillingResponse }
         guard kind == "free", let period = state["currentPeriod"] as? [String: Any],
               let end = isoDate(period["end"]) else { return GreptileDashboardState(renewalDate: nil) }
         if period["start"] != nil {

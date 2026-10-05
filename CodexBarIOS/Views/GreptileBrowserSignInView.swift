@@ -16,6 +16,8 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     private var completion: ((Result<GreptileSessionCredentials, Error>) -> Void)?
     private var task: Task<Void, Never>?
     private var didStart = false
+    private var navigationRevision = UUID()
+    @Published private(set) var canGoBack = false
 
     init(completion: @escaping (Result<GreptileSessionCredentials, Error>) -> Void) {
         let configuration = WKWebViewConfiguration()
@@ -35,10 +37,30 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     }
 
     func openUsage() {
-        organizations = []
-        identity = nil
+        resetInspection()
         message = nil
         webView.load(URLRequest(url: URL(string: "https://app.greptile.com/-/settings/usage")!))
+    }
+
+    private func resetInspection() {
+        navigationRevision = UUID()
+        task?.cancel()
+        task = nil
+        isVerifying = false
+        organizations = []
+        identity = nil
+        cookies = []
+    }
+
+    func goBack() {
+        guard webView.canGoBack, !isVerifying else { return }
+        resetInspection()
+        webView.goBack()
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        resetInspection()
+        canGoBack = webView.canGoBack
     }
 
     func cancel() { finish(.failure(GreptileSignInError.canceled)) }
@@ -63,6 +85,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        canGoBack = webView.canGoBack
         host = webView.url?.host ?? "app.greptile.com"
         inspectSession()
     }
@@ -72,21 +95,26 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     private func inspectSession() {
         guard completion != nil, task == nil, organizations.isEmpty, !webView.isLoading,
               webView.url?.scheme == "https", webView.url?.host == "app.greptile.com" else { return }
+        let revision = navigationRevision
+        let url = webView.url
         webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] values in
-            guard let self, self.completion != nil, self.task == nil else { return }
+            guard let self, self.completion != nil, self.task == nil, self.navigationRevision == revision,
+                  self.webView.url == url, !self.webView.isLoading else { return }
             guard let cookies = try? GreptileSessionCredentials.sessionCookies(from: values), !cookies.isEmpty else { return }
-            self.inspect(cookies: cookies)
+            self.inspect(cookies: cookies, revision: revision)
         }
     }
 
-    private func inspect(cookies: [GreptileSessionCookie]) {
+    private func inspect(cookies: [GreptileSessionCookie], revision: UUID) {
         task = Task { [weak self] in
             guard let self else { return }
-            defer { self.task = nil; self.isVerifying = false }
+            defer {
+                if self.navigationRevision == revision { self.task = nil; self.isVerifying = false }
+            }
             self.isVerifying = true
             do {
                 let identity = try await self.client.identity(cookies: cookies)
-                guard !Task.isCancelled, self.completion != nil else { return }
+                guard !Task.isCancelled, self.completion != nil, self.navigationRevision == revision else { return }
                 guard !identity.organizations.isEmpty else {
                     self.message = "Greptile returned no organizations. Finish account setup, then return to Usage."
                     return
@@ -95,7 +123,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
                 self.identity = identity
                 self.organizations = identity.organizations
             } catch {
-                guard !Task.isCancelled, self.completion != nil else { return }
+                guard !Task.isCancelled, self.completion != nil, self.navigationRevision == revision else { return }
                 self.message = "Finish signing in, then choose Greptile Usage to retry verification."
             }
         }
@@ -125,7 +153,10 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
         guard let url = action.request.url, url.scheme == "https", url.user == nil, url.password == nil,
-              url.port == nil || url.port == 443 else { return .cancel }
+              url.port == nil || url.port == 443 else {
+            explainBlockedNavigation(action)
+            return .cancel
+        }
         return .allow
     }
 
@@ -134,8 +165,11 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
         for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         guard navigationAction.targetFrame == nil else { return nil }
-        if let url = navigationAction.request.url, url.scheme == "https", url.user == nil, url.password == nil {
+        if let url = navigationAction.request.url, url.scheme == "https", url.user == nil, url.password == nil,
+           url.port == nil || url.port == 443 {
             webView.load(navigationAction.request)
+        } else {
+            explainBlockedNavigation(navigationAction)
         }
         return nil
     }
@@ -148,6 +182,11 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         message = "The sign-in page closed. Choose Greptile Usage to try again."
+    }
+
+    private func explainBlockedNavigation(_ action: WKNavigationAction) {
+        guard action.targetFrame?.isMainFrame != false, action.request.url?.absoluteString != "about:blank" else { return }
+        message = "This sign-in link could not be opened securely. Choose Greptile Usage to continue."
     }
 
     private func navigationFailed(_ error: Error) {
@@ -184,7 +223,8 @@ struct GreptileBrowserSignInView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { session.cancel() } }
                 ToolbarItemGroup(placement: .bottomBar) {
-                    Button("Back", systemImage: "chevron.left") { session.webView.goBack() }
+                    Button("Back", systemImage: "chevron.left") { session.goBack() }
+                        .disabled(!session.canGoBack || session.isVerifying)
                     Spacer()
                     Button("Greptile Usage") { session.openUsage() }.disabled(session.isVerifying)
                 }

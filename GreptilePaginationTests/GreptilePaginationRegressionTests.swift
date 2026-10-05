@@ -148,10 +148,12 @@ final class GreptilePaginationRegressionTests: XCTestCase, @unchecked Sendable {
         defer { task.cancel() }
         await fulfillment(of: [fixture.started], timeout: 2)
         task.cancel()
-        let result = try await task.value
-        XCTAssertNotNil(result.failureMessage)
-        XCTAssertTrue(result.bars.isEmpty)
-        XCTAssertEqual(fixture.requests.count, 1)
+        do {
+            _ = try await task.value
+            XCTFail("Canceled reads must not publish a failure result")
+        } catch is CancellationError {
+            XCTAssertEqual(fixture.requests.count, 1)
+        }
     }
 
     func testMissingOrUnreadableCredentialStopsBeforeAnyRequest() async throws {

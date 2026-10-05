@@ -90,20 +90,21 @@ public final class GreptileUsageProvider: UsageProvider {
                 account: ProviderConfigurationStore.keychainAccount(for: configuration)
             )
         } catch {
+            try Self.rethrowCancellation(error)
             return failureResult(
                 "Greptile credential could not be read from Keychain.",
                 configuration: configuration
             )
         }
 
-        if configuration.authMethod == .browserSession {
+        if configuration.authMethod == .browserSession || GreptileSessionCredentials.parse(storedSecret) != nil {
             guard let credential = GreptileSessionCredentials.parse(storedSecret) else {
                 return failureResult(
                     "Sign in with Greptile to read your allowance renewal date.",
                     configuration: configuration, recoveryAction: .signIn
                 )
             }
-            return await fetchBrowserUsage(credential: credential, configuration: configuration)
+            return try await fetchBrowserUsage(credential: credential, configuration: configuration)
         }
 
         guard
@@ -117,23 +118,31 @@ public final class GreptileUsageProvider: UsageProvider {
             )
         }
 
-        var result = await fetchReviewActivity(apiKey: apiKey, configuration: configuration)
+        var result = try await fetchReviewActivity(apiKey: apiKey, configuration: configuration)
         result.greptileAllowanceRenewal = GreptileAllowanceRenewal(
             renewsAt: nil, observedAt: result.fetchedAt,
-            unavailableReason: "Sign in with Greptile in account settings to read your allowance renewal date."
+            unavailableReason: "Sign in with Greptile in account settings to read your allowance renewal date.",
+            requiresAuthentication: true
         )
         return result
+    }
+
+    private static func rethrowCancellation(_ error: Error) throws {
+        if error is CancellationError || Task.isCancelled || (error as? URLError)?.code == .cancelled {
+            throw CancellationError()
+        }
     }
 
     private func fetchBrowserUsage(
         credential: GreptileSessionCredentials,
         configuration: ProviderAccountConfiguration
-    ) async -> ProviderUsageResult {
+    ) async throws -> ProviderUsageResult {
         let client = GreptileDashboardClient(session: session, baseURL: dashboardBaseURL)
         let identity: GreptileDashboardIdentity
         do {
             identity = try await client.verifiedIdentity(for: credential)
         } catch {
+            try Self.rethrowCancellation(error)
             let failure = error as? GreptileSignInError ?? .unavailable
             let cacheIdentity: String
             if case .wrongAccount = failure {
@@ -151,12 +160,15 @@ public final class GreptileUsageProvider: UsageProvider {
             let state = try await client.billingState(for: credential)
             renewal = GreptileAllowanceRenewal(renewsAt: state.renewalDate, observedAt: Date())
         } catch {
+            try Self.rethrowCancellation(error)
             renewal = GreptileAllowanceRenewal(
                 renewsAt: nil, observedAt: Date(),
-                unavailableReason: (error as? GreptileSignInError ?? .unavailable).localizedDescription
+                unavailableReason: (error as? GreptileSignInError ?? .unavailable).localizedDescription,
+                requiresAuthentication: (error as? GreptileSignInError) == .expired,
+                lookupFailed: (error as? GreptileSignInError) != .invalidBillingResponse
             )
         }
-        var result = await fetchReviewActivity(
+        var result = try await fetchReviewActivity(
             apiKey: identity.greptileToken, organization: credential.organization.id, configuration: configuration
         )
         result.greptileAllowanceRenewal = renewal
@@ -168,7 +180,7 @@ public final class GreptileUsageProvider: UsageProvider {
         apiKey: String,
         organization: String? = nil,
         configuration: ProviderAccountConfiguration
-    ) async -> ProviderUsageResult {
+    ) async throws -> ProviderUsageResult {
         var offset = 0
         var pageCount = 0
         var expectedTotal: Int?
@@ -183,6 +195,7 @@ public final class GreptileUsageProvider: UsageProvider {
             do {
                 (data, response) = try await session.data(for: request)
             } catch {
+                try Self.rethrowCancellation(error)
                 return failureResult(
                     "Could not reach Greptile. Check the connection and try again.",
                     configuration: configuration

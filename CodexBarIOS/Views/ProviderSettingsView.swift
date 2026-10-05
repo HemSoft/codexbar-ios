@@ -5,6 +5,8 @@ struct ProviderSettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @StateObject private var viewModel: ProviderSettingsViewModel
     private let latestUsageResult: ProviderUsageResult?
+    private let greptileAccountDestination: (String) -> ProviderSettingsView
+    @State private var newGreptileAccountID: String?
     private let startsCursorSignIn: Bool
     @State private var didAutoStartCursorSignIn = false
     @State private var pendingGeminiConfirmation: GeminiConfirmation?
@@ -31,6 +33,14 @@ struct ProviderSettingsView: View {
         self.configurationStore = configurationStore
         self.latestUsageResult = initialUsageResult
         self.startsCursorSignIn = startsCursorSignIn
+        self.greptileAccountDestination = { newID in
+            ProviderSettingsView(
+                configurationStore: configurationStore, accountID: newID,
+                onCredentialsChanged: onCredentialsChanged, onRefreshInputsChanged: onRefreshInputsChanged,
+                onAccountIdentityChanged: onAccountIdentityChanged, onAccountRefresh: onAccountRefresh,
+                onCredentialRefresh: onCredentialRefresh
+            )
+        }
         self._viewModel = StateObject(
             wrappedValue: ProviderSettingsViewModel(
                 configurationStore: configurationStore,
@@ -364,10 +374,19 @@ struct ProviderSettingsView: View {
                 } else if providerID == .gemini {
                     geminiAppsConnection
                 } else if providerID == .greptile {
-                    Button(configurationStore.hasSecret(for: configuration) ? "Reconnect Greptile for renewal" : "Sign in with Greptile") {
-                        viewModel.startGreptileSignIn()
+                    if configuration.authMethod == .apiKey, configurationStore.hasSecret(for: configuration) {
+                        Text("Keep this API-key account's review history. Add a separate account to sign in for renewal.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Button("Add Greptile account for renewal") {
+                            let account = configurationStore.addAccount(for: .greptile)
+                            if configurationStore.configuration(accountID: account.id) != nil { newGreptileAccountID = account.id }
+                        }
+                    } else {
+                        Button(configurationStore.hasSecret(for: configuration) ? "Reconnect Greptile for renewal" : "Sign in with Greptile") {
+                            viewModel.startGreptileSignIn()
+                        }
+                        .disabled(viewModel.isSigningInWithGreptile)
                     }
-                    .disabled(viewModel.isSigningInWithGreptile)
                     if viewModel.isSigningInWithGreptile {
                         ProgressView("Connecting to Greptile…")
                         Button("Cancel Sign-In") { viewModel.cancelGreptileSignIn() }
@@ -592,6 +611,7 @@ struct ProviderSettingsView: View {
         .sheet(item: $viewModel.openCodeBrowserSession) { session in
             OpenCodeBrowserSignInView(session: session)
         }
+        .navigationDestination(item: $newGreptileAccountID) { greptileAccountDestination($0) }
         .sheet(item: $viewModel.greptileBrowserSession) { session in
             GreptileBrowserSignInView(session: session)
         }

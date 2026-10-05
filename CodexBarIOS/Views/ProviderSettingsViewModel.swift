@@ -242,7 +242,9 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     var availableAuthMethods: [ProviderAuthMethod] {
         switch providerID {
-        case .codex, .claude, .grok, .cursor, .gemini, .githubBilling, .openCodeZen, .greptile:
+        case .greptile:
+            configuration.authMethod == .apiKey && configurationStore.hasSecret(for: configuration) ? [.apiKey] : [.browserSession]
+        case .codex, .claude, .grok, .cursor, .gemini, .githubBilling, .openCodeZen:
             [.browserSession]
         case .antigravity:
             [.cliToken]
@@ -750,8 +752,15 @@ final class ProviderSettingsViewModel: ObservableObject {
                 return
             }
             validationFeedbackProviderID = nil
-            credentialMessage = "Greptile connected. Refresh to read your allowance renewal date."
-            credentialsDidChange()
+            credentialMessage = "Greptile connected. Reading your allowance renewal date…"
+            credentialsDidChange(refreshMetrics: false)
+            let revision = metricsCredentialRevision
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let refreshed = await self.onAccountRefresh(self.configuration)
+                guard revision == self.metricsCredentialRevision, let refreshed else { return }
+                self.acceptUsageResult(refreshed)
+            }
         } catch {
             credentialError = (error as? GreptileSignInError ?? .invalidSession).localizedDescription
         }

@@ -1,9 +1,11 @@
 # Greptile review activity and billing allowance
 
-Investigation for [#395](https://github.com/HemSoft/codexbar-ios/issues/395),
-checked October 3, 2026. Sources below are first-party public documentation,
-not a capture of Franz's account. No account credentials or private review
-history were accessed, and no review, upgrade or billing action was triggered.
+The October 3, 2026 investigation for [#395](https://github.com/HemSoft/codexbar-ios/issues/395)
+used first-party public documentation. The October 5 follow-up for
+[#406](https://github.com/HemSoft/codexbar-ios/issues/406) verified read-only
+billing and identity responses in an existing authenticated dashboard session.
+No review, upgrade or billing action was triggered. Secrets and private review
+history are excluded from this document.
 
 ## Current app behavior
 
@@ -14,7 +16,7 @@ identity and organization membership, and asks which organization to connect.
 Only that account's Auth.js session cookie or numbered cookie chunks are saved
 in its Keychain entry. Canceling leaves saved credentials unchanged. Reconnect
 must match the saved user and organization; another identity requires a separate
-CodexBar account. The browser session is discarded after connection or cancel.
+CodexBar account. Existing API-key accounts keep their review history and offer an Add Greptile account for renewal button, since their user identity cannot be verified. The browser session is discarded after connection or cancel.
 
 The app reads `GET /api/auth/session` with the saved session to re-verify identity
 and membership before every billing read. It then reads
@@ -399,10 +401,11 @@ notes. Account-specific timestamps and a dashboard capture are retained only
 in local research evidence.
 
 This finding supersedes the earlier lack of an authenticated renewal contract.
-It does not change the app or complete #406. The remaining implementation work
-is guided account-scoped authentication, renewal parsing independent of the
-credit balance, honest missing/stale-date behavior, and dashboard/detail-sheet
-presentation. Phone integration and same-account app comparison remain pending.
+The app now implements guided account-scoped authentication, renewal parsing
+independent of the credit balance, missing/stale-date handling, and dashboard
+and detail-sheet presentation. A development build has been installed and
+launched on the connected iPhone. Franz's live sign-in and same-account value
+comparison remain pending.
 
 ### Compatibility check
 
@@ -413,4 +416,4 @@ pairs retain their existing period fields and stable identity. Credit-named
 metadata is not a review quota. The synthetic fixtures in
 `GreptilePaginationTests/GreptileAllowanceRegressionTests.swift` exercise that
 compatibility and missing-data behavior; they are not captures or proof of a
-paid account's response. This research changes no integration, UI or CI work.
+paid account's response. The original research-only snapshot changed no integration or UI. The #406 implementation preserves those review metrics and adds renewal independently. Automatic CI work is unchanged.

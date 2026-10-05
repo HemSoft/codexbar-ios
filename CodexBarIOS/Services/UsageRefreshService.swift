@@ -188,7 +188,7 @@ public final class UsageRefreshService: ObservableObject {
                 }
                 group.addTask {
                     do {
-                        let result = try await provider.fetchUsage(for: configuration)
+                        let result = await self.preservingGreptileRenewal(try await provider.fetchUsage(for: configuration))
                         if let message = result.failureMessage {
                             return .failure(
                                 configuration: configuration,
@@ -203,6 +203,7 @@ public final class UsageRefreshService: ObservableObject {
                             result: result
                         )
                     } catch {
+                        if Self.isCancellation(error) { return .canceled(accountID: configuration.id) }
                         let result = Self.failureResult(
                             for: configuration,
                             message: error.localizedDescription
@@ -219,6 +220,8 @@ public final class UsageRefreshService: ObservableObject {
 
             for await outcome in group {
                 switch outcome {
+                case .canceled(let accountID):
+                    finishRefresh(accountID: accountID)
                 case .success(let configuration, let generation, let result):
                     let accountID = configuration.id
                     guard isCurrent(configuration, generation: generation) else {
@@ -280,7 +283,7 @@ public final class UsageRefreshService: ObservableObject {
         }
 
         do {
-            let result = try await provider.fetchUsage(for: configuration)
+            let result = preservingGreptileRenewal(try await provider.fetchUsage(for: configuration))
             guard isCurrent(configuration, generation: generation) else {
                 return nil
             }
@@ -295,7 +298,7 @@ public final class UsageRefreshService: ObservableObject {
             lastRefreshError = nil
             return result
         } catch {
-            guard isCurrent(configuration, generation: generation) else {
+            guard !Self.isCancellation(error), isCurrent(configuration, generation: generation) else {
                 return nil
             }
             let message = error.localizedDescription
@@ -403,6 +406,20 @@ public final class UsageRefreshService: ObservableObject {
             return nil
         }
         return CodexRetainedResetAttempt(creditID: attempt.creditID)
+    }
+
+    private nonisolated static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || Task.isCancelled || (error as? URLError)?.code == .cancelled
+    }
+
+    private func preservingGreptileRenewal(_ incoming: ProviderUsageResult) -> ProviderUsageResult {
+        guard incoming.providerID == .greptile, incoming.greptileAllowanceRenewal?.lookupFailed == true,
+              let cached = results.first(where: { $0.accountID == incoming.accountID && Self.canReuseCachedResult($0, for: incoming) }),
+              var renewal = cached.greptileAllowanceRenewal, renewal.renewsAt != nil else { return incoming }
+        renewal.isStale = true
+        var result = incoming
+        result.greptileAllowanceRenewal = renewal
+        return result
     }
 
     private func replaceResult(_ result: ProviderUsageResult) {
@@ -673,6 +690,7 @@ private struct CodexResetAttempt {
 }
 
 private enum AccountRefreshOutcome: Sendable {
+    case canceled(accountID: String)
     case success(
         configuration: ProviderAccountConfiguration,
         generation: UUID,

@@ -11,7 +11,8 @@ building, testing, or releasing the app.
 - Show Greptile's free allowance renewal countdown and local date on the
   dashboard and in More Information. Guided phone sign-in connects the selected
   organization. Missing dates stay unavailable, and failed refreshes label the
-  last known date.
+  last known date. Existing API-key accounts can add a separate renewal account
+  without combining organizations’ review history.
   ([#406](https://github.com/HemSoft/codexbar-ios/issues/406))
 
 - Added an optional Codex Credits pool metric. Turn it on in account Settings

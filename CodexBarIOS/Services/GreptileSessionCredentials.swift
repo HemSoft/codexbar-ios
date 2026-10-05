@@ -74,10 +74,11 @@ struct GreptileSessionCredentials: Codable, Equatable, Sendable {
 }
 
 enum GreptileSignInError: LocalizedError, Equatable {
-    case canceled, expired, invalidSession, wrongAccount, unavailable
+    case canceled, expired, invalidSession, wrongAccount, unavailable, invalidBillingResponse
 
     var errorDescription: String? {
         switch self {
+        case .invalidBillingResponse: "Greptile did not return a valid billing response. Open Greptile Usage for current details."
         case .canceled: "Greptile sign-in canceled. Your saved account was not changed."
         case .expired: "Your Greptile session expired. Sign in again to read the renewal date."
         case .invalidSession: "Greptile sign-in could not be verified. Your saved account was not changed."

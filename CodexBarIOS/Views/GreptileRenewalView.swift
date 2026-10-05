@@ -22,7 +22,7 @@ struct GreptileRenewalView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if renewal.renewsAt == nil {
-                    if let onConnect {
+                    if renewal.requiresAuthentication, let onConnect {
                         Button("Connect Greptile for renewal", action: onConnect)
                             .font(.caption).accessibilityIdentifier("greptile-renewal-connect")
                     }
