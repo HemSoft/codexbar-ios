@@ -59,6 +59,7 @@ public final class GreptileUsageProvider: UsageProvider {
     private let secretStore: SecretStore
     private let session: URLSession
     private let endpoint: URL
+    private let dashboardBaseURL: URL
     private let pageSize: Int
     private let maximumPageCount: Int
 
@@ -68,14 +69,16 @@ public final class GreptileUsageProvider: UsageProvider {
 
     public init(
         secretStore: SecretStore = KeychainService(),
-        session: URLSession = .shared,
+        session: URLSession? = nil,
         endpoint: URL = URL(string: "https://api.greptile.com/mcp")!,
+        dashboardBaseURL: URL = URL(string: "https://app.greptile.com")!,
         pageSize: Int = 100,
         maximumPageCount: Int = 100
     ) {
         self.secretStore = secretStore
-        self.session = session
+        self.session = session ?? GreptileDashboardClient.isolatedSession()
         self.endpoint = endpoint
+        self.dashboardBaseURL = dashboardBaseURL
         self.pageSize = min(max(pageSize, 1), 100)
         self.maximumPageCount = max(maximumPageCount, 1)
     }
@@ -93,6 +96,16 @@ public final class GreptileUsageProvider: UsageProvider {
             )
         }
 
+        if configuration.authMethod == .browserSession {
+            guard let credential = GreptileSessionCredentials.parse(storedSecret) else {
+                return failureResult(
+                    "Sign in with Greptile to read your allowance renewal date.",
+                    configuration: configuration, recoveryAction: .signIn
+                )
+            }
+            return await fetchBrowserUsage(credential: credential, configuration: configuration)
+        }
+
         guard
             let apiKey = Self.normalizedAPIKey(from: storedSecret),
             !apiKey.isEmpty
@@ -104,6 +117,58 @@ public final class GreptileUsageProvider: UsageProvider {
             )
         }
 
+        var result = await fetchReviewActivity(apiKey: apiKey, configuration: configuration)
+        result.greptileAllowanceRenewal = GreptileAllowanceRenewal(
+            renewsAt: nil, observedAt: result.fetchedAt,
+            unavailableReason: "Sign in with Greptile in account settings to read your allowance renewal date."
+        )
+        return result
+    }
+
+    private func fetchBrowserUsage(
+        credential: GreptileSessionCredentials,
+        configuration: ProviderAccountConfiguration
+    ) async -> ProviderUsageResult {
+        let client = GreptileDashboardClient(session: session, baseURL: dashboardBaseURL)
+        let identity: GreptileDashboardIdentity
+        do {
+            identity = try await client.verifiedIdentity(for: credential)
+        } catch {
+            let failure = error as? GreptileSignInError ?? .unavailable
+            let cacheIdentity: String
+            if case .wrongAccount = failure {
+                cacheIdentity = "unverified-greptile-session"
+            } else {
+                cacheIdentity = credential.cacheIdentity
+            }
+            return failureResult(
+                failure.localizedDescription, configuration: configuration,
+                recoveryAction: failure == .unavailable ? .retryRefresh : .reauthenticate, cacheIdentity: cacheIdentity
+            )
+        }
+        let renewal: GreptileAllowanceRenewal
+        do {
+            let state = try await client.billingState(for: credential)
+            renewal = GreptileAllowanceRenewal(renewsAt: state.renewalDate, observedAt: Date())
+        } catch {
+            renewal = GreptileAllowanceRenewal(
+                renewsAt: nil, observedAt: Date(),
+                unavailableReason: (error as? GreptileSignInError ?? .unavailable).localizedDescription
+            )
+        }
+        var result = await fetchReviewActivity(
+            apiKey: identity.greptileToken, organization: credential.organization.id, configuration: configuration
+        )
+        result.greptileAllowanceRenewal = renewal
+        result.cacheIdentity = credential.cacheIdentity
+        return result
+    }
+
+    private func fetchReviewActivity(
+        apiKey: String,
+        organization: String? = nil,
+        configuration: ProviderAccountConfiguration
+    ) async -> ProviderUsageResult {
         var offset = 0
         var pageCount = 0
         var expectedTotal: Int?
@@ -112,7 +177,7 @@ public final class GreptileUsageProvider: UsageProvider {
         var counts = StatusCounts()
 
         while pageCount < pageLimit(expectedTotal: expectedTotal) {
-            let request = makeReviewsRequest(apiKey: apiKey, offset: offset)
+            let request = makeReviewsRequest(apiKey: apiKey, offset: offset, organization: organization)
             let data: Data
             let response: URLResponse
             do {
@@ -210,23 +275,22 @@ public final class GreptileUsageProvider: UsageProvider {
         return incompletePaginationFailure(configuration: configuration)
     }
 
-    func makeReviewsRequest(apiKey: String, offset: Int) -> URLRequest {
+    func makeReviewsRequest(apiKey: String, offset: Int, organization: String? = nil) -> URLRequest {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("CodexBarIOS/1.0", forHTTPHeaderField: "User-Agent")
+        var arguments: [String: Any] = ["limit": pageSize, "offset": offset]
+        if let organization { arguments["organization"] = organization }
         request.httpBody = try? JSONSerialization.data(withJSONObject: [
             "jsonrpc": "2.0",
             "id": "codexbar.greptile.reviews.\(offset)",
             "method": "tools/call",
             "params": [
                 "name": "list_code_reviews",
-                "arguments": [
-                    "limit": pageSize,
-                    "offset": offset,
-                ],
+                "arguments": arguments,
             ],
         ])
         return request
@@ -716,7 +780,8 @@ public final class GreptileUsageProvider: UsageProvider {
     private func failureResult(
         _ message: String,
         configuration: ProviderAccountConfiguration,
-        recoveryAction: ProviderUsageRecoveryAction = .retryRefresh
+        recoveryAction: ProviderUsageRecoveryAction = .retryRefresh,
+        cacheIdentity: String? = nil
     ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id,
@@ -726,6 +791,7 @@ public final class GreptileUsageProvider: UsageProvider {
             bars: [],
             failureMessage: message,
             recoveryAction: recoveryAction,
+            cacheIdentity: cacheIdentity,
             fetchedAt: Date()
         )
     }

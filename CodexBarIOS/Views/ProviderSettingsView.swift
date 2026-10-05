@@ -363,6 +363,20 @@ struct ProviderSettingsView: View {
                     }
                 } else if providerID == .gemini {
                     geminiAppsConnection
+                } else if providerID == .greptile {
+                    Button(configurationStore.hasSecret(for: configuration) ? "Reconnect Greptile for renewal" : "Sign in with Greptile") {
+                        viewModel.startGreptileSignIn()
+                    }
+                    .disabled(viewModel.isSigningInWithGreptile)
+                    if viewModel.isSigningInWithGreptile {
+                        ProgressView("Connecting to Greptile…")
+                        Button("Cancel Sign-In") { viewModel.cancelGreptileSignIn() }
+                    }
+                    if configurationStore.hasSecret(for: configuration) {
+                        Button("Disconnect Greptile", role: .destructive) { viewModel.removeSavedCredential() }
+                    }
+                    Text("Sign in and choose your organization to show its free allowance renewal. Your account session stays in Keychain.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 } else if providerID == .openCodeZen {
                     Button(configurationStore.hasSecret(for: configuration) ? "Reconnect OpenCode" : "Sign in with OpenCode") {
                         viewModel.startOpenCodeSignIn()
@@ -577,6 +591,9 @@ struct ProviderSettingsView: View {
         #endif
         .sheet(item: $viewModel.openCodeBrowserSession) { session in
             OpenCodeBrowserSignInView(session: session)
+        }
+        .sheet(item: $viewModel.greptileBrowserSession) { session in
+            GreptileBrowserSignInView(session: session)
         }
         .sheet(item: $viewModel.geminiBrowserSession, onDismiss: {
             if viewModel.needsGeminiAccountConfirmation { requestGeminiConfirmation(.appsReconnect) }

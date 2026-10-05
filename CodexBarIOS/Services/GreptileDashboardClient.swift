@@ -1,0 +1,110 @@
+import Foundation
+
+struct GreptileDashboardIdentity: Decodable, Sendable {
+    let greptileId: String
+    let greptileToken: String
+    let organizations: [GreptileOrganization]
+}
+
+struct GreptileDashboardState: Equatable, Sendable {
+    let renewalDate: Date?
+}
+
+struct GreptileDashboardClient: Sendable {
+    let session: URLSession
+    var baseURL = URL(string: "https://app.greptile.com")!
+
+    static func isolatedSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration, delegate: GreptileRedirectBlocker(), delegateQueue: nil)
+    }
+
+    func identity(cookies: [GreptileSessionCookie]) async throws -> GreptileDashboardIdentity {
+        struct Response: Decodable { let user: GreptileDashboardIdentity? }
+        let cookieCredential = GreptileSessionCredentials(
+            version: 1, subject: "verification", organization: GreptileOrganization(tenantExternalId: "verification", name: ""),
+            cookies: cookies
+        )
+        let data = try await read(
+            url: baseURL.appendingPathComponent("api/auth/session"),
+            credential: cookieCredential
+        )
+        guard let response = try? JSONDecoder().decode(Response.self, from: data),
+              let identity = response.user, !identity.greptileId.isEmpty,
+              !identity.greptileToken.isEmpty else { throw GreptileSignInError.expired }
+        return identity
+    }
+
+    func verifiedIdentity(for credential: GreptileSessionCredentials) async throws -> GreptileDashboardIdentity {
+        let identity = try await identity(cookies: credential.cookies)
+        guard identity.greptileId == credential.subject,
+              identity.organizations.contains(where: { $0.id == credential.organization.id }) else {
+            throw GreptileSignInError.wrongAccount
+        }
+        return identity
+    }
+
+    func billingState(for credential: GreptileSessionCredentials) async throws -> GreptileDashboardState {
+        let input = try JSONSerialization.data(withJSONObject: [
+            "0": ["json": ["tenantExternalId": credential.organization.id]],
+        ])
+        var components = URLComponents(url: baseURL.appendingPathComponent("api/trpc/billing.getState"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "batch", value: "1"),
+            URLQueryItem(name: "input", value: String(data: input, encoding: .utf8)),
+        ]
+        guard let url = components.url else { throw GreptileSignInError.invalidSession }
+        return try Self.parseBillingState(try await read(url: url, credential: credential))
+    }
+
+    private func read(url: URL, credential: GreptileSessionCredentials) async throws -> Data {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+        request.httpShouldHandleCookies = false
+        request.setValue(try credential.cookieHeader(), forHTTPHeaderField: "Cookie")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await session.data(for: request)
+        guard let response = response as? HTTPURLResponse else { throw GreptileSignInError.unavailable }
+        if response.statusCode == 401 { throw GreptileSignInError.expired }
+        guard response.statusCode == 200 else { throw GreptileSignInError.unavailable }
+        return data
+    }
+
+    static func parseBillingState(_ data: Data) throws -> GreptileDashboardState {
+        guard let array = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              array.count == 1,
+              let result = array[0]["result"] as? [String: Any],
+              let data = result["data"] as? [String: Any],
+              let state = data["json"] as? [String: Any],
+              let kind = state["kind"] as? String else { throw GreptileSignInError.unavailable }
+        guard kind == "free", let period = state["currentPeriod"] as? [String: Any],
+              let end = isoDate(period["end"]) else { return GreptileDashboardState(renewalDate: nil) }
+        if period["start"] != nil {
+            guard let start = isoDate(period["start"]), start < end else {
+                return GreptileDashboardState(renewalDate: nil)
+            }
+        }
+        return GreptileDashboardState(renewalDate: end)
+    }
+
+    private static func isoDate(_ value: Any?) -> Date? {
+        guard let text = value as? String else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+    }
+}
+
+private final class GreptileRedirectBlocker: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+}

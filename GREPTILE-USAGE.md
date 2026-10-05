@@ -5,7 +5,47 @@ checked October 3, 2026. Sources below are first-party public documentation,
 not a capture of Franz's account. No account credentials or private review
 history were accessed, and no review, upgrade or billing action was triggered.
 
-## Conclusion
+## Current app behavior
+
+Issue [#406](https://github.com/HemSoft/codexbar-ios/issues/406) adds guided
+Greptile sign-in on the phone. A private, temporary browser session opens
+[Greptile Usage](https://app.greptile.com/-/settings/usage), verifies the signed-in
+identity and organization membership, and asks which organization to connect.
+Only that account's Auth.js session cookie or numbered cookie chunks are saved
+in its Keychain entry. Canceling leaves saved credentials unchanged. Reconnect
+must match the saved user and organization; another identity requires a separate
+CodexBar account. The browser session is discarded after connection or cancel.
+
+The app reads `GET /api/auth/session` with the saved session to re-verify identity
+and membership before every billing read. It then reads
+`GET /api/trpc/billing.getState?batch=1&input=...` on `app.greptile.com`, passing
+`{"0":{"json":{"tenantExternalId":"<selected organization>"}}}` as URL-encoded
+input. These dashboard requests use the account's cookie, bypass shared cookie
+storage and HTTP cache, and reject redirects. The authenticated dashboard
+contract was verified on October 5, 2026; it is not a published public API and may
+change. See the verified contract below.
+
+For `kind: "free"`, `result.data.json.currentPeriod.end` supplies the allowance
+renewal date. Counts are not required. A returned start, when present, must be a
+valid date earlier than the end. The countdown updates each minute and shows the
+local calendar date, time and time zone on both dashboard widths and in More
+Information. Missing or malformed dates offer
+[Greptile Usage](https://app.greptile.com/-/settings/usage). A date past its period
+asks for refresh; observations older than a day or preserved after a failed
+refresh are labeled last known. A successful refresh replaces the period.
+
+Review activity remains a separate metric with its existing IDs and saved
+visibility, order and width. The verified session's user token authorizes
+read-only MCP activity calls, scoped with the selected organization. Existing
+organization API-key accounts retain review activity and can reconnect through
+the guided sign-in to obtain billing renewal. No credit balance is inferred from
+review counts, and no calendar boundary is guessed.
+
+Local synthetic tests and simulator journeys validate app behavior. Live phone
+sign-in and comparison with Franz's Greptile account remain his verification
+step, not evidence supplied by the synthetic tests.
+
+## Original October 3 conclusion
 
 Greptile's [pricing page](https://www.greptile.com/pricing) lists Starter as
 Free with **50 credits per month**, one active developer and unlimited

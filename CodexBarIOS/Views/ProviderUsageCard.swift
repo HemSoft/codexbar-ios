@@ -430,7 +430,8 @@ struct ProviderUsageCard: View {
         }
         .sheet(isPresented: $isShowingMoreInformation) {
             ProviderCardInformationView(
-                sections: informationSections
+                sections: informationSections,
+                greptileRenewal: greptileRenewal
             )
         }
         .sheet(item: $metricDetailPresentation) { presentation in
@@ -466,6 +467,7 @@ struct ProviderUsageCard: View {
             }
         }
         .onChange(of: informationSections) {
+            guard result.providerID != .greptile else { return }
             isShowingMoreInformation = Self.reconciledMoreInformationPresentation(
                 currentlyPresented: isShowingMoreInformation,
                 sections: informationSections
@@ -635,6 +637,10 @@ struct ProviderUsageCard: View {
                     message: refreshErrorMessage,
                     onReport: onReportProblem
                 )
+            }
+
+            if let greptileRenewal {
+                GreptileRenewalView(renewal: greptileRenewal, onConnect: onConfigureAccount)
             }
 
             if !metricGridRows.isEmpty {
@@ -954,7 +960,7 @@ struct ProviderUsageCard: View {
         isMetricVisible: (String) -> Bool = { _ in true }
     ) -> [ProviderUsageCardMenuAction] {
         var actions: [ProviderUsageCardMenuAction] = []
-        if !informationSections(for: result, alerts: alerts).isEmpty {
+        if result.providerID == .greptile || !informationSections(for: result, alerts: alerts).isEmpty {
             actions.append(.moreInformation)
         }
         if result.configurableMetrics.isEmpty {
@@ -1014,6 +1020,14 @@ struct ProviderUsageCard: View {
 
     var inlineAlerts: [UsageAlertDetail] {
         result.providerID == .cursor ? [] : displayedAlerts
+    }
+
+    private var greptileRenewal: GreptileAllowanceRenewal? {
+        guard result.providerID == .greptile else { return nil }
+        return result.greptileAllowanceRenewal ?? GreptileAllowanceRenewal(
+            renewsAt: nil, observedAt: result.fetchedAt,
+            unavailableReason: "Connect Greptile to read the free allowance renewal date."
+        )
     }
 
     var informationSections: [ProviderCardInformationSection] {
@@ -1960,45 +1974,6 @@ struct ProviderUsagePlaceholderCard: View {
         Capsule()
             .fill(Color(.tertiarySystemFill))
             .frame(width: width, height: height)
-    }
-}
-
-private struct ProviderCardInformationView: View {
-    let sections: [ProviderCardInformationSection]
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(sections) { section in
-                    Section(section.title) {
-                        ForEach(section.items) { item in
-                            LabeledContent {
-                                Text(item.detail)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.trailing)
-                            } label: {
-                                Text(item.label)
-                            }
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel("\(item.label), \(item.detail)")
-                        }
-                    }
-                }
-            }
-            .navigationTitle("More Information")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 }
 

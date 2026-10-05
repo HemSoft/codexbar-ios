@@ -75,7 +75,7 @@ final class GreptileHTTPFixture: @unchecked Sendable {
         return try XCTUnwrap(arguments["offset"] as? Int)
     }
 
-    private static func requestBody(_ request: URLRequest) throws -> Data {
+    static func requestBody(_ request: URLRequest) throws -> Data {
         if let body = request.httpBody { return body }
         let stream = try XCTUnwrap(request.httpBodyStream)
         stream.open()
@@ -98,7 +98,10 @@ private final class GreptileFixtureRegistry: @unchecked Sendable {
     func register(_ fixture: GreptileHTTPFixture) { lock.withLock { fixtures[fixture.endpoint] = fixture } }
     func remove(_ endpoint: URL) { _ = lock.withLock { fixtures.removeValue(forKey: endpoint) } }
     func fixture(for request: URLRequest) -> GreptileHTTPFixture? {
-        lock.withLock { request.url.flatMap { fixtures[$0] } }
+        lock.withLock {
+            guard let url = request.url else { return nil }
+            return fixtures.first { url == $0.key || url.absoluteString.hasPrefix($0.key.absoluteString + "/") }?.value
+        }
     }
 }
 

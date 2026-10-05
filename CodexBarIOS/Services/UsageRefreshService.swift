@@ -106,7 +106,13 @@ public final class UsageRefreshService: ObservableObject {
             creditsRemaining: cached.creditsRemaining, creditsFetchedAt: cached.creditsFetchedAt,
             monetaryMetrics: cached.monetaryMetrics, unavailableUsageMetrics: cached.unavailableUsageMetrics,
             usageMessages: cached.usageMessages, dashboardUsageMessages: cached.dashboardUsageMessages,
-            cardInformationSections: cached.cardInformationSections, codexBankedRateLimitResets: cached.codexBankedRateLimitResets,
+            cardInformationSections: cached.cardInformationSections,
+            greptileAllowanceRenewal: cached.greptileAllowanceRenewal.map { renewal in
+                var stale = renewal
+                stale.isStale = true
+                return stale
+            },
+            codexBankedRateLimitResets: cached.codexBankedRateLimitResets,
             failureMessage: message, recoveryAction: .retryRefresh,
             cacheIdentity: cached.cacheIdentity, cacheScope: cached.cacheScope,
             allowsUnscopedCacheReuse: cached.allowsUnscopedCacheReuse,
@@ -418,6 +424,7 @@ public final class UsageRefreshService: ObservableObject {
             || !failureResult.bars.isEmpty
             || !failureResult.monetaryMetrics.isEmpty
             || failureResult.codexBankedRateLimitResets != nil
+            || failureResult.greptileAllowanceRenewal != nil
             || failureResult.preserveCachedBarsOnFailure
             || failureResult.preserveCachedCreditsOnFailure
         let dataResult: ProviderUsageResult
@@ -430,7 +437,8 @@ public final class UsageRefreshService: ObservableObject {
             return
         }
 
-        let barsResult = failureResult.preserveCachedBarsOnFailure
+        let preserveGreptileHistory = failureResult.providerID == .greptile && failureResult.bars.isEmpty
+        let barsResult = failureResult.preserveCachedBarsOnFailure || preserveGreptileHistory
             ? cachedResult ?? failureResult
             : dataResult
         let creditsResult = failureResult.preserveCachedCreditsOnFailure
@@ -446,6 +454,8 @@ public final class UsageRefreshService: ObservableObject {
                 hasZenBalance: creditsResult.creditsRemaining != nil
             )
             : failureResult.title
+        var renewal = failureResult.greptileAllowanceRenewal ?? cachedResult?.greptileAllowanceRenewal
+        if failureResult.greptileAllowanceRenewal == nil { renewal?.isStale = true }
         replaceResult(ProviderUsageResult(
             accountID: accountID,
             providerID: failureResult.providerID,
@@ -461,6 +471,7 @@ public final class UsageRefreshService: ObservableObject {
             usageMessages: dataResult.usageMessages,
             dashboardUsageMessages: dataResult.dashboardUsageMessages,
             cardInformationSections: dataResult.cardInformationSections,
+            greptileAllowanceRenewal: renewal,
             codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,
             failureMessage: failureResult.failureMessage,
             recoveryAction: failureResult.recoveryAction,
@@ -479,6 +490,9 @@ public final class UsageRefreshService: ObservableObject {
         _ cachedResult: ProviderUsageResult,
         for failureResult: ProviderUsageResult
     ) -> Bool {
+        if failureResult.providerID == .greptile {
+            return cachedResult.cacheIdentity == failureResult.cacheIdentity
+        }
         if failureResult.providerID == .grok && failureResult.recoveryAction == .reauthenticate {
             return false
         }

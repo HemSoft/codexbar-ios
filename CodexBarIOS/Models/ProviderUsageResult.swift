@@ -222,12 +222,13 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let usageMessages: [String]
     public let dashboardUsageMessages: [String]
     public let cardInformationSections: [ProviderCardInformationSection]
+    public var greptileAllowanceRenewal: GreptileAllowanceRenewal?
     public let codexBankedRateLimitResets: CodexBankedRateLimitResets?
     public let failureMessage: String?
     public let recoveryAction: ProviderUsageRecoveryAction
     public let preserveCachedBarsOnFailure: Bool
     public let preserveCachedCreditsOnFailure: Bool
-    public let cacheIdentity: String?
+    public var cacheIdentity: String?
     public let cacheScope: String?
     public let allowsUnscopedCacheReuse: Bool
     public let hasSuccessfulRefreshHistory: Bool
@@ -249,6 +250,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         usageMessages: [String] = [],
         dashboardUsageMessages: [String]? = nil,
         cardInformationSections: [ProviderCardInformationSection] = [],
+        greptileAllowanceRenewal: GreptileAllowanceRenewal? = nil,
         codexBankedRateLimitResets: CodexBankedRateLimitResets? = nil,
         failureMessage: String? = nil,
         recoveryAction: ProviderUsageRecoveryAction = .retryRefresh,
@@ -275,6 +277,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.usageMessages = usageMessages
         self.dashboardUsageMessages = dashboardUsageMessages ?? usageMessages
         self.cardInformationSections = cardInformationSections.filter { !$0.items.isEmpty }
+        self.greptileAllowanceRenewal = greptileAllowanceRenewal
         self.codexBankedRateLimitResets = codexBankedRateLimitResets.flatMap {
             $0.availableCount > 0 ? $0 : nil
         }

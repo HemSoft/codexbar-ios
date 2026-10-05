@@ -1747,7 +1747,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 && !configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
-        if configuration.requiresSecret || [.codex, .claude, .cursor, .gemini, .grok].contains(configuration.providerID) {
+        if configuration.requiresSecret || [.codex, .claude, .cursor, .gemini, .grok, .greptile].contains(configuration.providerID) {
             return hasSecret(for: configuration)
         }
 
@@ -1875,7 +1875,8 @@ public final class ProviderConfigurationStore: ObservableObject {
             return "Not configured - sign in with Claude"
         }
 
-        if [.cursor, .gemini].contains(configuration.providerID) {
+        if [.cursor, .gemini, .greptile].contains(configuration.providerID) {
+            if configuration.providerID == .greptile { return "Not configured - sign in with Greptile" }
             return configuration.providerID == .gemini
                 ? "Not configured - sign in with Google" : "Not configured - sign in with Cursor"
         }
@@ -2997,6 +2998,25 @@ extension ProviderConfigurationStore {
         defaults.set(true, forKey: incompleteAccountResetKey)
         lastError = firstDeletionError
         return false
+    }
+
+}
+
+extension ProviderConfigurationStore {
+    func canReconnectGreptile(_ credential: GreptileSessionCredentials, for configuration: ProviderAccountConfiguration) -> Bool {
+        do {
+            let saved = try secretStore.readSecret(account: Self.keychainAccount(for: configuration))
+            guard configuration.authMethod == .browserSession, let saved, !saved.isEmpty else { return true }
+            guard let previous = GreptileSessionCredentials.parse(saved),
+                  previous.cacheIdentity == credential.cacheIdentity else {
+                lastError = GreptileSignInError.wrongAccount.localizedDescription
+                return false
+            }
+            return true
+        } catch {
+            lastError = "The saved Greptile identity could not be verified. Your saved account was not changed."
+            return false
+        }
     }
 
 }

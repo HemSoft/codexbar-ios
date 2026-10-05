@@ -89,7 +89,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderUsesReturnedBillingPeriodReviewQuota() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -133,7 +133,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderParsesNumericBillingPeriodTimestamps() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -166,7 +166,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderRejectsNonPositiveNumericBillingPeriodTimestamps() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -205,7 +205,7 @@ final class ProviderParsingTests: XCTestCase {
             #"{"reviewsUsed":1,"includedReviews":"infinity"}"#,
         ] {
             let secretStore = MemorySecretStore()
-            let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+            let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
             try secretStore.saveSecret(
                 "greptile-test-key",
                 account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -241,7 +241,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderDoesNotPresentMissingReviewDataAsZero() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -274,7 +274,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderRejectsIncompleteOrMalformedPagination() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -302,7 +302,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderDecodesSSEJSONRPCResponses() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -347,7 +347,7 @@ final class ProviderParsingTests: XCTestCase {
 
         for scenario in scenarios {
             let secretStore = MemorySecretStore()
-            let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+            let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
             try secretStore.saveSecret(
                 "greptile-test-key",
                 account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -406,7 +406,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderRejectsMalformedTruncatedFlag() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -438,7 +438,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderEnforcesConfiguredPaginationLimit() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -483,7 +483,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderNeverRequestsOffsetAbovePublishedMaximum() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -537,7 +537,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderRejectsOverlappingPagesThatMissReportedReviews() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -579,7 +579,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderRejectsIdlessReviewsBeforePaginationDeduplication() async throws {
         let secretStore = MemorySecretStore()
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
         try secretStore.saveSecret(
             "greptile-test-key",
             account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -626,7 +626,7 @@ final class ProviderParsingTests: XCTestCase {
 
         for (statusCode, headers, data, messageFragment) in cases {
             let secretStore = MemorySecretStore()
-            let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+            let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
             try secretStore.saveSecret(
                 "greptile-test-key",
                 account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -833,7 +833,7 @@ final class ProviderParsingTests: XCTestCase {
 
     func testGreptileProviderWithoutCredentialIsNotConfigured() async throws {
         let provider = GreptileUsageProvider(secretStore: EmptySecretStore())
-        let configuration = ProviderAccountConfiguration.defaultConfiguration(for: .greptile)
+        let configuration = ProviderAccountConfiguration(providerID: .greptile, authMethod: .apiKey)
 
         let result = try await provider.fetchUsage(for: configuration)
 
