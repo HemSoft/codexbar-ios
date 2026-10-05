@@ -15,7 +15,9 @@ final class GreptileBrowserCookieRegressionTests: XCTestCase {
             let body = request.url?.path == "/api/auth/session"
                 ? #"{"user":{"greptileId":"synthetic-user","greptileToken":"synthetic-token","organizations":[{"tenantExternalId":"synthetic-org","name":"Synthetic organization"}]}}"#
                 : #"[{"result":{"data":{"json":{"kind":"free"}}}}]"#
-            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(body.utf8))
+            let response = request.value(forHTTPHeaderField: "Cookie")?.contains("expired-synthetic-cookie") == true
+                ? #"{"user":null}"# : body
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(response.utf8))
         }
         defer { ConfigurationAndAuthMockURLProtocol.handler = nil }
         let completed = expectation(description: "Verified sign-in completes")
@@ -32,10 +34,16 @@ final class GreptileBrowserCookieRegressionTests: XCTestCase {
         var resets = 0
         var expectingRotation = false
         let rotated = expectation(description: "Changed authentication session is reverified")
+        let rejected = expectation(description: "Expired session clears the chooser")
+        let recovered = expectation(description: "Fresh session restores the chooser")
+        var expectingExpiry = false
+        var expectingRecovery = false
         let observer = session.$organizations.sink { organizations in
             if !organizations.isEmpty, !appeared { appeared = true; ready.fulfill() }
             if appeared && organizations.isEmpty { resets += 1 }
             if !organizations.isEmpty, expectingRotation { expectingRotation = false; rotated.fulfill() }
+            if organizations.isEmpty, expectingExpiry { expectingExpiry = false; rejected.fulfill() }
+            if !organizations.isEmpty, expectingRecovery { expectingRecovery = false; recovered.fulfill() }
         }
         defer { observer.cancel() }
         let store = session.webView.configuration.websiteDataStore.httpCookieStore
@@ -65,7 +73,18 @@ final class GreptileBrowserCookieRegressionTests: XCTestCase {
         await store.setCookie(try XCTUnwrap(HTTPCookie(properties: properties)))
         session.cookiesDidChange(in: store)
         await fulfillment(of: [rotated], timeout: 10)
-        XCTAssertGreaterThan(resets, 0, "An actual authentication change must reverify the chooser.")
+        XCTAssertEqual(resets, 0, "Same-account session rotation must reverify without hiding the chooser.")
+        properties[.value] = "expired-synthetic-cookie"
+        expectingExpiry = true
+        await store.setCookie(try XCTUnwrap(HTTPCookie(properties: properties)))
+        session.cookiesDidChange(in: store)
+        await fulfillment(of: [rejected], timeout: 10)
+        XCTAssertTrue(session.organizations.isEmpty, "An invalid identity must hide the prior organization.")
+        properties[.value] = "rotated-synthetic-cookie"
+        expectingRecovery = true
+        await store.setCookie(try XCTUnwrap(HTTPCookie(properties: properties)))
+        session.cookiesDidChange(in: store)
+        await fulfillment(of: [recovered], timeout: 10)
         session.connect(organization)
         await fulfillment(of: [completed], timeout: 10)
     }

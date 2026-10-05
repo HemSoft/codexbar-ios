@@ -22,6 +22,9 @@ the prior identity is no longer available to compare, so signing in clears the
 old history after the new verified credential is securely saved, even for the
 same user. Existing API-key accounts keep their review history and offer an Add
 Greptile account button, since their user identity cannot be verified.
+Unrelated cookies do not reset account selection. A changed auth cookie is
+reverified while the chooser stays visible; an expired or invalid identity
+clears the prior chooser. Connection cannot finish with a pending cookie change.
 The browser session is discarded after connection or cancel.
 
 The app reads `GET /api/auth/session` with the saved session to re-verify identity

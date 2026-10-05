@@ -116,8 +116,9 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
         }
         observedSessionTokens = tokens
         if task != nil { cookieInspectionPending = true; return }
-        organizations = []
         identity = nil
+        cookies = []
+        if latest.isEmpty { organizations = [] }
         inspectSession()
     }
 
@@ -127,20 +128,23 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
         isVerifying = false
         guard cookieInspectionPending else { return }
         cookieInspectionPending = false
-        organizations = []
         identity = nil
+        cookies = []
         inspectSession()
     }
 
     private func inspectSession() {
-        guard completion != nil, task == nil, organizations.isEmpty, !webView.isLoading,
+        guard completion != nil, task == nil, identity == nil, !webView.isLoading,
               webView.url?.scheme == "https", webView.url?.host == "app.greptile.com" else { return }
         let revision = navigationRevision
         let url = webView.url
         webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] values in
             guard let self, self.completion != nil, self.task == nil, self.navigationRevision == revision,
                   self.webView.url == url, !self.webView.isLoading else { return }
-            guard let cookies = try? GreptileSessionCredentials.sessionCookies(from: values), !cookies.isEmpty else { return }
+            guard let cookies = try? GreptileSessionCredentials.sessionCookies(from: values), !cookies.isEmpty else {
+                self.organizations = []
+                return
+            }
             self.observedSessionTokens = Dictionary(uniqueKeysWithValues: cookies.map { ($0.name, $0.value) })
             self.inspect(cookies: cookies, revision: revision)
         }
@@ -153,8 +157,10 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
             self.isVerifying = true
             do {
                 let identity = try await self.client.identity(cookies: cookies)
-                guard !Task.isCancelled, self.completion != nil, self.navigationRevision == revision else { return }
+                guard !Task.isCancelled, self.completion != nil, self.navigationRevision == revision,
+                      !self.cookieInspectionPending else { return }
                 guard !identity.organizations.isEmpty else {
+                    self.organizations = []
                     self.message = "Greptile returned no organizations. Finish account setup, then return to Usage."
                     return
                 }
@@ -163,7 +169,9 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
                 self.organizations = identity.organizations
                 self.message = nil
             } catch {
-                guard !Task.isCancelled, self.completion != nil, self.navigationRevision == revision else { return }
+                guard !Task.isCancelled, self.completion != nil, self.navigationRevision == revision,
+                      !self.cookieInspectionPending else { return }
+                self.organizations = []
                 self.message = "Finish signing in, then choose Greptile Usage to retry verification."
             }
         }
