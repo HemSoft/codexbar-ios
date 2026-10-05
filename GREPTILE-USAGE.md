@@ -154,7 +154,7 @@ plans never expose balances. The source ledger below records what was checked.
 | --- | --- |
 | Supported | [Pricing](https://www.greptile.com/pricing) documents Pro at $30 per seat per month, with 50 code-review credits per seat per month and $1 additional credits. Enterprise has custom pricing and includes Pro features. These are plan terms, not account consumption fields. |
 | Supported | [Billing](https://www.greptile.com/docs/code-review-bot/billing-seats) documents per-developer included credits and flex usage, plus human-facing Usage and Billing dashboards. [Review tiers](https://www.greptile.com/docs/code-review/review-tiers) assigns Base 1 credit, Plus 3 and Apex 10. These billing rules do not supply an account balance API. |
-| Explicitly unsupported | No reviewed first-party source explicitly denies billing API access for all Pro or Enterprise subscriptions. No universal unsupported classification is justified. |
+| No explicit denial | No reviewed first-party source explicitly denies billing API access for all Pro or Enterprise subscriptions. No universal unsupported classification is justified. |
 | Not verified | A supported read-only contract for consumed code-review credits, remaining allowance, plan eligibility or account billing-period/reset timestamps was not found in the reviewed [MCP reference](https://www.greptile.com/docs/mcp-v2/tools), [billing](https://www.greptile.com/docs/code-review-bot/billing-seats) or [plan documentation](https://www.greptile.com/pricing). Paid or negotiated Enterprise access remains unanswered. |
 
 ### Access and product boundaries
