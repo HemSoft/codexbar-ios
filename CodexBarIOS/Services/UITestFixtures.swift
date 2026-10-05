@@ -205,6 +205,14 @@ final class UITestFixtures {
         ))
     }
 
+    nonisolated private static func isCodexNextResetScenario(_ scenario: String?) -> Bool {
+        switch scenario {
+        case "codex-next-reset", "codex-next-reset-full", "codex-next-reset-expired",
+             "codex-next-reset-missing", "codex-next-reset-stale": true
+        default: false
+        }
+    }
+
     private static func seedCodexAccounts(in store: ProviderConfigurationStore, scenario: String?) {
         for (identity, label) in [("personal", "Personal Codex"), ("work", "Work Codex")] {
             let account = ProviderAccountConfiguration(
@@ -213,7 +221,7 @@ final class UITestFixtures {
             )
             _ = store.update(account)
             _ = store.saveSecret(codexCredential(for: identity), for: account)
-            if scenario?.hasPrefix("codex-next-reset") == true {
+            if isCodexNextResetScenario(scenario) {
                 let result = codexResult(for: account, scenario: scenario)
                 for metric in result.configurableMetrics {
                     store.updateMetricWidth(
@@ -256,7 +264,7 @@ final class UITestFixtures {
         for account: ProviderAccountConfiguration, scenario: String? = nil
     ) -> ProviderUsageResult {
         let used = account.id == "ui-codex-personal" ? 12.0 : 62.0
-        if scenario?.hasPrefix("codex-next-reset") == true {
+        if isCodexNextResetScenario(scenario) {
             return codexNextResetResult(for: account, scenario: scenario ?? "", used: used)
         }
         if scenario == "codex-free-thirty-day" {

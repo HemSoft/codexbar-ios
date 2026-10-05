@@ -5,7 +5,7 @@ struct CodexTileResetView: View {
     let isCurrent: Bool
 
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 60)) { context in
+        TimelineView(CodexResetTimelineSchedule(deadline: bar.resetsAt ?? Date())) { context in
             if let description = CodexTileResetContent.description(
                 for: bar, isCurrent: isCurrent, at: context.date
             ) {
@@ -14,6 +14,25 @@ struct CodexTileResetView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+}
+
+private struct CodexResetTimelineSchedule: TimelineSchedule {
+    let deadline: Date
+
+    func entries(from startDate: Date, mode: Mode) -> Entries {
+        Entries(nextDate: startDate, deadline: deadline)
+    }
+
+    struct Entries: Sequence, IteratorProtocol {
+        var nextDate: Date?
+        let deadline: Date
+
+        mutating func next() -> Date? {
+            guard let date = nextDate else { return nil }
+            nextDate = date < deadline ? Swift.min(date.addingTimeInterval(60), deadline) : nil
+            return date
         }
     }
 }

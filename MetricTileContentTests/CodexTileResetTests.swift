@@ -18,7 +18,10 @@ final class CodexTileResetTests: XCTestCase {
         XCTAssertEqual(result.bars.count, 2)
         XCTAssertEqual(result.bars.map(\.resetsAt), [now.addingTimeInterval(7_260), now.addingTimeInterval(259_200)])
         XCTAssertTrue(result.bars.allSatisfy { $0.label.contains("GPT-6.1-Sol") })
-        let descriptions = result.bars.compactMap { description($0) }
+        let descriptions = try result.bars.map { try XCTUnwrap(description($0)) }
+        guard descriptions.count == 2 else {
+            return XCTFail("Expected both named-window reset descriptions")
+        }
         XCTAssertTrue(descriptions[0].contains("Resets 2h 1m"))
         XCTAssertTrue(descriptions[1].contains("Resets 3d 0h"))
         XCTAssertNotEqual(descriptions[0], descriptions[1])
