@@ -24,9 +24,9 @@ struct ProviderSettingsView: View {
         accountID: String,
         initialUsageResult: ProviderUsageResult? = nil,
         startsCursorSignIn: Bool = false,
-        onCredentialsChanged: @escaping @MainActor () -> Void = {},
-        onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
-        onAccountIdentityChanged: @escaping @MainActor () -> Void = {},
+        onCredentialsChanged: @escaping @MainActor (String) -> Void = { _ in },
+        onRefreshInputsChanged: @escaping @MainActor (String) -> Void = { _ in },
+        onAccountIdentityChanged: @escaping @MainActor (String) -> Void = { _ in },
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil
     ) {
@@ -46,9 +46,9 @@ struct ProviderSettingsView: View {
                 configurationStore: configurationStore,
                 accountID: accountID,
                 initialUsageResult: initialUsageResult,
-                onCredentialsChanged: onCredentialsChanged,
-                onRefreshInputsChanged: onRefreshInputsChanged,
-                onAccountIdentityChanged: onAccountIdentityChanged,
+                onCredentialsChanged: { onCredentialsChanged(accountID) },
+                onRefreshInputsChanged: { onRefreshInputsChanged(accountID) },
+                onAccountIdentityChanged: { onAccountIdentityChanged(accountID) },
                 onAccountRefresh: onAccountRefresh,
                 onCredentialRefresh: onCredentialRefresh
             )

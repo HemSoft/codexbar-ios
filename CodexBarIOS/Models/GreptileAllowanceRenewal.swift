@@ -5,12 +5,13 @@ public struct GreptileAllowanceRenewal: Equatable, Sendable {
     public let observedAt: Date
     public var isStale: Bool
     public let unavailableReason: String?
-    public let requiresAuthentication: Bool
+    public var requiresAuthentication: Bool
     public let lookupFailed: Bool
+    public let isApplicable: Bool
 
     public init(
         renewsAt: Date?, observedAt: Date, isStale: Bool = false, unavailableReason: String? = nil,
-        requiresAuthentication: Bool = false, lookupFailed: Bool = false
+        requiresAuthentication: Bool = false, lookupFailed: Bool = false, isApplicable: Bool = true
     ) {
         self.renewsAt = renewsAt
         self.observedAt = observedAt
@@ -18,6 +19,7 @@ public struct GreptileAllowanceRenewal: Equatable, Sendable {
         self.unavailableReason = unavailableReason
         self.requiresAuthentication = requiresAuthentication
         self.lookupFailed = lookupFailed
+        self.isApplicable = isApplicable
     }
 
     public func status(at now: Date) -> String {

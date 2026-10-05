@@ -21,7 +21,7 @@ struct GreptileRenewalView: View {
                     Text(renewal.unavailableReason ?? "Greptile did not return a valid free-allowance renewal date.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                if renewal.renewsAt == nil {
+                if renewal.renewsAt == nil || renewal.requiresAuthentication {
                     if renewal.requiresAuthentication, let onConnect {
                         Button("Connect Greptile for renewal", action: onConnect)
                             .font(.caption).accessibilityIdentifier("greptile-renewal-connect")

@@ -459,6 +459,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     let cursorHistoryInvalidations = PassthroughSubject<String, Never>()
     let cursorSameIdentityReconnects = PassthroughSubject<String, Never>()
     let grokHistoryInvalidations = PassthroughSubject<String, Never>()
+    let greptileCredentialUpdates = PassthroughSubject<(accountID: String, identityChanged: Bool), Never>()
     @Published public private(set) var confirmedGoogleAccountLinks: [String: String]
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
     @Published public private(set) var groups: [ProviderAccountGroup]
@@ -791,6 +792,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         do {
             let data = try JSONEncoder().encode(updatedConfigurations)
+            let greptileIdentityChanged = try greptileCredentialChangesIdentity(credential, for: normalized)
             try writeAccountSecret(credential, for: normalized)
             if normalized.providerID == .gemini || normalized.providerID == .grok {
                 credentialChanges.send(normalized.id)
@@ -801,6 +803,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 metricLayouts[normalized.id] = AccountMetricLayout()
                 saveMetricLayouts()
             }
+            sendGreptileCredentialUpdate(for: normalized, identityChanged: greptileIdentityChanged)
             lastError = nil
             refreshSecretAvailability()
             return true
@@ -3003,6 +3006,18 @@ extension ProviderConfigurationStore {
 }
 
 extension ProviderConfigurationStore {
+    private func greptileCredentialChangesIdentity(_ credential: String, for configuration: ProviderAccountConfiguration) throws -> Bool {
+        guard configuration.providerID == .greptile else { return false }
+        let previous = try secretStore.readSecret(account: Self.keychainAccount(for: configuration))
+        guard let next = GreptileSessionCredentials.parse(credential) else { return previous != credential }
+        return GreptileSessionCredentials.parse(previous)?.cacheIdentity != next.cacheIdentity
+    }
+
+    private func sendGreptileCredentialUpdate(for configuration: ProviderAccountConfiguration, identityChanged: Bool) {
+        guard configuration.providerID == .greptile else { return }
+        greptileCredentialUpdates.send((accountID: configuration.id, identityChanged: identityChanged))
+    }
+
     func canReconnectGreptile(_ credential: GreptileSessionCredentials, for configuration: ProviderAccountConfiguration) -> Bool {
         do {
             let saved = try secretStore.readSecret(account: Self.keychainAccount(for: configuration))

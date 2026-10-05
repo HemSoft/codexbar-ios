@@ -150,15 +150,20 @@ public final class GreptileUsageProvider: UsageProvider {
             } else {
                 cacheIdentity = credential.cacheIdentity
             }
-            return failureResult(
+            var result = failureResult(
                 failure.localizedDescription, configuration: configuration,
-                recoveryAction: failure == .unavailable ? .retryRefresh : .reauthenticate, cacheIdentity: cacheIdentity
+                recoveryAction: failure.requiresAuthentication ? .reauthenticate : .retryRefresh, cacheIdentity: cacheIdentity
             )
+            result.greptileAllowanceRenewal = GreptileAllowanceRenewal(
+                renewsAt: nil, observedAt: result.fetchedAt, unavailableReason: failure.localizedDescription,
+                requiresAuthentication: failure.requiresAuthentication, lookupFailed: true
+            )
+            return result
         }
         let renewal: GreptileAllowanceRenewal
         do {
             let state = try await client.billingState(for: credential)
-            renewal = GreptileAllowanceRenewal(renewsAt: state.renewalDate, observedAt: Date())
+            renewal = GreptileAllowanceRenewal(renewsAt: state.renewalDate, observedAt: Date(), isApplicable: state.isFreeAllowance)
         } catch {
             try Self.rethrowCancellation(error)
             renewal = GreptileAllowanceRenewal(

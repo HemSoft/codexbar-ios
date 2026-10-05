@@ -17,6 +17,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     private var task: Task<Void, Never>?
     private var didStart = false
     private var navigationRevision = UUID()
+    private var cookieInspectionPending = false
     @Published private(set) var canGoBack = false
 
     init(completion: @escaping (Result<GreptileSessionCredentials, Error>) -> Void) {
@@ -44,6 +45,8 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
 
     private func resetInspection() {
         navigationRevision = UUID()
+        cookieInspectionPending = false
+        message = nil
         task?.cancel()
         task = nil
         isVerifying = false
@@ -90,7 +93,23 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
         inspectSession()
     }
 
-    func cookiesDidChange(in cookieStore: WKHTTPCookieStore) { inspectSession() }
+    func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        if task != nil { cookieInspectionPending = true; return }
+        organizations = []
+        identity = nil
+        inspectSession()
+    }
+
+    private func finishVerification(revision: UUID) {
+        guard navigationRevision == revision else { return }
+        task = nil
+        isVerifying = false
+        guard cookieInspectionPending else { return }
+        cookieInspectionPending = false
+        organizations = []
+        identity = nil
+        inspectSession()
+    }
 
     private func inspectSession() {
         guard completion != nil, task == nil, organizations.isEmpty, !webView.isLoading,
@@ -108,9 +127,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     private func inspect(cookies: [GreptileSessionCookie], revision: UUID) {
         task = Task { [weak self] in
             guard let self else { return }
-            defer {
-                if self.navigationRevision == revision { self.task = nil; self.isVerifying = false }
-            }
+            defer { self.finishVerification(revision: revision) }
             self.isVerifying = true
             do {
                 let identity = try await self.client.identity(cookies: cookies)
@@ -136,9 +153,10 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
             version: 1, subject: identity.greptileId, organization: organization, cookies: cookies
         )
         isVerifying = true
+        let revision = navigationRevision
         task = Task { [weak self] in
             guard let self else { return }
-            defer { self.task = nil; self.isVerifying = false }
+            defer { self.finishVerification(revision: revision) }
             do {
                 _ = try await self.client.verifiedIdentity(for: credential)
                 _ = try await self.client.billingState(for: credential)

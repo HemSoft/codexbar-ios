@@ -8,6 +8,7 @@ struct GreptileDashboardIdentity: Decodable, Sendable {
 
 struct GreptileDashboardState: Equatable, Sendable {
     let renewalDate: Date?
+    var isFreeAllowance = true
 }
 
 struct GreptileDashboardClient: Sendable {
@@ -32,9 +33,10 @@ struct GreptileDashboardClient: Sendable {
             url: baseURL.appendingPathComponent("api/auth/session"),
             credential: cookieCredential
         )
-        guard let response = try? JSONDecoder().decode(Response.self, from: data),
-              let identity = response.user, !identity.greptileId.isEmpty,
-              !identity.greptileToken.isEmpty else { throw GreptileSignInError.expired }
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], root["user"] != nil,
+              let response = try? JSONDecoder().decode(Response.self, from: data) else { throw GreptileSignInError.invalidIdentityResponse }
+        guard let identity = response.user else { throw GreptileSignInError.expired }
+        guard !identity.greptileId.isEmpty, !identity.greptileToken.isEmpty else { throw GreptileSignInError.invalidIdentityResponse }
         return identity
     }
 
@@ -79,7 +81,8 @@ struct GreptileDashboardClient: Sendable {
               let data = result["data"] as? [String: Any],
               let state = data["json"] as? [String: Any],
               let kind = state["kind"] as? String else { throw GreptileSignInError.invalidBillingResponse }
-        guard kind == "free", let period = state["currentPeriod"] as? [String: Any],
+        guard kind == "free" else { return GreptileDashboardState(renewalDate: nil, isFreeAllowance: false) }
+        guard let period = state["currentPeriod"] as? [String: Any],
               let end = isoDate(period["end"]) else { return GreptileDashboardState(renewalDate: nil) }
         if period["start"] != nil {
             guard let start = isoDate(period["start"]), start < end else {

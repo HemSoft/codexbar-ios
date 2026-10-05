@@ -159,7 +159,6 @@ public final class UsageRefreshService: ObservableObject {
 
         let enabledAccountIDs = Set(enabledConfigurations.map(\.id))
         pruneCachedState(to: enabledAccountIDs)
-        lastRefreshError = nil
 
         var requests: [(ProviderAccountConfiguration, any UsageProvider)] = []
         for configuration in enabledConfigurations {
@@ -176,9 +175,6 @@ public final class UsageRefreshService: ObservableObject {
 
         let requestedAccountIDs = Set(requests.map { $0.0.id })
         refreshingAccountIDs.formUnion(requestedAccountIDs)
-        for accountID in requestedAccountIDs {
-            refreshErrorsByAccountID.removeValue(forKey: accountID)
-        }
 
         await withTaskGroup(of: AccountRefreshOutcome.self) { group in
             for (configuration, provider) in requests {
@@ -276,8 +272,6 @@ public final class UsageRefreshService: ObservableObject {
         }
 
         refreshingAccountIDs.insert(configuration.id)
-        refreshErrorsByAccountID.removeValue(forKey: configuration.id)
-        lastRefreshError = nil
         defer {
             finishRefresh(accountID: configuration.id)
         }
@@ -415,8 +409,9 @@ public final class UsageRefreshService: ObservableObject {
     private func preservingGreptileRenewal(_ incoming: ProviderUsageResult) -> ProviderUsageResult {
         guard incoming.providerID == .greptile, incoming.greptileAllowanceRenewal?.lookupFailed == true,
               let cached = results.first(where: { $0.accountID == incoming.accountID && Self.canReuseCachedResult($0, for: incoming) }),
-              var renewal = cached.greptileAllowanceRenewal, renewal.renewsAt != nil else { return incoming }
+              var renewal = cached.greptileAllowanceRenewal, renewal.renewsAt != nil || !renewal.isApplicable else { return incoming }
         renewal.isStale = true
+        renewal.requiresAuthentication = incoming.greptileAllowanceRenewal?.requiresAuthentication ?? false
         var result = incoming
         result.greptileAllowanceRenewal = renewal
         return result

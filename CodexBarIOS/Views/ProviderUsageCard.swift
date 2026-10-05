@@ -1023,7 +1023,7 @@ struct ProviderUsageCard: View {
     }
 
     private var greptileRenewal: GreptileAllowanceRenewal? {
-        guard result.providerID == .greptile else { return nil }
+        guard result.providerID == .greptile, result.greptileAllowanceRenewal?.isApplicable != false else { return nil }
         return result.greptileAllowanceRenewal ?? GreptileAllowanceRenewal(
             renewsAt: nil, observedAt: result.fetchedAt,
             unavailableReason: "Connect Greptile to read the free allowance renewal date.", requiresAuthentication: true

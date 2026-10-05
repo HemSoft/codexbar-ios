@@ -161,10 +161,10 @@ final class UITestFixtures {
             return ProviderUsageResult(
                 accountID: configuration.id, providerID: .greptile, title: configuration.displayName,
                 subtitle: "Waiting for synthetic Greptile response", bars: [],
-                greptileAllowanceRenewal: scenario == "greptile-renewal-stale" ? GreptileAllowanceRenewal(
+                greptileAllowanceRenewal: ["greptile-renewal-stale", "greptile-renewal-expired"].contains(scenario ?? "") ? GreptileAllowanceRenewal(
                     renewsAt: Date().addingTimeInterval(604_800), observedAt: Date().addingTimeInterval(-90_000), isStale: true
                 ) : nil,
-                cacheIdentity: scenario == "greptile-renewal-stale" ? "synthetic-user:synthetic-org" : nil,
+                cacheIdentity: ["greptile-renewal-stale", "greptile-renewal-expired"].contains(scenario ?? "") ? "synthetic-user:synthetic-org" : nil,
                 fetchedAt: Date()
             )
         }
@@ -1482,8 +1482,10 @@ private final class UITestNetworkBlocker: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
+        let expiredBilling = scenario == "greptile-renewal-expired" && request.url?.path == "/api/trpc/billing.getState"
+        let status = expiredBilling ? 401 : (scenario == "greptile-failure" ? 503 : 200)
         let response = HTTPURLResponse(
-            url: request.url!, statusCode: scenario == "greptile-failure" ? 503 : 200,
+            url: request.url!, statusCode: status,
             httpVersion: nil, headerFields: nil
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -1504,7 +1506,7 @@ private final class UITestNetworkBlocker: URLProtocol, @unchecked Sendable {
             case "greptile-renewal-passed": end = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600))
             default: end = ISO8601DateFormatter().string(from: Date().addingTimeInterval(604_800))
             }
-            let state: [String: Any] = ["kind": "free", "currentPeriod": ["end": end]]
+            let state: [String: Any] = ["kind": scenario == "greptile-renewal-paid" ? "paid" : "free", "currentPeriod": ["end": end]]
             return (try? JSONSerialization.data(withJSONObject: [["result": ["data": ["json": state]]]])) ?? Data()
         case "/mcp": return UITestFixtures.greptilePayload(scenario: scenario)
         default: return Data()

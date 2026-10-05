@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import CodexBarIOS
@@ -95,7 +96,7 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(result.recoveryAction, .reauthenticate)
             XCTAssertEqual(result.cacheIdentity, "unverified-greptile-session")
             XCTAssertTrue(result.bars.isEmpty)
-            XCTAssertNil(result.greptileAllowanceRenewal)
+            XCTAssertNil(result.greptileAllowanceRenewal?.renewsAt)
             XCTAssertEqual(fixture.requests.count, 1)
         }
     }
@@ -161,7 +162,7 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         )
         let service = UsageRefreshService(providers: [try provider(fixture, credential: credential())], initialResults: [previous])
         await service.refresh(configurations: [account])
-        XCTAssertNil(service.results.first?.greptileAllowanceRenewal)
+        XCTAssertNil(service.results.first?.greptileAllowanceRenewal?.renewsAt)
         XCTAssertNotNil(service.results.first?.failureMessage)
     }
 
@@ -298,4 +299,114 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(service.refreshErrorsByAccountID.isEmpty)
         XCTAssertFalse(service.isRefreshing)
     }
+
+    @MainActor
+    func testExpiredSessionsRetainDateAndRequireReconnect() async throws {
+        let expiry = GreptileHTTPFixture.Reply.payload(Data("{}".utf8), status: 401)
+        let replies: [[GreptileHTTPFixture.Reply]] = [
+            [expiry], [try identity(), expiry, try GreptileHTTPFixture.page(["current"], total: 1)],
+        ]
+        for response in replies {
+            let fixture = GreptileHTTPFixture(response)
+            defer { fixture.invalidate() }
+            let account = browserAccount()
+            let original = GreptileAllowanceRenewal(renewsAt: now.addingTimeInterval(600), observedAt: now)
+            let previous = ProviderUsageResult(
+                accountID: account.id, providerID: .greptile, title: account.displayName, subtitle: "Verified", bars: [],
+                greptileAllowanceRenewal: original, cacheIdentity: credential().cacheIdentity, fetchedAt: now
+            )
+            let service = UsageRefreshService(providers: [try provider(fixture, credential: credential())], initialResults: [previous])
+            await service.refresh(configurations: [account])
+            let result = try XCTUnwrap(service.results.first?.greptileAllowanceRenewal)
+            XCTAssertEqual(result.renewsAt, original.renewsAt)
+            XCTAssertTrue(result.isStale)
+            XCTAssertTrue(result.requiresAuthentication)
+        }
+    }
+
+    @MainActor
+    func testCancellationRetainsPreviousRefreshFailure() async throws {
+        let fixture = GreptileHTTPFixture([
+            .failure(URLError(.notConnectedToInternet)), .failure(URLError(.cancelled)), .failure(URLError(.cancelled)),
+        ])
+        defer { fixture.invalidate() }
+        let service = UsageRefreshService(providers: [try provider(fixture, credential: credential())])
+        let account = browserAccount()
+        await service.refresh(configurations: [account])
+        let original = try XCTUnwrap(service.refreshErrorsByAccountID[account.id])
+        _ = await service.refresh(configuration: account)
+        XCTAssertEqual(service.refreshErrorsByAccountID[account.id], original)
+        await service.refresh(configurations: [account])
+        XCTAssertEqual(service.refreshErrorsByAccountID[account.id], original)
+        XCTAssertEqual(service.lastRefreshError, original)
+        XCTAssertTrue(service.successfulRefreshResults.isEmpty)
+    }
+
+    func testMalformedIdentityDoesNotRequestReauthentication() async throws {
+        for payload in ["not-json", "{}", #"{"user":{"greptileId":"fixture-user"}}"#] {
+            let fixture = GreptileHTTPFixture([.payload(Data(payload.utf8))])
+            defer { fixture.invalidate() }
+            let result = try await provider(fixture, credential: credential()).fetchUsage(for: browserAccount())
+            XCTAssertEqual(result.recoveryAction, .retryRefresh)
+            XCTAssertEqual(result.greptileAllowanceRenewal?.requiresAuthentication, false)
+            XCTAssertEqual(fixture.requests.count, 1)
+        }
+        let fixture = GreptileHTTPFixture([.payload(Data(#"{"user":null}"#.utf8))])
+        defer { fixture.invalidate() }
+        let result = try await provider(fixture, credential: credential()).fetchUsage(for: browserAccount())
+        XCTAssertEqual(result.recoveryAction, .reauthenticate)
+    }
+
+    func testPaidBillingDoesNotExposeAFreeRenewal() async throws {
+        let fixture = GreptileHTTPFixture([
+            try identity(), .payload(try billing(["kind": "paid", "currentPeriod": ["end": "2030-02-01T00:00:00Z"]])),
+            try GreptileHTTPFixture.page(["current"], total: 1),
+        ])
+        defer { fixture.invalidate() }
+        let result = try await provider(fixture, credential: credential()).fetchUsage(for: browserAccount())
+        XCTAssertEqual(result.greptileAllowanceRenewal?.isApplicable, false)
+        XCTAssertNil(result.greptileAllowanceRenewal?.renewsAt)
+        XCTAssertEqual(result.bars.first?.used, 1)
+    }
+
+    @MainActor
+    func testCredentialPublicationIdentifiesDisconnectAndAccountReplacement() throws {
+        let secrets = GreptileWritableFixtureSecrets()
+        let suite = "GreptileRenewalRegressionTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets)
+        let account = store.addAccount(for: .greptile)
+        var updates: [Bool] = []
+        let observer = store.greptileCredentialUpdates.sink { update in
+            XCTAssertEqual(update.accountID, account.id)
+            updates.append(update.identityChanged)
+        }
+        defer { observer.cancel() }
+        XCTAssertTrue(store.replaceCredential(try credential().encoded(), for: account))
+        XCTAssertTrue(store.replaceCredential(try credential().encoded(), for: account))
+        secrets.rejectNextSave()
+        XCTAssertFalse(store.replaceCredential(try credential(organization: "another-org").encoded(), for: account))
+        XCTAssertEqual(updates, [true, false])
+        XCTAssertEqual(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)), try credential().encoded())
+        try secrets.deleteSecret(account: ProviderConfigurationStore.keychainAccount(for: account))
+        XCTAssertTrue(store.canReconnectGreptile(credential(organization: "another-org"), for: account))
+        XCTAssertTrue(store.replaceCredential(try credential(organization: "another-org").encoded(), for: account))
+        XCTAssertEqual(updates, [true, false, true])
+    }
+}
+
+private final class GreptileWritableFixtureSecrets: SecretStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: String] = [:]
+    private var rejectsSave = false
+    func rejectNextSave() { lock.withLock { rejectsSave = true } }
+    func readSecret(account: String) throws -> String? { lock.withLock { values[account] } }
+    func saveSecret(_ secret: String, account: String) throws {
+        try lock.withLock {
+            if rejectsSave { rejectsSave = false; throw URLError(.cannotWriteToFile) }
+            values[account] = secret
+        }
+    }
+    func deleteSecret(account: String) throws { _ = lock.withLock { values.removeValue(forKey: account) } }
 }

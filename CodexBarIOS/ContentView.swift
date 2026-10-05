@@ -411,10 +411,10 @@ struct ContentView: View {
                 onAccountCreated: { accountID in
                     addAccountRefreshState.accountCreated(accountID)
                 },
-                onCredentialsChanged: {
+                onCredentialsChanged: { _ in
                     _ = addAccountRefreshState.credentialsChanged()
                 },
-                onRefreshInputsChanged: {
+                onRefreshInputsChanged: { _ in
                     addAccountRefreshState.refreshInputsChanged()
                 },
                 onAccountRefresh: { configuration in
@@ -445,14 +445,16 @@ struct ContentView: View {
                         $0.id == presentation.accountID
                     }?.result,
                     startsCursorSignIn: presentation.startsCursorSignIn,
-                    onCredentialsChanged: {
+                    onCredentialsChanged: { accountID in
+                        guard accountID == presentation.accountID else { return }
                         accountConfigurationNavigation.credentialsChanged()
                     },
-                    onRefreshInputsChanged: {
+                    onRefreshInputsChanged: { accountID in
+                        guard accountID == presentation.accountID else { return }
                         accountConfigurationNavigation.refreshInputsChanged()
                     },
-                    onAccountIdentityChanged: {
-                        historyStore.removeSnapshots(for: presentation.accountID)
+                    onAccountIdentityChanged: { accountID in
+                        historyStore.removeSnapshots(for: accountID)
                     },
                     onAccountRefresh: { configuration in
                         await orchestrator.loadAccountMetrics(configuration)

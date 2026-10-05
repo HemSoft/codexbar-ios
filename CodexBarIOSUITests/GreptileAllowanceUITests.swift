@@ -36,6 +36,7 @@ final class GreptileAllowanceUITests: XCTestCase {
         keepAccountSettings("greptile-failure", in: failed)
         failed.terminate()
         checkRenewalScreens()
+        checkPaidRenewalScreens()
     }
 
     private func checkRenewalScreens() {
@@ -46,6 +47,7 @@ final class GreptileAllowanceUITests: XCTestCase {
             ("greptile-renewal-malformed", "Renewal date unavailable", true),
             ("greptile-renewal-passed", "Period ended.", false),
             ("greptile-renewal-stale", "Last known renewal date", true),
+            ("greptile-renewal-expired", "Last known renewal date", false),
         ]
         for (scenario, status, full) in cases {
             let app = launch(scenario, options: [
@@ -60,6 +62,9 @@ final class GreptileAllowanceUITests: XCTestCase {
             XCTAssertEqual(app.staticTexts["greptile-renewal-date"].firstMatch.exists, !missing)
             XCTAssertFalse(app.buttons["dashboard-metric-greptile.review-quota"].exists)
             if missing { XCTAssertFalse(app.buttons["greptile-renewal-connect"].exists) }
+            if scenario.hasSuffix("expired") {
+                XCTAssertTrue(app.buttons["greptile-renewal-connect"].waitForExistence(timeout: 10))
+            }
             reveal(label, in: app)
             keep("\(scenario)-\(full ? "full-dark-large" : "compact-light")", app: app)
             app.terminate()
@@ -74,6 +79,23 @@ final class GreptileAllowanceUITests: XCTestCase {
             keep("\(scenario)-detail-\(full ? "dark-large" : "light")", app: app)
             app.terminate()
         }
+    }
+
+    private func checkPaidRenewalScreens() {
+        let app = launch("greptile-renewal-paid")
+        XCTAssertTrue(app.buttons["dashboard-metric-greptile.completed-reviews"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["greptile-renewal-status"].exists)
+        keep("greptile-renewal-paid-compact-light", app: app)
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION"] = "1"
+        app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"] = "ui-greptile-free"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Review statuses"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Free allowance renewal"].exists)
+        keep("greptile-renewal-paid-detail-light", app: app)
+        app.terminate()
     }
 
     private func launch(_ scenario: String, options: [String: String] = [:]) -> XCUIApplication {

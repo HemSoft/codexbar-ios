@@ -16,7 +16,7 @@ identity and organization membership, and asks which organization to connect.
 Only that account's Auth.js session cookie or numbered cookie chunks are saved
 in its Keychain entry. Canceling leaves saved credentials unchanged. Reconnect
 must match the saved user and organization; another identity requires a separate
-CodexBar account. Existing API-key accounts keep their review history and offer an Add Greptile account for renewal button, since their user identity cannot be verified. The browser session is discarded after connection or cancel.
+CodexBar account. Reconnecting after a disconnect clears the old account history once the new verified credentials are securely saved. Same-identity reconnect keeps history. Existing API-key accounts keep their review history and offer an Add Greptile account for renewal button, since their user identity cannot be verified. The browser session is discarded after connection or cancel.
 
 The app reads `GET /api/auth/session` with the saved session to re-verify identity
 and membership before every billing read. It then reads
