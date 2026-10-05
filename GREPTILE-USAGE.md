@@ -136,3 +136,115 @@ Starter-specific trial transitions, overage behavior, tier availability and
 undocumented runtime fields are not established by this investigation. The
 safe current result is review activity plus an explicit unavailable billing
 balance, not a fabricated approximation of the provider's allowance.
+
+## Paid-plan follow-up, October 5, 2026
+
+Research for [#397](https://github.com/HemSoft/codexbar-ios/issues/397).
+The October 3 findings above remain a historical record. This follow-up checked
+current first-party plan, billing, MCP, permissions and public API documentation
+without accessing a paid account.
+
+**A supported paid-plan code-review billing API is not verified.** The reviewed
+sources do not establish an endpoint, tool, optional billing field or permission
+that buying Pro or Enterprise unlocks. They also do not explicitly rule out
+such an integration. Missing public documentation cannot establish that paid
+plans never expose balances. The source ledger below records what was checked.
+
+| Classification | Finding and evidence |
+| --- | --- |
+| Supported | [Pricing](https://www.greptile.com/pricing) documents Pro at $30 per seat per month, with 50 code-review credits per seat per month and $1 additional credits. Enterprise has custom pricing and includes Pro features. These are plan terms, not account consumption fields. |
+| Supported | [Billing](https://www.greptile.com/docs/code-review-bot/billing-seats) documents per-developer included credits and flex usage, plus human-facing Usage and Billing dashboards. [Review tiers](https://www.greptile.com/docs/code-review/review-tiers) assigns Base 1 credit, Plus 3 and Apex 10. These billing rules do not supply an account balance API. |
+| Explicitly unsupported | No reviewed first-party source explicitly denies billing API access for all Pro or Enterprise subscriptions. No universal unsupported classification is justified. |
+| Not verified | A supported read-only contract for consumed code-review credits, remaining allowance, plan eligibility or account billing-period/reset timestamps was not found in the reviewed [MCP reference](https://www.greptile.com/docs/mcp-v2/tools), [billing](https://www.greptile.com/docs/code-review-bot/billing-seats) or [plan documentation](https://www.greptile.com/pricing). Paid or negotiated Enterprise access remains unanswered. |
+
+### Access and product boundaries
+
+The [MCP setup guide](https://www.greptile.com/docs/mcp-v2/setup) documents OAuth
+at `https://api.greptile.com/mcp`. The
+[tools reference](https://www.greptile.com/docs/mcp-v2/tools) documents OAuth
+organization selection and organization-bound API keys, plus review history,
+account discovery and analytics. It does not document billing scopes or
+paid-only balance fields. Its examples are not closed schemas.
+[Organization settings](https://www.greptile.com/docs/account/organization-settings)
+describes Enterprise custom roles, but does not identify a billing-read API
+permission. This does not prove that changing roles or authentication reveals
+a credit balance.
+
+Code-review credits must remain distinct from any codebase-query or other API
+allowance. The [current public documentation index](https://www.greptile.com/docs/llms.txt)
+does not list a standalone codebase API contract. The former public
+[query](https://www.greptile.com/docs/api-reference/query) and
+[search](https://www.greptile.com/docs/api-reference/search) documentation URLs
+redirected to the introduction; the
+[repositories](https://www.greptile.com/docs/api-reference/repositories) and
+[OpenAPI](https://www.greptile.com/docs/openapi.json) URLs redirected to a docs
+login page rather than returning public API specifications. Those redirects
+establish a research limitation, not API removal or paid-plan eligibility.
+No login was attempted. No separate API unit, allowance, current billing schema
+or relationship to code-review credits was verified. Do not import an API-query
+quota into the code-review balance or rely on a third-party OpenAPI copy.
+
+The [billing page](https://www.greptile.com/docs/code-review-bot/billing-seats)
+describes credits per billing period and organization flex caps. It does not
+provide this account's boundaries, reset timestamp or time zone, or an API
+contract for them. An analytics date range remains a caller-selected range,
+not an authoritative billing period.
+
+### Source ledger
+
+Every entry was checked on October 5, 2026. Conclusions apply to the published
+material retrieved that day; there is no provider support confirmation.
+
+| First-party source | Evidence checked | Checked |
+| --- | --- | --- |
+| [Pricing](https://www.greptile.com/pricing) | Starter, Pro and Enterprise terms; no advertised billing API entitlement | 2026-10-05 |
+| [Billing](https://www.greptile.com/docs/code-review-bot/billing-seats) | Credit attribution, flex limits, Usage/Billing dashboards, support contact | 2026-10-05 |
+| [Review tiers](https://www.greptile.com/docs/code-review/review-tiers) | Credit units vary by review tier | 2026-10-05 |
+| [MCP tools](https://www.greptile.com/docs/mcp-v2/tools) | Account, review, knowledge-base and analytics contracts; no documented credit balance or reset tool | 2026-10-05 |
+| [MCP setup](https://www.greptile.com/docs/mcp-v2/setup) | OAuth setup and tenant selection; no documented billing scope | 2026-10-05 |
+| [Organization settings](https://www.greptile.com/docs/account/organization-settings) | Enterprise roles and review permissions; no documented billing-read API permission | 2026-10-05 |
+| [Documentation index](https://www.greptile.com/docs/llms.txt) | Public documentation inventory; no standalone API specification listed | 2026-10-05 |
+| [Query](https://www.greptile.com/docs/api-reference/query), [search](https://www.greptile.com/docs/api-reference/search) | Redirected to introduction | 2026-10-05 |
+| [Repositories](https://www.greptile.com/docs/api-reference/repositories), [OpenAPI](https://www.greptile.com/docs/openapi.json) | Redirected to docs login; no public schema retrieved | 2026-10-05 |
+
+### Provider questions and next step
+
+The exact questions requiring Greptile confirmation are:
+
+1. Does Pro, Enterprise or a negotiated deployment expose a supported read-only
+   API or MCP tool for **code-review** credits consumed, included allowance,
+   remaining credits and flex usage? What is its published, versioned contract?
+2. Which plans and deployments qualify? Which OAuth scopes, API-key permissions
+   and organization/user roles are required? Does the response describe the
+   organization, an individual developer or unattributed usage?
+3. What are the exact field names and units? How do tier charges, promotional
+   credits and flex usage affect them, and are codebase API allowances separate?
+4. Does it return authoritative period start/end and reset timestamps? What are
+   the time zone, rollover, proration and reporting-delay semantics? Is fetching
+   the data read-only and free of review charges or account changes?
+
+The [billing documentation](https://www.greptile.com/docs/code-review-bot/billing-seats)
+names support@greptile.com for billing questions and sales@greptile.com for
+Enterprise pricing. No message was sent. Recommendation: preserve the current
+review-history behavior; do not recommend purchasing a plan to enable CodexBar
+credit tracking on this evidence. No supported implementation opportunity was
+verified, so no billing-integration follow-up is proposed yet. If Greptile
+supplies a supported contract, open a separate implementation issue before
+changing transport, parsing or UI.
+
+Paid-account runtime comparison remains **pending for Franz**, not an agent
+delivery prerequisite. A later authorized read-only comparison should record
+only redacted field names, units, scope and behavior against the same account's
+dashboard. No upgrade, purchase, billable review, private-endpoint probe,
+billing-session scrape or exported credential was used for this investigation.
+
+### Compatibility check
+
+Inspection of `makeReviewsRequest` and `reviewQuota(in:)` in
+`CodexBarIOS/Services/GreptileUsageProvider.swift` confirms the request still
+calls only `list_code_reviews`. Optional explicit review-named used/allowance
+pairs retain their existing period fields and stable identity. Credit-named
+metadata is not a review quota. The synthetic fixtures in
+`GreptilePaginationTests/GreptileAllowanceRegressionTests.swift` exercise that
+compatibility and missing-data behavior; they are not captures or proof of a
+paid account's response. This research changes no integration, UI or CI work.
