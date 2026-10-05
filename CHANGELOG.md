@@ -308,6 +308,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Documented the evidence and open questions for Greptile paid-plan credit
+  tracking. Public review and billing documentation does not establish a
+  supported account-balance API; paid-account comparison remains pending.
+  ([#397](https://github.com/HemSoft/codexbar-ios/issues/397))
+
 - Refreshed release-copy preparation and added privacy-safe Gemini, Grok, and
   GitHub Billing storefront capture scenes. Screenshot output directories can
   be isolated, and Watch captures no longer overwrite the published 1.2 set.
