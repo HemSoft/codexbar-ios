@@ -2,6 +2,46 @@ import XCTest
 
 @MainActor
 final class CodexCreditsPoolUITests: XCTestCase {
+    func testNamedCodexResetAccessibilityUpdatesAcrossMinuteTick() {
+        continueAfterFailure = false
+        let app = launch(scenario: "codex-next-reset", runID: UUID().uuidString)
+        let tile = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@ AND label CONTAINS %@",
+            "dashboard-metric-", "GPT-6.1-Sol", "12%"
+        )).firstMatch
+        XCTAssertTrue(tile.waitForExistence(timeout: 10), app.debugDescription)
+        let initialLabel = tile.label
+        XCTAssertTrue(initialLabel.contains("Resets 1h 0m"), initialLabel)
+        let updated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Resets 59m"), object: tile
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 75), .completed)
+        let labels = XCTAttachment(string: "Before: \(initialLabel)\nAfter: \(tile.label)")
+        labels.lifetime = .keepAlways
+        add(labels)
+        keep("codex-reset-updated-accessibility", app: app)
+        app.terminate()
+    }
+
+    func testPassedCodexResetDetailsAgreeWithDashboard() {
+        continueAfterFailure = false
+        let app = launch(scenario: "codex-next-reset-expired", runID: UUID().uuidString)
+        let tile = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@ AND label CONTAINS %@",
+            "dashboard-metric-", "Reset time passed", "12%"
+        )).firstMatch
+        XCTAssertTrue(tile.waitForExistence(timeout: 10), app.debugDescription)
+        tap(tile, in: app)
+        XCTAssertTrue(app.navigationBars["Metric Details"].waitForExistence(timeout: 10), app.debugDescription)
+        let reset = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Reset time passed")).firstMatch
+        reveal(reset, in: app)
+        XCTAssertTrue(reset.exists, app.debugDescription)
+        XCTAssertTrue(reset.label.contains("Refresh usage"), reset.label)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Resets now")).firstMatch.exists)
+        keep("codex-passed-reset-details", app: app)
+        app.terminate()
+    }
+
     func testOptInBalanceStatesAndSavedAccountChoices() {
         continueAfterFailure = false
         let states = [

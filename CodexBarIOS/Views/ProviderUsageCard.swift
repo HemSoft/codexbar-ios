@@ -1146,27 +1146,35 @@ struct ProviderUsageCard: View {
     }
 
     private func metricTile(_ item: ProviderMetricTileGridItem) -> some View {
-        Button {
-            metricDetailPresentation = ProviderMetricTileDetailPresentation(metricID: item.metric.id)
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                metricTileContent(item)
+        CodexResetTimeline(deadline: codexMetricResetDeadline(item.metric)) { now in
+            Button {
+                metricDetailPresentation = ProviderMetricTileDetailPresentation(metricID: item.metric.id)
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    metricTileContent(item)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(12)
+                .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(.separator).opacity(0.22), lineWidth: 0.5)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 12))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(12)
-            .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color(.separator).opacity(0.22), lineWidth: 0.5)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 12))
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("dashboard-metric-\(item.metric.id)")
+            .accessibilityLabel(metricAccessibilityLabel(item.metric, at: now))
+            .accessibilityHint(Self.metricDetailAccessibilityHint)
+            .accessibilityAddTraits(.isButton)
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("dashboard-metric-\(item.metric.id)")
-        .accessibilityLabel(metricAccessibilityLabel(item.metric))
-        .accessibilityHint(Self.metricDetailAccessibilityHint)
-        .accessibilityAddTraits(.isButton)
+    }
+
+    private func codexMetricResetDeadline(_ metric: ProviderUsageMetric) -> Date? {
+        guard result.providerID == .codex, case let .usageBar(index) = metric.kind,
+              result.bars.indices.contains(index) else { return nil }
+        return result.bars[index].resetsAt
     }
 
     @ViewBuilder
@@ -1284,9 +1292,7 @@ struct ProviderUsageCard: View {
         }
     }
 
-    private func resolvedVisualizationStyle(
-        for metric: ProviderUsageMetric
-    ) -> MetricVisualizationStyle {
+    private func resolvedVisualizationStyle(for metric: ProviderUsageMetric) -> MetricVisualizationStyle {
         let preferredStyle = visualizationStyleForMetric(metric.id)
         guard case let .usageBar(index) = metric.kind, result.bars.indices.contains(index) else {
             return preferredStyle
@@ -1358,20 +1364,15 @@ struct ProviderUsageCard: View {
             ?? (options.count == 1 ? options.first?.series : nil)
     }
 
-    static func metric(
-        withID metricID: String,
-        in result: ProviderUsageResult
-    ) -> ProviderUsageMetric? {
+    static func metric(withID metricID: String, in result: ProviderUsageResult) -> ProviderUsageMetric? {
         result.configurableMetrics.first { $0.id == metricID }
     }
 
-    private func metricAccessibilityLabel(_ metric: ProviderUsageMetric) -> String {
+    private func metricAccessibilityLabel(_ metric: ProviderUsageMetric, at now: Date) -> String {
         switch metric.kind {
         case let .usageBar(index) where result.bars.indices.contains(index):
             return Self.usageMetricAccessibilityLabel(
-                result.bars[index],
-                in: result,
-                thresholds: severityThresholds
+                result.bars[index], in: result, thresholds: severityThresholds, at: now
             )
         case let .unavailableUsage(reason):
             return "\(metric.label), \(reason)"
@@ -1400,9 +1401,8 @@ struct ProviderUsageCard: View {
     }
 
     static func usageMetricAccessibilityLabel(
-        _ bar: UsageBar,
-        in result: ProviderUsageResult,
-        thresholds: UsageSeverityThresholds = .default
+        _ bar: UsageBar, in result: ProviderUsageResult,
+        thresholds: UsageSeverityThresholds = .default, at now: Date = Date()
     ) -> String {
         if bar.isUnboundedNumeric {
             return [
@@ -1426,7 +1426,7 @@ struct ProviderUsageCard: View {
                 : "status unavailable",
             result.hasCurrentBars ? "fresh" : "stale",
             result.providerID == .codex
-                ? CodexTileResetContent.description(for: bar, isCurrent: result.hasCurrentBars)
+                ? CodexTileResetContent.description(for: bar, isCurrent: result.hasCurrentBars, at: now)
                 : bar.localizedResetDescription(),
             result.hasCurrentBars ? bar.dashboardProjectionDescription() : nil,
         ]
@@ -2638,8 +2638,8 @@ private struct ProviderMetricTileDetailView: View {
                 )
             }
             detailRow("Freshness", result.hasCurrentBars ? "Current" : "Last known value")
-            if let resetDescription = bar.localizedResetDescription() {
-                detailRow("Reset", resetDescription)
+            ProviderMetricResetContent(bar: bar, providerID: result.providerID, isCurrent: result.hasCurrentBars) {
+                detailRow("Reset", $0)
             }
             if result.hasCurrentBars, let projectionDescription = bar.projectionDescription() {
                 detailRow("Projection", projectionDescription)
@@ -3299,9 +3299,7 @@ private struct MetricVisualizationCustomizationView: View {
         return result.bars[index]
     }
 
-    private func resolvedVisualizationStyle(
-        for metric: ProviderUsageMetric
-    ) -> MetricVisualizationStyle {
+    private func resolvedVisualizationStyle(for metric: ProviderUsageMetric) -> MetricVisualizationStyle {
         let preferredStyle = visualizationStyleForMetric(metric.id)
         return usageBar(for: metric)?.resolvedVisualizationStyle(preferredStyle) ?? preferredStyle
     }

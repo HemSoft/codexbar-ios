@@ -82,6 +82,14 @@ it. Animations retain the normal app behavior.
   `-only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testThirtyDayWindowLabelAndSavedVisibility`.
   It never contacts OpenAI.
 
+- `CodexCreditsPoolUITests.testNamedCodexResetAccessibilityUpdatesAcrossMinuteTick`
+  checks that the dashboard button's accessibility label advances with the
+  visible Codex reset countdown. It waits across a minute tick without refresh.
+- `CodexCreditsPoolUITests.testPassedCodexResetDetailsAgreeWithDashboard`
+  opens an expired named-limit tile and verifies that its detail sheet also
+  asks for a refresh. Both journeys use isolated synthetic provider data and
+  run only in the local/manual UI suite, not automatic pull-request CI.
+
 - `CodexCreditsPoolUITests.testOptInBalanceStatesAndSavedAccountChoices`
   uses isolated synthetic Codex accounts through the production parser. It
   checks the off-by-default Settings switch, 62,500 credits, zero, unavailable,
@@ -302,7 +310,7 @@ SHA changes, dispatch a new run.
 
 An always-run destination check makes the manual job fail if either family
 fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than twenty-six passed tests with zero skips or
+runner rejects anything other than twenty-eight passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

@@ -313,6 +313,8 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Added manually run UI checks for Codex reset countdown accessibility and passed-deadline detail consistency. ([#406](https://github.com/HemSoft/codexbar-ios/issues/406))
+
 - Documented the evidence and open questions for Greptile paid-plan credit
   tracking. Public review and billing documentation does not establish a
   supported account-balance API; paid-account comparison remains pending.
