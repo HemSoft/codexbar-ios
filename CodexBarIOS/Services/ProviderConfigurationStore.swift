@@ -3024,7 +3024,7 @@ extension ProviderConfigurationStore {
             guard let saved, !saved.isEmpty else { return true }
             guard let previous = GreptileSessionCredentials.parse(saved) else {
                 lastError = configuration.authMethod == .apiKey
-                    ? "Add a separate Greptile account for renewal. This API-key account's identity cannot be verified."
+                    ? "Add a separate Greptile account to sign in. This API-key account's identity cannot be verified."
                     : "The saved Greptile sign-in could not be read. Disconnect and sign in again."
                 return false
             }
