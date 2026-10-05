@@ -85,9 +85,14 @@ it. Animations retain the normal app behavior.
 - `CodexCreditsPoolUITests.testNamedCodexResetAccessibilityUpdatesAcrossMinuteTick`
   checks that the dashboard button's accessibility label advances with the
   visible Codex reset countdown. It waits across a minute tick without refresh.
+  Run locally with
+  `-only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testNamedCodexResetAccessibilityUpdatesAcrossMinuteTick`.
+
 - `CodexCreditsPoolUITests.testPassedCodexResetDetailsAgreeWithDashboard`
   opens an expired named-limit tile and verifies that its detail sheet also
-  asks for a refresh. Both journeys use isolated synthetic provider data and
+  asks for a refresh. Run locally with
+  `-only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testPassedCodexResetDetailsAgreeWithDashboard`.
+  Both journeys use isolated synthetic provider data and
   run only in the local/manual UI suite, not automatic pull-request CI.
 
 - `CodexCreditsPoolUITests.testOptInBalanceStatesAndSavedAccountChoices`

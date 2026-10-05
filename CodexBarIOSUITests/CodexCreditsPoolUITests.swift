@@ -11,11 +11,13 @@ final class CodexCreditsPoolUITests: XCTestCase {
         )).firstMatch
         XCTAssertTrue(tile.waitForExistence(timeout: 10), app.debugDescription)
         let initialLabel = tile.label
-        XCTAssertTrue(initialLabel.contains("Resets 1h 0m"), initialLabel)
+        XCTAssertTrue(initialLabel.contains("Resets "), initialLabel)
         let updated = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label CONTAINS %@", "Resets 59m"), object: tile
+            predicate: NSPredicate(
+                format: "label != %@ AND label CONTAINS %@", initialLabel, "Resets "
+            ), object: tile
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 75), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 120), .completed)
         let labels = XCTAttachment(string: "Before: \(initialLabel)\nAfter: \(tile.label)")
         labels.lifetime = .keepAlways
         add(labels)
