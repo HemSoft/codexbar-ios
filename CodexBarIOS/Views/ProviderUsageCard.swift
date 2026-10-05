@@ -1265,18 +1265,22 @@ struct ProviderUsageCard: View {
     }
 
     @ViewBuilder
-    private func usageTileResetDetails(
-        item: ProviderMetricTileGridItem,
-        bar: UsageBar,
-        showsAllowanceSummary: Bool
-    ) -> some View {
+    private func usageTileResetDetails(item: ProviderMetricTileGridItem, bar: UsageBar, showsAllowanceSummary: Bool) -> some View {
+        if result.providerID == .codex, bar.resetsAt != nil {
+            CodexTileResetView(bar: bar, isCurrent: result.hasCurrentBars)
+        }
         if item.width == .full || showsAllowanceSummary {
-            if let resetDescription = bar.localizedResetDescription() {
-                supportingText(resetDescription)
-            }
-            if result.hasCurrentBars, let projectionDescription = bar.dashboardProjectionDescription() {
-                supportingText(projectionDescription)
-            }
+            fullWidthUsageTileDetails(bar)
+        }
+    }
+
+    @ViewBuilder
+    private func fullWidthUsageTileDetails(_ bar: UsageBar) -> some View {
+        if result.providerID != .codex, let resetDescription = bar.localizedResetDescription() {
+            supportingText(resetDescription)
+        }
+        if result.hasCurrentBars, let projectionDescription = bar.dashboardProjectionDescription() {
+            supportingText(projectionDescription)
         }
     }
 
@@ -1421,7 +1425,9 @@ struct ProviderUsageCard: View {
                 ? bar.effectiveSeverity(thresholds: thresholds).accessibilityName
                 : "status unavailable",
             result.hasCurrentBars ? "fresh" : "stale",
-            bar.localizedResetDescription(),
+            result.providerID == .codex
+                ? CodexTileResetContent.description(for: bar, isCurrent: result.hasCurrentBars)
+                : bar.localizedResetDescription(),
             result.hasCurrentBars ? bar.dashboardProjectionDescription() : nil,
         ]
         .compactMap { $0 }

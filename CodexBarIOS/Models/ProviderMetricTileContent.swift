@@ -1,3 +1,5 @@
+import Foundation
+
 /// Data selected for a dashboard tile, before SwiftUI renders it.
 /// Missing values and invalid indexes remain empty; reported values are never clamped.
 enum ProviderMetricTileContent: Equatable, Sendable {
@@ -41,5 +43,26 @@ enum ProviderMetricTileContent: Equatable, Sendable {
         guard result.monetaryMetrics.indices.contains(index) else { return .empty }
         let metric = result.monetaryMetrics[index]
         return .monetary(metric, supportingDetail: isFullWidth ? metric.detail : nil)
+    }
+}
+
+enum CodexTileResetContent {
+    static func description(
+        for bar: UsageBar,
+        isCurrent: Bool,
+        at now: Date = Date(),
+        formatter: UserFacingDateTimeFormatter = .current
+    ) -> String? {
+        guard let reset = bar.resetsAt else { return nil }
+        let description: String
+        if reset <= now {
+            let localTime = formatter.timeWithZone(reset, includesWeekday: true)
+            description = "Reset time passed (\(localTime)) · Refresh usage"
+        } else {
+            description = formatter.resetDescription(
+                resetAt: reset, now: now, style: .relativeWithLocalTime, fallback: nil
+            ) ?? ""
+        }
+        return isCurrent ? description : "Last reported: \(description)"
     }
 }

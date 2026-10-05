@@ -90,7 +90,7 @@ final class UITestFixtures {
             Self.seedGoogleAccounts(in: configurationStore, sources: googleSources)
         }
         if codex && configurationStore.configurations.isEmpty {
-            Self.seedCodexAccounts(in: configurationStore)
+            Self.seedCodexAccounts(in: configurationStore, scenario: scenario)
         }
         if recovery && configurationStore.configurations.isEmpty {
             Self.seedRecoveryAccount(in: configurationStore)
@@ -205,7 +205,7 @@ final class UITestFixtures {
         ))
     }
 
-    private static func seedCodexAccounts(in store: ProviderConfigurationStore) {
+    private static func seedCodexAccounts(in store: ProviderConfigurationStore, scenario: String?) {
         for (identity, label) in [("personal", "Personal Codex"), ("work", "Work Codex")] {
             let account = ProviderAccountConfiguration(
                 id: "ui-codex-\(identity)", providerID: .codex,
@@ -213,6 +213,15 @@ final class UITestFixtures {
             )
             _ = store.update(account)
             _ = store.saveSecret(codexCredential(for: identity), for: account)
+            if scenario?.hasPrefix("codex-next-reset") == true {
+                let result = codexResult(for: account, scenario: scenario)
+                for metric in result.configurableMetrics {
+                    store.updateMetricWidth(
+                        scenario == "codex-next-reset-full" ? .full : .half,
+                        accountID: account.id, metricID: metric.id
+                    )
+                }
+            }
         }
     }
 
@@ -247,6 +256,9 @@ final class UITestFixtures {
         for account: ProviderAccountConfiguration, scenario: String? = nil
     ) -> ProviderUsageResult {
         let used = account.id == "ui-codex-personal" ? 12.0 : 62.0
+        if scenario?.hasPrefix("codex-next-reset") == true {
+            return codexNextResetResult(for: account, scenario: scenario ?? "", used: used)
+        }
         if scenario == "codex-free-thirty-day" {
             return codexThirtyDayResult(for: account, used: used)
         }
@@ -262,6 +274,33 @@ final class UITestFixtures {
                     resetsAt: Date().addingTimeInterval(18_000), resetDisplayStyle: .relativeWithLocalTime
                 ),
             ], fetchedAt: Date()
+        )
+    }
+
+    nonisolated private static func codexNextResetResult(
+        for account: ProviderAccountConfiguration, scenario: String, used: Double
+    ) -> ProviderUsageResult {
+        let now = Date()
+        let offset: TimeInterval = account.id == "ui-codex-personal" ? 0 : 3_600
+        let deadline = scenario == "codex-next-reset-expired" ? -60 : 3_660 + offset
+        let epoch = Int(now.timeIntervalSince1970)
+        let payload = #"""
+        {"additional_rate_limits":[{"limit_name":"GPT-6.1-Sol","metered_feature":"synthetic-sol","rate_limit":{
+        "primary_window":{"used_percent":\#(used),"reset_at":\#(epoch + Int(deadline)),"limit_window_seconds":18000},
+        "secondary_window":{"used_percent":34,"reset_at":\#(epoch + 259200 + Int(offset)),"limit_window_seconds":604800}}}]}
+        """#
+        guard let parsed = CodexUsageParser.parse(Data(payload.utf8), fetchedAt: now) else {
+            preconditionFailure("Invalid synthetic named Codex reset fixture")
+        }
+        let bars = scenario == "codex-next-reset-missing"
+            ? [UsageBar(stableKey: "missing-reset", label: "Synthetic limit without reset", used: used, limit: 100)]
+            : parsed.bars
+        return ProviderUsageResult(
+            accountID: account.id, providerID: .codex, title: account.displayName,
+            subtitle: "Synthetic named Codex limits. No live account.", bars: bars,
+            barsFetchedAt: scenario == "codex-next-reset-stale" ? now.addingTimeInterval(-600) : now,
+            failureMessage: scenario == "codex-next-reset-stale" ? "Synthetic refresh failed" : nil,
+            preserveCachedBarsOnFailure: scenario == "codex-next-reset-stale", fetchedAt: now
         )
     }
 

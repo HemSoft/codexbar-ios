@@ -59,6 +59,11 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Show the next reset countdown and local reset time on compact Codex usage
+  tiles, including named model limits. Passed reset times ask for a refresh,
+  and previously reported values remain clearly labeled.
+  ([#406](https://github.com/HemSoft/codexbar-ios/issues/406))
+
 - Cursor model usage follows Cursor's minimum 1% display for small positive
   usage, while History and forecasts retain the measured values. Refreshes
   bypass local HTTP cache and cookies. Grok Bot has more time to respond and
