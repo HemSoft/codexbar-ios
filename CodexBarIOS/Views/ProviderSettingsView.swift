@@ -375,14 +375,14 @@ struct ProviderSettingsView: View {
                     geminiAppsConnection
                 } else if providerID == .greptile {
                     if configuration.authMethod == .apiKey, configurationStore.hasSecret(for: configuration) {
-                        Text("Keep this API-key account's review history. Add a separate account to sign in for renewal.")
+                        Text("Keep this API-key account's review history. Add a separate account to sign in to Greptile.")
                             .font(.footnote).foregroundStyle(.secondary)
-                        Button("Add Greptile account for renewal") {
+                        Button("Add Greptile account") {
                             let account = configurationStore.addAccount(for: .greptile)
                             if configurationStore.configuration(accountID: account.id) != nil { newGreptileAccountID = account.id }
                         }
                     } else {
-                        Button(configurationStore.hasSecret(for: configuration) ? "Reconnect Greptile for renewal" : "Sign in with Greptile") {
+                        Button(configurationStore.hasSecret(for: configuration) ? "Reconnect Greptile" : "Sign in to Greptile") {
                             viewModel.startGreptileSignIn()
                         }
                         .disabled(viewModel.isSigningInWithGreptile)
@@ -394,7 +394,7 @@ struct ProviderSettingsView: View {
                     if configurationStore.hasSecret(for: configuration) {
                         Button("Disconnect Greptile", role: .destructive) { viewModel.removeSavedCredential() }
                     }
-                    Text("Sign in and choose your organization to show its free allowance renewal. Your account session stays in Keychain.")
+                    Text("Sign in and choose your organization to connect your Greptile account. Your account session stays in Keychain.")
                         .font(.footnote).foregroundStyle(.secondary)
                 } else if providerID == .openCodeZen {
                     Button(configurationStore.hasSecret(for: configuration) ? "Reconnect OpenCode" : "Sign in with OpenCode") {

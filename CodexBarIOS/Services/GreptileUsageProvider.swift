@@ -100,7 +100,7 @@ public final class GreptileUsageProvider: UsageProvider {
         if configuration.authMethod == .browserSession || GreptileSessionCredentials.parse(storedSecret) != nil {
             guard let credential = GreptileSessionCredentials.parse(storedSecret) else {
                 return failureResult(
-                    "Sign in with Greptile to read your allowance renewal date.",
+                    "Sign in to Greptile to read your allowance renewal date.",
                     configuration: configuration, recoveryAction: .signIn
                 )
             }
@@ -121,7 +121,7 @@ public final class GreptileUsageProvider: UsageProvider {
         var result = try await fetchReviewActivity(apiKey: apiKey, configuration: configuration)
         result.greptileAllowanceRenewal = GreptileAllowanceRenewal(
             renewsAt: nil, observedAt: result.fetchedAt,
-            unavailableReason: "Sign in with Greptile in account settings to read your allowance renewal date.",
+            unavailableReason: "Sign in to Greptile in account settings to read your allowance renewal date.",
             requiresAuthentication: true
         )
         return result

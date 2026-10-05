@@ -83,7 +83,7 @@ enum GreptileSignInError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .canceled: "Greptile sign-in canceled. Your saved account was not changed."
-        case .expired: "Your Greptile session expired. Sign in again to read the renewal date."
+        case .expired: "Your Greptile session expired. Sign in again."
         case .invalidSession: "Greptile sign-in could not be verified. Your saved account was not changed."
         case .wrongAccount: "This session belongs to another Greptile account or organization. Add a separate account to connect it."
         default: "Greptile could not return valid account data. Check the connection or try refreshing later."

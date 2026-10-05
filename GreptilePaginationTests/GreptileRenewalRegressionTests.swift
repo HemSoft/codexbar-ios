@@ -118,6 +118,7 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         }
         XCTAssertThrowsError(try GreptileDashboardClient.parseBillingState(Data("[]".utf8)))
         XCTAssertThrowsError(try GreptileDashboardClient.parseBillingState(Data("not-json".utf8)))
+        XCTAssertThrowsError(try GreptileDashboardClient.parseBillingState(billing(["kind": "unknown"])))
     }
 
     func testWrongSubjectOrOrganizationStopsBeforeBillingAndReviewRequests() async throws {
@@ -338,11 +339,14 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         let replies: [[GreptileHTTPFixture.Reply]] = [
             [expiry], [try identity(), expiry, try GreptileHTTPFixture.page(["current"], total: 1)],
         ]
-        for response in replies {
+        let scenarios = replies.flatMap { response in [true, false].map { (response, $0) } }
+        for (response, isFree) in scenarios {
             let fixture = GreptileHTTPFixture(response)
             defer { fixture.invalidate() }
             let account = browserAccount()
-            let original = GreptileAllowanceRenewal(renewsAt: now.addingTimeInterval(600), observedAt: now)
+            let original = GreptileAllowanceRenewal(
+                renewsAt: isFree ? now.addingTimeInterval(600) : nil, observedAt: now, isApplicable: isFree
+            )
             let previous = ProviderUsageResult(
                 accountID: account.id, providerID: .greptile, title: account.displayName, subtitle: "Verified", bars: [],
                 greptileAllowanceRenewal: original, cacheIdentity: credential().cacheIdentity, fetchedAt: now
@@ -353,6 +357,7 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(result.renewsAt, original.renewsAt)
             XCTAssertTrue(result.isStale)
             XCTAssertTrue(result.requiresAuthentication)
+            XCTAssertEqual(result.isApplicable, isFree)
         }
     }
 

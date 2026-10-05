@@ -16,7 +16,13 @@ identity and organization membership, and asks which organization to connect.
 Only that account's Auth.js session cookie or numbered cookie chunks are saved
 in its Keychain entry. Canceling leaves saved credentials unchanged. Reconnect
 must match the saved user and organization; another identity requires a separate
-CodexBar account. Reconnecting after a disconnect clears the old account history once the new verified credentials are securely saved. Same-identity reconnect keeps history. Existing API-key accounts keep their review history and offer an Add Greptile account for renewal button, since their user identity cannot be verified. The browser session is discarded after connection or cancel.
+CodexBar account. Reconnecting while the prior credential is saved preserves
+history only when the verified user and organization match. After Disconnect,
+the prior identity is no longer available to compare, so signing in clears the
+old history after the new verified credential is securely saved, even for the
+same user. Existing API-key accounts keep their review history and offer an Add
+Greptile account button, since their user identity cannot be verified.
+The browser session is discarded after connection or cancel.
 
 The app reads `GET /api/auth/session` with the saved session to re-verify identity
 and membership before every billing read. It then reads
@@ -39,8 +45,8 @@ refresh are labeled last known. A successful refresh replaces the period.
 Review activity remains a separate metric with its existing IDs and saved
 visibility, order and width. The verified session's user token authorizes
 read-only MCP activity calls, scoped with the selected organization. Existing
-organization API-key accounts retain review activity and can reconnect through
-the guided sign-in to obtain billing renewal. No credit balance is inferred from
+organization API-key accounts retain review activity and can add a separate
+account through guided sign-in to obtain billing renewal. No credit balance is inferred from
 review counts, and no calendar boundary is guessed.
 
 Local synthetic tests and simulator journeys validate app behavior. Live phone
@@ -417,3 +423,20 @@ metadata is not a review quota. The synthetic fixtures in
 `GreptilePaginationTests/GreptileAllowanceRegressionTests.swift` exercise that
 compatibility and missing-data behavior; they are not captures or proof of a
 paid account's response. The original research-only snapshot changed no integration or UI. The #406 implementation preserves those review metrics and adds renewal independently. Automatic CI work is unchanged.
+
+### Native OAuth transport limitation (October 5)
+
+A public native OAuth client registered successfully with Greptile's advertised
+registration endpoint. Authorization Code with S256 PKCE authenticated the
+same user and organization: `GET https://api.greptile.com/v1/me` returned 200.
+The same OAuth token returned 401 from the dashboard billing endpoint, and
+`GET /api/auth/session` returned null. Identity/read authorization therefore
+does not establish access to the private billing session. The diagnostic token
+was revoked after these read-only checks.
+
+Google's [native OAuth documentation](https://developers.google.com/identity/protocols/oauth2/native-app)
+requires an external browser rather than embedded WebKit. A complete native
+billing login needs Greptile to authorize OAuth access to billing or provide an
+authorized exchange into its dashboard session. The current temporary browser
+flow fixes dashboard-cookie flicker, but does not resolve that provider-side
+native authentication limitation.

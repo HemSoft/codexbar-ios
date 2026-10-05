@@ -96,7 +96,7 @@ struct GreptileDashboardClient: Sendable {
               let data = result["data"] as? [String: Any],
               let state = data["json"] as? [String: Any],
               let kind = state["kind"] as? String else { throw GreptileSignInError.invalidBillingResponse }
-        guard kind == "free" else { return GreptileDashboardState(renewalDate: nil, isFreeAllowance: false) }
+        guard try isFreeAllowance(kind: kind) else { return GreptileDashboardState(renewalDate: nil, isFreeAllowance: false) }
         guard let period = state["currentPeriod"] as? [String: Any],
               let end = isoDate(period["end"]) else { return GreptileDashboardState(renewalDate: nil) }
         if period["start"] != nil {
@@ -105,6 +105,14 @@ struct GreptileDashboardClient: Sendable {
             }
         }
         return GreptileDashboardState(renewalDate: end)
+    }
+
+    private static func isFreeAllowance(kind: String) throws -> Bool {
+        switch kind {
+        case "free": true
+        case "paid": false
+        default: throw GreptileSignInError.invalidBillingResponse
+        }
     }
 
     private static func isoDate(_ value: Any?) -> Date? {

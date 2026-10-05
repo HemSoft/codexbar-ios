@@ -1,6 +1,76 @@
 import XCTest
 import WebKit
+import Combine
 @testable import CodexBarIOS
+
+#if CODEXBAR_LOCAL_AUTH_TESTS
+/// Explicit local-only coverage. Automatic CI does not enable this compilation condition.
+final class GreptileBrowserCookieRegressionTests: XCTestCase {
+    @MainActor
+    func testUnrelatedCookieChangesKeepChooserStableAndConnectionCompletes() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ConfigurationAndAuthMockURLProtocol.self]
+        let client = GreptileDashboardClient(session: URLSession(configuration: configuration))
+        ConfigurationAndAuthMockURLProtocol.handler = { request in
+            let body = request.url?.path == "/api/auth/session"
+                ? #"{"user":{"greptileId":"synthetic-user","greptileToken":"synthetic-token","organizations":[{"tenantExternalId":"synthetic-org","name":"Synthetic organization"}]}}"#
+                : #"[{"result":{"data":{"json":{"kind":"free"}}}}]"#
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(body.utf8))
+        }
+        defer { ConfigurationAndAuthMockURLProtocol.handler = nil }
+        let completed = expectation(description: "Verified sign-in completes")
+        let session = GreptileBrowserSignInSession(client: client) { result in
+            if case .failure = result { XCTFail("Synthetic verified sign-in should succeed.") }
+            if case .success(let credential) = result {
+                XCTAssertEqual(credential.cookies.first?.value, "rotated-synthetic-cookie")
+            }
+            completed.fulfill()
+        }
+        defer { session.invalidate() }
+        let ready = expectation(description: "Organization chooser appears")
+        var appeared = false
+        var resets = 0
+        var expectingRotation = false
+        let rotated = expectation(description: "Changed authentication session is reverified")
+        let observer = session.$organizations.sink { organizations in
+            if !organizations.isEmpty, !appeared { appeared = true; ready.fulfill() }
+            if appeared && organizations.isEmpty { resets += 1 }
+            if !organizations.isEmpty, expectingRotation { expectingRotation = false; rotated.fulfill() }
+        }
+        defer { observer.cancel() }
+        let store = session.webView.configuration.websiteDataStore.httpCookieStore
+        let auth = try XCTUnwrap(HTTPCookie(properties: [
+            .name: "__Secure-authjs.session-token", .value: "synthetic-cookie",
+            .domain: "app.greptile.com", .path: "/", .secure: "TRUE",
+        ]))
+        await store.setCookie(auth)
+        session.webView.loadHTMLString("<html><body>Synthetic Greptile dashboard</body></html>",
+                                      baseURL: URL(string: "https://app.greptile.com/"))
+        await fulfillment(of: [ready], timeout: 10)
+        let organization = try XCTUnwrap(session.organizations.first)
+        for index in 0..<20 {
+            let unrelated = try XCTUnwrap(HTTPCookie(properties: [
+                .name: "synthetic-analytics", .value: String(index),
+                .domain: "app.greptile.com", .path: "/", .secure: "TRUE",
+            ]))
+            await store.setCookie(unrelated)
+            session.cookiesDidChange(in: store)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(resets, 0, "Unrelated cookies must not flicker between browser and organization chooser.")
+        XCTAssertEqual(session.organizations, [organization])
+        var properties = try XCTUnwrap(auth.properties)
+        properties[.value] = "rotated-synthetic-cookie"
+        expectingRotation = true
+        await store.setCookie(try XCTUnwrap(HTTPCookie(properties: properties)))
+        session.cookiesDidChange(in: store)
+        await fulfillment(of: [rotated], timeout: 10)
+        XCTAssertGreaterThan(resets, 0, "An actual authentication change must reverify the chooser.")
+        session.connect(organization)
+        await fulfillment(of: [completed], timeout: 10)
+    }
+}
+#endif
 
 final class GeminiBrowserSignInTests: XCTestCase {
     func testCookieSelectionRejectsWrongDomainsScopesExpiredAndInsecureValues() throws {

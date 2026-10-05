@@ -288,9 +288,9 @@ final class ProviderSettingsViewModel: ObservableObject {
         if providerID == .greptile {
             return ProviderCredentialPresentation(
                 sectionTitle: "Greptile Connection",
-                unsavedPlaceholder: "Sign in with Greptile",
+                unsavedPlaceholder: "Sign in to Greptile",
                 savedPlaceholder: "Greptile session saved",
-                saveButtonTitle: "Sign in with Greptile",
+                saveButtonTitle: "Sign in to Greptile",
                 setupMessage: nil,
                 setupLinkTitle: nil,
                 setupURL: nil,
@@ -752,17 +752,21 @@ final class ProviderSettingsViewModel: ObservableObject {
                 return
             }
             validationFeedbackProviderID = nil
-            credentialMessage = "Greptile connected. Reading your allowance renewal date…"
+            credentialMessage = "Greptile connected. Reading your usage…"
             credentialsDidChange(refreshMetrics: false)
-            let revision = metricsCredentialRevision
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                let refreshed = await self.onAccountRefresh(self.configuration)
-                guard revision == self.metricsCredentialRevision, let refreshed else { return }
-                self.acceptUsageResult(refreshed)
-            }
+            refreshConnectedGreptile()
         } catch {
             credentialError = (error as? GreptileSignInError ?? .invalidSession).localizedDescription
+        }
+    }
+
+    private func refreshConnectedGreptile() {
+        let revision = metricsCredentialRevision
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let refreshed = await self.onAccountRefresh(self.configuration)
+            guard revision == self.metricsCredentialRevision, let refreshed else { return }
+            self.acceptUsageResult(refreshed)
         }
     }
 

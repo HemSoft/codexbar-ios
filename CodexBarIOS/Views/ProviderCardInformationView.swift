@@ -10,7 +10,7 @@ struct ProviderCardInformationView: View {
         NavigationStack {
             List {
                 if let greptileRenewal {
-                    Section("Free allowance renewal") {
+                    Section(greptileRenewal.isApplicable ? "Free allowance renewal" : "Greptile connection") {
                         GreptileRenewalView(renewal: greptileRenewal, showsTitle: false)
                     }
                 }

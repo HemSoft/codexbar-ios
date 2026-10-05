@@ -148,6 +148,17 @@ final class UITestFixtures {
         }
     }
 
+    nonisolated private static func cachedGreptileRenewal(scenario: String?) -> GreptileAllowanceRenewal? {
+        switch scenario {
+        case "greptile-renewal-stale", "greptile-renewal-expired":
+            GreptileAllowanceRenewal(renewsAt: Date().addingTimeInterval(604_800),
+                                    observedAt: Date().addingTimeInterval(-90_000), isStale: true)
+        case "greptile-renewal-paid-expired":
+            GreptileAllowanceRenewal(renewsAt: nil, observedAt: Date().addingTimeInterval(-90_000), isApplicable: false)
+        default: nil
+        }
+    }
+
     nonisolated private static func initialResult(
         for configuration: ProviderAccountConfiguration, scenario: String?, googleSources: [ProviderID]
     ) -> ProviderUsageResult {
@@ -161,10 +172,8 @@ final class UITestFixtures {
             return ProviderUsageResult(
                 accountID: configuration.id, providerID: .greptile, title: configuration.displayName,
                 subtitle: "Waiting for synthetic Greptile response", bars: [],
-                greptileAllowanceRenewal: ["greptile-renewal-stale", "greptile-renewal-expired"].contains(scenario ?? "") ? GreptileAllowanceRenewal(
-                    renewsAt: Date().addingTimeInterval(604_800), observedAt: Date().addingTimeInterval(-90_000), isStale: true
-                ) : nil,
-                cacheIdentity: ["greptile-renewal-stale", "greptile-renewal-expired"].contains(scenario ?? "") ? "synthetic-user:synthetic-org" : nil,
+                greptileAllowanceRenewal: cachedGreptileRenewal(scenario: scenario),
+                cacheIdentity: cachedGreptileRenewal(scenario: scenario) == nil ? nil : "synthetic-user:synthetic-org",
                 fetchedAt: Date()
             )
         }
@@ -1482,7 +1491,8 @@ private final class UITestNetworkBlocker: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
-        let expiredBilling = scenario == "greptile-renewal-expired" && request.url?.path == "/api/trpc/billing.getState"
+        let expiredBilling = ["greptile-renewal-expired", "greptile-renewal-paid-expired"].contains(scenario)
+            && request.url?.path == "/api/trpc/billing.getState"
         let status = expiredBilling ? 401 : (scenario == "greptile-failure" ? 503 : 200)
         let response = HTTPURLResponse(
             url: request.url!, statusCode: status,

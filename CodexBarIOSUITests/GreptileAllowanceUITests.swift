@@ -37,6 +37,7 @@ final class GreptileAllowanceUITests: XCTestCase {
         failed.terminate()
         checkRenewalScreens()
         checkPaidRenewalScreens()
+        checkPaidExpiredSessionScreens()
     }
 
     private func checkRenewalScreens() {
@@ -95,6 +96,30 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Review statuses"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Free allowance renewal"].exists)
         keep("greptile-renewal-paid-detail-light", app: app)
+        app.terminate()
+    }
+
+    private func checkPaidExpiredSessionScreens() {
+        let app = launch("greptile-renewal-paid-expired")
+        let status = app.staticTexts["greptile-renewal-status"].firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertEqual(status.label, "Sign in again to Greptile")
+        let signIn = app.buttons["greptile-renewal-connect"]
+        reveal(signIn, in: app)
+        XCTAssertTrue(signIn.exists)
+        XCTAssertEqual(signIn.label, "Sign in to Greptile")
+        XCTAssertFalse(app.staticTexts["Free allowance renewal"].exists)
+        keep("greptile-renewal-paid-expired-compact-light", app: app)
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION"] = "1"
+        app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"] = "ui-greptile-free"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Greptile connection"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Free allowance renewal"].exists)
+        XCTAssertEqual(app.staticTexts["greptile-renewal-status"].firstMatch.label, "Sign in again to Greptile")
+        keep("greptile-renewal-paid-expired-detail-light", app: app)
         app.terminate()
     }
 
@@ -159,11 +184,11 @@ final class GreptileAllowanceUITests: XCTestCase {
         tap(app.otherElements["Greptile Free Fixture"], in: app)
         XCTAssertTrue(app.navigationBars["Greptile Free Fixture"].waitForExistence(timeout: 10))
         if scenario == "greptile-free" {
-            let add = app.buttons["Add Greptile account for renewal"]
+            let add = app.buttons["Add Greptile account"]
             reveal(add, in: app)
             XCTAssertTrue(add.exists)
             XCTAssertFalse(app.secureTextFields.firstMatch.exists)
-            XCTAssertFalse(app.buttons["Sign in with Greptile"].exists)
+            XCTAssertFalse(app.buttons["Sign in to Greptile"].exists)
             keep("greptile-renewal-legacy-account-settings", app: app)
         }
         let section = app.staticTexts["Metrics"].firstMatch

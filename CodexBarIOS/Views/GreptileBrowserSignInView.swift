@@ -10,7 +10,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     @Published private(set) var organizations: [GreptileOrganization] = []
     @Published private(set) var message: String?
     @Published private(set) var isVerifying = false
-    private let client = GreptileDashboardClient(session: GreptileDashboardClient.isolatedSession())
+    private let client: GreptileDashboardClient
     private var identity: GreptileDashboardIdentity?
     private var cookies: [GreptileSessionCookie] = []
     private var completion: ((Result<GreptileSessionCredentials, Error>) -> Void)?
@@ -18,12 +18,17 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     private var didStart = false
     private var navigationRevision = UUID()
     private var cookieInspectionPending = false
+    private var observedSessionTokens: [String: String]?
     @Published private(set) var canGoBack = false
 
-    init(completion: @escaping (Result<GreptileSessionCredentials, Error>) -> Void) {
+    init(
+        client: GreptileDashboardClient = GreptileDashboardClient(session: GreptileDashboardClient.isolatedSession()),
+        completion: @escaping (Result<GreptileSessionCredentials, Error>) -> Void
+    ) {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         webView = WKWebView(frame: .zero, configuration: configuration)
+        self.client = client
         self.completion = completion
         super.init()
         webView.navigationDelegate = self
@@ -46,6 +51,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     private func resetInspection() {
         navigationRevision = UUID()
         cookieInspectionPending = false
+        observedSessionTokens = nil
         message = nil
         task?.cancel()
         task = nil
@@ -94,6 +100,21 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     }
 
     func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        let revision = navigationRevision
+        cookieStore.getAllCookies { [weak self] values in
+            self?.inspectCookieChange(values, revision: revision)
+        }
+    }
+
+    private func inspectCookieChange(_ values: [HTTPCookie], revision: UUID) {
+        guard completion != nil, navigationRevision == revision else { return }
+        let latest = (try? GreptileSessionCredentials.sessionCookies(from: values)) ?? []
+        let tokens = Dictionary(uniqueKeysWithValues: latest.map { ($0.name, $0.value) })
+        guard tokens != observedSessionTokens else {
+            if !cookies.isEmpty { cookies = latest }
+            return
+        }
+        observedSessionTokens = tokens
         if task != nil { cookieInspectionPending = true; return }
         organizations = []
         identity = nil
@@ -120,6 +141,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
             guard let self, self.completion != nil, self.task == nil, self.navigationRevision == revision,
                   self.webView.url == url, !self.webView.isLoading else { return }
             guard let cookies = try? GreptileSessionCredentials.sessionCookies(from: values), !cookies.isEmpty else { return }
+            self.observedSessionTokens = Dictionary(uniqueKeysWithValues: cookies.map { ($0.name, $0.value) })
             self.inspect(cookies: cookies, revision: revision)
         }
     }
@@ -139,6 +161,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
                 self.cookies = cookies
                 self.identity = identity
                 self.organizations = identity.organizations
+                self.message = nil
             } catch {
                 guard !Task.isCancelled, self.completion != nil, self.navigationRevision == revision else { return }
                 self.message = "Finish signing in, then choose Greptile Usage to retry verification."
@@ -159,7 +182,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
             defer { self.finishVerification(revision: revision) }
             do {
                 try await self.client.verifyConnection(for: credential)
-                guard !Task.isCancelled, self.completion != nil else { return }
+                guard !Task.isCancelled, self.completion != nil, !self.cookieInspectionPending else { return }
                 self.finish(.success(credential))
             } catch {
                 guard !Task.isCancelled, self.completion != nil else { return }
@@ -169,6 +192,7 @@ final class GreptileBrowserSignInSession: NSObject, ObservableObject, Identifiab
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
+        guard organizations.isEmpty else { return .cancel }
         guard let url = action.request.url, url.scheme == "https", url.user == nil, url.password == nil,
               url.port == nil || url.port == 443 else {
             explainBlockedNavigation(action)

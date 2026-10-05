@@ -1879,7 +1879,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
 
         if [.cursor, .gemini, .greptile].contains(configuration.providerID) {
-            if configuration.providerID == .greptile { return "Not configured - sign in with Greptile" }
+            if configuration.providerID == .greptile { return "Not configured - sign in to Greptile" }
             return configuration.providerID == .gemini
                 ? "Not configured - sign in with Google" : "Not configured - sign in with Cursor"
         }
