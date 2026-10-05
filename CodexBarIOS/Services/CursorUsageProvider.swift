@@ -109,7 +109,7 @@ public final class CursorUsageProvider: UsageProvider {
     private func prepareEarlyRenewal(_ credential: CursorSessionCredential, account: String) async throws -> PreparedSession {
         let key = account + "." + CursorSessionCredential.digest(credential.storedSecret)
         guard await Self.earlyRenewalBackoff.permits(key: key, at: Date()) else {
-            return PreparedSession(credential: credential, attemptedRenewal: true)
+            return PreparedSession(credential: credential, attemptedRenewal: false)
         }
         do {
             return PreparedSession(credential: try await renew(credential, account: account), attemptedRenewal: true)

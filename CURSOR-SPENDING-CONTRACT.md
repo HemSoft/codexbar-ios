@@ -139,7 +139,7 @@ an account. With a saved refresh grant, the same early lifetime window and prima
 renewal fails while the token remains unexpired, independently valid primary
 usage can still succeed, including fresh zero. That attempt cannot be repeated
 within the same refresh. Failed early grants back off for 15 minutes per account and credential
-fingerprint; expiry still requires renewal immediately. An ended lifetime or primary rejection
+fingerprint. Expiry or primary rejection still permits the required renewal immediately. An ended lifetime or primary rejection
 requires browser recovery only if its single renewal cannot restore valid usage. A verified
 `shouldLogout: true` renewal response also requires reconnection even when its HTTP
 status is 200; it cannot fall back to zero quota from the old credential. Renewal requests
@@ -155,7 +155,8 @@ settings. Canceled sign-in leaves the saved account unchanged. Successful
 browser replacement invalidates prior in-flight observations; a different or
 unknown saved identity, including a missing previous secret, clears the previous account's history.
 Known same-account reconnection preserves measured cache, history and saved metric choices while
-invalidating prior in-flight work. Saved browser `authId` or `userId` supplies continuity. For
+invalidating prior in-flight work. Retained measurements remain stale and excluded from successful
+History and alerts until a post-reconnect quota fetch succeeds. Saved browser `authId` or `userId` supplies continuity. For
 renewal without either identifier, the app preserves its existing cache fingerprint in the saved
 credential. This fingerprint is not an account claim and never authorizes access.
 

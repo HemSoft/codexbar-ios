@@ -122,6 +122,10 @@ final class CursorStalePublicationRegressionTests: XCTestCase {
         await refresh.value
         XCTAssertEqual(service.results.first?.bars.map(\.used), [0.1, 13])
         XCTAssertEqual(service.results.first?.fetchedAt, good.fetchedAt)
+        XCTAssertTrue(service.successfulRefreshResults.isEmpty, "Reconnect cache is not verified current usage")
+        XCTAssertTrue(service.incompleteRefreshAccountIDs.contains(fixture.account.id))
+        XCTAssertNotNil(service.results.first?.failureMessage)
+        XCTAssertNotNil(service.lastRefreshError)
     }
 
     private func makeStore() throws -> (

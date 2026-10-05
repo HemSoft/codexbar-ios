@@ -38,6 +38,12 @@ final class CursorRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(repeated.failureMessage)
         XCTAssertEqual(repeated.bars.map(\.used), [0, 0])
         XCTAssertEqual(fixture.state.refreshCount, 1, "Automatic refresh must back off the rejected early grant")
+        fixture.state.rejectOldToken = true
+        fixture.state.refreshReply = (200, "{\"access_token\":\"\(fixture.freshToken)\"}")
+        let rejectedDuringCooldown = try await fixture.fetch()
+        XCTAssertNil(rejectedDuringCooldown.failureMessage)
+        XCTAssertEqual(rejectedDuringCooldown.bars.map(\.used), [0.1, 13])
+        XCTAssertEqual(fixture.state.refreshCount, 2, "Primary rejection still permits one reactive renewal during early cooldown")
     }
 
     func testRenewalWithoutAuthIDKeepsCacheIdentity() async throws {

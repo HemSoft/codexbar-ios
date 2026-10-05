@@ -80,7 +80,10 @@ public final class UsageRefreshService: ObservableObject {
         if currentConfigurationsByAccountID[accountID] != nil || refreshingAccountIDs.contains(accountID) {
             refreshGenerationsByAccountID[accountID] = UUID()
         }
-        if preserveCachedResult { return }
+        if preserveCachedResult {
+            markCacheAwaitingVerification(accountID: accountID)
+            return
+        }
         let remainingAccountIDs = Set(results.map(\.accountID))
             .union(refreshErrorsByAccountID.keys)
             .subtracting([accountID])
@@ -88,6 +91,27 @@ public final class UsageRefreshService: ObservableObject {
         if let lastRefreshError, !refreshErrorsByAccountID.values.contains(lastRefreshError) {
             self.lastRefreshError = refreshErrorsByAccountID.sorted { $0.key < $1.key }.first?.value
         }
+    }
+
+    private func markCacheAwaitingVerification(accountID: String) {
+        let message = "Sign-in updated. Refresh to verify current usage."
+        refreshErrorsByAccountID[accountID] = message
+        lastRefreshError = message
+        guard let cached = results.first(where: { $0.accountID == accountID }) else { return }
+        replaceResult(ProviderUsageResult(
+            accountID: cached.accountID, providerID: cached.providerID, title: cached.title,
+            plan: cached.plan, verifiedGrokPlanName: cached.verifiedGrokPlanName,
+            subtitle: "\(message) Showing last known data.",
+            bars: cached.bars, barsFetchedAt: cached.barsFetchedAt,
+            creditsRemaining: cached.creditsRemaining, creditsFetchedAt: cached.creditsFetchedAt,
+            monetaryMetrics: cached.monetaryMetrics, unavailableUsageMetrics: cached.unavailableUsageMetrics,
+            usageMessages: cached.usageMessages, dashboardUsageMessages: cached.dashboardUsageMessages,
+            cardInformationSections: cached.cardInformationSections, codexBankedRateLimitResets: cached.codexBankedRateLimitResets,
+            failureMessage: message, recoveryAction: .retryRefresh,
+            cacheIdentity: cached.cacheIdentity, cacheScope: cached.cacheScope,
+            allowsUnscopedCacheReuse: cached.allowsUnscopedCacheReuse,
+            hasSuccessfulRefreshHistory: cached.hasSuccessfulRefreshHistory, fetchedAt: cached.fetchedAt
+        ))
     }
 
     public func refresh(configurations: [ProviderAccountConfiguration]) async {
@@ -132,7 +156,6 @@ public final class UsageRefreshService: ObservableObject {
         lastRefreshError = nil
 
         var requests: [(ProviderAccountConfiguration, any UsageProvider)] = []
-        var errorsByAccountID: [String: String] = [:]
         for configuration in enabledConfigurations {
             guard isCurrent(configuration) else {
                 continue
@@ -140,7 +163,6 @@ public final class UsageRefreshService: ObservableObject {
             guard let provider = providers.first(where: { $0.providerID == configuration.providerID }) else {
                 let message = "This provider is unavailable."
                 refreshErrorsByAccountID[configuration.id] = message
-                errorsByAccountID[configuration.id] = message
                 continue
             }
             requests.append((configuration, provider))
@@ -208,14 +230,13 @@ public final class UsageRefreshService: ObservableObject {
                     }
                     preserveFailureResult(result, configuration: configuration)
                     refreshErrorsByAccountID[accountID] = message
-                    errorsByAccountID[accountID] = message
                     finishRefresh(accountID: accountID)
                 }
             }
         }
 
         lastRefreshError = enabledConfigurations.lazy
-            .compactMap { errorsByAccountID[$0.id] }
+            .compactMap { self.refreshErrorsByAccountID[$0.id] }
             .first
     }
 
