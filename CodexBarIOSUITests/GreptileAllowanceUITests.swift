@@ -121,7 +121,7 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Greptile connection"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Free allowance renewal"].exists)
         XCTAssertEqual(app.staticTexts["greptile-renewal-status"].firstMatch.label, "Sign in again to Greptile")
-        let detailSignIn = app.buttons["greptile-renewal-connect"].firstMatch
+        let detailSignIn = app.collectionViews.buttons["greptile-renewal-connect"].firstMatch
         reveal(detailSignIn, in: app)
         XCTAssertTrue(detailSignIn.exists)
         keep("greptile-renewal-paid-expired-detail-light", app: app)
