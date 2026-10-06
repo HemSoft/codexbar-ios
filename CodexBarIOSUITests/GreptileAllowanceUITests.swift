@@ -43,6 +43,26 @@ final class GreptileAllowanceUITests: XCTestCase {
         checkPaidExpiredSessionScreens()
     }
 
+    func testDetailReconnectStaysInApp() {
+        continueAfterFailure = false
+        let app = launch("greptile-renewal-paid-expired")
+        app.terminate()
+        app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+        app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION"] = "1"
+        app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"] = "ui-greptile-free"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10))
+        let signIn = app.collectionViews.buttons["greptile-renewal-connect"].firstMatch
+        tap(signIn, in: app)
+        XCTAssertEqual(app.state, .runningForeground, "Reconnect must keep CodexBar in front, without opening Usage.")
+        XCTAssertTrue(app.navigationBars["Greptile Free Fixture"].waitForExistence(timeout: 10))
+        let accountSignIn = app.collectionViews["provider-account-settings-form"].buttons["greptile-account-sign-in"]
+        reveal(accountSignIn, in: app)
+        XCTAssertTrue(accountSignIn.isHittable)
+        keep("greptile-renewal-reconnect-verified-settings", app: app)
+        app.terminate()
+    }
+
     private func checkRenewalScreens() {
         let cases = [
             ("greptile-renewal-available", "Renews in", false),
@@ -129,6 +149,7 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertTrue(detailSignIn.exists)
         keep("greptile-renewal-paid-expired-detail-light", app: app)
         tap(detailSignIn, in: app)
+        XCTAssertEqual(app.state, .runningForeground)
         XCTAssertTrue(app.buttons["greptile-account-sign-in"].waitForExistence(timeout: 10), app.debugDescription)
         keep("greptile-renewal-detail-reconnect-settings", app: app)
         app.terminate()

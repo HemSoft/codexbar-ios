@@ -38,6 +38,7 @@ struct GreptileRenewalView: View {
                         .font(.caption)
                 }
             }
+            .buttonStyle(.borderless)
             .fixedSize(horizontal: false, vertical: true)
         }
     }

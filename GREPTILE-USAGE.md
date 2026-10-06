@@ -47,7 +47,8 @@ refresh are labeled last known. A successful refresh replaces the period.
 A failed or unrecognized billing response does not classify a new account as
 free; a matching saved plan classification survives that failure. Malformed
 billing clears the date while retaining that classification. More Information
-can dismiss its sheet and open guided account settings to reconnect.
+can dismiss its sheet and open guided account settings to reconnect. The
+reconnect action keeps CodexBar in the foreground.
 
 Review activity remains a separate metric with its existing IDs and saved
 visibility, order and width. The verified session's user token authorizes
