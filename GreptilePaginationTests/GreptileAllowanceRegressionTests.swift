@@ -3,7 +3,7 @@ import XCTest
 @testable import CodexBarIOS
 
 final class GreptileAllowanceRegressionTests: XCTestCase, @unchecked Sendable {
-    func testActivityOnlyExplainsThatHistoryIsNotRemainingCredits() async throws {
+    func testActivityOnlyKeepsTheReviewCountWithoutExplanatoryCopy() async throws {
         let fixture = GreptileHTTPFixture([try GreptileHTTPFixture.page(["first", "second"], total: 2)])
         defer { fixture.invalidate() }
         let result = try await fixture.provider().fetchUsage(for: GreptileHTTPFixture.account)
@@ -11,13 +11,13 @@ final class GreptileAllowanceRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(result.greptileAllowanceRenewal?.requiresNewAccount, true)
         XCTAssertEqual(result.greptileAllowanceRenewal?.requiresAuthentication, false)
         XCTAssertNil(result.greptileAllowanceRenewal?.isApplicable)
-        XCTAssertEqual(result.subtitle, "All available review history")
+        XCTAssertEqual(result.subtitle, "")
         XCTAssertEqual(result.bars.first?.used, 2)
         XCTAssertEqual(result.bars.first?.limit, 0)
         XCTAssertNil(result.bars.first?.resetsAt)
         XCTAssertNil(result.plan)
         XCTAssertEqual(result.bars.first?.stableKey, GreptileUsageIdentity.completedReviewsStableKey)
-        XCTAssertTrue(result.usageMessages.contains { $0.contains("review history, not your remaining credits") })
+        XCTAssertTrue(result.usageMessages.isEmpty)
         XCTAssertEqual(fixture.requests.count, 1)
         XCTAssertEqual(try GreptileHTTPFixture.offset(in: fixture.requests[0]), 0)
     }
@@ -29,7 +29,7 @@ final class GreptileAllowanceRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(result.failureMessage)
         XCTAssertTrue(result.bars.isEmpty)
         XCTAssertNil(result.plan)
-        XCTAssertTrue(result.usageMessages.contains { $0.contains("Missing billing data is not a zero balance") })
+        XCTAssertTrue(result.usageMessages.isEmpty)
     }
 
     func testCreditLookingMetadataCannotBecomeAReviewQuotaOrFreePlanBalance() async throws {
@@ -64,8 +64,8 @@ final class GreptileAllowanceRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(bar.limit, 17)
         XCTAssertEqual(bar.resetsAt, ISO8601DateFormatter().date(from: "2030-01-31T00:00:00Z"))
         XCTAssertEqual(bar.projectionPeriodStart, ISO8601DateFormatter().date(from: "2030-01-01T00:00:00Z"))
-        XCTAssertEqual(result.subtitle, "Current billing period")
-        XCTAssertEqual(result.usageMessages, ["Greptile reports 0 of 17 reviews used for this billing period."])
+        XCTAssertEqual(result.subtitle, "")
+        XCTAssertTrue(result.usageMessages.isEmpty)
     }
 
     func testAuthorizationFailureIsNotSuccessfulMissingBillingData() async throws {

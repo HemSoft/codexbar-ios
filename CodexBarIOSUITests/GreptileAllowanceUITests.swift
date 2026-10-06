@@ -5,8 +5,10 @@ final class GreptileAllowanceUITests: XCTestCase {
     func testReviewHistoryAndBillingAvailabilityStates() {
         continueAfterFailure = false
         let app = launch("greptile-free")
-        let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "not your remaining credits")).firstMatch
+        let note = app.staticTexts["greptile-renewal-status"].firstMatch
         XCTAssertTrue(note.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertFalse(app.staticTexts["All available review history"].exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "This connection shows review history")).firstMatch.exists)
         XCTAssertTrue(app.buttons["dashboard-metric-greptile.completed-reviews"].exists)
         XCTAssertFalse(app.buttons["dashboard-metric-greptile.review-quota"].exists)
         XCTAssertFalse(app.staticTexts["Starter"].exists)
@@ -26,8 +28,8 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertEqual(metric.value as? String, "1")
         app.terminate()
 
-        checkState("greptile-empty", message: "Missing billing data is not a zero balance", metric: nil)
-        checkState("greptile-returned-quota", message: "Greptile reports 3 of 17 reviews used", metric: "review-quota")
+        checkState("greptile-empty", message: "Add a Greptile account", metric: nil)
+        checkState("greptile-returned-quota", message: "Add a Greptile account", metric: "review-quota")
         let failed = launch("greptile-failure")
         let error = failed.descendants(matching: .any).matching(NSPredicate(
             format: "label CONTAINS %@", "Greptile is temporarily unavailable"
@@ -91,6 +93,10 @@ final class GreptileAllowanceUITests: XCTestCase {
                 XCTAssertTrue(app.buttons["greptile-renewal-connect"].waitForExistence(timeout: 10))
             }
             reveal(label, in: app)
+            if scenario == "greptile-renewal-available", !full {
+                let date = app.staticTexts["greptile-renewal-date"].firstMatch
+                XCTAssertEqual(label.frame.midY, date.frame.midY, accuracy: 6)
+            }
             keep("\(scenario)-\(full ? "full-dark-large" : "compact-light")", app: app)
             app.terminate()
             app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
@@ -98,9 +104,9 @@ final class GreptileAllowanceUITests: XCTestCase {
             app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"] = "ui-greptile-free"
             app.launch()
             XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10), app.debugDescription)
-            let heading = scenario.hasSuffix("unknown") ? "Greptile connection" : "Free allowance renewal"
-            XCTAssertTrue(app.staticTexts[heading].waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertFalse(app.staticTexts["Free allowance renewal"].exists)
             let detail = app.staticTexts["greptile-renewal-status"].firstMatch
+            XCTAssertTrue(detail.waitForExistence(timeout: 10), app.debugDescription)
             XCTAssertTrue(detail.label.hasPrefix(status), app.debugDescription)
             keep("\(scenario)-detail-\(full ? "dark-large" : "light")", app: app)
             app.terminate()

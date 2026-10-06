@@ -398,9 +398,7 @@ public extension DemoUsageProvider {
                         fractionlessUsageText: "84"
                     ),
                 ],
-                usageMessages: [
-                    "Greptile's API does not currently expose billing-credit usage.",
-                ],
+                usageMessages: [],
                 cardInformationSections: [
                     ProviderCardInformationSection(
                         id: "greptile.review-statuses",
@@ -419,7 +417,7 @@ public extension DemoUsageProvider {
                         ]
                     ),
                 ],
-                subtitle: "All available review history"
+                subtitle: ""
             ),
             DemoUsageProvider(
                 providerID: .gemini,

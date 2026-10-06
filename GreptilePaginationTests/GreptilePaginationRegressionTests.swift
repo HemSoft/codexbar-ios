@@ -12,7 +12,7 @@ final class GreptilePaginationRegressionTests: XCTestCase, @unchecked Sendable {
                 XCTAssertNil(result.failureMessage)
                 XCTAssertTrue(result.bars.isEmpty)
                 XCTAssertEqual(fixture.requests.count, 1)
-                XCTAssertTrue(result.usageMessages.contains { $0.contains("no completed review activity") })
+                XCTAssertTrue(result.usageMessages.isEmpty)
             }
         }
     }

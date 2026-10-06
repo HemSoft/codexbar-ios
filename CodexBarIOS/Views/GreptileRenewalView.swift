@@ -3,7 +3,6 @@ import SwiftUI
 struct GreptileRenewalView: View {
     let renewal: GreptileAllowanceRenewal
     var onConnect: (() -> Void)?
-    var showsTitle = true
 
     private func connectionStatus(at date: Date) -> String {
         if renewal.requiresNewAccount { return "Add a Greptile account" }
@@ -14,17 +13,20 @@ struct GreptileRenewalView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             VStack(alignment: .leading, spacing: 6) {
-                if showsTitle {
-                    Text(renewal.isApplicable == true ? "Free allowance renewal" : "Greptile connection")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Text(connectionStatus(at: context.date))
-                    .font(.subheadline.weight(.semibold))
-                    .accessibilityIdentifier("greptile-renewal-status")
                 if let date = renewal.localDateText {
-                    Text(date).font(.caption).foregroundStyle(.secondary)
-                        .accessibilityIdentifier("greptile-renewal-date")
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            statusText(at: context.date)
+                            dateText(date)
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        VStack(alignment: .leading, spacing: 4) {
+                            statusText(at: context.date)
+                            dateText(date)
+                        }
+                    }
                 } else {
+                    statusText(at: context.date)
                     Text(renewal.unavailableReason ?? (renewal.isApplicable == true
                          ? "Greptile did not return a valid free-allowance renewal date." : "Your Greptile session needs reconnecting."))
                         .font(.caption).foregroundStyle(.secondary)
@@ -41,5 +43,16 @@ struct GreptileRenewalView: View {
             .buttonStyle(.borderless)
             .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func statusText(at date: Date) -> some View {
+        Text(connectionStatus(at: date))
+            .font(.subheadline.weight(.semibold))
+            .accessibilityIdentifier("greptile-renewal-status")
+    }
+
+    private func dateText(_ date: String) -> some View {
+        Text(date).font(.caption).foregroundStyle(.secondary)
+            .accessibilityIdentifier("greptile-renewal-date")
     }
 }

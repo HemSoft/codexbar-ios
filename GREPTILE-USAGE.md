@@ -39,8 +39,10 @@ change. See the verified contract below.
 For `kind: "free"`, `result.data.json.currentPeriod.end` supplies the allowance
 renewal date. Counts are not required. A returned start, when present, must be a
 valid date earlier than the end. The countdown updates each minute and shows the
-local calendar date, time and time zone on both dashboard widths and in More
-Information. Missing or malformed dates offer
+local calendar date, time and time zone alongside the countdown on both
+dashboard widths and in More Information. Larger accessibility text can wrap
+without truncating either value. Review-history subtitles and explanatory
+footnotes are omitted. Missing or malformed dates offer
 [Greptile Usage](https://app.greptile.com/-/settings/usage). A date past its period
 asks for refresh; observations older than a day or preserved after a failed
 refresh are labeled last known. A successful refresh replaces the period.

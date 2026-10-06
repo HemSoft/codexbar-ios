@@ -705,30 +705,14 @@ public final class GreptileUsageProvider: UsageProvider {
             )
             : nil)
 
-        let usageMessages: [String]
-        if let quota {
-            usageMessages = [
-                "Greptile reports \(formattedCount(quota.reviewsUsed)) of "
-                    + "\(formattedCount(quota.reviewAllowance)) reviews used for this billing period.",
-            ]
-        } else {
-            usageMessages = [
-                counts.completed > 0
-                    ? "This connection shows review history, not your remaining credits. "
-                        + "Greptile did not return billing allowance data for this request."
-                    : "Greptile returned no completed review activity and no billing allowance. "
-                        + "Missing billing data is not a zero balance.",
-            ]
-        }
-
         return ProviderUsageResult(
             accountID: configuration.id,
             providerID: .greptile,
             title: configuration.displayName,
             plan: quota?.plan.flatMap(Self.planDescriptor),
-            subtitle: quota == nil ? "All available review history" : "Current billing period",
+            subtitle: "",
             bars: bar.map { [$0] } ?? [],
-            usageMessages: usageMessages,
+            usageMessages: [],
             cardInformationSections: [
                 ProviderCardInformationSection(
                     id: "greptile.review-statuses",
@@ -764,10 +748,6 @@ public final class GreptileUsageProvider: UsageProvider {
             quota: quota,
             configuration: configuration
         )
-    }
-
-    private func formattedCount(_ value: Double) -> String {
-        value.formatted(.number.precision(.fractionLength(value.rounded() == value ? 0 : 2)))
     }
 
     private static func planDescriptor(_ plan: String) -> ProviderPlanDescriptor? {

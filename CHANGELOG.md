@@ -9,7 +9,9 @@ building, testing, or releasing the app.
 ### Added
 
 - Show Greptile's free allowance renewal countdown and local date on the
-  dashboard and in More Information. Guided phone sign-in connects the selected
+  dashboard and in More Information. The countdown and date share a compact row
+  without review-history subtitles or explanatory footnotes. Guided phone sign-in
+  connects the selected
   organization, even during a temporary billing outage. Missing dates stay
   unavailable, and failed refreshes label the last known date. Greptile login
   keeps account selection stable through dashboard cookie updates and verified
@@ -76,9 +78,8 @@ building, testing, or releasing the app.
   its saved metric choice.
   ([#400](https://github.com/HemSoft/codexbar-ios/issues/400))
 
-- Clarify that Greptile review history is not a remaining credit balance, and
-  that missing billing data does not mean zero credits. Account allowance and
-  reset dates are shown only when returned, never assumed from the Free plan.
+- Greptile account allowance and reset dates are shown only when returned,
+  never assumed from the Free plan or inferred from review counts.
   ([#395](https://github.com/HemSoft/codexbar-ios/issues/395))
 
 - Describe Codex's 30-day usage window in days instead of showing a confusing

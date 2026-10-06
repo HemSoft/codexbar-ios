@@ -507,9 +507,11 @@ struct ProviderUsageCard: View {
                             }
                         }
 
-                        Text(statusText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        if !statusText.isEmpty {
+                            Text(statusText)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
 
                         if let hiddenSeverityAlert {
                             Label(
@@ -2605,7 +2607,7 @@ private struct ProviderMetricTileDetailView: View {
             let bar = result.bars[index]
             if bar.isUnboundedNumeric {
                 detailRow("Count", bar.usageText)
-                detailRow("Scope", result.subtitle)
+                if !result.subtitle.isEmpty { detailRow("Scope", result.subtitle) }
             } else {
                 detailRow("Used", ProviderUsageCard.formattedUsageAmount(bar.used))
                 detailRow("Limit", ProviderUsageCard.formattedUsageAmount(bar.limit))
