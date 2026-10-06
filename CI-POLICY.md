@@ -128,7 +128,7 @@ current thresholds.
 Do not run the full CI gate for routine pull requests, including UI changes.
 After the intended release changes have merged, select a release-candidate
 branch or tag, record its resolved SHA, and dispatch the gate once. The dispatch
-first runs the five automatic jobs. If they pass, `Full iOS UI validation` runs all twenty-six
+first runs the five automatic jobs. If they pass, `Full iOS UI validation` runs all twenty-seven
 journeys on both iPhone and iPad. A failed iPhone family does not suppress the
 iPad family or its retained failure artifacts.
 
@@ -225,7 +225,7 @@ comparison. Inspect `comparison.json`, all four summaries/logs/result bundles,
 screenshots and the candidate iPad recording in the existing UI artifact.
 
 A focused comparison is not release evidence. Default `full` dispatch still runs
-the billing fixtures and all twenty-six journeys per family, including the existing
+the billing fixtures and all twenty-seven journeys per family, including the existing
 both-destinations and exact-count guards.
 
 Run the new lightweight classifier/device-selection regressions explicitly locally:
