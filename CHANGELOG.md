@@ -14,8 +14,8 @@ building, testing, or releasing the app.
   unavailable, and failed refreshes label the last known date. Greptile login
   keeps account selection stable through dashboard cookie updates and verified
   session rotation. More Information can reconnect an expired session, and
-  unavailable billing does not assume a free plan. Existing API-key accounts can add a separate Greptile account
-  without combining organizations' review history.
+  unavailable billing does not assume a free plan. Existing API-key accounts can
+  add a separate Greptile account without combining organizations' review history.
   ([#406](https://github.com/HemSoft/codexbar-ios/issues/406))
 
 - Added an optional Codex Credits pool metric. Turn it on in account Settings

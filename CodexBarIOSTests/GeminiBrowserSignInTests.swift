@@ -22,9 +22,9 @@ final class GreptileBrowserCookieRegressionTests: XCTestCase {
         let updatedExpiry = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970) + 7_200)
         let completed = expectation(description: "Extended expiry is saved")
         let session = GreptileBrowserSignInSession(client: client) { result in
+            defer { completed.fulfill() }
             guard case .success(let credential) = result else { XCTFail("Connection failed"); return }
             XCTAssertEqual(credential.cookies.first?.expiresAt, updatedExpiry)
-            completed.fulfill()
         }
         defer { session.invalidate() }
         let verifying = expectation(description: "Initial identity verification starts")
