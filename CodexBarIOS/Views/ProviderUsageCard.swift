@@ -257,6 +257,7 @@ struct ProviderUsageCard: View {
     @State private var isResetActionUnavailable = false
     @State private var isCustomizingMetrics = false
     @State private var isShowingMoreInformation = false
+    @State private var reconnectAfterInformation = false
 
     /// Simulator-only fixture hook: the More Information sheet opens directly when
     /// a journey relaunches with CODEXBAR_UI_TEST_MORE_INFORMATION=1. Production
@@ -428,11 +429,16 @@ struct ProviderUsageCard: View {
                 onMarkMetricsSeen: onMarkMetricsSeen
             )
         }
-        .sheet(isPresented: $isShowingMoreInformation) {
+        .sheet(isPresented: $isShowingMoreInformation, onDismiss: reconnectFromInformation, content: {
             ProviderCardInformationView(
-                sections: informationSections
+                sections: informationSections,
+                greptileRenewal: greptileRenewal,
+                onConnect: {
+                    reconnectAfterInformation = true
+                    isShowingMoreInformation = false
+                }
             )
-        }
+        })
         .sheet(item: $metricDetailPresentation) { presentation in
             if let metric = Self.metric(withID: presentation.metricID, in: result) {
                 ProviderMetricTileDetailView(
@@ -466,6 +472,7 @@ struct ProviderUsageCard: View {
             }
         }
         .onChange(of: informationSections) {
+            guard result.providerID != .greptile else { return }
             isShowingMoreInformation = Self.reconciledMoreInformationPresentation(
                 currentlyPresented: isShowingMoreInformation,
                 sections: informationSections
@@ -500,9 +507,11 @@ struct ProviderUsageCard: View {
                             }
                         }
 
-                        Text(statusText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        if !statusText.isEmpty {
+                            Text(statusText)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
 
                         if let hiddenSeverityAlert {
                             Label(
@@ -635,6 +644,10 @@ struct ProviderUsageCard: View {
                     message: refreshErrorMessage,
                     onReport: onReportProblem
                 )
+            }
+
+            if let greptileRenewal {
+                GreptileRenewalView(renewal: greptileRenewal, onConnect: onConfigureAccount)
             }
 
             if !metricGridRows.isEmpty {
@@ -954,7 +967,7 @@ struct ProviderUsageCard: View {
         isMetricVisible: (String) -> Bool = { _ in true }
     ) -> [ProviderUsageCardMenuAction] {
         var actions: [ProviderUsageCardMenuAction] = []
-        if !informationSections(for: result, alerts: alerts).isEmpty {
+        if result.providerID == .greptile || !informationSections(for: result, alerts: alerts).isEmpty {
             actions.append(.moreInformation)
         }
         if result.configurableMetrics.isEmpty {
@@ -1014,6 +1027,21 @@ struct ProviderUsageCard: View {
 
     var inlineAlerts: [UsageAlertDetail] {
         result.providerID == .cursor ? [] : displayedAlerts
+    }
+
+    private func reconnectFromInformation() {
+        guard reconnectAfterInformation else { return }
+        reconnectAfterInformation = false
+        onConfigureAccount()
+    }
+
+    private var greptileRenewal: GreptileAllowanceRenewal? {
+        guard result.providerID == .greptile else { return nil }
+        if let renewal = result.greptileAllowanceRenewal, renewal.isApplicable == false && !renewal.requiresAuthentication { return nil }
+        return result.greptileAllowanceRenewal ?? GreptileAllowanceRenewal(
+            renewsAt: nil, observedAt: result.fetchedAt,
+            unavailableReason: "Connect Greptile to read the allowance renewal date.", requiresAuthentication: true, isApplicable: nil
+        )
     }
 
     var informationSections: [ProviderCardInformationSection] {
@@ -1963,45 +1991,6 @@ struct ProviderUsagePlaceholderCard: View {
     }
 }
 
-private struct ProviderCardInformationView: View {
-    let sections: [ProviderCardInformationSection]
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(sections) { section in
-                    Section(section.title) {
-                        ForEach(section.items) { item in
-                            LabeledContent {
-                                Text(item.detail)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.trailing)
-                            } label: {
-                                Text(item.label)
-                            }
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel("\(item.label), \(item.detail)")
-                        }
-                    }
-                }
-            }
-            .navigationTitle("More Information")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-    }
-}
-
 private struct UsageAlertSummaryView: View {
     let alerts: [UsageAlertDetail]
 
@@ -2618,7 +2607,7 @@ private struct ProviderMetricTileDetailView: View {
             let bar = result.bars[index]
             if bar.isUnboundedNumeric {
                 detailRow("Count", bar.usageText)
-                detailRow("Scope", result.subtitle)
+                if !result.subtitle.isEmpty { detailRow("Scope", result.subtitle) }
             } else {
                 detailRow("Used", ProviderUsageCard.formattedUsageAmount(bar.used))
                 detailRow("Limit", ProviderUsageCard.formattedUsageAmount(bar.limit))

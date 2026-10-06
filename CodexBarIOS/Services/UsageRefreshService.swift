@@ -106,7 +106,13 @@ public final class UsageRefreshService: ObservableObject {
             creditsRemaining: cached.creditsRemaining, creditsFetchedAt: cached.creditsFetchedAt,
             monetaryMetrics: cached.monetaryMetrics, unavailableUsageMetrics: cached.unavailableUsageMetrics,
             usageMessages: cached.usageMessages, dashboardUsageMessages: cached.dashboardUsageMessages,
-            cardInformationSections: cached.cardInformationSections, codexBankedRateLimitResets: cached.codexBankedRateLimitResets,
+            cardInformationSections: cached.cardInformationSections,
+            greptileAllowanceRenewal: cached.greptileAllowanceRenewal.map { renewal in
+                var stale = renewal
+                stale.isStale = true
+                return stale
+            },
+            codexBankedRateLimitResets: cached.codexBankedRateLimitResets,
             failureMessage: message, recoveryAction: .retryRefresh,
             cacheIdentity: cached.cacheIdentity, cacheScope: cached.cacheScope,
             allowsUnscopedCacheReuse: cached.allowsUnscopedCacheReuse,
@@ -153,7 +159,6 @@ public final class UsageRefreshService: ObservableObject {
 
         let enabledAccountIDs = Set(enabledConfigurations.map(\.id))
         pruneCachedState(to: enabledAccountIDs)
-        lastRefreshError = nil
 
         var requests: [(ProviderAccountConfiguration, any UsageProvider)] = []
         for configuration in enabledConfigurations {
@@ -170,9 +175,6 @@ public final class UsageRefreshService: ObservableObject {
 
         let requestedAccountIDs = Set(requests.map { $0.0.id })
         refreshingAccountIDs.formUnion(requestedAccountIDs)
-        for accountID in requestedAccountIDs {
-            refreshErrorsByAccountID.removeValue(forKey: accountID)
-        }
 
         await withTaskGroup(of: AccountRefreshOutcome.self) { group in
             for (configuration, provider) in requests {
@@ -182,7 +184,7 @@ public final class UsageRefreshService: ObservableObject {
                 }
                 group.addTask {
                     do {
-                        let result = try await provider.fetchUsage(for: configuration)
+                        let result = await self.preservingGreptileRenewal(try await provider.fetchUsage(for: configuration))
                         if let message = result.failureMessage {
                             return .failure(
                                 configuration: configuration,
@@ -197,6 +199,7 @@ public final class UsageRefreshService: ObservableObject {
                             result: result
                         )
                     } catch {
+                        if Self.isCancellation(error) { return .canceled(accountID: configuration.id) }
                         let result = Self.failureResult(
                             for: configuration,
                             message: error.localizedDescription
@@ -213,6 +216,8 @@ public final class UsageRefreshService: ObservableObject {
 
             for await outcome in group {
                 switch outcome {
+                case .canceled(let accountID):
+                    finishRefresh(accountID: accountID)
                 case .success(let configuration, let generation, let result):
                     let accountID = configuration.id
                     guard isCurrent(configuration, generation: generation) else {
@@ -267,14 +272,12 @@ public final class UsageRefreshService: ObservableObject {
         }
 
         refreshingAccountIDs.insert(configuration.id)
-        refreshErrorsByAccountID.removeValue(forKey: configuration.id)
-        lastRefreshError = nil
         defer {
             finishRefresh(accountID: configuration.id)
         }
 
         do {
-            let result = try await provider.fetchUsage(for: configuration)
+            let result = preservingGreptileRenewal(try await provider.fetchUsage(for: configuration))
             guard isCurrent(configuration, generation: generation) else {
                 return nil
             }
@@ -289,7 +292,7 @@ public final class UsageRefreshService: ObservableObject {
             lastRefreshError = nil
             return result
         } catch {
-            guard isCurrent(configuration, generation: generation) else {
+            guard !Self.isCancellation(error), isCurrent(configuration, generation: generation) else {
                 return nil
             }
             let message = error.localizedDescription
@@ -399,6 +402,26 @@ public final class UsageRefreshService: ObservableObject {
         return CodexRetainedResetAttempt(creditID: attempt.creditID)
     }
 
+    private nonisolated static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || Task.isCancelled || (error as? URLError)?.code == .cancelled
+    }
+
+    private func preservingGreptileRenewal(_ incoming: ProviderUsageResult) -> ProviderUsageResult {
+        guard incoming.providerID == .greptile, let failed = incoming.greptileAllowanceRenewal,
+              failed.isApplicable == nil, !failed.requiresNewAccount,
+              let cached = results.first(where: { $0.accountID == incoming.accountID && Self.canReuseCachedResult($0, for: incoming) }),
+              let previous = cached.greptileAllowanceRenewal else { return incoming }
+        let renewal = GreptileAllowanceRenewal(
+            renewsAt: failed.lookupFailed ? previous.renewsAt : nil, observedAt: previous.observedAt,
+            isStale: true, unavailableReason: failed.unavailableReason,
+            requiresAuthentication: failed.requiresAuthentication, lookupFailed: failed.lookupFailed,
+            isApplicable: previous.isApplicable
+        )
+        var result = incoming
+        result.greptileAllowanceRenewal = renewal
+        return result
+    }
+
     private func replaceResult(_ result: ProviderUsageResult) {
         var nextResults = results.filter { $0.accountID != result.accountID }
         nextResults.append(result)
@@ -430,7 +453,8 @@ public final class UsageRefreshService: ObservableObject {
             return
         }
 
-        let barsResult = failureResult.preserveCachedBarsOnFailure
+        let preserveGreptileHistory = failureResult.providerID == .greptile && failureResult.bars.isEmpty
+        let barsResult = failureResult.preserveCachedBarsOnFailure || preserveGreptileHistory
             ? cachedResult ?? failureResult
             : dataResult
         let creditsResult = failureResult.preserveCachedCreditsOnFailure
@@ -446,6 +470,8 @@ public final class UsageRefreshService: ObservableObject {
                 hasZenBalance: creditsResult.creditsRemaining != nil
             )
             : failureResult.title
+        var renewal = failureResult.greptileAllowanceRenewal ?? cachedResult?.greptileAllowanceRenewal
+        if failureResult.greptileAllowanceRenewal == nil { renewal?.isStale = true }
         replaceResult(ProviderUsageResult(
             accountID: accountID,
             providerID: failureResult.providerID,
@@ -461,6 +487,7 @@ public final class UsageRefreshService: ObservableObject {
             usageMessages: dataResult.usageMessages,
             dashboardUsageMessages: dataResult.dashboardUsageMessages,
             cardInformationSections: dataResult.cardInformationSections,
+            greptileAllowanceRenewal: renewal,
             codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,
             failureMessage: failureResult.failureMessage,
             recoveryAction: failureResult.recoveryAction,
@@ -479,6 +506,9 @@ public final class UsageRefreshService: ObservableObject {
         _ cachedResult: ProviderUsageResult,
         for failureResult: ProviderUsageResult
     ) -> Bool {
+        if failureResult.providerID == .greptile {
+            return cachedResult.cacheIdentity == failureResult.cacheIdentity
+        }
         if failureResult.providerID == .grok && failureResult.recoveryAction == .reauthenticate {
             return false
         }
@@ -660,6 +690,7 @@ private struct CodexResetAttempt {
 }
 
 private enum AccountRefreshOutcome: Sendable {
+    case canceled(accountID: String)
     case success(
         configuration: ProviderAccountConfiguration,
         generation: UUID,

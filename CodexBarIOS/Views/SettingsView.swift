@@ -227,9 +227,9 @@ struct SettingsView: View {
                             configurationStore: configurationStore,
                             accountID: accountID,
                             initialUsageResult: usageResultForAccount(accountID),
-                            onCredentialsChanged: { onCredentialsChanged(accountID) },
-                            onRefreshInputsChanged: { onRefreshInputsChanged(accountID) },
-                            onAccountIdentityChanged: { onAccountIdentityChanged(accountID) },
+                            onCredentialsChanged: onCredentialsChanged,
+                            onRefreshInputsChanged: onRefreshInputsChanged,
+                            onAccountIdentityChanged: onAccountIdentityChanged,
                             onAccountRefresh: onAccountRefresh,
                             onCredentialRefresh: onCredentialRefresh
                         )
@@ -261,16 +261,13 @@ struct SettingsView: View {
                 onAccountCreated: { accountID in
                     addAccountRefreshState.accountCreated(accountID)
                 },
-                onCredentialsChanged: {
-                    if let accountID = addAccountRefreshState.credentialsChanged() {
-                        onCredentialsChanged(accountID)
-                    }
+                onCredentialsChanged: { accountID in
+                    _ = addAccountRefreshState.credentialsChanged()
+                    onCredentialsChanged(accountID)
                 },
-                onRefreshInputsChanged: {
+                onRefreshInputsChanged: { accountID in
                     addAccountRefreshState.refreshInputsChanged()
-                    if let accountID = addAccountRefreshState.accountID {
-                        onRefreshInputsChanged(accountID)
-                    }
+                    onRefreshInputsChanged(accountID)
                 },
                 onAccountRefresh: onAccountRefresh,
                 onCredentialRefresh: onCredentialRefresh
@@ -1467,8 +1464,8 @@ struct AddAccountSetupFlow: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     let initialProviderID: ProviderID?
     var onAccountCreated: @MainActor (String) -> Void
-    var onCredentialsChanged: @MainActor () -> Void
-    var onRefreshInputsChanged: @MainActor () -> Void
+    var onCredentialsChanged: @MainActor (String) -> Void
+    var onRefreshInputsChanged: @MainActor (String) -> Void
     var onAccountRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
     var onCredentialRefresh: @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?
 
@@ -1479,8 +1476,8 @@ struct AddAccountSetupFlow: View {
         configurationStore: ProviderConfigurationStore,
         initialProviderID: ProviderID? = nil,
         onAccountCreated: @escaping @MainActor (String) -> Void = { _ in },
-        onCredentialsChanged: @escaping @MainActor () -> Void = {},
-        onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
+        onCredentialsChanged: @escaping @MainActor (String) -> Void = { _ in },
+        onRefreshInputsChanged: @escaping @MainActor (String) -> Void = { _ in },
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil
     ) {

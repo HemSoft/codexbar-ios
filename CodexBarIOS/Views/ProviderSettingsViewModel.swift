@@ -57,6 +57,9 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published var grokFixtureStage: GrokFixtureStage?
     @Published private(set) var isSigningInWithCursor = false
     @Published var geminiBrowserSession: GeminiBrowserSignInSession?
+    @Published var greptileBrowserSession: GreptileBrowserSignInSession?
+    @Published private(set) var isSigningInWithGreptile = false
+    private var greptileAttemptID: UUID?
     @Published private(set) var isSigningInWithGemini = false
     var geminiSessionValidator: any GeminiSessionValidating = GeminiSessionValidator()
     @Published private(set) var needsGeminiAccountConfirmation = false
@@ -239,13 +242,15 @@ final class ProviderSettingsViewModel: ObservableObject {
 
     var availableAuthMethods: [ProviderAuthMethod] {
         switch providerID {
+        case .greptile:
+            configuration.authMethod == .apiKey && configurationStore.hasSecret(for: configuration) ? [.apiKey] : [.browserSession]
         case .codex, .claude, .grok, .cursor, .gemini, .githubBilling, .openCodeZen:
             [.browserSession]
         case .antigravity:
             [.cliToken]
         case .copilot:
             [.browserSession, .cliToken]
-        case .openRouter, .moonshot, .greptile:
+        case .openRouter, .moonshot:
             [.apiKey]
         }
     }
@@ -282,16 +287,15 @@ final class ProviderSettingsViewModel: ObservableObject {
 
         if providerID == .greptile {
             return ProviderCredentialPresentation(
-                sectionTitle: "Greptile Organization API Key",
-                unsavedPlaceholder: "Paste Greptile organization API key",
-                savedPlaceholder: "Greptile organization API key saved",
-                saveButtonTitle: "Save and Validate API Key",
-                setupMessage: "Create an organization API key in Greptile Settings. "
-                    + "CodexBar uses it only for read-only review-usage requests and never triggers reviews.",
-                setupLinkTitle: "Open Greptile API Key Settings",
-                setupURL: URL(string: "https://app.greptile.com/settings/api"),
-                securityMessage: "CodexBar stores this credential only in Keychain. "
-                    + "When Greptile omits review allowance data, CodexBar leaves quota usage unknown."
+                sectionTitle: "Greptile Connection",
+                unsavedPlaceholder: "Sign in to Greptile",
+                savedPlaceholder: "Greptile session saved",
+                saveButtonTitle: "Sign in to Greptile",
+                setupMessage: nil,
+                setupLinkTitle: nil,
+                setupURL: nil,
+                securityMessage: "Your Greptile session stays in this account's Keychain entry. "
+                    + "CodexBar reads the selected organization's billing period and review activity."
             )
         }
 
@@ -483,6 +487,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         cancelOpenCodeSignIn()
         cancelGoogleCodingSignIn()
         cancelGeminiSignIn()
+        cancelGreptileSignIn()
         codexSignInTask?.cancel()
         codexAuthPresenter.finish()
         cursorSignInTask?.cancel()
@@ -561,6 +566,7 @@ final class ProviderSettingsViewModel: ObservableObject {
     }
 
     func removeSavedCredential(message: String? = nil) {
+        if providerID == .greptile { cancelGreptileSignIn() }
         if providerID == .grok { cancelGrokSignIn() }
         if providerID == .openCodeZen { cancelOpenCodeSignIn() }
         if providerID == .gemini { cancelGeminiSignIn() }
@@ -713,6 +719,62 @@ final class ProviderSettingsViewModel: ObservableObject {
         geminiBrowserSession = GeminiBrowserSignInSession { [weak self] result in
             self?.completeGeminiBrowserSignIn(result, attemptID: attemptID)
         }
+    }
+
+    func startGreptileSignIn() {
+        guard !isSigningInWithGreptile else { return }
+        credentialError = nil
+        credentialMessage = nil
+        isSigningInWithGreptile = true
+        let attemptID = UUID()
+        greptileAttemptID = attemptID
+        greptileBrowserSession = GreptileBrowserSignInSession { [weak self] result in
+            guard let self, self.greptileAttemptID == attemptID else { return }
+            self.greptileBrowserSession = nil
+            self.greptileAttemptID = nil
+            self.isSigningInWithGreptile = false
+            self.completeGreptileSignIn(result)
+        }
+    }
+
+    private func completeGreptileSignIn(_ result: Result<GreptileSessionCredentials, Error>) {
+        do {
+            let credential = try result.get()
+            guard configurationStore.canReconnectGreptile(credential, for: configuration) else {
+                credentialError = configurationStore.lastError
+                return
+            }
+            var updated = configuration
+            updated.authMethod = .browserSession
+            if updated.accountLabel.isEmpty { updated.accountLabel = credential.organization.name }
+            guard persistCredential(try credential.encoded(), with: updated) else {
+                credentialError = "Greptile sign-in completed, but secure storage failed. Your saved account was not changed."
+                return
+            }
+            validationFeedbackProviderID = nil
+            credentialMessage = "Greptile connected. Reading your usage…"
+            credentialsDidChange(refreshMetrics: false)
+            refreshConnectedGreptile()
+        } catch {
+            credentialError = (error as? GreptileSignInError ?? .invalidSession).localizedDescription
+        }
+    }
+
+    private func refreshConnectedGreptile() {
+        let revision = metricsCredentialRevision
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let refreshed = await self.onAccountRefresh(self.configuration)
+            guard revision == self.metricsCredentialRevision, let refreshed else { return }
+            self.acceptUsageResult(refreshed)
+        }
+    }
+
+    func cancelGreptileSignIn() {
+        greptileAttemptID = nil
+        greptileBrowserSession?.invalidate()
+        greptileBrowserSession = nil
+        isSigningInWithGreptile = false
     }
 
     func cancelGeminiSignIn() {

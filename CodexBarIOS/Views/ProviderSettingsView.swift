@@ -5,6 +5,8 @@ struct ProviderSettingsView: View {
     @ObservedObject var configurationStore: ProviderConfigurationStore
     @StateObject private var viewModel: ProviderSettingsViewModel
     private let latestUsageResult: ProviderUsageResult?
+    private let greptileAccountDestination: (String) -> ProviderSettingsView
+    @State private var newGreptileAccountID: String?
     private let startsCursorSignIn: Bool
     @State private var didAutoStartCursorSignIn = false
     @State private var pendingGeminiConfirmation: GeminiConfirmation?
@@ -22,23 +24,31 @@ struct ProviderSettingsView: View {
         accountID: String,
         initialUsageResult: ProviderUsageResult? = nil,
         startsCursorSignIn: Bool = false,
-        onCredentialsChanged: @escaping @MainActor () -> Void = {},
-        onRefreshInputsChanged: @escaping @MainActor () -> Void = {},
-        onAccountIdentityChanged: @escaping @MainActor () -> Void = {},
+        onCredentialsChanged: @escaping @MainActor (String) -> Void = { _ in },
+        onRefreshInputsChanged: @escaping @MainActor (String) -> Void = { _ in },
+        onAccountIdentityChanged: @escaping @MainActor (String) -> Void = { _ in },
         onAccountRefresh: @escaping @MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult? = { _ in nil },
         onCredentialRefresh: (@MainActor (ProviderAccountConfiguration) async -> ProviderUsageResult?)? = nil
     ) {
         self.configurationStore = configurationStore
         self.latestUsageResult = initialUsageResult
         self.startsCursorSignIn = startsCursorSignIn
+        self.greptileAccountDestination = { newID in
+            ProviderSettingsView(
+                configurationStore: configurationStore, accountID: newID,
+                onCredentialsChanged: onCredentialsChanged, onRefreshInputsChanged: onRefreshInputsChanged,
+                onAccountIdentityChanged: onAccountIdentityChanged, onAccountRefresh: onAccountRefresh,
+                onCredentialRefresh: onCredentialRefresh
+            )
+        }
         self._viewModel = StateObject(
             wrappedValue: ProviderSettingsViewModel(
                 configurationStore: configurationStore,
                 accountID: accountID,
                 initialUsageResult: initialUsageResult,
-                onCredentialsChanged: onCredentialsChanged,
-                onRefreshInputsChanged: onRefreshInputsChanged,
-                onAccountIdentityChanged: onAccountIdentityChanged,
+                onCredentialsChanged: { onCredentialsChanged(accountID) },
+                onRefreshInputsChanged: { onRefreshInputsChanged(accountID) },
+                onAccountIdentityChanged: { onAccountIdentityChanged(accountID) },
                 onAccountRefresh: onAccountRefresh,
                 onCredentialRefresh: onCredentialRefresh
             )
@@ -363,6 +373,30 @@ struct ProviderSettingsView: View {
                     }
                 } else if providerID == .gemini {
                     geminiAppsConnection
+                } else if providerID == .greptile {
+                    if configuration.authMethod == .apiKey, configurationStore.hasSecret(for: configuration) {
+                        Text("Keep this API-key account's review history. Add a separate account to sign in to Greptile.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Button("Add Greptile account") {
+                            let account = configurationStore.addAccount(for: .greptile)
+                            if configurationStore.configuration(accountID: account.id) != nil { newGreptileAccountID = account.id }
+                        }
+                    } else {
+                        Button(configurationStore.hasSecret(for: configuration) ? "Reconnect Greptile" : "Sign in to Greptile") {
+                            viewModel.startGreptileSignIn()
+                        }
+                        .disabled(viewModel.isSigningInWithGreptile)
+                        .accessibilityIdentifier("greptile-account-sign-in")
+                    }
+                    if viewModel.isSigningInWithGreptile {
+                        ProgressView("Connecting to Greptile…")
+                        Button("Cancel Sign-In") { viewModel.cancelGreptileSignIn() }
+                    }
+                    if configurationStore.hasSecret(for: configuration) {
+                        Button("Disconnect Greptile", role: .destructive) { viewModel.removeSavedCredential() }
+                    }
+                    Text("Sign in and choose your organization to connect your Greptile account. Your account session stays in Keychain.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 } else if providerID == .openCodeZen {
                     Button(configurationStore.hasSecret(for: configuration) ? "Reconnect OpenCode" : "Sign in with OpenCode") {
                         viewModel.startOpenCodeSignIn()
@@ -577,6 +611,10 @@ struct ProviderSettingsView: View {
         #endif
         .sheet(item: $viewModel.openCodeBrowserSession) { session in
             OpenCodeBrowserSignInView(session: session)
+        }
+        .navigationDestination(item: $newGreptileAccountID) { greptileAccountDestination($0) }
+        .sheet(item: $viewModel.greptileBrowserSession) { session in
+            GreptileBrowserSignInView(session: session)
         }
         .sheet(item: $viewModel.geminiBrowserSession, onDismiss: {
             if viewModel.needsGeminiAccountConfirmation { requestGeminiConfirmation(.appsReconnect) }

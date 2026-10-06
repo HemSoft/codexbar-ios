@@ -29,6 +29,7 @@ struct ContentView: View {
     @State private var hasCompletedInitialRefresh = false
     @State private var settingsRefreshCompletionID = UUID()
     @State private var settingsDismissalRefreshState = SettingsDismissalRefreshState()
+    @State private var dashboardSettingsChangedAccountIDs: Set<String> = []
     @State private var isConfirmingHistoryReset = false
     @State private var problemReportPresentation: PrivacySafeDiagnosticContext?
 
@@ -411,10 +412,10 @@ struct ContentView: View {
                 onAccountCreated: { accountID in
                     addAccountRefreshState.accountCreated(accountID)
                 },
-                onCredentialsChanged: {
+                onCredentialsChanged: { _ in
                     _ = addAccountRefreshState.credentialsChanged()
                 },
-                onRefreshInputsChanged: {
+                onRefreshInputsChanged: { _ in
                     addAccountRefreshState.refreshInputsChanged()
                 },
                 onAccountRefresh: { configuration in
@@ -429,12 +430,7 @@ struct ContentView: View {
         .sheet(
             item: accountConfigurationPresentation,
             onDismiss: {
-                guard let accountID = accountConfigurationNavigation.finishDismissal() else {
-                    return
-                }
-                Task {
-                    await refreshAccount(accountID: accountID)
-                }
+                finishDashboardAccountSettings()
             },
             content: { presentation in
             NavigationStack {
@@ -445,14 +441,16 @@ struct ContentView: View {
                         $0.id == presentation.accountID
                     }?.result,
                     startsCursorSignIn: presentation.startsCursorSignIn,
-                    onCredentialsChanged: {
-                        accountConfigurationNavigation.credentialsChanged()
+                    onCredentialsChanged: { accountID in
+                        dashboardSettingsChangedAccountIDs.insert(accountID)
+                        if accountID == presentation.accountID { accountConfigurationNavigation.credentialsChanged() }
                     },
-                    onRefreshInputsChanged: {
-                        accountConfigurationNavigation.refreshInputsChanged()
+                    onRefreshInputsChanged: { accountID in
+                        dashboardSettingsChangedAccountIDs.insert(accountID)
+                        if accountID == presentation.accountID { accountConfigurationNavigation.refreshInputsChanged() }
                     },
-                    onAccountIdentityChanged: {
-                        historyStore.removeSnapshots(for: presentation.accountID)
+                    onAccountIdentityChanged: { accountID in
+                        historyStore.removeSnapshots(for: accountID)
                     },
                     onAccountRefresh: { configuration in
                         await orchestrator.loadAccountMetrics(configuration)
@@ -915,6 +913,15 @@ struct ContentView: View {
             return
         }
         await orchestrator.refreshAccount(configuration)
+    }
+
+    private func finishDashboardAccountSettings() {
+        var accountIDs = dashboardSettingsChangedAccountIDs
+        dashboardSettingsChangedAccountIDs.removeAll()
+        if let accountID = accountConfigurationNavigation.finishDismissal() { accountIDs.insert(accountID) }
+        Task {
+            for accountID in accountIDs.sorted() { await refreshAccount(accountID: accountID) }
+        }
     }
 
     private func moveCard(_ draggedID: String, to targetID: String) {

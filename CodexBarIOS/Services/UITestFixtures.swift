@@ -79,7 +79,7 @@ final class UITestFixtures {
         let claude = scenario?.hasPrefix("claude-") == true
         let greptile = scenario?.hasPrefix("greptile-") == true
         if greptile && configurationStore.configurations.isEmpty {
-            Self.seedGreptileAccount(in: configurationStore)
+            Self.seedGreptileAccount(in: configurationStore, scenario: scenario ?? "")
         }
         if claude && configurationStore.configurations.isEmpty {
             Self.seedClaudeAccount(in: configurationStore)
@@ -148,6 +148,17 @@ final class UITestFixtures {
         }
     }
 
+    nonisolated private static func cachedGreptileRenewal(scenario: String?) -> GreptileAllowanceRenewal? {
+        switch scenario {
+        case "greptile-renewal-stale", "greptile-renewal-expired":
+            GreptileAllowanceRenewal(renewsAt: Date().addingTimeInterval(604_800),
+                                    observedAt: Date().addingTimeInterval(-90_000), isStale: true)
+        case "greptile-renewal-paid-expired":
+            GreptileAllowanceRenewal(renewsAt: nil, observedAt: Date().addingTimeInterval(-90_000), isApplicable: false)
+        default: nil
+        }
+    }
+
     nonisolated private static func initialResult(
         for configuration: ProviderAccountConfiguration, scenario: String?, googleSources: [ProviderID]
     ) -> ProviderUsageResult {
@@ -160,7 +171,10 @@ final class UITestFixtures {
         if scenario?.hasPrefix("greptile-") == true {
             return ProviderUsageResult(
                 accountID: configuration.id, providerID: .greptile, title: configuration.displayName,
-                subtitle: "Waiting for synthetic Greptile response", bars: [], fetchedAt: Date()
+                subtitle: "Waiting for synthetic Greptile response", bars: [],
+                greptileAllowanceRenewal: cachedGreptileRenewal(scenario: scenario),
+                cacheIdentity: cachedGreptileRenewal(scenario: scenario) == nil ? nil : "synthetic-user:synthetic-org",
+                fetchedAt: Date()
             )
         }
         if scenario?.hasPrefix("codex-") == true { return codexResult(for: configuration, scenario: scenario) }
@@ -216,13 +230,24 @@ final class UITestFixtures {
         }
     }
 
-    private static func seedGreptileAccount(in store: ProviderConfigurationStore) {
+    private static func seedGreptileAccount(in store: ProviderConfigurationStore, scenario: String) {
         let account = ProviderAccountConfiguration(
             id: "ui-greptile-free", providerID: .greptile,
-            accountLabel: "Greptile Free Fixture", authMethod: .apiKey
+            accountLabel: "Greptile Free Fixture", authMethod: scenario.hasPrefix("greptile-renewal-") ? .browserSession : .apiKey
         )
         _ = store.update(account)
-        _ = store.saveSecret("ui-test-credential", for: account)
+        _ = store.saveSecret(account.authMethod == .browserSession ? (try? greptileCredential.encoded()) ?? "" : "ui-test-credential", for: account)
+        if ProcessInfo.processInfo.environment["CODEXBAR_UI_TEST_FULL_WIDTH"] == "1" {
+            store.updateMetricWidth(.full, accountID: account.id, metricID: GreptileUsageIdentity.completedReviewsMetricID)
+        }
+    }
+
+    nonisolated static var greptileCredential: GreptileSessionCredentials {
+        return GreptileSessionCredentials(
+            version: 1, subject: "synthetic-user",
+            organization: GreptileOrganization(tenantExternalId: "synthetic-org", name: "Synthetic organization"),
+            cookies: [GreptileSessionCookie(name: "__Secure-authjs.session-token", value: "synthetic-cookie", expiresAt: nil)]
+        )
     }
 
     nonisolated static func greptilePayload(scenario: String) -> Data {
@@ -1173,7 +1198,8 @@ private struct UITestSecretStore: SecretStore {
         let expectedCoding = try AntigravityCredentials.parse(UITestFixtures.codingCredential)
         let codex = ["personal", "work"].contains { secret == UITestFixtures.codexCredential(for: $0) }
         let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }
-        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor else {
+        let greptile = GreptileSessionCredentials.parse(secret) == UITestFixtures.greptileCredential
+        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile else {
             throw UITestFixtureError.invalidCredential
         }
         UserDefaults(suiteName: suite)?.set(secret, forKey: "fixture-secret.\(account)")
@@ -1443,7 +1469,8 @@ private struct UITestGreptileProvider: UsageProvider {
         defer { session.invalidateAndCancel() }
         let provider = GreptileUsageProvider(
             secretStore: secretStore, session: session,
-            endpoint: URL(string: "https://greptile-fixture.invalid/mcp")!
+            endpoint: URL(string: "https://greptile-fixture.invalid/mcp")!,
+            dashboardBaseURL: URL(string: "https://greptile-fixture.invalid")!
         )
         return try await provider.fetchUsage(for: configuration)
     }
@@ -1455,18 +1482,46 @@ private final class UITestNetworkBlocker: URLProtocol, @unchecked Sendable {
     override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         let scenario = ProcessInfo.processInfo.environment["CODEXBAR_UI_TEST_SCENARIO"] ?? ""
-        guard request.url?.absoluteString == "https://greptile-fixture.invalid/mcp",
+        guard request.url?.host == "greptile-fixture.invalid",
               scenario.hasPrefix("greptile-") else {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
+        if scenario == "greptile-renewal-stale" {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
+        let expiredBilling = ["greptile-renewal-expired", "greptile-renewal-paid-expired"].contains(scenario)
+            && request.url?.path == "/api/trpc/billing.getState"
+        let status = expiredBilling ? 401 : (scenario == "greptile-failure" ? 503 : 200)
         let response = HTTPURLResponse(
-            url: request.url!, statusCode: scenario == "greptile-failure" ? 503 : 200,
+            url: request.url!, statusCode: status,
             httpVersion: nil, headerFields: nil
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: UITestFixtures.greptilePayload(scenario: scenario))
+        client?.urlProtocol(self, didLoad: Self.payload(for: request, scenario: scenario))
         client?.urlProtocolDidFinishLoading(self)
+    }
+    private static func payload(for request: URLRequest, scenario: String) -> Data {
+        switch request.url?.path {
+        case "/api/auth/session":
+            let payload = #"{"user":{"greptileId":"synthetic-user","greptileToken":"synthetic-token","#
+                + #""organizations":[{"tenantExternalId":"synthetic-org","name":"Synthetic organization"}]}}"#
+            return Data(payload.utf8)
+        case "/api/trpc/billing.getState":
+            let end: Any
+            switch scenario {
+            case "greptile-renewal-missing": end = NSNull()
+            case "greptile-renewal-malformed": end = "invalid"
+            case "greptile-renewal-passed": end = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600))
+            default: end = ISO8601DateFormatter().string(from: Date().addingTimeInterval(604_800))
+            }
+            let kind = ["greptile-renewal-paid": "paid", "greptile-renewal-unknown": "unknown"][scenario] ?? "free"
+            let state: [String: Any] = ["kind": kind, "currentPeriod": ["end": end]]
+            return (try? JSONSerialization.data(withJSONObject: [["result": ["data": ["json": state]]]])) ?? Data()
+        case "/mcp": return UITestFixtures.greptilePayload(scenario: scenario)
+        default: return Data()
+        }
     }
     override func stopLoading() {}
 }

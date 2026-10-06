@@ -459,6 +459,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     let cursorHistoryInvalidations = PassthroughSubject<String, Never>()
     let cursorSameIdentityReconnects = PassthroughSubject<String, Never>()
     let grokHistoryInvalidations = PassthroughSubject<String, Never>()
+    let greptileCredentialUpdates = PassthroughSubject<(accountID: String, identityChanged: Bool), Never>()
     @Published public private(set) var confirmedGoogleAccountLinks: [String: String]
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
     @Published public private(set) var groups: [ProviderAccountGroup]
@@ -791,6 +792,7 @@ public final class ProviderConfigurationStore: ObservableObject {
 
         do {
             let data = try JSONEncoder().encode(updatedConfigurations)
+            let greptileIdentityChanged = try greptileCredentialChangesIdentity(credential, for: normalized)
             try writeAccountSecret(credential, for: normalized)
             if normalized.providerID == .gemini || normalized.providerID == .grok {
                 credentialChanges.send(normalized.id)
@@ -801,6 +803,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 metricLayouts[normalized.id] = AccountMetricLayout()
                 saveMetricLayouts()
             }
+            sendGreptileCredentialUpdate(for: normalized, identityChanged: greptileIdentityChanged)
             lastError = nil
             refreshSecretAvailability()
             return true
@@ -1747,7 +1750,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                 && !configuration.openCodeWorkspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
-        if configuration.requiresSecret || [.codex, .claude, .cursor, .gemini, .grok].contains(configuration.providerID) {
+        if configuration.requiresSecret || [.codex, .claude, .cursor, .gemini, .grok, .greptile].contains(configuration.providerID) {
             return hasSecret(for: configuration)
         }
 
@@ -1875,7 +1878,8 @@ public final class ProviderConfigurationStore: ObservableObject {
             return "Not configured - sign in with Claude"
         }
 
-        if [.cursor, .gemini].contains(configuration.providerID) {
+        if [.cursor, .gemini, .greptile].contains(configuration.providerID) {
+            if configuration.providerID == .greptile { return "Not configured - sign in to Greptile" }
             return configuration.providerID == .gemini
                 ? "Not configured - sign in with Google" : "Not configured - sign in with Cursor"
         }
@@ -2997,6 +3001,42 @@ extension ProviderConfigurationStore {
         defaults.set(true, forKey: incompleteAccountResetKey)
         lastError = firstDeletionError
         return false
+    }
+
+}
+
+extension ProviderConfigurationStore {
+    private func greptileCredentialChangesIdentity(_ credential: String, for configuration: ProviderAccountConfiguration) throws -> Bool {
+        guard configuration.providerID == .greptile else { return false }
+        let previous = try secretStore.readSecret(account: Self.keychainAccount(for: configuration))
+        guard let next = GreptileSessionCredentials.parse(credential) else { return previous != credential }
+        return GreptileSessionCredentials.parse(previous)?.cacheIdentity != next.cacheIdentity
+    }
+
+    private func sendGreptileCredentialUpdate(for configuration: ProviderAccountConfiguration, identityChanged: Bool) {
+        guard configuration.providerID == .greptile else { return }
+        greptileCredentialUpdates.send((accountID: configuration.id, identityChanged: identityChanged))
+    }
+
+    func canReconnectGreptile(_ credential: GreptileSessionCredentials, for configuration: ProviderAccountConfiguration) -> Bool {
+        do {
+            let saved = try secretStore.readSecret(account: Self.keychainAccount(for: configuration))
+            guard let saved, !saved.isEmpty else { return true }
+            guard let previous = GreptileSessionCredentials.parse(saved) else {
+                lastError = configuration.authMethod == .apiKey
+                    ? "Add a separate Greptile account to sign in. This API-key account's identity cannot be verified."
+                    : "The saved Greptile sign-in could not be read. Disconnect and sign in again."
+                return false
+            }
+            guard previous.cacheIdentity == credential.cacheIdentity else {
+                lastError = GreptileSignInError.wrongAccount.localizedDescription
+                return false
+            }
+            return true
+        } catch {
+            lastError = "The saved Greptile identity could not be verified. Your saved account was not changed."
+            return false
+        }
     }
 
 }

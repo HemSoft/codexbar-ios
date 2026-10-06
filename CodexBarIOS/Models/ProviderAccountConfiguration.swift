@@ -324,7 +324,7 @@ public extension ProviderAccountConfiguration {
         case .cursor:
             ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         case .greptile:
-            ProviderAccountConfiguration(providerID: providerID, authMethod: .apiKey)
+            ProviderAccountConfiguration(providerID: providerID, authMethod: .browserSession)
         }
     }
 }
