@@ -127,7 +127,7 @@ jobs:
         with:
           name: function-risk-ios
           path: ${{ runner.temp }}/function-risk-ios
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Preserve iOS test diagnostics
@@ -252,6 +252,7 @@ jobs:
         run: xcrun swift run GitHubBillingFixtureTests
 
       - name: Run UI journeys
+        if: ${{ !cancelled() }}
         env:
           UI_TEST_RESULTS_DIR: ${{ runner.temp }}/ui-tests
           UI_TEST_DERIVED_DATA_DIR: ${{ runner.temp }}/DerivedData-UI
@@ -279,6 +280,9 @@ jobs:
         run: |
           if [[ "$UI_FAMILIES_RESULT" != success ]]; then
             echo "Both UI destinations must pass. Combined result=$UI_FAMILIES_RESULT" >&2
+            if [[ "$UI_FAMILIES_RESULT" == skipped ]]; then
+              echo "UI workers did not run. Check the prerequisite automatic jobs for failure or cancellation." >&2
+            fi
             exit 1
           fi
 
