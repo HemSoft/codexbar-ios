@@ -36,11 +36,13 @@ struct GreptileDashboardClient: Sendable {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], root["user"] != nil,
               let response = try? JSONDecoder().decode(Response.self, from: data) else { throw GreptileSignInError.invalidIdentityResponse }
         guard let identity = response.user else { throw GreptileSignInError.expired }
-        guard !identity.greptileId.isEmpty, !identity.greptileToken.isEmpty,
+        let subject = identity.greptileId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = identity.greptileToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !subject.isEmpty, !token.isEmpty,
               identity.organizations.allSatisfy({ !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
             throw GreptileSignInError.invalidIdentityResponse
         }
-        return identity
+        return GreptileDashboardIdentity(greptileId: subject, greptileToken: token, organizations: identity.organizations)
     }
 
     func verifiedIdentity(for credential: GreptileSessionCredentials) async throws -> GreptileDashboardIdentity {

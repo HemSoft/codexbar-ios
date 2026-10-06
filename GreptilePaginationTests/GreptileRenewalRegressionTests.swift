@@ -14,10 +14,12 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         )
     }
 
-    private func identity(subject: String = "fixture-user", organization: String = "fixture-org") throws -> GreptileHTTPFixture.Reply {
+    private func identity(
+        subject: String = "fixture-user", organization: String = "fixture-org", token: String = "synthetic-user-token"
+    ) throws -> GreptileHTTPFixture.Reply {
         .payload(try JSONSerialization.data(withJSONObject: [
             "user": [
-                "greptileId": subject, "greptileToken": "synthetic-user-token",
+                "greptileId": subject, "greptileToken": token,
                 "organizations": [["tenantExternalId": organization, "name": "Synthetic organization"]],
             ],
         ]))
@@ -431,6 +433,29 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
             }
             XCTAssertEqual(fixture.requests.count, 1)
         }
+    }
+
+    func testIdentityCredentialsRejectBlankFieldsAndNormalizeSurroundingWhitespace() async throws {
+        for blank in ["", "   ", "\n\t"] {
+            for (reply, subject) in [(try identity(subject: blank), blank), (try identity(token: blank), "fixture-user")] {
+                let fixture = GreptileHTTPFixture([reply])
+                defer { fixture.invalidate() }
+                let client = GreptileDashboardClient(session: fixture.session, baseURL: fixture.endpoint)
+                do {
+                    try await client.verifyConnection(for: credential(subject: subject))
+                    XCTFail("Blank identity credentials must be rejected before billing or connection.")
+                } catch {
+                    XCTAssertEqual(error as? GreptileSignInError, .invalidIdentityResponse)
+                }
+                XCTAssertEqual(fixture.requests.count, 1)
+            }
+        }
+        let fixture = GreptileHTTPFixture([try identity(subject: " fixture-user\n", token: "\t synthetic-user-token ")])
+        defer { fixture.invalidate() }
+        let client = GreptileDashboardClient(session: fixture.session, baseURL: fixture.endpoint)
+        let normalized = try await client.verifiedIdentity(for: credential())
+        XCTAssertEqual(normalized.greptileId, "fixture-user")
+        XCTAssertEqual(normalized.greptileToken, "synthetic-user-token")
     }
 
     func testPaidBillingDoesNotExposeAFreeRenewal() async throws {
