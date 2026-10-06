@@ -2,20 +2,27 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-10-01
+Status last reviewed: 2026-10-06
 
 ## Current Status
 
 - Version `1.3 (3)` is the current distributed release. Read-only App Store
-  Connect inspection on October 1, 2026 confirms its selected build is
+  Connect API inspection on October 6, 2026 confirms its selected build is
   `VALID`, no newer version or build exists, and all review submissions are
   complete. Apple's public US listing also reports version `1.3`.
 - Version `1.4.0 (4)` preparation continues under
   [release issue #373](https://github.com/HemSoft/codexbar-ios/issues/373).
-  [PR #372](https://github.com/HemSoft/codexbar-ios/pull/372), the four required
-  risk reductions, and the iPad-menu fix are merged. No final candidate is
-  frozen, and no 1.4.0 binary is uploaded or submitted. Build 4 is available at the time of the check; recheck before
-  any upload. The changelog stays Unreleased until the final candidate is ready.
+  Product work through [PR #408](https://github.com/HemSoft/codexbar-ios/pull/408)
+  is merged, including the four required risk reductions, iPad menu, History
+  date-label, Cursor reconnection/spending and Greptile renewal fixes.
+  [#405](https://github.com/HemSoft/codexbar-ios/issues/405) and
+  [#409](https://github.com/HemSoft/codexbar-ios/issues/409) are labeled V1.5 and
+  deferred. Fresh Google-backed Greptile billing login may remain unavailable;
+  release and review copy disclose that limitation. No final candidate is
+  frozen, and no 1.4.0 binary is uploaded or submitted. GET-only Apple checks
+  show build 4 unused at 5:59 AM EDT on October 6; recheck before any upload.
+  The completed product scope is frozen; its changelog is dated October 6 for
+  release-candidate preparation, without claiming App Store distribution.
   See the [1.4.0 preparation record](release-assets/1.4.0/README.md) for the
   source boundary, copy-to-changelog mapping, and outstanding release gates.
 - App builds, installs, and launches on the connected development iPhone.
@@ -52,7 +59,11 @@ Status last reviewed: 2026-10-01
 
 ## Apple Requirements To Keep Current
 
-- App uploads must be built with Xcode 26 or later and the iOS/iPadOS 26 SDK or later as of 2026-04-28.
+- App uploads must be built with Xcode 26 or later and the iOS/iPadOS 26 SDK
+  or later as of 2026-04-28. Since 2026-09-09, uploaded iOS/iPadOS apps must
+  target iOS 13 or later. Rechecked against
+  [Apple's requirements](https://developer.apple.com/news/upcoming-requirements/)
+  on 2026-10-06; CodexBar targets iOS 17.
 - App privacy answers in App Store Connect must accurately describe CodexBar's data handling and any third-party SDK behavior.
 - iOS App Store listings require a privacy policy URL.
 - If review cannot exercise paid or account-specific provider features directly, provide clear App Review notes and a short demo video.

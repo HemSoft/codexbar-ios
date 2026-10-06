@@ -5,8 +5,9 @@ CodexBar 1.4.0 adds more provider metrics, guided sign-in, and longer usage hist
 - Monitor GitHub Billing through its own sign-in, with personal and organization spending, included allowances, budgets, and month-end projections where supported.
 - Connect OpenCode Go and Zen through browser approval and workspace selection, without pasting credentials.
 - Choose browser or private sign-in for ChatGPT / Codex and OpenCode. Distinct Codex accounts stay separate, and duplicate identities remain blocked.
-- Track every Codex usage window the service reports, including separate Codex Spark limits, and choose which metrics appear on each card.
-- See Cursor Models, Other Models, and Grok Bot usage separately. Over-limit readings remain visible above 100%.
-- Explore up to 90 days of daily usage history alongside recent detailed samples. The latest History value stays in sync with successful refreshes.
+- Track every reported Codex usage window, including separate Codex Spark limits. Optionally show the reported Codex Credits balance, with a separate choice for each account.
+- See Cursor Models, Other Models, and Grok Bot usage separately. Over-limit readings and on-demand spending stay visible. Expired Cursor sign-in renews when possible; guided reconnection preserves your saved card choices.
+- Explore up to 90 days of daily usage history alongside recent detailed samples, with clearer dates at the chart edges on iPhone and iPad.
+- See Greptile's provider-returned free-allowance renewal date through a verified dashboard session. Fresh Google-backed Greptile billing sign-in or reconnection may be unavailable in this version.
 
-This update also improves Greptile quota reporting, saved-account and History recovery, Settings navigation, and card customization. Account menus are easier to open on iPad without collapsing the card. Metrics depend on the connected provider and account; missing data is not replaced with guessed usage.
+This update also clarifies Claude's five-hour and weekly windows and Codex's 30-day window, improves saved-account and History recovery, and makes account menus easier to open on iPad. Metrics depend on the connected provider and account; missing data is not replaced with guessed usage.

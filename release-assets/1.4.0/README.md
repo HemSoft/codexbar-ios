@@ -2,9 +2,11 @@
 
 Prepared September 29, 2026 under [issue #371](https://github.com/HemSoft/codexbar-ios/issues/371).
 Mode is Prepare. The original [PR #372](https://github.com/HemSoft/codexbar-ios/pull/372)
-changed version settings and local metadata. The October 1 asset and security
-preparation continues under #373. Neither preparation uploads a binary,
-creates an App Store Connect version, selects a build, or submits for review.
+changed version settings and local metadata. October 1 asset preparation and
+October 6 copy/security reconciliation continue under
+[#373](https://github.com/HemSoft/codexbar-ios/issues/373). Preparation does not
+upload a binary, create an App Store Connect version, select a build, or submit
+for review.
 Preparation merge is not release-readiness proof.
 
 ## Release boundary
@@ -24,8 +26,9 @@ Read-only App Store Connect inspection confirms:
   [release-copy correction](https://github.com/HemSoft/codexbar-ios/pull/263)
   matches Apple's live What's New text and adds no product behavior.
 - Product reconciliation ends at
-  [`ceef42a`](https://github.com/HemSoft/codexbar-ios/commit/ceef42a35004c800618403d09046a826c25ec157).
-  All 54 intervening main commits were compared with the 1.4.0 changelog.
+  [`34eab95`](https://github.com/HemSoft/codexbar-ios/commit/34eab950d15451a7dd5706d484cc564d2796c4d2).
+  All 72 intervening main commits were compared with the 1.4.0 changelog,
+  including the 18 commits after the original September 29 product boundary.
   Existing 1.3 and earlier product claims are excluded from 1.4.0 What's New.
 - The final release SHA must be resolved after preparation merges and after
   outstanding release fixes. Neither this product boundary nor the preparation
@@ -61,6 +64,85 @@ include those providers and History and fit the 100-character limit.
 No pricing, rollout, account authority, requested permissions, or networking
 behavior changes.
 
+## October 6 release scope and copy reconciliation
+
+The intended product boundary is merged main
+[`34eab95`](https://github.com/HemSoft/codexbar-ios/commit/34eab950d15451a7dd5706d484cc564d2796c4d2).
+The release-preparation PR changes metadata, documentation and reviewed security
+evidence only. Its merge must precede the final immutable candidate SHA.
+
+Franz moved [#405](https://github.com/HemSoft/codexbar-ios/issues/405) and
+[#409](https://github.com/HemSoft/codexbar-ios/issues/409) to V1.5. Both have the
+V1.5 label and milestone and do not gate this release. Deferring #405 does not
+change repository review instructions in this preparation PR.
+
+GET-only App Store Connect APIs at October 6, 2026, 5:59 AM EDT confirm live
+1.3 build 3, selected build VALID, no 1.4.0 version or upload, and only COMPLETE
+review submissions. All version, build and submission response pages were
+complete. Build 4 is unused at this check, not reserved; recheck immediately
+before any future upload. The expired browser session did not prevent API
+inspection. No Apple write was made.
+
+The 18 commits after the original September 29 boundary cover preparation,
+four risk reductions, iPad menus, History chart dates, Cursor spending and
+reconnection, Grok availability, Claude/Codex window labels, optional Codex
+Credits, dashboard spacing, and Greptile research and renewal dates. Their
+customer effects are present in the 1.4.0 changelog; process, research and
+release preparation stay under Developer Experience.
+
+What's New now includes optional Codex Credits, Cursor on-demand spend and
+guided reconnection, readable History dates, Claude/Codex window labels, and
+provider-returned Greptile renewal dates. The description adds renewal dates
+without claiming a balance. Description, What's New and App Review notes
+explicitly qualify fresh Google-backed Greptile billing sign-in/reconnection.
+A saved verified session can return a renewal date; a native OAuth identity
+check does not establish authorization for the dashboard billing endpoint.
+[#409](https://github.com/HemSoft/codexbar-ios/issues/409) owns that missing
+compatibility. No manual credential-transfer workaround is offered.
+
+The privacy policy now describes the existing Greptile session-cookie storage,
+identity and billing endpoints, organization-scoped review requests, and
+deletion behavior. This disclosure changes no requested permission or network
+behavior.
+
+The maintained screenshot sizes (1320 x 2868 iPhone, 2064 x 2752 iPad, and
+416 x 496 Watch) remain accepted by Apple's current
+[screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
+This format check does not approve the old image content.
+
+All metadata files fit Apple's limits; the independent-provider disclaimer and
+account-dependent metric qualifications remain. Keywords now use descriptive
+terms rather than other providers' app/company names, following Apple's
+[metadata requirements](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/).
+The keyword list is 96 ASCII bytes. Name, subtitle, promotional text,
+pricing and release policy are unchanged. Exact proposed copy
+is in the linked metadata files below; it has not been saved to Apple.
+
+Preparatory diagnostics on the clean product boundary pass all seven local
+perfection gates (711 iOS and 61 watchOS tests, zero failures/skips). A
+[hosted History performance run](https://github.com/HemSoft/codexbar-ios/actions/runs/37447658058)
+was inconclusive because the 25-account reference record CV was 0.189, above
+0.15. Its samples and telemetry remain preserved. One full local paired repeat
+after native audit load ended passed with zero findings, maximum median latency
+ratio 1.088 and maximum CV 0.086. Neither result validates a later candidate;
+no threshold, sample or automatic CI change was made.
+
+The fresh [security diagnostic](https://github.com/HemSoft/codexbar-ios/actions/runs/37446684582)
+completed at 6:31 AM EDT with full 109/109 production extraction, zero
+compiler/reach errors and the same three severity-7.5 findings. The hosted job
+failed on the stale source snapshot. After reviewing raw diagnostics and current
+guards/consumers, the baseline now binds the product commit and exact finding
+identities. Local replay accepts three reviewed findings with zero blockers.
+The failed hosted run stays failed; the final merged candidate needs its own
+passing hosted analysis. Analyzer pins, matching rules, source coverage, severity
+policy and automatic CI are unchanged.
+
+The completed product scope is frozen at this boundary. The 1.4.0 changelog is
+dated October 6 for release-candidate preparation; this is not an App Store
+upload or distribution date. The immutable candidate SHA is resolved after
+the preparation PR merges. Older screenshots, security results and CI runs do
+not pass later-candidate gates.
+
 ## Preparation screenshots and security review
 
 The [capture manifest](capture-manifest.json) records 20 preview images, with
@@ -92,10 +174,12 @@ History, provider results, setup, or metric customization defaults.
 An interaction recording is omitted because this change prepares static
 storefront states and image processing. It changes no customer interaction,
 navigation, animation, or timing. Final merged-candidate recapture and live
-checks remain separate. The native History chart still clips its trailing
-x-axis date label, tracked in [#386](https://github.com/HemSoft/codexbar-ios/issues/386).
-These previews do not pass final no-clipped-text asset approval. Resolve that
-UI defect or explicitly omit the affected scene before upload.
+checks remain separate. The October 1 previews predate the History date-label
+fix from
+[PR #387](https://github.com/HemSoft/codexbar-ios/pull/387), which closed
+[#386](https://github.com/HemSoft/codexbar-ios/issues/386). Those images remain
+historical previews. Recapture the fixed History scene and all other storefront
+scenes from the final merged candidate before upload.
 
 The [fresh security diagnostic](https://github.com/HemSoft/codexbar-ios/actions/runs/36823093844)
 failed closed against its stale baseline. It extracted all 103 production
@@ -113,9 +197,9 @@ iOS widget, Watch app, and Watch widget. Test products use the same version/buil
 No automatic CI jobs, destinations, test counts, triggers, retries, or timeouts
 change in preparation.
 
-The changelog remains `1.4.0 - Unreleased` because the final release candidate
-is not ready. Date it before submission once the candidate is final; preserve
-all published version sections.
+The changelog is `1.4.0 - 2026-10-06` for the prepared release scope. All
+published version sections remain unchanged. Final merged-SHA validation and
+Apple distribution remain separate checkpoints.
 
 Local metadata sources:
 
@@ -124,7 +208,9 @@ Local metadata sources:
 - [App Review notes](../../fastlane/metadata/review_information/notes.txt)
 - [Privacy policy](../../PRIVACY.md) and [support guide](../../SUPPORT.md)
 
-The description names current providers and Watch support. Review notes disclose
+The description names current providers and Watch support. The October 6
+privacy update also covers the existing Greptile dashboard-session behavior.
+Review notes disclose
 provider-specific authorization, broad provider permissions, account isolation,
 and the lack of a customer demo mode. The privacy policy now correctly names
 GitHub Billing's existing `admin:org` permission and explains its organization
@@ -145,6 +231,11 @@ permissions or data handling.
 | Separate Cursor metrics and over-limit readings | [#286](https://github.com/HemSoft/codexbar-ios/issues/286), [#292](https://github.com/HemSoft/codexbar-ios/issues/292), [#294](https://github.com/HemSoft/codexbar-ios/issues/294) |
 | 90-day daily History and fresh latest readings | [#290](https://github.com/HemSoft/codexbar-ios/issues/290), [#274](https://github.com/HemSoft/codexbar-ios/issues/274) |
 | Greptile reporting, recovery, navigation, and customization | [#281](https://github.com/HemSoft/codexbar-ios/issues/281), [#276](https://github.com/HemSoft/codexbar-ios/issues/276), [#277](https://github.com/HemSoft/codexbar-ios/issues/277), [#265](https://github.com/HemSoft/codexbar-ios/issues/265), [#346](https://github.com/HemSoft/codexbar-ios/issues/346) |
+| Optional Codex Credits and clearer 30-day labels | [#391](https://github.com/HemSoft/codexbar-ios/issues/391), [#393](https://github.com/HemSoft/codexbar-ios/issues/393) |
+| Cursor spend, fractional display, partial results and guided reconnection | [#388](https://github.com/HemSoft/codexbar-ios/issues/388), [#400](https://github.com/HemSoft/codexbar-ios/issues/400), [#402](https://github.com/HemSoft/codexbar-ios/issues/402) |
+| Readable History dates and iPad account menus | [#386](https://github.com/HemSoft/codexbar-ios/issues/386), [#381](https://github.com/HemSoft/codexbar-ios/issues/381) |
+| Claude five-hour and weekly window labels | [#384](https://github.com/HemSoft/codexbar-ios/issues/384) |
+| Greptile returned renewal dates, with the Google-backed billing-login limitation | [#395](https://github.com/HemSoft/codexbar-ios/issues/395), [#406](https://github.com/HemSoft/codexbar-ios/issues/406), [#409](https://github.com/HemSoft/codexbar-ios/issues/409) |
 
 ## Remaining release gates
 
@@ -157,7 +248,7 @@ or submission and are not recorded as passed by merging preparation.
   more than 30; all historical high-risk ceilings are resolved. The
   [main CI run](https://github.com/HemSoft/codexbar-ios/actions/runs/36811126830)
   passed. This does not replace fresh risk evidence for the final candidate.
-- [ ] Resolve the final merged candidate SHA, date the changelog, and rerun
+- [ ] Resolve the final merged candidate SHA and rerun
   the seven local perfection gates on that clean candidate.
 - [ ] Pass all five automatic jobs plus manually dispatched
   `Full iOS UI validation` for that exact SHA. Review fresh function-risk,

@@ -1,1 +1,1 @@
-usage,limits,widgets,ChatGPT,Codex,Claude,Copilot,Cursor,Gemini,Grok,GitHub,billing,OpenCode,history
+quota,widgets,billing,history,alerts,resets,forecast,coding,accounts,watch,limits,balance,trends
