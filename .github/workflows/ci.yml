@@ -127,7 +127,7 @@ jobs:
         with:
           name: function-risk-ios
           path: ${{ runner.temp }}/function-risk-ios
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       - name: Preserve iOS test diagnostics
@@ -264,7 +264,7 @@ jobs:
         with:
           name: CodexBarIOSUITests-${{ matrix.family }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/ui-tests
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
   ios-ui-tests:
