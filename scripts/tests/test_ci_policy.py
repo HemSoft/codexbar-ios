@@ -41,13 +41,10 @@ class CITriggerPolicyTests(unittest.TestCase):
         self.assertNotIn("run-ui-tests.sh", ios_job)
 
     def test_ui_job_runs_only_after_a_successful_manual_gate(self) -> None:
-        ui_job = job_block(self.workflow, "ios-ui-tests")
+        ui_job = job_block(self.workflow, "ios-ui-families")
         self.assertIn(
-            "    name: ${{ inputs.ui_validation_mode == 'account-menu-comparison' "
-            "&& 'Account menu comparison' || 'Full iOS UI validation' }}\n", ui_job,
-        )
-        self.assertIn(
-            "    if: ${{ github.event_name == 'workflow_dispatch' && success() }}\n",
+            "    if: ${{ github.event_name == 'workflow_dispatch' && "
+            "inputs.ui_validation_mode != 'account-menu-comparison' && success() }}\n",
             ui_job,
         )
         for required_job in (
@@ -58,19 +55,13 @@ class CITriggerPolicyTests(unittest.TestCase):
             "smoke-tests",
         ):
             self.assertIn(f"      - {required_job}\n", ui_job)
-
-        expected_steps = (
-            "Run iPhone UI journeys",
-            "Run iPad UI journeys",
-            "Require both UI destinations",
-            "Preserve UI test results and failure screenshots",
-        )
-        positions = [ui_job.index(step) for step in expected_steps]
-        self.assertEqual(positions, sorted(positions))
-        self.assertIn("run: ./scripts/run-ui-tests.sh iphone", ui_job)
-        self.assertIn("run: ./scripts/run-ui-tests.sh ipad", ui_job)
-        self.assertIn("if: ${{ always() }}", ui_job)
+        self.assertIn('run: ./scripts/run-ui-tests.sh "${{ matrix.family }}"', ui_job)
+        self.assertIn("family: [iphone, ipad]", ui_job)
+        self.assertIn("fail-fast: false", ui_job)
         self.assertIn("retention-days: 14", ui_job)
+        aggregate = job_block(self.workflow, "ios-ui-tests")
+        self.assertIn("always() && github.event_name == 'workflow_dispatch'", aggregate)
+        self.assertIn('if [[ "$UI_FAMILIES_RESULT" != success ]]', aggregate)
 
     def test_ui_runner_requires_all_twenty_seven_journeys(self) -> None:
         for assertion in (
