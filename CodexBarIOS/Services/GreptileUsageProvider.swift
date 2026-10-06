@@ -122,7 +122,7 @@ public final class GreptileUsageProvider: UsageProvider {
         result.greptileAllowanceRenewal = GreptileAllowanceRenewal(
             renewsAt: nil, observedAt: result.fetchedAt,
             unavailableReason: "Sign in to Greptile in account settings to read your allowance renewal date.",
-            requiresAuthentication: true
+            requiresAuthentication: true, isApplicable: nil
         )
         return result
     }
@@ -156,7 +156,7 @@ public final class GreptileUsageProvider: UsageProvider {
             )
             result.greptileAllowanceRenewal = GreptileAllowanceRenewal(
                 renewsAt: nil, observedAt: result.fetchedAt, unavailableReason: failure.localizedDescription,
-                requiresAuthentication: failure.requiresAuthentication, lookupFailed: true
+                requiresAuthentication: failure.requiresAuthentication, lookupFailed: true, isApplicable: nil
             )
             return result
         }
@@ -170,7 +170,7 @@ public final class GreptileUsageProvider: UsageProvider {
                 renewsAt: nil, observedAt: Date(),
                 unavailableReason: (error as? GreptileSignInError ?? .unavailable).localizedDescription,
                 requiresAuthentication: (error as? GreptileSignInError) == .expired,
-                lookupFailed: (error as? GreptileSignInError) != .invalidBillingResponse
+                lookupFailed: (error as? GreptileSignInError) != .invalidBillingResponse, isApplicable: nil
             )
         }
         var result = try await fetchReviewActivity(

@@ -44,6 +44,10 @@ Information. Missing or malformed dates offer
 [Greptile Usage](https://app.greptile.com/-/settings/usage). A date past its period
 asks for refresh; observations older than a day or preserved after a failed
 refresh are labeled last known. A successful refresh replaces the period.
+A failed or unrecognized billing response does not classify a new account as
+free; a matching saved plan classification survives that failure. Malformed
+billing clears the date while retaining that classification. More Information
+can dismiss its sheet and open guided account settings to reconnect.
 
 Review activity remains a separate metric with its existing IDs and saved
 visibility, order and width. The verified session's user token authorizes

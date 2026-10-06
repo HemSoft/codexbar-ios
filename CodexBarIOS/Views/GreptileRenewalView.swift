@@ -9,17 +9,18 @@ struct GreptileRenewalView: View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             VStack(alignment: .leading, spacing: 6) {
                 if showsTitle {
-                    Text(renewal.isApplicable ? "Free allowance renewal" : "Greptile connection")
+                    Text(renewal.isApplicable == true ? "Free allowance renewal" : "Greptile connection")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Text(renewal.isApplicable ? renewal.status(at: context.date) : "Sign in again to Greptile")
+                Text(renewal.requiresAuthentication && renewal.isApplicable != true
+                     ? "Sign in again to Greptile" : renewal.status(at: context.date))
                     .font(.subheadline.weight(.semibold))
                     .accessibilityIdentifier("greptile-renewal-status")
                 if let date = renewal.localDateText {
                     Text(date).font(.caption).foregroundStyle(.secondary)
                         .accessibilityIdentifier("greptile-renewal-date")
                 } else {
-                    Text(renewal.unavailableReason ?? (renewal.isApplicable
+                    Text(renewal.unavailableReason ?? (renewal.isApplicable == true
                          ? "Greptile did not return a valid free-allowance renewal date." : "Your Greptile session needs reconnecting."))
                         .font(.caption).foregroundStyle(.secondary)
                 }

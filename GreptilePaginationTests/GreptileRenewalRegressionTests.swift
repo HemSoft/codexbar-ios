@@ -395,6 +395,44 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(result.recoveryAction, .reauthenticate)
     }
 
+    @MainActor
+    func testUnknownBillingDoesNotAssumeFreeOrReplaceCachedPaidClassification() async throws {
+        for reply in [GreptileHTTPFixture.Reply.failure(URLError(.timedOut)), .payload(Data("malformed".utf8))] {
+            let fixture = GreptileHTTPFixture([try identity(), reply, try GreptileHTTPFixture.page([], total: 0)])
+            defer { fixture.invalidate() }
+            let account = browserAccount()
+            let provider = try provider(fixture, credential: credential())
+            let previous = ProviderUsageResult(
+                accountID: account.id, providerID: .greptile, title: account.displayName, subtitle: "Verified paid", bars: [],
+                greptileAllowanceRenewal: GreptileAllowanceRenewal(renewsAt: nil, observedAt: now, isApplicable: false),
+                cacheIdentity: credential().cacheIdentity, fetchedAt: now
+            )
+            let service = UsageRefreshService(providers: [provider], initialResults: [previous])
+            await service.refresh(configurations: [account])
+            XCTAssertEqual(service.results.first?.greptileAllowanceRenewal?.isApplicable, false)
+            XCTAssertNil(service.results.first?.greptileAllowanceRenewal?.renewsAt)
+            let firstLookup = GreptileHTTPFixture([try identity(), reply, try GreptileHTTPFixture.page([], total: 0)])
+            defer { firstLookup.invalidate() }
+            let result = try await self.provider(firstLookup, credential: credential()).fetchUsage(for: account)
+            XCTAssertNil(result.greptileAllowanceRenewal?.isApplicable)
+        }
+    }
+
+    func testEmptyOrganizationIdentifiersRejectIdentityBeforeConnection() async throws {
+        for organization in ["", "   "] {
+            let fixture = GreptileHTTPFixture([try identity(organization: organization)])
+            defer { fixture.invalidate() }
+            let client = GreptileDashboardClient(session: fixture.session, baseURL: fixture.endpoint)
+            do {
+                _ = try await client.identity(cookies: credential().cookies)
+                XCTFail("An unusable organization must not be offered for connection.")
+            } catch {
+                XCTAssertEqual(error as? GreptileSignInError, .invalidIdentityResponse)
+            }
+            XCTAssertEqual(fixture.requests.count, 1)
+        }
+    }
+
     func testPaidBillingDoesNotExposeAFreeRenewal() async throws {
         let fixture = GreptileHTTPFixture([
             try identity(), .payload(try billing(["kind": "paid", "currentPeriod": ["end": "2030-02-01T00:00:00Z"]])),

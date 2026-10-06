@@ -257,6 +257,7 @@ struct ProviderUsageCard: View {
     @State private var isResetActionUnavailable = false
     @State private var isCustomizingMetrics = false
     @State private var isShowingMoreInformation = false
+    @State private var reconnectAfterInformation = false
 
     /// Simulator-only fixture hook: the More Information sheet opens directly when
     /// a journey relaunches with CODEXBAR_UI_TEST_MORE_INFORMATION=1. Production
@@ -428,12 +429,16 @@ struct ProviderUsageCard: View {
                 onMarkMetricsSeen: onMarkMetricsSeen
             )
         }
-        .sheet(isPresented: $isShowingMoreInformation) {
+        .sheet(isPresented: $isShowingMoreInformation, onDismiss: reconnectFromInformation, content: {
             ProviderCardInformationView(
                 sections: informationSections,
-                greptileRenewal: greptileRenewal
+                greptileRenewal: greptileRenewal,
+                onConnect: {
+                    reconnectAfterInformation = true
+                    isShowingMoreInformation = false
+                }
             )
-        }
+        })
         .sheet(item: $metricDetailPresentation) { presentation in
             if let metric = Self.metric(withID: presentation.metricID, in: result) {
                 ProviderMetricTileDetailView(
@@ -1022,12 +1027,18 @@ struct ProviderUsageCard: View {
         result.providerID == .cursor ? [] : displayedAlerts
     }
 
+    private func reconnectFromInformation() {
+        guard reconnectAfterInformation else { return }
+        reconnectAfterInformation = false
+        onConfigureAccount()
+    }
+
     private var greptileRenewal: GreptileAllowanceRenewal? {
         guard result.providerID == .greptile else { return nil }
-        if let renewal = result.greptileAllowanceRenewal, !renewal.isApplicable && !renewal.requiresAuthentication { return nil }
+        if let renewal = result.greptileAllowanceRenewal, renewal.isApplicable == false && !renewal.requiresAuthentication { return nil }
         return result.greptileAllowanceRenewal ?? GreptileAllowanceRenewal(
             renewsAt: nil, observedAt: result.fetchedAt,
-            unavailableReason: "Connect Greptile to read the free allowance renewal date.", requiresAuthentication: true
+            unavailableReason: "Connect Greptile to read the allowance renewal date.", requiresAuthentication: true, isApplicable: nil
         )
     }
 

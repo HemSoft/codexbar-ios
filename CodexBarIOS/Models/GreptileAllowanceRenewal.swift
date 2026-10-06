@@ -7,11 +7,11 @@ public struct GreptileAllowanceRenewal: Equatable, Sendable {
     public let unavailableReason: String?
     public var requiresAuthentication: Bool
     public let lookupFailed: Bool
-    public let isApplicable: Bool
+    public let isApplicable: Bool?
 
     public init(
         renewsAt: Date?, observedAt: Date, isStale: Bool = false, unavailableReason: String? = nil,
-        requiresAuthentication: Bool = false, lookupFailed: Bool = false, isApplicable: Bool = true
+        requiresAuthentication: Bool = false, lookupFailed: Bool = false, isApplicable: Bool? = true
     ) {
         self.renewsAt = renewsAt
         self.observedAt = observedAt
