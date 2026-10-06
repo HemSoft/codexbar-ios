@@ -327,6 +327,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Corrected the manual release UI runner to require all 27 existing journeys
+  on each device family. A complete passing suite no longer fails the stale
+  26-test count check. Failed, skipped, and missing journeys still block the
+  release. Automatic CI workload is unchanged.
+  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
+
 - Made the manual GitHub Billing release fixtures independent of the current
   month and added UTC billing-period boundary checks. September sample data
   remains valid for its fixed test date, while stale and future periods remain
