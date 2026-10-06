@@ -4,7 +4,7 @@ Notable changes to CodexBar are documented here. Entries describe shipped app
 behavior; development-only changes are listed separately when they affect
 building, testing, or releasing the app.
 
-## 1.4.0 - 2026-10-06
+## 1.4.0 - Unreleased
 
 ### Added
 

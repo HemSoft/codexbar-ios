@@ -21,8 +21,8 @@ Status last reviewed: 2026-10-06
   release and review copy disclose that limitation. No final candidate is
   frozen, and no 1.4.0 binary is uploaded or submitted. GET-only Apple checks
   show build 4 unused at 5:59 AM EDT on October 6; recheck before any upload.
-  The completed product scope is frozen; its changelog is dated October 6 for
-  release-candidate preparation, without claiming App Store distribution.
+  The intended product scope is complete. The changelog stays Unreleased until
+  the final candidate is ready; preparation does not claim App Store distribution.
   See the [1.4.0 preparation record](release-assets/1.4.0/README.md) for the
   source boundary, copy-to-changelog mapping, and outstanding release gates.
 - App builds, installs, and launches on the connected development iPhone.

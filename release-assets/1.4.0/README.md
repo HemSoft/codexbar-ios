@@ -114,7 +114,7 @@ All metadata files fit Apple's limits; the independent-provider disclaimer and
 account-dependent metric qualifications remain. Keywords now use descriptive
 terms rather than other providers' app/company names, following Apple's
 [metadata requirements](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/).
-The keyword list is 96 ASCII bytes. Name, subtitle, promotional text,
+The keyword list is 98 ASCII bytes. Name, subtitle, promotional text,
 pricing and release policy are unchanged. Exact proposed copy
 is in the linked metadata files below; it has not been saved to Apple.
 
@@ -137,11 +137,10 @@ The failed hosted run stays failed; the final merged candidate needs its own
 passing hosted analysis. Analyzer pins, matching rules, source coverage, severity
 policy and automatic CI are unchanged.
 
-The completed product scope is frozen at this boundary. The 1.4.0 changelog is
-dated October 6 for release-candidate preparation; this is not an App Store
-upload or distribution date. The immutable candidate SHA is resolved after
-the preparation PR merges. Older screenshots, security results and CI runs do
-not pass later-candidate gates.
+The intended product scope is complete at this boundary. The 1.4.0 changelog
+remains Unreleased until the final candidate is ready. The immutable candidate
+SHA is resolved after the preparation PR merges. Older screenshots, security
+results and CI runs do not pass later-candidate gates.
 
 ## Preparation screenshots and security review
 
@@ -197,9 +196,9 @@ iOS widget, Watch app, and Watch widget. Test products use the same version/buil
 No automatic CI jobs, destinations, test counts, triggers, retries, or timeouts
 change in preparation.
 
-The changelog is `1.4.0 - 2026-10-06` for the prepared release scope. All
-published version sections remain unchanged. Final merged-SHA validation and
-Apple distribution remain separate checkpoints.
+The changelog remains `1.4.0 - Unreleased` until the final candidate is ready.
+Date it before submission and preserve all published version sections. Final
+merged-SHA validation and Apple distribution remain separate checkpoints.
 
 Local metadata sources:
 
@@ -248,7 +247,7 @@ or submission and are not recorded as passed by merging preparation.
   more than 30; all historical high-risk ceilings are resolved. The
   [main CI run](https://github.com/HemSoft/codexbar-ios/actions/runs/36811126830)
   passed. This does not replace fresh risk evidence for the final candidate.
-- [ ] Resolve the final merged candidate SHA and rerun
+- [ ] Resolve the final merged candidate SHA, date the changelog, and rerun
   the seven local perfection gates on that clean candidate.
 - [ ] Pass all five automatic jobs plus manually dispatched
   `Full iOS UI validation` for that exact SHA. Review fresh function-risk,
