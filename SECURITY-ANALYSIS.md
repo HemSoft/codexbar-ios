@@ -319,6 +319,57 @@ with zero blocking findings. This replay is not a new analysis of changed files
 and does not make the failed hosted job pass. Fresh hosted analysis remains
 pending.
 
+## October 6 release source review
+
+Release issue [#373](https://github.com/HemSoft/codexbar-ios/issues/373) resumes
+from product commit
+[`34eab95`](https://github.com/HemSoft/codexbar-ios/commit/34eab950d15451a7dd5706d484cc564d2796c4d2).
+Its 109 tracked production Swift files have source snapshot
+`1821c3d0521a7bebd41803e0a57ee14652665fd1020d7614c6c17199bdb77b78`.
+The previous passing analysis covered an older source snapshot and cannot
+validate the new Cursor and Greptile authorization paths.
+
+The [fresh diagnostic run](https://github.com/HemSoft/codexbar-ios/actions/runs/37446684582)
+uses the unchanged manual hosted workflow. It completed on October 6 at
+6:31 AM EDT, extracting all 109 production files with zero compiler/reach
+errors and no SARIF extraction diagnostics. It reports the same three
+severity-7.5 findings. The job failed on the stale production-source baseline;
+that failure is preserved, and replay does not make the hosted run pass.
+
+Current review of the existing finding contexts confirms:
+
+- OpenCode's SHA256 value still serves ephemeral workspace/session cache
+  equality in `UsageRefreshService`. All `cacheIdentity` consumers were reviewed;
+  `ProviderUsageResult` remains non-Codable. Other providers' identities are
+  independent cache keys. The OpenCode digest is not persisted, published to
+  companion snapshots, or used as a password verifier.
+- Collapsed dashboard IDs remain configured local provider or provider-plus-UUID
+  IDs. The collapse updater rejects unknown IDs, and credentials are stored
+  separately through `SecretStore`.
+- The private `UITestSecretStore` now accepts additional exact synthetic Cursor
+  credentials (both fixed-expiry variants) and the parsed fixed Greptile session,
+  alongside the prior literal, coding and Codex values. Cursor uses an unsigned
+  fixture token with a synthetic signature. Greptile uses `synthetic-user`,
+  `synthetic-org` and `synthetic-cookie`; these values grant no provider access.
+  Arbitrary credentials are rejected before the preferences write. Fixture
+  activation still requires DEBUG, a simulator and a UUID-isolated defaults
+  namespace. The network blocker permits only synthetic Greptile responses at
+  `greptile-fixture.invalid` and rejects other destinations. The prior rationale,
+  which omitted these new accepted values, must not be carried forward unchanged.
+
+The baseline now binds this reviewed product commit and source snapshot. Its
+three exceptions use the fresh raw SARIF identities: OpenCode remains at line
+134 with an unchanged diagnostic; collapsed IDs moved to line 2369 and the
+private fixture write to line 1205. The latter rationale now includes Cursor
+and Greptile synthetic values and their current guards. Replaying the retained
+SARIF/source-reach CSV accepts exactly three findings with zero blockers and
+full 109/109 reach. No analyzer pin, severity threshold, matching rule or
+production path changes.
+This preparation changes no production Swift source. A replay against the
+renewed baseline must be identified as replay, not a successful hosted run.
+The eventual merged release candidate still needs its own complete passing
+hosted result; this diagnostic is not the final-candidate release gate.
+
 ## Reproduce the positive test
 
 The positive test uses `scripts/security-analysis/fixtures/Positive.swift` to

@@ -19,6 +19,8 @@ building, testing, or releasing the app.
   More Information opens account settings to reconnect, and
   unavailable billing does not assume a free plan. Existing API-key accounts can
   add a separate Greptile account without combining organizations' review history.
+  Fresh Google-backed billing sign-in or reconnection may fail; saved verified
+  sessions can still return renewal dates.
   ([#406](https://github.com/HemSoft/codexbar-ios/issues/406))
 
 - Added an optional Codex Credits pool metric. Turn it on in account Settings
@@ -71,6 +73,11 @@ building, testing, or releasing the app.
   ([#272](https://github.com/HemSoft/codexbar-ios/issues/272))
 
 ### Changed
+
+- Explained how Greptile sign-in protects account-specific session credentials
+  and which read-only provider requests use them. The privacy-policy update
+  changes no permissions or data handling.
+  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
 
 - Cursor model usage follows Cursor's minimum 1% display for small positive
   usage, while History and forecasts retain the measured values. Refreshes
@@ -319,6 +326,14 @@ building, testing, or releasing the app.
   ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))
 
 ### Developer Experience
+
+- Reconciled 1.4.0 release copy with the final merged provider fixes, including
+  optional Codex Credits, Cursor reconnection and spending, readable History
+  dates, and Greptile renewal dates. Store and review copy disclose the deferred
+  Google-backed Greptile billing-login limitation. Renewed the security review
+  against fresh complete-source findings without changing analyzer policy or
+  automatic CI workload.
+  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
 
 - Documented the evidence and open questions for Greptile paid-plan credit
   tracking. Public review and billing documentation does not establish a

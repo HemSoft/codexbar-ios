@@ -1,6 +1,6 @@
 # CodexBar Privacy Policy
 
-Effective date: September 29, 2026
+Effective date: October 6, 2026
 
 CodexBar Usage Monitor is a local dashboard for monitoring AI provider usage, limits, and API balances. It does not require a CodexBar account and does not send your provider credentials or usage data to HemSoft servers.
 
@@ -59,6 +59,27 @@ its retained values only to `gemini.google.com` for read-only consumer Gemini
 Apps usage requests. They are never written to app settings, logs, diagnostics,
 widgets, or Watch snapshots. Disconnecting one Gemini entry removes its saved
 credential without affecting other entries or your Safari session.
+
+For Greptile billing renewal, CodexBar opens a temporary nonpersistent browser
+session and retains only the secure, root-path Auth.js session cookie (or its
+numbered chunks) for `app.greptile.com`. After verifying the user and selected
+organization, it saves those session values, the verified user identifier, and
+the selected organization in that account's own iOS Keychain entry. Other
+browser data is discarded when the sign-in session closes. Fresh Google-backed
+billing sign-in or reconnection may be unavailable in this version.
+
+The retained dashboard session can grant broader Greptile account access.
+CodexBar sends it only to `app.greptile.com` for identity verification and
+read-only billing-state requests. The identity response's Greptile token is
+used for read-only review-activity requests to `api.greptile.com/mcp`, scoped to
+the selected organization. Existing organization API-key accounts use that MCP
+endpoint directly. The app does not trigger reviews, spend credits, buy plans,
+or change billing settings. The dashboard transport bypasses shared cookie
+storage and HTTP caches and rejects redirects. Session cookies and tokens are
+never included in History, widgets, Watch snapshots, or feedback diagnostics.
+Disconnect removes the local saved credential; it does not sign out another
+CodexBar account or the user's browser session. Removing the account also
+removes its saved local usage history.
 
 GitHub Status monitoring is independently configurable and off by default. If
 you enable it, CodexBar periodically requests GitHub's public
