@@ -147,7 +147,7 @@ final class GreptileAllowanceUITests: XCTestCase {
         app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"] = "ui-greptile-free"
         app.launch()
         XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Greptile connection"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Greptile connection"].exists)
         XCTAssertFalse(app.staticTexts["Free allowance renewal"].exists)
         XCTAssertEqual(app.staticTexts["greptile-renewal-status"].firstMatch.label, "Sign in again to Greptile")
         let detailSignIn = app.collectionViews.buttons["greptile-renewal-connect"].firstMatch
