@@ -258,7 +258,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 
 It uses only synthetic payloads and an in-process URL protocol. It makes no live
 GitHub requests and uses no account credentials. The manual `workflow_dispatch`
-full UI validation job runs this harness before its iPhone and iPad journeys;
+iPhone worker runs this harness before its journeys;
 routine pull-request CI does not add this work.
 
 ## Fixture startup and isolation
@@ -300,9 +300,10 @@ automatic jobs pass, `Full iOS UI validation` runs both device families. The
 release cannot proceed unless every job passes for the candidate SHA. If that
 SHA changes, dispatch a new run.
 
-An always-run destination check makes the manual job fail if either family
-fails, even though the iPad family still runs after an iPhone failure. The
-runner rejects anything other than twenty-seven passed tests with zero skips or
+The two families run on independent manual workers, each with a 90-minute
+limit and its own artifact. Fail-fast is disabled. An always-run aggregate
+fails unless both workers succeed, including when a worker is cancelled or
+skipped. The runner rejects anything other than twenty-seven passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

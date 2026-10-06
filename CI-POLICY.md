@@ -111,7 +111,10 @@ ordinary PR runs avoids that work. Record completed post-change runs before
 claiming the actual savings. The concurrency policy cancels obsolete runs, but
 it cannot recover runner time spent before cancellation.
 
-The manual full gate retains a 90-minute limit for `Full iOS UI validation`.
+The manual full gate gives each iPhone and iPad worker its own 90-minute limit.
+They run independently with fail-fast disabled and publish separate artifacts.
+`Full iOS UI validation` is a fail-closed aggregate of both workers; a failed,
+cancelled, or skipped family cannot pass the release gate.
 Keeping the UI suites intact preserves their correctness decisions without
 charging every review-fix commit for both simulator families. Inspect unit
 tests, simulator startup, each UI family, and artifact steps separately when a
@@ -128,9 +131,10 @@ current thresholds.
 Do not run the full CI gate for routine pull requests, including UI changes.
 After the intended release changes have merged, select a release-candidate
 branch or tag, record its resolved SHA, and dispatch the gate once. The dispatch
-first runs the five automatic jobs. If they pass, `Full iOS UI validation` runs all twenty-seven
-journeys on both iPhone and iPad. A failed iPhone family does not suppress the
-iPad family or its retained failure artifacts.
+first runs the five automatic jobs. If they pass, independent manual workers
+run all twenty-seven journeys on iPhone and iPad. `Full iOS UI validation` passes only after both workers pass.
+A failed iPhone family does not suppress the iPad family or its retained failure
+artifacts. The account-menu comparison remains a separate manual-only mode.
 
 The release cannot proceed unless every job in that manual run passes for the
 exact candidate SHA. Any candidate change invalidates the result and requires a

@@ -82,7 +82,8 @@ final class GreptileAllowanceUITests: XCTestCase {
                 "CODEXBAR_UI_TEST_DARK": full ? "1" : "0",
                 "CODEXBAR_UI_TEST_DEFAULT_TEXT": full ? "0" : "1",
             ])
-            let label = app.staticTexts["greptile-renewal-status"].firstMatch
+            let label = app.staticTexts.matching(identifier: "greptile-renewal-status")
+                .matching(NSPredicate(format: "label BEGINSWITH %@", status)).firstMatch
             XCTAssertTrue(label.waitForExistence(timeout: 10), app.debugDescription)
             XCTAssertTrue(label.label.hasPrefix(status), app.debugDescription)
             let missing = scenario.hasSuffix("missing") || scenario.hasSuffix("malformed") || scenario.hasSuffix("unknown")
@@ -105,7 +106,8 @@ final class GreptileAllowanceUITests: XCTestCase {
             app.launch()
             XCTAssertTrue(app.navigationBars["More Information"].waitForExistence(timeout: 10), app.debugDescription)
             XCTAssertFalse(app.staticTexts["Free allowance renewal"].exists)
-            let detail = app.staticTexts["greptile-renewal-status"].firstMatch
+            let detail = app.staticTexts.matching(identifier: "greptile-renewal-status")
+                .matching(NSPredicate(format: "label BEGINSWITH %@", status)).firstMatch
             XCTAssertTrue(detail.waitForExistence(timeout: 10), app.debugDescription)
             XCTAssertTrue(detail.label.hasPrefix(status), app.debugDescription)
             keep("\(scenario)-detail-\(full ? "dark-large" : "light")", app: app)

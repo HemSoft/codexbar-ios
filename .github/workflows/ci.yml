@@ -226,9 +226,9 @@ jobs:
       - name: Verify CI trigger policy
         run: python3 -m unittest discover -s scripts/tests -p 'test_ci_policy.py' -v
 
-  ios-ui-tests:
-    name: ${{ inputs.ui_validation_mode == 'account-menu-comparison' && 'Account menu comparison' || 'Full iOS UI validation' }}
-    if: ${{ github.event_name == 'workflow_dispatch' && success() }}
+  ios-ui-families:
+    name: iOS UI journeys (${{ matrix.family }})
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.ui_validation_mode != 'account-menu-comparison' && success() }}
     needs:
       - swiftlint
       - strict-concurrency
@@ -237,56 +237,83 @@ jobs:
       - smoke-tests
     runs-on: macos-26
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [iphone, ipad]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: ${{ inputs.ui_validation_mode == 'account-menu-comparison' && '0' || '1' }}
-
-      - name: Compare the original account journey on baseline and candidate
-        if: ${{ inputs.ui_validation_mode == 'account-menu-comparison' }}
-        env:
-          ACCOUNT_MENU_BASE_SHA: ${{ inputs.comparison_base_sha }}
-          UI_TEST_RESULTS_DIR: ${{ runner.temp }}/ui-tests
-        run: python3 scripts/compare-account-menu.py
 
       - name: Run GitHub Billing API fixtures
-        if: ${{ inputs.ui_validation_mode != 'account-menu-comparison' }}
+        if: ${{ matrix.family == 'iphone' }}
         run: xcrun swift run GitHubBillingFixtureTests
 
-      - name: Run iPhone UI journeys
-        id: ui-iphone
-        if: ${{ !cancelled() && inputs.ui_validation_mode != 'account-menu-comparison' }}
+      - name: Run UI journeys
+        if: ${{ !cancelled() }}
         env:
           UI_TEST_RESULTS_DIR: ${{ runner.temp }}/ui-tests
           UI_TEST_DERIVED_DATA_DIR: ${{ runner.temp }}/DerivedData-UI
-        run: ./scripts/run-ui-tests.sh iphone
-
-      - name: Run iPad UI journeys
-        id: ui-ipad
-        if: ${{ !cancelled() && inputs.ui_validation_mode != 'account-menu-comparison' }}
-        env:
-          UI_TEST_RESULTS_DIR: ${{ runner.temp }}/ui-tests
-          UI_TEST_DERIVED_DATA_DIR: ${{ runner.temp }}/DerivedData-UI
-        run: ./scripts/run-ui-tests.sh ipad
-
-      - name: Require both UI destinations
-        if: ${{ always() && inputs.ui_validation_mode != 'account-menu-comparison' }}
-        env:
-          IPHONE_OUTCOME: ${{ steps.ui-iphone.outcome }}
-          IPAD_OUTCOME: ${{ steps.ui-ipad.outcome }}
-        run: |
-          if [[ "$IPHONE_OUTCOME" != success || "$IPAD_OUTCOME" != success ]]; then
-            echo "Both UI destinations must pass. iPhone=$IPHONE_OUTCOME iPad=$IPAD_OUTCOME" >&2
-            exit 1
-          fi
+        run: ./scripts/run-ui-tests.sh "${{ matrix.family }}"
 
       - name: Preserve UI test results and failure screenshots
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: CodexBarIOSUITests-${{ github.run_id }}-${{ github.run_attempt }}
+          name: CodexBarIOSUITests-${{ matrix.family }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ui-tests
+          if-no-files-found: warn
+          retention-days: 14
+
+  ios-ui-tests:
+    name: Full iOS UI validation
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.ui_validation_mode != 'account-menu-comparison' }}
+    needs: ios-ui-families
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Require both UI destinations
+        env:
+          UI_FAMILIES_RESULT: ${{ needs.ios-ui-families.result }}
+        run: |
+          if [[ "$UI_FAMILIES_RESULT" != success ]]; then
+            echo "Both UI destinations must pass. Combined result=$UI_FAMILIES_RESULT" >&2
+            if [[ "$UI_FAMILIES_RESULT" == skipped ]]; then
+              echo "UI workers did not run. Check the prerequisite automatic jobs for failure or cancellation." >&2
+            fi
+            exit 1
+          fi
+
+  account-menu-comparison:
+    name: Account menu comparison
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.ui_validation_mode == 'account-menu-comparison' && success() }}
+    needs:
+      - swiftlint
+      - strict-concurrency
+      - ios-tests
+      - watch-tests
+      - smoke-tests
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Compare the original account journey on baseline and candidate
+        env:
+          ACCOUNT_MENU_BASE_SHA: ${{ inputs.comparison_base_sha }}
+          UI_TEST_RESULTS_DIR: ${{ runner.temp }}/ui-tests
+        run: python3 scripts/compare-account-menu.py
+
+      - name: Preserve comparison results and failure screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: AccountMenuComparison-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/ui-tests
           if-no-files-found: warn
           retention-days: 14
