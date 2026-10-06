@@ -122,7 +122,7 @@ public final class GreptileUsageProvider: UsageProvider {
         result.greptileAllowanceRenewal = GreptileAllowanceRenewal(
             renewsAt: nil, observedAt: result.fetchedAt,
             unavailableReason: "Sign in to Greptile in account settings to read your allowance renewal date.",
-            requiresAuthentication: true, isApplicable: nil
+            isApplicable: nil, requiresNewAccount: true
         )
         return result
     }

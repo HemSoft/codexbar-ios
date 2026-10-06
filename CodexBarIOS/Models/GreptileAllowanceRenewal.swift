@@ -6,18 +6,20 @@ public struct GreptileAllowanceRenewal: Equatable, Sendable {
     public var isStale: Bool
     public let unavailableReason: String?
     public var requiresAuthentication: Bool
+    public let requiresNewAccount: Bool
     public let lookupFailed: Bool
     public let isApplicable: Bool?
 
     public init(
         renewsAt: Date?, observedAt: Date, isStale: Bool = false, unavailableReason: String? = nil,
-        requiresAuthentication: Bool = false, lookupFailed: Bool = false, isApplicable: Bool? = true
+        requiresAuthentication: Bool = false, lookupFailed: Bool = false, isApplicable: Bool? = true, requiresNewAccount: Bool = false
     ) {
         self.renewsAt = renewsAt
         self.observedAt = observedAt
         self.isStale = isStale
         self.unavailableReason = unavailableReason
         self.requiresAuthentication = requiresAuthentication
+        self.requiresNewAccount = requiresNewAccount
         self.lookupFailed = lookupFailed
         self.isApplicable = isApplicable
     }

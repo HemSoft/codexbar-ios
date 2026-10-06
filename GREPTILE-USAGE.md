@@ -53,7 +53,9 @@ Review activity remains a separate metric with its existing IDs and saved
 visibility, order and width. The verified session's user token authorizes
 read-only MCP activity calls, scoped with the selected organization. Existing
 organization API-key accounts retain review activity and can add a separate
-account through guided sign-in to obtain billing renewal. No credit balance is inferred from
+account through guided sign-in to obtain billing renewal. The dashboard and
+More Information label this migration "Add Greptile account"; it is separate
+from reconnecting an expired browser session. No credit balance is inferred from
 review counts, and no calendar boundary is guessed.
 
 Local synthetic tests and simulator journeys validate app behavior. Live phone

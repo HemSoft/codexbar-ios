@@ -11,7 +11,10 @@ final class GreptileAllowanceUITests: XCTestCase {
         XCTAssertFalse(app.buttons["dashboard-metric-greptile.review-quota"].exists)
         XCTAssertFalse(app.staticTexts["Starter"].exists)
         reveal(note, in: app)
-        keep("greptile-free-history-only", app: app)
+        let legacyConnect = app.buttons["greptile-renewal-connect"].firstMatch
+        XCTAssertEqual(legacyConnect.label, "Add Greptile account")
+        XCTAssertEqual(app.staticTexts["greptile-renewal-status"].firstMatch.label, "Add a Greptile account")
+        keep("greptile-renewal-legacy-dashboard", app: app)
         openMoreInformation(in: app)
         keep("greptile-free-review-statuses", app: app)
         tap(app.buttons["Done"].firstMatch, in: app)

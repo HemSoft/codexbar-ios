@@ -5,6 +5,12 @@ struct GreptileRenewalView: View {
     var onConnect: (() -> Void)?
     var showsTitle = true
 
+    private func connectionStatus(at date: Date) -> String {
+        if renewal.requiresNewAccount { return "Add a Greptile account" }
+        if renewal.requiresAuthentication && renewal.isApplicable != true { return "Sign in again to Greptile" }
+        return renewal.status(at: date)
+    }
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             VStack(alignment: .leading, spacing: 6) {
@@ -12,8 +18,7 @@ struct GreptileRenewalView: View {
                     Text(renewal.isApplicable == true ? "Free allowance renewal" : "Greptile connection")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Text(renewal.requiresAuthentication && renewal.isApplicable != true
-                     ? "Sign in again to Greptile" : renewal.status(at: context.date))
+                Text(connectionStatus(at: context.date))
                     .font(.subheadline.weight(.semibold))
                     .accessibilityIdentifier("greptile-renewal-status")
                 if let date = renewal.localDateText {
@@ -25,8 +30,8 @@ struct GreptileRenewalView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if renewal.renewsAt == nil || renewal.requiresAuthentication {
-                    if renewal.requiresAuthentication, let onConnect {
-                        Button("Sign in to Greptile", action: onConnect)
+                    if renewal.requiresAuthentication || renewal.requiresNewAccount, let onConnect {
+                        Button(renewal.requiresNewAccount ? "Add Greptile account" : "Sign in to Greptile", action: onConnect)
                             .font(.caption).accessibilityIdentifier("greptile-renewal-connect")
                     }
                     Link("Open Greptile Usage", destination: URL(string: "https://app.greptile.com/-/settings/usage")!)

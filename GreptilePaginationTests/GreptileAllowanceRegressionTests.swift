@@ -8,6 +8,9 @@ final class GreptileAllowanceRegressionTests: XCTestCase, @unchecked Sendable {
         defer { fixture.invalidate() }
         let result = try await fixture.provider().fetchUsage(for: GreptileHTTPFixture.account)
         XCTAssertNil(result.failureMessage)
+        XCTAssertEqual(result.greptileAllowanceRenewal?.requiresNewAccount, true)
+        XCTAssertEqual(result.greptileAllowanceRenewal?.requiresAuthentication, false)
+        XCTAssertNil(result.greptileAllowanceRenewal?.isApplicable)
         XCTAssertEqual(result.subtitle, "All available review history")
         XCTAssertEqual(result.bars.first?.used, 2)
         XCTAssertEqual(result.bars.first?.limit, 0)

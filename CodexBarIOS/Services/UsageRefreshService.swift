@@ -408,7 +408,7 @@ public final class UsageRefreshService: ObservableObject {
 
     private func preservingGreptileRenewal(_ incoming: ProviderUsageResult) -> ProviderUsageResult {
         guard incoming.providerID == .greptile, let failed = incoming.greptileAllowanceRenewal,
-              failed.isApplicable == nil,
+              failed.isApplicable == nil, !failed.requiresNewAccount,
               let cached = results.first(where: { $0.accountID == incoming.accountID && Self.canReuseCachedResult($0, for: incoming) }),
               let previous = cached.greptileAllowanceRenewal else { return incoming }
         let renewal = GreptileAllowanceRenewal(
