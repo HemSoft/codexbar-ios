@@ -327,6 +327,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Made the manual GitHub Billing release fixtures independent of the current
+  month and added UTC billing-period boundary checks. September sample data
+  remains valid for its fixed test date, while stale and future periods remain
+  unavailable. Automatic CI workload is unchanged.
+  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
+
 - Reconciled 1.4.0 release copy with the final merged provider fixes, including
   optional Codex Credits, Cursor reconnection and spending, readable History
   dates, and Greptile renewal dates. Store and review copy disclose the deferred

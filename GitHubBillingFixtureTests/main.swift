@@ -2,6 +2,11 @@
 import Foundation
 import CodexBarIOS
 
+private enum GitHubBillingFixtureClock {
+    // All valid billing payloads use September 2026, independent of the host clock.
+    static let now = Date(timeIntervalSince1970: 1_789_473_600) // September 15, 2026, 12:00 UTC.
+}
+
 @main
 enum GitHubBillingFixtureRunner {
     static func main() async throws {
@@ -1080,7 +1085,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(malformed == nil, "Malformed decimals must fail closed")
 
@@ -1090,7 +1095,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "unknown-plan",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         let result = try require(missing, "Missing optional fields should produce unavailable metrics instead of a crash")
         try check(!result.unavailableUsageMetrics.isEmpty, "Unknown plans must explain unavailable allowances")
@@ -1103,7 +1108,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         ), "Incomplete product quantities should remain readable")
         for sectionID in [
             "github-billing.product.copilot",
@@ -1124,7 +1129,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         ), "A product row with quantity but no gross amount should remain readable")
         try check(
             incompleteAmount.cardInformationSections
@@ -1140,7 +1145,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: ["octocat/private": true],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         ), "An incomplete Actions row should remain a readable response")
         try check(
             missingActionsProduct.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
@@ -1153,7 +1158,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         ), "An incomplete storage row should remain a readable response")
         try check(
             missingStorageSKU.unavailableUsageMetrics["githubBilling.actions-storage"] != nil,
@@ -1166,7 +1171,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         ), "An incomplete Git LFS row should remain a readable response")
         try check(
             missingLFSSKU.unavailableUsageMetrics["githubBilling.lfs-storage"] != nil,
@@ -1179,7 +1184,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         ), "An incomplete Git LFS bandwidth row should remain a readable response")
         try check(
             missingLFSProduct.unavailableUsageMetrics["githubBilling.lfs-bandwidth"] != nil,
@@ -1192,7 +1197,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(missingSummaryItems == nil, "A missing top-level summary usageItems field must fail closed")
 
@@ -1202,7 +1207,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(missingDetailedItems == nil, "A missing top-level detailed usageItems field must fail closed")
 
@@ -1212,7 +1217,7 @@ enum GitHubBillingFixtureRunner {
             repositoryVisibility: [:],
             planName: "free",
             configuration: configuration,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(mismatchedPersonalOwner == nil, "Personal summary data must match the configured owner")
 
@@ -1221,7 +1226,7 @@ enum GitHubBillingFixtureRunner {
             usageData: organizationUsage(),
             budgetPageData: [data("{}")],
             configuration: organizationConfiguration(),
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(missingBudgets == nil, "A missing top-level budgets field must fail closed")
 
@@ -1230,7 +1235,7 @@ enum GitHubBillingFixtureRunner {
             usageData: organizationUsage(),
             budgetPageData: [],
             configuration: organizationConfiguration(),
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(
             negativeOrganizationSummary?.bars.contains { $0.stableKey?.hasPrefix("usage-") == true } == false
@@ -1243,7 +1248,7 @@ enum GitHubBillingFixtureRunner {
             usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes","repositoryName":"example/private","organizationName":"Example-Engineering"}]}"#),
             budgetPageData: [],
             configuration: organizationConfiguration(),
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(
             incompleteOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
@@ -1255,7 +1260,7 @@ enum GitHubBillingFixtureRunner {
             usageData: data(#"{"usageItems":[{"date":"2026-09-01","product":"Actions","sku":"actions_linux","quantity":-1,"unitType":"minutes","pricePerUnit":0.01,"grossAmount":-0.01,"discountAmount":0,"netAmount":-0.01,"organizationName":"Example-Engineering"}]}"#),
             budgetPageData: [data(#"{"budgets":[{"id":"negative-detail","budget_type":"ProductPricing","budget_amount":10,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}]}"#)],
             configuration: organizationConfiguration(),
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(
             negativeOrganizationUsage?.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
@@ -1274,7 +1279,7 @@ enum GitHubBillingFixtureRunner {
             usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":1,"unitType":"minutes"}]}"#),
             budgetPageData: [],
             configuration: organizationConfiguration(),
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(missingOrganizationIdentity == nil, "Organization detail rows must retain account isolation")
 
@@ -1283,7 +1288,7 @@ enum GitHubBillingFixtureRunner {
             usageData: data(#"{"usageItems":[]}"#),
             budgetPageData: [],
             configuration: organizationConfiguration(),
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(mismatchedOrganizationOwner == nil, "Organization summary data must match the configured owner")
     }
@@ -1922,13 +1927,14 @@ private enum GitHubBillingReviewFixtures {
             githubBillingAccountScope: .personal,
             githubBillingOwner: "octocat"
         )
+        try billingPeriodBoundaryContract(configuration: personal)
         let customImageUsage = GitHubBillingUsageParser.parsePersonal(
             summaryData: data(#"{"user":"octocat","timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0},{"product":"Actions","sku":"actions_custom_image","unitType":"GB-hours","pricePerUnit":0.0008,"grossQuantity":12,"grossAmount":0.0096,"discountQuantity":12,"discountAmount":0.0096,"netQuantity":0,"netAmount":0}]}"#),
             usageData: data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0},{"product":"Actions","sku":"actions_custom_image","quantity":12,"unitType":"GB-hours","pricePerUnit":0.0008,"repositoryName":"octocat/private","grossAmount":0.0096,"discountAmount":0.0096,"netAmount":0}]}"#),
             repositoryVisibility: ["octocat/private": true],
             planName: "free",
             configuration: personal,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(
             customImageUsage?.bars.first { $0.stableKey == "actions-allowance-minutes" }?.used == 10,
@@ -1948,7 +1954,7 @@ private enum GitHubBillingReviewFixtures {
             usageData: data(#"{"usageItems":[{"date":"2026-09-01","sku":"actions_linux","quantity":1,"unitType":"minutes","pricePerUnit":0.006,"grossAmount":0.006,"discountAmount":0.006,"netAmount":0,"organizationName":"Example-Engineering"}]}"#),
             budgetPageData: [data(#"{"budgets":[{"id":"unclassified-detail","budget_type":"ProductPricing","budget_amount":10,"prevent_further_usage":true,"budget_scope":"organization","budget_product_sku":"Actions","budget_alerting":{"will_alert":true,"alert_recipients":[]}}]}"#)],
             configuration: organization,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(
             unclassifiedBudgetUsage?.bars.contains { $0.stableKey == "budget-unclassified-detail" } == false
@@ -1962,11 +1968,38 @@ private enum GitHubBillingReviewFixtures {
             budgetPageData: [],
             planName: "team",
             configuration: organization,
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
         try check(unclassifiedSummary?.unavailableUsageMetrics["githubBilling.packages-storage"] != nil
             && unclassifiedSummary?.bars.contains { $0.stableKey == "packages-storage" } == false,
             "A recognizable allowance SKU without its product must not be presented as zero usage")
+    }
+
+    private static func billingPeriodBoundaryContract(configuration: ProviderAccountConfiguration) throws {
+        let summary = data(#"{"user":"octocat","timePeriod":{"year":2026,"month":9},"usageItems":[{"product":"Actions","sku":"actions_linux","unitType":"minutes","pricePerUnit":0.006,"grossQuantity":10,"grossAmount":0.06,"discountQuantity":10,"discountAmount":0.06,"netQuantity":0,"netAmount":0}]}"#)
+        let usage = data(#"{"usageItems":[{"product":"Actions","sku":"actions_linux","quantity":10,"unitType":"minutes","pricePerUnit":0.006,"repositoryName":"octocat/private","grossAmount":0.06,"discountAmount":0.06,"netAmount":0}]}"#)
+        for (timestamp, isCurrent) in [
+            ("2026-08-31T23:59:59Z", false),
+            ("2026-09-01T00:00:00Z", true),
+            ("2026-09-30T23:59:59Z", true),
+            ("2026-10-01T00:00:00Z", false),
+        ] {
+            guard let fetchedAt = ISO8601DateFormatter().date(from: timestamp) else {
+                throw FixtureFailure(message: "Invalid billing boundary date")
+            }
+            let result = GitHubBillingUsageParser.parsePersonal(
+                summaryData: summary, usageData: usage, repositoryVisibility: ["octocat/private": true],
+                planName: "free", configuration: configuration, fetchedAt: fetchedAt
+            )
+            try check(result != nil, "Billing-period boundary fixture must parse")
+            let bar = result?.bars.first { $0.stableKey == "actions-allowance-minutes" }
+            if isCurrent {
+                try check(bar?.used == 10, "In-period billing evidence must preserve runner minutes at \(timestamp)")
+            } else {
+                try check(bar == nil && result?.unavailableUsageMetrics["githubBilling.actions-allowance-minutes"] != nil,
+                    "Out-of-period evidence must remain unavailable at \(timestamp)")
+            }
+        }
     }
 
     static func organizationVisibilityFailure(
@@ -2057,7 +2090,7 @@ private struct FixtureIdentifiedFailureProvider: UsageProvider {
             bars: [],
             failureMessage: "Refresh failed",
             cacheIdentity: configuration.githubBillingOwner.lowercased(),
-            fetchedAt: Date()
+            fetchedAt: GitHubBillingFixtureClock.now
         )
     }
 }
