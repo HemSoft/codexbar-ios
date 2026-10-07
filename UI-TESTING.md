@@ -311,7 +311,7 @@ SHA changes, dispatch a new run.
 The two families run on independent manual workers, each with a 90-minute
 limit and its own artifact. Fail-fast is disabled. An always-run aggregate
 fails unless both workers succeed, including when a worker is cancelled or
-skipped. The runner rejects anything other than twenty-seven passed tests with zero skips or
+skipped. The runner rejects anything other than twenty-eight passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.

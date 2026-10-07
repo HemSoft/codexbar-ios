@@ -11,6 +11,9 @@ final class SettingsEvidenceUITests: XCTestCase {
         let app = launch()
         openSettings(app)
         XCTAssertTrue(app.navigationBars["Settings"].exists)
+        let backgroundGear = app.buttons["Open settings"].firstMatch
+        XCTAssertTrue(backgroundGear.exists, "The background gear must exist to exercise the false dismissal signal.")
+        XCTAssertFalse(backgroundGear.isHittable, "The open Settings sheet must occlude the background gear.")
         capture("settings-open-background-gear")
         XCTAssertFalse(
             waitForSettingsDismissal(in: app, timeout: 0.2),
