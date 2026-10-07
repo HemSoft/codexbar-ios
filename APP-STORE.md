@@ -10,7 +10,7 @@ Status last reviewed: 2026-10-07
   Connect API inspection on October 6, 2026 confirms its selected build is
   `VALID`, no newer version or build exists, and all review submissions are
   complete. Apple's public US listing also reports version `1.3`.
-- Version `1.4.0 (4)` is proceeding through upload and submission under
+- Version `1.4.0 (4)` is preparing for upload and submission under
   [release issue #373](https://github.com/HemSoft/codexbar-ios/issues/373).
   Product work and preparation PRs through
   [PR #414](https://github.com/HemSoft/codexbar-ios/pull/414) are merged.

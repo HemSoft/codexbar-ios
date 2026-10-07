@@ -92,8 +92,7 @@ More provider metrics, guided sign-in, and up to 90 days of usage history.
 
 - Keep Cursor usage current by renewing sign-in automatically when possible. Guided
   reconnection preserves saved card choices; failed refreshes retain visibly stale
-  measurements instead of replacing them with fresh zeros. Valid zero usage and a Bot-
-  only failure do not request reconnection.
+  measurements instead of replacing them with fresh zeros. Valid zero usage and a Bot-only failure do not request reconnection.
   ([#402](https://github.com/HemSoft/codexbar-ios/issues/402))
 
 - Keep Cursor on-demand spending visible when no remaining allowance is returned,
@@ -161,8 +160,7 @@ More provider metrics, guided sign-in, and up to 90 days of usage history.
   ([#373](https://github.com/HemSoft/codexbar-ios/issues/373)) ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
 
 - Kept automatic CI workload bounded to the existing lint, concurrency, unit/risk and
-  smoke gates. New costly validation stays local or manual unless completed before-and-
-  after measurements prove no increase in elapsed or billed runner time.
+  smoke gates. New costly validation stays local or manual unless completed before-and-after measurements prove no increase in elapsed or billed runner time.
   ([#337](https://github.com/HemSoft/codexbar-ios/issues/337)) ([#339](https://github.com/HemSoft/codexbar-ios/issues/339)) ([#341](https://github.com/HemSoft/codexbar-ios/issues/341))
 
 - Added per-function iOS and Watch coverage/risk reports and local regressions for
@@ -194,14 +192,12 @@ More provider metrics, guided sign-in, and up to 90 days of usage history.
   ([#353](https://github.com/HemSoft/codexbar-ios/issues/353)) ([#344](https://github.com/HemSoft/codexbar-ios/issues/344)) ([#381](https://github.com/HemSoft/codexbar-ios/issues/381))
 
 - Made Claude cancellation and stalled Cursor optional-request tests coordinate
-  presentation, response, timeout, and cancellation events instead of depending on busy-
-  runner timing.
+  presentation, response, timeout, and cancellation events instead of depending on busy-runner timing.
   ([#330](https://github.com/HemSoft/codexbar-ios/issues/330)) ([#304](https://github.com/HemSoft/codexbar-ios/issues/304))
 
 - Added Google coding authorization with PKCE, secure account-specific storage and
   renewable native-client tokens, with the registered iOS client shipped for guided
-  phone setup. Kept the UIKit service out of macOS smoke builds and excluded the one-
-  time development session handoff from Release builds. Live account/quota comparisons
+  phone setup. Kept the UIKit service out of macOS smoke builds and excluded the one-time development session handoff from Release builds. Live account/quota comparisons
   remain owner-run.
   ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
 
