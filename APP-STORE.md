@@ -2,7 +2,7 @@
 
 This document tracks the work required to ship CodexBar for iOS and iPadOS through TestFlight and App Store review.
 
-Status last reviewed: 2026-10-06
+Status last reviewed: 2026-10-07
 
 ## Current Status
 
@@ -10,21 +10,32 @@ Status last reviewed: 2026-10-06
   Connect API inspection on October 6, 2026 confirms its selected build is
   `VALID`, no newer version or build exists, and all review submissions are
   complete. Apple's public US listing also reports version `1.3`.
-- Version `1.4.0 (4)` preparation continues under
+- Version `1.4.0 (4)` is preparing for upload and submission under
   [release issue #373](https://github.com/HemSoft/codexbar-ios/issues/373).
-  Product work through [PR #408](https://github.com/HemSoft/codexbar-ios/pull/408)
-  is merged, including the four required risk reductions, iPad menu, History
-  date-label, Cursor reconnection/spending and Greptile renewal fixes.
+  Product work and preparation PRs through
+  [PR #414](https://github.com/HemSoft/codexbar-ios/pull/414) are merged.
+  Candidate `0c8dd31c46e311ac18ab8de3da34fb6c2f64e247` passed the seven local
+  gates, five required CI jobs, and all 28 native UI journeys on each device
+  family in [full run 37578406696](https://github.com/HemSoft/codexbar-ios/actions/runs/37578406696).
+  The dated, consolidated 1.4.0 changelog records the release cut, not public
+  App Store availability. This documentation merge changes the candidate SHA;
+  freeze and validate its merged SHA before archive/upload. Do not reuse the
+  previous SHA's full UI run as the new candidate's release gate.
   [#405](https://github.com/HemSoft/codexbar-ios/issues/405) and
-  [#409](https://github.com/HemSoft/codexbar-ios/issues/409) are labeled V1.5 and
-  deferred. Fresh Google-backed Greptile billing login may remain unavailable;
-  release and review copy disclose that limitation. No final candidate is
-  frozen, and no 1.4.0 binary is uploaded or submitted. GET-only Apple checks
-  show build 4 unused at 5:59 AM EDT on October 6; recheck before any upload.
-  The intended product scope is complete. The changelog stays Unreleased until
-  the final candidate is ready; preparation does not claim App Store distribution.
-  See the [1.4.0 preparation record](release-assets/1.4.0/README.md) for the
-  source boundary, copy-to-changelog mapping, and outstanding release gates.
+  [#409](https://github.com/HemSoft/codexbar-ios/issues/409) remain deferred to V1.5.
+  Fresh Google-backed Greptile billing sign-in or reconnection may be unavailable;
+  customer and review copy disclose that limitation. Existing runtime warnings
+  and earlier hosted UI/performance failures are preserved in the release ledger;
+  no warning-free runtime is claimed.
+  GET-only Apple inspection at 3:02 AM EDT on October 7 found live 1.3 build 3,
+  no 1.4.0 version or build 4, and four COMPLETE submissions. Build 4 was unused
+  then, not reserved; recheck immediately before upload. No 1.4.0 binary or
+  metadata has been uploaded, saved, or submitted at this documentation checkpoint.
+  Prepared copy and asset inputs remain in the
+  [1.4.0 preparation record](release-assets/1.4.0/README.md); current native
+  screenshots, exact-candidate results and later Apple identifiers are recorded
+  in the release issue. Preserve current pricing, regions, rollout, and rating
+  policy unless separately directed.
 - App builds, installs, and launches on the connected development iPhone.
 - Main dashboard, provider settings, widget support, and snapshot trend improvements are on `main`.
 - The embedded Apple Watch companion shows presentation-only snapshots
