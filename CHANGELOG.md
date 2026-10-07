@@ -327,6 +327,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Release UI checks wait for Settings to close before reopening it and verify
+  menu/customizer transitions directly. A manual regression rejects background
+  controls as proof of dismissal; both simulator families must run all 28
+  journeys. Automatic test suites and CI jobs are unchanged.
+  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
+
 - Run release iPhone and iPad UI validation on independent manual workers,
   retaining both results and requiring both to pass. Greptile renewal checks
   wait for the expected refreshed status within their existing timeout.
