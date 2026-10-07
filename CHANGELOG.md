@@ -10,7 +10,7 @@ More provider metrics, guided sign-in, and up to 90 days of usage history.
 
 ### Added
 
-- Connect Google Gemini and see Gemini Apps, Gemini Models, and Other models in one
+- Connect experimental Google Gemini and see Gemini Apps, Gemini Models, and Other models in one
   account, with separate five-hour and weekly limits, reset countdowns, and usage
   projections when the provider supplies enough data. Choose an account through guided
   Google sign-in and return automatically to CodexBar.
