@@ -1,5 +1,10 @@
 # CodexBar 1.4.0 preparation
 
+This is the historical preparation record. Version 1.4.0 build 4 was submitted
+on October 7, 2026 and is Waiting for Review. The [App Store tracker](../../APP-STORE.md)
+records the final shipping source, validation and Apple identifiers. The earlier
+Prepare-mode checkpoints below retain their original state and evidence.
+
 Prepared September 29, 2026 under [issue #371](https://github.com/HemSoft/codexbar-ios/issues/371).
 Mode is Prepare. The original [PR #372](https://github.com/HemSoft/codexbar-ios/pull/372)
 changed version settings and local metadata. October 1 asset preparation and

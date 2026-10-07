@@ -44,11 +44,12 @@ The Windows reference implementation is checked out beside this repo at:
 
 ## Release preparation
 
-Version 1.3 is the current App Store release. Version 1.4.0 build 4 is in
-repository preparation, not uploaded or submitted. See the
+Version 1.3 is the current distributed App Store release. Version 1.4.0 build 4
+was submitted on October 7, 2026 and is Waiting for Review. See the
 [App Store tracker](APP-STORE.md) and
 [1.4.0 preparation record](release-assets/1.4.0/README.md) for the source
-boundary, release copy, and checks still required before submission.
+boundary and release copy. The tracker records the final shipping source,
+validation and submission identifiers; Apple approval and distribution remain pending.
 
 ## Local validation
 
