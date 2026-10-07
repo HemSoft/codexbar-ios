@@ -7,6 +7,21 @@ final class SettingsEvidenceUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testSettingsDismissalSignalRejectsTheBackgroundGear() {
+        let app = launch()
+        openSettings(app)
+        XCTAssertTrue(app.navigationBars["Settings"].exists)
+        capture("settings-open-background-gear")
+        XCTAssertFalse(
+            waitForSettingsDismissal(in: app, timeout: 0.2),
+            "The Settings sheet is open; a background gear is not proof of dismissal."
+        )
+        tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
+        XCTAssertTrue(waitForSettingsDismissal(in: app))
+        capture("settings-dismissed-dashboard")
+        app.terminate()
+    }
+
     func testEverySettingsDestinationAndDoneBack() {
         let app = launch()
         openSettings(app)
@@ -28,7 +43,7 @@ final class SettingsEvidenceUITests: XCTestCase {
             returnToCategories(app)
         }
         tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
-        XCTAssertTrue(app.buttons["Open settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForSettingsDismissal(in: app))
         app.terminate()
     }
 
@@ -51,7 +66,7 @@ final class SettingsEvidenceUITests: XCTestCase {
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "Fixture Group".count))
         field.typeText("Corrected Group")
         tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
-        XCTAssertTrue(app.buttons["Open settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForSettingsDismissal(in: app))
         openSettings(app)
         select("accountsAndGroups", in: app)
         XCTAssertTrue(app.textFields.containing(NSPredicate(format: "value == %@", "Corrected Group")).firstMatch.waitForExistence(timeout: 5))
@@ -85,7 +100,7 @@ final class SettingsEvidenceUITests: XCTestCase {
             }
             capture(granted ? "settings-notifications-granted" : "settings-notifications-denied")
             tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
-            XCTAssertTrue(app.buttons["Open settings"].waitForExistence(timeout: 5))
+            XCTAssertTrue(waitForSettingsDismissal(in: app))
             openSettings(app)
             select("alerts", in: app)
             XCTAssertEqual(app.switches["Monitor GitHub Service Status"].firstMatch.value as? String, "1")
@@ -95,7 +110,7 @@ final class SettingsEvidenceUITests: XCTestCase {
             XCTAssertEqual(recovery.value as? String, granted ? "1" : "0")
             capture("settings-notifications-persisted-\(granted)")
             tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
-            XCTAssertTrue(app.buttons["Open settings"].waitForExistence(timeout: 5))
+            XCTAssertTrue(waitForSettingsDismissal(in: app))
             openSettings(app)
             select("alerts", in: app)
             tapSwitch(app.switches["Monitor GitHub Service Status"].firstMatch, in: app)
@@ -132,6 +147,14 @@ final class SettingsEvidenceUITests: XCTestCase {
         ]
         app.launch()
         return app
+    }
+
+    private func waitForSettingsDismissal(in app: XCUIApplication, timeout: TimeInterval = 5) -> Bool {
+        let gear = app.buttons["Open settings"].firstMatch
+        let accessibleDashboard = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"), object: gear
+        )
+        return XCTWaiter.wait(for: [accessibleDashboard], timeout: timeout) == .completed
     }
 
     private func openSettings(_ app: XCUIApplication) {

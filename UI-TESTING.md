@@ -200,6 +200,14 @@ it. Animations retain the normal app behavior.
   handling, not that the affected live response was cached. No account cookies,
   tokens or outbound provider networking are used. It is manual/release-only.
 
+- `SettingsEvidenceUITests.testSettingsDismissalSignalRejectsTheBackgroundGear`
+  verifies that a gear exposed behind the Settings sheet does not count as a
+  closed sheet, then checks that Done returns to a hittable dashboard gear.
+  Settings journeys wait for this actual dismissal before reopening. The
+  Gemini-only journey uses the existing explicit menu/customizer transition
+  checks instead of trying to scroll to a missing menu item. All 28 declared
+  journeys must pass on each family; this added regression is manual/release-only.
+
 - `SettingsEvidenceUITests.testEverySettingsDestinationAndDoneBack` captures
   root summaries and all six existing destinations, then checks Done/Back.
 - `SettingsEvidenceUITests.testPendingDuplicateGroupBlocksDoneUntilCorrected`

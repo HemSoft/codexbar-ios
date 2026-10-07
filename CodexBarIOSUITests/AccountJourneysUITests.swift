@@ -394,8 +394,7 @@ final class AccountJourneysUITests: XCTestCase {
         for id in Self.codingMetricIDs {
             assertGoogleMetric(id, contains: "Setup required", in: app)
         }
-        tap(app.buttons["More options for Gemini Fixture"], in: app)
-        tap(app.buttons["Customize Card…"], in: app)
+        openCodingCustomizer(in: app)
         let hiddenID = "antigravity.gemini-weekly"
         tap(app.buttons["customize-metric-\(hiddenID)"], in: app)
         tap(app.buttons["Hide"], in: app)
