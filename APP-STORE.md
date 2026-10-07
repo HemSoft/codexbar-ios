@@ -6,36 +6,52 @@ Status last reviewed: 2026-10-07
 
 ## Current Status
 
-- Version `1.3 (3)` is the current distributed release. Read-only App Store
-  Connect API inspection on October 6, 2026 confirms its selected build is
-  `VALID`, no newer version or build exists, and all review submissions are
-  complete. Apple's public US listing also reports version `1.3`.
-- Version `1.4.0 (4)` is preparing for upload and submission under
+- Version `1.3 (3)` remains the distributed release at the final submission check.
+- Version `1.4.0 (4)` was submitted for App Review on October 7, 2026 at 4:56 PM EDT under
   [release issue #373](https://github.com/HemSoft/codexbar-ios/issues/373).
-  Product work and preparation PRs through
-  [PR #414](https://github.com/HemSoft/codexbar-ios/pull/414) are merged.
-  Candidate `0c8dd31c46e311ac18ab8de3da34fb6c2f64e247` passed the seven local
-  gates, five required CI jobs, and all 28 native UI journeys on each device
-  family in [full run 37578406696](https://github.com/HemSoft/codexbar-ios/actions/runs/37578406696).
-  The dated, consolidated 1.4.0 changelog records the release cut, not public
-  App Store availability. This documentation merge changes the candidate SHA;
-  freeze and validate its merged SHA before archive/upload. Do not reuse the
-  previous SHA's full UI run as the new candidate's release gate.
-  [#405](https://github.com/HemSoft/codexbar-ios/issues/405) and
+  Apple reports `WAITING_FOR_REVIEW`. Submission is complete; public distribution
+  remains pending Apple's review. Apple displays no review-time estimate.
+- Shipping source is immutable commit `54b2a489cadf38af0c741a3553249e9411fca0be`, frozen as
+  `release/1.4.0-rc-54b2a48`. [PR #415](https://github.com/HemSoft/codexbar-ios/pull/415)
+  merged the dated, consolidated 1.4.0 changelog before this archive was built.
+  The next `1.5.0 - Unreleased` section starts after that release cut.
+- All seven local gates passed with 711 iOS and 61 Watch tests. All five required
+  CI jobs and the complete 28-test iPhone and iPad UI suites passed for the shipping
+  SHA in [run 37661183114](https://github.com/HemSoft/codexbar-ios/actions/runs/37661183114).
+  Initial iPad attempt 1 failed one Greptile account-navigation assertion; its native
+  bundle, video and logs remain preserved. One complete unchanged-source focused
+  journey passed on matching iOS 26.5, then the bounded failed-jobs attempt 2 passed.
+  The retry preserves the original failure and does not claim an app fix.
+- The exported iPhone app, iOS widget, Watch companion and Watch complication all
+  report `1.4.0 (4)`. Distribution signatures, App Store provisioning, privacy
+  manifests and export-compliance declarations passed for every submitted product.
+  Two automatic export attempts failed and remain recorded. One new distribution
+  certificate and four matching App Store profiles enabled a successful manual
+  export of the same archive, without role changes or certificate revocation.
+  IPA SHA256 is `248e61c112785ff72a8641df9eb873743bb7646c2989c932018c6c6ff7b54910`.
+- Apple's upload delivery ID is `53f759b4-3521-4fdb-8bb2-c8ad2d0bdfa5`, processed build ID
+  `53f759b4-3521-4fdb-8bb2-c8ad2d0bdfa5`, version ID `8f1f19dc-ec43-420f-b336-fb20271d6d3c`, and review submission ID
+  `ab271b71-a450-4325-a6d5-2a90593b4b06`. Binary processing completed as `VALID` before selection.
+- Saved en-US metadata and review notes match the prepared copy. New storefront
+  previews contain nine iPhone, nine iPad and two Apple Watch screenshots. Privacy
+  remains Data Not Collected, age 4+, and the support/privacy URLs and opaque
+  1024-pixel app icon were verified. Legacy demo credentials were cleared.
+- Release policy is unchanged: US$3.99, 175 available territories, automatic release
+  after approval, immediate rollout and the existing star rating. Existing Mac,
+  Vision Pro, public distribution and education-discount settings are preserved.
+- TestFlight and a fresh final-candidate Release install/launch on the physical
+  iPhone were skipped. The earlier development launch passed. The shipping source
+  differs from that device-tested candidate only in documentation; production and
+  test inputs are unchanged. Live provider comparisons remain Franz-owned and pending.
+  Runtime warnings remain unresolved. Original hosted performance failure is
+  preserved alongside the complete local passing comparison under unchanged policy;
+  security/performance provenance is explicit source equivalence, not fresh analysis.
+- [#405](https://github.com/HemSoft/codexbar-ios/issues/405) and
   [#409](https://github.com/HemSoft/codexbar-ios/issues/409) remain deferred to V1.5.
-  Fresh Google-backed Greptile billing sign-in or reconnection may be unavailable;
-  customer and review copy disclose that limitation. Existing runtime warnings
-  and earlier hosted UI/performance failures are preserved in the release ledger;
-  no warning-free runtime is claimed.
-  GET-only Apple inspection at 3:02 AM EDT on October 7 found live 1.3 build 3,
-  no 1.4.0 version or build 4, and four COMPLETE submissions. Build 4 was unused
-  then, not reserved; recheck immediately before upload. No 1.4.0 binary or
-  metadata has been uploaded, saved, or submitted at this documentation checkpoint.
-  Prepared copy and asset inputs remain in the
-  [1.4.0 preparation record](release-assets/1.4.0/README.md); current native
-  screenshots, exact-candidate results and later Apple identifiers are recorded
-  in the release issue. Preserve current pricing, regions, rollout, and rating
-  policy unless separately directed.
+  The release and review copy disclose the Greptile Google-backed billing sign-in
+  limitation. The complete local artifact ledger is
+  `DerivedData/ReleasePreparation/1.4.0-54b2a48/release-status.md`, with Apple write
+  and readback receipts in `DerivedData/ReleaseSubmission/1.4.0-build4-20261007`.
 - App builds, installs, and launches on the connected development iPhone.
 - Main dashboard, provider settings, widget support, and snapshot trend improvements are on `main`.
 - The embedded Apple Watch companion shows presentation-only snapshots
@@ -351,6 +367,24 @@ Manual CI release gate for every future version:
   pass before uploading or releasing the build.
 - [ ] If the candidate SHA changes, discard the earlier result and pass a new
   manual run. Routine pull requests do not require this gate.
+
+Version 1.4.0 submission status:
+
+- [x] Consolidate and date the customer changelog before archiving, preserve published
+  history, and derive the exact What's New copy from shipped changes.
+- [x] Freeze and qualify the exact merged source SHA, including seven local gates,
+  five required CI jobs, fresh function-risk reports and complete native UI suites.
+- [x] Archive and export all four products as 1.4.0 build 4; verify distribution signing,
+  provisioning, privacy manifests and export-compliance declarations.
+- [x] Upload the verified IPA once and wait for binary processing to become `VALID`.
+- [x] Select the exact processed build and verify saved en-US metadata, review notes,
+  contact details, privacy, age rating, icon, URLs and every maintained screenshot family.
+- [x] Preserve pricing, availability, release policy, rollout and the existing rating.
+- [x] Submit once for App Review and verify Apple's version/submission state.
+- [x] Record accepted TestFlight/physical-device omissions, unresolved runtime warnings,
+  original failures and source-equivalent security/performance evidence honestly.
+- [x] Start the next 1.5.0 Unreleased changelog section through the reviewed PR path.
+- [ ] Confirm App Review approval and public distribution when Apple completes review.
 
 Version 1.3 submission status:
 

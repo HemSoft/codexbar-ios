@@ -4,6 +4,8 @@ Notable changes to CodexBar are documented here. Entries describe shipped app
 behavior; development-only changes are listed separately when they affect
 building, testing, or releasing the app.
 
+## 1.5.0 - Unreleased
+
 ## 1.4.0 - 2026-10-07
 
 More provider metrics, guided sign-in, and up to 90 days of usage history.
