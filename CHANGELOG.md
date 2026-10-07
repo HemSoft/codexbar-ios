@@ -4,517 +4,212 @@ Notable changes to CodexBar are documented here. Entries describe shipped app
 behavior; development-only changes are listed separately when they affect
 building, testing, or releasing the app.
 
-## 1.4.0 - Unreleased
+## 1.4.0 - 2026-10-07
+
+More provider metrics, guided sign-in, and up to 90 days of usage history.
 
 ### Added
 
-- Show Greptile's free allowance renewal countdown and local date on the
-  dashboard and in More Information. The countdown and date share a compact row
-  without review-history subtitles or explanatory footnotes. Guided phone sign-in
-  connects the selected
-  organization, even during a temporary billing outage. Missing dates stay
-  unavailable, and failed refreshes label the last known date. Greptile login
-  keeps account selection stable through dashboard cookie updates and verified
-  session rotation and rejects unusable account credentials before connecting.
-  More Information opens account settings to reconnect, and
-  unavailable billing does not assume a free plan. Existing API-key accounts can
-  add a separate Greptile account without combining organizations' review history.
-  Fresh Google-backed billing sign-in or reconnection may fail; saved verified
-  sessions can still return renewal dates.
-  ([#406](https://github.com/HemSoft/codexbar-ios/issues/406))
+- Connect Google Gemini and see Gemini Apps, Gemini Models, and Other models in one
+  account, with separate five-hour and weekly limits, reset countdowns, and usage
+  projections when the provider supplies enough data. Choose an account through guided
+  Google sign-in and return automatically to CodexBar.
+  ([#296](https://github.com/HemSoft/codexbar-ios/issues/296)) ([#314](https://github.com/HemSoft/codexbar-ios/issues/314)) ([#299](https://github.com/HemSoft/codexbar-ios/issues/299)) ([#319](https://github.com/HemSoft/codexbar-ios/issues/319)) ([#330](https://github.com/HemSoft/codexbar-ios/issues/330)) ([#332](https://github.com/HemSoft/codexbar-ios/issues/332))
 
-- Added an optional Codex Credits pool metric. Turn it on in account Settings
-  or Customize Card to see the reported balance in credits, not dollars. It
-  stays off by default and saves each account's choice independently.
-  ([#391](https://github.com/HemSoft/codexbar-ios/issues/391))
+- Connect Grok to track verified paid weekly usage and Extra Usage Credits when
+  available. Its consumer subscription stays separate from Cursor's Grok Bot allowance
+  and developer API spending.
+  ([#355](https://github.com/HemSoft/codexbar-ios/issues/355)) ([#361](https://github.com/HemSoft/codexbar-ios/issues/361))
 
-- Added guided Grok sign-in with a weekly paid-usage meter when verified, its
-  provider-reported reset, and the remaining Extra Usage Credits balance when
-  available. Grok stays separate from Cursor's models and Grok Bot. Temporary
-  outages offer Retry; rejected authorization asks you to reconnect. Removing
-  a Grok connection clears its previous usage and history.
-  ([#355](https://github.com/HemSoft/codexbar-ios/issues/355))
+- Connect GitHub Billing separately from Copilot to see personal and organization
+  spending, included allowances, budgets, discounts, and month-end projections where
+  supported. Permission disclosures explain billing access before sign-in.
+  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336)) ([#349](https://github.com/HemSoft/codexbar-ios/issues/349))
 
-- Added separate GitHub Billing accounts for personal allowances, organization
-  spend, budgets, discounts, and month-end projections. Guided GitHub sign-in,
-  account selection, permission disclosures, and account-scoped Keychain
-  storage keep billing access separate from GitHub Copilot.
-  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
+- Track separate Cursor Models, Other Models, and Grok Bot usage. Each metric has its
+  own saved visibility on the dashboard, widgets, and Apple Watch.
+  ([#292](https://github.com/HemSoft/codexbar-ios/issues/292)) ([#286](https://github.com/HemSoft/codexbar-ios/issues/286))
 
-- Show usage projections for all six Gemini limits when their usage and reset
-  times support a forecast, including warnings when the current pace would
-  exhaust a limit before reset.
-  ([#330](https://github.com/HemSoft/codexbar-ios/issues/330))
+- Track every usage window reported for each Codex account, including separate Codex
+  Spark limits. Optionally show the reported Codex Credits balance in credits, with a
+  separate saved choice for each account.
+  ([#270](https://github.com/HemSoft/codexbar-ios/issues/270)) ([#391](https://github.com/HemSoft/codexbar-ios/issues/391))
 
-- Display Gemini Models and Other models, Claude/GPT, five-hour and weekly
-  quotas from previously saved coding connections inside Google Gemini. Missing
-  quota stays unavailable. New connection setup is tracked separately.
-  ([#314](https://github.com/HemSoft/codexbar-ios/issues/314))
-
-- Added an experimental Google Gemini account option that displays five-hour
-  and weekly consumer usage with reset times. Live comparison evidence is
-  tracked in the sign-in documentation.
-  ([#296](https://github.com/HemSoft/codexbar-ios/issues/296))
-- Split Cursor's included usage into separate Cursor Models and Other Models
-  metrics, each with its own saved dashboard, widget, and Watch visibility.
-  ([#292](https://github.com/HemSoft/codexbar-ios/issues/292))
-- Added 90 days of daily usage history alongside existing frequent samples,
-  with History controls for today, 3 days, 7 days, a month, and 3 months.
+- Explore up to 90 days of daily usage history alongside recent detailed samples. Choose
+  today, three days, seven days, one month, or three months.
   ([#290](https://github.com/HemSoft/codexbar-ios/issues/290))
-- Added Cursor's separate Grok Bot weekly usage metric, shown by default with
-  its own reset window and hideable from the account's Metrics settings.
-  ([#286](https://github.com/HemSoft/codexbar-ios/issues/286))
-- Added account-aware Codex limit tracking for every usage window the service
-  reports, including separate GPT-5.3-Codex-Spark limits. Each discovered
-  metric can be shown, hidden, and arranged in Customize Card.
-  ([#270](https://github.com/HemSoft/codexbar-ios/issues/270))
-- Added per-metric dashboard visibility controls to each account's Settings
-  screen, using the same saved choices as Customize Card.
+
+- Show or hide individual metrics from account Settings or Customize Card using the same
+  saved preferences.
   ([#272](https://github.com/HemSoft/codexbar-ios/issues/272))
+
+- See Greptile's provider-returned free-allowance renewal countdown and local date on
+  the dashboard and in More Information. Missing dates stay unavailable; failed
+  refreshes mark the last known date as stale. Fresh Google-backed billing sign-in or
+  reconnection may be unavailable in this release; saved verified sessions can still
+  return renewal dates.
+  ([#406](https://github.com/HemSoft/codexbar-ios/issues/406))
 
 ### Changed
 
-- Explained how Greptile sign-in protects account-specific session credentials
-  and which read-only provider requests use them. The privacy-policy update
-  changes no permissions or data handling.
-  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
+- Connect OpenCode Go and Zen through browser approval and workspace selection. Choose
+  an existing browser session or private sign-in without pasting cookies, JSON, or
+  workspace IDs. Reconnection preserves your saved card choices and History, and
+  verifies the same account and workspace before saving a session.
+  ([#353](https://github.com/HemSoft/codexbar-ios/issues/353)) ([#356](https://github.com/HemSoft/codexbar-ios/issues/356))
 
-- Cursor model usage follows Cursor's minimum 1% display for small positive
-  usage, while History and forecasts retain the measured values. Refreshes
-  bypass local HTTP cache and cookies. Grok Bot has more time to respond and
-  reports failed, rejected or timed-out reads without erasing model usage or
-  its saved metric choice.
-  ([#400](https://github.com/HemSoft/codexbar-ios/issues/400))
+- Choose normal-browser or private sign-in for ChatGPT / Codex. Distinct accounts retain
+  separate usage and credentials, and duplicate identities remain blocked. Google may
+  still require identity verification.
+  ([#368](https://github.com/HemSoft/codexbar-ios/issues/368))
 
-- Greptile account allowance and reset dates are shown only when returned,
-  never assumed from the Free plan or inferred from review counts.
-  ([#395](https://github.com/HemSoft/codexbar-ios/issues/395))
+- Read Claude's shared windows as "5-hour" and "Weekly", and Codex's long window as
+  "30-day", while retaining saved metric layouts and values.
+  ([#384](https://github.com/HemSoft/codexbar-ios/issues/384)) ([#393](https://github.com/HemSoft/codexbar-ios/issues/393))
 
-- Describe Codex's 30-day usage window in days instead of showing a confusing
-  "720 hour usage limit". Usage values, reset times, and saved metric choices
-  stay unchanged. ([#393](https://github.com/HemSoft/codexbar-ios/issues/393))
-
-- Name Claude's shared usage windows "5-hour" and "Weekly" so their reset
-  periods are clear on the dashboard and in metric selection. Saved layouts,
-  widgets, and Watch selections keep their existing metric identities.
-  ([#384](https://github.com/HemSoft/codexbar-ios/issues/384))
-
-- Label Grok's narrowly inferred zero separately from provider-reported weekly
-  usage, and identify its consumer billing connection as separate from Cursor
-  Bot and developer API spending.
-  ([#388](https://github.com/HemSoft/codexbar-ios/issues/388))
-
-- Corrected the privacy policy's GitHub Billing permission description to
-  explain the existing organization-administration scope and its broader
-  capabilities. CodexBar's billing requests remain read-only; this update
-  does not request additional permissions.
-  ([#371](https://github.com/HemSoft/codexbar-ios/issues/371))
-
-- Grok now shows at most two subscription values, never on-demand or API
-  spending as a substitute. A verified SuperGrok plan suggests the account
-  name without replacing a name you chose; missing weekly usage stays
-  unavailable rather than showing a guessed zero.
-  ([#361](https://github.com/HemSoft/codexbar-ios/issues/361))
-
-- OpenCode sign-in now offers an explicit browser-session choice, so users can
-  use an existing browser login instead of always starting privately. Private
-  sign-in remains available, and closing the browser allows another attempt.
-  Reconnection also protects the saved Console user identity as well as its
-  workspace. Google may still require account verification.
-  ([#356](https://github.com/HemSoft/codexbar-ios/issues/356))
-
-- OpenCode Go and Zen now use system-browser approval with workspace
-  selection instead of pasted JSON, cookies, or workspace IDs. Removing auth
-  leaves a guided reconnect action and preserves account customization and
-  history. Sessions are verified before being saved securely on the device.
-  Normal renewal preserves cached usage and keeps a still-valid saved session
-  usable during temporary connection failures.
-  ([#353](https://github.com/HemSoft/codexbar-ios/issues/353))
-
-- GitHub Billing cards now show monthly allowance progress for personal Free
-  and Pro plans and organization Free and Team plans. Covered metrics include
-  eligible Actions minutes, Actions storage, Packages storage and data transfer,
-  Git LFS storage and bandwidth, and personal Codespaces compute and storage. The Actions
-  bars match GitHub Billing's allowance-minute normalization and monthly GB
-  presentation, include the billing-cycle reset, and no longer disappear for
-  otherwise valid accounts. Public-repository Actions usage, paid larger runners, and self-hosted
-  runners do not consume the Actions allowance bars. Zero usage, remaining
-  allowance, and overage remain explicit. When GitHub does not provide enough evidence for a
-  trustworthy percentage, the affected allowance stays unavailable rather than
-  showing a guess. Enterprise-pooled limits also stay unavailable. Organization
-  connections ask approval to read the organization plan but never change
-  organizations or teams. Budgets and billed spend remain separate, and each
-  signed-in credential reuses its own recent repository visibility between
-  routine refreshes to avoid GitHub API rate-limit failures without carrying
-  classifications across reconnections.
-  ([#349](https://github.com/HemSoft/codexbar-ios/issues/349))
-
-- Refined GitHub Billing cards to answer three questions quickly: what was
-  consumed, what GitHub discounted or included, and what is actually billable.
-  Aggregate amounts always show two decimal places in the verified billing
-  currency, unit prices keep GitHub's source precision (for example
-  $0.006/minute), metered usage groups
-  into Copilot, Actions, Codespaces, Git LFS, and any other returned products,
-  and Actions gains an Included usage subsection splitting Minutes and
-  Storage. Routine qualifications moved into the More Information sheet while
-  permission failures, incomplete billing data, and unclassifiable repositories
-  stay on the card. Complete ISO currency evidence is preserved, missing
-  evidence uses GitHub's documented USD billing currency, and conflicting or
-  partial evidence suppresses monetary values instead of relabeling them.
+- See GitHub Billing usage, included or discounted amounts, and billable spending
+  grouped by product. Routine qualifications appear in More Information; permission
+  failures and incomplete billing evidence remain visible on the card. Unsupported
+  allowances stay unavailable rather than showing a guessed percentage.
   ([#347](https://github.com/HemSoft/codexbar-ios/issues/347))
 
-- Connect and reconnect Gemini Coding Usage from the phone through Google
-  authorization. CodexBar now includes its registered iOS OAuth client, so users
-  choose an account and return to the app without entering OAuth settings or
-  importing credentials.
-  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+- See Cursor's minimum 1% display for small positive model usage while History and
+  forecasts retain the measured values. Independent Grok Bot failures no longer erase
+  model usage or its saved metric choice.
+  ([#400](https://github.com/HemSoft/codexbar-ios/issues/400))
 
-- Connect and reconnect Google Gemini through a private Google website sign-in
-  window with automatic return, verified usage, and separate account storage.
-  Existing Gemini accounts retain their labels, groups, history, and display
-  preferences without copying credentials.
-  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
+- Distinguish Grok's narrowly inferred zero from provider-reported weekly usage. Missing
+  or conflicting evidence stays unavailable, and weekly subscription usage remains
+  separate from credit balances.
+  ([#363](https://github.com/HemSoft/codexbar-ios/issues/363)) ([#388](https://github.com/HemSoft/codexbar-ios/issues/388))
+
+- Read clearer privacy disclosures for GitHub Billing permissions and account-specific
+  Greptile session credentials. These explanations do not add permissions or change data
+  handling.
+  ([#371](https://github.com/HemSoft/codexbar-ios/issues/371)) ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
 
 ### Fixed
 
-- Keep Cursor usage up to date by renewing sign-in automatically when possible.
-  When needed, Reconnect Cursor
-  opens guided sign-in without requiring sign-out. Failed refreshes keep
-  measured usage visibly stale rather than replacing it with fresh zeros.
-  Valid zero usage and a Bot-only failure do not request reconnection.
+- Keep Cursor usage current by renewing sign-in automatically when possible. Guided
+  reconnection preserves saved card choices; failed refreshes retain visibly stale
+  measurements instead of replacing them with fresh zeros. Valid zero usage and a Bot-
+  only failure do not request reconnection.
   ([#402](https://github.com/HemSoft/codexbar-ios/issues/402))
 
-- Removed excess blank space above dashboard account headings while keeping
-  the account menu's full touch target and saved metric layouts.
-  ([#398](https://github.com/HemSoft/codexbar-ios/issues/398))
+- Keep Cursor on-demand spending visible when no remaining allowance is returned,
+  including amounts above the spending cap. Preserve over-100% readings, partial
+  results, and saved choices across dashboard, widgets, Watch, alerts, and History.
+  Accounts with no Grok Bot allowance no longer show a misleading Bot meter.
+  ([#388](https://github.com/HemSoft/codexbar-ios/issues/388)) ([#294](https://github.com/HemSoft/codexbar-ios/issues/294)) ([#288](https://github.com/HemSoft/codexbar-ios/issues/288))
 
-- Restore Cursor on-demand spending when the provider reports spend without
-  remaining allowance, including amounts above the spending cap. Keep all four
-  Cursor metric choices visible during partial refreshes without inventing
-  values or resetting saved visibility. Grok also recognizes a provider's empty
-  credits object as its documented zero balance.
-  ([#388](https://github.com/HemSoft/codexbar-ios/issues/388))
+- Keep History dates readable at chart edges on iPhone and iPad, including larger text
+  sizes. Successful refreshes update the latest value without creating extra samples
+  inside the configured sampling interval.
+  ([#386](https://github.com/HemSoft/codexbar-ios/issues/386)) ([#274](https://github.com/HemSoft/codexbar-ios/issues/274))
 
-- Keep History chart dates readable at the chart edges on iPhone and iPad,
-  including larger text sizes, without changing usage values or range selection.
-  ([#386](https://github.com/HemSoft/codexbar-ios/issues/386))
+- Make account menus easier to open at accessibility text sizes on iPad, remove excess
+  space above account headings, and show the selected visualization after customization
+  and relaunch.
+  ([#381](https://github.com/HemSoft/codexbar-ios/issues/381)) ([#398](https://github.com/HemSoft/codexbar-ios/issues/398)) ([#346](https://github.com/HemSoft/codexbar-ios/issues/346))
 
-- Enlarged account-menu tap targets so opening a menu at accessibility text
-  sizes does not collapse the card on iPad. Account settings and Customize Card
-  remain available without changing the card's saved layout.
-  ([#381](https://github.com/HemSoft/codexbar-ios/issues/381))
+- Recover safely from duplicate saved account or History identifiers instead of crashing
+  or discarding account data and credentials before an explicit reset or replacement.
+  ([#277](https://github.com/HemSoft/codexbar-ios/issues/277)) ([#276](https://github.com/HemSoft/codexbar-ios/issues/276))
 
-- Offer a normal-browser or private sign-in choice when connecting ChatGPT /
-  Codex accounts. A familiar browser session may help when Google rejects a
-  private login as an unfamiliar device; Google can still require identity
-  verification. Saved accounts use the current ChatGPT identity format without
-  reconnecting; distinct accounts stay separate, and duplicates remain blocked.
-  ([#368](https://github.com/HemSoft/codexbar-ios/issues/368))
+- Keep Settings Done visible through nested screens, preserve Back navigation and
+  pending-edit validation, and make provider rows selectable across their full width
+  with one clear VoiceOver action. Account group selection now exposes a separate
+  accessibility value.
+  ([#265](https://github.com/HemSoft/codexbar-ios/issues/265)) ([#280](https://github.com/HemSoft/codexbar-ios/issues/280)) ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
 
-- Show which visualization is selected in a metric's Customize Card menu,
-  including after hiding, restoring, and relaunching the card.
-  ([#346](https://github.com/HemSoft/codexbar-ios/issues/346))
+- Keep Gemini's six metric choices and independent layouts through missing quota data,
+  failed refreshes, and reconnect cancellation. Require confirmation before linking the
+  same Google identity, retain usable saved sessions, and offer Sign In Again when
+  authorization expires. Disabled quotas stop publishing to alerts and companion
+  displays while existing History stays saved.
+  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319)) ([#299](https://github.com/HemSoft/codexbar-ios/issues/299)) ([#301](https://github.com/HemSoft/codexbar-ios/issues/301)) ([#303](https://github.com/HemSoft/codexbar-ios/issues/303))
 
-- Place Grok weekly subscription usage above Extra Usage Credits on existing
-  accounts whose saved order came from metric discovery. A deliberate card
-  reorder made afterward stays in place; balances and weekly percentages
-  remain separate. ([#365](https://github.com/HemSoft/codexbar-ios/issues/365))
-
-- Show 0% weekly Grok usage when a verified paid account has an active shared
-  weekly period and Grok reports no usage fields. The card says no usage was
-  reported; missing or conflicting usage on unverified accounts remains
-  unavailable. Grok now recognizes plan names returned by its settings service.
-  ([#363](https://github.com/HemSoft/codexbar-ios/issues/363))
-
-- OpenCode sign-in now checks an approval already in progress when the browser
-  closes instead of immediately discarding it. The app returns from the browser
-  as soon as it receives a valid token and shows account-verification progress.
-  Unapproved or stalled checks offer a fresh attempt, and Cancel in the app
-  still stops sign-in without changing the saved account.
+- Handle OpenCode browser dismissal and authorization already in progress without
+  discarding an approved sign-in. Return to the app for verification, offer a fresh
+  attempt when checks stall, and keep Cancel available.
   ([#358](https://github.com/HemSoft/codexbar-ios/issues/358))
 
-- GitHub Billing cards now keep Actions minutes visible when standard macOS
-  runner usage is present, matching GitHub's included-usage total instead of
-  showing a reconciliation warning. Actions minutes and storage also stay
-  together on the card and in card-customization settings.
-  ([#351](https://github.com/HemSoft/codexbar-ios/issues/351))
+- Keep GitHub Billing Actions minutes and storage together, including eligible macOS
+  runner usage. Request the permission required for personal billing and explain
+  rejected or incomplete reads without exposing account data. Reconnecting to a
+  different owner clears that card's previous usage and History instead of mixing
+  accounts.
+  ([#351](https://github.com/HemSoft/codexbar-ios/issues/351)) ([#344](https://github.com/HemSoft/codexbar-ios/issues/344)) ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
 
-- Request the GitHub `user` permission required by personal billing rather than
-  profile-only access. Existing connections need a fresh sign-in to approve it.
-  Connection errors now identify the failed request and permission state without
-  exposing account data or treating every 404 as an unsupported account.
-  ([#344](https://github.com/HemSoft/codexbar-ios/issues/344))
+- Keep Grok weekly usage above Extra Usage Credits for accounts using the default order,
+  while preserving deliberate card reordering. Recognize provider-reported empty credit
+  balances as zero and clear prior usage and History when a Grok connection is removed.
+  ([#365](https://github.com/HemSoft/codexbar-ios/issues/365)) ([#388](https://github.com/HemSoft/codexbar-ios/issues/388)) ([#355](https://github.com/HemSoft/codexbar-ios/issues/355))
 
-- Reject GitHub Billing responses attributed to a different account, clear saved
-  history and prevent cached usage reuse when an existing card is connected to
-  a different owner, refresh dashboard and companion surfaces after connection,
-  update generated card labels to that owner, show used, included, and remaining
-  allowances, classify standard Linux and Windows arm64 runners, show complete
-  pricing details and explain omitted rows, reserve repository lookups for
-  Actions-minute classification, preserve unsupported-scope budget details with
-  unavailable headroom, keep invalid or incomplete usage unavailable, and
-  explain when an account may be unsupported, hidden, or not found.
-  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
-
-- Show the reset countdown and local reset time for Gemini Models and Other
-  Models five-hour and weekly limits on the dashboard and widgets, even when no
-  projection warning is needed. Default small and medium widgets now include
-  the same projection or reset details as the larger layouts, with rings, dials,
-  and large numbers beside the heading to leave room for the caption.
-  ([#332](https://github.com/HemSoft/codexbar-ios/issues/332))
-
-- Coding sign-in no longer leaves a permanent refreshing message after the
-  account connects. The existing usage refresh indicator tracks refresh progress.
-
-- Keep the saved coding session when a reconnect cannot retrieve valid usage,
-  and schedule one account refresh after a successful coding sign-in.
-  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
-
-- Ask for linked Google account confirmation after browser account selection,
-  preserving saved sessions when the reconnect is cancelled.
-- Remove the manual coding-session JSON field from Gemini settings.
-
-- Put all six Google usage metrics in one Gemini account and dashboard card.
-  Connect Gemini Apps and coding sessions inside that account, with confirmation
-  that they use the same Google identity. Existing coding accounts can be linked
-  from Gemini settings while retaining credentials, metric choices, and history.
-  Unlinked data stays saved until its owner confirms the association.
-  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
-- Keep all six choices available before setup and through missing quota data,
-  with independent visibility, order, width, and visualization preferences.
-  Show actual unavailable or disabled status without fabricated values or resets.
-  Explicitly disabled quotas stop publishing to alerts, widgets, and Apple Watch
-  while observed History data stays intact.
-  ([#319](https://github.com/HemSoft/codexbar-ios/issues/319))
-
-- Expose the selected account group as a separate accessibility value in account
-  settings. ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
-
-- Release temporary Gemini network sessions after connection checks complete,
-  fail, or are canceled, preventing repeated sign-in attempts from retaining them.
-  ([#303](https://github.com/HemSoft/codexbar-ios/issues/303))
-- Show Sign In Again when Gemini rejects an expired session in a usage response,
-  while retaining the last known usage as stale data.
-  ([#301](https://github.com/HemSoft/codexbar-ios/issues/301))
-- Preserved Cursor Models and Other Models usage above 100% in dashboard,
-  widget, Watch, projection inputs, alert, and History values while keeping gauges
-  visually capped at full. ([#294](https://github.com/HemSoft/codexbar-ios/issues/294))
-- Hid Cursor's Grok Bot weekly metric when the account explicitly has no
-  included allowance, while preserving genuine 0% readings for entitled users.
-  ([#288](https://github.com/HemSoft/codexbar-ios/issues/288))
-- Kept incomplete Greptile review scans from replacing the last complete usage
-  result or skipping reviews during pagination.
-  ([#284](https://github.com/HemSoft/codexbar-ios/issues/284))
-- Made Greptile API-key saves report whether the key was stored or validated,
-  show rejected-key errors, and display server-reported review allowances and
-  reset dates without turning missing quota data into zero usage.
-  ([#281](https://github.com/HemSoft/codexbar-ios/issues/281))
-- Made each provider row in Settings selectable across its full visible width
-  while keeping one clear VoiceOver action.
-  ([#280](https://github.com/HemSoft/codexbar-ios/issues/280))
-- Recovered safely from saved account lists with duplicate account IDs,
-  preserving account data and credentials until explicit replacement.
-  ([#277](https://github.com/HemSoft/codexbar-ios/issues/277))
-- Recovered safely from saved History entries with duplicate snapshot IDs,
-  preserving the damaged data until reset instead of crashing after a refresh.
-  ([#276](https://github.com/HemSoft/codexbar-ios/issues/276))
-- Kept History's latest value in sync with a successful dashboard refresh
-  without saving extra samples inside the configured sampling interval.
-  ([#274](https://github.com/HemSoft/codexbar-ios/issues/274))
-- Kept the Settings **Done** button visible at the root and throughout nested
-  screens while preserving standard Back navigation and pending-edit validation.
-  ([#265](https://github.com/HemSoft/codexbar-ios/issues/265))
+- Keep Greptile's last complete review results when pagination or refresh fails. Show
+  returned allowances and reset dates without inferring a free plan or treating missing
+  quota as zero. API-key saves explain validation failures, and More Information opens
+  in-app account settings for reconnection. Organization accounts remain separate.
+  ([#284](https://github.com/HemSoft/codexbar-ios/issues/284)) ([#281](https://github.com/HemSoft/codexbar-ios/issues/281)) ([#395](https://github.com/HemSoft/codexbar-ios/issues/395)) ([#406](https://github.com/HemSoft/codexbar-ios/issues/406))
 
 ### Developer Experience
 
-- Release UI checks wait for Settings to close before reopening it and verify
-  menu/customizer transitions directly. A manual regression rejects background
-  controls as proof of dismissal; both simulator families must run all 28
-  journeys. Automatic test suites and CI jobs are unchanged.
-  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
+- Kept full iPhone/iPad UI validation as a manually dispatched release gate, requiring
+  all 28 journeys on each independent device-family worker. Stronger Settings dismissal
+  and menu/customizer checks reject background controls as proof of a completed action.
+  Fixed-date billing fixtures remain valid across calendar changes.
+  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373)) ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
 
-- Run release iPhone and iPad UI validation on independent manual workers,
-  retaining both results and requiring both to pass. Greptile renewal checks
-  wait for the expected refreshed status within their existing timeout.
-  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
+- Kept automatic CI workload bounded to the existing lint, concurrency, unit/risk and
+  smoke gates. New costly validation stays local or manual unless completed before-and-
+  after measurements prove no increase in elapsed or billed runner time.
+  ([#337](https://github.com/HemSoft/codexbar-ios/issues/337)) ([#339](https://github.com/HemSoft/codexbar-ios/issues/339)) ([#341](https://github.com/HemSoft/codexbar-ios/issues/341))
 
-- Corrected the manual release UI runner to require all 27 existing journeys
-  on each device family. A complete passing suite no longer fails the stale
-  26-test count check. Failed, skipped, and missing journeys still block the
-  release. Automatic CI workload is unchanged.
-  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
+- Added per-function iOS and Watch coverage/risk reports and local regressions for
+  Gemini session decisions, Greptile pagination, dashboard tile selection, and Settings
+  routing/notification decisions without changing their customer behavior.
+  ([#306](https://github.com/HemSoft/codexbar-ios/issues/306)) ([#374](https://github.com/HemSoft/codexbar-ios/issues/374)) ([#375](https://github.com/HemSoft/codexbar-ios/issues/375)) ([#376](https://github.com/HemSoft/codexbar-ios/issues/376)) ([#377](https://github.com/HemSoft/codexbar-ios/issues/377))
 
-- Made the manual GitHub Billing release fixtures independent of the current
-  month and added UTC billing-period boundary checks. September sample data
-  remains valid for its fixed test date, while stale and future periods remain
-  unavailable. Automatic CI workload is unchanged.
-  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
+- Added complete-source Swift security analysis and a reviewed findings baseline through
+  manual workflow runs. Added replayable Release performance comparisons for History
+  recording, chart generation, serialized size, and retained growth, with machine
+  diagnostics and failure evidence preserved.
+  ([#309](https://github.com/HemSoft/codexbar-ios/issues/309)) ([#310](https://github.com/HemSoft/codexbar-ios/issues/310)) ([#325](https://github.com/HemSoft/codexbar-ios/issues/325)) ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
 
-- Reconciled 1.4.0 release copy with the final merged provider fixes, including
-  optional Codex Credits, Cursor reconnection and spending, readable History
-  dates, and Greptile renewal dates. Store and review copy disclose the deferred
-  Google-backed Greptile billing-login limitation. Renewed the security review
-  against fresh complete-source findings without changing analyzer policy or
-  automatic CI workload.
-  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
-
-- Documented the evidence and open questions for Greptile paid-plan credit
-  tracking. Public review and billing documentation does not establish a
-  supported account-balance API; paid-account comparison remains pending.
-  ([#397](https://github.com/HemSoft/codexbar-ios/issues/397))
-
-- Refreshed release-copy preparation and added privacy-safe Gemini, Grok, and
-  GitHub Billing storefront capture scenes. Screenshot output directories can
-  be isolated, and Watch captures no longer overwrite the published 1.2 set.
-  Native-size PNGs have no alpha, and fixture dates no longer expire. Updated
-  the release workflow's companion skill names and re-reviewed the exact
-  security findings without changing analyzer pins or automatic CI work.
-  Final-candidate validation and Apple upload remain separate release steps.
-  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373))
-
-- Added a manually dispatched account-menu comparison on the pinned toolchain.
-  It retains baseline outcomes and requires the candidate's original Google
-  journey to pass on iPhone and iPad. This focused diagnosis does not replace
-  the nineteen-journey release gate or add automatic CI work.
-  ([#381](https://github.com/HemSoft/codexbar-ios/issues/381))
-
-- Isolated Settings category routing and notification-request decisions for
-  local synthetic regression tests. Category summaries, Done/Back navigation,
-  pending group edits, and independent notification choices retain their
-  existing behavior. Added three manual-only Settings UI journeys and kept the
-  manual runner's exact-count gate in sync. Automatic test suites and workflows
-  are unchanged.
-  ([#377](https://github.com/HemSoft/codexbar-ios/issues/377))
-
-- Isolated dashboard tile selection for local synthetic regression tests.
-  Metric values, missing and stale states, supporting details, customization,
-  accessibility labels, and History behavior are unchanged.
-  ([#376](https://github.com/HemSoft/codexbar-ios/issues/376))
-
-- Simplified Greptile's end-of-page decisions and added local synthetic
-  pagination regressions. Empty and short pages retain the same complete-scan
-  checks, quota handling, and protection for last known account data. Automatic
-  test suites and CI workflows are unchanged.
-  ([#375](https://github.com/HemSoft/codexbar-ios/issues/375))
-
-- Isolated Gemini browser cookie-read decisions for local synthetic regression
-  tests without changing sign-in screens, credential storage, or automatic CI
-  test suites. Loading, stale callbacks, cancellation, and repeated account-page
-  returns remain guarded by the same browser and cookie policy.
-  ([#374](https://github.com/HemSoft/codexbar-ios/issues/374))
-
-- Prepared version `1.4.0 (4)` across the app, widgets, Watch companion, and
-  test targets. Updated local App Store copy for current providers and guided
-  sign-in, with an evidence map and explicit remaining release gates. No binary
-  has been uploaded or submitted for review.
-  ([#371](https://github.com/HemSoft/codexbar-ios/issues/371))
-
-- Added local OpenCode authorization and quota regressions with the same pinned
-  strict lint plugin as the app, plus manual iPhone/iPad reconnect journeys.
-  The manual release runner now checks all eleven current UI journeys.
-  No automatic test suite or CI job was added.
-  ([#353](https://github.com/HemSoft/codexbar-ios/issues/353))
-
-- Added a manual GitHub Billing permission-disclosure UI journey and updated
-  the release runner to require all six journeys on each simulator family.
-  Automatic CI workload is unchanged.
-  ([#344](https://github.com/HemSoft/codexbar-ios/issues/344))
-
-- Re-reviewed the complete Swift security-analysis baseline after adding GitHub
-  Billing authentication, networking, and local fixture support. The same three
-  non-actionable findings remain pinned with no new blocking finding.
-  ([#336](https://github.com/HemSoft/codexbar-ios/issues/336))
-
-- Require the manually dispatched full CI gate only for the exact release
-  candidate, not for routine pull requests. A changed candidate must pass a new
-  manual run before release. ([#341](https://github.com/HemSoft/codexbar-ios/issues/341))
-
-- Make automatic pull-request and `main` push CI time a hard non-increase
-  constraint. New validation must stay local or manual unless completed
-  before-and-after runs prove no increase in elapsed or billed runner time.
-  ([#339](https://github.com/HemSoft/codexbar-ios/issues/339))
-
-- Keep routine pull-request CI to SwiftLint, strict concurrency, iOS and watchOS
-  unit and risk checks, and the SwiftPM smoke harness. Run the complete iPhone
-  and iPad UI gate by manual dispatch. Those UI steps used 36m 53s of macOS
-  runner time in a completed September 10 sample.
-  ([#337](https://github.com/HemSoft/codexbar-ios/issues/337))
-
-- Make the Claude cancellation test wait for authorization presentation before
-  requesting cancellation, so slow simulator startup does not fail an unrelated
-  readiness deadline. ([#330](https://github.com/HemSoft/codexbar-ios/issues/330))
-
-- Document measured CI runtimes and manual-analysis failure ownership. Preserve
-  machine-load diagnostics, process errors and replayable performance evidence.
-  Verify benchmark repeatability with three clean-source comparisons and an
-  intentional-slowdown check while retaining earlier inconclusive results.
-  ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
-
-- Added a development-only, one-time session handoff for connected devices.
-  It saves an existing renewable coding session to the selected account's
-  Keychain and removes the staging file. An unreadable Keychain slot is never
-  treated as empty. Release builds exclude this tool;
-  new-user browser authorization still needs app-side OAuth configuration.
-  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
-
-- Keep the Google coding browser sign-in service limited to UIKit platforms so
-  the macOS SwiftPM smoke tests can compile.
-  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
-
-- Added a Google coding browser-authorization implementation with PKCE,
-  account-scoped storage, and native-client token renewal. Deployment requires
-  configuring the app’s Google OAuth iOS client. Live quota testing remains
-  with Franz. ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
-
-- Allow the full iOS unit, iPhone UI, and iPad UI suite up to 90 minutes in CI
-  so the required iPad checks can finish after the earlier suites.
-
-- Established phone-based provider setup as the required user experience,
-  excluding manual credential imports. Agents own implementation and automated
-  checks; Franz owns live account and quota verification.
-  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
-
-- Run Swift security analysis and the usage-history Release budget manually,
-  preserving their diagnostic artifacts and failure checks while removing them
-  from automatic PR runs and merge requirements. Broader CI runtime and benchmark
-  reliability work remains tracked separately.
-  ([#325](https://github.com/HemSoft/codexbar-ios/issues/325))
-
-- Include pinned repository-wide SwiftLint and complete strict-concurrency
-  checks in the local perfection audit. Report failures alongside every
-  selected gate and identify separate readiness checks outside its score.
+- Expanded the seven-gate local perfection audit with pinned repository-wide SwiftLint
+  and complete strict-concurrency validation. Kept separate UI, risk, security, and
+  performance checks outside its score.
   ([#311](https://github.com/HemSoft/codexbar-ios/issues/311))
 
-- Measure usage-history recording and chart generation against a frozen Release
-  baseline, with a regression gate for latency, serialized size, and retained
-  history growth through manual workflow runs.
-  ([#310](https://github.com/HemSoft/codexbar-ios/issues/310))
+- Prepared privacy-safe native storefront capture scenes for Gemini, Grok, GitHub
+  Billing, History and the Watch companion, with isolated outputs and opaque PNGs.
+  Reconciled release copy against the last live version and documented the deferred
+  Greptile Google-backed billing-login limitation.
+  ([#373](https://github.com/HemSoft/codexbar-ios/issues/373)) ([#371](https://github.com/HemSoft/codexbar-ios/issues/371))
 
-- Add Swift security analysis of the app, widgets, watch companion, and shared
-  code through manual workflow runs, with published findings
-  and failure checks for unreviewed high-severity findings or incomplete extraction.
-  Analysis covers unchanged source too, with three documented
-  non-actionable findings that require re-review after production changes.
-  ([#309](https://github.com/HemSoft/codexbar-ios/issues/309))
+- Added local OpenCode authorization/quota regressions and manual guided-reconnection
+  journeys. Added GitHub Billing permission-disclosure validation and focused iPad
+  account-menu diagnostics. Retained results from failed or inconclusive runs instead of
+  treating diagnostic subsets as release gates.
+  ([#353](https://github.com/HemSoft/codexbar-ios/issues/353)) ([#344](https://github.com/HemSoft/codexbar-ios/issues/344)) ([#381](https://github.com/HemSoft/codexbar-ios/issues/381))
 
-- Require isolated iPhone and iPad UI journeys for account setup, saved group
-  selection, dashboard recovery, History, and account deep links in pull requests.
-  Failure screenshots and result bundles are retained for diagnosis.
-  ([#307](https://github.com/HemSoft/codexbar-ios/issues/307))
+- Made Claude cancellation and stalled Cursor optional-request tests coordinate
+  presentation, response, timeout, and cancellation events instead of depending on busy-
+  runner timing.
+  ([#330](https://github.com/HemSoft/codexbar-ios/issues/330)) ([#304](https://github.com/HemSoft/codexbar-ios/issues/304))
 
-- Added per-function iOS and watchOS coverage and risk reports to the required
-  test checks, with explicit instrumentation gaps and a gate against new or
-  increased uncovered complexity.
-  ([#306](https://github.com/HemSoft/codexbar-ios/issues/306))
+- Added Google coding authorization with PKCE, secure account-specific storage and
+  renewable native-client tokens, with the registered iOS client shipped for guided
+  phone setup. Kept the UIKit service out of macOS smoke builds and excluded the one-
+  time development session handoff from Release builds. Live account/quota comparisons
+  remain owner-run.
+  ([#299](https://github.com/HemSoft/codexbar-ios/issues/299))
 
-- Made the stalled Cursor optional-request regression test coordinate response,
-  timeout, and cancellation events so busy test runners do not cause false failures.
-  ([#304](https://github.com/HemSoft/codexbar-ios/issues/304))
-- Added a resumable App Store release skill that derives customer copy from
-  changes since the last live version, composes the repository's existing
-  validation and submission runbooks, and keeps upload and final submission as
-  separately authorized milestones.
-  ([#264](https://github.com/HemSoft/codexbar-ios/issues/264))
+- Added a resumable App Store release workflow with source-linked customer copy and
+  separate validation, upload, and submission checkpoints. Documented the evidence and
+  open questions for future Greptile paid-credit tracking without claiming an
+  implemented balance API.
+  ([#264](https://github.com/HemSoft/codexbar-ios/issues/264)) ([#397](https://github.com/HemSoft/codexbar-ios/issues/397))
 
 ## 1.3.0 - 2026-08-23
 
