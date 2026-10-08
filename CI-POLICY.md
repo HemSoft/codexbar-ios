@@ -32,8 +32,18 @@ at `622f2e3a2ab5e35f4b1a21c23d34e9016edd6efb`: 21m 09s workflow elapsed,
 21m 01s completed job span, and 32m 29s summed completed job runtime.
 GitHub's timing API reports zero billable milliseconds for MACOS and UBUNTU;
 that API value does not turn elapsed runner time into a dollar estimate.
-Completed candidate measurements will be recorded in the implementation PR and
-this section before merge. Manual dispatch cost is recorded separately.
+The completed candidate [run 37753142813](https://github.com/hemsoft-dev/codexbar-ios/actions/runs/37753142813)
+at `8092f2a0dec5755530a54fdc942583de2daa97fc` used 51 seconds workflow
+elapsed, 42 seconds completed job span, and 42 summed completed job-seconds.
+The timing API again reports zero billable milliseconds for MACOS and UBUNTU.
+Workflow elapsed and summed runner time both decreased. Skipped jobs contribute
+no runtime and supply no validation evidence. Manual dispatch cost is recorded
+separately in the implementation PR.
+
+| Completed automatic run | Workflow elapsed | Completed job span | Summed job runtime | API billable MACOS / UBUNTU |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline 37690509455 | 1,269s | 1,261s | 1,949s | 0ms / 0ms |
+| Candidate 37753142813 | 51s | 42s | 42s | 0ms / 0ms |
 
 Trigger/job changes: remove `push: branches: [main]`; retain `pull_request` and
 `workflow_dispatch`; make four native quality jobs dispatch-only. Move the
