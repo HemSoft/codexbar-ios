@@ -2,9 +2,6 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       ui_validation_mode:
@@ -50,7 +47,11 @@ jobs:
           --reporter github-actions-logging
           .
 
+      - name: Verify CI trigger policy
+        run: python3 -m unittest discover -s scripts/tests -p 'test_ci_policy.py' -v
+
   strict-concurrency:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Strict concurrency
     runs-on: macos-26
     timeout-minutes: 30
@@ -64,6 +65,7 @@ jobs:
         run: ./scripts/check-strict-concurrency.sh
 
   ios-tests:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: iOS tests
     runs-on: macos-26
     timeout-minutes: 30
@@ -140,6 +142,7 @@ jobs:
           retention-days: 14
 
   watch-tests:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: watchOS tests
     runs-on: macos-26
     timeout-minutes: 30
@@ -205,6 +208,7 @@ jobs:
           retention-days: 14
 
   smoke-tests:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: SwiftPM smoke tests
     runs-on: macos-26
     timeout-minutes: 15
@@ -223,8 +227,6 @@ jobs:
       - name: Verify perfection gate selection and failure reporting
         run: python3 -m unittest discover -s scripts/tests -p 'test_perfection_runner.py' -v
 
-      - name: Verify CI trigger policy
-        run: python3 -m unittest discover -s scripts/tests -p 'test_ci_policy.py' -v
 
   ios-ui-families:
     name: iOS UI journeys (${{ matrix.family }})

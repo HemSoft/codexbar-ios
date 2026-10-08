@@ -1,32 +1,46 @@
 # CI gate and manual analysis policy
 
-The automatic merge gate retains SwiftLint, Strict concurrency, iOS tests,
-watchOS tests and SwiftPM smoke tests. The required `iOS tests` job runs unit
-tests, coverage, and function-risk enforcement without UI journeys. The full
-iPhone and iPad UI gate runs manually only as a required release-candidate
-gate, never as a pull-request gate. Swift security analysis and the
-usage-history Release budget remain manual with their failure rules and
-artifacts preserved.
+Ordinary pull requests run pinned SwiftLint and the existing four lightweight
+CI-policy assertions in one macOS job. These catch style violations and accidental
+changes to automatic/manual triggers. Native strict-concurrency builds, iOS and
+watchOS unit suites with function risk, and the SwiftPM smoke harness run only
+through explicit `workflow_dispatch`, before a release or on demand.
 
-This policy revises the decision in
-[issue #325](https://github.com/HemSoft/codexbar-ios/issues/325), which kept both
-UI destinations in every pull-request run. The measured cost prompted
-[issue #337](https://github.com/HemSoft/codexbar-ios/issues/337) to move them to
-manual dispatch.
+CI has no `main` push trigger: it performs no deployment or productive post-merge
+task, so duplicate post-merge validation and its notification obligation are
+removed. Historical failures and cancellations remain visible. Separate security
+and usage-history performance workflows remain manual and unchanged.
+
+This policy implements [issue #419](https://github.com/HemSoft/codexbar-ios/issues/419),
+following #325 and #337's earlier UI-only split. Full validation retains every
+existing native workload, both UI families, thresholds and artifacts.
 
 ## Rollout status
 
-The live `main required quality checks` ruleset requires the five automatic
-checks above, with strict branch freshness and no bypass actors. Those status
-names do not change under issue #337, and `Full iOS UI validation` is not a
-required status. No ruleset mutation is needed for this policy change. Classic
-branch protection returns 404 because the repository ruleset supplies the
-requirements.
+The intended live `main required quality checks` ruleset requires only SwiftLint,
+with strict branch freshness and no bypass actors. Codex current-head review and
+thread resolution remain mandatory. The four manual-only native statuses must
+not strand ordinary PRs; their skipped PR results are not validation evidence.
+The implementation PR records completed full-dispatch proof and the exact live
+ruleset reconciliation before merge. Classic branch protection is absent; the
+repository ruleset supplies required statuses.
 
-The `CI` workflow handles pull requests, pushes to `main`, and manual dispatch.
-Only manual dispatch can start `Full iOS UI validation`, and that job waits for
-the five automatic jobs to pass. The security-analysis and usage-history
-performance workflow files contain only `workflow_dispatch`.
+## October 8 automatic-work comparison
+
+The completed baseline is [run 37690509455](https://github.com/hemsoft-dev/codexbar-ios/actions/runs/37690509455)
+at `622f2e3a2ab5e35f4b1a21c23d34e9016edd6efb`: 21m 09s workflow elapsed,
+21m 01s completed job span, and 32m 29s summed completed job runtime.
+GitHub's timing API reports zero billable milliseconds for MACOS and UBUNTU;
+that API value does not turn elapsed runner time into a dollar estimate.
+Completed candidate measurements will be recorded in the implementation PR and
+this section before merge. Manual dispatch cost is recorded separately.
+
+Trigger/job changes: remove `push: branches: [main]`; retain `pull_request` and
+`workflow_dispatch`; make four native quality jobs dispatch-only. Move the
+existing four CI-policy assertions from the smoke job to SwiftLint without
+adding another invocation. No new job, matrix entry, destination, retry, longer
+timeout, native test workload or analysis pass is introduced. Manual jobs retain
+their existing runners, timeouts and failure rules.
 
 ## Measured inventory
 
@@ -99,17 +113,15 @@ or thermal observations.
 
 ## Automatic gate budget
 
-Keep the five required status names. They check lint, strict concurrency, iOS
-unit behavior and function risk, watchOS behavior and function risk, and the
-SwiftPM smoke harness. The automatic `iOS tests` job has a 30-minute limit. The
-other four automatic timeouts remain unchanged.
+SwiftLint is the sole automatic required status. Its existing ten-minute timeout
+and pinned lint command are unchanged; it also executes the four existing
+configuration assertions. The four native quality jobs are dispatch-only, with
+their original 30/30/30/15-minute limits. Do not recreate their automatic triggers,
+require their skipped PR statuses, or dispatch the full gate for routine PRs.
 
-The historical table predates the UI split and must not be used as the measured
-post-change duration. In the September 10 sample, the two UI destinations used
-36m 53s of the run's 61.9 summed macOS job-minutes. Removing those steps from
-ordinary PR runs avoids that work. Record completed post-change runs before
-claiming the actual savings. The concurrency policy cancels obsolete runs, but
-it cannot recover runner time spent before cancellation.
+The historical inventory below predates this policy. Completed candidate
+measurements above, rather than estimates, establish the automatic cost change.
+Concurrency cancellation cannot recover runner time already spent.
 
 The manual full gate gives each iPhone and iPad worker its own 90-minute limit.
 They run independently with fail-fast disabled and publish separate artifacts.
@@ -131,8 +143,8 @@ current thresholds.
 Do not run the full CI gate for routine pull requests, including UI changes.
 After the intended release changes have merged, select a release-candidate
 branch or tag, record its resolved SHA, and dispatch the gate once. The dispatch
-first runs the five automatic jobs. If they pass, independent manual workers
-run all twenty-eight journeys on iPhone and iPad. `Full iOS UI validation` passes only after both workers pass.
+first runs all five quality jobs. If they pass, independent manual workers
+run all twenty-nine journeys on iPhone and iPad. `Full iOS UI validation` passes only after both workers pass.
 A failed iPhone family does not suppress the iPad family or its retained failure
 artifacts. The account-menu comparison remains a separate manual-only mode.
 
@@ -206,8 +218,8 @@ must remain visible in issue #325 until its criteria are met.
 The existing manual `CI` dispatch also accepts `ui_validation_mode=account-menu-comparison`.
 This names the manual job `Account menu comparison`, never `Full iOS UI validation`.
 It runs only the complete original Google customization/relaunch journey on each
-family for an exact ancestor baseline and the dispatched candidate. Automatic
-pull-request/main jobs, their destinations and timeouts are unchanged. The four
+family for an exact ancestor baseline and the dispatched candidate. The comparison remains dispatch-only; it creates no automatic PR or main-push
+work. The four
 existing CI policy tests retain the same assertions; only the expected manual job
 name accounts for this selector.
 
@@ -229,7 +241,7 @@ comparison. Inspect `comparison.json`, all four summaries/logs/result bundles,
 screenshots and the candidate iPad recording in the existing UI artifact.
 
 A focused comparison is not release evidence. Default `full` dispatch still runs
-the billing fixtures and all twenty-eight journeys per family, including the existing
+the billing fixtures and all twenty-nine journeys per family, including the existing
 both-destinations and exact-count guards.
 
 Run the new lightweight classifier/device-selection regressions explicitly locally:
@@ -254,6 +266,6 @@ duration from each job's own start and completion timestamps, not the
 workflow's last update time. Confirm an ordinary PR run marks `Full iOS UI
 validation` skipped and spends no time in either UI destination. Confirm a
 manual `CI` run records `workflow_dispatch`, matches the reviewed SHA, and runs
-both destinations after the automatic jobs pass. The security-analysis and
+both destinations after all five quality jobs pass. The security-analysis and
 usage-history performance workflows must contain only `workflow_dispatch`.
 Keep failures and cancellations in the inventory when refreshing measurements.
