@@ -505,8 +505,8 @@ public final class UsageRefreshService: ObservableObject {
             recoveryAction: failureResult.recoveryAction,
             preserveCachedBarsOnFailure: failureResult.preserveCachedBarsOnFailure,
             preserveCachedCreditsOnFailure: failureResult.preserveCachedCreditsOnFailure,
-            cacheIdentity: failureResult.cacheIdentity,
-            cacheScope: failureResult.cacheScope,
+            cacheIdentity: failureResult.cacheIdentity ?? (failureResult.providerID == .grok ? cachedResult?.cacheIdentity : nil),
+            cacheScope: failureResult.cacheScope ?? (failureResult.providerID == .grok ? cachedResult?.cacheScope : nil),
             allowsUnscopedCacheReuse: failureResult.allowsUnscopedCacheReuse,
             hasSuccessfulRefreshHistory: failureResult.hasSuccessfulRefreshHistory
                 || cachedResult?.hasSuccessfulRefreshHistory == true,

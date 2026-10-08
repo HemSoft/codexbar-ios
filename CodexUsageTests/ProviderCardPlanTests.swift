@@ -61,7 +61,7 @@ final class ProviderCardPlanTests: XCTestCase {
         let cached = ProviderUsageResult(
             accountID: account.id, providerID: .grok, title: "Grok", verifiedGrokPlanName: "SuperGrok Lite",
             subtitle: "Synthetic", bars: [UsageBar(label: "Weekly", used: 31, limit: 100)],
-            cacheIdentity: "same-subject", fetchedAt: Date()
+            cacheIdentity: "same-subject", cacheScope: "consumer.fixture", fetchedAt: Date()
         )
         for (identity, reauthenticate, reusable, expected) in [
             ("same-subject", false, true, "SuperGrok Lite"),
@@ -74,7 +74,11 @@ final class ProviderCardPlanTests: XCTestCase {
                 providers: [FailedGrokPlanProvider(identity: identity, reauthenticate: reauthenticate, reusable: reusable)], initialResults: [cached]
             )
             await service.refresh(configurations: [account])
-            XCTAssertEqual(try XCTUnwrap(service.results.first).cardPlan.displayLabel, expected)
+            let result = try XCTUnwrap(service.results.first)
+            XCTAssertEqual(result.cardPlan.displayLabel, expected)
+            XCTAssertEqual(result.bars.map(\.used), expected == "SuperGrok Lite" ? [31] : [])
+            XCTAssertEqual(result.cacheIdentity, identity ?? (expected == "SuperGrok Lite" ? "same-subject" : nil))
+            XCTAssertEqual(result.cacheScope, expected == "SuperGrok Lite" ? "consumer.fixture" : nil)
         }
     }
 

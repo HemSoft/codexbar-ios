@@ -34,7 +34,7 @@ public final class GrokUsageProvider: UsageProvider {
             return failure("Sign in with Grok to see consumer usage.", configuration: configuration)
         }
         let state = await currentCredential(candidate, keychainAccount: account)
-        guard case .ready(let credential) = state else { return credentialFailure(state, configuration: configuration) }
+        guard case .ready(let credential) = state else { return credentialFailure(state, configuration: configuration, subject: candidate.subject) }
         do {
             let result = try await fetchCandidate(credential, for: configuration)
             return try GrokCredentialLock.withLock {
@@ -43,18 +43,18 @@ public final class GrokUsageProvider: UsageProvider {
                 return result
             }
         } catch {
-            return usageFailure(error, configuration: configuration)
+            return usageFailure(error, configuration: configuration, subject: credential.subject)
         }
     }
 
     private func credentialFailure(
-        _ state: CredentialState, configuration: ProviderAccountConfiguration
+        _ state: CredentialState, configuration: ProviderAccountConfiguration, subject: String
     ) -> ProviderUsageResult {
         switch state {
         case .ready: failure("Grok usage could not be verified.", configuration: configuration)
         case .retry: failure(
             "Grok usage is temporarily unavailable. Try refreshing again.",
-            configuration: configuration, recoveryAction: .retryRefresh
+            configuration: configuration, recoveryAction: .retryRefresh, cacheIdentity: Self.identityHash(subject)
         )
         case .reconnect: failure(
             "Grok authorization expired or was removed. Reconnect in account settings.",
@@ -63,7 +63,7 @@ public final class GrokUsageProvider: UsageProvider {
         }
     }
 
-    private func usageFailure(_ error: Error, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
+    private func usageFailure(_ error: Error, configuration: ProviderAccountConfiguration, subject: String) -> ProviderUsageResult {
         if error as? GrokAuthError == .unauthorized {
             return failure("Grok authorization was rejected. Reconnect in account settings.", configuration: configuration)
         }
@@ -75,7 +75,7 @@ public final class GrokUsageProvider: UsageProvider {
         }
         return failure(
             "Grok usage could not be verified. Try refreshing again.",
-            configuration: configuration, recoveryAction: .retryRefresh
+            configuration: configuration, recoveryAction: .retryRefresh, cacheIdentity: Self.identityHash(subject)
         )
     }
 
@@ -138,7 +138,7 @@ public final class GrokUsageProvider: UsageProvider {
               let settings = try? decoder.decode(GrokRemoteSettings.self, from: data) else {
             return PlanLookup(name: nil, isUnavailable: true)
         }
-        return PlanLookup(name: Self.knownPlan(settings.subscriptionTierDisplay ?? settings.subscriptionTier), isUnavailable: false)
+        return PlanLookup(name: Self.knownPlan(settings.subscriptionTierDisplay) ?? Self.knownPlan(settings.subscriptionTier), isUnavailable: false)
     }
 
     private static func knownPlan(_ value: String?) -> String? {
@@ -252,12 +252,13 @@ public final class GrokUsageProvider: UsageProvider {
 
     private func failure(
         _ message: String, configuration: ProviderAccountConfiguration,
-        recoveryAction: ProviderUsageRecoveryAction = .reauthenticate, allowsUnscopedCacheReuse: Bool = true
+        recoveryAction: ProviderUsageRecoveryAction = .reauthenticate, allowsUnscopedCacheReuse: Bool = true,
+        cacheIdentity: String? = nil
     ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
             subtitle: message, bars: [], failureMessage: message, recoveryAction: recoveryAction,
-            allowsUnscopedCacheReuse: allowsUnscopedCacheReuse,
+            cacheIdentity: cacheIdentity, allowsUnscopedCacheReuse: allowsUnscopedCacheReuse,
             fetchedAt: Date()
         )
     }
@@ -295,7 +296,7 @@ public final class GrokUsageProvider: UsageProvider {
         let reason = unavailableReason(config, supportedPeriod: supportedPeriod, activePeriod: activePeriod)
         let balance = config.isUnifiedBillingUser == true
             ? money(config.prepaidBalance, kind: .balance, label: "Extra Usage Credits") : nil
-        let cacheIdentity = Data(SHA256.hash(data: Data(subject.utf8))).base64EncodedString()
+        let cacheIdentity = identityHash(subject)
         return ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
             verifiedGrokPlanName: knownPlan(verifiedPlanName), grokPlanLookupFailed: planLookupFailed,
@@ -317,6 +318,10 @@ public final class GrokUsageProvider: UsageProvider {
             ],
             cacheIdentity: cacheIdentity, cacheScope: "consumer.\(cacheIdentity)", fetchedAt: now
         )
+    }
+
+    private static func identityHash(_ subject: String) -> String {
+        Data(SHA256.hash(data: Data(subject.utf8))).base64EncodedString()
     }
 
     private static func omitsUsage(_ data: Data) -> Bool {

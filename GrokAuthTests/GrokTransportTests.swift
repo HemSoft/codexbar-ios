@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import XCTest
 @testable import CodexBarIOS
@@ -115,7 +116,7 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
                 "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"},
                 "prepaidBalance":{"val":500}}}
                 """),
-            (200, #"{"subscription_tier_display":"SuperGrok Lite"}"#),
+            (200, #"{"subscription_tier_display":"  ","subscription_tier":"SuperGrok Lite"}"#),
         ])
         defer { session.invalidateAndCancel() }
         let result = try await GrokUsageProvider(session: session).fetchCandidate(
@@ -212,6 +213,29 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
                     Data(billing.replacingOccurrences(of: ":31", with: ":11").utf8), configuration: account,
                     subject: sameSubject ? "subject-one" : "another-subject", now: Date(), verifiedPlanName: "SuperGrok Lite"
                 )
+                for firstStatus in [400, 401, 402, 408, 425, 503] {
+                    let retainsTier = sameSubject && ![401, 402].contains(firstStatus)
+                    let chainedSession = makeSession([
+                        (200, #"{"sub":"subject-one"}"#), (firstStatus, "{}"),
+                        (200, #"{"sub":"subject-one"}"#), (200, billing), (503, "{}"),
+                    ])
+                    let chained = UsageRefreshService(
+                        providers: [GrokUsageProvider(secretStore: secrets, session: chainedSession)], initialResults: [cached]
+                    )
+                    if singleAccount { _ = await chained.refresh(configuration: account) } else { await chained.refresh(configurations: [account]) }
+                    let stale = try XCTUnwrap(chained.results.first)
+                    XCTAssertEqual(stale.cardPlan.displayLabel, retainsTier ? "SuperGrok Lite" : "Plan unavailable")
+                    XCTAssertEqual(stale.bars.map(\.used), retainsTier ? [11] : [])
+                    XCTAssertEqual(stale.cacheIdentity, [401, 402].contains(firstStatus) ? nil
+                        : Data(SHA256.hash(data: Data("subject-one".utf8))).base64EncodedString())
+                    if singleAccount { _ = await chained.refresh(configuration: account) } else { await chained.refresh(configurations: [account]) }
+                    let restored = try XCTUnwrap(chained.results.first)
+                    XCTAssertEqual(restored.cardPlan.displayLabel, retainsTier ? "SuperGrok Lite" : "Plan unavailable")
+                    XCTAssertEqual(restored.bars.first?.used, 31)
+                    XCTAssertNil(restored.failureMessage)
+                    XCTAssertEqual(GrokTestProtocol.state.requests.count, 5)
+                    chainedSession.invalidateAndCancel()
+                }
                 for (status, settings, unavailable, freshTier) in [
                     (0, "", true, "Plan unavailable"),
                     (503, "{}", true, "Plan unavailable"),
@@ -221,6 +245,10 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
                     (200, "{}", false, "Plan unavailable"),
                     (200, #"{"subscription_tier":"Unknown future tier"}"#, false, "Plan unavailable"),
                     (200, #"{"subscription_tier_display":"SuperGrok Heavy"}"#, false, "SuperGrok Heavy"),
+                    (200, #"{"subscription_tier_display":"","subscription_tier":"SuperGrok Lite"}"#, false, "SuperGrok Lite"),
+                    (200, #"{"subscription_tier_display":"  ","subscription_tier":"SuperGrok Plus"}"#, false, "SuperGrok Plus"),
+                    (200, #"{"subscription_tier_display":"Unknown","subscription_tier":"SuperGrok"}"#, false, "SuperGrok"),
+                    (200, #"{"subscription_tier_display":"SuperGrok Heavy","subscription_tier":"SuperGrok Lite"}"#, false, "SuperGrok Heavy"),
                 ] {
                     let session = makeSession([(200, #"{"sub":"subject-one"}"#), (200, billing), (status, settings)])
                     let service = UsageRefreshService(
@@ -254,7 +282,8 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
         try secrets.saveSecret(credential.encoded(), account: ProviderConfigurationStore.keychainAccount(for: account))
         let cached = ProviderUsageResult(
             accountID: account.id, providerID: .grok, title: "Grok", verifiedGrokPlanName: "SuperGrok Lite",
-            subtitle: "Synthetic", bars: [UsageBar(label: "Weekly", used: 31, limit: 100)], fetchedAt: Date()
+            subtitle: "Synthetic", bars: [UsageBar(label: "Weekly", used: 31, limit: 100)],
+            cacheIdentity: Data(SHA256.hash(data: Data("subject-one".utf8))).base64EncodedString(), fetchedAt: Date()
         )
         for status in [302, 400, 401, 402, 403, 404, 408, 409, 410, 422, 425, 429, 500, 503, 599] {
             let session = makeSession([(200, #"{"sub":"subject-one"}"#), (status, "{}")])
