@@ -282,7 +282,7 @@ jobs:
           if [[ "$UI_FAMILIES_RESULT" != success ]]; then
             echo "Both UI destinations must pass. Combined result=$UI_FAMILIES_RESULT" >&2
             if [[ "$UI_FAMILIES_RESULT" == skipped ]]; then
-              echo "UI workers did not run. Check the prerequisite automatic jobs for failure or cancellation." >&2
+              echo "UI workers did not run. Check the prerequisite manual quality jobs for failure or cancellation." >&2
             fi
             exit 1
           fi
