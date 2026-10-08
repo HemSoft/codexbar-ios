@@ -366,6 +366,11 @@ final class ClaudeUsageUITests: XCTestCase {
         ).firstMatch
         if element.exists && element.isHittable && navigationButton.exists
             && navigationButton.frame == element.frame { return }
+        for alert in app.alerts.allElementsBoundByIndex {
+            let button = alert.buttons.matching(NSPredicate(format: "label == %@", element.label)).firstMatch
+            if element.exists && element.isHittable && button.exists && button.frame == element.frame
+                && alert.frame.intersection(app.frame).contains(element.frame) { return }
+        }
         let customizer = app.scrollViews["metric-customization-scroll"]
         let settings = app.collectionViews["provider-account-settings-form"]
         let scrollSurface = customizer.exists ? customizer : (settings.exists ? settings : app.scrollViews.firstMatch)
