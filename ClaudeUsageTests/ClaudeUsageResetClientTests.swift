@@ -23,6 +23,37 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         XCTAssertNotNil(body["request_id"].flatMap(UUID.init(uuidString:)))
         XCTAssertEqual(post.value(forHTTPHeaderField: "User-Agent"), "CodexBarIOS")
         XCTAssertTrue(requests.contains { $0.url?.query == "cedar_ember=1" })
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: harness.directory.path).isEmpty)
+        try await assertConfirmedOutcomesAndRejections()
+    }
+
+    private func assertConfirmedOutcomesAndRejections() async throws {
+        let confirmed: [(String, ClaudeUsageResetOutcome)] = [
+            ("reset", .reset), ("already_redeemed", .alreadyRedeemed), ("already_used", .alreadyRedeemed),
+            ("nothing_to_reset", .nothingToReset), ("not_limited", .nothingToReset), ("no_credit", .noCredit),
+        ]
+        for (response, expected) in confirmed {
+            let harness = makeHarness()
+            defer { try? FileManager.default.removeItem(at: harness.directory) }
+            ResetClientProtocol.configure(mode: .confirmed(response))
+            let outcome = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
+                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+            XCTAssertEqual(outcome, expected, response)
+            XCTAssertEqual(ResetClientProtocol.requests.filter { $0.httpMethod == "POST" }.count, 1)
+            XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: harness.directory.path).isEmpty)
+        }
+        for status in [400, 401, 403, 404, 409, 429] {
+            let harness = makeHarness()
+            defer { try? FileManager.default.removeItem(at: harness.directory) }
+            ResetClientProtocol.configure(mode: .rejected(status))
+            do {
+                _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
+                    credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+                XCTFail("A rejected request cannot report success")
+            } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .httpStatus(status)) }
+            XCTAssertEqual(ResetClientProtocol.requests.filter { $0.httpMethod == "POST" }.count, 1)
+            XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: harness.directory.path).isEmpty)
+        }
     }
 
     func testExpiredIneligibleOrDifferentGrantNeverSendsPost() async throws {
@@ -60,7 +91,10 @@ final class ClaudeUsageResetClientTests: XCTestCase {
     }
 
     func testAmbiguousPostSurvivesClientRestartWithoutAutomaticReplay() async throws {
-        for mode in [ResetClientProtocol.Mode.timeout, .serverError, .malformedSuccess] {
+        for mode in [
+            ResetClientProtocol.Mode.timeout, .serverError, .malformedSuccess, .rejected(408),
+            .confirmed("unexpected"), .oversizedSuccess, .redirectSuccess,
+        ] {
             let harness = makeHarness()
             ResetClientProtocol.configure(mode: mode)
             do {
@@ -217,9 +251,10 @@ private struct ResetClientSecrets: SecretStore {
 }
 
 private class ResetClientProtocol: URLProtocol, @unchecked Sendable {
-    enum Mode: Sendable {
+    enum Mode: Equatable, Sendable {
         case success, ineligible, expired, missingIdentity, timeout, reconciled
         case serverError, malformedSuccess, missingGrant, changedIdentity, delayed, otherIdentity
+        case confirmed(String), rejected(Int), oversizedSuccess, redirectSuccess
     }
     private static let lock = NSLock()
     nonisolated(unsafe) private static var mode = Mode.success
@@ -275,7 +310,12 @@ private class ResetClientProtocol: URLProtocol, @unchecked Sendable {
              "organization":{"uuid":"\(organization)"}}
             """
         } else if request.httpMethod == "POST" {
-            body = mode == .malformedSuccess ? "{}" : #"{"result":"reset","cleared":["five_hour","seven_day"]}"#
+            switch mode {
+            case .confirmed(let result): body = "{\"result\":\"\(result)\"}"
+            case .oversizedSuccess: body = "{\"result\":\"reset\",\"padding\":\"" + String(repeating: "x", count: 1_048_576) + "\"}"
+            case .malformedSuccess: body = "{}"
+            default: body = #"{"result":"reset","cleared":["five_hour","seven_day"]}"#
+            }
         } else if mode == .missingGrant {
             body = #"{"cedar_ember":{"eligible":true,"grants":[]}}"#
         } else {
@@ -287,8 +327,13 @@ private class ResetClientProtocol: URLProtocol, @unchecked Sendable {
             }]}}
             """
         }
-        let status = request.httpMethod == "POST" && mode == .serverError ? 503 : 200
-        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
+        let status: Int
+        if request.httpMethod == "POST", case .rejected(let value) = mode {
+            status = value
+        } else { status = request.httpMethod == "POST" && mode == .serverError ? 503 : 200 }
+        let responseURL = request.httpMethod == "POST" && mode == .redirectSuccess
+            ? URL(string: "https://other.invalid/reset_rate_limits")! : request.url!
+        let response = HTTPURLResponse(url: responseURL, statusCode: status, httpVersion: nil,
                                        headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
