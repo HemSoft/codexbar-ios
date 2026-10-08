@@ -243,10 +243,7 @@ final class UITestFixtures {
             _ = store.update(account)
             _ = store.saveSecret("ui-test-credential", for: account)
             if provider == .grok {
-                let credential = GrokCredential(
-                    kind: "grok-oauth-v1", accessToken: "synthetic-token", refreshToken: "synthetic-refresh",
-                    expiresAt: Date().addingTimeInterval(3600), subject: "synthetic-user", email: nil
-                )
+                let credential = Self.planPillGrokCredential
                 _ = store.saveSecret((try? credential.encoded()) ?? "", for: account)
                 precondition(store.applyVerifiedGrokPlan(grokResult(for: account, scenario: "grok-default")),
                              "Synthetic verified Grok naming must normalize")
@@ -255,6 +252,13 @@ final class UITestFixtures {
                 _ = store.saveSecret(#"{"__Secure-1PSID":"synthetic"}"#, for: account)
             }
         }
+    }
+
+    nonisolated static var planPillGrokCredential: GrokCredential {
+        GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "synthetic-token", refreshToken: "synthetic-refresh",
+            expiresAt: Date(timeIntervalSince1970: 2_524_608_000), subject: "synthetic-user", email: nil
+        )
     }
 
     nonisolated static func planPillResult(for account: ProviderAccountConfiguration) -> ProviderUsageResult {
@@ -1257,7 +1261,8 @@ private struct UITestSecretStore: SecretStore {
         let codex = ["personal", "work"].contains { secret == UITestFixtures.codexCredential(for: $0) }
         let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }
         let greptile = GreptileSessionCredentials.parse(secret) == UITestFixtures.greptileCredential
-        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile else {
+        let grok = GrokCredential.parse(secret) == UITestFixtures.planPillGrokCredential
+        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile || grok else {
             throw UITestFixtureError.invalidCredential
         }
         UserDefaults(suiteName: suite)?.set(secret, forKey: "fixture-secret.\(account)")
