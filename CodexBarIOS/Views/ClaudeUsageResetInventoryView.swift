@@ -58,6 +58,7 @@ struct ClaudeUsageResetInventoryView: View {
                 }
             }
         }
+        .interactiveDismissDisabled(isSubmitting)
     }
 
     private var summary: String {
@@ -80,7 +81,9 @@ struct ClaudeUsageResetInventoryView: View {
                      ? "Claude may require a usage limit to be reached before this reset can be used."
                      : "Claude has not enabled this reset for use now.").foregroundStyle(.secondary)
             }
-            if canRedeem, onUseReset != nil, inventory.credentialBinding != nil, inventory.redeemableGrant(at: Date())?.id == grant.id {
+            if isSubmitting && selectedGrant?.id == grant.id
+                || (canRedeem && onUseReset != nil && inventory.credentialBinding != nil
+                    && inventory.redeemableGrant(at: Date())?.id == grant.id) {
                 Button {
                     selectedGrant = grant
                     isConfirming = true
@@ -88,7 +91,7 @@ struct ClaudeUsageResetInventoryView: View {
                     if isSubmitting { ProgressView("Using reset…") } else { Text("Use one reset") }
                 }
                 .buttonStyle(.bordered)
-                .disabled(isSubmitting)
+                .disabled(isSubmitting || !canRedeem)
                 .accessibilityIdentifier("claude-use-reset")
             }
         }
