@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A42000000000000000000301 /* ClaudeUsageResetInventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */; };
+		A42000000000000000000201 /* ClaudeUsageResetClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000202 /* ClaudeUsageResetClient.swift */; };
+		A42000000000000000000101 /* ClaudeUsageResetInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000102 /* ClaudeUsageResetInventory.swift */; };
 		AB2990000000000000000001 /* GoogleCodingSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2990000000000000000002; };
 		A31900000000000000000001 /* GoogleUsageMetricCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */; };
 		A22600000000000000000001 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
@@ -252,6 +255,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetInventoryView.swift; sourceTree = "<group>"; };
+		A42000000000000000000202 /* ClaudeUsageResetClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetClient.swift; sourceTree = "<group>"; };
+		A42000000000000000000102 /* ClaudeUsageResetInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetInventory.swift; sourceTree = "<group>"; };
 		AB2990000000000000000002 /* GoogleCodingSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCodingSignIn.swift; sourceTree = "<group>"; };
 		A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleUsageMetricCatalog.swift; sourceTree = "<group>"; };
 		A22600000000000000000005 /* GreptileUsageIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreptileUsageIdentity.swift; sourceTree = "<group>"; };
@@ -496,6 +502,7 @@
 			children = (
 				200000000000000000000003 /* ProviderID.swift */,
 				200000000000000000000004 /* ProviderUsageResult.swift */,
+				A42000000000000000000102 /* ClaudeUsageResetInventory.swift */,
 				A40600000000000000000302 /* GreptileAllowanceRenewal.swift */,
 				A37600000000000000000002 /* ProviderMetricTileContent.swift */,
 				A37700000000000000000002 /* SettingsPresentationModels.swift */,
@@ -553,6 +560,7 @@
 				AB2990000000000000000002 /* GoogleCodingSignIn.swift */,
 				200000000000000000000023 /* ClaudeUsageParser.swift */,
 				200000000000000000000024 /* ClaudeUsageProvider.swift */,
+				A42000000000000000000202 /* ClaudeUsageResetClient.swift */,
 				200000000000000000000025 /* OpenRouterUsageProvider.swift */,
 				A22500000000000000000002 /* GreptileUsageProvider.swift */,
 				A29600000000000000000002 /* GeminiUsageProvider.swift */,
@@ -585,6 +593,7 @@
 			children = (
 				F20000000000000000000002 /* DiagnosticReportView.swift */,
 				20000000000000000000000A /* ProviderUsageCard.swift */,
+				A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */,
 				200000000000000000000012 /* SettingsView.swift */,
 				200000000000000000000038 /* WidgetBuilderView.swift */,
 				200000000000000000000013 /* ProviderSettingsView.swift */,
@@ -1004,6 +1013,7 @@
 				100000000000000000000002 /* ContentView.swift in Sources */,
 				100000000000000000000003 /* ProviderID.swift in Sources */,
 				100000000000000000000004 /* ProviderUsageResult.swift in Sources */,
+				A42000000000000000000101 /* ClaudeUsageResetInventory.swift in Sources */,
 				A37600000000000000000001 /* ProviderMetricTileContent.swift in Sources */,
 				A37700000000000000000001 /* SettingsPresentationModels.swift in Sources */,
 				A37700000000000000000003 /* GitHubStatusNotificationAuthorization.swift in Sources */,
@@ -1015,6 +1025,7 @@
 				100000000000000000000009 /* UsageRefreshService.swift in Sources */,
 				100000000000000000000034 /* UsageHistoryStore.swift in Sources */,
 				10000000000000000000000A /* ProviderUsageCard.swift in Sources */,
+				A42000000000000000000301 /* ClaudeUsageResetInventoryView.swift in Sources */,
 				10000000000000000000000D /* ProviderAccountConfiguration.swift in Sources */,
 				10000000000000000000000E /* KeychainService.swift in Sources */,
 				10000000000000000000000F /* ProviderConfigurationStore.swift in Sources */,
@@ -1055,6 +1066,7 @@
 				AB2990000000000000000001 /* GoogleCodingSignIn.swift in Sources */,
 				100000000000000000000021 /* ClaudeUsageParser.swift in Sources */,
 				100000000000000000000022 /* ClaudeUsageProvider.swift in Sources */,
+				A42000000000000000000201 /* ClaudeUsageResetClient.swift in Sources */,
 				100000000000000000000023 /* OpenRouterUsageProvider.swift in Sources */,
 				A22500000000000000000001 /* GreptileUsageProvider.swift in Sources */,
 				A29600000000000000000001 /* GeminiUsageProvider.swift in Sources */,

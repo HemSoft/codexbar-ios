@@ -24,6 +24,21 @@ public struct ClaudeUsageResetInventory: Equatable, Sendable {
     public let grants: [ClaudeUsageResetGrant]
     public let selectedGrantID: String?
     public let cooldownUntil: Date?
+    public let credentialBinding: String?
+
+    public init(isEligible: Bool, grants: [ClaudeUsageResetGrant], selectedGrantID: String?,
+                cooldownUntil: Date?, credentialBinding: String? = nil) {
+        self.isEligible = isEligible
+        self.grants = grants
+        self.selectedGrantID = selectedGrantID
+        self.cooldownUntil = cooldownUntil
+        self.credentialBinding = credentialBinding
+    }
+
+    public func bound(toAccessToken token: String) -> Self {
+        Self(isEligible: isEligible, grants: grants, selectedGrantID: selectedGrantID,
+             cooldownUntil: cooldownUntil, credentialBinding: ClaudeUsageResetClient.credentialBinding(for: token))
+    }
 
     public func availableCount(at date: Date) -> Int {
         guard isEligible else { return 0 }
