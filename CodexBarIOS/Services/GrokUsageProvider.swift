@@ -95,12 +95,7 @@ public final class GrokUsageProvider: UsageProvider {
         guard let response = response as? HTTPURLResponse, response.url == request.url else {
             throw GrokAuthError.invalidResponse
         }
-        if response.statusCode == 401 || response.statusCode == 403 { throw GrokAuthError.unauthorized }
-        if [408, 425, 429].contains(response.statusCode) || (500...599).contains(response.statusCode) {
-            throw GrokAuthError.temporarilyUnavailable
-        }
-        if [402, 404, 410].contains(response.statusCode) { throw GrokAuthError.unsupportedAccount }
-        guard response.statusCode == 200 else { throw GrokAuthError.invalidResponse }
+        guard response.statusCode == 200 else { throw Self.billingError(for: response.statusCode) }
         // Do not read settings for a malformed billing response; retry billing first.
         let now = Date()
         _ = try Self.parseCredits(data, configuration: configuration, subject: identity.sub, now: now)
@@ -111,6 +106,15 @@ public final class GrokUsageProvider: UsageProvider {
             data, configuration: configuration, subject: identity.sub, now: now, verifiedPlanName: tier.name,
             planLookupFailed: tier.isUnavailable
         )
+    }
+
+    private static func billingError(for status: Int) -> GrokAuthError {
+        switch status {
+        case 401, 403: .unauthorized
+        case 402, 404, 410: .unsupportedAccount
+        case 408, 425, 429, 500...599: .temporarilyUnavailable
+        default: .invalidResponse
+        }
     }
 
     private struct PlanLookup {
