@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A42000000000000000000501 /* ClaudeUsageResetInventoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000502 /* ClaudeUsageResetInventoryTests.swift */; };
+		A42000000000000000000601 /* ClaudeUsageResetClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000602 /* ClaudeUsageResetClientTests.swift */; };
+		A42000000000000000000701 /* ClaudeUsageResetFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000702 /* ClaudeUsageResetFlowTests.swift */; };
+		A42000000000000000000801 /* ClaudeUsageResetProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000802 /* ClaudeUsageResetProviderTests.swift */; };
 		A42000000000000000000301 /* ClaudeUsageResetInventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */; };
 		A42000000000000000000401 /* ProviderMetricTileGridResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000402 /* ProviderMetricTileGridResolver.swift */; };
 		A42000000000000000000201 /* ClaudeUsageResetClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000202 /* ClaudeUsageResetClient.swift */; };
@@ -256,6 +260,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A42000000000000000000502 /* ClaudeUsageResetInventoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetInventoryTests.swift; sourceTree = SOURCE_ROOT; };
+		A42000000000000000000602 /* ClaudeUsageResetClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetClientTests.swift; sourceTree = SOURCE_ROOT; };
+		A42000000000000000000702 /* ClaudeUsageResetFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetFlowTests.swift; sourceTree = SOURCE_ROOT; };
+		A42000000000000000000802 /* ClaudeUsageResetProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetProviderTests.swift; sourceTree = SOURCE_ROOT; };
 		A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetInventoryView.swift; sourceTree = "<group>"; };
 		A42000000000000000000402 /* ProviderMetricTileGridResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderMetricTileGridResolver.swift; sourceTree = "<group>"; };
 		A42000000000000000000202 /* ClaudeUsageResetClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetClient.swift; sourceTree = "<group>"; };
@@ -632,6 +640,10 @@
 				A31400000000000000000402 /* AntigravityUsageProviderTests.swift */,
 				A29900000000000000000202 /* GeminiBrowserSignInTests.swift */,
 				200000000000000000000050 /* TestSupport.swift */,
+				A42000000000000000000502 /* ClaudeUsageResetInventoryTests.swift */,
+				A42000000000000000000602 /* ClaudeUsageResetClientTests.swift */,
+				A42000000000000000000702 /* ClaudeUsageResetFlowTests.swift */,
+				A42000000000000000000802 /* ClaudeUsageResetProviderTests.swift */,
 				20000000000000000000004A /* UsageAlertTests.swift */,
 				20000000000000000000004D /* UsageHistoryTests.swift */,
 				C20000000000000000000001 /* WidgetConfigurationTests.swift */,
@@ -1128,6 +1140,10 @@
 				A31400000000000000000401 /* AntigravityUsageProviderTests.swift in Sources */,
 				A29900000000000000000201 /* GeminiBrowserSignInTests.swift in Sources */,
 				100000000000000000000050 /* TestSupport.swift in Sources */,
+				A42000000000000000000501 /* ClaudeUsageResetInventoryTests.swift in Sources */,
+				A42000000000000000000601 /* ClaudeUsageResetClientTests.swift in Sources */,
+				A42000000000000000000701 /* ClaudeUsageResetFlowTests.swift in Sources */,
+				A42000000000000000000801 /* ClaudeUsageResetProviderTests.swift in Sources */,
 				100000000000000000000051 /* UsageAlertTests.swift in Sources */,
 				10000000000000000000004D /* UsageHistoryTests.swift in Sources */,
 				C10000000000000000000003 /* WidgetConfigurationTests.swift in Sources */,
