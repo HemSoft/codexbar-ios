@@ -75,6 +75,7 @@ final class UITestFixtures {
         }
         let githubBilling = scenario?.hasPrefix("github-billing") == true
         let grok = scenario?.hasPrefix("grok") == true
+        Self.seedPlanPillAccounts(in: configurationStore, scenario: scenario)
         let codex = scenario?.hasPrefix("codex-") == true
         let claude = scenario?.hasPrefix("claude-") == true
         let greptile = scenario?.hasPrefix("greptile-") == true
@@ -126,7 +127,7 @@ final class UITestFixtures {
         } else {
             providers = [UITestUsageProvider(failsFirstRefresh: recovery), UITestGrokProvider(scenario: scenario)]
         }
-        refreshService = UsageRefreshService(providers: providers, initialResults: results)
+        refreshService = UsageRefreshService(providers: Self.providersForPlanPills(providers, scenario: scenario), initialResults: results)
         if (greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1")
             || scenario?.hasPrefix("grok-cursor-parity") == true
             || Self.isCursorSessionScenario(scenario) {
@@ -162,6 +163,7 @@ final class UITestFixtures {
     nonisolated private static func initialResult(
         for configuration: ProviderAccountConfiguration, scenario: String?, googleSources: [ProviderID]
     ) -> ProviderUsageResult {
+        if scenario == "plan-pills" { return planPillResult(for: configuration) }
         if scenario?.hasPrefix("metric-evidence-") == true {
             return metricEvidenceResult(for: configuration, scenario: scenario ?? "")
         }
@@ -217,6 +219,47 @@ final class UITestFixtures {
         return CodexCredentialsParser.storedCredential(from: CodexCredentials(
             accessToken: "header.\(payload).signature"
         ))
+    }
+
+    private static func providersForPlanPills(_ providers: [any UsageProvider], scenario: String?) -> [any UsageProvider] {
+        guard scenario == "plan-pills" else { return providers }
+        return [ProviderID.codex, .claude, .gemini, .openRouter].map { UITestPlanPillProvider(providerID: $0) }
+    }
+
+    private static func seedPlanPillAccounts(in store: ProviderConfigurationStore, scenario: String?) {
+        guard scenario == "plan-pills", store.configurations.isEmpty else { return }
+        for (id, provider, title) in [
+            ("pro", ProviderID.codex, "Codex 20x fixture"),
+            ("prolite", .codex, "Codex 5x fixture"),
+            ("max5", .claude, "Claude Max fixture"),
+            ("google", .gemini, "Long Google AI Ultra account name is not proof of a subscription"),
+            ("api", .openRouter, "OpenRouter fixture"),
+        ] {
+            let account = ProviderAccountConfiguration(id: id, providerID: provider, accountLabel: title, authMethod: .apiKey)
+            _ = store.update(account)
+            _ = store.saveSecret("ui-test-credential", for: account)
+            if provider == .gemini {
+                _ = store.saveSecret(#"{"__Secure-1PSID":"synthetic"}"#, for: account)
+            }
+        }
+    }
+
+    nonisolated static func planPillResult(for account: ProviderAccountConfiguration) -> ProviderUsageResult {
+        let parsed: ProviderUsageResult?
+        switch account.providerID {
+        case .codex:
+            let data = Data("{\"plan_type\":\"\(account.id)\",\"rate_limit\":{\"primary_window\":{\"used_percent\":42,\"reset_at\":1893542400,\"limit_window_seconds\":18000}}}".utf8)
+            parsed = CodexUsageParser.parse(data)
+        case .claude:
+            parsed = ClaudeUsageParser.parse(Data(#"{"five_hour":{"utilization":42}}"#.utf8), subscriptionType: "max_5x")
+        default:
+            parsed = nil
+        }
+        return ProviderUsageResult(
+            accountID: account.id, providerID: account.providerID, title: account.displayName, plan: parsed?.plan,
+            subtitle: "Synthetic plan fixture. No live account.",
+            bars: parsed?.bars ?? [UsageBar(stableKey: "fixture", label: "Usage", used: 42, limit: 100)], fetchedAt: Date()
+        )
     }
 
     private static func seedCodexAccounts(in store: ProviderConfigurationStore) {
@@ -1526,3 +1569,11 @@ private final class UITestNetworkBlocker: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 #endif
+
+private struct UITestPlanPillProvider: UsageProvider {
+    let providerID: ProviderID
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        UITestFixtures.planPillResult(for: configuration)
+    }
+}

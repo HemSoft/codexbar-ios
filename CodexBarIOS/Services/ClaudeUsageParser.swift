@@ -1201,12 +1201,20 @@ public enum ClaudeUsageParser {
         let identifier: String
         let displayLabel: String
         let accessibilityLabel: String
-        if subscription == "max_20x" || rateLimit == "max_20x" {
+        if subscription == "max_20x" || rateLimit == "max_20x" || rateLimit == "default_claude_max_20x" {
             identifier = "max20"
             displayLabel = "MAX 20×"
             accessibilityLabel = "Max 20x"
+        } else if subscription == "max_5x" || rateLimit == "max_5x" || rateLimit == "default_claude_max_5x" {
+            identifier = "max5"
+            displayLabel = "MAX 5×"
+            accessibilityLabel = "Max 5x"
         } else {
             switch subscription {
+            case "max":
+                identifier = "max"
+                displayLabel = "MAX"
+                accessibilityLabel = "Max"
             case "free":
                 identifier = "free"
                 displayLabel = "FREE"

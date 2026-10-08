@@ -130,6 +130,39 @@ final class CodexCreditsPoolUITests: XCTestCase {
         app.terminate()
     }
 
+    func testPreciseSubscriptionPillsOnExpandedAndCollapsedCards() {
+        continueAfterFailure = false
+        for defaultText in [true, false] {
+            for dark in [false, true] {
+                let app = launchSpacingFixture(defaultText: defaultText, dark: dark, scenario: "plan-pills")
+                for (title, plan) in [
+                    ("Codex 20x fixture", "Pro 20x"),
+                    ("Codex 5x fixture", "Pro 5x"),
+                    ("Claude Max fixture", "Max 5x"),
+                    ("Long Google AI Ultra account name is not proof of a subscription", "Plan unavailable"),
+                    ("OpenRouter fixture", "API credits"),
+                ] {
+                    let header = app.buttons.matching(NSPredicate(
+                        format: "label BEGINSWITH %@ AND label CONTAINS %@", title + ", " + plan, "Normal status"
+                    )).firstMatch
+                    reveal(header, in: app)
+                    XCTAssertEqual(header.value as? String, "Expanded", app.debugDescription)
+                    keep("pill-\(title)-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
+                    header.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()
+                    XCTAssertEqual(header.value as? String, "Collapsed", app.debugDescription)
+                    XCTAssertTrue(header.label.contains(plan))
+                    keep("pill-collapsed-\(title)-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
+                }
+                tap(app.buttons["Refresh usage"], in: app)
+                let sameAccount = app.buttons.matching(NSPredicate(
+                    format: "label BEGINSWITH %@", "Codex 20x fixture, Pro 20x"
+                )).firstMatch
+                XCTAssertTrue(sameAccount.exists, app.debugDescription)
+                app.terminate()
+            }
+        }
+    }
+
     func testCompactCardHeadersAndIndependentControls() {
         continueAfterFailure = false
         for defaultText in [true, false] {
@@ -141,7 +174,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(menu.frame.width, 44)
                 XCTAssertGreaterThanOrEqual(menu.frame.height, 44)
                 keep("spacing-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
-                let disclosure = app.descendants(matching: .any)["Personal Codex, Synthetic Codex usage, Normal status"]
+                let disclosure = app.descendants(matching: .any)["Personal Codex, Plan unavailable, Synthetic Codex usage, Normal status"]
                 XCTAssertTrue(disclosure.exists, app.debugDescription)
                 XCTAssertEqual(disclosure.value as? String, "Expanded", app.debugDescription)
                 disclosure.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()

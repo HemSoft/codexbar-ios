@@ -2234,7 +2234,7 @@ final class UsageHistoryTests: XCTestCase {
 
         XCTAssertEqual(
             ProviderUsageCard.headerAccessibilityLabel(for: result),
-            "Work Claude, Max 20x plan"
+            "Work Claude, Max 20x"
         )
         let resultWithoutPlan = ProviderUsageResult(
             accountID: "cursor.personal",
@@ -2251,7 +2251,7 @@ final class UsageHistoryTests: XCTestCase {
         )
         XCTAssertEqual(
             ProviderUsageCard.headerAccessibilityLabel(for: resultWithoutPlan),
-            "Cursor"
+            "Cursor, Business"
         )
     }
 

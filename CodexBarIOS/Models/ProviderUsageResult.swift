@@ -210,6 +210,26 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let providerID: ProviderID
     public var title: String
     public let plan: ProviderPlanDescriptor?
+
+    /// Presentation fallback only. Never infers a subscription from usage or account labels.
+    public var cardPlan: ProviderPlanDescriptor {
+        if let plan { return plan }
+        if providerID == .greptile, greptileAllowanceRenewal?.isApplicable == true {
+            return .make(providerPrefix: "greptile", identifier: "free", label: "Free")
+        }
+        switch providerID {
+        case .openRouter, .moonshot:
+            return .make(
+                providerPrefix: providerID.rawValue, identifier: "api-credits",
+                label: "API credits", displayLabel: "API credits"
+            )
+        default:
+            return .make(
+                providerPrefix: providerID.rawValue, identifier: "unavailable",
+                label: "Plan unavailable", displayLabel: "Plan unavailable"
+            )
+        }
+    }
     /// Plan verified through the same Grok subject as this usage response; never a usage metric.
     public let verifiedGrokPlanName: String?
     public let subtitle: String
