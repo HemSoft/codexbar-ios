@@ -45,6 +45,14 @@ separately in the implementation PR.
 | Baseline 37690509455 | 1,269s | 1,261s | 1,949s | 0ms / 0ms |
 | Candidate 37753142813 | 51s | 42s | 42s | 0ms / 0ms |
 
+
+The final workload, including the stronger trigger assertions, also passed in
+[run 37754838237](https://github.com/hemsoft-dev/codexbar-ios/actions/runs/37754838237)
+at `3ec659df3a472113cf9b066d9eefffe906c9d748`: 70 seconds workflow elapsed,
+58 seconds completed job span and summed job runtime, with zero API-reported
+billable milliseconds on MACOS and UBUNTU. The PR records the latest exact-head
+measurement after this documentation update, without changing workflow work.
+
 Trigger/job changes: remove `push: branches: [main]`; retain `pull_request` and
 `workflow_dispatch`; make four native quality jobs dispatch-only. Move the
 existing four CI-policy assertions from the smoke job to SwiftLint without
