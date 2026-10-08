@@ -130,7 +130,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
         app.terminate()
     }
 
-    private func assertPreciseSubscriptionPillsOnExpandedAndCollapsedCards() {
+    func testPreciseSubscriptionPillsOnExpandedAndCollapsedCards() {
         continueAfterFailure = false
         for defaultText in [true, false] {
             for dark in [false, true] {
@@ -139,6 +139,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                     ("Codex 20x fixture", "Pro 20x"),
                     ("Codex 5x fixture", "Pro 5x"),
                     ("Claude Max fixture", "Max 5x"),
+                    ("Grok fixture", "SuperGrok Lite"),
                     ("Long Google AI Ultra account name is not proof of a subscription", "Plan unavailable"),
                     ("OpenRouter fixture", "API credits"),
                 ] {
@@ -205,7 +206,6 @@ final class CodexCreditsPoolUITests: XCTestCase {
         XCTAssertTrue(personalQuota(in: stale).label.contains("stale"))
         keep("spacing-stale", app: stale)
         stale.terminate()
-        assertPreciseSubscriptionPillsOnExpandedAndCollapsedCards()
     }
 
     private func launchSpacingFixture(defaultText: Bool, dark: Bool, scenario: String = "codex-credits") -> XCUIApplication {

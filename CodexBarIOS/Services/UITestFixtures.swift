@@ -223,7 +223,7 @@ final class UITestFixtures {
 
     private static func providersForPlanPills(_ providers: [any UsageProvider], scenario: String?) -> [any UsageProvider] {
         guard scenario == "plan-pills" else { return providers }
-        return [ProviderID.codex, .claude, .gemini, .openRouter].map { UITestPlanPillProvider(providerID: $0) }
+        return [ProviderID.codex, .claude, .grok, .gemini, .openRouter].map { UITestPlanPillProvider(providerID: $0) }
     }
 
     private static func seedPlanPillAccounts(in store: ProviderConfigurationStore, scenario: String?) {
@@ -232,6 +232,7 @@ final class UITestFixtures {
             ("pro", ProviderID.codex, "Codex 20x fixture"),
             ("prolite", .codex, "Codex 5x fixture"),
             ("max5", .claude, "Claude Max fixture"),
+            ("grok-plan", .grok, "Grok fixture"),
             ("google", .gemini, "Long Google AI Ultra account name is not proof of a subscription"),
             ("api", .openRouter, "OpenRouter fixture"),
         ] {
@@ -247,6 +248,8 @@ final class UITestFixtures {
     nonisolated static func planPillResult(for account: ProviderAccountConfiguration) -> ProviderUsageResult {
         let parsed: ProviderUsageResult?
         switch account.providerID {
+        case .grok:
+            return grokResult(for: account, scenario: "grok-default")
         case .codex:
             let data = Data("{\"plan_type\":\"\(account.id)\",\"rate_limit\":{\"primary_window\":{\"used_percent\":42,\"reset_at\":1893542400,\"limit_window_seconds\":18000}}}".utf8)
             parsed = CodexUsageParser.parse(data)

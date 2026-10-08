@@ -63,10 +63,10 @@ class CITriggerPolicyTests(unittest.TestCase):
         self.assertIn("always() && github.event_name == 'workflow_dispatch'", aggregate)
         self.assertIn('if [[ "$UI_FAMILIES_RESULT" != success ]]', aggregate)
 
-    def test_ui_runner_requires_all_twenty_eight_journeys(self) -> None:
+    def test_ui_runner_requires_all_twenty_nine_journeys(self) -> None:
         for assertion in (
-            ".totalTestCount == 28",
-            ".passedTests == 28",
+            ".totalTestCount == 29",
+            ".passedTests == 29",
             ".failedTests == 0",
             ".skippedTests == 0",
             ".expectedFailures == 0",
