@@ -507,3 +507,15 @@ identities are unchanged; the reviewer renewed their source/consumer assessment
 without changing diagnostic identities, thresholds or exclusions. The earlier
 hosted result remains evidence for its analyzed source. Fresh hosted analysis of
 the boundary repair is required before reporting this renewed baseline as passing.
+
+Native checks subsequently rejected the explicit dashboard schedule at1455ace:
+both families retained two resets past expiry. The bounded local periodic-display
+repair at `2ee959433c9217ca4e4ce0ffe87dcb61e2e06e1b` passes untouched-dashboard expiry/start and cooldown transitions
+on both families with zero reset requests (iPad116.496s, iPhone117.280s).
+The source snapshot is `9aadd2257e81c45686d7ecf2da925bc3f80ff5dc907217967c66ae29b41168c6` with the same113 files.
+The grant model returns to its previously reviewed implementation; the visible
+reset section now uses the existing one-second timeline pattern. This changes
+no credential consumer, persistence or provider request. Exact retained finding
+identities remain unchanged after source/consumer re-review. The stale-source
+1455ace hosted extraction was intentionally canceled; a fresh analysis must
+verify this final source before its renewed baseline is reported as passing.
