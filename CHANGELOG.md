@@ -26,11 +26,11 @@ building, testing, or releasing the app.
 
 ### Fixed
 
-- Keep Claude Fable 5 and 5.1 weekly usage together as a separate Fable metric.
-  Saved visibility, layout, widget and Apple Watch choices survive model-name
-  changes, and daily history keeps that allowance together. A saved Fable widget
-  stays unavailable when its allowance is missing, rather than showing another quota. Tile
-  width menus expose the saved selection to accessibility tools.
+- Keep Claude Fable 5 and 5.1 under one weekly metric, separate from shared
+  Claude allowances. Saved visibility, layout, history, widget and Apple Watch
+  choices survive model-name changes. A saved Fable widget stays unavailable
+  when Claude omits its allowance. Tile width menus identify the saved selection
+  for accessibility tools.
   ([#421](https://github.com/hemsoft-dev/codexbar-ios/issues/421))
 
 ### Developer Experience
