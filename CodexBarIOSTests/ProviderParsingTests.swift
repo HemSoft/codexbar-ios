@@ -4642,7 +4642,7 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.title, "Claude")
-        XCTAssertNil(result.plan)
+        XCTAssertEqual(result.plan?.label, "MAX")
         XCTAssertEqual(result.bars.map(\.label), ["5-hour"])
         XCTAssertEqual(result.bars.first?.stableKey, "session")
         XCTAssertEqual(result.bars.first?.used, 25)

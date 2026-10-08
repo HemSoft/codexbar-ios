@@ -2289,7 +2289,7 @@ final class UsageHistoryTests: XCTestCase {
                 isPerformingRecovery: false,
                 severity: .warning
             ),
-            "\(result.title), Current, Refreshing, Warning status"
+            "\(result.title), Plan unavailable, Current, Refreshing, Warning status"
         )
         XCTAssertEqual(
             ProviderUsageCard.disclosureAccessibilityLabel(
@@ -2299,7 +2299,7 @@ final class UsageHistoryTests: XCTestCase {
                 isPerformingRecovery: true,
                 severity: .critical
             ),
-            "\(result.title), Session expired, Signing in, Critical status"
+            "\(result.title), Plan unavailable, Session expired, Signing in, Critical status"
         )
     }
 

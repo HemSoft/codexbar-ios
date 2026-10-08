@@ -51,7 +51,7 @@ final class ProviderUsageCardHiddenSeverityTests: XCTestCase {
                 severity: .critical,
                 severitySource: alert.message
             ),
-            "Cursor, Current, Critical status, Hidden metric Other Models is currently at 100%."
+            "Cursor, Plan unavailable, Current, Critical status, Hidden metric Other Models is currently at 100%."
         )
     }
 
