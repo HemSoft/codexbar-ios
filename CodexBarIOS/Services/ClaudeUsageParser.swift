@@ -1,6 +1,17 @@
 import Foundation
 
 enum ClaudeUsageIdentity {
+    static let fableWeeklyStableKey = "weekly-scoped-fable"
+    static let fableWeeklyMetricID = "claude.\(fableWeeklyStableKey)"
+    static let fableModelNames = ["fable", "fable 5", "fable 5.1", "claude fable", "claude fable 5", "claude fable 5.1"]
+    static let legacyFableStableKeys = fableModelNames.map {
+        "weekly-scoped-\($0.filter { $0.isLetter || $0.isNumber })"
+    }.filter { $0 != fableWeeklyStableKey }
+
+    static func canonicalFableStableKey(_ key: String) -> String {
+        legacyFableStableKeys.contains(key) ? fableWeeklyStableKey : key
+    }
+
     static let allModelsWeeklyStableKey = "weekly-all"
     static let allModelsWeeklyLegacyKey = "weekly-usage-limit"
     static let sonnetWeeklyLegacyKey = "sonnet-weekly-limit"
@@ -1090,9 +1101,7 @@ public enum ClaudeUsageParser {
         guard let name = sanitizedModelName(value) else { return nil }
         // These documented models share one Fable cap. Keep saved choices when
         // its display name changes; unrelated or future model names stay distinct.
-        let knownNames: Set<String> = [
-            "fable", "fable 5", "fable 5.1", "claude fable", "claude fable 5", "claude fable 5.1",
-        ]
+        let knownNames = Set(ClaudeUsageIdentity.fableModelNames)
         let normalized = name.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return knownNames.contains(normalized) ? "Fable" : name
     }

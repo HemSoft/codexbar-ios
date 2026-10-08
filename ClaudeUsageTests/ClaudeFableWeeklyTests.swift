@@ -197,6 +197,81 @@ final class ClaudeFableWeeklyTests: XCTestCase {
         return try XCTUnwrap(ClaudeUsageParser.parse(JSONSerialization.data(withJSONObject: object), subscriptionType: plan, fetchedAt: now))
     }
 
+    func testOlderFableChoicesMigrateWithoutOverwritingCanonicalChoices() throws {
+        let canonical = "claude.weekly-scoped-fable"
+        let preference = MetricTilePreference(isVisible: false, visualizationStyle: .circularRing,
+                                             width: .full, watchVisibility: .show, isNewlyDiscovered: false)
+        for stableKey in [
+            "weekly-scoped-fable5", "weekly-scoped-fable51", "weekly-scoped-claudefable",
+            "weekly-scoped-claudefable5", "weekly-scoped-claudefable51",
+        ] {
+            let legacy = "claude.\(stableKey)"
+            var layout = AccountMetricLayout(orderedMetricIDs: ["claude.session", legacy, "claude.weekly-all"],
+                                             preferences: [legacy: preference], hasCustomMetricOrder: true)
+            ClaudeFableMetricPreferenceCompatibility.migrate(layout: &layout, availableMetricIDs: [canonical, "claude.session"])
+            XCTAssertEqual(layout.preferences[canonical], preference, legacy)
+            XCTAssertNil(layout.preferences[legacy], legacy)
+            XCTAssertEqual(layout.orderedMetricIDs, ["claude.session", canonical, "claude.weekly-all"])
+            XCTAssertTrue(layout.hasCustomMetricOrder)
+            let migrated = layout
+            ClaudeFableMetricPreferenceCompatibility.migrate(layout: &layout, availableMetricIDs: [canonical])
+            XCTAssertEqual(layout, migrated, "Migration must be idempotent")
+            XCTAssertEqual(try JSONDecoder().decode(AccountMetricLayout.self, from: JSONEncoder().encode(layout)), migrated)
+        }
+        let legacy = "claude.weekly-scoped-fable5"
+        let canonicalChoice = MetricTilePreference(isNewlyDiscovered: false)
+        var existing = AccountMetricLayout(orderedMetricIDs: [legacy, "claude.session", canonical],
+                                          preferences: [legacy: preference, canonical: canonicalChoice])
+        ClaudeFableMetricPreferenceCompatibility.migrate(layout: &existing, availableMetricIDs: [canonical])
+        XCTAssertEqual(existing.preferences[canonical], canonicalChoice, "An explicit canonical choice takes precedence")
+        XCTAssertEqual(existing.orderedMetricIDs, ["claude.session", canonical])
+        var absent = AccountMetricLayout(orderedMetricIDs: [legacy], preferences: [legacy: preference])
+        let original = absent
+        ClaudeFableMetricPreferenceCompatibility.migrate(layout: &absent, availableMetricIDs: ["claude.weekly-all"])
+        XCTAssertEqual(absent, original, "Missing provider data must not migrate or discard choices")
+        ClaudeFableMetricPreferenceCompatibility.migrate(layout: &absent, availableMetricIDs: [canonical, legacy])
+        XCTAssertEqual(absent, original, "Do not merge identities still returned as distinct metrics")
+        let newerLegacy = "claude.weekly-scoped-fable51"
+        var duplicate = AccountMetricLayout(orderedMetricIDs: [legacy, newerLegacy],
+                                           preferences: [legacy: MetricTilePreference(), newerLegacy: preference,
+                                                         canonical: MetricTilePreference(),
+                                           ])
+        ClaudeFableMetricPreferenceCompatibility.migrate(layout: &duplicate, availableMetricIDs: [canonical])
+        XCTAssertEqual(duplicate.preferences[canonical], preference, "Retain the customized alias rather than a default duplicate")
+        XCTAssertEqual(duplicate.orderedMetricIDs, [canonical])
+    }
+
+    @MainActor
+    func testDailyHistoryKeepsOldFableAliasesInOneComponent() throws {
+        for stableKey in [
+            "weekly-scoped-fable5", "weekly-scoped-fable51", "weekly-scoped-claudefable",
+            "weekly-scoped-claudefable5", "weekly-scoped-claudefable51",
+        ] {
+            let suite = "ClaudeFableLegacyHistory.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let history = UsageHistoryStore(defaults: defaults)
+            let account = ProviderAccountConfiguration(id: "legacy-fable", providerID: .claude,
+                                                       accountLabel: "Synthetic", authMethod: .browserSession)
+            let older = ProviderUsageResult(accountID: account.id, providerID: .claude, title: account.displayName,
+                                            subtitle: "Synthetic", bars: [UsageBar(stableKey: stableKey, label: "Fable 5 weekly usage limit",
+                                                used: 12, limit: 100, resetsAt: reset),
+                                            ], fetchedAt: now)
+            history.record(results: [older], now: now)
+            let parsed = try parse(limits: [limit(name: "Fable 5.1", percent: 21)])
+            let current = ProviderUsageResult(accountID: account.id, providerID: .claude, title: account.displayName,
+                                              subtitle: "Synthetic", bars: parsed.bars, fetchedAt: now.addingTimeInterval(60))
+            history.record(results: [current], now: now.addingTimeInterval(60))
+            let dailyFable = history.dailySnapshots.filter {
+                $0.bars.contains { ["weekly-scoped-fable", stableKey].contains($0.stableKey ?? "") }
+            }
+            XCTAssertEqual(dailyFable.count, 1, stableKey)
+            XCTAssertEqual(dailyFable.first?.bars.first?.used, 21)
+            XCTAssertEqual(history.snapshots.count, 2, "Retain original historical samples")
+            XCTAssertEqual(UsageHistoryStore(defaults: defaults).dailySnapshots, history.dailySnapshots)
+        }
+    }
+
     private func bound(_ result: ProviderUsageResult, to account: ProviderAccountConfiguration) -> ProviderUsageResult {
         ProviderUsageResult(accountID: account.id, providerID: .claude, title: account.displayName,
                             subtitle: result.subtitle, bars: result.bars, fetchedAt: now)
