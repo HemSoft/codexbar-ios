@@ -24,6 +24,15 @@ building, testing, or releasing the app.
   clears its former Grok tier and quota. Custom names are preserved.
   ([#417](https://github.com/HemSoft/codexbar-ios/issues/417))
 
+### Fixed
+
+- Keep Claude Fable 5 and 5.1 weekly usage together as a separate Fable metric.
+  Saved visibility, layout, widget and Apple Watch choices survive model-name
+  changes, and daily history keeps that allowance together. A saved Fable widget
+  stays unavailable when its allowance is missing, rather than showing another quota. Tile
+  width menus expose the saved selection to accessibility tools.
+  ([#421](https://github.com/hemsoft-dev/codexbar-ios/issues/421))
+
 ### Developer Experience
 
 - Run ordinary PR lint and configuration checks without native build/test reruns.

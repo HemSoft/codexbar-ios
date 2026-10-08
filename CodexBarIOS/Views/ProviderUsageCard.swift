@@ -2994,17 +2994,16 @@ private struct MetricVisualizationCustomizationView: View {
             .disabled(visibleMetrics.last?.id == metric.id)
 
             Menu("Tile Width") {
-                ForEach(MetricTileWidthPreference.allCases, id: \.self) { width in
-                    Button {
+                Picker("Tile Width", selection: Binding(
+                    get: { metricWidthForMetric(metric.id) },
+                    set: { width in
                         performChange(haptic: .rigid) {
                             onUpdateMetricWidth(metric.id, width)
                         }
-                    } label: {
-                        if metricWidthForMetric(metric.id) == width {
-                            Label(width.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(width.displayName)
-                        }
+                    }
+                )) {
+                    ForEach(MetricTileWidthPreference.allCases, id: \.self) { width in
+                        Text(width.displayName).tag(width)
                     }
                 }
             }

@@ -79,7 +79,7 @@ final class ClaudeFableWeeklyTests: XCTestCase {
         let suite = "ClaudeFableWeeklyTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let store = ProviderConfigurationStore(defaults: defaults, secretStore: FableFixtureSecretStore())
+        var store = ProviderConfigurationStore(defaults: defaults, secretStore: FableFixtureSecretStore())
         let first = store.addAccount(for: .claude)
         let second = store.addAccount(for: .claude)
         XCTAssertTrue(store.saveSecret("synthetic", for: first))
@@ -88,7 +88,23 @@ final class ClaudeFableWeeklyTests: XCTestCase {
         let changedName = bound(try parse(limits: [limit(name: "Fable 5.1", percent: 21)]), to: first)
         let other = bound(try parse(limits: [limit(name: "Fable 5", percent: 7)]), to: second)
         let id = "claude.weekly-scoped-fable"
+        let olderID = "claude.weekly-scoped-fable5"
+        _ = store.reconcileMetricLayout(accountID: first.id, availableMetricIDs: ["claude.session", olderID, "claude.weekly-all"])
+        store.updateMetricWidth(.full, accountID: first.id, metricID: olderID)
+        store.updateVisualizationStyle(.circularRing, accountID: first.id, metricID: olderID)
+        store.updateWatchMetricVisibility(.show, accountID: first.id, metricID: olderID)
+        store.updateMetricVisibility(false, accountID: first.id, metricID: olderID)
+        store.updateMetricOrder(["claude.session", olderID, "claude.weekly-all"], accountID: first.id)
+        // Decode the persisted older choice before exercising actual store reconciliation.
+        store = ProviderConfigurationStore(defaults: defaults, secretStore: FableFixtureSecretStore())
+        XCTAssertFalse(store.isMetricVisible(accountID: first.id, metricID: olderID))
         _ = store.reconcileMetricLayout(accountID: first.id, availableMetricIDs: original.availableMetrics.map(\.id))
+        XCTAssertFalse(store.isMetricVisible(accountID: first.id, metricID: id))
+        XCTAssertEqual(store.metricWidth(accountID: first.id, metricID: id), .full)
+        XCTAssertEqual(store.visualizationStyle(accountID: first.id, metricID: id), .circularRing)
+        XCTAssertEqual(store.watchVisibilityPolicy(accountID: first.id, metricID: id), .show)
+        XCTAssertEqual(store.metricLayouts[first.id]?.orderedMetricIDs, ["claude.session", id, "claude.weekly-all"])
+        XCTAssertNil(store.metricLayouts[first.id]?.preferences[olderID])
         store.updateMetricWidth(.full, accountID: first.id, metricID: id)
         store.updateVisualizationStyle(.circularRing, accountID: first.id, metricID: id)
         _ = store.reconcileMetricLayout(accountID: second.id, availableMetricIDs: other.availableMetrics.map(\.id))
@@ -141,6 +157,9 @@ final class ClaudeFableWeeklyTests: XCTestCase {
             let metric = try XCTUnwrap(watch.accounts.first { $0.id == watchID }?.metrics.first { $0.id == id })
             XCTAssertEqual(metric.exactValue, value)
             XCTAssertEqual(metric.resetsAt, reset)
+            // Complication resolver code belongs to watchOS natively; the portable
+            // SwiftPM module also exposes it for this end-to-end publisher check.
+            #if SWIFT_PACKAGE
             for legacyID in ["claude.weekly-scoped-fable5", "claude.weekly-scoped-fable51",
                              "claude.weekly-scoped-claudefable", "claude.weekly-scoped-claudefable5",
                              "claude.weekly-scoped-claudefable51",
@@ -157,6 +176,7 @@ final class ClaudeFableWeeklyTests: XCTestCase {
             let unknown = WatchComplicationSelection(accountID: watchID, metricID: "claude.weekly-scoped-fableexperimental")
             XCTAssertEqual(WatchComplicationResolver().resolve(snapshot: watch, selection: unknown, at: now).availability,
                            .unavailable)
+            #endif
         }
         let missing = bound(try parse(limits: []), to: first)
         WidgetSnapshotPublisher.publish(results: [missing, other], configurationStore: restored,

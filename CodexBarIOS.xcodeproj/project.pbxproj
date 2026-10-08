@@ -11,9 +11,11 @@
 		A42000000000000000000601 /* ClaudeUsageResetClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000602 /* ClaudeUsageResetClientTests.swift */; };
 		A42000000000000000000701 /* ClaudeUsageResetFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000702 /* ClaudeUsageResetFlowTests.swift */; };
 		A42000000000000000000801 /* ClaudeUsageResetProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000802 /* ClaudeUsageResetProviderTests.swift */; };
+		A42100000000000000000301 /* ClaudeFableWeeklyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42100000000000000000302 /* ClaudeFableWeeklyTests.swift */; };
 		A42000000000000000000301 /* ClaudeUsageResetInventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */; };
 		A42000000000000000000401 /* ProviderMetricTileGridResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000402 /* ProviderMetricTileGridResolver.swift */; };
 		A42000000000000000000201 /* ClaudeUsageResetClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000202 /* ClaudeUsageResetClient.swift */; };
+		A42100000000000000000201 /* ClaudeFableMetricPreferenceCompatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42100000000000000000202 /* ClaudeFableMetricPreferenceCompatibility.swift */; };
 		A42000000000000000000101 /* ClaudeUsageResetInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000102 /* ClaudeUsageResetInventory.swift */; };
 		AB2990000000000000000001 /* GoogleCodingSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2990000000000000000002; };
 		A31900000000000000000001 /* GoogleUsageMetricCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */; };
@@ -22,9 +24,13 @@
 		A22600000000000000000003 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
 		A22600000000000000000004 /* GreptileUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22600000000000000000005 /* GreptileUsageIdentity.swift */; };
 		A22700000000000000000001 /* CursorUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22700000000000000000005 /* CursorUsageIdentity.swift */; };
+		A42100000000000000000101 /* ClaudeFableUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42100000000000000000105 /* ClaudeFableUsageIdentity.swift */; };
 		A22700000000000000000002 /* CursorUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22700000000000000000005 /* CursorUsageIdentity.swift */; };
+		A42100000000000000000102 /* ClaudeFableUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42100000000000000000105 /* ClaudeFableUsageIdentity.swift */; };
 		A22700000000000000000003 /* CursorUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22700000000000000000005 /* CursorUsageIdentity.swift */; };
+		A42100000000000000000103 /* ClaudeFableUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42100000000000000000105 /* ClaudeFableUsageIdentity.swift */; };
 		A22700000000000000000004 /* CursorUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22700000000000000000005 /* CursorUsageIdentity.swift */; };
+		A42100000000000000000104 /* ClaudeFableUsageIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42100000000000000000105 /* ClaudeFableUsageIdentity.swift */; };
 		G10000000000000000000244 /* GitHubStatusMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = G20000000000000000000244 /* GitHubStatusMonitor.swift */; };
 		100000000000000000000001 /* CodexBarIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* CodexBarIOSApp.swift */; };
 		100000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* ContentView.swift */; };
@@ -264,14 +270,17 @@
 		A42000000000000000000602 /* ClaudeUsageResetClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetClientTests.swift; sourceTree = SOURCE_ROOT; };
 		A42000000000000000000702 /* ClaudeUsageResetFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetFlowTests.swift; sourceTree = SOURCE_ROOT; };
 		A42000000000000000000802 /* ClaudeUsageResetProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetProviderTests.swift; sourceTree = SOURCE_ROOT; };
+		A42100000000000000000302 /* ClaudeFableWeeklyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeFableWeeklyTests.swift; sourceTree = SOURCE_ROOT; };
 		A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetInventoryView.swift; sourceTree = "<group>"; };
 		A42000000000000000000402 /* ProviderMetricTileGridResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderMetricTileGridResolver.swift; sourceTree = "<group>"; };
 		A42000000000000000000202 /* ClaudeUsageResetClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetClient.swift; sourceTree = "<group>"; };
+		A42100000000000000000202 /* ClaudeFableMetricPreferenceCompatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeFableMetricPreferenceCompatibility.swift; sourceTree = "<group>"; };
 		A42000000000000000000102 /* ClaudeUsageResetInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetInventory.swift; sourceTree = "<group>"; };
 		AB2990000000000000000002 /* GoogleCodingSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCodingSignIn.swift; sourceTree = "<group>"; };
 		A31900000000000000000002 /* GoogleUsageMetricCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleUsageMetricCatalog.swift; sourceTree = "<group>"; };
 		A22600000000000000000005 /* GreptileUsageIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreptileUsageIdentity.swift; sourceTree = "<group>"; };
 		A22700000000000000000005 /* CursorUsageIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorUsageIdentity.swift; sourceTree = "<group>"; };
+		A42100000000000000000105 /* ClaudeFableUsageIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeFableUsageIdentity.swift; sourceTree = "<group>"; };
 		G20000000000000000000244 /* GitHubStatusMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubStatusMonitor.swift; sourceTree = "<group>"; };
 		200000000000000000000001 /* CodexBarIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarIOSApp.swift; sourceTree = "<group>"; };
 		200000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -571,6 +580,7 @@
 				200000000000000000000023 /* ClaudeUsageParser.swift */,
 				200000000000000000000024 /* ClaudeUsageProvider.swift */,
 				A42000000000000000000202 /* ClaudeUsageResetClient.swift */,
+				A42100000000000000000202 /* ClaudeFableMetricPreferenceCompatibility.swift */,
 				200000000000000000000025 /* OpenRouterUsageProvider.swift */,
 				A22500000000000000000002 /* GreptileUsageProvider.swift */,
 				A29600000000000000000002 /* GeminiUsageProvider.swift */,
@@ -644,6 +654,7 @@
 				A42000000000000000000602 /* ClaudeUsageResetClientTests.swift */,
 				A42000000000000000000702 /* ClaudeUsageResetFlowTests.swift */,
 				A42000000000000000000802 /* ClaudeUsageResetProviderTests.swift */,
+				A42100000000000000000302 /* ClaudeFableWeeklyTests.swift */,
 				20000000000000000000004A /* UsageAlertTests.swift */,
 				20000000000000000000004D /* UsageHistoryTests.swift */,
 				C20000000000000000000001 /* WidgetConfigurationTests.swift */,
@@ -684,6 +695,7 @@
 			isa = PBXGroup;
 			children = (
 				A22700000000000000000005 /* CursorUsageIdentity.swift */,
+				A42100000000000000000105 /* ClaudeFableUsageIdentity.swift */,
 				A22600000000000000000005 /* GreptileUsageIdentity.swift */,
 				200000000000000000000048 /* CodexBarDeepLink.swift */,
 				20000000000000000000003E /* UserFacingDateTimeFormatter.swift */,
@@ -1021,6 +1033,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A22700000000000000000001 /* CursorUsageIdentity.swift in Sources */,
+				A42100000000000000000101 /* ClaudeFableUsageIdentity.swift in Sources */,
 				A22600000000000000000001 /* GreptileUsageIdentity.swift in Sources */,
 				G10000000000000000000244 /* GitHubStatusMonitor.swift in Sources */,
 				F10000000000000000000002 /* DiagnosticReportView.swift in Sources */,
@@ -1083,6 +1096,7 @@
 				100000000000000000000021 /* ClaudeUsageParser.swift in Sources */,
 				100000000000000000000022 /* ClaudeUsageProvider.swift in Sources */,
 				A42000000000000000000201 /* ClaudeUsageResetClient.swift in Sources */,
+				A42100000000000000000201 /* ClaudeFableMetricPreferenceCompatibility.swift in Sources */,
 				100000000000000000000023 /* OpenRouterUsageProvider.swift in Sources */,
 				A22500000000000000000001 /* GreptileUsageProvider.swift in Sources */,
 				A29600000000000000000001 /* GeminiUsageProvider.swift in Sources */,
@@ -1144,6 +1158,7 @@
 				A42000000000000000000601 /* ClaudeUsageResetClientTests.swift in Sources */,
 				A42000000000000000000701 /* ClaudeUsageResetFlowTests.swift in Sources */,
 				A42000000000000000000801 /* ClaudeUsageResetProviderTests.swift in Sources */,
+				A42100000000000000000301 /* ClaudeFableWeeklyTests.swift in Sources */,
 				100000000000000000000051 /* UsageAlertTests.swift in Sources */,
 				10000000000000000000004D /* UsageHistoryTests.swift in Sources */,
 				C10000000000000000000003 /* WidgetConfigurationTests.swift in Sources */,
@@ -1155,6 +1170,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A22700000000000000000002 /* CursorUsageIdentity.swift in Sources */,
+				A42100000000000000000102 /* ClaudeFableUsageIdentity.swift in Sources */,
 				A22600000000000000000002 /* GreptileUsageIdentity.swift in Sources */,
 				10000000000000000000002B /* CodexBarIOSWidgetBundle.swift in Sources */,
 				100000000000000000000046 /* CodexBarWidgetConfiguration.swift in Sources */,
@@ -1175,6 +1191,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A22700000000000000000003 /* CursorUsageIdentity.swift in Sources */,
+				A42100000000000000000103 /* ClaudeFableUsageIdentity.swift in Sources */,
 				A22600000000000000000003 /* GreptileUsageIdentity.swift in Sources */,
 				D10000000000000000000001 /* CodexBarWatchApp.swift in Sources */,
 				D10000000000000000000002 /* WatchDashboardState.swift in Sources */,
@@ -1200,6 +1217,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A22700000000000000000004 /* CursorUsageIdentity.swift in Sources */,
+				A42100000000000000000104 /* ClaudeFableUsageIdentity.swift in Sources */,
 				A22600000000000000000004 /* GreptileUsageIdentity.swift in Sources */,
 				F31000000000000000000003 /* CodexBarWatchWidgetBundle.swift in Sources */,
 				F31000000000000000000004 /* WatchComplicationConfiguration.swift in Sources */,

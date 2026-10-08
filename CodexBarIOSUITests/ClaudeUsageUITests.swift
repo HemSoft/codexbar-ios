@@ -43,13 +43,121 @@ final class ClaudeUsageUITests: XCTestCase {
             restored.terminate()
         }
         for defaultText in [true, false] {
-            for dark in [false, true] { exerciseSavedReset(defaultText: defaultText, dark: dark) }
+            for dark in [false, true] {
+                exerciseSavedReset(defaultText: defaultText, dark: dark)
+                exerciseFableAllowance(defaultText: defaultText, dark: dark)
+            }
         }
         exerciseAmbiguousReset()
         exerciseUnavailableResets()
         exerciseResetTimeBoundary()
         exerciseResetDashboardBoundaries()
         exerciseResetCooldown()
+    }
+
+    private func exerciseFableAllowance(defaultText: Bool, dark: Bool) {
+        let runID = UUID().uuidString
+        let variant = "\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")"
+        var app = launch(scenario: "claude-fable-two-accounts", runID: runID, defaultText: defaultText, dark: dark)
+        let first = fableMetric(percent: 21, in: app)
+        let second = fableMetric(percent: 7, in: app)
+        XCTAssertTrue(first.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(first.label.contains("Fable") && first.label.contains("Resets"), first.label)
+        XCTAssertTrue(app.buttons.matching(identifier: "dashboard-metric-claude.session").firstMatch.label.contains("42%"))
+        XCTAssertTrue(app.buttons.matching(identifier: "dashboard-metric-claude.weekly-all").firstMatch.label.contains("64%"))
+        reveal(first, in: app)
+        keep("claude-fable-eligible-\(variant)", app: app)
+        reveal(second, in: app)
+        XCTAssertTrue(second.exists, app.debugDescription)
+        keep("claude-fable-second-account-\(variant)", app: app)
+
+        openFableCustomizer(in: app)
+        let choice = app.buttons["customize-metric-claude.weekly-scoped-fable"]
+        XCTAssertTrue(choice.exists, app.debugDescription)
+        XCTAssertTrue(app.buttons["customize-metric-claude.session"].exists)
+        XCTAssertTrue(app.buttons["customize-metric-claude.weekly-all"].exists)
+        keep("claude-fable-customize-\(variant)", app: app)
+        tap(choice, in: app)
+        fableMenuChoice("Tile Width", in: app)
+        fableMenuChoice("Half", in: app)
+        tap(choice, in: app)
+        fableMenuChoice("Visualization", in: app)
+        fableMenuChoice("Circular ring", in: app)
+        tap(choice, in: app)
+        fableMenuChoice("Hide", in: app)
+        XCTAssertTrue(app.buttons["Show Fable weekly usage limit"].exists, app.debugDescription)
+        tap(app.buttons["Done"], in: app)
+        XCTAssertTrue(first.waitForNonExistence(timeout: 5))
+        reveal(second, in: app)
+        XCTAssertTrue(second.exists, "Hiding the first account must leave the second account's Fable visible")
+        app.terminate()
+
+        // The payload changes its model display name on relaunch while the
+        // UUID-isolated account and saved metric choices stay the same.
+        app = launch(scenario: "claude-fable-renamed", runID: runID, reset: false, defaultText: defaultText, dark: dark)
+        XCTAssertTrue(app.buttons.matching(identifier: "dashboard-metric-claude.session").firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(fableMetric(percent: 21, in: app).exists)
+        reveal(fableMetric(percent: 7, in: app), in: app)
+        XCTAssertTrue(fableMetric(percent: 7, in: app).exists)
+        keep("claude-fable-hidden-relaunch-\(variant)", app: app)
+        openFableCustomizer(in: app)
+        tap(app.buttons["Show Fable weekly usage limit"], in: app)
+        tap(app.buttons["Done"], in: app)
+        let restored = fableMetric(percent: 21, in: app)
+        XCTAssertTrue(restored.waitForExistence(timeout: 5), app.debugDescription)
+        reveal(restored, in: app)
+        keep("claude-fable-restored-\(variant)", app: app)
+        reveal(fableMetric(percent: 7, in: app), in: app)
+        XCTAssertTrue(fableMetric(percent: 7, in: app).exists)
+        openFableCustomizer(in: app)
+        tap(app.buttons["customize-metric-claude.weekly-scoped-fable"], in: app)
+        fableMenuChoice("Visualization", in: app)
+        XCTAssertTrue(app.buttons["Circular ring"].isSelected, "Saved visualization must survive model rename and relaunch")
+        fableMenuChoice("Circular ring", in: app)
+        tap(app.buttons["customize-metric-claude.weekly-scoped-fable"], in: app)
+        fableMenuChoice("Tile Width", in: app)
+        XCTAssertTrue(app.buttons["Half"].isSelected, "Saved width must survive model rename and relaunch")
+        fableMenuChoice("Half", in: app)
+        tap(app.buttons["Done"], in: app)
+        app.terminate()
+
+        for scenario in ["claude-fable-absent", "claude-fable-credits"] {
+            let missing = launch(scenario: scenario, runID: UUID().uuidString, defaultText: defaultText, dark: dark)
+            XCTAssertTrue(missing.buttons["dashboard-metric-claude.session"].waitForExistence(timeout: 10))
+            XCTAssertTrue(missing.buttons["dashboard-metric-claude.weekly-all"].exists)
+            XCTAssertFalse(missing.buttons["dashboard-metric-claude.weekly-scoped-fable"].exists,
+                           "Neither the plan label nor usage credits establish a Fable quota")
+            if scenario == "claude-fable-credits" {
+                XCTAssertTrue(missing.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Usage credits spent"))
+                    .firstMatch.exists, missing.debugDescription)
+            }
+            keep("\(scenario)-\(variant)", app: missing)
+            missing.terminate()
+        }
+    }
+
+    private func fableMetric(percent: Int, in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@",
+            "dashboard-metric-claude.weekly-scoped-fable", "\(percent)%"
+        )).firstMatch
+    }
+
+    private func openFableCustomizer(in app: XCUIApplication) {
+        let menu = app.buttons["More options for Synthetic Claude"]
+        reveal(menu, in: app, towardTop: true)
+        XCTAssertTrue(menu.isEnabled, app.debugDescription)
+        menu.tap()
+        fableMenuChoice("Customize Card…", in: app)
+        XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
+    }
+
+    private func fableMenuChoice(_ label: String, in app: XCUIApplication) {
+        // Popups live outside the scroll surface; do not scroll underneath them.
+        let choice = app.buttons[label]
+        XCTAssertTrue(choice.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(choice.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        choice.tap()
     }
 
     private func exerciseSavedReset(defaultText: Bool, dark: Bool) {
@@ -250,14 +358,34 @@ final class ClaudeUsageUITests: XCTestCase {
         element.tap()
     }
 
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false) {
+        _ = element.waitForExistence(timeout: 1)
+        let navigationButton = app.navigationBars.buttons.matching(
+            NSPredicate(format: "label == %@", element.label)
+        ).firstMatch
+        if element.exists && element.isHittable && navigationButton.exists
+            && navigationButton.frame == element.frame { return }
         let customizer = app.scrollViews["metric-customization-scroll"]
-        let scrollView = customizer.exists ? customizer : app.scrollViews.firstMatch
-        let surface = scrollView.exists ? scrollView : app
-        for _ in 0..<5 where !element.exists || !element.isHittable { surface.swipeUp() }
-        for _ in 0..<5 where !element.exists || !element.isHittable { surface.swipeDown() }
-        XCTAssertTrue(element.waitForExistence(timeout: 5), app.debugDescription)
-        XCTAssertTrue(element.wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
+        let settings = app.collectionViews["provider-account-settings-form"]
+        let scrollSurface = customizer.exists ? customizer : (settings.exists ? settings : app.scrollViews.firstMatch)
+        let container = scrollSurface.exists ? scrollSurface : app
+        for _ in 0..<12 {
+            let bars = app.navigationBars.allElementsBoundByIndex.map(\.frame).filter {
+                $0.width <= container.frame.width + 1 && $0.intersects(container.frame)
+            }
+            let top = max(container.frame.minY, bars.map(\.maxY).max() ?? container.frame.minY)
+            let viewport = CGRect(x: container.frame.minX, y: top, width: container.frame.width,
+                                  height: max(0, container.frame.maxY - top)).insetBy(dx: 4, dy: 0)
+            if element.exists && element.isHittable && viewport.contains(element.frame) { return }
+            let upward = element.exists ? element.frame.midY > viewport.midY : !towardTop
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: viewport.minX + min(8, viewport.width / 2) - app.frame.minX,
+                                                  dy: viewport.minY + viewport.height * (upward ? 0.65 : 0.35) - app.frame.minY))
+            let end = origin.withOffset(CGVector(dx: viewport.minX + min(8, viewport.width / 2) - app.frame.minX,
+                                                dy: viewport.minY + viewport.height * (upward ? 0.4 : 0.6) - app.frame.minY))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTFail("Control outside the visible viewport: \(element).\n\(app.debugDescription)")
     }
 
     private func keep(_ name: String, app: XCUIApplication) {

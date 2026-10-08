@@ -268,6 +268,20 @@ isolation, exact confirmed-grant comparison across refreshed caches, confirmed a
 receipt-write failure, redirects and stale completions. These native tests run
 locally or on explicit manual dispatch, never automatically for ordinary PRs.
 
+## Claude Fable regressions
+
+The existing manual Claude journey checks a provider-returned Fable allowance
+separately from the shared 5-hour and all-model weekly windows. It covers two
+accounts, hide/restore and model-name changes across relaunch, Customize Card,
+light/dark appearance and default/accessibility2 text. Absent allowances and
+usage-credit-only responses do not create a Fable quota. The release count stays
+29 journeys per family. No live provider quota is consumed.
+
+`ClaudeFableWeeklyTests` runs locally and in the manual native unit suite. Its
+nine cases cover reported values, known aliases, inactive/duplicate windows,
+missing/credit-only data, account/credential isolation, persisted older choices,
+daily history, saved widget tiles and watch complication selections.
+
 ## GitHub Billing API fixtures
 
 The separate manual fixture harness exercises personal Free and Pro allowances,
