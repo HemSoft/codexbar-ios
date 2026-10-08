@@ -313,7 +313,9 @@ final class CodexCreditsPoolUITests: XCTestCase {
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         _ = element.waitForExistence(timeout: 1)
-        if element.exists && element.isHittable && app.navigationBars.buttons[element.label].exists { return }
+        if element.exists && element.isHittable && app.navigationBars.buttons.matching(
+            NSPredicate(format: "label == %@", element.label)
+        ).firstMatch.exists { return }
         let customizer = app.scrollViews["metric-customization-scroll"]
         let settings = app.collectionViews["provider-account-settings-form"]
         let container = customizer.exists ? customizer : (settings.exists ? settings : app.scrollViews.firstMatch)
