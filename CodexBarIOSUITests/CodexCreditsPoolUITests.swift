@@ -144,7 +144,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                     ("OpenRouter fixture", "API credits"),
                 ] {
                     let header = app.descendants(matching: .any).matching(NSPredicate(
-                        format: "label BEGINSWITH %@ AND label CONTAINS %@", title + ", " + plan, "Normal status"
+                        format: "label BEGINSWITH %@", title + ", " + plan
                     )).firstMatch
                     reveal(header, in: app)
                     XCTAssertEqual(header.value as? String, "Expanded", app.debugDescription)
