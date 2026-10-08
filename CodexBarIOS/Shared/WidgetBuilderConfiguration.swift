@@ -288,6 +288,8 @@ public extension CodexBarWidgetUsageBarSnapshot {
             || suffix == GreptileUsageIdentity.reviewQuotaMetricID {
             return GreptileUsageIdentity.canonicalReviewUsageMetricID
         }
+        let fableSuffix = ClaudeFableUsageIdentity.canonicalWidgetSuffix(suffix)
+        if fableSuffix != suffix { return fableSuffix }
         let oldScopedWeeklySuffix = "-weekly-limit"
         guard suffix.hasSuffix(oldScopedWeeklySuffix) else {
             return suffix

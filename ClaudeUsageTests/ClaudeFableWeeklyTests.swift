@@ -123,6 +123,17 @@ final class ClaudeFableWeeklyTests: XCTestCase {
             let tile = try XCTUnwrap(widget.bars.first { $0.metricID == id })
             XCTAssertEqual(tile.fractionUsed, fraction)
             XCTAssertEqual(tile.label, "Fable weekly usage limit")
+            // Saved pre-upgrade builder IDs include the model version and an old bar index.
+            for legacySuffix in ["fable-5", "fable-5-1", "claude-fable", "claude-fable-5", "claude-fable-5-1"] {
+                let savedID = "bar.\(account).8.\(legacySuffix)-weekly-usage-limit"
+                let selected = WidgetSnapshotStore.loadSnapshot(defaults: defaults).builderTile(resolvingSavedID: savedID)
+                XCTAssertEqual(selected?.fractionUsed, fraction, savedID)
+                XCTAssertEqual(selected?.title, "Fable weekly usage limit", savedID)
+                XCTAssertEqual(selected?.providerID, "claude", savedID)
+            }
+            XCTAssertNil(WidgetSnapshotStore.loadSnapshot(defaults: defaults).builderTile(
+                resolvingSavedID: "bar.\(account).8.fable-experimental-weekly-usage-limit"
+            ))
         }
         let watch = WatchSnapshotPublisher.makeSnapshot(results: [changedName, other], configurationStore: restored, now: now)
         for (account, value) in [(first.id, "21%"), (second.id, "7%")] {
@@ -130,6 +141,22 @@ final class ClaudeFableWeeklyTests: XCTestCase {
             let metric = try XCTUnwrap(watch.accounts.first { $0.id == watchID }?.metrics.first { $0.id == id })
             XCTAssertEqual(metric.exactValue, value)
             XCTAssertEqual(metric.resetsAt, reset)
+            for legacyID in ["claude.weekly-scoped-fable5", "claude.weekly-scoped-fable51",
+                             "claude.weekly-scoped-claudefable", "claude.weekly-scoped-claudefable5",
+                             "claude.weekly-scoped-claudefable51",
+            ] {
+                let selection = WatchComplicationSelection(accountID: watchID, metricID: legacyID)
+                let sample = WatchComplicationResolver().resolve(snapshot: watch, selection: selection, at: now)
+                XCTAssertEqual(sample.exactValue, value, legacyID)
+                XCTAssertEqual(sample.metricLabel, "Fable weekly usage limit", legacyID)
+                let choiceID = "\(watchID)::\(legacyID)"
+                let choice = try XCTUnwrap(WatchComplicationChoiceCatalog(snapshot: watch).metrics(for: [choiceID]).first)
+                XCTAssertEqual(choice.metricID, id, choiceID)
+                XCTAssertEqual(choice.metricLabel, "Fable weekly usage limit", choiceID)
+            }
+            let unknown = WatchComplicationSelection(accountID: watchID, metricID: "claude.weekly-scoped-fableexperimental")
+            XCTAssertEqual(WatchComplicationResolver().resolve(snapshot: watch, selection: unknown, at: now).availability,
+                           .unavailable)
         }
     }
 

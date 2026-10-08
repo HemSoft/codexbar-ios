@@ -1,15 +1,13 @@
 import Foundation
 
 enum ClaudeUsageIdentity {
-    static let fableWeeklyStableKey = "weekly-scoped-fable"
-    static let fableWeeklyMetricID = "claude.\(fableWeeklyStableKey)"
-    static let fableModelNames = ["fable", "fable 5", "fable 5.1", "claude fable", "claude fable 5", "claude fable 5.1"]
-    static let legacyFableStableKeys = fableModelNames.map {
-        "weekly-scoped-\($0.filter { $0.isLetter || $0.isNumber })"
-    }.filter { $0 != fableWeeklyStableKey }
+    static let fableWeeklyStableKey = ClaudeFableUsageIdentity.stableKey
+    static let fableWeeklyMetricID = ClaudeFableUsageIdentity.metricID
+    static let fableModelNames = ClaudeFableUsageIdentity.modelNames
+    static let legacyFableStableKeys = ClaudeFableUsageIdentity.legacyStableKeys
 
     static func canonicalFableStableKey(_ key: String) -> String {
-        legacyFableStableKeys.contains(key) ? fableWeeklyStableKey : key
+        ClaudeFableUsageIdentity.canonicalStableKey(key)
     }
 
     static let allModelsWeeklyStableKey = "weekly-all"
