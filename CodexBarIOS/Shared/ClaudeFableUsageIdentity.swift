@@ -15,6 +15,13 @@ enum ClaudeFableUsageIdentity {
         legacyStableKeys.contains(where: { savedID == "claude.\($0)" }) ? metricID : nil
     }
 
+    /// A Fable-labelled choice must never substitute another quota by position.
+    /// Unknown Fable names can still match their own reported identity.
+    static func requiresWidgetIdentityMatch(_ suffix: String) -> Bool {
+        (suffix.hasPrefix("fable-") || suffix.hasPrefix("claude-fable-"))
+            && (suffix.hasSuffix("-weekly-limit") || suffix.hasSuffix("-weekly-usage-limit"))
+    }
+
     static func canonicalWidgetSuffix(_ suffix: String) -> String {
         let legacyNames = ["fable-5", "fable-5-1", "claude-fable", "claude-fable-5", "claude-fable-5-1"]
         for name in legacyNames {

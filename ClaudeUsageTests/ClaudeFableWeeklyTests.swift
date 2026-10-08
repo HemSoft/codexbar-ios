@@ -158,6 +158,25 @@ final class ClaudeFableWeeklyTests: XCTestCase {
             XCTAssertEqual(WatchComplicationResolver().resolve(snapshot: watch, selection: unknown, at: now).availability,
                            .unavailable)
         }
+        let missing = bound(try parse(limits: []), to: first)
+        WidgetSnapshotPublisher.publish(results: [missing, other], configurationStore: restored,
+                                        snapshotDefaults: defaults, now: now)
+        let withoutFable = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
+        for suffix in ["fable", "fable-5", "fable-5-1", "claude-fable", "claude-fable-5", "claude-fable-5-1", "fable-experimental"] {
+            for index in [0, 1] {
+                XCTAssertNil(withoutFable.builderTile(resolvingSavedID: "bar.\(first.id).\(index).\(suffix)-weekly-usage-limit"),
+                             "An absent Fable allowance must not borrow a session/weekly tile by its old index")
+            }
+        }
+        XCTAssertEqual(withoutFable.builderTile(resolvingSavedID: "bar.\(second.id).0.fable-5-weekly-usage-limit")?.fractionUsed, 0.07)
+        let futureModel = bound(try parse(limits: [limit(name: "Fable Experimental", percent: 9)]), to: first)
+        WidgetSnapshotPublisher.publish(results: [futureModel, other], configurationStore: restored,
+                                        snapshotDefaults: defaults, now: now)
+        let futureTile = WidgetSnapshotStore.loadSnapshot(defaults: defaults).builderTile(
+            resolvingSavedID: "bar.\(first.id).0.fable-experimental-weekly-usage-limit"
+        )
+        XCTAssertEqual(futureTile?.fractionUsed, 0.09, "A future model keeps its own actual reported allowance")
+        XCTAssertEqual(futureTile?.title, "Fable Experimental weekly usage limit")
     }
 
     func testProviderDoesNotCarryFableAcrossAccountOrCredentialChanges() async throws {

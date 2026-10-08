@@ -252,6 +252,7 @@ public extension CodexBarWidgetUsageBarSnapshot {
                         Self.normalizedBarLabel(label)
                     )
             }
+            guard !ClaudeFableUsageIdentity.requiresWidgetIdentityMatch(savedIdentity.suffix) else { return false }
             return !matchesLegacyAccount && savedIndex == currentIndex
         }
         return Self.canonicalIdentitySuffix(savedIdentity.suffix)
