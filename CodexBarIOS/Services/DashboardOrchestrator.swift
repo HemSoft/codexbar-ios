@@ -288,6 +288,53 @@ final class DashboardOrchestrator: ObservableObject {
         return await refreshAccount(currentConfiguration)
     }
 
+    func consumeClaudeReset(
+        for configuration: ProviderAccountConfiguration,
+        grantID: String,
+        confirmedGrant: ClaudeUsageResetGrant,
+        credentialBinding: String
+    ) async -> ClaudeUsageResetFeedback {
+        guard let current = configurationStore.configuration(accountID: configuration.id), current.isEnabled,
+              refreshService.hasSameRefreshInputs(configuration, current)
+        else { return ClaudeUsageResetFeedback(message: "The Claude account changed. Refresh usage before using a reset.", isSuccess: false) }
+        let outcome: ClaudeUsageResetOutcome?
+        let failure: String?
+        do {
+            outcome = try await refreshService.consumeClaudeReset(
+                for: current, grantID: grantID, confirmedGrant: confirmedGrant, credentialBinding: credentialBinding
+            )
+            failure = nil
+        } catch {
+            outcome = nil
+            failure = (error as? LocalizedError)?.errorDescription ?? "Claude did not confirm this reset. Refresh usage to check again."
+        }
+        let refreshed = await refreshAccount(current)
+        guard let latest = configurationStore.configuration(accountID: configuration.id), latest.isEnabled,
+              refreshService.hasSameRefreshInputs(current, latest)
+        else { return ClaudeUsageResetFeedback(message: "The Claude account changed. Refresh usage to check its current state.", isSuccess: false) }
+        if let refreshedBinding = refreshed?.claudeUsageResetInventory?.credentialBinding, refreshedBinding != credentialBinding {
+            return ClaudeUsageResetFeedback(message: "Claude authorization changed. Check the refreshed account before using another reset.", isSuccess: false)
+        }
+        let refreshSucceeded = refreshed.map { $0.failureMessage == nil } ?? false
+        switch outcome {
+        case .reset, .alreadyRedeemed:
+            return ClaudeUsageResetFeedback(message: refreshSucceeded
+                ? "Claude confirmed the reset. Current usage and saved resets are refreshed."
+                : "Claude confirmed the reset, but usage could not be refreshed. Refresh usage to check again.", isSuccess: true)
+        case .nothingToReset:
+            return ClaudeUsageResetFeedback(message: "Claude reported no applicable usage limit to reset.", isSuccess: false)
+        case .noCredit:
+            return ClaudeUsageResetFeedback(message: "Claude reported no saved reset available for this account.", isSuccess: false)
+        case .stateChanged:
+            return ClaudeUsageResetFeedback(
+                message: "The saved reset inventory changed. Review the refreshed details before confirming again.",
+                isSuccess: false
+            )
+        case nil:
+            return ClaudeUsageResetFeedback(message: failure ?? "Claude did not confirm this reset.", isSuccess: false)
+        }
+    }
+
     func consumeCodexBankedReset(
         for configuration: ProviderAccountConfiguration,
         creditID: String?

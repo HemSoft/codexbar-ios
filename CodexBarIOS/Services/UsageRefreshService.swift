@@ -20,6 +20,7 @@ public final class UsageRefreshService: ObservableObject {
     private var currentConfigurationsByAccountID: [String: ProviderAccountConfiguration] = [:]
     private var refreshGenerationsByAccountID: [String: UUID] = [:]
     private var codexResetAttempts: [String: CodexResetAttempt] = [:]
+    private var claudeResetAccounts: Set<String> = []
     private var codexResetTasks: [String: Task<CodexBankedResetConsumptionOutcome, Error>] = [:]
 
     public init(
@@ -322,6 +323,32 @@ public final class UsageRefreshService: ObservableObject {
 
     public func refresh() async {
         await refresh(configurations: ProviderID.allCases.map(ProviderAccountConfiguration.defaultConfiguration))
+    }
+
+    public func consumeClaudeReset(
+        for configuration: ProviderAccountConfiguration,
+        grantID: String,
+        confirmedGrant: ClaudeUsageResetGrant,
+        credentialBinding: String
+    ) async throws -> ClaudeUsageResetOutcome {
+        guard configuration.providerID == .claude, configuration.isEnabled,
+              !hasCurrentConfigurationSnapshot || isCurrent(configuration),
+              let provider = providers.first(where: { $0.providerID == .claude }) as? any ClaudeUsageResetConsuming,
+              let result = results.first(where: { $0.accountID == configuration.id }),
+              result.failureMessage == nil, refreshErrorsByAccountID[configuration.id] == nil,
+              !refreshingAccountIDs.contains(configuration.id),
+              let inventory = result.claudeUsageResetInventory,
+              inventory.credentialBinding == credentialBinding,
+              confirmedGrant.id == grantID, inventory.matchesConfirmation(grant: confirmedGrant, binding: credentialBinding, at: Date())
+        else { throw ClaudeUsageResetError.unavailable }
+        guard claudeResetAccounts.insert(configuration.id).inserted else { throw ClaudeUsageResetError.inProgress }
+        defer { claudeResetAccounts.remove(configuration.id) }
+        let generation = registerCurrentConfiguration(configuration)
+        let outcome = try await provider.consumeClaudeReset(
+            for: configuration, grantID: grantID, confirmedGrant: confirmedGrant, credentialBinding: credentialBinding
+        )
+        guard isCurrent(configuration, generation: generation) else { throw ClaudeUsageResetError.credentialChanged }
+        return outcome
     }
 
     public func consumeCodexBankedReset(

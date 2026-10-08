@@ -247,6 +247,27 @@ saved metric layouts, history, alert identity, widget tile IDs, and Watch
 snapshots. They do not add tests to either automatic unit suite or establish
 live provider results.
 
+## Claude saved-reset regressions
+
+The same manual Claude journey covers two-account availability, irreversible
+confirmation and cancellation, successful refresh, unchanged second-account
+usage, relaunch persistence and ambiguous-request protection. An open confirmation
+expires automatically without a reset request. The dashboard remains open across
+grant start/expiry boundaries and updates without another interaction. Provider
+cooldown text and the disabled action change when the cooldown ends, with zero
+requests. It exercises
+light/dark with default/accessibility2 text, plus zero, ineligible, paused,
+inactive, expired, unknown, malformed and failed inventories. Fixtures use the
+production inventory parser and an isolated fake consuming provider; networking
+is blocked and no Anthropic reset is used. The public release count remains 29.
+
+Local/native regression classes are `ClaudeUsageResetInventoryTests`,
+`ClaudeUsageResetClientTests`, `ClaudeUsageResetFlowTests` and
+`ClaudeUsageResetProviderTests`. They check account/organization/credential
+isolation, exact confirmed-grant comparison across refreshed caches, confirmed and ambiguous response handling,
+receipt-write failure, redirects and stale completions. These native tests run
+locally or on explicit manual dispatch, never automatically for ordinary PRs.
+
 ## GitHub Billing API fixtures
 
 The separate manual fixture harness exercises personal Free and Pro allowances,

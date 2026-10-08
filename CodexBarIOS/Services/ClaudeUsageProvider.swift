@@ -1,6 +1,6 @@
 import Foundation
 
-public final class ClaudeUsageProvider: UsageProvider {
+public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming {
     private static let usageEndpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private static let tokenRefreshEndpoint = URL(string: "https://platform.claude.com/v1/oauth/token")!
     private static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
@@ -8,6 +8,7 @@ public final class ClaudeUsageProvider: UsageProvider {
     private let secretStore: SecretStore
     private let session: URLSession
     private let now: @Sendable () -> Date
+    private let resetClient: ClaudeUsageResetClient
     private let snapshotCache = ClaudeUsageSnapshotCache()
 
     public let providerID = ProviderID.claude
@@ -20,6 +21,7 @@ public final class ClaudeUsageProvider: UsageProvider {
         self.secretStore = secretStore
         self.session = session
         self.now = now
+        self.resetClient = ClaudeUsageResetClient(session: session, secretStore: secretStore, now: now)
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
@@ -74,6 +76,23 @@ public final class ClaudeUsageProvider: UsageProvider {
         )
     }
 
+    public func consumeClaudeReset(
+        for configuration: ProviderAccountConfiguration, grantID: String, confirmedGrant: ClaudeUsageResetGrant, credentialBinding: String
+    ) async throws -> ClaudeUsageResetOutcome {
+        guard configuration.providerID == .claude,
+              let saved = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
+              let parsed = ClaudeCredentialsParser.parse(saved)
+        else { throw ClaudeUsageResetError.unavailable }
+        let refreshed = try await refreshedCredentialsIfNeeded(parsed, configuration: configuration)
+        guard let token = refreshed.credentials.accessToken, !token.isEmpty else { throw ClaudeUsageResetError.unavailable }
+        guard let inventory = await snapshotCache.result(accountID: configuration.id)?.claudeUsageResetInventory,
+              inventory.credentialBinding == credentialBinding,
+              confirmedGrant.id == grantID, inventory.matchesConfirmation(grant: confirmedGrant, binding: credentialBinding, at: now())
+        else { throw ClaudeUsageResetError.unavailable }
+        return try await resetClient.consume(for: configuration, accessToken: token, grantID: grantID,
+                                             credentialBinding: credentialBinding, confirmedGrant: confirmedGrant)
+    }
+
     private func fetchOAuthUsage(
         configuration: ProviderAccountConfiguration,
         credentials: ClaudeCredentials,
@@ -106,7 +125,8 @@ public final class ClaudeUsageProvider: UsageProvider {
             ) else {
                 return OAuthUsageOutcome(result: nil)
             }
-            let result = applyAccountMetadata(to: parsed, configuration: configuration)
+            let inventory = ClaudeUsageResetInventoryParser.parse(data)?.bound(toAccessToken: accessToken)
+            let result = applyAccountMetadata(to: parsed, configuration: configuration, resetInventory: inventory)
             return OAuthUsageOutcome(
                 result: result,
                 isSuccessfulSnapshot: true
@@ -231,7 +251,9 @@ public final class ClaudeUsageProvider: UsageProvider {
     }
 
     private func makeOAuthUsageRequest(accessToken: String) -> URLRequest {
-        var request = URLRequest(url: Self.usageEndpoint)
+        var components = URLComponents(url: Self.usageEndpoint, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "cedar_ember", value: "1")]
+        var request = URLRequest(url: components.url!)
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -311,7 +333,8 @@ public final class ClaudeUsageProvider: UsageProvider {
 
     private func applyAccountMetadata(
         to result: ProviderUsageResult,
-        configuration: ProviderAccountConfiguration
+        configuration: ProviderAccountConfiguration,
+        resetInventory: ClaudeUsageResetInventory? = nil
     ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id,
@@ -327,6 +350,7 @@ public final class ClaudeUsageProvider: UsageProvider {
             usageMessages: result.usageMessages,
             dashboardUsageMessages: result.dashboardUsageMessages,
             cardInformationSections: result.cardInformationSections,
+            claudeUsageResetInventory: resetInventory,
             failureMessage: result.failureMessage,
             hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory,
             fetchedAt: result.fetchedAt
@@ -387,6 +411,7 @@ private actor ClaudeUsageSnapshotCache {
             usageMessages: result.usageMessages,
             dashboardUsageMessages: result.dashboardUsageMessages,
             cardInformationSections: result.cardInformationSections,
+            claudeUsageResetInventory: result.claudeUsageResetInventory,
             failureMessage: result.failureMessage,
             hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory
                 || cached.hasSuccessfulRefreshHistory,

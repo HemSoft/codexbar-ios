@@ -794,7 +794,7 @@ public final class ProviderConfigurationStore: ObservableObject {
             let data = try JSONEncoder().encode(updatedConfigurations)
             let greptileIdentityChanged = try greptileCredentialChangesIdentity(credential, for: normalized)
             try writeAccountSecret(credential, for: normalized)
-            if normalized.providerID == .gemini || normalized.providerID == .grok {
+            if [ProviderID.gemini, .grok, .claude].contains(normalized.providerID) {
                 credentialChanges.send(normalized.id)
             }
             defaults.set(data, forKey: configurationsKey)
@@ -840,7 +840,7 @@ public final class ProviderConfigurationStore: ObservableObject {
                     credentialChanges.send(configuration.id)
                 }
                 try writeAccountSecret(nil, for: configuration)
-                if configuration.providerID == .grok { credentialChanges.send(configuration.id) }
+                if [ProviderID.grok, .claude].contains(configuration.providerID) { credentialChanges.send(configuration.id) }
                 configurations.removeAll { $0.id == configuration.id }
                 removedAccountIDs.insert(configuration.id)
                 removedAnyAccount = true
@@ -1555,7 +1555,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         do {
             try writeAccountSecret(secret, for: configuration)
 
-            if configuration.providerID == .gemini || configuration.providerID == .grok {
+            if [ProviderID.gemini, .grok, .claude].contains(configuration.providerID) {
                 credentialChanges.send(configuration.id)
             }
             lastError = nil
@@ -2926,7 +2926,7 @@ extension ProviderConfigurationStore {
             do {
                 try deleteAccountSecret(account, grokAccounts: grokAccounts)
                 if let configuration = configurations.first(where: {
-                    ($0.providerID == .gemini || $0.providerID == .grok)
+                    [ProviderID.gemini, .grok, .claude].contains($0.providerID)
                         && (keychainAccount(for: $0) == account
                             || Self.geminiCodingKeychainAccount(accountID: $0.id) == account)
                 }) {

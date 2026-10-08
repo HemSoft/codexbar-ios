@@ -690,6 +690,9 @@ struct ContentView: View {
                 retainedCodexResetAttempt: orchestrator.retainedCodexResetAttempt(
                     for: item.configuration
                 ),
+                onUseClaudeReset: { grant, binding in
+                    await orchestrator.consumeClaudeReset(for: item.configuration, grantID: grant.id, confirmedGrant: grant, credentialBinding: binding)
+                },
                 onUseCodexReset: { creditID in
                     await orchestrator.consumeCodexBankedReset(
                         for: item.configuration,

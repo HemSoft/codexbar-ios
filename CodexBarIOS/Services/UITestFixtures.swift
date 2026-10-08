@@ -84,6 +84,7 @@ final class UITestFixtures {
         }
         if claude && configurationStore.configurations.isEmpty {
             Self.seedClaudeAccount(in: configurationStore)
+            Self.seedSecondClaudeAccount(in: configurationStore, scenario: scenario)
         }
         let googleSources = Self.googleSources(for: scenario)
         let google = !googleSources.isEmpty
@@ -105,9 +106,7 @@ final class UITestFixtures {
                 Self.seedSavedGrokLayout(in: configurationStore, scenario: scenario)
             }
         }
-        let results = configurationStore.configurations
-            .filter(configurationStore.isConfigured)
-            .map { Self.initialResult(for: $0, scenario: scenario, googleSources: googleSources) }
+        let results = Self.initialResults(in: configurationStore, scenario: scenario, googleSources: googleSources, defaults: defaults)
         let providers: [any UsageProvider]
         if google {
             providers = [UITestGoogleProvider(sources: googleSources)]
@@ -116,7 +115,7 @@ final class UITestFixtures {
         } else if codex {
             providers = [UITestCodexProvider(scenario: scenario)]
         } else if claude {
-            providers = [UITestClaudeProvider(scenario: scenario)]
+            providers = Self.claudeProviders(scenario: scenario, suiteName: suite)
         } else if githubBilling {
             providers = [UITestGitHubBillingProvider()]
         } else if grok {
@@ -139,6 +138,35 @@ final class UITestFixtures {
         if recovery && historyStore.snapshots.isEmpty {
             seedHistory()
         }
+    }
+
+    private static func initialResults(
+        in store: ProviderConfigurationStore, scenario: String?, googleSources: [ProviderID], defaults: UserDefaults
+    ) -> [ProviderUsageResult] {
+        store.configurations.filter(store.isConfigured).map { account in
+            if let scenario, scenario.hasPrefix("claude-resets-") {
+                let requests = defaults.dictionary(forKey: "fixtureClaudeResetRequests") as? [String: Int] ?? [:]
+                let remaining = defaults.dictionary(forKey: "fixtureClaudeResetRemaining") as? [String: Int] ?? [:]
+                return UITestClaudeResetProvider.result(for: account, scenario: scenario,
+                                                       requests: requests[account.id, default: 0], remaining: remaining[account.id])
+            }
+            return initialResult(for: account, scenario: scenario, googleSources: googleSources)
+        }
+    }
+
+    private static func seedSecondClaudeAccount(in store: ProviderConfigurationStore, scenario: String?) {
+        guard scenario == "claude-resets-two-accounts" else { return }
+        let second = ProviderAccountConfiguration(id: "ui-claude-second", providerID: .claude,
+                                                  accountLabel: "Second Claude", authMethod: .browserSession)
+        _ = store.update(second)
+        _ = store.saveSecret("ui-test-credential", for: second)
+    }
+
+    private static func claudeProviders(scenario: String?, suiteName: String) -> [any UsageProvider] {
+        if let scenario, scenario.hasPrefix("claude-resets-") {
+            return [UITestClaudeResetProvider(scenario: scenario, suiteName: suiteName)]
+        }
+        return [UITestClaudeProvider(scenario: scenario)]
     }
 
     nonisolated static func isCursorSessionScenario(_ scenario: String?) -> Bool {
@@ -1597,4 +1625,90 @@ private struct UITestPlanPillProvider: UsageProvider {
     }
 }
 
+#endif
+
+#if DEBUG
+import Foundation
+
+actor UITestClaudeResetProvider: UsageProvider, ClaudeUsageResetConsuming {
+    nonisolated let providerID = ProviderID.claude
+    private let scenario: String
+    private let defaults: UserDefaults
+    private var requestsByAccount: [String: Int]
+    private var remainingByAccount: [String: Int]
+    private var uncertainAccounts: Set<String>
+
+    init(scenario: String, suiteName: String) {
+        self.scenario = scenario
+        let defaults = UserDefaults(suiteName: suiteName)!
+        self.defaults = defaults
+        requestsByAccount = defaults.dictionary(forKey: "fixtureClaudeResetRequests") as? [String: Int] ?? [:]
+        remainingByAccount = defaults.dictionary(forKey: "fixtureClaudeResetRemaining") as? [String: Int] ?? [:]
+        uncertainAccounts = Set(defaults.stringArray(forKey: "fixtureClaudeResetUncertain") ?? [])
+    }
+
+    func fetchUsage(for account: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        Self.result(for: account, scenario: scenario, requests: requestsByAccount[account.id, default: 0],
+                    remaining: remainingByAccount[account.id, default: account.id == "ui-claude-second" ? 1 : 2])
+    }
+
+    func consumeClaudeReset(
+        for account: ProviderAccountConfiguration, grantID: String, confirmedGrant: ClaudeUsageResetGrant, credentialBinding: String
+    ) async throws -> ClaudeUsageResetOutcome {
+        let remaining = remainingByAccount[account.id, default: account.id == "ui-claude-second" ? 1 : 2]
+        guard ["ui-claude", "ui-claude-second"].contains(account.id), grantID == "fixture_grant", remaining > 0,
+              confirmedGrant.id == grantID, confirmedGrant.remainingCount == remaining, confirmedGrant.isCurrent(at: Date()),
+              credentialBinding == ClaudeUsageResetClient.credentialBinding(for: "ui-test-credential")
+        else { throw ClaudeUsageResetError.unavailable }
+        guard !uncertainAccounts.contains(account.id) else { throw ClaudeUsageResetError.indeterminate }
+        requestsByAccount[account.id, default: 0] += 1
+        defaults.set(requestsByAccount, forKey: "fixtureClaudeResetRequests")
+        if scenario == "claude-resets-error" {
+            uncertainAccounts.insert(account.id)
+            defaults.set(Array(uncertainAccounts), forKey: "fixtureClaudeResetUncertain")
+            throw ClaudeUsageResetError.indeterminate
+        }
+        remainingByAccount[account.id] = remaining - 1
+        defaults.set(remainingByAccount, forKey: "fixtureClaudeResetRemaining")
+        return .reset
+    }
+
+    nonisolated static func result(
+        for account: ProviderAccountConfiguration, scenario: String, requests: Int = 0, remaining: Int? = nil
+    ) -> ProviderUsageResult {
+        let remaining = scenario == "claude-resets-zero" ? 0 : remaining ?? (account.id == "ui-claude-second" ? 1 : 2)
+        let now = Date()
+        let formatter = ISO8601DateFormatter()
+        let expiring = ["claude-resets-boundary", "claude-resets-dashboard-expiry"].contains(scenario)
+        let endOffset: TimeInterval = scenario == "claude-resets-expired" ? -3600 : expiring ? 30 : 7 * 86400
+        let end = formatter.string(from: now.addingTimeInterval(endOffset))
+        let startOffset: TimeInterval = scenario == "claude-resets-dashboard-start" ? 30
+            : scenario == "claude-resets-inactive" ? 3600 : -7200
+        let cooldown = scenario == "claude-resets-cooldown"
+            ? ",\"cooldown_until\":\"\(formatter.string(from: now.addingTimeInterval(30)))\"" : ""
+        let start = formatter.string(from: now.addingTimeInterval(startOffset))
+        let session = formatter.string(from: now.addingTimeInterval(7200))
+        let weekly = formatter.string(from: now.addingTimeInterval(3 * 86400))
+        let payload = """
+        {"five_hour":{"utilization":\(requests > 0 && scenario != "claude-resets-error" ? 0 : 42),"resets_at":"\(session)"},
+         "seven_day":{"utilization":\(requests > 0 && scenario != "claude-resets-error" ? 0 : 64),"resets_at":"\(weekly)"},
+         "cedar_ember":{"eligible":\(scenario != "claude-resets-ineligible"),"next_grant_id":"fixture_grant"\(cooldown),"grants":[{
+           "id":"fixture_grant","label":"Saved Claude reset","resets_left":\(remaining),
+           "starts_at":"\(start)","ends_at":"\(end)","clears":["five_hour","seven_day"],
+           "paused":\(scenario == "claude-resets-paused"),"usable_now":true
+         }]}}
+        """
+        let data = Data(payload.utf8)
+        let parsed = ClaudeUsageParser.parse(data, subscriptionType: "max_20x", fetchedAt: now)!
+        let inventoryData = scenario == "claude-resets-malformed"
+            ? Data(#"{"cedar_ember":{"eligible":true,"grants":"invalid"}}"#.utf8) : data
+        let inventory = scenario == "claude-resets-unknown" ? nil
+            : ClaudeUsageResetInventoryParser.parse(inventoryData)?.bound(toAccessToken: "ui-test-credential")
+        return ProviderUsageResult(accountID: account.id, providerID: .claude, title: account.displayName,
+                                   plan: parsed.plan, subtitle: "Synthetic Claude resets. No live account. Reset requests: \(requests)",
+                                   bars: parsed.bars, claudeUsageResetInventory: inventory,
+                                   failureMessage: scenario == "claude-resets-failed" ? "Synthetic Claude usage unavailable" : nil,
+                                   recoveryAction: .retryRefresh, fetchedAt: now)
+    }
+}
 #endif

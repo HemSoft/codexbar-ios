@@ -333,3 +333,11 @@ The current [ChatGPT Pro tiers](https://help.openai.com/en/articles/9793128-abou
 include Pro 100, 200 and 500. Legacy `pro`/`prolite` metadata does not identify
 one of those numeric tiers, so the pill displays Pro without guessing a price
 or usage multiplier.
+
+### Claude saved usage resets
+
+Eligible Claude accounts can view provider-returned saved usage resets, their
+expiry and the windows they restore. Using a reset requires a separate account
+confirmation. CodexBar refreshes usage after every result and protects an
+unconfirmed request against another consumption, including after relaunch.
+Unavailable reset details never appear as a zero balance.

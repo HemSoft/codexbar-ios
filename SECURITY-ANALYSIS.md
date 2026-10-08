@@ -437,3 +437,85 @@ not loosen the matching contract to make local output pass. To replay an
 existing hosted baseline exactly, download its `swift-security-*` artifact
 and pass the original `sarif/swift.sarif` and `source-reach.csv` to the gate
 from a checkout whose production snapshot matches the reviewed source.
+
+## October 8 Claude reset source review
+
+Issue [#420](https://github.com/hemsoft-dev/codexbar-ios/issues/420) adds
+account-specific saved-reset inventory and an explicitly confirmed provider
+mutation. Reviewed production source
+[`c36ddf7`](https://github.com/hemsoft-dev/codexbar-ios/commit/c36ddf76e8039b1f2cfeebfbe9af838408102353)
+contains 113 tracked production Swift files with snapshot
+`d408551a9430b13aa001bd5095eec66c98b5ccba0b5aa2dd8ba2fb95e8fe4252`.
+The exact originally confirmed grant and credential binding travel unchanged
+through the card, orchestrator, service and provider to the client's fresh
+comparison. Changed cached terms are rejected before reset preflight or POST.
+Reset inventory remains transient; ambiguous-request receipts persist only
+hashed account, organization and grant identity with count/time, with file
+protection and backup exclusion. Credentials and raw grants are not exported to
+history, widget/watch snapshots, configuration backups or diagnostics.
+
+Manual analysis
+[37759320889](https://github.com/hemsoft-dev/codexbar-ios/actions/runs/37759320889)
+analyzed earlier product source `700c9afbc9e1730a6fd0e6b78cc512701a5534bd`
+with CodeQL 2.26.4 and Swift query pack
+`1.3.9+1d123a2caa0e4e6256a49d963bfcbd51a01617e8`.
+It extracted 113/113 production Swift files and returned exactly three
+severity-7.5 findings. The job failed because the reviewed production snapshot
+was stale. Complete raw diagnostics, related locations/data flows and current
+consumers were reviewed before renewing the baseline:
+
+- OpenCode's SHA256 cache identity at line134 has unchanged diagnostic
+  `5f1496c65fc30d9560b382010124317c39ab181e30f19c854ccc92e29e9b3b0a`.
+  It remains an ephemeral cache comparison, never a persisted password verifier.
+- Collapsed local configuration IDs at line2371 have diagnostic
+  `a283b8ef3e8e280df73624ba73ebb4acdf7b4df58d11a137b189ff3d30fb43e5`.
+  The updater rejects unknown IDs; provider credentials remain separate.
+- The simulator-only fixture preference writer at line1296 has diagnostic
+  `7a76b8617fb1d68689fa36aa3d4844ff07a284e8c8c75c492398e9a1630e9e13`.
+  Its exact accepted synthetic values now include the plan-pill Grok subject
+  and access/refresh token fixtures. Arbitrary credentials are rejected. DEBUG,
+  simulator, UUID-isolation and provider-network blocking guards remain intact.
+  Claude reset fixtures use only `ui-test-credential` and the isolated fake
+  provider; they cannot consume a live reset.
+
+No additional reset finding appeared. Replaying the retained raw SARIF and
+source-reach CSV against the renewed exact baseline accepts those three
+findings with zero blockers and complete source reach. Severity thresholds,
+diagnostic matching, extraction requirements and exclusions are unchanged.
+Replay is not a passing hosted analysis of the repaired source.
+
+Fresh hosted analysis
+[37768114114](https://github.com/hemsoft-dev/codexbar-ios/actions/runs/37768114114)
+passed at `80649e18cf5f224588029431912a9881c055d8c7`, which adds the renewed
+baseline to that reviewed production source. The pinned Xcode 26.6 / Swift 6.3.3
+build, CodeQL 2.26.4 and Swift query pack
+`1.3.9+1d123a2caa0e4e6256a49d963bfcbd51a01617e8` extracted all 113
+production Swift files with no extraction errors.
+The gate accepts exactly the three reviewed diagnostics above and reports zero
+blocking findings. The retained raw SARIF, source-reach CSV and gate report
+verify the successful result without changing thresholds or exclusions.
+
+The subsequent grant-boundary/cooldown review at
+`c2c54bc6256130c2495182a80a4d12a6883b487d` binds the same 113 production
+Swift filenames to source snapshot
+`4ff4bbf03167efc3c1ceacb7433c64b50535058f2b691e1592a21eb9ab34d68c`.
+The new time-dependent reset display and cooldown labels add no credential persistence,
+provider mutation, export or cache consumer. New dashboard/cooldown scenarios
+still accept only the existing synthetic credential and block provider networking.
+The three finding sources, locations and complete retained diagnostic/data-flow
+identities are unchanged; the reviewer renewed their source/consumer assessment
+without changing diagnostic identities, thresholds or exclusions. The earlier
+hosted result remains evidence for its analyzed source. Fresh hosted analysis of
+the boundary repair is required before reporting this renewed baseline as passing.
+
+Native checks subsequently rejected the explicit dashboard schedule at1455ace:
+both families retained two resets past expiry. The bounded local periodic-display
+repair at `2ee959433c9217ca4e4ce0ffe87dcb61e2e06e1b` passes untouched-dashboard expiry/start and cooldown transitions
+on both families with zero reset requests (iPad116.496s, iPhone117.280s).
+The source snapshot is `9aadd2257e81c45686d7ecf2da925bc3f80ff5dc907217967c66ae29b41168c6` with the same113 files.
+The grant model returns to its previously reviewed implementation; the visible
+reset section now uses the existing one-second timeline pattern. This changes
+no credential consumer, persistence or provider request. Exact retained finding
+identities remain unchanged after source/consumer re-review. The stale-source
+1455ace hosted extraction was intentionally canceled; a fresh analysis must
+verify this final source before its renewed baseline is reported as passing.
