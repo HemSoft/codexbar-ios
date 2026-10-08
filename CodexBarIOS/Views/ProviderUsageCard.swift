@@ -549,8 +549,7 @@ struct ProviderUsageCard: View {
             }
 
             if result.providerID == .claude {
-                let now = Date()
-                TimelineView(.explicit([now] + (result.claudeUsageResetInventory?.transitionDates(after: now) ?? []))) { context in
+                TimelineView(.periodic(from: .now, by: 1)) { context in
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Label(claudeResetAvailabilityText(at: context.date), systemImage: "arrow.counterclockwise.circle")

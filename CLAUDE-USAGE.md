@@ -123,7 +123,7 @@ is not interpreted as a saved grant. Automated validation uses synthetic data
 and blocked networking. Live account eligibility and before/after comparisons
 remain pending for Franz.
 
-Dashboard reset availability updates at the provider-returned grant start and expiry
-boundaries without a usage refresh. The inventory sheet shows Claude's cooldown
+A visible dashboard reset section updates every second from the provider-returned
+grant start and expiry dates, without a usage refresh. The inventory sheet shows Claude's cooldown
 end time before generic eligibility messages and removes it once that time passes.
 Neither update consumes a reset or changes provider quotas.
