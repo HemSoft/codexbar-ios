@@ -252,7 +252,10 @@ live provider results.
 The same manual Claude journey covers two-account availability, irreversible
 confirmation and cancellation, successful refresh, unchanged second-account
 usage, relaunch persistence and ambiguous-request protection. An open confirmation
-expires automatically without a reset request. It exercises
+expires automatically without a reset request. The dashboard remains open across
+grant start/expiry boundaries and updates without another interaction. Provider
+cooldown text and the disabled action change when the cooldown ends, with zero
+requests. It exercises
 light/dark with default/accessibility2 text, plus zero, ineligible, paused,
 inactive, expired, unknown, malformed and failed inventories. Fixtures use the
 production inventory parser and an isolated fake consuming provider; networking

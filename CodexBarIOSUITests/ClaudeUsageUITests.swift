@@ -48,6 +48,8 @@ final class ClaudeUsageUITests: XCTestCase {
         exerciseAmbiguousReset()
         exerciseUnavailableResets()
         exerciseResetTimeBoundary()
+        exerciseResetDashboardBoundaries()
+        exerciseResetCooldown()
     }
 
     private func exerciseSavedReset(defaultText: Bool, dark: Bool) {
@@ -180,6 +182,42 @@ final class ClaudeUsageUITests: XCTestCase {
         XCTAssertTrue(summary.label.contains("0 resets available"), summary.label)
         XCTAssertTrue(app.staticTexts["Not currently available"].exists)
         keep("claude-resets-after-expiry", app: app)
+        tap(app.buttons["Done"], in: app)
+        assertRequests(0, title: "Synthetic Claude", in: app)
+        app.terminate()
+    }
+
+    private func exerciseResetDashboardBoundaries() {
+        for (scenario, before, after) in [("expiry", 2, 0), ("start", 0, 2)] {
+            let app = launch(scenario: "claude-resets-dashboard-\(scenario)", runID: UUID().uuidString)
+            let availability = app.staticTexts["claude-reset-availability-ui-claude"]
+            assertResetAvailability(before, account: "ui-claude", in: app)
+            keep("claude-resets-dashboard-\(scenario)-before", app: app)
+            let updated = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "label CONTAINS %@", "\(after) saved resets available"), object: availability
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 35), .completed,
+                           "The open dashboard must update without a refresh or another interaction")
+            let expiry = app.staticTexts["claude-reset-expiration-ui-claude"]
+            XCTAssertEqual(expiry.exists, after > 0, app.debugDescription)
+            keep("claude-resets-dashboard-\(scenario)-after", app: app)
+            assertRequests(0, title: "Synthetic Claude", in: app)
+            app.terminate()
+        }
+    }
+
+    private func exerciseResetCooldown() {
+        let app = launch(scenario: "claude-resets-cooldown", runID: UUID().uuidString)
+        tap(app.buttons["claude-view-resets-ui-claude"], in: app)
+        let cooldown = app.staticTexts["claude-reset-cooldown"]
+        XCTAssertTrue(cooldown.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(cooldown.label.contains("Claude reset cooldown ends"), cooldown.label)
+        XCTAssertFalse(app.buttons["claude-use-reset"].exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "may require a usage limit")).firstMatch.exists)
+        keep("claude-resets-cooldown-before", app: app)
+        XCTAssertTrue(app.buttons["claude-use-reset"].waitForExistence(timeout: 35))
+        XCTAssertFalse(cooldown.exists, app.debugDescription)
+        keep("claude-resets-cooldown-after", app: app)
         tap(app.buttons["Done"], in: app)
         assertRequests(0, title: "Synthetic Claude", in: app)
         app.terminate()

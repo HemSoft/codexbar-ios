@@ -1679,16 +1679,20 @@ actor UITestClaudeResetProvider: UsageProvider, ClaudeUsageResetConsuming {
         let remaining = scenario == "claude-resets-zero" ? 0 : remaining ?? (account.id == "ui-claude-second" ? 1 : 2)
         let now = Date()
         let formatter = ISO8601DateFormatter()
-        let endOffset: TimeInterval = scenario == "claude-resets-expired" ? -3600 : scenario == "claude-resets-boundary" ? 30 : 7 * 86400
+        let expiring = ["claude-resets-boundary", "claude-resets-dashboard-expiry"].contains(scenario)
+        let endOffset: TimeInterval = scenario == "claude-resets-expired" ? -3600 : expiring ? 30 : 7 * 86400
         let end = formatter.string(from: now.addingTimeInterval(endOffset))
-        let startOffset: TimeInterval = scenario == "claude-resets-inactive" ? 3600 : -7200
+        let startOffset: TimeInterval = scenario == "claude-resets-dashboard-start" ? 30
+            : scenario == "claude-resets-inactive" ? 3600 : -7200
+        let cooldown = scenario == "claude-resets-cooldown"
+            ? ",\"cooldown_until\":\"\(formatter.string(from: now.addingTimeInterval(30)))\"" : ""
         let start = formatter.string(from: now.addingTimeInterval(startOffset))
         let session = formatter.string(from: now.addingTimeInterval(7200))
         let weekly = formatter.string(from: now.addingTimeInterval(3 * 86400))
         let payload = """
         {"five_hour":{"utilization":\(requests > 0 && scenario != "claude-resets-error" ? 0 : 42),"resets_at":"\(session)"},
          "seven_day":{"utilization":\(requests > 0 && scenario != "claude-resets-error" ? 0 : 64),"resets_at":"\(weekly)"},
-         "cedar_ember":{"eligible":\(scenario != "claude-resets-ineligible"),"next_grant_id":"fixture_grant","grants":[{
+         "cedar_ember":{"eligible":\(scenario != "claude-resets-ineligible"),"next_grant_id":"fixture_grant"\(cooldown),"grants":[{
            "id":"fixture_grant","label":"Saved Claude reset","resets_left":\(remaining),
            "starts_at":"\(start)","ends_at":"\(end)","clears":["five_hour","seven_day"],
            "paused":\(scenario == "claude-resets-paused"),"usable_now":true

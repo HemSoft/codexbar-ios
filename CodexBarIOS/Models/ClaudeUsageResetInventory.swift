@@ -45,6 +45,13 @@ public struct ClaudeUsageResetInventory: Equatable, Sendable {
         return grants.filter { $0.isCurrent(at: date) }.reduce(0) { $0 + $1.remainingCount }
     }
 
+    /// Invalidate displays only when the provider's time-dependent state can change.
+    public func transitionDates(after date: Date) -> [Date] {
+        let dates = grants.flatMap { [$0.startsAt, $0.expiresAt].compactMap { $0 } }
+            + [cooldownUntil].compactMap { $0 }
+        return Array(Set(dates.filter { $0 > date })).sorted()
+    }
+
     public func matchesConfirmation(grant: ClaudeUsageResetGrant, binding: String, at date: Date) -> Bool {
         credentialBinding == binding && redeemableGrant(at: date) == grant
     }

@@ -549,23 +549,26 @@ struct ProviderUsageCard: View {
             }
 
             if result.providerID == .claude {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Label(claudeResetAvailabilityText, systemImage: "arrow.counterclockwise.circle")
-                            .font(.caption)
-                            .accessibilityIdentifier("claude-reset-availability-\(result.accountID)")
-                        if let expiration = claudeResetExpirationText {
-                            Text(expiration).font(.caption2)
-                                .accessibilityIdentifier("claude-reset-expiration-\(result.accountID)")
+                let now = Date()
+                TimelineView(.explicit([now] + (result.claudeUsageResetInventory?.transitionDates(after: now) ?? []))) { context in
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label(claudeResetAvailabilityText(at: context.date), systemImage: "arrow.counterclockwise.circle")
+                                .font(.caption)
+                                .accessibilityIdentifier("claude-reset-availability-\(result.accountID)")
+                            if let expiration = claudeResetExpirationText(at: context.date) {
+                                Text(expiration).font(.caption2)
+                                    .accessibilityIdentifier("claude-reset-expiration-\(result.accountID)")
+                            }
                         }
-                    }
-                    .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    if result.claudeUsageResetInventory != nil {
-                        Button("View Resets") { isShowingClaudeResets = true }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .accessibilityIdentifier("claude-view-resets-\(result.accountID)")
+                        .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                        if result.claudeUsageResetInventory != nil {
+                            Button("View Resets") { isShowingClaudeResets = true }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .accessibilityIdentifier("claude-view-resets-\(result.accountID)")
+                        }
                     }
                 }
                 if let feedback = claudeResetFeedback {
@@ -995,15 +998,15 @@ struct ProviderUsageCard: View {
         }
     }
 
-    private var claudeResetAvailabilityText: String {
+    private func claudeResetAvailabilityText(at date: Date) -> String {
         guard let inventory = result.claudeUsageResetInventory else { return "Saved resets unavailable" }
-        let count = inventory.availableCount(at: Date())
+        let count = inventory.availableCount(at: date)
         return count == 1 ? "1 saved reset available" : "\(count) saved resets available"
     }
 
-    private var claudeResetExpirationText: String? {
+    private func claudeResetExpirationText(at date: Date) -> String? {
         guard let inventory = result.claudeUsageResetInventory, inventory.isEligible else { return nil }
-        let expiry = inventory.grants.filter { $0.isCurrent(at: Date()) }.compactMap(\.expiresAt).min()
+        let expiry = inventory.grants.filter { $0.isCurrent(at: date) }.compactMap(\.expiresAt).min()
         return expiry.map { "Next reset expires \($0.formatted(date: .abbreviated, time: .shortened))" }
     }
 

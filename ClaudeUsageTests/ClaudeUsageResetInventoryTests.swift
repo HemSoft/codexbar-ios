@@ -45,6 +45,16 @@ final class ClaudeUsageResetInventoryTests: XCTestCase {
         let cooling = try XCTUnwrap(parse(replacing: "\"eligible\":true", with: "\"eligible\":true,\"cooldown_until\":\"2030-01-02T00:00:00Z\""))
         XCTAssertEqual(cooling.availableCount(at: now), 2)
         XCTAssertNil(cooling.redeemableGrant(at: now))
+        let cooldown = try XCTUnwrap(cooling.cooldownUntil)
+        XCTAssertEqual(cooling.transitionDates(after: now), [cooldown, now.addingTimeInterval(7 * 86_400)])
+        XCTAssertEqual(cooling.transitionDates(after: cooldown), [now.addingTimeInterval(7 * 86_400)])
+        XCTAssertEqual(cooling.redeemableGrant(at: cooldown)?.id, "fixture_grant")
+        let future = try XCTUnwrap(parse(replacing: "2029-12-01T00:00:00Z", with: "2030-01-02T00:00:00Z"))
+        XCTAssertEqual(future.availableCount(at: now), 0)
+        XCTAssertEqual(future.transitionDates(after: now), [cooldown, now.addingTimeInterval(7 * 86_400)])
+        XCTAssertEqual(future.availableCount(at: cooldown), 2)
+        XCTAssertEqual(future.availableCount(at: now.addingTimeInterval(7 * 86_400)), 0)
+
     }
 
     func testConfirmedEmptyAndSeparateAccountsRemainIndependent() throws {

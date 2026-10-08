@@ -10,7 +10,8 @@ building, testing, or releasing the app.
 
 - View saved Claude usage resets, the windows they restore and their expiry.
   Confirm the account before using one, then see refreshed usage and the remaining
-  resets. Unconfirmed requests stay protected against another consumption.
+  resets. Availability updates when a grant starts or expires, and provider cooldowns
+  show when a reset can next be used. Unconfirmed requests stay protected against another consumption.
   ([#420](https://github.com/HemSoft/codexbar-ios/issues/420))
 
 ### Changed
