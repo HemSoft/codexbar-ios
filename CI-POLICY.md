@@ -220,8 +220,8 @@ This names the manual job `Account menu comparison`, never `Full iOS UI validati
 It runs only the complete original Google customization/relaunch journey on each
 family for an exact ancestor baseline and the dispatched candidate. The comparison remains dispatch-only; it creates no automatic PR or main-push
 work. The four
-existing CI policy tests retain the same assertions; only the expected manual job
-name accounts for this selector.
+existing CI policy tests retain their count and full-UI assertions, and also
+check PR-only lint, dispatch-only native work and the comparison selector.
 
 ```sh
 gh workflow run ci.yml --repo HemSoft/codexbar-ios \
