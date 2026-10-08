@@ -238,7 +238,7 @@ final class UITestFixtures {
         ] {
             let account = ProviderAccountConfiguration(
                 id: id, providerID: provider, accountLabel: title,
-                grokGeneratedLabel: provider == .grok ? title : nil, authMethod: .apiKey
+                grokGeneratedLabel: provider == .grok ? title : nil, authMethod: provider == .grok ? .browserSession : .apiKey
             )
             _ = store.update(account)
             _ = store.saveSecret("ui-test-credential", for: account)
@@ -248,7 +248,8 @@ final class UITestFixtures {
                     expiresAt: Date().addingTimeInterval(3600), subject: "synthetic-user", email: nil
                 )
                 _ = store.saveSecret((try? credential.encoded()) ?? "", for: account)
-                _ = store.applyVerifiedGrokPlan(grokResult(for: account, scenario: "grok-default"))
+                precondition(store.applyVerifiedGrokPlan(grokResult(for: account, scenario: "grok-default")),
+                             "Synthetic verified Grok naming must normalize")
             }
             if provider == .gemini {
                 _ = store.saveSecret(#"{"__Secure-1PSID":"synthetic"}"#, for: account)
