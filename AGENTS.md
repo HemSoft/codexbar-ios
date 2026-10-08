@@ -54,8 +54,12 @@ Before editing files:
 
 ## Automatic CI Cost Ceiling
 
-Automatic pull-request and `main` push CI must not increase in elapsed time or
-summed billed runner time. This is a hard constraint.
+Automatic pull-request CI runs only pinned SwiftLint and the existing lightweight
+CI-policy assertions. CI does not run on `main` pushes. Native builds, unit tests,
+function-risk analysis and the SwiftPM smoke harness run only before releases or
+through explicit on-demand dispatch. Do not recreate retired automatic gates.
+Automatic CI must not increase in elapsed time or summed billed runner time.
+This is a hard constraint.
 
 - Do not add automatic jobs, matrix entries, test destinations, retries,
   analysis passes, artifact processing, broader triggers, or longer timeouts.
@@ -169,7 +173,7 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
     --ref <release-candidate-branch-or-tag>
   ```
 
-  The release cannot proceed until the five automatic jobs and manual
+  The release cannot proceed until all five quality jobs and manual
   `Full iOS UI validation` job pass for that exact SHA. Any change to the
   release candidate invalidates the result and requires a new manual run.
 
@@ -272,10 +276,12 @@ Before declaring a PR ready:
   AI-review gate when no formal approval is required; report its actual state
   without treating it as a formal GitHub approval.
 
-Keep the five required quality checks and their workload unchanged: SwiftLint,
-Strict concurrency, iOS tests, watchOS tests, and SwiftPM smoke tests. Report the
-actual current-head review and check state rather than assuming AI review alone
-makes the PR mergeable.
+SwiftLint is the sole required automatic PR status. Keep strict branch freshness
+and current-head Codex review. Strict concurrency, iOS tests, watchOS tests and
+SwiftPM smoke tests are manual-only alongside the complete release UI gate; do
+not require their skipped PR statuses or dispatch full validation for routine
+PRs. Retain all five quality workloads for an explicit release or on-demand run.
+Report the actual current-head review and check state.
 
 ## Connected iPhone and Signing
 

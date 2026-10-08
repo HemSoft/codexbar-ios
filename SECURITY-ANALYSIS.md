@@ -112,9 +112,10 @@ and `blocking_findings`. A passing analysis with three reviewed findings means
 three findings and zero actionable high-severity findings, never a clean scan
 with zero findings. No baseline is refreshed automatically.
 
-The active default-branch ruleset requires the five correctness checks documented
-in [CI-POLICY.md](CI-POLICY.md). `Swift security analysis` is no longer required
-by that ruleset. Its manual job still fails on the findings and extraction rules
+The default-branch ruleset requires only automatic `SwiftLint`, with strict
+branch freshness, as documented in [CI-POLICY.md](CI-POLICY.md). The full manual
+gate retains all five quality workloads for releases or on-demand validation.
+`Swift security analysis` is not required by that ruleset. Its manual job still fails on the findings and extraction rules
 above. The workflow file does not configure repository rules; verify both when
 changing policy so a removed trigger does not leave a required status pending.
 

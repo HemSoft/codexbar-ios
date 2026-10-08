@@ -161,6 +161,14 @@ intended version differs from the ledger.
 
 ### 4. Run release validation
 
+Dispatch `ci.yml` against the frozen candidate ref and verify its resolved
+`headSha`. Before archive/upload, require SwiftLint, Strict concurrency, iOS tests,
+watchOS tests, SwiftPM smoke tests and Full iOS UI validation to succeed for that
+exact SHA, including both families and all 29 manual journeys with zero skips.
+Any source change invalidates the run. Routine PR automation requires only
+SwiftLint; do not recreate retired automatic native gates or main-push reruns.
+Keep manual security/performance release requirements unchanged.
+
 1. Confirm `release-preparation-merged`, synchronized `main`, and the recorded
    candidate SHA. Require
    `git status --porcelain -- . ':(exclude).agents/skills/app-store-release/History/**'`

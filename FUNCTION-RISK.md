@@ -1,8 +1,10 @@
 # Function coverage and risk
 
-The required `iOS tests` and `watchOS tests` CI jobs collect coverage and run
+The manual `iOS tests` and `watchOS tests` CI jobs collect coverage and run
 `scripts/function-risk/measure.py`. A measurement error or failed baseline
-comparison fails that existing required status. Both jobs publish artifacts named
+comparison fails the corresponding manual quality status. Both statuses must
+pass for an exact release candidate or a requested full validation run; they
+are not ordinary pull-request merge gates. Both jobs publish artifacts named
 `function-risk-ios` and `function-risk-watch`, including raw xccov coverage,
 SwiftLint output, source declarations, the full JSON report and a Markdown review
 queue. Artifacts remain available for 14 days. A collection failure produces

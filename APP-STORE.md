@@ -363,7 +363,7 @@ Manual CI release gate for every future version:
 - [ ] After all intended release changes have merged, create or select the
   release-candidate branch or tag and record its resolved SHA.
 - [ ] Dispatch the `CI` workflow manually against that candidate. Confirm its
-  `headSha` matches and all five automatic jobs plus `Full iOS UI validation`
+  `headSha` matches and all five quality jobs plus `Full iOS UI validation`
   pass before uploading or releasing the build.
 - [ ] If the candidate SHA changes, discard the earlier result and pass a new
   manual run. Routine pull requests do not require this gate.

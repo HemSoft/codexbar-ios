@@ -319,16 +319,18 @@ final class CodexCreditsPoolUITests: XCTestCase {
         ).firstMatch.exists { return }
         let customizer = app.scrollViews["metric-customization-scroll"]
         let settings = app.collectionViews["provider-account-settings-form"]
-        let container = customizer.exists ? customizer : (settings.exists ? settings : app.scrollViews.firstMatch)
-        if !customizer.exists && !settings.exists && element.isHittable
-            && app.frame.insetBy(dx: 4, dy: 4).contains(element.frame) { return }
+        var container = customizer.exists ? customizer : (settings.exists ? settings : app.scrollViews.firstMatch)
+        if element.exists && element.identifier.hasPrefix("settings-") {
+            let containingCollection = app.collectionViews.containing(.button, identifier: element.identifier).firstMatch
+            if containingCollection.exists { container = containingCollection }
+        }
         for _ in 0..<12 {
             let bars = app.navigationBars.allElementsBoundByIndex.map(\.frame).filter {
                 $0.width <= container.frame.width + 1 && $0.intersects(container.frame)
             }
             let top = max(container.frame.minY, bars.map(\.maxY).max() ?? container.frame.minY)
             let viewport = CGRect(x: container.frame.minX, y: top, width: container.frame.width,
-                                  height: max(0, container.frame.maxY - top)).insetBy(dx: 4, dy: 4)
+                                  height: max(0, container.frame.maxY - top)).insetBy(dx: 4, dy: 0)
             if element.exists && element.isHittable && viewport.contains(element.frame) { return }
             let upward = element.exists ? element.frame.midY > viewport.midY : !towardTop
             let start = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.65 : 0.35))
