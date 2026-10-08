@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "reviewed_commit": "34eab950d15451a7dd5706d484cc564d2796c4d2",
-  "source_snapshot_sha256": "1821c3d0521a7bebd41803e0a57ee14652665fd1020d7614c6c17199bdb77b78",
+  "reviewed_commit": "c36ddf76e8039b1f2cfeebfbe9af838408102353",
+  "source_snapshot_sha256": "d408551a9430b13aa001bd5095eec66c98b5ccba0b5aa2dd8ba2fb95e8fe4252",
   "codeql_version": "2.26.4",
   "query_pack_version": "1.3.9+1d123a2caa0e4e6256a49d963bfcbd51a01617e8",
   "findings": [
@@ -22,21 +22,21 @@
         "rule": "swift/cleartext-storage-preferences",
         "severity": 7.5,
         "path": "CodexBarIOS/Services/UITestFixtures.swift",
-        "line": 1205,
+        "line": 1296,
         "message": "This operation stores 'secret' in the user defaults database. It may contain unencrypted sensitive data from [secret](1).",
-        "diagnostic_sha256": "0c8421d83132a76561333185ad3106c31fdf121d64989622a29d5597bdf5d3e4"
+        "diagnostic_sha256": "7a76b8617fb1d68689fa36aa3d4844ff07a284e8c8c75c492398e9a1630e9e13"
       },
       "alert": "https://github.com/HemSoft/codexbar-ios/security/code-scanning/4",
-      "rationale": "UITestSecretStore accepts only the literal ui-test-credential, the parsed fixed synthetic coding credential, exact personal/work Codex fixture strings, exact fixed-expiry synthetic Cursor credentials, or the parsed fixed Greptile fixture session. Cursor/Codex fixture tokens have synthetic signatures; the Greptile fixture uses synthetic-user, synthetic-org and synthetic-cookie. Arbitrary credentials are rejected before the preferences write. Activation remains DEBUG-only, simulator-only and UUID-isolated, with a network blocker that permits only synthetic Greptile responses at greptile-fixture.invalid and rejects other destinations. These values have no authentication authority. Changing any accepted credential, caller, activation guard or network boundary requires re-review."
+      "rationale": "UITestSecretStore accepts only ui-test-credential or exact parsed synthetic coding, Codex, Cursor, Greptile and Grok fixture credentials. Grok uses the fixed synthetic plan-pill subject and access/refresh token values; these grant no provider access. Arbitrary values are rejected before the preferences write. Activation is DEBUG-only, simulator-only and UUID-isolated. Provider networking is blocked except the existing synthetic Greptile host. Claude resets use only ui-test-credential and the isolated fake provider. Re-review any accepted value, caller, activation guard or network boundary change."
     },
     {
       "finding": {
         "rule": "swift/cleartext-storage-preferences",
         "severity": 7.5,
         "path": "CodexBarIOS/Services/ProviderConfigurationStore.swift",
-        "line": 2369,
+        "line": 2371,
         "message": "This operation stores 'call to sorted()' in the user defaults database. It may contain unencrypted sensitive data from [.collapsedDashboardAccountIDs](1).",
-        "diagnostic_sha256": "fe4f637e169d089af0b2eff01b1357ec937a39763a19d07e66db3112d6cecbff"
+        "diagnostic_sha256": "a283b8ef3e8e280df73624ba73ebb4acdf7b4df58d11a137b189ff3d30fb43e5"
       },
       "alert": "https://github.com/HemSoft/codexbar-ios/security/code-scanning/3",
       "rationale": "The preference stores the collapsed state of configured local IDs, not credentials or provider account identifiers. ProviderAccountConfiguration uses a provider name or provider plus random UUID, and the collapse updater rejects unknown IDs. The configuration already persists those IDs; secrets are stored separately through SecretStore. Re-review if account-ID generation or callers accept sensitive identifiers."
