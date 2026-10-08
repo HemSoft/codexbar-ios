@@ -412,9 +412,7 @@ public final class UsageRefreshService: ObservableObject {
               let identity = incoming.cacheIdentity,
               let cached = results.first(where: { $0.accountID == incoming.accountID && $0.cacheIdentity == identity })
         else { return incoming }
-        var result = incoming
-        result.verifiedGrokPlanName = cached.verifiedGrokPlanName
-        return result
+        return GrokUsageProvider.retainingVerifiedPlan(cached.verifiedGrokPlanName, for: incoming)
     }
 
     private func preservingGreptileRenewal(_ incoming: ProviderUsageResult) -> ProviderUsageResult {

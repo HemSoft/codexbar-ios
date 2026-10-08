@@ -269,6 +269,59 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
                 }
             }
         }
+        try await assertRetainedTierUsesOnlyFreshOmittedUsageEvidence(account: account, secrets: secrets, start: start, end: end)
+    }
+
+    @MainActor
+    private func assertRetainedTierUsesOnlyFreshOmittedUsageEvidence(
+        account: ProviderAccountConfiguration, secrets: GrokTestSecrets, start: String, end: String
+    ) async throws {
+        let cases: [((String, String), Bool, String?, String, [Double])] = [
+            (("", "true"), true, "SuperGrok Lite", "subject-one", [0]),
+            ((",\"creditUsagePercent\":31", "true"), true, "SuperGrok Lite", "subject-one", [31]),
+            ((",\"creditUsagePercent\":null", "true"), true, "SuperGrok Lite", "subject-one", []),
+            ((",\"productUsage\":[]", "true"), true, "SuperGrok Lite", "subject-one", []),
+            (("", "false"), true, "SuperGrok Lite", "subject-one", []),
+            (("", "true"), false, "SuperGrok Lite", "subject-one", []),
+            (("", "true"), true, nil, "subject-one", []),
+            (("", "true"), true, "SuperGrok Lite", "other-subject", []),
+        ]
+        for singleAccount in [false, true] {
+            for ((usage, unified), unavailable, plan, subject, expected) in cases {
+                let billing = """
+                    {"config":{"isUnifiedBillingUser":\(unified)\(usage),"prepaidBalance":{"val":700},
+                    "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"}}}
+                    """
+                let cached = ProviderUsageResult(
+                    accountID: account.id, providerID: .grok, title: "Grok", verifiedGrokPlanName: plan,
+                    subtitle: "Old usage", bars: [UsageBar(label: "Old weekly", used: 77, limit: 100, resetsAt: .distantPast)],
+                    cacheIdentity: Data(SHA256.hash(data: Data(subject.utf8))).base64EncodedString(), fetchedAt: .distantPast
+                )
+                let session = makeSession([
+                    (200, #"{"sub":"subject-one"}"#), (200, billing),
+                    (unavailable ? 503 : 200, unavailable ? "{}" : #"{"subscription_tier":"Unknown"}"#),
+                ])
+                defer { session.invalidateAndCancel() }
+                let service = UsageRefreshService(
+                    providers: [GrokUsageProvider(secretStore: secrets, session: session)], initialResults: [cached]
+                )
+                if singleAccount { _ = await service.refresh(configuration: account) } else { await service.refresh(configurations: [account]) }
+                let result = try XCTUnwrap(service.results.first)
+                XCTAssertEqual(result.bars.map(\.used), expected, "Only fresh reported or safely inferred usage is visible")
+                XCTAssertEqual(result.monetaryMetrics.map(\.minorUnits), unified == "true" ? [700] : [],
+                               "Fresh extra credits must survive tier retention only for a verified unified account")
+                XCTAssertNil(result.failureMessage)
+                XCTAssertTrue(result.hasFreshBars)
+                if expected == [0] {
+                    XCTAssertEqual(result.bars.first?.resetsAt, ISO8601DateFormatter().date(from: end))
+                    XCTAssertEqual(result.bars.first?.stableKey, "included-usage")
+                    XCTAssertEqual(result.bars.first?.projectionPeriodStart, ISO8601DateFormatter().date(from: start))
+                    XCTAssertTrue(result.usageMessages.contains { $0.contains("Inferred zero") })
+                    XCTAssertTrue(result.subtitle.contains("No included usage reported"))
+                }
+                XCTAssertEqual(GrokTestProtocol.state.requests.count, 3)
+            }
+        }
     }
 
     @MainActor

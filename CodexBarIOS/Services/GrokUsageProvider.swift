@@ -300,6 +300,7 @@ public final class GrokUsageProvider: UsageProvider {
         return ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
             verifiedGrokPlanName: knownPlan(verifiedPlanName), grokPlanLookupFailed: planLookupFailed,
+            grokInferredZeroCandidate: inferredZeroCandidate(config, data: data, now: now),
             subtitle: bar == nil ? reason : inferredZero ? "No included usage reported by Grok." : "Direct Grok subscription usage",
             bars: bar.map { [$0] } ?? [],
             monetaryMetrics: [balance].compactMap { $0 },
@@ -322,6 +323,33 @@ public final class GrokUsageProvider: UsageProvider {
 
     private static func identityHash(_ subject: String) -> String {
         Data(SHA256.hash(data: Data(subject.utf8))).base64EncodedString()
+    }
+
+    private static func inferredZeroCandidate(_ config: GrokCreditsConfig, data: Data, now: Date) -> UsageBar? {
+        guard config.isUnifiedBillingUser == true, config.currentPeriod?.type == "USAGE_PERIOD_TYPE_WEEKLY",
+              let start = config.currentPeriod?.start.flatMap(date), let end = config.currentPeriod?.end.flatMap(date),
+              start <= now, end > now, omitsUsage(data) else { return nil }
+        return UsageBar(
+            stableKey: "included-usage", label: "Weekly usage inferred", used: 0, limit: 100, resetsAt: end,
+            projectionCurrent: 0, projectionLimit: 100, projectionPeriodStart: start, projectionPeriodEnd: end
+        )
+    }
+
+    static func retainingVerifiedPlan(_ name: String?, for incoming: ProviderUsageResult) -> ProviderUsageResult {
+        var result = incoming
+        result.verifiedGrokPlanName = knownPlan(name)
+        guard result.verifiedGrokPlanName != nil, incoming.bars.isEmpty,
+              let bar = incoming.grokInferredZeroCandidate else { return result }
+        // This candidate comes only from fresh billing; cached bars never supply its period or value.
+        return ProviderUsageResult(
+            accountID: incoming.accountID, providerID: .grok, title: incoming.title,
+            verifiedGrokPlanName: result.verifiedGrokPlanName, grokPlanLookupFailed: incoming.grokPlanLookupFailed,
+            subtitle: "No included usage reported by Grok.", bars: [bar],
+            monetaryMetrics: incoming.monetaryMetrics,
+            usageMessages: ["Inferred zero from Grok's CLI convention, not a reported measurement."],
+            cardInformationSections: incoming.cardInformationSections,
+            cacheIdentity: incoming.cacheIdentity, cacheScope: incoming.cacheScope, fetchedAt: incoming.fetchedAt
+        )
     }
 
     private static func omitsUsage(_ data: Data) -> Bool {
