@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A42000000000000000000301 /* ClaudeUsageResetInventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */; };
+		A42000000000000000000401 /* ProviderMetricTileGridResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000402 /* ProviderMetricTileGridResolver.swift */; };
 		A42000000000000000000201 /* ClaudeUsageResetClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000202 /* ClaudeUsageResetClient.swift */; };
 		A42000000000000000000101 /* ClaudeUsageResetInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000102 /* ClaudeUsageResetInventory.swift */; };
 		AB2990000000000000000001 /* GoogleCodingSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2990000000000000000002; };
@@ -256,6 +257,7 @@
 
 /* Begin PBXFileReference section */
 		A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetInventoryView.swift; sourceTree = "<group>"; };
+		A42000000000000000000402 /* ProviderMetricTileGridResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderMetricTileGridResolver.swift; sourceTree = "<group>"; };
 		A42000000000000000000202 /* ClaudeUsageResetClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetClient.swift; sourceTree = "<group>"; };
 		A42000000000000000000102 /* ClaudeUsageResetInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetInventory.swift; sourceTree = "<group>"; };
 		AB2990000000000000000002 /* GoogleCodingSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCodingSignIn.swift; sourceTree = "<group>"; };
@@ -594,6 +596,7 @@
 				F20000000000000000000002 /* DiagnosticReportView.swift */,
 				20000000000000000000000A /* ProviderUsageCard.swift */,
 				A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */,
+				A42000000000000000000402 /* ProviderMetricTileGridResolver.swift */,
 				200000000000000000000012 /* SettingsView.swift */,
 				200000000000000000000038 /* WidgetBuilderView.swift */,
 				200000000000000000000013 /* ProviderSettingsView.swift */,
@@ -1026,6 +1029,7 @@
 				100000000000000000000034 /* UsageHistoryStore.swift in Sources */,
 				10000000000000000000000A /* ProviderUsageCard.swift in Sources */,
 				A42000000000000000000301 /* ClaudeUsageResetInventoryView.swift in Sources */,
+				A42000000000000000000401 /* ProviderMetricTileGridResolver.swift in Sources */,
 				10000000000000000000000D /* ProviderAccountConfiguration.swift in Sources */,
 				10000000000000000000000E /* KeychainService.swift in Sources */,
 				10000000000000000000000F /* ProviderConfigurationStore.swift in Sources */,

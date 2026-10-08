@@ -42,30 +42,157 @@ final class ClaudeUsageUITests: XCTestCase {
             XCTAssertTrue(restored.buttons["dashboard-metric-claude.weekly-all"].waitForNonExistence(timeout: 5))
             restored.terminate()
         }
+        for defaultText in [true, false] {
+            for dark in [false, true] { exerciseSavedReset(defaultText: defaultText, dark: dark) }
+        }
+        exerciseAmbiguousReset()
+        exerciseUnavailableResets()
     }
 
-    private func launch(scenario: String, runID: String, reset: Bool = true) -> XCUIApplication {
+    private func exerciseSavedReset(defaultText: Bool, dark: Bool) {
+        let runID = UUID().uuidString
+        let scenario = "claude-resets-two-accounts"
+        var app = launch(scenario: scenario, runID: runID, defaultText: defaultText, dark: dark)
+        let variant = "\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")"
+        assertResetAvailability(2, account: "ui-claude", in: app)
+        assertResetAvailability(1, account: "ui-claude-second", in: app)
+        assertRequests(0, title: "Synthetic Claude", in: app)
+        keep("claude-resets-available-\(variant)", app: app)
+        tap(app.buttons["claude-view-resets-ui-claude"], in: app)
+        let summary = app.staticTexts["claude-reset-summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(summary.label.contains("2 resets available"), summary.label)
+        tap(app.buttons["claude-use-reset"], in: app)
+        let confirmation = app.alerts["Use one Claude reset?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5), app.debugDescription)
+        let message = confirmation.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "cannot be undone")).firstMatch
+        XCTAssertTrue(message.exists, app.debugDescription)
+        XCTAssertTrue(message.label.contains("Synthetic Claude"))
+        XCTAssertTrue(message.label.contains("five-hour usage") && message.label.contains("weekly usage"))
+        keep("claude-resets-confirmation-\(variant)", app: app)
+        tap(confirmation.buttons["Cancel"], in: app)
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+        tap(app.buttons["Done"], in: app)
+        assertRequests(0, title: "Synthetic Claude", in: app)
+        assertResetAvailability(2, account: "ui-claude", in: app)
+        tap(app.buttons["claude-view-resets-ui-claude"], in: app)
+        tap(app.buttons["claude-use-reset"], in: app)
+        tap(confirmation.buttons["Use reset"], in: app)
+        let feedback = app.descendants(matching: .any)["claude-reset-feedback"]
+        XCTAssertTrue(feedback.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(feedback.label.contains("Claude confirmed the reset"), feedback.label)
+        XCTAssertTrue(summary.label.contains("1 reset available"), summary.label)
+        keep("claude-resets-refreshed-\(variant)", app: app)
+        tap(app.buttons["Done"], in: app)
+        assertRequests(1, title: "Synthetic Claude", in: app)
+        assertRequests(0, title: "Second Claude", in: app)
+        assertResetAvailability(1, account: "ui-claude", in: app)
+        assertResetAvailability(1, account: "ui-claude-second", in: app)
+        for id in ["dashboard-metric-claude.session", "dashboard-metric-claude.weekly-all"] {
+            let zero = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", id, "0%")).firstMatch
+            let unchanged = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", id,
+                                                           id.hasSuffix("session") ? "42%" : "64%")).firstMatch
+            reveal(zero, in: app)
+            XCTAssertTrue(zero.exists, app.debugDescription)
+            reveal(unchanged, in: app)
+            XCTAssertTrue(unchanged.exists, app.debugDescription)
+        }
+        keep("claude-resets-account-isolation-\(variant)", app: app)
+        app.terminate()
+        app = launch(scenario: scenario, runID: runID, reset: false, defaultText: defaultText, dark: dark)
+        assertRequests(1, title: "Synthetic Claude", in: app)
+        assertRequests(0, title: "Second Claude", in: app)
+        assertResetAvailability(1, account: "ui-claude", in: app)
+        app.terminate()
+    }
+
+    private func exerciseAmbiguousReset() {
+        let runID = UUID().uuidString
+        var app = launch(scenario: "claude-resets-error", runID: runID)
+        for _ in 0..<2 {
+            tap(app.buttons["claude-view-resets-ui-claude"], in: app)
+            tap(app.buttons["claude-use-reset"], in: app)
+            tap(app.alerts["Use one Claude reset?"].buttons["Use reset"], in: app)
+            let feedback = app.descendants(matching: .any)["claude-reset-feedback"]
+            XCTAssertTrue(feedback.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertTrue(feedback.label.contains("has not confirmed"), feedback.label)
+            keep("claude-resets-unconfirmed", app: app)
+            tap(app.buttons["Done"], in: app)
+            assertRequests(1, title: "Synthetic Claude", in: app)
+            assertResetAvailability(2, account: "ui-claude", in: app)
+        }
+        app.terminate()
+        app = launch(scenario: "claude-resets-error", runID: runID, reset: false)
+        assertRequests(1, title: "Synthetic Claude", in: app)
+        assertResetAvailability(2, account: "ui-claude", in: app)
+        app.terminate()
+    }
+
+    private func exerciseUnavailableResets() {
+        for scenario in ["zero", "ineligible", "paused", "inactive", "expired", "unknown", "malformed", "failed"] {
+            let app = launch(scenario: "claude-resets-\(scenario)", runID: UUID().uuidString)
+            let known = !["unknown", "malformed", "failed"].contains(scenario)
+            let availability = app.descendants(matching: .any)["claude-reset-availability-ui-claude"]
+            reveal(availability, in: app)
+            XCTAssertTrue(availability.label.contains(known ? "0 saved resets available" : "Saved resets unavailable"), availability.label)
+            if known {
+                tap(app.buttons["claude-view-resets-ui-claude"], in: app)
+                XCTAssertTrue(app.navigationBars["Claude resets"].waitForExistence(timeout: 5))
+                XCTAssertFalse(app.buttons["claude-use-reset"].exists, "Unavailable grant must have no consumption action")
+                keep("claude-resets-\(scenario)", app: app)
+                tap(app.buttons["Done"], in: app)
+            } else {
+                XCTAssertFalse(app.buttons["claude-view-resets-ui-claude"].exists)
+                keep("claude-resets-\(scenario)", app: app)
+            }
+            if scenario != "failed" { assertRequests(0, title: "Synthetic Claude", in: app) }
+            app.terminate()
+        }
+    }
+
+    private func assertRequests(_ count: Int, title: String, in app: XCUIApplication) {
+        let header = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label BEGINSWITH %@ AND label CONTAINS %@", title + ", ", "Reset requests: \(count)"
+        )).firstMatch
+        reveal(header, in: app)
+        XCTAssertTrue(header.exists, app.debugDescription)
+    }
+
+    private func assertResetAvailability(_ count: Int, account: String, in app: XCUIApplication) {
+        let availability = app.descendants(matching: .any)["claude-reset-availability-\(account)"]
+        reveal(availability, in: app)
+        XCTAssertTrue(availability.label.contains(count == 1 ? "1 saved reset available" : "\(count) saved resets available"), availability.label)
+    }
+
+    private func launch(scenario: String, runID: String, reset: Bool = true, defaultText: Bool = true, dark: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment = [
             "CODEXBAR_UI_TESTS": "1",
             "CODEXBAR_UI_TEST_RUN_ID": runID,
             "CODEXBAR_UI_TEST_RESET": reset ? "1" : "0",
             "CODEXBAR_UI_TEST_SCENARIO": scenario,
-            "CODEXBAR_UI_TEST_DEFAULT_TEXT": "1",
+            "CODEXBAR_UI_TEST_DEFAULT_TEXT": defaultText ? "1" : "0",
+            "CODEXBAR_UI_TEST_DARK": dark ? "1" : "0",
         ]
-        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-AppleInterfaceStyle", dark ? "Dark" : "Light"]
         app.launch()
         return app
     }
 
     private func tap(_ element: XCUIElement, in app: XCUIApplication) {
-        XCTAssertTrue(element.waitForExistence(timeout: 5), app.debugDescription)
+        reveal(element, in: app)
+        XCTAssertTrue(element.isEnabled, app.debugDescription)
+        element.tap()
+    }
+
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         let customizer = app.scrollViews["metric-customization-scroll"]
         let scrollView = customizer.exists ? customizer : app.scrollViews.firstMatch
-        for _ in 0..<4 where !element.isHittable { scrollView.swipeUp() }
-        XCTAssertTrue(element.isEnabled, app.debugDescription)
+        let surface = scrollView.exists ? scrollView : app
+        for _ in 0..<5 where !element.exists || !element.isHittable { surface.swipeUp() }
+        for _ in 0..<5 where !element.exists || !element.isHittable { surface.swipeDown() }
+        XCTAssertTrue(element.waitForExistence(timeout: 5), app.debugDescription)
         XCTAssertTrue(element.wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
-        element.tap()
     }
 
     private func keep(_ name: String, app: XCUIApplication) {

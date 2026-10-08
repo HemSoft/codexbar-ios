@@ -254,6 +254,8 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let cardInformationSections: [ProviderCardInformationSection]
     public var greptileAllowanceRenewal: GreptileAllowanceRenewal?
     public let codexBankedRateLimitResets: CodexBankedRateLimitResets?
+    /// Transient account-bound grants; never persist in usage history or device snapshots.
+    public let claudeUsageResetInventory: ClaudeUsageResetInventory?
     public let failureMessage: String?
     public let recoveryAction: ProviderUsageRecoveryAction
     public let preserveCachedBarsOnFailure: Bool
@@ -284,6 +286,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         cardInformationSections: [ProviderCardInformationSection] = [],
         greptileAllowanceRenewal: GreptileAllowanceRenewal? = nil,
         codexBankedRateLimitResets: CodexBankedRateLimitResets? = nil,
+        claudeUsageResetInventory: ClaudeUsageResetInventory? = nil,
         failureMessage: String? = nil,
         recoveryAction: ProviderUsageRecoveryAction = .retryRefresh,
         preserveCachedBarsOnFailure: Bool = false,
@@ -315,6 +318,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.codexBankedRateLimitResets = codexBankedRateLimitResets.flatMap {
             $0.availableCount > 0 ? $0 : nil
         }
+        self.claudeUsageResetInventory = providerID == .claude && failureMessage == nil ? claudeUsageResetInventory : nil
         self.failureMessage = failureMessage
         self.recoveryAction = recoveryAction
         self.preserveCachedBarsOnFailure = preserveCachedBarsOnFailure

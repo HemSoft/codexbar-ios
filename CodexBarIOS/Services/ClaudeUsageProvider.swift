@@ -121,7 +121,8 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
             ) else {
                 return OAuthUsageOutcome(result: nil)
             }
-            let result = applyAccountMetadata(to: parsed, configuration: configuration)
+            let inventory = ClaudeUsageResetInventoryParser.parse(data)?.bound(toAccessToken: accessToken)
+            let result = applyAccountMetadata(to: parsed, configuration: configuration, resetInventory: inventory)
             return OAuthUsageOutcome(
                 result: result,
                 isSuccessfulSnapshot: true
@@ -246,7 +247,9 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
     }
 
     private func makeOAuthUsageRequest(accessToken: String) -> URLRequest {
-        var request = URLRequest(url: Self.usageEndpoint)
+        var components = URLComponents(url: Self.usageEndpoint, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "cedar_ember", value: "1")]
+        var request = URLRequest(url: components.url!)
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -326,7 +329,8 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
 
     private func applyAccountMetadata(
         to result: ProviderUsageResult,
-        configuration: ProviderAccountConfiguration
+        configuration: ProviderAccountConfiguration,
+        resetInventory: ClaudeUsageResetInventory? = nil
     ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id,
@@ -342,6 +346,7 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
             usageMessages: result.usageMessages,
             dashboardUsageMessages: result.dashboardUsageMessages,
             cardInformationSections: result.cardInformationSections,
+            claudeUsageResetInventory: resetInventory,
             failureMessage: result.failureMessage,
             hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory,
             fetchedAt: result.fetchedAt
@@ -402,6 +407,7 @@ private actor ClaudeUsageSnapshotCache {
             usageMessages: result.usageMessages,
             dashboardUsageMessages: result.dashboardUsageMessages,
             cardInformationSections: result.cardInformationSections,
+            claudeUsageResetInventory: result.claudeUsageResetInventory,
             failureMessage: result.failureMessage,
             hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory
                 || cached.hasSuccessfulRefreshHistory,
