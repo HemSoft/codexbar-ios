@@ -1196,55 +1196,24 @@ public enum ClaudeUsageParser {
         rateLimitTier: String?
     ) -> ProviderPlanDescriptor? {
         let subscription = ProviderPlanDescriptor.normalizedPlanValue(subscriptionType)
-        let rateLimit = ProviderPlanDescriptor.normalizedPlanValue(rateLimitTier)
-
-        let identifier: String
-        let displayLabel: String
-        let accessibilityLabel: String
-        if subscription == "max_20x" || rateLimit == "max_20x" || rateLimit == "default_claude_max_20x" {
-            identifier = "max20"
-            displayLabel = "MAX 20×"
-            accessibilityLabel = "Max 20x"
-        } else if subscription == "max_5x" || rateLimit == "max_5x" || rateLimit == "default_claude_max_5x" {
-            identifier = "max5"
-            displayLabel = "MAX 5×"
-            accessibilityLabel = "Max 5x"
-        } else {
-            switch subscription {
-            case "max":
-                identifier = "max"
-                displayLabel = "MAX"
-                accessibilityLabel = "Max"
-            case "free":
-                identifier = "free"
-                displayLabel = "FREE"
-                accessibilityLabel = "Free"
-            case "pro":
-                identifier = "pro"
-                displayLabel = "PRO"
-                accessibilityLabel = "Pro"
-            case "team":
-                identifier = "team"
-                displayLabel = "TEAM"
-                accessibilityLabel = "Team"
-            case "team_premium":
-                identifier = "team-premium"
-                displayLabel = "TEAM PREMIUM"
-                accessibilityLabel = "Team Premium"
-            case "enterprise":
-                identifier = "enterprise"
-                displayLabel = "ENTERPRISE"
-                accessibilityLabel = "Enterprise"
-            default:
-                return nil
-            }
+        let tier = ProviderPlanDescriptor.normalizedPlanValue(rateLimitTier)
+        let maxTiers = [
+            "max_20x": "20", "default_claude_max_20x": "20",
+            "max_5x": "5", "default_claude_max_5x": "5",
+        ]
+        if let multiplier = maxTiers[subscription ?? ""] ?? maxTiers[tier ?? ""] {
+            return .make(
+                providerPrefix: "claude", identifier: "max\(multiplier)",
+                label: "Max \(multiplier)x", displayLabel: "MAX \(multiplier)×"
+            )
         }
-
-        return ProviderPlanDescriptor.make(
-            providerPrefix: "claude",
-            identifier: identifier,
-            label: accessibilityLabel,
-            displayLabel: displayLabel
+        let labels = [
+            "free": "Free", "pro": "Pro", "max": "Max", "team": "Team",
+            "team_premium": "Team Premium", "enterprise": "Enterprise",
+        ]
+        guard let subscription, let label = labels[subscription] else { return nil }
+        return .make(
+            providerPrefix: "claude", identifier: subscription.replacingOccurrences(of: "_", with: "-"), label: label
         )
     }
 }
