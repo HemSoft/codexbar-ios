@@ -19,6 +19,26 @@ def job_block(workflow: str, job_id: str) -> str:
     return match.group(0)
 
 
+def workflow_trigger_keys(workflow: str) -> set[str]:
+    # The supported workflow shape is a block mapping. Reject alternative YAML
+    # shapes rather than silently overlooking an automatic event.
+    match = re.search(r"^on:\n(.*?)(?=^[^\s#]|\Z)", workflow, re.MULTILINE | re.DOTALL)
+    if match is None:
+        raise AssertionError("Workflow triggers must be an explicit on block mapping")
+    keys = []
+    for line in match.group(1).splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith("  ") and not line.startswith("   "):
+            event = re.fullmatch(r"  ([a-z_]+):(?:\s.*)?", line)
+            if event is None:
+                raise AssertionError(f"Unsupported workflow event declaration: {line}")
+            keys.append(event.group(1))
+    if len(keys) != len(set(keys)):
+        raise AssertionError("Duplicate workflow event declarations")
+    return set(keys)
+
+
 class CITriggerPolicyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -26,10 +46,15 @@ class CITriggerPolicyTests(unittest.TestCase):
         cls.ui_runner = UI_RUNNER.read_text(encoding="utf-8")
 
     def test_ci_supports_automatic_and_manual_runs(self) -> None:
-        triggers = self.workflow.split("permissions:", maxsplit=1)[0]
-        self.assertIn("  pull_request:\n", triggers)
-        self.assertNotIn("  push:\n", triggers)
-        self.assertIn("  workflow_dispatch:\n", triggers)
+        allowed = {"pull_request", "workflow_dispatch"}
+        self.assertEqual(workflow_trigger_keys(self.workflow), allowed)
+        for event in ("push: {}", "schedule: []", "merge_group:"):
+            altered = self.workflow.replace("on:\n", f"on:\n  {event}\n", 1)
+            self.assertNotEqual(workflow_trigger_keys(altered), allowed, event)
+        for declaration in ("on: [pull_request, push]", "on: {pull_request: {}, push: {}}"):
+            altered = self.workflow.replace("on:", declaration, 1)
+            with self.assertRaises(AssertionError):
+                workflow_trigger_keys(altered)
 
     def test_native_jobs_are_dispatch_only_and_keep_their_workloads(self) -> None:
         for job_id in ("strict-concurrency", "ios-tests", "watch-tests", "smoke-tests"):
