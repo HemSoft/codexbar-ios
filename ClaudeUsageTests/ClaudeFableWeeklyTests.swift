@@ -21,7 +21,7 @@ final class ClaudeFableWeeklyTests: XCTestCase {
     }
 
     func testKnownFamilyNamesKeepOneStableIdentity() throws {
-        for name in ["Fable", "Fable 5", "Fable 5.1", "Claude Fable", "Claude Fable 5.1", " fAbLe 5.1 "] {
+        for name in ["Fable", "Fable 5", "Fable 5.1", "Claude Fable", "Claude Fable 5", "Claude Fable 5.1", " fAbLe 5.1 "] {
             let result = try parse(limits: [limit(name: name, percent: 21)])
             XCTAssertEqual(result.bars.filter { $0.stableKey?.hasPrefix("weekly-scoped-") == true }.map(\.stableKey),
                            ["weekly-scoped-fable"], name)
