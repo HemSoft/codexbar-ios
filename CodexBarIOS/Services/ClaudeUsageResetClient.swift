@@ -50,6 +50,7 @@ public enum ClaudeUsageResetError: LocalizedError, Equatable, Sendable {
 /// Uses fresh account-scoped grants and never retries a mutating request automatically.
 public actor ClaudeUsageResetClient {
     private let session: URLSession
+    private let redirectDelegate = ResetRedirectDelegate()
     private let secretStore: SecretStore
     private let receiptDirectory: URL
     private let baseURL: URL
@@ -77,7 +78,8 @@ public actor ClaudeUsageResetClient {
         for configuration: ProviderAccountConfiguration,
         accessToken: String,
         grantID: String,
-        credentialBinding: String
+        credentialBinding: String,
+        confirmedGrant: ClaudeUsageResetGrant
     ) async throws -> ClaudeUsageResetOutcome {
         guard configuration.providerID == .claude, !accessToken.isEmpty else { throw ClaudeUsageResetError.unavailable }
         if Self.credentialBinding(for: accessToken) != credentialBinding {
@@ -89,13 +91,30 @@ public actor ClaudeUsageResetClient {
         let scope = digest(identity.account + ":" + identity.organization)
         guard activeScopes.insert(scope).inserted else { throw ClaudeUsageResetError.inProgress }
         defer { activeScopes.remove(scope) }
-        let inventory = try await inventory(accessToken: accessToken)
-        let organization = identity.organization
         let receiptURL = receiptDirectory.appendingPathComponent(scope + ".json")
-        if try reconcilePendingReceipt(inventory: inventory, scope: scope, url: receiptURL) { return .stateChanged }
+        guard let grant = try await verifiedGrant(for: configuration, accessToken: accessToken, identity: identity,
+                                                  scope: scope, receiptURL: receiptURL, grantID: grantID, confirmedGrant: confirmedGrant)
+        else { return .stateChanged }
+        return try await recordAndSend(accessToken: accessToken, organization: identity.organization, grant: grant,
+                                      scope: scope, receiptURL: receiptURL)
+    }
+
+    private func verifiedGrant(
+        for configuration: ProviderAccountConfiguration, accessToken: String, identity: Identity,
+        scope: String, receiptURL: URL, grantID: String, confirmedGrant: ClaudeUsageResetGrant
+    ) async throws -> ClaudeUsageResetGrant? {
+        let inventory = try await inventory(accessToken: accessToken)
+        if try reconcilePendingReceipt(inventory: inventory, scope: scope, url: receiptURL) { return nil }
         guard let grant = inventory.redeemableGrant(at: now()), grant.id == grantID else { throw ClaudeUsageResetError.unavailable }
+        if grant != confirmedGrant { return nil }
         guard try await verifiedIdentity(accessToken: accessToken) == identity else { throw ClaudeUsageResetError.credentialChanged }
         try verifyCredential(accessToken, configuration: configuration)
+        return grant
+    }
+
+    private func recordAndSend(
+        accessToken: String, organization: String, grant: ClaudeUsageResetGrant, scope: String, receiptURL: URL
+    ) async throws -> ClaudeUsageResetOutcome {
         let requestID = UUID().uuidString
         let receipt = Receipt(scope: scope, grantHash: digest(grant.id), remainingCount: grant.remainingCount,
                               expiresAt: grant.expiresAt)
@@ -104,6 +123,13 @@ public actor ClaudeUsageResetClient {
         } catch {
             throw ClaudeUsageResetError.storageUnavailable
         }
+        return try await sendRecordedReset(accessToken: accessToken, organization: organization, grant: grant,
+                                           requestID: requestID, receiptURL: receiptURL)
+    }
+
+    private func sendRecordedReset(
+        accessToken: String, organization: String, grant: ClaudeUsageResetGrant, requestID: String, receiptURL: URL
+    ) async throws -> ClaudeUsageResetOutcome {
         do {
             let outcome = try await postReset(accessToken: accessToken, organization: organization, grant: grant, requestID: requestID)
             try? FileManager.default.removeItem(at: receiptURL)
@@ -175,7 +201,7 @@ public actor ClaudeUsageResetClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(ResetRequest(program: "cedar_ember", grantID: grant.id, requestID: requestID))
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, delegate: redirectDelegate)
         let http = try checkedResponse(response, request: request)
         guard (200..<300).contains(http.statusCode) else { throw ClaudeUsageResetError.httpStatus(http.statusCode) }
         guard data.count <= 1_048_576, let result = try? JSONDecoder().decode(ResetResponse.self, from: data) else { throw ClaudeUsageResetError.indeterminate }
@@ -193,7 +219,7 @@ public actor ClaudeUsageResetClient {
         var components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
         request.url = components.url
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, delegate: redirectDelegate)
         let http = try checkedResponse(response, request: request)
         guard (200..<300).contains(http.statusCode) else { throw ClaudeUsageResetError.httpStatus(http.statusCode) }
         guard data.count <= 1_048_576 else { throw ClaudeUsageResetError.unavailable }
@@ -257,4 +283,14 @@ public actor ClaudeUsageResetClient {
     }
 
     private struct ResetResponse: Decodable { let result: String }
+}
+
+/// A redirect must never replay the mutating request or send grant data elsewhere.
+private final class ResetRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
 }

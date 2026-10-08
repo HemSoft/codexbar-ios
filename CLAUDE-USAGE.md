@@ -101,7 +101,9 @@ not a stable published Anthropic API. The request identifies CodexBar honestly;
 it does not impersonate another client to obtain reset eligibility. An unsupported
 or ineligible provider response leaves redemption unavailable.
 
-No mutation is retried automatically. Before the POST, an atomic app-private
+No mutation is retried automatically. Redirects are refused before a request can
+be replayed or its grant data sent elsewhere. A changed fresh grant requires
+new confirmation. Before the POST, an atomic app-private
 receipt records only hashes of the provider account/organization and grant,
 the remaining count and expiration. It is excluded from backup. Raw grant IDs,
 credentials and inventory are not sent to widgets, Apple Watch, usage history,

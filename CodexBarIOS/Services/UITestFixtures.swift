@@ -1679,7 +1679,8 @@ actor UITestClaudeResetProvider: UsageProvider, ClaudeUsageResetConsuming {
         let now = Date()
         let formatter = ISO8601DateFormatter()
         let end = formatter.string(from: now.addingTimeInterval(scenario == "claude-resets-expired" ? -3600 : 7 * 86400))
-        let start = formatter.string(from: now.addingTimeInterval(scenario == "claude-resets-inactive" ? 3600 : -3600))
+        let startOffset: TimeInterval = scenario == "claude-resets-inactive" ? 3600 : -7200
+        let start = formatter.string(from: now.addingTimeInterval(startOffset))
         let session = formatter.string(from: now.addingTimeInterval(7200))
         let weekly = formatter.string(from: now.addingTimeInterval(3 * 86400))
         let payload = """

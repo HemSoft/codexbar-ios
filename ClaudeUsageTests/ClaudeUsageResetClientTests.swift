@@ -6,12 +6,20 @@ final class ClaudeUsageResetClientTests: XCTestCase {
     private let account = ProviderAccountConfiguration(id: "claude.fixture", providerID: .claude, authMethod: .cliToken)
     private let now = Date(timeIntervalSince1970: 1_893_456_000)
 
+    private var fixtureConfirmedGrant: ClaudeUsageResetGrant {
+        ClaudeUsageResetGrant(id: "fixture_grant", title: "Claude usage reset", remainingCount: 2,
+                             startsAt: Date(timeIntervalSince1970: 1_890_777_600),
+                             expiresAt: Date(timeIntervalSince1970: 1_894_060_800),
+                             clears: ["five_hour", "seven_day"], isPaused: false, isUsableNow: true, requiresLimit: true)
+    }
+
     func testFreshVerifiedGrantProducesOneOrganizationBoundPost() async throws {
         let harness = makeHarness()
         defer { try? FileManager.default.removeItem(at: harness.directory) }
         ResetClientProtocol.configure(mode: .success)
         let outcome = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"),
+                                                          confirmedGrant: fixtureConfirmedGrant)
         XCTAssertEqual(outcome, .reset)
         let requests = ResetClientProtocol.requests
         XCTAssertEqual(requests.filter { $0.httpMethod == "POST" }.count, 1)
@@ -25,6 +33,44 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         XCTAssertTrue(requests.contains { $0.url?.query == "cedar_ember=1" })
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: harness.directory.path).isEmpty)
         try await assertConfirmedOutcomesAndRejections()
+        try await assertLoopbackRedirectWhenRequested()
+        let changedHarness = makeHarness()
+        defer { try? FileManager.default.removeItem(at: changedHarness.directory) }
+        ResetClientProtocol.configure(mode: .success)
+        let confirmed = try await changedHarness.client.inventory(accessToken: "fixture-token")
+        let grant = try XCTUnwrap(confirmed.redeemableGrant(at: now))
+        ResetClientProtocol.configure(mode: .reconciled)
+        let changed = try await changedHarness.client.consume(
+            for: account, accessToken: "fixture-token", grantID: grant.id,
+            credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"), confirmedGrant: grant
+        )
+        XCTAssertEqual(changed, .stateChanged)
+        XCTAssertEqual(ResetClientProtocol.requests.filter { $0.httpMethod == "POST" }.count, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: changedHarness.directory.path))
+    }
+
+    private func assertLoopbackRedirectWhenRequested() async throws {
+        // Explicit local transport qualification; the native suite has no loopback fixture server.
+        let portFile = URL(fileURLWithPath: "/tmp/codexbar-reset-redirect-port")
+        guard FileManager.default.fileExists(atPath: portFile.path) else { return }
+        let port = try XCTUnwrap(Int(String(contentsOf: portFile, encoding: .utf8)))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ClaudeRedirect.\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = now
+        let client = ClaudeUsageResetClient(session: URLSession(configuration: .ephemeral),
+                                           secretStore: ResetClientSecrets(token: "fixture-token"), receiptDirectory: directory,
+                                           baseURL: URL(string: "http://127.0.0.1:\(port)")!, now: { clock })
+        do {
+            _ = try await client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
+                                         credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"),
+                                         confirmedGrant: fixtureConfirmedGrant)
+            XCTFail("A real HTTP307 must never follow or report a confirmed reset")
+        } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .indeterminate) }
+        let requests = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf:
+            URL(fileURLWithPath: "/tmp/codexbar-reset-redirect-requests.json"))) as? [[String: String]])
+        XCTAssertEqual(requests.filter { $0["method"] == "POST" }.count, 1)
+        XCTAssertFalse(requests.contains { $0["path"] == "/redirected-reset" })
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).count, 1)
     }
 
     private func assertConfirmedOutcomesAndRejections() async throws {
@@ -37,7 +83,7 @@ final class ClaudeUsageResetClientTests: XCTestCase {
             defer { try? FileManager.default.removeItem(at: harness.directory) }
             ResetClientProtocol.configure(mode: .confirmed(response))
             let outcome = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"), confirmedGrant: fixtureConfirmedGrant)
             XCTAssertEqual(outcome, expected, response)
             XCTAssertEqual(ResetClientProtocol.requests.filter { $0.httpMethod == "POST" }.count, 1)
             XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: harness.directory.path).isEmpty)
@@ -48,7 +94,7 @@ final class ClaudeUsageResetClientTests: XCTestCase {
             ResetClientProtocol.configure(mode: .rejected(status))
             do {
                 _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                    credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+                    credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"), confirmedGrant: fixtureConfirmedGrant)
                 XCTFail("A rejected request cannot report success")
             } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .httpStatus(status)) }
             XCTAssertEqual(ResetClientProtocol.requests.filter { $0.httpMethod == "POST" }.count, 1)
@@ -63,7 +109,8 @@ final class ClaudeUsageResetClientTests: XCTestCase {
             do {
                 _ = try await harness.client.consume(for: account, accessToken: "fixture-token",
                                                      grantID: mode == .success ? "different_grant" : "fixture_grant",
-                                                     credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token")
+                                                     credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"),
+                                                     confirmedGrant: fixtureConfirmedGrant
                 )
                 XCTFail("An unselected grant must not be redeemed")
             } catch {
@@ -80,7 +127,8 @@ final class ClaudeUsageResetClientTests: XCTestCase {
             ResetClientProtocol.configure(mode: mode)
             do {
                 _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"),
+                                                          confirmedGrant: fixtureConfirmedGrant)
                 XCTFail("Unverified identity or replaced credentials must prevent redemption")
             } catch {
                 XCTAssertTrue([ClaudeUsageResetError.credentialChanged, .unavailable].contains(error as? ClaudeUsageResetError ?? .inProgress))
@@ -93,13 +141,14 @@ final class ClaudeUsageResetClientTests: XCTestCase {
     func testAmbiguousPostSurvivesClientRestartWithoutAutomaticReplay() async throws {
         for mode in [
             ResetClientProtocol.Mode.timeout, .serverError, .malformedSuccess, .rejected(408),
-            .confirmed("unexpected"), .oversizedSuccess, .redirectSuccess,
+            .confirmed("unexpected"), .oversizedSuccess, .redirectSuccess, .actualRedirect,
         ] {
             let harness = makeHarness()
             ResetClientProtocol.configure(mode: mode)
             do {
                 _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"),
+                                                          confirmedGrant: fixtureConfirmedGrant)
                 XCTFail("An unconfirmed mutation must remain unknown")
             } catch {
                 XCTAssertEqual(error as? ClaudeUsageResetError, .indeterminate)
@@ -109,13 +158,15 @@ final class ClaudeUsageResetClientTests: XCTestCase {
             ResetClientProtocol.configure(mode: .success)
             do {
                 _ = try await restarted.consume(for: account, accessToken: "rotated-token", grantID: "fixture_grant",
-                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "rotated-token"))
+                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "rotated-token"),
+                                                          confirmedGrant: fixtureConfirmedGrant)
                 XCTFail("Token rotation cannot erase an ambiguous same-subject request")
             } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .indeterminate) }
             XCTAssertFalse(ResetClientProtocol.requests.contains { $0.httpMethod == "POST" })
             ResetClientProtocol.configure(mode: .reconciled)
             let outcome = try await restarted.consume(for: account, accessToken: "rotated-token", grantID: "fixture_grant",
-                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "rotated-token"))
+                                                          credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "rotated-token"),
+                                                          confirmedGrant: fixtureConfirmedGrant)
             XCTAssertEqual(outcome, .stateChanged)
             XCTAssertFalse(ResetClientProtocol.requests.contains { $0.httpMethod == "POST" })
             let receipts = try FileManager.default.contentsOfDirectory(atPath: harness.directory.path)
@@ -130,7 +181,7 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         ResetClientProtocol.configure(mode: .timeout)
         do {
             _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"), confirmedGrant: fixtureConfirmedGrant)
             XCTFail("Timeout must remain unknown")
         } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .indeterminate) }
         let files = try FileManager.default.contentsOfDirectory(at: harness.directory, includingPropertiesForKeys: nil)
@@ -144,7 +195,7 @@ final class ClaudeUsageResetClientTests: XCTestCase {
             ResetClientProtocol.configure(mode: mode)
             do {
                 _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                    credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+                    credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"), confirmedGrant: fixtureConfirmedGrant)
                 XCTFail("Missing grant or unreadable receipt must not permit another POST")
             } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .indeterminate) }
             XCTAssertFalse(ResetClientProtocol.requests.contains { $0.httpMethod == "POST" })
@@ -158,7 +209,7 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         ResetClientProtocol.configure(mode: .success)
         do {
             _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "previous-account-token"))
+                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "previous-account-token"), confirmedGrant: fixtureConfirmedGrant)
             XCTFail("A previous account's confirmation cannot spend the current account's reset")
         } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .credentialChanged) }
         XCTAssertTrue(ResetClientProtocol.requests.isEmpty)
@@ -170,9 +221,10 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         ResetClientProtocol.configure(mode: .delayed)
         let account = self.account
         let binding = ClaudeUsageResetClient.credentialBinding(for: "fixture-token")
+        let confirmedGrant = fixtureConfirmedGrant
         let first = Task {
             try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                                             credentialBinding: binding)
+                                             credentialBinding: binding, confirmedGrant: confirmedGrant)
         }
         for _ in 0..<100 where ResetClientProtocol.requests.isEmpty {
             try await Task.sleep(for: .milliseconds(1))
@@ -180,7 +232,7 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         XCTAssertFalse(ResetClientProtocol.requests.isEmpty)
         do {
             _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                                                credentialBinding: binding)
+                                                credentialBinding: binding, confirmedGrant: fixtureConfirmedGrant)
             XCTFail("A simultaneous confirmation must not start another request")
         } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .inProgress) }
         let outcome = try await first.value
@@ -195,14 +247,15 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         let originalBinding = ClaudeUsageResetClient.credentialBinding(for: "fixture-token")
         do {
             _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                                                credentialBinding: originalBinding)
+                                                credentialBinding: originalBinding, confirmedGrant: fixtureConfirmedGrant)
             XCTFail("Original account mutation should remain unconfirmed")
         } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .indeterminate) }
         let other = client(session: harness.session, directory: harness.directory, token: "other-token")
         let otherAccount = ProviderAccountConfiguration(id: "claude.other", providerID: .claude, authMethod: .cliToken)
         ResetClientProtocol.configure(mode: .otherIdentity)
         let outcome = try await other.consume(for: otherAccount, accessToken: "other-token", grantID: "fixture_grant",
-                                             credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "other-token"))
+                                             credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "other-token"),
+                                             confirmedGrant: fixtureConfirmedGrant)
         XCTAssertEqual(outcome, .reset)
         let post = try XCTUnwrap(ResetClientProtocol.requests.first { $0.httpMethod == "POST" })
         XCTAssertEqual(post.url?.path, "/api/organizations/00000000-0000-0000-0000-000000000004/reset_rate_limits")
@@ -216,7 +269,7 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         ResetClientProtocol.configure(mode: .success)
         do {
             _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
-                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"), confirmedGrant: fixtureConfirmedGrant)
             XCTFail("A mutation without a durable safety receipt must not start")
         } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .storageUnavailable) }
         XCTAssertFalse(ResetClientProtocol.requests.contains { $0.httpMethod == "POST" })
@@ -254,7 +307,7 @@ private class ResetClientProtocol: URLProtocol, @unchecked Sendable {
     enum Mode: Equatable, Sendable {
         case success, ineligible, expired, missingIdentity, timeout, reconciled
         case serverError, malformedSuccess, missingGrant, changedIdentity, delayed, otherIdentity
-        case confirmed(String), rejected(Int), oversizedSuccess, redirectSuccess
+        case confirmed(String), rejected(Int), oversizedSuccess, redirectSuccess, actualRedirect
     }
     private static let lock = NSLock()
     nonisolated(unsafe) private static var mode = Mode.success
@@ -289,6 +342,14 @@ private class ResetClientProtocol: URLProtocol, @unchecked Sendable {
     }
 
     private func respond(mode: Mode) {
+        if mode == .actualRedirect, request.httpMethod == "POST", request.url?.path.hasSuffix("reset_rate_limits") == true {
+            var redirected = request
+            redirected.url = URL(string: "https://other.invalid/redirected-reset")!
+            let response = HTTPURLResponse(url: request.url!, statusCode: 307, httpVersion: nil,
+                                           headerFields: ["Location": redirected.url!.absoluteString])!
+            client?.urlProtocol(self, wasRedirectedTo: redirected, redirectResponse: response)
+            return
+        }
         if request.httpMethod == "POST", mode == .timeout {
             client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
             return

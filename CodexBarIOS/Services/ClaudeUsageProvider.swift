@@ -85,8 +85,12 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
         else { throw ClaudeUsageResetError.unavailable }
         let refreshed = try await refreshedCredentialsIfNeeded(parsed, configuration: configuration)
         guard let token = refreshed.credentials.accessToken, !token.isEmpty else { throw ClaudeUsageResetError.unavailable }
+        guard let inventory = await snapshotCache.result(accountID: configuration.id)?.claudeUsageResetInventory,
+              inventory.credentialBinding == credentialBinding,
+              let confirmedGrant = inventory.redeemableGrant(at: now()), confirmedGrant.id == grantID
+        else { throw ClaudeUsageResetError.unavailable }
         return try await resetClient.consume(for: configuration, accessToken: token, grantID: grantID,
-                                             credentialBinding: credentialBinding)
+                                             credentialBinding: credentialBinding, confirmedGrant: confirmedGrant)
     }
 
     private func fetchOAuthUsage(

@@ -25,18 +25,30 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
     @MainActor
     func testEveryOutcomeRefreshesAuthoritativeUsage() async throws {
         for outcome in [ClaudeUsageResetOutcome.reset, .alreadyRedeemed, .nothingToReset, .noCredit, .stateChanged] {
-            let harness = makeHarness(outcome: outcome)
-            defer { harness.clear() }
-            let feedback = await harness.orchestrator.consumeClaudeReset(
-                for: harness.account, grantID: "fixture_grant", credentialBinding: "binding"
-            )
-            let calls = await harness.provider.consumptionCount()
-            let fetches = await harness.provider.fetchCount()
-            XCTAssertEqual(calls, 1)
-            XCTAssertEqual(fetches, 1)
-            XCTAssertEqual(harness.service.results.first?.bars.first?.used, 17)
-            XCTAssertEqual(harness.service.results.first?.claudeUsageResetInventory?.availableCount(at: Date()), 1)
-            XCTAssertEqual(feedback.isSuccess, outcome == .reset || outcome == .alreadyRedeemed)
+            for refreshMode in ["valid", "failed", "rebound"] {
+                let harness = makeHarness(outcome: outcome, refreshMode: refreshMode)
+                defer { harness.clear() }
+                let feedback = await harness.orchestrator.consumeClaudeReset(
+                    for: harness.account, grantID: "fixture_grant", credentialBinding: "binding"
+                )
+                let calls = await harness.provider.consumptionCount()
+                let fetches = await harness.provider.fetchCount()
+                XCTAssertEqual(calls, 1)
+                XCTAssertEqual(fetches, 1)
+                let refreshed = try XCTUnwrap(harness.service.results.first)
+                if refreshMode == "failed" {
+                    XCTAssertNotNil(refreshed.failureMessage)
+                    XCTAssertNil(refreshed.claudeUsageResetInventory)
+                    if outcome == .reset || outcome == .alreadyRedeemed {
+                        XCTAssertTrue(feedback.message.contains("could not be refreshed"))
+                    }
+                } else {
+                    XCTAssertEqual(refreshed.bars.first?.used, 17)
+                    XCTAssertEqual(refreshed.claudeUsageResetInventory?.availableCount(at: Date()), 1)
+                }
+                XCTAssertEqual(feedback.isSuccess, refreshMode != "rebound" && (outcome == .reset || outcome == .alreadyRedeemed))
+                if refreshMode == "rebound" { XCTAssertTrue(feedback.message.contains("authorization changed")) }
+            }
         }
     }
 
@@ -84,33 +96,44 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
 
     @MainActor
     func testCredentialInvalidationDiscardsPendingCompletion() async throws {
-        let harness = makeHarness(paused: true)
-        defer { harness.clear() }
-        let first = Task { @MainActor in
-            try await harness.service.consumeClaudeReset(for: harness.account, grantID: "fixture_grant", credentialBinding: "binding")
-        }
-        let started = await harness.provider.waitUntilConsuming()
-        guard started else {
-            first.cancel()
+        for mode in ["service", "saveSecret", "removeSecret", "removeAccount", "disable"] {
+            let harness = makeHarness(paused: true)
+            defer { harness.clear() }
+            let first = Task { @MainActor in
+                try await harness.service.consumeClaudeReset(for: harness.account, grantID: "fixture_grant", credentialBinding: "binding")
+            }
+            let started = await harness.provider.waitUntilConsuming()
+            guard started else {
+                first.cancel()
+                await harness.provider.release()
+                XCTFail("Consumption did not start within the fixture deadline")
+                return
+            }
+            switch mode {
+            case "saveSecret": XCTAssertTrue(harness.store.saveSecret("replacement-token", for: harness.account))
+            case "removeSecret": XCTAssertTrue(harness.store.saveSecret("", for: harness.account))
+            case "removeAccount": XCTAssertTrue(harness.store.removeAccount(harness.account))
+            case "disable":
+                var disabled = harness.account
+                disabled.isEnabled = false
+                XCTAssertTrue(harness.store.update(disabled))
+            default: harness.service.invalidateCredentials(accountID: harness.account.id)
+            }
             await harness.provider.release()
-            XCTFail("Consumption did not start within the fixture deadline")
-            return
+            do {
+                _ = try await first.value
+                XCTFail("Stale completion must be rejected: \(mode)")
+            } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .credentialChanged, mode) }
+            let calls = await harness.provider.consumptionCount()
+            XCTAssertEqual(calls, 1, mode)
+            if mode != "disable" { XCTAssertTrue(harness.service.results.isEmpty, mode) }
         }
-        harness.service.invalidateCredentials(accountID: harness.account.id)
-        await harness.provider.release()
-        do {
-            _ = try await first.value
-            XCTFail("Stale completion must be rejected")
-        } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .credentialChanged) }
-        let calls = await harness.provider.consumptionCount()
-        XCTAssertEqual(calls, 1)
-        XCTAssertTrue(harness.service.results.isEmpty)
     }
 
     @MainActor
     private func makeHarness(
         mode: String = "valid", outcome: ClaudeUsageResetOutcome = .reset,
-        error: ClaudeUsageResetError? = nil, paused: Bool = false
+        error: ClaudeUsageResetError? = nil, paused: Bool = false, refreshMode: String = "valid"
     ) -> Harness {
         let suite = "ClaudeResetFlow.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
@@ -118,7 +141,7 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
         var account = store.addAccount(for: .claude)
         account.isEnabled = mode != "disabled"
         XCTAssertTrue(store.update(account))
-        let provider = FlowProvider(outcome: outcome, error: error, paused: paused)
+        let provider = FlowProvider(outcome: outcome, error: error, paused: paused, refreshMode: refreshMode)
         let resultAccount = mode == "wrongAccount"
             ? ProviderAccountConfiguration(id: "other-account", providerID: .claude, authMethod: .cliToken) : account
         let initial = FlowProvider.result(account: resultAccount, count: 2, used: 64, mode: mode)
@@ -131,7 +154,8 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
             watchSnapshotCoordinator: WatchSnapshotCoordinator(refreshService: service, configurationStore: store,
                                                                sender: FlowWatchSender(), publishSnapshot: { _, _, _ in })
         )
-        return Harness(account: account, service: service, provider: provider, orchestrator: orchestrator, defaults: defaults, suite: suite)
+        return Harness(account: account, service: service, provider: provider, orchestrator: orchestrator,
+                       store: store, defaults: defaults, suite: suite)
     }
 
     @MainActor
@@ -140,6 +164,7 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
         let service: UsageRefreshService
         let provider: FlowProvider
         let orchestrator: DashboardOrchestrator
+        let store: ProviderConfigurationStore
         let defaults: UserDefaults
         let suite: String
         func clear() { defaults.removePersistentDomain(forName: suite) }
@@ -151,13 +176,15 @@ private actor FlowProvider: UsageProvider, ClaudeUsageResetConsuming {
     private let outcome: ClaudeUsageResetOutcome
     private let error: ClaudeUsageResetError?
     private let paused: Bool
+    private let refreshMode: String
     private var calls = 0
     private var fetches = 0
     private var continuation: CheckedContinuation<Void, Never>?
-    init(outcome: ClaudeUsageResetOutcome, error: ClaudeUsageResetError?, paused: Bool) {
+    init(outcome: ClaudeUsageResetOutcome, error: ClaudeUsageResetError?, paused: Bool, refreshMode: String) {
         self.outcome = outcome
         self.error = error
         self.paused = paused
+        self.refreshMode = refreshMode
     }
     func consumeClaudeReset(
         for configuration: ProviderAccountConfiguration, grantID: String, credentialBinding: String
@@ -169,7 +196,7 @@ private actor FlowProvider: UsageProvider, ClaudeUsageResetConsuming {
     }
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         fetches += 1
-        return Self.result(account: configuration, count: 1, used: 17)
+        return Self.result(account: configuration, count: 1, used: 17, mode: refreshMode)
     }
     func consumptionCount() -> Int { calls }
     func fetchCount() -> Int { fetches }
@@ -189,8 +216,9 @@ private actor FlowProvider: UsageProvider, ClaudeUsageResetConsuming {
         let grant = ClaudeUsageResetGrant(id: "fixture_grant", title: "Fixture", remainingCount: count,
                                          startsAt: nil, expiresAt: Date().addingTimeInterval(mode == "expired" ? -60 : 3600),
                                          clears: ["five_hour", "seven_day"], isPaused: false, isUsableNow: true, requiresLimit: false)
+        let binding = mode == "unbound" ? nil : mode == "rebound" ? "replacement" : "binding"
         let inventory = ClaudeUsageResetInventory(isEligible: true, grants: [grant], selectedGrantID: grant.id,
-                                                  cooldownUntil: nil, credentialBinding: mode == "unbound" ? nil : "binding")
+                                                  cooldownUntil: nil, credentialBinding: binding)
         return ProviderUsageResult(accountID: account.id, providerID: .claude, title: account.displayName, subtitle: "Synthetic",
                                    bars: [UsageBar(label: "Weekly", used: used, limit: 100)], claudeUsageResetInventory: inventory,
                                    failureMessage: mode == "failed" ? "Unavailable" : nil, fetchedAt: Date())

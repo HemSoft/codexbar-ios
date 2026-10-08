@@ -78,7 +78,7 @@ final class ClaudeUsageUITests: XCTestCase {
         tap(app.buttons["claude-view-resets-ui-claude"], in: app)
         tap(app.buttons["claude-use-reset"], in: app)
         tap(confirmation.buttons["Use reset"], in: app)
-        let feedback = app.descendants(matching: .any)["claude-reset-feedback"]
+        let feedback = app.staticTexts["claude-reset-feedback"]
         XCTAssertTrue(feedback.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(feedback.label.contains("Claude confirmed the reset"), feedback.label)
         XCTAssertTrue(summary.label.contains("1 reset available"), summary.label)
@@ -89,9 +89,14 @@ final class ClaudeUsageUITests: XCTestCase {
         assertResetAvailability(1, account: "ui-claude", in: app)
         assertResetAvailability(1, account: "ui-claude-second", in: app)
         for id in ["dashboard-metric-claude.session", "dashboard-metric-claude.weekly-all"] {
-            let zero = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", id, "0%")).firstMatch
-            let unchanged = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", id,
-                                                           id.hasSuffix("session") ? "42%" : "64%")).firstMatch
+            let title = id.hasSuffix("session") ? "5-hour" : "Weekly"
+            let value = id.hasSuffix("session") ? "42" : "64"
+            let zero = app.buttons.matching(NSPredicate(
+                format: "identifier == %@ AND label BEGINSWITH %@", id, "\(title), 0%, 0 of 100 used,"
+            )).firstMatch
+            let unchanged = app.buttons.matching(NSPredicate(
+                format: "identifier == %@ AND label BEGINSWITH %@", id, "\(title), \(value)%, \(value) of 100 used,"
+            )).firstMatch
             reveal(zero, in: app)
             XCTAssertTrue(zero.exists, app.debugDescription)
             reveal(unchanged, in: app)
@@ -113,7 +118,7 @@ final class ClaudeUsageUITests: XCTestCase {
             tap(app.buttons["claude-view-resets-ui-claude"], in: app)
             tap(app.buttons["claude-use-reset"], in: app)
             tap(app.alerts["Use one Claude reset?"].buttons["Use reset"], in: app)
-            let feedback = app.descendants(matching: .any)["claude-reset-feedback"]
+            let feedback = app.staticTexts["claude-reset-feedback"]
             XCTAssertTrue(feedback.waitForExistence(timeout: 10), app.debugDescription)
             XCTAssertTrue(feedback.label.contains("has not confirmed"), feedback.label)
             keep("claude-resets-unconfirmed", app: app)
@@ -132,7 +137,7 @@ final class ClaudeUsageUITests: XCTestCase {
         for scenario in ["zero", "ineligible", "paused", "inactive", "expired", "unknown", "malformed", "failed"] {
             let app = launch(scenario: "claude-resets-\(scenario)", runID: UUID().uuidString)
             let known = !["unknown", "malformed", "failed"].contains(scenario)
-            let availability = app.descendants(matching: .any)["claude-reset-availability-ui-claude"]
+            let availability = app.staticTexts["claude-reset-availability-ui-claude"]
             reveal(availability, in: app)
             XCTAssertTrue(availability.label.contains(known ? "0 saved resets available" : "Saved resets unavailable"), availability.label)
             if known {
@@ -159,7 +164,7 @@ final class ClaudeUsageUITests: XCTestCase {
     }
 
     private func assertResetAvailability(_ count: Int, account: String, in app: XCUIApplication) {
-        let availability = app.descendants(matching: .any)["claude-reset-availability-\(account)"]
+        let availability = app.staticTexts["claude-reset-availability-\(account)"]
         reveal(availability, in: app)
         XCTAssertTrue(availability.label.contains(count == 1 ? "1 saved reset available" : "\(count) saved resets available"), availability.label)
     }
