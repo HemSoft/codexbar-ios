@@ -133,6 +133,53 @@ final class ClaudeFableWeeklyTests: XCTestCase {
         }
     }
 
+    func testProviderDoesNotCarryFableAcrossAccountOrCredentialChanges() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FableAccountProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let first = ProviderAccountConfiguration(id: "fable-first", providerID: .claude, authMethod: .cliToken)
+        let second = ProviderAccountConfiguration(id: "fable-second", providerID: .claude, authMethod: .cliToken)
+        let secrets = FableAccountSecrets()
+        secrets.set("fable-first-token", for: first)
+        secrets.set("fable-second-token", for: second)
+        let provider = ClaudeUsageProvider(secretStore: secrets, session: session)
+        FableAccountProtocol.configure(token: "fable-first-token", status: 200,
+                                       body: try providerBody(percent: 21))
+        FableAccountProtocol.configure(token: "fable-second-token", status: 200,
+                                       body: try providerBody(percent: nil))
+        let initial = try await provider.fetchUsage(for: first)
+        XCTAssertEqual(initial.accountID, first.id)
+        XCTAssertEqual(initial.bars.first { $0.stableKey == "weekly-scoped-fable" }?.used, 21)
+        let separate = try await provider.fetchUsage(for: second)
+        XCTAssertEqual(separate.accountID, second.id)
+        XCTAssertFalse(separate.bars.contains { $0.stableKey == "weekly-scoped-fable" })
+        secrets.set("fable-changed-organization-token", for: first)
+        FableAccountProtocol.configure(token: "fable-changed-organization-token", status: 503, body: "{}")
+        let unavailable = try await provider.fetchUsage(for: first)
+        XCTAssertNotNil(unavailable.failureMessage)
+        XCTAssertTrue(unavailable.bars.isEmpty, "A changed credential must not retain the old organization's Fable allowance")
+        FableAccountProtocol.configure(token: "fable-changed-organization-token", status: 200,
+                                       body: try providerBody(percent: 7))
+        let changed = try await provider.fetchUsage(for: first)
+        XCTAssertEqual(changed.bars.first { $0.stableKey == "weekly-scoped-fable" }?.used, 7)
+        FableAccountProtocol.configure(token: "fable-changed-organization-token", status: 200,
+                                       body: try providerBody(percent: nil))
+        let creditsOnly = try await provider.fetchUsage(for: first)
+        XCTAssertFalse(creditsOnly.monetaryMetrics.isEmpty)
+        XCTAssertFalse(creditsOnly.bars.contains { $0.stableKey == "weekly-scoped-fable" })
+        XCTAssertEqual(creditsOnly.bars.first { $0.stableKey == "weekly-all" }?.used, 64)
+    }
+
+    private func providerBody(percent: Double?) throws -> String {
+        let scoped = percent.map { [limit(name: "Fable 5.1", percent: $0)] } ?? []
+        let object: [String: Any] = [
+            "five_hour": ["utilization": 42], "seven_day": ["utilization": 64], "limits": scoped,
+            "extra_usage": ["is_enabled": true, "monthly_limit": 5_000, "used_credits": 700],
+        ]
+        return try XCTUnwrap(String(data: JSONSerialization.data(withJSONObject: object), encoding: .utf8))
+    }
+
     private func limit(name: String, percent: Double?, active: Bool = true) -> [String: Any] {
         [
             "kind": "weekly_scoped", "group": "weekly", "percent": percent.map { $0 as Any } ?? NSNull(),
@@ -160,4 +207,33 @@ private struct FableFixtureSecretStore: SecretStore {
     func readSecret(account: String) throws -> String? { "synthetic" }
     func saveSecret(_ secret: String, account: String) throws {}
     func deleteSecret(account: String) throws {}
+}
+
+private final class FableAccountSecrets: SecretStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: String] = [:]
+    func set(_ token: String, for account: ProviderAccountConfiguration) {
+        lock.withLock { values[ProviderConfigurationStore.keychainAccount(for: account)] = token }
+    }
+    func readSecret(account: String) throws -> String? { lock.withLock { values[account] } }
+    func saveSecret(_ secret: String, account: String) throws { lock.withLock { values[account] = secret } }
+    func deleteSecret(account: String) throws { _ = lock.withLock { values.removeValue(forKey: account) } }
+}
+
+private class FableAccountProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var responses: [String: (Int, String)] = [:]
+    static func configure(token: String, status: Int, body: String) {
+        lock.withLock { responses["Bearer " + token] = (status, body) }
+    }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        let result = Self.lock.withLock { Self.responses[request.value(forHTTPHeaderField: "Authorization") ?? ""] ?? (403, "{}") }
+        let response = HTTPURLResponse(url: request.url!, statusCode: result.0, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(result.1.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
 }
