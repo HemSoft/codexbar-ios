@@ -320,8 +320,6 @@ final class CodexCreditsPoolUITests: XCTestCase {
         let customizer = app.scrollViews["metric-customization-scroll"]
         let settings = app.collectionViews["provider-account-settings-form"]
         let container = customizer.exists ? customizer : (settings.exists ? settings : app.scrollViews.firstMatch)
-        if !customizer.exists && !settings.exists && element.isHittable
-            && app.frame.insetBy(dx: 4, dy: 4).contains(element.frame) { return }
         for _ in 0..<12 {
             let bars = app.navigationBars.allElementsBoundByIndex.map(\.frame).filter {
                 $0.width <= container.frame.width + 1 && $0.intersects(container.frame)
