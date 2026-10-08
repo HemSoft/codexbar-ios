@@ -15,7 +15,10 @@ final class ClaudeUsageResetInventoryTests: XCTestCase {
     }
 
     func testUnsupportedAndMalformedInventoryNeverBecomeZeroBalance() {
-        for payload in ["{}", "{\"cedar_ember\":null}", "{\"cedar_ember\":{\"eligible\":\"true\"}}"] {
+        for payload in ["{}", "{\"cedar_ember\":null}", "{\"cedar_ember\":{\"eligible\":\"true\"}}",
+                        "{\"cedar_ember\":{\"eligible\":true}}",
+                        "{\"cedar_ember\":{\"eligible\":true,\"grants\":null}}",
+        ] {
             XCTAssertNil(ClaudeUsageResetInventoryParser.parse(Data(payload.utf8)))
         }
         for replacement in ["-1", "1.5", "true", "1001"] {
@@ -37,6 +40,9 @@ final class ClaudeUsageResetInventoryTests: XCTestCase {
 
     func testConfirmedEmptyAndSeparateAccountsRemainIndependent() throws {
         let empty = try XCTUnwrap(ClaudeUsageResetInventoryParser.parse(Data("{\"cedar_ember\":{\"eligible\":true,\"grants\":[]}}".utf8)))
+        let unavailable = try XCTUnwrap(ClaudeUsageResetInventoryParser.parse(Data("{\"cedar_ember\":{\"eligible\":false}}".utf8)))
+        XCTAssertFalse(unavailable.isEligible)
+        XCTAssertEqual(unavailable.availableCount(at: now), 0)
         let available = try XCTUnwrap(parse())
         XCTAssertEqual(empty.availableCount(at: now), 0)
         XCTAssertNil(empty.redeemableGrant(at: now))

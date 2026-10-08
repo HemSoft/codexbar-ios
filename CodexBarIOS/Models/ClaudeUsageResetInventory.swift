@@ -57,6 +57,7 @@ public enum ClaudeUsageResetInventoryParser {
         guard data.count <= 1_048_576,
               let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
               let payload = envelope.inventory,
+              !payload.eligible || payload.grants != nil,
               (payload.grants?.count ?? 0) <= 200
         else { return nil }
         do {
