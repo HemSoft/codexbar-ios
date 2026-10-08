@@ -232,13 +232,14 @@ final class ClaudeFableWeeklyTests: XCTestCase {
         ClaudeFableMetricPreferenceCompatibility.migrate(layout: &absent, availableMetricIDs: [canonical, legacy])
         XCTAssertEqual(absent, original, "Do not merge identities still returned as distinct metrics")
         let newerLegacy = "claude.weekly-scoped-fable51"
-        var duplicate = AccountMetricLayout(orderedMetricIDs: [legacy, newerLegacy],
+        var duplicate = AccountMetricLayout(orderedMetricIDs: [legacy, "claude.session", newerLegacy, canonical],
                                            preferences: [legacy: MetricTilePreference(), newerLegacy: preference,
                                                          canonical: MetricTilePreference(),
                                            ])
         ClaudeFableMetricPreferenceCompatibility.migrate(layout: &duplicate, availableMetricIDs: [canonical])
         XCTAssertEqual(duplicate.preferences[canonical], preference, "Retain the customized alias rather than a default duplicate")
-        XCTAssertEqual(duplicate.orderedMetricIDs, [canonical])
+        XCTAssertEqual(duplicate.orderedMetricIDs, [canonical, "claude.session"],
+                       "A default discovered canonical entry must retain the older chosen position")
     }
 
     @MainActor

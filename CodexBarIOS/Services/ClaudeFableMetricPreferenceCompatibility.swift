@@ -9,7 +9,8 @@ enum ClaudeFableMetricPreferenceCompatibility {
         let available = Set(availableMetricIDs)
         guard available.contains(destinationID), available.isDisjoint(with: legacyIDs) else { return }
         let sources = orderedSources(in: layout)
-        if canReplaceDestination(layout.preferences[destinationID]),
+        let preserveCanonicalChoice = !canReplaceDestination(layout.preferences[destinationID])
+        if !preserveCanonicalChoice,
            let sourceID = sources.first(where: { hasCustomPresentation(layout.preferences[$0]) }) ?? sources.first,
            var preference = layout.preferences[sourceID] {
             if let destination = layout.preferences[destinationID] {
@@ -18,7 +19,7 @@ enum ClaudeFableMetricPreferenceCompatibility {
             layout.preferences[destinationID] = preference
         }
         for id in legacyIDs { layout.preferences.removeValue(forKey: id) }
-        let hasCanonicalOrder = layout.orderedMetricIDs.contains(destinationID)
+        let hasCanonicalOrder = preserveCanonicalChoice && layout.orderedMetricIDs.contains(destinationID)
         let replacements = layout.orderedMetricIDs.compactMap { id -> String? in
             guard legacyIDs.contains(id) else { return id }
             return hasCanonicalOrder ? nil : destinationID
