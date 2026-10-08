@@ -494,3 +494,16 @@ production Swift files with no extraction errors.
 The gate accepts exactly the three reviewed diagnostics above and reports zero
 blocking findings. The retained raw SARIF, source-reach CSV and gate report
 verify the successful result without changing thresholds or exclusions.
+
+The subsequent grant-boundary/cooldown review at
+`c2c54bc6256130c2495182a80a4d12a6883b487d` binds the same 113 production
+Swift filenames to source snapshot
+`4ff4bbf03167efc3c1ceacb7433c64b50535058f2b691e1592a21eb9ab34d68c`.
+The new date schedule and cooldown labels add no credential persistence,
+provider mutation, export or cache consumer. New dashboard/cooldown scenarios
+still accept only the existing synthetic credential and block provider networking.
+The three finding sources, locations and complete retained diagnostic/data-flow
+identities are unchanged; the reviewer renewed their source/consumer assessment
+without changing diagnostic identities, thresholds or exclusions. The earlier
+hosted result remains evidence for its analyzed source. Fresh hosted analysis of
+the boundary repair is required before reporting this renewed baseline as passing.
