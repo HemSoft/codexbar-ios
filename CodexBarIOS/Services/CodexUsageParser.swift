@@ -421,10 +421,10 @@ public enum CodexUsageParser {
             label = "Plus"
         case "pro":
             identifier = "pro"
-            label = "Pro 20x"
+            label = "Pro"
         case "prolite":
             identifier = "prolite"
-            label = "Pro 5x"
+            label = "Pro"
         case "business", "team":
             identifier = "business"
             label = "Business"

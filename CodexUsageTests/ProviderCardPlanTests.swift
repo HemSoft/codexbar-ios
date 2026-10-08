@@ -3,8 +3,8 @@ import XCTest
 @testable import CodexBarIOS
 
 final class ProviderCardPlanTests: XCTestCase {
-    func testCodexProTiersComeFromMetadataRatherThanUsage() throws {
-        for (raw, label) in [("pro", "PRO 20X"), ("prolite", "PRO 5X"), ("unknown", "Plan unavailable")] {
+    func testCodexProFamilyDoesNotInventNumericTier() throws {
+        for (raw, label) in [("pro", "PRO"), ("prolite", "PRO"), ("plus", "PLUS"), ("unknown", "Plan unavailable")] {
             let payload = "{\"plan_type\":\"\(raw)\",\"rate_limit\":{\"primary_window\":{\"used_percent\":42,\"reset_at\":1893542400,\"limit_window_seconds\":18000}}}"
             let parsed = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8)))
             XCTAssertEqual(parsed.cardPlan.displayLabel, label)
@@ -63,13 +63,15 @@ final class ProviderCardPlanTests: XCTestCase {
             subtitle: "Synthetic", bars: [UsageBar(label: "Weekly", used: 31, limit: 100)],
             cacheIdentity: "same-subject", fetchedAt: Date()
         )
-        for (identity, reauthenticate, expected) in [
-            ("same-subject", false, "SuperGrok Lite"),
-            ("different-subject", false, "Plan unavailable"),
-            ("same-subject", true, "Plan unavailable"),
+        for (identity, reauthenticate, reusable, expected) in [
+            ("same-subject", false, true, "SuperGrok Lite"),
+            ("different-subject", false, true, "Plan unavailable"),
+            ("same-subject", true, true, "Plan unavailable"),
+            (nil, false, false, "Plan unavailable"),
+            (nil, false, true, "SuperGrok Lite"),
         ] {
             let service = UsageRefreshService(
-                providers: [FailedGrokPlanProvider(identity: identity, reauthenticate: reauthenticate)], initialResults: [cached]
+                providers: [FailedGrokPlanProvider(identity: identity, reauthenticate: reauthenticate, reusable: reusable)], initialResults: [cached]
             )
             await service.refresh(configurations: [account])
             XCTAssertEqual(try XCTUnwrap(service.results.first).cardPlan.displayLabel, expected)
@@ -95,14 +97,15 @@ final class ProviderCardPlanTests: XCTestCase {
 
 private struct FailedGrokPlanProvider: UsageProvider {
     let providerID = ProviderID.grok
-    let identity: String
+    let identity: String?
     let reauthenticate: Bool
+    let reusable: Bool
 
     func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName, subtitle: "Synthetic failure",
             bars: [], failureMessage: "Synthetic failure", recoveryAction: reauthenticate ? .reauthenticate : .retryRefresh,
-            cacheIdentity: identity, fetchedAt: Date()
+            cacheIdentity: identity, allowsUnscopedCacheReuse: reusable, fetchedAt: Date()
         )
     }
 }

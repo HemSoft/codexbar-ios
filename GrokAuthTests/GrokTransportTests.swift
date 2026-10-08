@@ -191,6 +191,35 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
     }
 
     @MainActor
+    func testUnsupportedBillingDiscardsCachedPlanWhileOutagesKeepIt() async throws {
+        let account = ProviderAccountConfiguration.defaultConfiguration(for: .grok)
+        let secrets = GrokTestSecrets()
+        let credential = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "synthetic", refreshToken: "synthetic-refresh",
+            expiresAt: Date().addingTimeInterval(3600), subject: "subject-one", email: nil
+        )
+        try secrets.saveSecret(credential.encoded(), account: ProviderConfigurationStore.keychainAccount(for: account))
+        let cached = ProviderUsageResult(
+            accountID: account.id, providerID: .grok, title: "Grok", verifiedGrokPlanName: "SuperGrok Lite",
+            subtitle: "Synthetic", bars: [UsageBar(label: "Weekly", used: 31, limit: 100)], fetchedAt: Date()
+        )
+        for status in [402, 404, 410, 429, 503] {
+            let session = makeSession([(200, #"{"sub":"subject-one"}"#), (status, "{}")])
+            let provider = GrokUsageProvider(secretStore: secrets, session: session)
+            let service = UsageRefreshService(providers: [provider], initialResults: [cached])
+            await service.refresh(configurations: [account])
+            let result = try XCTUnwrap(service.results.first)
+            let temporary = status == 429 || status == 503
+            XCTAssertEqual(result.cardPlan.displayLabel, temporary ? "SuperGrok Lite" : "Plan unavailable", "HTTP \(status)")
+            XCTAssertEqual(result.bars.isEmpty, !temporary, "HTTP \(status)")
+            XCTAssertNotNil(result.failureMessage)
+            XCTAssertEqual(result.recoveryAction, .retryRefresh)
+            XCTAssertEqual(GrokTestProtocol.state.requests.count, 2)
+            session.invalidateAndCancel()
+        }
+    }
+
+    @MainActor
     func testTransientFailuresOfferRetryButRejectedTokensOfferReconnect() async throws {
         let suite = "GrokAuthTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!

@@ -510,7 +510,8 @@ public final class UsageRefreshService: ObservableObject {
         if failureResult.providerID == .greptile {
             return cachedResult.cacheIdentity == failureResult.cacheIdentity
         }
-        if failureResult.providerID == .grok && failureResult.recoveryAction == .reauthenticate {
+        if failureResult.providerID == .grok
+            && (failureResult.recoveryAction == .reauthenticate || !failureResult.allowsUnscopedCacheReuse) {
             return false
         }
         if let failureIdentity = failureResult.cacheIdentity {

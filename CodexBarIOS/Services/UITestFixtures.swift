@@ -229,8 +229,8 @@ final class UITestFixtures {
     private static func seedPlanPillAccounts(in store: ProviderConfigurationStore, scenario: String?) {
         guard scenario == "plan-pills", store.configurations.isEmpty else { return }
         for (id, provider, title) in [
-            ("pro", ProviderID.codex, "Codex 20x fixture"),
-            ("prolite", .codex, "Codex 5x fixture"),
+            ("pro", ProviderID.codex, "Codex Pro fixture"),
+            ("plus", .codex, "Codex Plus fixture"),
             ("max5", .claude, "Claude Max fixture"),
             ("grok-plan", .grok, "SuperGrok Lite"),
             ("google", .gemini, "Long Google AI Ultra account name is not proof of a subscription"),

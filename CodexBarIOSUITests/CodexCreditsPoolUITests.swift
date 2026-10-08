@@ -136,8 +136,8 @@ final class CodexCreditsPoolUITests: XCTestCase {
             for dark in [false, true] {
                 let app = launchSpacingFixture(defaultText: defaultText, dark: dark, scenario: "plan-pills")
                 for (title, plan) in [
-                    ("Codex 20x fixture", "Pro 20x"),
-                    ("Codex 5x fixture", "Pro 5x"),
+                    ("Codex Pro fixture", "Pro"),
+                    ("Codex Plus fixture", "Plus"),
                     ("Claude Max fixture", "Max 5x"),
                     ("Grok", "SuperGrok Lite"),
                     ("Long Google AI Ultra account name is not proof of a subscription", "Plan unavailable"),
@@ -156,7 +156,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                 }
                 tap(app.buttons["Refresh usage"], in: app)
                 let sameAccount = app.descendants(matching: .any).matching(NSPredicate(
-                    format: "label BEGINSWITH %@", "Codex 20x fixture, Pro 20x"
+                    format: "label BEGINSWITH %@", "Codex Pro fixture, Pro"
                 )).firstMatch
                 reveal(sameAccount, in: app, towardTop: true)
                 XCTAssertTrue(sameAccount.exists, app.debugDescription)

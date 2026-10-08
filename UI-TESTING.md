@@ -346,7 +346,7 @@ widget sizes. Other providers retain their existing caption content, now also
 visible in Automatic mode. Missing descriptions add no empty caption row.
 
 The manual-only `CodexCreditsPoolUITests.testPreciseSubscriptionPillsOnExpandedAndCollapsedCards`
-checks Codex Pro 5x/20x, Claude Max 5x, verified Grok, unknown Google and API-credit
+checks Codex Pro/Plus, Claude Max 5x, verified Grok, unknown Google and API-credit
 headers in light/dark at default and accessibility text sizes. It asserts actual
 expanded/collapsed state changes and the same account's plan after refresh. The
 full release runner requires all 29 journeys with zero skips; ordinary automatic

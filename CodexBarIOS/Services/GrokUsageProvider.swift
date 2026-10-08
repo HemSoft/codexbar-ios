@@ -70,7 +70,7 @@ public final class GrokUsageProvider: UsageProvider {
         if error as? GrokAuthError == .unsupportedAccount {
             return failure(
                 "Grok subscription usage is not available for this account.",
-                configuration: configuration, recoveryAction: .retryRefresh
+                configuration: configuration, recoveryAction: .retryRefresh, allowsUnscopedCacheReuse: false
             )
         }
         return failure(
@@ -237,11 +237,12 @@ public final class GrokUsageProvider: UsageProvider {
 
     private func failure(
         _ message: String, configuration: ProviderAccountConfiguration,
-        recoveryAction: ProviderUsageRecoveryAction = .reauthenticate
+        recoveryAction: ProviderUsageRecoveryAction = .reauthenticate, allowsUnscopedCacheReuse: Bool = true
     ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
             subtitle: message, bars: [], failureMessage: message, recoveryAction: recoveryAction,
+            allowsUnscopedCacheReuse: allowsUnscopedCacheReuse,
             fetchedAt: Date()
         )
     }
