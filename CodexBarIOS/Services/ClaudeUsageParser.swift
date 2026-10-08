@@ -1031,7 +1031,7 @@ public enum ClaudeUsageParser {
         case "weekly_scoped":
             guard
                 limit.group == nil || limit.group == "weekly",
-                let modelName = sanitizedModelName(limit.scope?.model?.displayName)
+                let modelName = scopedWeeklyModelName(limit.scope?.model?.displayName)
             else {
                 return nil
             }
@@ -1084,6 +1084,17 @@ public enum ClaudeUsageParser {
             return nil
         }
         return value
+    }
+
+    private static func scopedWeeklyModelName(_ value: String?) -> String? {
+        guard let name = sanitizedModelName(value) else { return nil }
+        // These documented models share one Fable cap. Keep saved choices when
+        // its display name changes; unrelated or future model names stay distinct.
+        let knownNames: Set<String> = [
+            "fable", "fable 5", "fable 5.1", "claude fable", "claude fable 5", "claude fable 5.1",
+        ]
+        let normalized = name.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return knownNames.contains(normalized) ? "Fable" : name
     }
 
     private static func normalizedKey(_ value: String) -> String {
