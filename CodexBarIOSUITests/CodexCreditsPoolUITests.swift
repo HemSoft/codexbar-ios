@@ -158,6 +158,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                 let sameAccount = app.descendants(matching: .any).matching(NSPredicate(
                     format: "label BEGINSWITH %@", "Codex 20x fixture, Pro 20x"
                 )).firstMatch
+                reveal(sameAccount, in: app, towardTop: true)
                 XCTAssertTrue(sameAccount.exists, app.debugDescription)
                 app.terminate()
             }
@@ -311,7 +312,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
         element.tap()
     }
 
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false) {
         _ = element.waitForExistence(timeout: 1)
         if element.exists && element.isHittable && app.navigationBars.buttons.matching(
             NSPredicate(format: "label == %@", element.label)
@@ -329,7 +330,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
             let viewport = CGRect(x: container.frame.minX, y: top, width: container.frame.width,
                                   height: max(0, container.frame.maxY - top)).insetBy(dx: 4, dy: 4)
             if element.exists && element.isHittable && viewport.contains(element.frame) { return }
-            let upward = !element.exists || element.frame.midY > viewport.midY
+            let upward = element.exists ? element.frame.midY > viewport.midY : !towardTop
             let start = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.65 : 0.35))
             let end = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.4 : 0.6))
             start.press(forDuration: 0.05, thenDragTo: end)
