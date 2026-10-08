@@ -38,6 +38,23 @@ final class ProviderCardPlanTests: XCTestCase {
         }
     }
 
+    func testVerifiedGrokMetadataAndOtherReportedPlansAreHonored() {
+        let grok = ProviderUsageResult(
+            providerID: .grok, title: "Synthetic", verifiedGrokPlanName: "SuperGrok Lite",
+            subtitle: "Synthetic", bars: [], fetchedAt: Date()
+        )
+        XCTAssertEqual(grok.cardPlan.displayLabel, "SuperGrok Lite")
+        let cursorPlan = ProviderPlanDescriptor.make(providerPrefix: "cursor", identifier: "business", label: "Business")
+        let cursor = ProviderUsageResult(providerID: .cursor, title: "Synthetic", plan: cursorPlan,
+                                         subtitle: "Synthetic", bars: [], fetchedAt: Date())
+        XCTAssertEqual(cursor.cardPlan, cursorPlan)
+        let differentProvider = ProviderUsageResult(
+            providerID: .claude, title: "Synthetic", verifiedGrokPlanName: "SuperGrok Lite",
+            subtitle: "Synthetic", bars: [], fetchedAt: Date()
+        )
+        XCTAssertEqual(differentProvider.cardPlan.displayLabel, "Plan unavailable")
+    }
+
     func testReportedPlanAndFreeBillingAreAccountScoped() {
         let verified = ProviderPlanDescriptor.make(providerPrefix: "claude", identifier: "pro", label: "Pro")
         let first = ProviderUsageResult(accountID: "first", providerID: .claude, title: "Same title", plan: verified,

@@ -214,6 +214,12 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     /// Presentation fallback only. Never infers a subscription from usage or account labels.
     public var cardPlan: ProviderPlanDescriptor {
         if let plan { return plan }
+        if providerID == .grok, let name = verifiedGrokPlanName {
+            return .make(
+                providerPrefix: "grok", identifier: name.lowercased().replacingOccurrences(of: " ", with: "-"),
+                label: name, displayLabel: name
+            )
+        }
         if providerID == .greptile, greptileAllowanceRenewal?.isApplicable == true {
             return .make(providerPrefix: "greptile", identifier: "free", label: "Free")
         }

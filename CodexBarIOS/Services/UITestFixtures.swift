@@ -1568,7 +1568,6 @@ private final class UITestNetworkBlocker: URLProtocol, @unchecked Sendable {
     }
     override func stopLoading() {}
 }
-#endif
 
 private struct UITestPlanPillProvider: UsageProvider {
     let providerID: ProviderID
@@ -1577,3 +1576,5 @@ private struct UITestPlanPillProvider: UsageProvider {
         UITestFixtures.planPillResult(for: configuration)
     }
 }
+
+#endif
