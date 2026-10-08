@@ -46,12 +46,15 @@ separately in the implementation PR.
 | Candidate 37753142813 | 51s | 42s | 42s | 0ms / 0ms |
 
 
-The final workload, including the stronger trigger assertions, also passed in
+An earlier candidate, including the stronger trigger assertions, also passed in
 [run 37754838237](https://github.com/hemsoft-dev/codexbar-ios/actions/runs/37754838237)
 at `3ec659df3a472113cf9b066d9eefffe906c9d748`: 70 seconds workflow elapsed,
 58 seconds completed job span and summed job runtime, with zero API-reported
-billable milliseconds on MACOS and UBUNTU. The PR records the latest exact-head
-measurement after this documentation update, without changing workflow work.
+billable milliseconds on MACOS and UBUNTU. This measurement predates the manual
+UI-helper repairs, whose Swift files are scanned by automatic SwiftLint. The
+implementation PR must record completed workflow elapsed and summed runner time
+for its latest head after any further source or documentation change. Historical
+candidate measurements do not satisfy that final cost-ceiling proof.
 
 Trigger/job changes: remove `push: branches: [main]`; retain `pull_request` and
 `workflow_dispatch`; make four native quality jobs dispatch-only. Move the
