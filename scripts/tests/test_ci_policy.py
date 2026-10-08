@@ -28,10 +28,21 @@ class CITriggerPolicyTests(unittest.TestCase):
     def test_ci_supports_automatic_and_manual_runs(self) -> None:
         triggers = self.workflow.split("permissions:", maxsplit=1)[0]
         self.assertIn("  pull_request:\n", triggers)
-        self.assertIn("  push:\n", triggers)
+        self.assertNotIn("  push:\n", triggers)
         self.assertIn("  workflow_dispatch:\n", triggers)
 
-    def test_automatic_ios_job_stops_after_unit_and_risk_checks(self) -> None:
+    def test_native_jobs_are_dispatch_only_and_keep_their_workloads(self) -> None:
+        for job_id in ("strict-concurrency", "ios-tests", "watch-tests", "smoke-tests"):
+            self.assertIn("    if: ${{ github.event_name == 'workflow_dispatch' }}\n", job_block(self.workflow, job_id))
+        lint_job = job_block(self.workflow, "swiftlint")
+        smoke_job = job_block(self.workflow, "smoke-tests")
+        self.assertIn("swiftlint lint", lint_job)
+        self.assertIn("test_ci_policy.py", lint_job)
+        self.assertNotIn("test_ci_policy.py", smoke_job)
+        self.assertEqual(self.workflow.count("test_ci_policy.py"), 1)
+        self.assertIn("check-strict-concurrency.sh", job_block(self.workflow, "strict-concurrency"))
+        self.assertIn("Enforce watchOS function risk baseline", job_block(self.workflow, "watch-tests"))
+        self.assertIn("swift run CodexBarIOSSmokeTests", smoke_job)
         ios_job = job_block(self.workflow, "ios-tests")
         self.assertIn("    name: iOS tests\n", ios_job)
         self.assertIn("    timeout-minutes: 30\n", ios_job)

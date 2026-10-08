@@ -227,7 +227,6 @@ jobs:
       - name: Verify perfection gate selection and failure reporting
         run: python3 -m unittest discover -s scripts/tests -p 'test_perfection_runner.py' -v
 
-
   ios-ui-families:
     name: iOS UI journeys (${{ matrix.family }})
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.ui_validation_mode != 'account-menu-comparison' && success() }}

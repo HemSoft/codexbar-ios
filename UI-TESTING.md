@@ -300,11 +300,12 @@ baseline remains unchanged.
 
 ## CI and failure reproduction
 
-The required automatic `iOS tests` status runs unit tests, coverage, and the
-function-risk gate. It does not start either UI destination. Routine pull
+Ordinary PRs run pinned lint and lightweight configuration checks. The `iOS tests`
+status runs unit tests, coverage and function risk only through an explicit dispatch.
+Native validation and UI journeys run before releases or on demand; ordinary pull
 requests do not require a manual full run. Before a release, dispatch the `CI`
 workflow against the exact release-candidate branch or tag. After the five
-automatic jobs pass, `Full iOS UI validation` runs both device families. The
+quality jobs pass, `Full iOS UI validation` runs both device families. The
 release cannot proceed unless every job passes for the candidate SHA. If that
 SHA changes, dispatch a new run.
 
@@ -326,7 +327,7 @@ it cannot reach the dashboard balance. Keep that mutation out of the PR.
 ### Widget reset-caption layout check
 
 Run `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/tests/widget-reset-layout-tests.sh`.
-The required SwiftPM smoke CI job runs the same check. It compiles the production
+The on-demand/release SwiftPM smoke CI job runs the same check. It compiles the production
 widget tile and its dependencies against the SwiftPM module on macOS, adapting
 only the platform background color. ImageRenderer measures 54 fixtures across
 all visualization styles, three tile widths, reset/warning captions, and missing

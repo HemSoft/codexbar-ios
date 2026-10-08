@@ -18,6 +18,12 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Run ordinary PR lint and configuration checks without native build/test reruns.
+  Extensive iOS/watchOS tests, function-risk checks, strict-concurrency builds,
+  smoke validation and both UI families run before releases or on demand.
+  Duplicate post-merge validation is removed.
+  ([#419](https://github.com/hemsoft-dev/codexbar-ios/issues/419))
+
 - Use connected Codex as the sole required AI reviewer. Repository guidance
   preserves current-head review, addressed-thread resolution, and required CI
   and human approvals without waiting for optional review products.

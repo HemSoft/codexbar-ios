@@ -59,14 +59,16 @@ pinned repository-wide SwiftLint, complete strict concurrency, iOS build and
 unit tests, SwiftPM smoke tests, and watchOS build and unit tests. Use `--list`
 for gate names or `--status` for the most recent historical summary. See the
 [perfection skill](.agents/skills/perfection/SKILL.md) for focused runs and the
-separate UI and function-risk checks required by CI. Security analysis and the
+separate manual UI and function-risk release checks. Security analysis and the
 performance budget run manually for relevant changes and release preparation;
 see [security analysis](SECURITY-ANALYSIS.md) and
 [performance verification](USAGE-HISTORY-PERFORMANCE.md).
 
-The [CI policy](CI-POLICY.md) records measured runtimes, the five required
-correctness checks, and manual security/performance dispatch and failure
-ownership. Manual analysis keeps its existing failure rules and artifacts.
+The [CI policy](CI-POLICY.md) records measured runtimes and the lightweight
+required PR lint/configuration gate. All five quality checks and both UI families
+run before a release or on demand. It also records manual security/performance
+dispatch and failure ownership. Manual analysis keeps its existing failure rules
+and artifacts.
 
 ## OpenCode sign-in
 
