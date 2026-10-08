@@ -477,6 +477,7 @@ public final class UsageRefreshService: ObservableObject {
             providerID: failureResult.providerID,
             title: title,
             plan: failureResult.plan ?? cachedResult?.plan,
+            verifiedGrokPlanName: failureResult.verifiedGrokPlanName ?? cachedResult?.verifiedGrokPlanName,
             subtitle: subtitle,
             bars: barsResult.bars,
             barsFetchedAt: barsResult.barsFetchedAt,

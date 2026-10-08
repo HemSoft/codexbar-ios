@@ -139,7 +139,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                     ("Codex 20x fixture", "Pro 20x"),
                     ("Codex 5x fixture", "Pro 5x"),
                     ("Claude Max fixture", "Max 5x"),
-                    ("Grok fixture", "SuperGrok Lite"),
+                    ("Grok", "SuperGrok Lite"),
                     ("Long Google AI Ultra account name is not proof of a subscription", "Plan unavailable"),
                     ("OpenRouter fixture", "API credits"),
                 ] {

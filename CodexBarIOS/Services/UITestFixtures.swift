@@ -232,13 +232,24 @@ final class UITestFixtures {
             ("pro", ProviderID.codex, "Codex 20x fixture"),
             ("prolite", .codex, "Codex 5x fixture"),
             ("max5", .claude, "Claude Max fixture"),
-            ("grok-plan", .grok, "Grok fixture"),
+            ("grok-plan", .grok, "SuperGrok Lite"),
             ("google", .gemini, "Long Google AI Ultra account name is not proof of a subscription"),
             ("api", .openRouter, "OpenRouter fixture"),
         ] {
-            let account = ProviderAccountConfiguration(id: id, providerID: provider, accountLabel: title, authMethod: .apiKey)
+            let account = ProviderAccountConfiguration(
+                id: id, providerID: provider, accountLabel: title,
+                grokGeneratedLabel: provider == .grok ? title : nil, authMethod: .apiKey
+            )
             _ = store.update(account)
             _ = store.saveSecret("ui-test-credential", for: account)
+            if provider == .grok {
+                let credential = GrokCredential(
+                    kind: "grok-oauth-v1", accessToken: "synthetic-token", refreshToken: nil,
+                    expiresAt: Date().addingTimeInterval(3600), subject: "synthetic-user", email: nil
+                )
+                _ = store.saveSecret((try? credential.encoded()) ?? "", for: account)
+                _ = store.applyVerifiedGrokPlan(grokResult(for: account, scenario: "grok-default"))
+            }
             if provider == .gemini {
                 _ = store.saveSecret(#"{"__Secure-1PSID":"synthetic"}"#, for: account)
             }

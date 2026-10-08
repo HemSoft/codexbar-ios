@@ -11,6 +11,8 @@ building, testing, or releasing the app.
 - Identify each provider card with a subscription or billing-type pill, including
   Codex Pro 5x/20x and Claude Max 5x/20x. Accounts whose provider does not report
   a verified plan show “Plan unavailable” instead of a guessed tier.
+  Grok keeps its verified tier after a temporary refresh failure, and generated
+  Grok account names no longer repeat the plan pill. Custom names are preserved.
   ([#417](https://github.com/HemSoft/codexbar-ios/issues/417))
 
 ### Developer Experience

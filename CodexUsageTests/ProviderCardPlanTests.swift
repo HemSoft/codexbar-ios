@@ -55,6 +55,27 @@ final class ProviderCardPlanTests: XCTestCase {
         XCTAssertEqual(differentProvider.cardPlan.displayLabel, "Plan unavailable")
     }
 
+    @MainActor
+    func testGrokPlanSurvivesOnlyReusableSameAccountRefreshFailure() async throws {
+        let account = ProviderAccountConfiguration(id: "grok.fixture", providerID: .grok, accountLabel: "Grok", authMethod: .apiKey)
+        let cached = ProviderUsageResult(
+            accountID: account.id, providerID: .grok, title: "Grok", verifiedGrokPlanName: "SuperGrok Lite",
+            subtitle: "Synthetic", bars: [UsageBar(label: "Weekly", used: 31, limit: 100)],
+            cacheIdentity: "same-subject", fetchedAt: Date()
+        )
+        for (identity, reauthenticate, expected) in [
+            ("same-subject", false, "SuperGrok Lite"),
+            ("different-subject", false, "Plan unavailable"),
+            ("same-subject", true, "Plan unavailable"),
+        ] {
+            let service = UsageRefreshService(
+                providers: [FailedGrokPlanProvider(identity: identity, reauthenticate: reauthenticate)], initialResults: [cached]
+            )
+            await service.refresh(configurations: [account])
+            XCTAssertEqual(try XCTUnwrap(service.results.first).cardPlan.displayLabel, expected)
+        }
+    }
+
     func testReportedPlanAndFreeBillingAreAccountScoped() {
         let verified = ProviderPlanDescriptor.make(providerPrefix: "claude", identifier: "pro", label: "Pro")
         let first = ProviderUsageResult(accountID: "first", providerID: .claude, title: "Same title", plan: verified,
@@ -69,5 +90,19 @@ final class ProviderCardPlanTests: XCTestCase {
             fetchedAt: Date()
         )
         XCTAssertEqual(free.cardPlan.displayLabel, "FREE")
+    }
+}
+
+private struct FailedGrokPlanProvider: UsageProvider {
+    let providerID = ProviderID.grok
+    let identity: String
+    let reauthenticate: Bool
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        ProviderUsageResult(
+            accountID: configuration.id, providerID: .grok, title: configuration.displayName, subtitle: "Synthetic failure",
+            bars: [], failureMessage: "Synthetic failure", recoveryAction: reauthenticate ? .reauthenticate : .retryRefresh,
+            cacheIdentity: identity, fetchedAt: Date()
+        )
     }
 }

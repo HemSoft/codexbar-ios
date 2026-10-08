@@ -313,6 +313,9 @@ remaining live comparison checks.
 
 ### Provider card plan pills
 
+Grok uses a separate verified tier pill and generated Grok account names, preserving
+custom account names and verified tier metadata through reusable refresh failures.
+
 Every account card shows its verified plan or product type in the header,
 including when collapsed. Codex `pro` and `prolite` distinguish Pro 20x and
 Pro 5x; Claude's returned Max tier distinguishes 5x and 20x. Existing verified
