@@ -88,11 +88,15 @@ eligibility holds and any cooldown has ended. Other saved grants remain visible
 with their availability and provider-reported expiration.
 
 The reset sheet names the account, affected windows, expiration and irreversible
-cost of one reset before confirmation. Cancelling confirmation sends no reset
-request. Before a confirmed request, the client rereads inventory, verifies the
-OAuth account and organization, and checks that the confirmation still belongs
-to the exact saved credential. A changed account or rotated credential requires
-a fresh usage read and a new confirmation.
+cost of one reset before confirmation. Its count and availability update while
+the sheet stays open, and an expired confirmation closes without a request.
+Cancelling confirmation sends no reset request. The original confirmed grant
+is passed unchanged through the request flow. A refreshed cache cannot replace
+its count, affected windows, expiration or other terms. Before a confirmed
+request, the client rereads inventory, verifies the OAuth account and
+organization, and checks that the confirmation still belongs to the exact
+saved credential and grant. A changed account, grant or rotated credential
+requires a fresh usage read and a new confirmation.
 
 The organization-bound `reset_rate_limits` POST uses `program=cedar_ember`, the
 selected `grant_id` and a new `request_id`. This contract follows the

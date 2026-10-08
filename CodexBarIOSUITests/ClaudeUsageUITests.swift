@@ -47,6 +47,7 @@ final class ClaudeUsageUITests: XCTestCase {
         }
         exerciseAmbiguousReset()
         exerciseUnavailableResets()
+        exerciseResetTimeBoundary()
     }
 
     private func exerciseSavedReset(defaultText: Bool, dark: Bool) {
@@ -161,6 +162,27 @@ final class ClaudeUsageUITests: XCTestCase {
         )).firstMatch
         reveal(header, in: app)
         XCTAssertTrue(header.exists, app.debugDescription)
+    }
+
+    private func exerciseResetTimeBoundary() {
+        let app = launch(scenario: "claude-resets-boundary", runID: UUID().uuidString)
+        tap(app.buttons["claude-view-resets-ui-claude"], in: app)
+        let summary = app.staticTexts["claude-reset-summary"]
+        XCTAssertTrue(summary.label.contains("2 resets available"), summary.label)
+        let use = app.buttons["claude-use-reset"]
+        XCTAssertTrue(use.exists, app.debugDescription)
+        tap(use, in: app)
+        let confirmation = app.alerts["Use one Claude reset?"]
+        XCTAssertTrue(confirmation.exists)
+        keep("claude-resets-before-expiry", app: app)
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 35), "An expiring grant must close its stale confirmation")
+        XCTAssertFalse(use.exists, "An open sheet must remove consumption when the grant expires")
+        XCTAssertTrue(summary.label.contains("0 resets available"), summary.label)
+        XCTAssertTrue(app.staticTexts["Not currently available"].exists)
+        keep("claude-resets-after-expiry", app: app)
+        tap(app.buttons["Done"], in: app)
+        assertRequests(0, title: "Synthetic Claude", in: app)
+        app.terminate()
     }
 
     private func assertResetAvailability(_ count: Int, account: String, in app: XCUIApplication) {

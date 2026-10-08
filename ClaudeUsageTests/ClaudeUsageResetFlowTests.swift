@@ -10,7 +10,7 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
             defer { harness.clear() }
             do {
                 _ = try await harness.service.consumeClaudeReset(
-                    for: harness.account, grantID: mode == "wrongGrant" ? "other" : "fixture_grant",
+                    for: harness.account, grantID: mode == "wrongGrant" ? "other" : "fixture_grant", confirmedGrant: harness.confirmedGrant,
                     credentialBinding: mode == "wrongBinding" ? "replacement" : "binding"
                 )
                 XCTFail("Invalid confirmation must not reach provider: \(mode)")
@@ -29,7 +29,7 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
                 let harness = makeHarness(outcome: outcome, refreshMode: refreshMode)
                 defer { harness.clear() }
                 let feedback = await harness.orchestrator.consumeClaudeReset(
-                    for: harness.account, grantID: "fixture_grant", credentialBinding: "binding"
+                    for: harness.account, grantID: "fixture_grant", confirmedGrant: harness.confirmedGrant, credentialBinding: "binding"
                 )
                 let calls = await harness.provider.consumptionCount()
                 let fetches = await harness.provider.fetchCount()
@@ -58,7 +58,7 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
             let harness = makeHarness(error: error)
             defer { harness.clear() }
             let feedback = await harness.orchestrator.consumeClaudeReset(
-                for: harness.account, grantID: "fixture_grant", credentialBinding: "binding"
+                for: harness.account, grantID: "fixture_grant", confirmedGrant: harness.confirmedGrant, credentialBinding: "binding"
             )
             XCTAssertFalse(feedback.isSuccess)
             let calls = await harness.provider.consumptionCount()
@@ -74,7 +74,9 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
         let harness = makeHarness(paused: true)
         defer { harness.clear() }
         let first = Task { @MainActor in
-            try await harness.service.consumeClaudeReset(for: harness.account, grantID: "fixture_grant", credentialBinding: "binding")
+            try await harness.service.consumeClaudeReset(
+                for: harness.account, grantID: "fixture_grant", confirmedGrant: harness.confirmedGrant, credentialBinding: "binding"
+            )
         }
         let started = await harness.provider.waitUntilConsuming()
         guard started else {
@@ -84,7 +86,9 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
             return
         }
         do {
-            _ = try await harness.service.consumeClaudeReset(for: harness.account, grantID: "fixture_grant", credentialBinding: "binding")
+            _ = try await harness.service.consumeClaudeReset(
+                for: harness.account, grantID: "fixture_grant", confirmedGrant: harness.confirmedGrant, credentialBinding: "binding"
+            )
             XCTFail("Duplicate confirmation must be rejected")
         } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .inProgress) }
         await harness.provider.release()
@@ -100,7 +104,9 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
             let harness = makeHarness(paused: true)
             defer { harness.clear() }
             let first = Task { @MainActor in
-                try await harness.service.consumeClaudeReset(for: harness.account, grantID: "fixture_grant", credentialBinding: "binding")
+                try await harness.service.consumeClaudeReset(
+                    for: harness.account, grantID: "fixture_grant", confirmedGrant: harness.confirmedGrant, credentialBinding: "binding"
+                )
             }
             let started = await harness.provider.waitUntilConsuming()
             guard started else {
@@ -155,7 +161,8 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
                                                                sender: FlowWatchSender(), publishSnapshot: { _, _, _ in })
         )
         return Harness(account: account, service: service, provider: provider, orchestrator: orchestrator,
-                       store: store, defaults: defaults, suite: suite)
+                       store: store, defaults: defaults, suite: suite, confirmedGrant: initial.claudeUsageResetInventory?.grants.first
+                       ?? FlowProvider.result(account: account, count: 2, used: 64).claudeUsageResetInventory!.grants[0])
     }
 
     @MainActor
@@ -167,6 +174,7 @@ final class ClaudeUsageResetFlowTests: XCTestCase, @unchecked Sendable {
         let store: ProviderConfigurationStore
         let defaults: UserDefaults
         let suite: String
+        let confirmedGrant: ClaudeUsageResetGrant
         func clear() { defaults.removePersistentDomain(forName: suite) }
     }
 }
@@ -187,7 +195,7 @@ private actor FlowProvider: UsageProvider, ClaudeUsageResetConsuming {
         self.refreshMode = refreshMode
     }
     func consumeClaudeReset(
-        for configuration: ProviderAccountConfiguration, grantID: String, credentialBinding: String
+        for configuration: ProviderAccountConfiguration, grantID: String, confirmedGrant: ClaudeUsageResetGrant, credentialBinding: String
     ) async throws -> ClaudeUsageResetOutcome {
         calls += 1
         if paused { await withCheckedContinuation { continuation = $0 } }

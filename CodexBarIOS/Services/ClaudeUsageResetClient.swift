@@ -5,6 +5,7 @@ public protocol ClaudeUsageResetConsuming: Sendable {
     func consumeClaudeReset(
         for configuration: ProviderAccountConfiguration,
         grantID: String,
+        confirmedGrant: ClaudeUsageResetGrant,
         credentialBinding: String
     ) async throws -> ClaudeUsageResetOutcome
 }

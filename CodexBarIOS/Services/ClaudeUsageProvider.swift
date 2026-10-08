@@ -77,7 +77,7 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
     }
 
     public func consumeClaudeReset(
-        for configuration: ProviderAccountConfiguration, grantID: String, credentialBinding: String
+        for configuration: ProviderAccountConfiguration, grantID: String, confirmedGrant: ClaudeUsageResetGrant, credentialBinding: String
     ) async throws -> ClaudeUsageResetOutcome {
         guard configuration.providerID == .claude,
               let saved = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
@@ -87,7 +87,7 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
         guard let token = refreshed.credentials.accessToken, !token.isEmpty else { throw ClaudeUsageResetError.unavailable }
         guard let inventory = await snapshotCache.result(accountID: configuration.id)?.claudeUsageResetInventory,
               inventory.credentialBinding == credentialBinding,
-              let confirmedGrant = inventory.redeemableGrant(at: now()), confirmedGrant.id == grantID
+              confirmedGrant.id == grantID, inventory.matchesConfirmation(grant: confirmedGrant, binding: credentialBinding, at: now())
         else { throw ClaudeUsageResetError.unavailable }
         return try await resetClient.consume(for: configuration, accessToken: token, grantID: grantID,
                                              credentialBinding: credentialBinding, confirmedGrant: confirmedGrant)

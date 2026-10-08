@@ -328,6 +328,7 @@ public final class UsageRefreshService: ObservableObject {
     public func consumeClaudeReset(
         for configuration: ProviderAccountConfiguration,
         grantID: String,
+        confirmedGrant: ClaudeUsageResetGrant,
         credentialBinding: String
     ) async throws -> ClaudeUsageResetOutcome {
         guard configuration.providerID == .claude, configuration.isEnabled,
@@ -338,12 +339,14 @@ public final class UsageRefreshService: ObservableObject {
               !refreshingAccountIDs.contains(configuration.id),
               let inventory = result.claudeUsageResetInventory,
               inventory.credentialBinding == credentialBinding,
-              inventory.redeemableGrant(at: Date())?.id == grantID
+              confirmedGrant.id == grantID, inventory.matchesConfirmation(grant: confirmedGrant, binding: credentialBinding, at: Date())
         else { throw ClaudeUsageResetError.unavailable }
         guard claudeResetAccounts.insert(configuration.id).inserted else { throw ClaudeUsageResetError.inProgress }
         defer { claudeResetAccounts.remove(configuration.id) }
         let generation = registerCurrentConfiguration(configuration)
-        let outcome = try await provider.consumeClaudeReset(for: configuration, grantID: grantID, credentialBinding: credentialBinding)
+        let outcome = try await provider.consumeClaudeReset(
+            for: configuration, grantID: grantID, confirmedGrant: confirmedGrant, credentialBinding: credentialBinding
+        )
         guard isCurrent(configuration, generation: generation) else { throw ClaudeUsageResetError.credentialChanged }
         return outcome
     }

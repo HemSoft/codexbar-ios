@@ -291,6 +291,7 @@ final class DashboardOrchestrator: ObservableObject {
     func consumeClaudeReset(
         for configuration: ProviderAccountConfiguration,
         grantID: String,
+        confirmedGrant: ClaudeUsageResetGrant,
         credentialBinding: String
     ) async -> ClaudeUsageResetFeedback {
         guard let current = configurationStore.configuration(accountID: configuration.id), current.isEnabled,
@@ -299,7 +300,9 @@ final class DashboardOrchestrator: ObservableObject {
         let outcome: ClaudeUsageResetOutcome?
         let failure: String?
         do {
-            outcome = try await refreshService.consumeClaudeReset(for: current, grantID: grantID, credentialBinding: credentialBinding)
+            outcome = try await refreshService.consumeClaudeReset(
+                for: current, grantID: grantID, confirmedGrant: confirmedGrant, credentialBinding: credentialBinding
+            )
             failure = nil
         } catch {
             outcome = nil

@@ -1653,10 +1653,11 @@ actor UITestClaudeResetProvider: UsageProvider, ClaudeUsageResetConsuming {
     }
 
     func consumeClaudeReset(
-        for account: ProviderAccountConfiguration, grantID: String, credentialBinding: String
+        for account: ProviderAccountConfiguration, grantID: String, confirmedGrant: ClaudeUsageResetGrant, credentialBinding: String
     ) async throws -> ClaudeUsageResetOutcome {
         let remaining = remainingByAccount[account.id, default: account.id == "ui-claude-second" ? 1 : 2]
         guard ["ui-claude", "ui-claude-second"].contains(account.id), grantID == "fixture_grant", remaining > 0,
+              confirmedGrant.id == grantID, confirmedGrant.remainingCount == remaining, confirmedGrant.isCurrent(at: Date()),
               credentialBinding == ClaudeUsageResetClient.credentialBinding(for: "ui-test-credential")
         else { throw ClaudeUsageResetError.unavailable }
         guard !uncertainAccounts.contains(account.id) else { throw ClaudeUsageResetError.indeterminate }
@@ -1678,7 +1679,8 @@ actor UITestClaudeResetProvider: UsageProvider, ClaudeUsageResetConsuming {
         let remaining = scenario == "claude-resets-zero" ? 0 : remaining ?? (account.id == "ui-claude-second" ? 1 : 2)
         let now = Date()
         let formatter = ISO8601DateFormatter()
-        let end = formatter.string(from: now.addingTimeInterval(scenario == "claude-resets-expired" ? -3600 : 7 * 86400))
+        let endOffset: TimeInterval = scenario == "claude-resets-expired" ? -3600 : scenario == "claude-resets-boundary" ? 30 : 7 * 86400
+        let end = formatter.string(from: now.addingTimeInterval(endOffset))
         let startOffset: TimeInterval = scenario == "claude-resets-inactive" ? 3600 : -7200
         let start = formatter.string(from: now.addingTimeInterval(startOffset))
         let session = formatter.string(from: now.addingTimeInterval(7200))

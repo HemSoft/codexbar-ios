@@ -45,6 +45,19 @@ final class ClaudeUsageResetProviderTests: XCTestCase {
         ResetFetchProtocol.configure(status: 200, inventory: true)
         let first = try await provider.fetchUsage(for: account)
         XCTAssertNotNil(first.claudeUsageResetInventory)
+        let confirmed = try XCTUnwrap(first.claudeUsageResetInventory?.redeemableGrant(at: now))
+        ResetFetchProtocol.configure(status: 200, inventory: true, count: 1)
+        let changed = try await provider.fetchUsage(for: account)
+        XCTAssertEqual(changed.claudeUsageResetInventory?.grants.first?.remainingCount, 1)
+        ResetFetchProtocol.configure(status: 200, inventory: true, count: 1)
+        do {
+            _ = try await provider.consumeClaudeReset(
+                for: account, grantID: confirmed.id, confirmedGrant: confirmed,
+                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token")
+            )
+            XCTFail("A refreshed cache must not replace the grant the user confirmed")
+        } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .unavailable) }
+        XCTAssertTrue(ResetFetchProtocol.requests.isEmpty, "Changed confirmation must be rejected before any reset preflight or POST")
         ResetFetchProtocol.configure(status: 200, inventory: false)
         let missing = try await provider.fetchUsage(for: account)
         XCTAssertNil(missing.claudeUsageResetInventory)
@@ -72,10 +85,11 @@ private class ResetFetchProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var status = 200
     nonisolated(unsafe) private static var includesInventory = true
+    nonisolated(unsafe) private static var remainingCount = 2
     nonisolated(unsafe) private static var recorded: [URLRequest] = []
     static var requests: [URLRequest] { lock.withLock { recorded } }
-    static func configure(status: Int, inventory: Bool) {
-        lock.withLock { self.status = status; includesInventory = inventory; recorded = [] }
+    static func configure(status: Int, inventory: Bool, count: Int = 2) {
+        lock.withLock { self.status = status; includesInventory = inventory; remainingCount = count; recorded = [] }
     }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -83,14 +97,14 @@ private class ResetFetchProtocol: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         let responseState = Self.lock.withLock {
             Self.recorded.append(request)
-            return (Self.status, Self.includesInventory)
+            return (Self.status, Self.includesInventory, Self.remainingCount)
         }
         let inventory = responseState.1 ? #"""
         ,"cedar_ember":{"eligible":true,"next_grant_id":"fixture_grant","grants":[{
           "id":"fixture_grant","resets_left":2,"starts_at":"2029-12-01T00:00:00Z",
           "ends_at":"2030-01-08T00:00:00Z","clears":["five_hour","seven_day"],"usable_now":true
         }]}
-        """# : ""
+        """#.replacingOccurrences(of: "\"resets_left\":2", with: "\"resets_left\":\(responseState.2)") : ""
         let body = "{\"five_hour\":{\"utilization\":42}" + inventory + "}"
         let response = HTTPURLResponse(url: request.url!, statusCode: responseState.0, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)

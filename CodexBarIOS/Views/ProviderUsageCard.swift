@@ -80,7 +80,7 @@ struct ProviderUsageCard: View {
     let onConfigureAccount: () -> Void
     let onRetry: () -> Void
     let onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)?
-    let onUseClaudeReset: ((String, String) async -> ClaudeUsageResetFeedback)?
+    let onUseClaudeReset: ((ClaudeUsageResetGrant, String) async -> ClaudeUsageResetFeedback)?
     let isMetricVisible: (String) -> Bool
     let onUpdateMetricVisibility: (String, Bool) -> Void
     let watchVisibilityForMetric: (String) -> WatchMetricVisibilityPolicy
@@ -153,7 +153,7 @@ struct ProviderUsageCard: View {
         onConfigureAccount: @escaping () -> Void = {},
         onRetry: @escaping () -> Void = {},
         retainedCodexResetAttempt: CodexRetainedResetAttempt? = nil,
-        onUseClaudeReset: ((String, String) async -> ClaudeUsageResetFeedback)? = nil,
+        onUseClaudeReset: ((ClaudeUsageResetGrant, String) async -> ClaudeUsageResetFeedback)? = nil,
         onUseCodexReset: ((String?) async -> CodexBankedResetRedemptionFeedback)? = nil,
         isMetricVisible: @escaping (String) -> Bool = { _ in true },
         onUpdateMetricVisibility: @escaping (String, Bool) -> Void = { _, _ in },
@@ -1013,13 +1013,13 @@ struct ProviderUsageCard: View {
             && result.claudeUsageResetInventory?.credentialBinding != nil
     }
 
-    private func useClaudeReset(grantID: String, binding: String) async -> ClaudeUsageResetFeedback {
+    private func useClaudeReset(grant: ClaudeUsageResetGrant, binding: String) async -> ClaudeUsageResetFeedback {
         guard canUseClaudeReset, let onUseClaudeReset else {
             return ClaudeUsageResetFeedback(message: "Refresh Claude usage before using a reset.", isSuccess: false)
         }
         isUsingClaudeReset = true
         defer { isUsingClaudeReset = false }
-        let feedback = await onUseClaudeReset(grantID, binding)
+        let feedback = await onUseClaudeReset(grant, binding)
         claudeResetFeedback = feedback
         return feedback
     }
