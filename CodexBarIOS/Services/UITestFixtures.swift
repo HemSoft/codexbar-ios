@@ -244,7 +244,7 @@ final class UITestFixtures {
             _ = store.saveSecret("ui-test-credential", for: account)
             if provider == .grok {
                 let credential = GrokCredential(
-                    kind: "grok-oauth-v1", accessToken: "synthetic-token", refreshToken: nil,
+                    kind: "grok-oauth-v1", accessToken: "synthetic-token", refreshToken: "synthetic-refresh",
                     expiresAt: Date().addingTimeInterval(3600), subject: "synthetic-user", email: nil
                 )
                 _ = store.saveSecret((try? credential.encoded()) ?? "", for: account)
