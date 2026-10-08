@@ -128,8 +128,9 @@ final class ClaudeUsageUITests: XCTestCase {
             XCTAssertFalse(missing.buttons["dashboard-metric-claude.weekly-scoped-fable"].exists,
                            "Neither the plan label nor usage credits establish a Fable quota")
             if scenario == "claude-fable-credits" {
-                XCTAssertTrue(missing.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Usage credits spent"))
-                    .firstMatch.exists, missing.debugDescription)
+                let credits = missing.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Usage credits spent")).firstMatch
+                XCTAssertTrue(credits.exists, missing.debugDescription)
+                reveal(credits, in: missing)
             }
             keep("\(scenario)-\(variant)", app: missing)
             missing.terminate()
