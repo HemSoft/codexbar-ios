@@ -12,6 +12,15 @@ final class ClaudeUsageResetInventoryTests: XCTestCase {
         XCTAssertEqual(inventory.redeemableGrant(at: now)?.clears, ["five_hour", "seven_day"])
         XCTAssertEqual(inventory.availableCount(at: now.addingTimeInterval(8 * 86_400)), 0)
         XCTAssertNil(inventory.redeemableGrant(at: now.addingTimeInterval(8 * 86_400)))
+        let confirmed = inventory.bound(toAccessToken: "fixture-token")
+        let grant = try XCTUnwrap(confirmed.redeemableGrant(at: now))
+        let binding = try XCTUnwrap(confirmed.credentialBinding)
+        XCTAssertTrue(confirmed.matchesConfirmation(grant: grant, binding: binding, at: now))
+        XCTAssertFalse(inventory.matchesConfirmation(grant: grant, binding: binding, at: now))
+        XCTAssertFalse(confirmed.bound(toAccessToken: "replacement-token").matchesConfirmation(grant: grant, binding: binding, at: now))
+        XCTAssertFalse(confirmed.matchesConfirmation(grant: grant, binding: binding, at: now.addingTimeInterval(8 * 86_400)))
+        let changed = try XCTUnwrap(parse(replacing: "\"resets_left\":2", with: "\"resets_left\":1")).bound(toAccessToken: "fixture-token")
+        XCTAssertFalse(changed.matchesConfirmation(grant: grant, binding: binding, at: now))
     }
 
     func testUnsupportedAndMalformedInventoryNeverBecomeZeroBalance() {

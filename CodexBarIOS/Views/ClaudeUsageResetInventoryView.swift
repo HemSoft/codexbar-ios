@@ -9,6 +9,7 @@ struct ClaudeUsageResetInventoryView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedGrant: ClaudeUsageResetGrant?
+    @State private var confirmationBinding: String?
     @State private var isConfirming = false
     @State private var isSubmitting = false
     @State private var feedback: ClaudeUsageResetFeedback?
@@ -50,7 +51,10 @@ struct ClaudeUsageResetInventoryView: View {
                 }
             }
             .alert("Use one Claude reset?", isPresented: $isConfirming) {
-                Button("Cancel", role: .cancel) { selectedGrant = nil }
+                Button("Cancel", role: .cancel) {
+                    selectedGrant = nil
+                    confirmationBinding = nil
+                }
                 Button("Use reset") { redeemSelectedGrant() }
             } message: {
                 if let grant = selectedGrant {
@@ -59,6 +63,13 @@ struct ClaudeUsageResetInventoryView: View {
             }
         }
         .interactiveDismissDisabled(isSubmitting)
+        .onChange(of: inventory.credentialBinding) {
+            guard !isSubmitting else { return }
+            isConfirming = false
+            selectedGrant = nil
+            confirmationBinding = nil
+            feedback = ClaudeUsageResetFeedback(message: "Claude authorization changed. Review the refreshed reset details.", isSuccess: false)
+        }
     }
 
     private var summary: String {
@@ -86,6 +97,7 @@ struct ClaudeUsageResetInventoryView: View {
                     && inventory.redeemableGrant(at: Date())?.id == grant.id) {
                 Button {
                     selectedGrant = grant
+                    confirmationBinding = inventory.credentialBinding
                     isConfirming = true
                 } label: {
                     if isSubmitting { ProgressView("Using reset…") } else { Text("Use one reset") }
@@ -117,13 +129,20 @@ struct ClaudeUsageResetInventoryView: View {
     }
 
     private func redeemSelectedGrant() {
-        guard !isSubmitting, canRedeem, let onUseReset, let selectedGrant, let binding = inventory.credentialBinding,
-              inventory.redeemableGrant(at: Date())?.id == selectedGrant.id
-        else { return }
+        guard !isSubmitting else { return }
+        guard canRedeem, let onUseReset, let selectedGrant, let binding = confirmationBinding,
+              inventory.matchesConfirmation(grant: selectedGrant, binding: binding, at: Date())
+        else {
+            feedback = ClaudeUsageResetFeedback(message: "These reset details changed. Review them before confirming again.", isSuccess: false)
+            self.selectedGrant = nil
+            confirmationBinding = nil
+            return
+        }
         isSubmitting = true
         Task { @MainActor in
             feedback = await onUseReset(selectedGrant.id, binding)
             self.selectedGrant = nil
+            confirmationBinding = nil
             isSubmitting = false
         }
     }

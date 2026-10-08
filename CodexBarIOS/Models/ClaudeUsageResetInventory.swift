@@ -45,6 +45,10 @@ public struct ClaudeUsageResetInventory: Equatable, Sendable {
         return grants.filter { $0.isCurrent(at: date) }.reduce(0) { $0 + $1.remainingCount }
     }
 
+    public func matchesConfirmation(grant: ClaudeUsageResetGrant, binding: String, at date: Date) -> Bool {
+        credentialBinding == binding && redeemableGrant(at: date) == grant
+    }
+
     public func redeemableGrant(at date: Date) -> ClaudeUsageResetGrant? {
         guard isEligible, cooldownUntil.map({ $0 <= date }) ?? true else { return nil }
         return grants.first { $0.id == selectedGrantID && $0.isUsableNow && $0.isCurrent(at: date) }
