@@ -310,3 +310,24 @@ models, Claude/GPT, from the internal Antigravity quota adapter. Each has
 five-hour and weekly metrics alongside Gemini Apps on one dashboard card. See
 [coding session setup](ANTIGRAVITY-SETUP.md) for browser setup, renewal, and the
 remaining live comparison checks.
+
+### Provider card plan pills
+
+Grok uses a separate verified tier pill and generated Grok account names, preserving
+custom account names and verified tier metadata through reusable refresh failures.
+
+Every account card shows its verified plan or product type in the header,
+including when collapsed. Codex `pro` and `prolite` identify the Pro family;
+Claude's returned Max tier distinguishes 5x and 20x. Existing verified
+Copilot, GitHub Billing, Grok and Greptile plan metadata is reused. A verified
+Greptile Free billing state can also identify Free without a renewal date.
+OpenRouter and Moonshot identify API credits. Other missing or unrecognized
+plans show "Plan unavailable". Google usage sources currently provide no verified
+subscription identity; neither a Google account name nor quota size establishes
+Google AI Pro or Ultra. The fallback pill is presentation only and is not saved
+as detected subscription metadata in widgets, watch snapshots or history.
+
+The current [ChatGPT Pro tiers](https://help.openai.com/en/articles/9793128-about-chatgpt-pro-tiers)
+include Pro 100, 200 and 500. Legacy `pro`/`prolite` metadata does not identify
+one of those numeric tiers, so the pill displays Pro without guessing a price
+or usage multiplier.

@@ -2234,24 +2234,15 @@ final class UsageHistoryTests: XCTestCase {
 
         XCTAssertEqual(
             ProviderUsageCard.headerAccessibilityLabel(for: result),
-            "Work Claude, Max 20x plan"
+            "Work Claude, Max 20x"
         )
-        let resultWithoutPlan = ProviderUsageResult(
-            accountID: "cursor.personal",
-            providerID: .cursor,
-            title: "Cursor",
-            plan: ProviderPlanDescriptor(
-                identifier: "cursor.business",
-                displayLabel: "BUSINESS",
-                accessibilityLabel: "Business"
-            ),
-            subtitle: "Live Cursor usage",
-            bars: [],
-            fetchedAt: Date()
+        let resultWithVerifiedGrokPlan = ProviderUsageResult(
+            accountID: "grok.personal", providerID: .grok, title: "Grok",
+            verifiedGrokPlanName: "SuperGrok Lite", subtitle: "Live Grok usage", bars: [], fetchedAt: Date()
         )
         XCTAssertEqual(
-            ProviderUsageCard.headerAccessibilityLabel(for: resultWithoutPlan),
-            "Cursor"
+            ProviderUsageCard.headerAccessibilityLabel(for: resultWithVerifiedGrokPlan),
+            "Grok, SuperGrok Lite"
         )
     }
 
@@ -2298,7 +2289,7 @@ final class UsageHistoryTests: XCTestCase {
                 isPerformingRecovery: false,
                 severity: .warning
             ),
-            "\(result.title), Current, Refreshing, Warning status"
+            "\(result.title), Plan unavailable, Current, Refreshing, Warning status"
         )
         XCTAssertEqual(
             ProviderUsageCard.disclosureAccessibilityLabel(
@@ -2308,7 +2299,7 @@ final class UsageHistoryTests: XCTestCase {
                 isPerformingRecovery: true,
                 severity: .critical
             ),
-            "\(result.title), Session expired, Signing in, Critical status"
+            "\(result.title), Plan unavailable, Session expired, Signing in, Critical status"
         )
     }
 

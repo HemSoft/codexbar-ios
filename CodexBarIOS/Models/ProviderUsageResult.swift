@@ -210,8 +210,38 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let providerID: ProviderID
     public var title: String
     public let plan: ProviderPlanDescriptor?
+
+    /// Presentation fallback only. Never infers a subscription from usage or account labels.
+    public var cardPlan: ProviderPlanDescriptor {
+        if let plan { return plan }
+        if providerID == .grok, let name = verifiedGrokPlanName {
+            return .make(
+                providerPrefix: "grok", identifier: name.lowercased().replacingOccurrences(of: " ", with: "-"),
+                label: name, displayLabel: name
+            )
+        }
+        if providerID == .greptile, greptileAllowanceRenewal?.isApplicable == true {
+            return .make(providerPrefix: "greptile", identifier: "free", label: "Free")
+        }
+        switch providerID {
+        case .openRouter, .moonshot:
+            return .make(
+                providerPrefix: providerID.rawValue, identifier: "api-credits",
+                label: "API credits", displayLabel: "API credits"
+            )
+        default:
+            return .make(
+                providerPrefix: providerID.rawValue, identifier: "unavailable",
+                label: "Plan unavailable", displayLabel: "Plan unavailable"
+            )
+        }
+    }
     /// Plan verified through the same Grok subject as this usage response; never a usage metric.
-    public let verifiedGrokPlanName: String?
+    public var verifiedGrokPlanName: String?
+    /// The optional Grok tier read failed; a matching verified subject may retain its known tier.
+    public let grokPlanLookupFailed: Bool
+    /// Fresh active-pool evidence that requires a verified paid tier before becoming visible.
+    public let grokInferredZeroCandidate: UsageBar?
     public let subtitle: String
     public let bars: [UsageBar]
     public let barsFetchedAt: Date?
@@ -240,6 +270,8 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         title: String,
         plan: ProviderPlanDescriptor? = nil,
         verifiedGrokPlanName: String? = nil,
+        grokPlanLookupFailed: Bool = false,
+        grokInferredZeroCandidate: UsageBar? = nil,
         subtitle: String,
         bars: [UsageBar],
         barsFetchedAt: Date? = nil,
@@ -267,6 +299,8 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.title = title
         self.plan = plan
         self.verifiedGrokPlanName = verifiedGrokPlanName
+        self.grokPlanLookupFailed = providerID == .grok && grokPlanLookupFailed
+        self.grokInferredZeroCandidate = providerID == .grok && grokPlanLookupFailed ? grokInferredZeroCandidate : nil
         self.subtitle = subtitle
         self.bars = bars
         self.barsFetchedAt = bars.isEmpty ? nil : (barsFetchedAt ?? fetchedAt)

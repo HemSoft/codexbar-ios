@@ -130,6 +130,41 @@ final class CodexCreditsPoolUITests: XCTestCase {
         app.terminate()
     }
 
+    func testPreciseSubscriptionPillsOnExpandedAndCollapsedCards() {
+        continueAfterFailure = false
+        for defaultText in [true, false] {
+            for dark in [false, true] {
+                let app = launchSpacingFixture(defaultText: defaultText, dark: dark, scenario: "plan-pills")
+                for (title, plan) in [
+                    ("Codex Pro fixture", "Pro"),
+                    ("Codex Plus fixture", "Plus"),
+                    ("Claude Max fixture", "Max 5x"),
+                    ("Grok", "SuperGrok Lite"),
+                    ("Long Google AI Ultra account name is not proof of a subscription", "Plan unavailable"),
+                    ("OpenRouter fixture", "API credits"),
+                ] {
+                    let header = app.descendants(matching: .any).matching(NSPredicate(
+                        format: "label BEGINSWITH %@", title + ", " + plan
+                    )).firstMatch
+                    reveal(header, in: app)
+                    XCTAssertEqual(header.value as? String, "Expanded", app.debugDescription)
+                    keep("pill-\(title)-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
+                    header.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()
+                    XCTAssertEqual(header.value as? String, "Collapsed", app.debugDescription)
+                    XCTAssertTrue(header.label.contains(plan))
+                    keep("pill-collapsed-\(title)-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
+                }
+                tap(app.buttons["Refresh usage"], in: app)
+                let sameAccount = app.descendants(matching: .any).matching(NSPredicate(
+                    format: "label BEGINSWITH %@", "Codex Pro fixture, Pro"
+                )).firstMatch
+                reveal(sameAccount, in: app, towardTop: true)
+                XCTAssertTrue(sameAccount.exists, app.debugDescription)
+                app.terminate()
+            }
+        }
+    }
+
     func testCompactCardHeadersAndIndependentControls() {
         continueAfterFailure = false
         for defaultText in [true, false] {
@@ -141,7 +176,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(menu.frame.width, 44)
                 XCTAssertGreaterThanOrEqual(menu.frame.height, 44)
                 keep("spacing-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
-                let disclosure = app.descendants(matching: .any)["Personal Codex, Synthetic Codex usage, Normal status"]
+                let disclosure = app.descendants(matching: .any)["Personal Codex, Plan unavailable, Synthetic Codex usage, Normal status"]
                 XCTAssertTrue(disclosure.exists, app.debugDescription)
                 XCTAssertEqual(disclosure.value as? String, "Expanded", app.debugDescription)
                 disclosure.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()
@@ -277,9 +312,11 @@ final class CodexCreditsPoolUITests: XCTestCase {
         element.tap()
     }
 
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false) {
         _ = element.waitForExistence(timeout: 1)
-        if element.exists && element.isHittable && app.navigationBars.buttons[element.label].exists { return }
+        if element.exists && element.isHittable && app.navigationBars.buttons.matching(
+            NSPredicate(format: "label == %@", element.label)
+        ).firstMatch.exists { return }
         let customizer = app.scrollViews["metric-customization-scroll"]
         let settings = app.collectionViews["provider-account-settings-form"]
         let container = customizer.exists ? customizer : (settings.exists ? settings : app.scrollViews.firstMatch)
@@ -293,7 +330,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
             let viewport = CGRect(x: container.frame.minX, y: top, width: container.frame.width,
                                   height: max(0, container.frame.maxY - top)).insetBy(dx: 4, dy: 4)
             if element.exists && element.isHittable && viewport.contains(element.frame) { return }
-            let upward = !element.exists || element.frame.midY > viewport.midY
+            let upward = element.exists ? element.frame.midY > viewport.midY : !towardTop
             let start = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.65 : 0.35))
             let end = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.4 : 0.6))
             start.press(forDuration: 0.05, thenDragTo: end)

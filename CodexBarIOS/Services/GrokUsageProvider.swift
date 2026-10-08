@@ -34,7 +34,7 @@ public final class GrokUsageProvider: UsageProvider {
             return failure("Sign in with Grok to see consumer usage.", configuration: configuration)
         }
         let state = await currentCredential(candidate, keychainAccount: account)
-        guard case .ready(let credential) = state else { return credentialFailure(state, configuration: configuration) }
+        guard case .ready(let credential) = state else { return credentialFailure(state, configuration: configuration, subject: candidate.subject) }
         do {
             let result = try await fetchCandidate(credential, for: configuration)
             return try GrokCredentialLock.withLock {
@@ -43,18 +43,18 @@ public final class GrokUsageProvider: UsageProvider {
                 return result
             }
         } catch {
-            return usageFailure(error, configuration: configuration)
+            return usageFailure(error, configuration: configuration, subject: credential.subject)
         }
     }
 
     private func credentialFailure(
-        _ state: CredentialState, configuration: ProviderAccountConfiguration
+        _ state: CredentialState, configuration: ProviderAccountConfiguration, subject: String
     ) -> ProviderUsageResult {
         switch state {
         case .ready: failure("Grok usage could not be verified.", configuration: configuration)
         case .retry: failure(
             "Grok usage is temporarily unavailable. Try refreshing again.",
-            configuration: configuration, recoveryAction: .retryRefresh
+            configuration: configuration, recoveryAction: .retryRefresh, cacheIdentity: Self.identityHash(subject)
         )
         case .reconnect: failure(
             "Grok authorization expired or was removed. Reconnect in account settings.",
@@ -63,19 +63,19 @@ public final class GrokUsageProvider: UsageProvider {
         }
     }
 
-    private func usageFailure(_ error: Error, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
+    private func usageFailure(_ error: Error, configuration: ProviderAccountConfiguration, subject: String) -> ProviderUsageResult {
         if error as? GrokAuthError == .unauthorized {
             return failure("Grok authorization was rejected. Reconnect in account settings.", configuration: configuration)
         }
         if error as? GrokAuthError == .unsupportedAccount {
             return failure(
                 "Grok subscription usage is not available for this account.",
-                configuration: configuration, recoveryAction: .retryRefresh
+                configuration: configuration, recoveryAction: .retryRefresh, allowsUnscopedCacheReuse: false
             )
         }
         return failure(
             "Grok usage could not be verified. Try refreshing again.",
-            configuration: configuration, recoveryAction: .retryRefresh
+            configuration: configuration, recoveryAction: .retryRefresh, cacheIdentity: Self.identityHash(subject)
         )
     }
 
@@ -95,11 +95,7 @@ public final class GrokUsageProvider: UsageProvider {
         guard let response = response as? HTTPURLResponse, response.url == request.url else {
             throw GrokAuthError.invalidResponse
         }
-        if response.statusCode == 401 || response.statusCode == 403 { throw GrokAuthError.unauthorized }
-        if response.statusCode == 429 || (500...599).contains(response.statusCode) {
-            throw GrokAuthError.temporarilyUnavailable
-        }
-        guard response.statusCode == 200 else { throw GrokAuthError.unsupportedAccount }
+        guard response.statusCode == 200 else { throw Self.billingError(for: response.statusCode) }
         // Do not read settings for a malformed billing response; retry billing first.
         let now = Date()
         _ = try Self.parseCredits(data, configuration: configuration, subject: identity.sub, now: now)
@@ -107,23 +103,42 @@ public final class GrokUsageProvider: UsageProvider {
         // A failed settings read must never turn a real usage response into a guessed plan.
         let tier = await fetchPlanName(accessToken: credential.accessToken)
         return try Self.parseCredits(
-            data, configuration: configuration, subject: identity.sub, now: now, verifiedPlanName: tier
+            data, configuration: configuration, subject: identity.sub, now: now, verifiedPlanName: tier.name,
+            planLookupFailed: tier.isUnavailable
         )
     }
 
-    private func fetchPlanName(accessToken: String) async -> String? {
+    private static func billingError(for status: Int) -> GrokAuthError {
+        switch status {
+        case 401, 403: .unauthorized
+        case 402, 404, 410: .unsupportedAccount
+        case 408, 425, 429, 500...599: .temporarilyUnavailable
+        default: .invalidResponse
+        }
+    }
+
+    private struct PlanLookup {
+        let name: String?
+        let isUnavailable: Bool
+    }
+
+    private func fetchPlanName(accessToken: String) async -> PlanLookup {
         var request = URLRequest(url: Self.settingsURL)
         request.timeoutInterval = 8
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("xai-grok-cli", forHTTPHeaderField: "x-xai-token-auth")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         guard let (data, reply) = try? await session.data(for: request),
-              let response = reply as? HTTPURLResponse, response.url == request.url else { return nil }
+              let response = reply as? HTTPURLResponse, response.url == request.url else {
+            return PlanLookup(name: nil, isUnavailable: true)
+        }
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         guard response.statusCode == 200,
-              let settings = try? decoder.decode(GrokRemoteSettings.self, from: data) else { return nil }
-        return Self.knownPlan(settings.subscriptionTierDisplay ?? settings.subscriptionTier)
+              let settings = try? decoder.decode(GrokRemoteSettings.self, from: data) else {
+            return PlanLookup(name: nil, isUnavailable: true)
+        }
+        return PlanLookup(name: Self.knownPlan(settings.subscriptionTierDisplay) ?? Self.knownPlan(settings.subscriptionTier), isUnavailable: false)
     }
 
     private static func knownPlan(_ value: String?) -> String? {
@@ -237,18 +252,20 @@ public final class GrokUsageProvider: UsageProvider {
 
     private func failure(
         _ message: String, configuration: ProviderAccountConfiguration,
-        recoveryAction: ProviderUsageRecoveryAction = .reauthenticate
+        recoveryAction: ProviderUsageRecoveryAction = .reauthenticate, allowsUnscopedCacheReuse: Bool = true,
+        cacheIdentity: String? = nil
     ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
             subtitle: message, bars: [], failureMessage: message, recoveryAction: recoveryAction,
+            cacheIdentity: cacheIdentity, allowsUnscopedCacheReuse: allowsUnscopedCacheReuse,
             fetchedAt: Date()
         )
     }
 
     static func parseCredits(
         _ data: Data, configuration: ProviderAccountConfiguration, subject: String, now: Date,
-        verifiedPlanName: String? = nil
+        verifiedPlanName: String? = nil, planLookupFailed: Bool = false
     ) throws -> ProviderUsageResult {
         guard let response = try? JSONDecoder().decode(GrokCreditsResponse.self, from: data),
               let config = response.config else { throw GrokAuthError.invalidResponse }
@@ -279,10 +296,11 @@ public final class GrokUsageProvider: UsageProvider {
         let reason = unavailableReason(config, supportedPeriod: supportedPeriod, activePeriod: activePeriod)
         let balance = config.isUnifiedBillingUser == true
             ? money(config.prepaidBalance, kind: .balance, label: "Extra Usage Credits") : nil
-        let cacheIdentity = Data(SHA256.hash(data: Data(subject.utf8))).base64EncodedString()
+        let cacheIdentity = identityHash(subject)
         return ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
-            verifiedGrokPlanName: knownPlan(verifiedPlanName),
+            verifiedGrokPlanName: knownPlan(verifiedPlanName), grokPlanLookupFailed: planLookupFailed,
+            grokInferredZeroCandidate: inferredZeroCandidate(config, data: data, now: now),
             subtitle: bar == nil ? reason : inferredZero ? "No included usage reported by Grok." : "Direct Grok subscription usage",
             bars: bar.map { [$0] } ?? [],
             monetaryMetrics: [balance].compactMap { $0 },
@@ -300,6 +318,37 @@ public final class GrokUsageProvider: UsageProvider {
                 ),
             ],
             cacheIdentity: cacheIdentity, cacheScope: "consumer.\(cacheIdentity)", fetchedAt: now
+        )
+    }
+
+    private static func identityHash(_ subject: String) -> String {
+        Data(SHA256.hash(data: Data(subject.utf8))).base64EncodedString()
+    }
+
+    private static func inferredZeroCandidate(_ config: GrokCreditsConfig, data: Data, now: Date) -> UsageBar? {
+        guard config.isUnifiedBillingUser == true, config.currentPeriod?.type == "USAGE_PERIOD_TYPE_WEEKLY",
+              let start = config.currentPeriod?.start.flatMap(date), let end = config.currentPeriod?.end.flatMap(date),
+              start <= now, end > now, omitsUsage(data) else { return nil }
+        return UsageBar(
+            stableKey: "included-usage", label: "Weekly usage inferred", used: 0, limit: 100, resetsAt: end,
+            projectionCurrent: 0, projectionLimit: 100, projectionPeriodStart: start, projectionPeriodEnd: end
+        )
+    }
+
+    static func retainingVerifiedPlan(_ name: String?, for incoming: ProviderUsageResult) -> ProviderUsageResult {
+        var result = incoming
+        result.verifiedGrokPlanName = knownPlan(name)
+        guard result.verifiedGrokPlanName != nil, incoming.bars.isEmpty,
+              let bar = incoming.grokInferredZeroCandidate else { return result }
+        // This candidate comes only from fresh billing; cached bars never supply its period or value.
+        return ProviderUsageResult(
+            accountID: incoming.accountID, providerID: .grok, title: incoming.title,
+            verifiedGrokPlanName: result.verifiedGrokPlanName, grokPlanLookupFailed: incoming.grokPlanLookupFailed,
+            subtitle: "No included usage reported by Grok.", bars: [bar],
+            monetaryMetrics: incoming.monetaryMetrics,
+            usageMessages: ["Inferred zero from Grok's CLI convention, not a reported measurement."],
+            cardInformationSections: incoming.cardInformationSections,
+            cacheIdentity: incoming.cacheIdentity, cacheScope: incoming.cacheScope, fetchedAt: incoming.fetchedAt
         )
     }
 

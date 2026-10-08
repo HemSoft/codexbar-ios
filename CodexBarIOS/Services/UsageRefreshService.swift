@@ -224,7 +224,7 @@ public final class UsageRefreshService: ObservableObject {
                         finishRefresh(accountID: accountID)
                         continue
                     }
-                    replaceResult(result)
+                    replaceResult(preservingVerifiedGrokPlan(result))
                     refreshErrorsByAccountID.removeValue(forKey: accountID)
                     finishRefresh(accountID: accountID)
                 case .failure(let configuration, let generation, let message, let result):
@@ -277,7 +277,7 @@ public final class UsageRefreshService: ObservableObject {
         }
 
         do {
-            let result = preservingGreptileRenewal(try await provider.fetchUsage(for: configuration))
+            let result = preservingVerifiedGrokPlan(preservingGreptileRenewal(try await provider.fetchUsage(for: configuration)))
             guard isCurrent(configuration, generation: generation) else {
                 return nil
             }
@@ -406,6 +406,15 @@ public final class UsageRefreshService: ObservableObject {
         error is CancellationError || Task.isCancelled || (error as? URLError)?.code == .cancelled
     }
 
+    private func preservingVerifiedGrokPlan(_ incoming: ProviderUsageResult) -> ProviderUsageResult {
+        guard incoming.providerID == .grok, incoming.failureMessage == nil, incoming.grokPlanLookupFailed,
+              incoming.verifiedGrokPlanName == nil,
+              let identity = incoming.cacheIdentity,
+              let cached = results.first(where: { $0.accountID == incoming.accountID && $0.cacheIdentity == identity })
+        else { return incoming }
+        return GrokUsageProvider.retainingVerifiedPlan(cached.verifiedGrokPlanName, for: incoming)
+    }
+
     private func preservingGreptileRenewal(_ incoming: ProviderUsageResult) -> ProviderUsageResult {
         guard incoming.providerID == .greptile, let failed = incoming.greptileAllowanceRenewal,
               failed.isApplicable == nil, !failed.requiresNewAccount,
@@ -477,6 +486,7 @@ public final class UsageRefreshService: ObservableObject {
             providerID: failureResult.providerID,
             title: title,
             plan: failureResult.plan ?? cachedResult?.plan,
+            verifiedGrokPlanName: failureResult.verifiedGrokPlanName ?? cachedResult?.verifiedGrokPlanName,
             subtitle: subtitle,
             bars: barsResult.bars,
             barsFetchedAt: barsResult.barsFetchedAt,
@@ -493,8 +503,8 @@ public final class UsageRefreshService: ObservableObject {
             recoveryAction: failureResult.recoveryAction,
             preserveCachedBarsOnFailure: failureResult.preserveCachedBarsOnFailure,
             preserveCachedCreditsOnFailure: failureResult.preserveCachedCreditsOnFailure,
-            cacheIdentity: failureResult.cacheIdentity,
-            cacheScope: failureResult.cacheScope,
+            cacheIdentity: failureResult.cacheIdentity ?? (failureResult.providerID == .grok ? cachedResult?.cacheIdentity : nil),
+            cacheScope: failureResult.cacheScope ?? (failureResult.providerID == .grok ? cachedResult?.cacheScope : nil),
             allowsUnscopedCacheReuse: failureResult.allowsUnscopedCacheReuse,
             hasSuccessfulRefreshHistory: failureResult.hasSuccessfulRefreshHistory
                 || cachedResult?.hasSuccessfulRefreshHistory == true,
@@ -509,7 +519,8 @@ public final class UsageRefreshService: ObservableObject {
         if failureResult.providerID == .greptile {
             return cachedResult.cacheIdentity == failureResult.cacheIdentity
         }
-        if failureResult.providerID == .grok && failureResult.recoveryAction == .reauthenticate {
+        if failureResult.providerID == .grok
+            && (failureResult.recoveryAction == .reauthenticate || !failureResult.allowsUnscopedCacheReuse) {
             return false
         }
         if let failureIdentity = failureResult.cacheIdentity {

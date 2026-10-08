@@ -88,26 +88,37 @@ final class GrokAccountTests: XCTestCase {
         let second = store.addAccount(for: .grok)
         XCTAssertTrue(store.replaceCredential(try credential(subject: "one").encoded(), for: first))
         XCTAssertTrue(store.replaceCredential(try credential(subject: "two").encoded(), for: second))
+        var formerlyGenerated = first
+        formerlyGenerated.accountLabel = "SuperGrok Lite"
+        formerlyGenerated.grokGeneratedLabel = "SuperGrok Lite"
+        XCTAssertTrue(store.update(formerlyGenerated))
         func result(_ account: ProviderAccountConfiguration, subject: String, plan: String?) throws -> ProviderUsageResult {
             try GrokUsageProvider.parseCredits(
                 Data(#"{"config":{"isUnifiedBillingUser":true}}"#.utf8),
                 configuration: account, subject: subject, now: Date(), verifiedPlanName: plan
             )
         }
-        XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "two", plan: "SuperGrok Lite")))
-        XCTAssertTrue(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: "SuperGrok Lite")))
+        for plan in [nil, "SuperGrok Lite", "Unrecognized tier"] as [String?] {
+            XCTAssertTrue(store.update(formerlyGenerated))
+            XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "two", plan: plan)))
+            XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "SuperGrok Lite")
+            XCTAssertTrue(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: plan)))
+            XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "Grok")
+        }
         XCTAssertTrue(store.applyVerifiedGrokPlan(try result(second, subject: "two", plan: "SuperGrok Lite")))
-        XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "SuperGrok Lite")
-        XCTAssertEqual(store.configuration(accountID: second.id)?.accountLabel, "SuperGrok Lite 2")
+        XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "Grok")
+        XCTAssertEqual(store.configuration(accountID: second.id)?.accountLabel, "Grok 2")
         XCTAssertTrue(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: "SuperGrok Plus")))
-        XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "SuperGrok Plus")
+        XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "Grok")
         var custom = try XCTUnwrap(store.configuration(accountID: first.id))
         custom.accountLabel = "My Grok"
         XCTAssertTrue(store.update(custom))
-        XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: "SuperGrok Heavy")))
+        for plan in [nil, "SuperGrok Heavy"] as [String?] {
+            XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: plan)))
+        }
         XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "My Grok")
-        XCTAssertFalse(store.applyVerifiedGrokPlan(try result(second, subject: "two", plan: nil)))
-        XCTAssertEqual(store.configuration(accountID: second.id)?.accountLabel, "SuperGrok Lite 2")
+        XCTAssertTrue(store.applyVerifiedGrokPlan(try result(second, subject: "two", plan: nil)))
+        XCTAssertEqual(store.configuration(accountID: second.id)?.accountLabel, "Grok 2")
     }
 
     @MainActor
@@ -127,10 +138,10 @@ final class GrokAccountTests: XCTestCase {
         XCTAssertTrue(store.applyVerifiedGrokPlan(result))
         XCTAssertEqual(result.title, account.accountLabel)
         let refresh = UsageRefreshService(providers: [], initialResults: [result])
-        refresh.updateGrokResultTitle("SuperGrok Lite", accountID: account.id)
-        XCTAssertEqual(refresh.results.first?.title, "SuperGrok Lite")
+        refresh.updateGrokResultTitle("Grok", accountID: account.id)
+        XCTAssertEqual(refresh.results.first?.title, "Grok")
         WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults)
-        XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.title, "SuperGrok Lite")
+        XCTAssertEqual(WidgetSnapshotStore.loadSnapshot(defaults: defaults).results.first?.title, "Grok")
     }
 
     @MainActor

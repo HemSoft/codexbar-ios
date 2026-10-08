@@ -205,7 +205,7 @@ it. Animations retain the normal app behavior.
   closed sheet, then checks that Done returns to a hittable dashboard gear.
   Settings journeys wait for this actual dismissal before reopening. The
   Gemini-only journey uses the existing explicit menu/customizer transition
-  checks instead of trying to scroll to a missing menu item. All 28 declared
+  checks instead of trying to scroll to a missing menu item. All 29 declared
   journeys must pass on each family; this added regression is manual/release-only.
 
 - `SettingsEvidenceUITests.testEverySettingsDestinationAndDoneBack` captures
@@ -311,7 +311,7 @@ SHA changes, dispatch a new run.
 The two families run on independent manual workers, each with a 90-minute
 limit and its own artifact. Fail-fast is disabled. An always-run aggregate
 fails unless both workers succeed, including when a worker is cancelled or
-skipped. The runner rejects anything other than twenty-eight passed tests with zero skips or
+skipped. The runner rejects anything other than twenty-nine passed tests with zero skips or
 expected failures. GitHub retains both destinations' result bundles, logs,
 summaries, and exported failure screenshots for 14 days. See
 [CI-POLICY.md](CI-POLICY.md) for dispatch and SHA-verification commands.
@@ -344,3 +344,10 @@ visible with those saved visualization choices. Captions may wrap to two lines a
 down to fit the tile. Check a long account label and a weekly caption in both
 widget sizes. Other providers retain their existing caption content, now also
 visible in Automatic mode. Missing descriptions add no empty caption row.
+
+The manual-only `CodexCreditsPoolUITests.testPreciseSubscriptionPillsOnExpandedAndCollapsedCards`
+checks Codex Pro/Plus, Claude Max 5x, verified Grok, unknown Google and API-credit
+headers in light/dark at default and accessibility text sizes. It asserts actual
+expanded/collapsed state changes and the same account's plan after refresh. The
+full release runner requires all 29 journeys with zero skips; ordinary automatic
+CI does not run them.

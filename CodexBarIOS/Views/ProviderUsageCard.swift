@@ -937,28 +937,22 @@ struct ProviderUsageCard: View {
         )
     }
 
-    @ViewBuilder
     private var planBadge: some View {
-        if result.providerID.supportsPlanBadge, let plan = result.plan {
-            Text(plan.displayLabel)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background {
-                    Capsule()
-                        .fill(Color.secondary.opacity(0.14))
-                }
-                .fixedSize()
-                .accessibilityHidden(true)
-        }
+        Text(result.cardPlan.displayLabel)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.14))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityHidden(true)
     }
 
     static func headerAccessibilityLabel(for result: ProviderUsageResult) -> String {
-        guard result.providerID.supportsPlanBadge, let plan = result.plan else {
-            return result.title
-        }
-        return "\(result.title), \(plan.accessibilityLabel) plan"
+        "\(result.title), \(result.cardPlan.accessibilityLabel)"
     }
 
     static func menuActions(

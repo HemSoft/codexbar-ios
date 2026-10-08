@@ -3433,7 +3433,7 @@ final class ProviderParsingTests: XCTestCase {
             ("go", "codex.go", "GO"),
             ("plus", "codex.plus", "PLUS"),
             ("pro", "codex.pro", "PRO"),
-            ("prolite", "codex.pro", "PRO"),
+            ("prolite", "codex.prolite", "PRO"),
             ("business", "codex.business", "BUSINESS"),
             ("team", "codex.business", "BUSINESS"),
             ("enterprise", "codex.enterprise", "ENTERPRISE"),
@@ -3934,7 +3934,7 @@ final class ProviderParsingTests: XCTestCase {
             ("team", nil, "claude.team", "TEAM"),
             ("team_premium", nil, "claude.team-premium", "TEAM PREMIUM"),
             ("enterprise", nil, "claude.enterprise", "ENTERPRISE"),
-            ("max", nil, nil, nil),
+            ("max", nil, "claude.max", "MAX"),
             ("subscription", nil, nil, nil),
             ("unknown_value", "unknown_tier", nil, nil),
             ("", "", nil, nil),
@@ -4642,7 +4642,7 @@ final class ProviderParsingTests: XCTestCase {
         ))
 
         XCTAssertEqual(result.title, "Claude")
-        XCTAssertNil(result.plan)
+        XCTAssertEqual(result.plan?.displayLabel, "MAX")
         XCTAssertEqual(result.bars.map(\.label), ["5-hour"])
         XCTAssertEqual(result.bars.first?.stableKey, "session")
         XCTAssertEqual(result.bars.first?.used, 25)

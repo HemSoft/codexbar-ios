@@ -1603,12 +1603,11 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 
-    /// Apply a plan only after the result's verified subject matches the saved credential.
+    /// Normalize generated names only after the result's verified subject matches the saved credential.
     /// The generated-label marker prevents a refresh from replacing a user's rename.
     @discardableResult
     func applyVerifiedGrokPlan(_ result: ProviderUsageResult) -> Bool {
         guard result.providerID == .grok, result.failureMessage == nil,
-              let plan = result.verifiedGrokPlanName,
               let current = configuration(accountID: result.accountID), current.providerID == .grok,
               let credential = try? GrokCredentialLock.withLock({
                   GrokCredential.parse(try secretStore.readSecret(account: Self.keychainAccount(for: current)))
@@ -1618,10 +1617,13 @@ public final class ProviderConfigurationStore: ObservableObject {
         var candidate = current
         var suffix = 1
         repeat {
-            candidate.accountLabel = suffix == 1 ? plan : "\(plan) \(suffix)"
+            candidate.accountLabel = suffix == 1 ? "Grok" : "Grok \(suffix)"
             suffix += 1
         } while !isAccountNameUnique(candidate)
-        guard candidate.accountLabel != current.accountLabel else { return true }
+        // A neutral generated name is stable even when an earlier number becomes free.
+        let generatedNumber = Int(generated.dropFirst(5)) ?? 0
+        guard candidate.accountLabel != current.accountLabel, generated != "Grok",
+              !(generated.hasPrefix("Grok ") && generatedNumber >= 2) else { return true }
         candidate.grokGeneratedLabel = candidate.accountLabel
         return update(candidate)
     }

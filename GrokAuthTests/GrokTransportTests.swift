@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import XCTest
 @testable import CodexBarIOS
@@ -115,7 +116,7 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
                 "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"},
                 "prepaidBalance":{"val":500}}}
                 """),
-            (200, #"{"subscription_tier_display":"SuperGrok Lite"}"#),
+            (200, #"{"subscription_tier_display":"  ","subscription_tier":"SuperGrok Lite"}"#),
         ])
         defer { session.invalidateAndCancel() }
         let result = try await GrokUsageProvider(session: session).fetchCandidate(
@@ -187,6 +188,169 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
             XCTFail("A userinfo outage is not rejected authorization")
         } catch GrokAuthError.temporarilyUnavailable {
             XCTAssertEqual(GrokTestProtocol.state.requests.count, 1)
+        }
+    }
+
+    @MainActor
+    func testOptionalTierFailuresRetainOnlyTheSameVerifiedSubjectsPlan() async throws {
+        let account = ProviderAccountConfiguration.defaultConfiguration(for: .grok)
+        let secrets = GrokTestSecrets()
+        let credential = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "synthetic", refreshToken: "synthetic-refresh",
+            expiresAt: Date().addingTimeInterval(3600), subject: "subject-one", email: nil
+        )
+        try secrets.saveSecret(credential.encoded(), account: ProviderConfigurationStore.keychainAccount(for: account))
+        let formatter = ISO8601DateFormatter()
+        let start = formatter.string(from: Date().addingTimeInterval(-86_400))
+        let end = formatter.string(from: Date().addingTimeInterval(86_400))
+        let billing = """
+            {"config":{"isUnifiedBillingUser":true,"creditUsagePercent":31,
+            "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"}}}
+            """
+        for singleAccount in [false, true] {
+            for sameSubject in [false, true] {
+                let cached = try GrokUsageProvider.parseCredits(
+                    Data(billing.replacingOccurrences(of: ":31", with: ":11").utf8), configuration: account,
+                    subject: sameSubject ? "subject-one" : "another-subject", now: Date(), verifiedPlanName: "SuperGrok Lite"
+                )
+                for firstStatus in [400, 401, 402, 408, 425, 503] {
+                    let retainsTier = sameSubject && ![401, 402].contains(firstStatus)
+                    let chainedSession = makeSession([
+                        (200, #"{"sub":"subject-one"}"#), (firstStatus, "{}"),
+                        (200, #"{"sub":"subject-one"}"#), (200, billing), (503, "{}"),
+                    ])
+                    let chained = UsageRefreshService(
+                        providers: [GrokUsageProvider(secretStore: secrets, session: chainedSession)], initialResults: [cached]
+                    )
+                    if singleAccount { _ = await chained.refresh(configuration: account) } else { await chained.refresh(configurations: [account]) }
+                    let stale = try XCTUnwrap(chained.results.first)
+                    XCTAssertEqual(stale.cardPlan.displayLabel, retainsTier ? "SuperGrok Lite" : "Plan unavailable")
+                    XCTAssertEqual(stale.bars.map(\.used), retainsTier ? [11] : [])
+                    XCTAssertEqual(stale.cacheIdentity, [401, 402].contains(firstStatus) ? nil
+                        : Data(SHA256.hash(data: Data("subject-one".utf8))).base64EncodedString())
+                    if singleAccount { _ = await chained.refresh(configuration: account) } else { await chained.refresh(configurations: [account]) }
+                    let restored = try XCTUnwrap(chained.results.first)
+                    XCTAssertEqual(restored.cardPlan.displayLabel, retainsTier ? "SuperGrok Lite" : "Plan unavailable")
+                    XCTAssertEqual(restored.bars.first?.used, 31)
+                    XCTAssertNil(restored.failureMessage)
+                    XCTAssertEqual(GrokTestProtocol.state.requests.count, 5)
+                    chainedSession.invalidateAndCancel()
+                }
+                for (status, settings, unavailable, freshTier) in [
+                    (0, "", true, "Plan unavailable"),
+                    (503, "{}", true, "Plan unavailable"),
+                    (403, "{}", true, "Plan unavailable"),
+                    (200, "not-json", true, "Plan unavailable"),
+                    (200, #"{"subscription_tier":123}"#, true, "Plan unavailable"),
+                    (200, "{}", false, "Plan unavailable"),
+                    (200, #"{"subscription_tier":"Unknown future tier"}"#, false, "Plan unavailable"),
+                    (200, #"{"subscription_tier_display":"SuperGrok Heavy"}"#, false, "SuperGrok Heavy"),
+                    (200, #"{"subscription_tier_display":"","subscription_tier":"SuperGrok Lite"}"#, false, "SuperGrok Lite"),
+                    (200, #"{"subscription_tier_display":"  ","subscription_tier":"SuperGrok Plus"}"#, false, "SuperGrok Plus"),
+                    (200, #"{"subscription_tier_display":"Unknown","subscription_tier":"SuperGrok"}"#, false, "SuperGrok"),
+                    (200, #"{"subscription_tier_display":"SuperGrok Heavy","subscription_tier":"SuperGrok Lite"}"#, false, "SuperGrok Heavy"),
+                ] {
+                    let session = makeSession([(200, #"{"sub":"subject-one"}"#), (200, billing), (status, settings)])
+                    let service = UsageRefreshService(
+                        providers: [GrokUsageProvider(secretStore: secrets, session: session)], initialResults: [cached]
+                    )
+                    if singleAccount {
+                        _ = await service.refresh(configuration: account)
+                    } else {
+                        await service.refresh(configurations: [account])
+                    }
+                    let result = try XCTUnwrap(service.results.first)
+                    XCTAssertEqual(result.cardPlan.displayLabel, unavailable && sameSubject ? "SuperGrok Lite" : freshTier)
+                    XCTAssertEqual(result.grokPlanLookupFailed, unavailable)
+                    XCTAssertEqual(result.bars.first?.used, 31, "New billing must not be replaced by cached quota")
+                    XCTAssertNil(result.failureMessage)
+                    XCTAssertEqual(GrokTestProtocol.state.requests.count, 3)
+                    session.invalidateAndCancel()
+                }
+            }
+        }
+        try await assertRetainedTierUsesOnlyFreshOmittedUsageEvidence(account: account, secrets: secrets, start: start, end: end)
+    }
+
+    @MainActor
+    private func assertRetainedTierUsesOnlyFreshOmittedUsageEvidence(
+        account: ProviderAccountConfiguration, secrets: GrokTestSecrets, start: String, end: String
+    ) async throws {
+        let cases: [((String, String), Bool, String?, String, [Double])] = [
+            (("", "true"), true, "SuperGrok Lite", "subject-one", [0]),
+            ((",\"creditUsagePercent\":31", "true"), true, "SuperGrok Lite", "subject-one", [31]),
+            ((",\"creditUsagePercent\":null", "true"), true, "SuperGrok Lite", "subject-one", []),
+            ((",\"productUsage\":[]", "true"), true, "SuperGrok Lite", "subject-one", []),
+            (("", "false"), true, "SuperGrok Lite", "subject-one", []),
+            (("", "true"), false, "SuperGrok Lite", "subject-one", []),
+            (("", "true"), true, nil, "subject-one", []),
+            (("", "true"), true, "SuperGrok Lite", "other-subject", []),
+        ]
+        for singleAccount in [false, true] {
+            for ((usage, unified), unavailable, plan, subject, expected) in cases {
+                let billing = """
+                    {"config":{"isUnifiedBillingUser":\(unified)\(usage),"prepaidBalance":{"val":700},
+                    "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"}}}
+                    """
+                let cached = ProviderUsageResult(
+                    accountID: account.id, providerID: .grok, title: "Grok", verifiedGrokPlanName: plan,
+                    subtitle: "Old usage", bars: [UsageBar(label: "Old weekly", used: 77, limit: 100, resetsAt: .distantPast)],
+                    cacheIdentity: Data(SHA256.hash(data: Data(subject.utf8))).base64EncodedString(), fetchedAt: .distantPast
+                )
+                let session = makeSession([
+                    (200, #"{"sub":"subject-one"}"#), (200, billing),
+                    (unavailable ? 503 : 200, unavailable ? "{}" : #"{"subscription_tier":"Unknown"}"#),
+                ])
+                defer { session.invalidateAndCancel() }
+                let service = UsageRefreshService(
+                    providers: [GrokUsageProvider(secretStore: secrets, session: session)], initialResults: [cached]
+                )
+                if singleAccount { _ = await service.refresh(configuration: account) } else { await service.refresh(configurations: [account]) }
+                let result = try XCTUnwrap(service.results.first)
+                XCTAssertEqual(result.bars.map(\.used), expected, "Only fresh reported or safely inferred usage is visible")
+                XCTAssertEqual(result.monetaryMetrics.map(\.minorUnits), unified == "true" ? [700] : [],
+                               "Fresh extra credits must survive tier retention only for a verified unified account")
+                XCTAssertNil(result.failureMessage)
+                XCTAssertTrue(result.hasFreshBars)
+                if expected == [0] {
+                    XCTAssertEqual(result.bars.first?.resetsAt, ISO8601DateFormatter().date(from: end))
+                    XCTAssertEqual(result.bars.first?.stableKey, "included-usage")
+                    XCTAssertEqual(result.bars.first?.projectionPeriodStart, ISO8601DateFormatter().date(from: start))
+                    XCTAssertTrue(result.usageMessages.contains { $0.contains("Inferred zero") })
+                    XCTAssertTrue(result.subtitle.contains("No included usage reported"))
+                }
+                XCTAssertEqual(GrokTestProtocol.state.requests.count, 3)
+            }
+        }
+    }
+
+    @MainActor
+    func testUnsupportedBillingDiscardsCachedPlanWhileOutagesKeepIt() async throws {
+        let account = ProviderAccountConfiguration.defaultConfiguration(for: .grok)
+        let secrets = GrokTestSecrets()
+        let credential = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "synthetic", refreshToken: "synthetic-refresh",
+            expiresAt: Date().addingTimeInterval(3600), subject: "subject-one", email: nil
+        )
+        try secrets.saveSecret(credential.encoded(), account: ProviderConfigurationStore.keychainAccount(for: account))
+        let cached = ProviderUsageResult(
+            accountID: account.id, providerID: .grok, title: "Grok", verifiedGrokPlanName: "SuperGrok Lite",
+            subtitle: "Synthetic", bars: [UsageBar(label: "Weekly", used: 31, limit: 100)],
+            cacheIdentity: Data(SHA256.hash(data: Data("subject-one".utf8))).base64EncodedString(), fetchedAt: Date()
+        )
+        for status in [302, 400, 401, 402, 403, 404, 408, 409, 410, 422, 425, 429, 500, 503, 599] {
+            let session = makeSession([(200, #"{"sub":"subject-one"}"#), (status, "{}")])
+            let provider = GrokUsageProvider(secretStore: secrets, session: session)
+            let service = UsageRefreshService(providers: [provider], initialResults: [cached])
+            await service.refresh(configurations: [account])
+            let result = try XCTUnwrap(service.results.first)
+            let temporary = ![401, 402, 403, 404, 410].contains(status)
+            XCTAssertEqual(result.cardPlan.displayLabel, temporary ? "SuperGrok Lite" : "Plan unavailable", "HTTP \(status)")
+            XCTAssertEqual(result.bars.isEmpty, !temporary, "HTTP \(status)")
+            XCTAssertNotNil(result.failureMessage)
+            XCTAssertEqual(result.recoveryAction, [401, 403].contains(status) ? .reauthenticate : .retryRefresh)
+            XCTAssertEqual(GrokTestProtocol.state.requests.count, 2)
+            session.invalidateAndCancel()
         }
     }
 
