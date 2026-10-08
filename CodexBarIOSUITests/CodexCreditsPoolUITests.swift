@@ -130,7 +130,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
         app.terminate()
     }
 
-    func testPreciseSubscriptionPillsOnExpandedAndCollapsedCards() {
+    private func assertPreciseSubscriptionPillsOnExpandedAndCollapsedCards() {
         continueAfterFailure = false
         for defaultText in [true, false] {
             for dark in [false, true] {
@@ -142,7 +142,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                     ("Long Google AI Ultra account name is not proof of a subscription", "Plan unavailable"),
                     ("OpenRouter fixture", "API credits"),
                 ] {
-                    let header = app.buttons.matching(NSPredicate(
+                    let header = app.descendants(matching: .any).matching(NSPredicate(
                         format: "label BEGINSWITH %@ AND label CONTAINS %@", title + ", " + plan, "Normal status"
                     )).firstMatch
                     reveal(header, in: app)
@@ -154,7 +154,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
                     keep("pill-collapsed-\(title)-\(defaultText ? "default" : "accessibility2")-\(dark ? "dark" : "light")", app: app)
                 }
                 tap(app.buttons["Refresh usage"], in: app)
-                let sameAccount = app.buttons.matching(NSPredicate(
+                let sameAccount = app.descendants(matching: .any).matching(NSPredicate(
                     format: "label BEGINSWITH %@", "Codex 20x fixture, Pro 20x"
                 )).firstMatch
                 XCTAssertTrue(sameAccount.exists, app.debugDescription)
@@ -205,6 +205,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
         XCTAssertTrue(personalQuota(in: stale).label.contains("stale"))
         keep("spacing-stale", app: stale)
         stale.terminate()
+        assertPreciseSubscriptionPillsOnExpandedAndCollapsedCards()
     }
 
     private func launchSpacingFixture(defaultText: Bool, dark: Bool, scenario: String = "codex-credits") -> XCUIApplication {
