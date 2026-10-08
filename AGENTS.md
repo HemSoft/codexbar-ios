@@ -242,40 +242,40 @@ the test targets above.
 
 ## Pull Request Reviewers
 
-This repository has three automated PR reviewers. Treat all of them as part of
-the normal merge-readiness loop: triage actionable feedback, fix or document
-each thread, explicitly resolve addressed review threads in GitHub, and request
-fresh reviews after meaningful updates.
-
-| Reviewer | GitHub identity / check | Trigger | Auto on push? |
-| --- | --- | --- | --- |
-| Codex | `chatgpt-codex-connector` | `@codex review` on the PR, or automatic Codex cloud reviews when enabled | When enabled in Codex cloud settings |
-| CodeRabbit | `coderabbitai` / `CodeRabbit` check | `@coderabbitai review` on the PR | Configurable per repo in CodeRabbit |
-| Cursor Bugbot | `cursor` / `Cursor Bugbot` check | `cursor review` or `bugbot run` on the PR, or automatic Bugbot reviews when enabled in the Cursor dashboard | When enabled in the Cursor dashboard |
-
-The expected CI checks that must pass for merge are whatever the repo's branch
-protection requires; re-check the current required-checks list in GitHub rather
-than assuming the three reviewers above are sufficient.
-
-Notes for agents:
-
-- Request Codex and CodeRabbit through PR trigger comments, not the Copilot
-  `requestReviewsByLogin` API path.
-- Bugbot is configured on this repo through the Cursor GitHub app. Prefer
-  `cursor review` when requesting a manual rerun.
-- None of these reviewers is a guaranteed branch-protection approval by itself.
-  Report the actual GitHub review/check state for the current head SHA.
-- Before declaring a PR ready, confirm actionable threads from all reviewers
-  that left feedback are addressed and explicitly resolved, and that normal PR
-  checks pass for the current head.
-
-Example manual review requests on a PR:
+Connected Codex is the sole required AI reviewer for this repository. Reuse an
+existing automatic review when its completed result is tied to the current PR
+head. Otherwise, request one review for that head through a PR comment:
 
 ```text
 @codex review
-@coderabbitai review
-cursor review
 ```
+
+Use the connected `HemSoft` GitHub account for requests and verify the effective
+identity with `gh api user --jq .login`. Do not request Codex through the
+Copilot `requestReviewsByLogin` API path.
+
+Before declaring a PR ready:
+
+- Require a completed clean Codex review for the current head SHA. A request,
+  pending reaction, or review of an earlier head does not satisfy this gate.
+  After meaningful updates, obtain fresh review evidence for the new head.
+- Assess actionable findings already present from every source, including
+  optional reviewers. Fix or disprove each finding with evidence and explicitly
+  resolve addressed review threads in GitHub. An outdated unresolved thread
+  remains unresolved.
+- Do not request or wait for optional review products because an old roster,
+  installed app, or automatic run lists them. Their availability does not add
+  an AI-review gate.
+- Re-check effective branch protection and repository rulesets. All required CI
+  checks, human approval counts, code-owner approvals, and live change requests
+  remain merge gates. A clean comment-only Codex review is sufficient for the
+  AI-review gate when no formal approval is required; report its actual state
+  without treating it as a formal GitHub approval.
+
+Keep the five required quality checks and their workload unchanged: SwiftLint,
+Strict concurrency, iOS tests, watchOS tests, and SwiftPM smoke tests. Report the
+actual current-head review and check state rather than assuming AI review alone
+makes the PR mergeable.
 
 ## Connected iPhone and Signing
 

@@ -6,6 +6,13 @@ building, testing, or releasing the app.
 
 ## 1.5.0 - Unreleased
 
+### Developer Experience
+
+- Use connected Codex as the sole required AI reviewer. Repository guidance
+  preserves current-head review, addressed-thread resolution, and required CI
+  and human approvals without waiting for optional review products.
+  ([#405](https://github.com/HemSoft/codexbar-ios/issues/405))
+
 ## 1.4.0 - 2026-10-07
 
 More provider metrics, guided sign-in, and up to 90 days of usage history.
