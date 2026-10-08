@@ -193,6 +193,7 @@ final class AccountJourneysUITests: XCTestCase {
         let credential = app.secureTextFields["Paste OpenRouter Management API Key"]
         enter("ui-test-credential", into: credential, in: app)
         tap(app.buttons["Save Management API Key"], in: app)
+        reveal(app.buttons["Remove Saved Credential"], in: app)
         XCTAssertTrue(app.buttons["Remove Saved Credential"].waitForExistence(timeout: 5))
         tap(app.buttons["Done"], in: app)
         assertBalance("60.00", freshness: "fresh", in: app)

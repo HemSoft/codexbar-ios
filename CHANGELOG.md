@@ -22,7 +22,8 @@ building, testing, or releasing the app.
   Extensive iOS/watchOS tests, function-risk checks, strict-concurrency builds,
   smoke validation and both UI families run before releases or on demand.
   Duplicate post-merge validation is removed. Manual UI checks scroll card headers
-  clear of the navigation bar before interacting with them.
+  clear of the navigation bar before interacting with them, use the Settings
+  sidebar's own scroll surface, and reveal saved-credential controls before checking them.
   ([#419](https://github.com/hemsoft-dev/codexbar-ios/issues/419))
 
 - Use connected Codex as the sole required AI reviewer. Repository guidance
