@@ -44,7 +44,7 @@ final class ClaudeUsageResetClientTests: XCTestCase {
     }
 
     func testChangedCredentialAndMissingVerifiedIdentityNeverSendPost() async throws {
-        for mode in [ResetClientProtocol.Mode.success, .missingIdentity] {
+        for mode in [ResetClientProtocol.Mode.success, .missingIdentity, .changedIdentity] {
             let harness = makeHarness(token: mode == .success ? "replacement-token" : "fixture-token")
             ResetClientProtocol.configure(mode: mode)
             do {
@@ -130,6 +130,30 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         XCTAssertTrue(ResetClientProtocol.requests.isEmpty)
     }
 
+    func testConcurrentConfirmationCannotSendDuplicatePost() async throws {
+        let harness = makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.directory) }
+        ResetClientProtocol.configure(mode: .delayed)
+        let account = self.account
+        let binding = ClaudeUsageResetClient.credentialBinding(for: "fixture-token")
+        let first = Task {
+            try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
+                                             credentialBinding: binding)
+        }
+        for _ in 0..<100 where ResetClientProtocol.requests.isEmpty {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertFalse(ResetClientProtocol.requests.isEmpty)
+        do {
+            _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
+                                                credentialBinding: binding)
+            XCTFail("A simultaneous confirmation must not start another request")
+        } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .inProgress) }
+        let outcome = try await first.value
+        XCTAssertEqual(outcome, .reset)
+        XCTAssertEqual(ResetClientProtocol.requests.filter { $0.httpMethod == "POST" }.count, 1)
+    }
+
     private func makeHarness(token: String = "fixture-token") -> Harness {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ClaudeResetClientTests.\(UUID())")
         let configuration = URLSessionConfiguration.ephemeral
@@ -159,7 +183,10 @@ private struct ResetClientSecrets: SecretStore {
 }
 
 private class ResetClientProtocol: URLProtocol, @unchecked Sendable {
-    enum Mode { case success, ineligible, expired, missingIdentity, timeout, reconciled, serverError, malformedSuccess, missingGrant }
+    enum Mode: Sendable {
+        case success, ineligible, expired, missingIdentity, timeout, reconciled
+        case serverError, malformedSuccess, missingGrant, changedIdentity, delayed
+    }
     private static let lock = NSLock()
     nonisolated(unsafe) private static var mode = Mode.success
     nonisolated(unsafe) private static var recorded: [URLRequest] = []
@@ -185,15 +212,26 @@ private class ResetClientProtocol: URLProtocol, @unchecked Sendable {
             recordedRequest.httpBody = data
         }
         let mode = Self.lock.withLock { Self.recorded.append(recordedRequest); return Self.mode }
+        if mode == .delayed, request.url?.path == "/api/oauth/profile" {
+            DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(100)) { [self] in respond(mode: mode) }
+            return
+        }
+        respond(mode: mode)
+    }
+
+    private func respond(mode: Mode) {
         if request.httpMethod == "POST", mode == .timeout {
             client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
             return
         }
         let body: String
         if request.url?.path == "/api/oauth/profile" {
+            let profileCount = Self.requests.filter { $0.url?.path == "/api/oauth/profile" }.count
+            let organization = mode == .changedIdentity && profileCount > 1
+                ? "00000000-0000-0000-0000-000000000003" : "00000000-0000-0000-0000-000000000002"
             body = mode == .missingIdentity ? "{}" : """
             {"account":{"uuid":"00000000-0000-0000-0000-000000000001"},
-             "organization":{"uuid":"00000000-0000-0000-0000-000000000002"}}
+             "organization":{"uuid":"\(organization)"}}
             """
         } else if request.httpMethod == "POST" {
             body = mode == .malformedSuccess ? "{}" : #"{"result":"reset","cleared":["five_hour","seven_day"]}"#
