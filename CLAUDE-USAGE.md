@@ -127,3 +127,36 @@ A visible dashboard reset section updates every second from the provider-returne
 grant start and expiry dates, without a usage refresh. The inventory sheet shows Claude's cooldown
 end time before generic eligibility messages and removes it once that time passes.
 Neither update consumes a reset or changes provider quotas.
+
+## Fable weekly allowance
+
+When Claude returns a model-scoped weekly allowance in `limits[]`, CodexBar
+shows its reported percentage and reset separately from the shared 5-hour and
+all-model weekly windows. Enforceable inactive weekly entries remain visible.
+Usage credits stay in the money metrics and do not establish a Fable quota.
+Missing or malformed percentages are omitted; a genuine reported zero is zero.
+
+[Anthropic's Fable plan documentation](https://support.claude.com/en/articles/15424964-claude-fable-models-on-your-plan)
+describes one included cap shared by Fable 5 and 5.1 on eligible plans. It draws
+from the shared weekly allowance. The returned model display names `Fable`,
+`Fable 5`, `Fable 5.1` and their `Claude`-prefixed forms therefore share the stable
+metric ID `claude.weekly-scoped-fable`. Other and future model names retain
+their separate identity. Plan labels alone never create an allowance.
+
+Earlier work in [#43](https://github.com/hemsoft-dev/codexbar-ios/issues/43)
+already supported generic scoped weekly entries, including plain Fable. The
+remaining gap was that documented model-name variants created different metric
+IDs, losing saved choices or duplicating one cap in mixed responses. This change
+normalizes those known names without assuming a new `seven_day_fable` root field.
+The existing provider cache remains account- and credential-bound; local fixtures
+verify that a changed credential cannot reuse a previous account's Fable usage.
+
+Synthetic fixtures cover present and absent allowances, usage credits, inactive
+entries, model aliases, mixed windows, two accounts, saved visibility and layout,
+history, widgets and Apple Watch. Live provider comparison remains pending for
+Franz and is not an agent delivery prerequisite.
+
+Saved Fable widget selections match the allowance by identity, never by a former
+bar position. If that allowance is absent, the tile stays unavailable instead of
+showing the session or all-model weekly quota. Future model names can still match
+their own provider-returned identity without becoming aliases of the known cap.

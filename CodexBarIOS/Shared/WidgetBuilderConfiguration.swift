@@ -252,6 +252,7 @@ public extension CodexBarWidgetUsageBarSnapshot {
                         Self.normalizedBarLabel(label)
                     )
             }
+            guard !ClaudeFableUsageIdentity.requiresWidgetIdentityMatch(savedIdentity.suffix) else { return false }
             return !matchesLegacyAccount && savedIndex == currentIndex
         }
         return Self.canonicalIdentitySuffix(savedIdentity.suffix)
@@ -288,6 +289,8 @@ public extension CodexBarWidgetUsageBarSnapshot {
             || suffix == GreptileUsageIdentity.reviewQuotaMetricID {
             return GreptileUsageIdentity.canonicalReviewUsageMetricID
         }
+        let fableSuffix = ClaudeFableUsageIdentity.canonicalWidgetSuffix(suffix)
+        if fableSuffix != suffix { return fableSuffix }
         let oldScopedWeeklySuffix = "-weekly-limit"
         guard suffix.hasSuffix(oldScopedWeeklySuffix) else {
             return suffix

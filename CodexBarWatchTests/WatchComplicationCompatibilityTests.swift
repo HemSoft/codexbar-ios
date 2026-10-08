@@ -72,6 +72,36 @@ final class WatchComplicationCompatibilityTests: XCTestCase {
         XCTAssertEqual(otherModels.clampedUsedFraction, 1)
     }
 
+    func testSavedFableSelectionsKeepTheirAccountAndAllowanceIdentity() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let id = "claude.weekly-scoped-fable"
+        let first = WatchAccountSnapshot(id: "claude.first", providerName: "Claude", accountLabel: "First", fetchedAt: now,
+                                        metrics: [WatchMetricSnapshot(id: id, label: "Fable weekly usage limit", exactValue: "21%")])
+        let second = WatchAccountSnapshot(id: "claude.second", providerName: "Claude", accountLabel: "Second", fetchedAt: now,
+                                         metrics: [WatchMetricSnapshot(id: id, label: "Fable weekly usage limit", exactValue: "7%")])
+        let snapshot = WatchDashboardSnapshot(generatedAt: now, refreshIntervalSeconds: 300, accounts: [first, second])
+        let resolver = WatchComplicationResolver()
+        for (account, expected) in [(first.id, "21%"), (second.id, "7%")] {
+            for alias in ["fable5", "fable51", "claudefable", "claudefable5", "claudefable51"] {
+                let legacy = "claude.weekly-scoped-\(alias)"
+                let selected = resolver.resolve(snapshot: snapshot,
+                                                selection: WatchComplicationSelection(accountID: account, metricID: legacy), at: now)
+                XCTAssertEqual(selected.exactValue, expected)
+                XCTAssertEqual(selected.metricLabel, "Fable weekly usage limit")
+                let choice = try XCTUnwrap(WatchComplicationChoiceCatalog(snapshot: snapshot).metrics(for: ["\(account)::\(legacy)"]).first)
+                XCTAssertEqual(choice.accountID, account)
+                XCTAssertEqual(choice.metricID, id)
+            }
+        }
+        let missing = WatchAccountSnapshot(id: first.id, providerName: "Claude", accountLabel: "First", fetchedAt: now,
+                                          metrics: [WatchMetricSnapshot(id: "claude.session", label: "5-hour", exactValue: "42%")])
+        let absent = WatchDashboardSnapshot(generatedAt: now, refreshIntervalSeconds: 300, accounts: [missing, second])
+        let legacy = WatchComplicationSelection(accountID: first.id, metricID: "claude.weekly-scoped-fable5")
+        XCTAssertEqual(resolver.resolve(snapshot: absent, selection: legacy, at: now).availability, .unavailable)
+        let future = WatchComplicationSelection(accountID: second.id, metricID: "claude.weekly-scoped-fableexperimental")
+        XCTAssertEqual(resolver.resolve(snapshot: snapshot, selection: future, at: now).availability, .unavailable)
+    }
+
     func testWatchGaugeTextNormalizesNegativeFractions() {
         let sample = WatchUsageSample(
             id: "negative",

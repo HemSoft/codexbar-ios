@@ -459,9 +459,11 @@ enum DailyUsageHistoryComponent {
         guard let stableKey = bar.stableKey else {
             return "legacy.\(bar.label.lowercased())"
         }
-        return providerID == .cursor
-            ? CursorUsageIdentity.canonicalStableKey(stableKey)
-            : stableKey
+        switch providerID {
+        case .cursor: return CursorUsageIdentity.canonicalStableKey(stableKey)
+        case .claude: return ClaudeUsageIdentity.canonicalFableStableKey(stableKey)
+        default: return stableKey
+        }
     }
 }
 

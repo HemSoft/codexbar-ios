@@ -519,3 +519,39 @@ no credential consumer, persistence or provider request. Exact retained finding
 identities remain unchanged after source/consumer re-review. The stale-source
 1455ace hosted extraction was intentionally canceled; a fresh analysis must
 verify this final source before its renewed baseline is reported as passing.
+
+## Claude Fable identity review, October 8
+
+Manual run [37795032431](https://github.com/hemsoft-dev/codexbar-ios/actions/runs/37795032431)
+analyzed `ecd05b51c670054d9dc72255eee0b31c5d302ec5` with Xcode 26.6,
+Swift 6.3.3, CodeQL 2.26.4 and the pinned Swift query pack
+`1.3.9+1d123a2caa0e4e6256a49d963bfcbd51a01617e8`. The build and analysis
+succeeded. All 115 tracked production Swift files had extracted syntax, with
+zero extraction errors. The hosted gate failed because the prior 113-file
+production snapshot was stale.
+
+The complete raw SARIF contains exactly the same three severity-7.5 contexts.
+Their locations, related locations, data flows and consumers were reviewed
+before renewing the exact diagnostic identities:
+
+- `OpenCodeZenUsageProvider.swift:134` is unchanged. Its digest remains an
+  ephemeral cache identity, neither a password verifier nor persisted data.
+- `ProviderConfigurationStore.swift:2375` stores local collapse-state IDs.
+  The Fable migration changes metric choices, not account-ID generation or
+  secret storage. Unknown collapsed IDs remain rejected.
+- `UITestFixtures.swift:1329` accepts only the existing fixed synthetic
+  credentials. Fable fixtures add usage payloads, not accepted credentials.
+  DEBUG, simulator, UUID storage and provider-network guards remain intact.
+
+Reviewed production commit `07711d0467d276b1dc0717a5ea6c262c38a6311b`
+has identical production bytes to the analyzed commit. Its 115-file digest is
+`544189229dbf2ff3e600d3e456a495a3eb4bb2bd40ced53c4b48402d7a605039`.
+Local replay of that hosted SARIF and source-reach CSV against the renewed
+baseline passes with three accepted findings and zero blockers. No severity
+threshold, query selection or exclusion changed.
+
+This is a reviewed local replay, not a successful hosted baseline-renewal run.
+The hosted result remains failed on its old baseline. Do not report the renewed
+baseline as hosted passing until a full manual analysis succeeds on the reviewed
+branch or release candidate. That is not an ordinary-PR merge status. The raw
+analysis is not repeated solely for baseline and documentation metadata.

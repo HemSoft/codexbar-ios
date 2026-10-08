@@ -430,6 +430,10 @@ private enum MetricPreferenceCompatibility {
             layout: &layout,
             availableMetricIDs: availableMetricIDs
         )
+        ClaudeFableMetricPreferenceCompatibility.migrate(
+            layout: &layout,
+            availableMetricIDs: availableMetricIDs
+        )
     }
 
     static func migrateOrder(

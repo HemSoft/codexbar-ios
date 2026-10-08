@@ -106,8 +106,11 @@ struct WatchComplicationChoiceCatalog {
         return identifiers.map { identifier in
             if let exact = choicesByID[identifier] { return exact }
             let saved = Self.savedMetricChoice(identifier: identifier)
-            guard let account = snapshot?.accounts.first(where: { ($0.legacyAccountIDs ?? []).contains(saved.accountID) }),
-                  let metric = account.metrics.first(where: { $0.id == saved.metricID }) else { return saved }
+            let replacementID = ClaudeFableUsageIdentity.replacementMetricID(for: saved.metricID)
+            guard let account = snapshot?.accounts.first(where: {
+                ($0.legacyAccountIDs ?? []).contains(saved.accountID)
+                    || (replacementID != nil && $0.id == saved.accountID)
+            }), let metric = account.metrics.first(where: { $0.id == (replacementID ?? saved.metricID) }) else { return saved }
             return WatchComplicationMetricChoice(
                 id: identifier, accountID: saved.accountID, metricID: metric.id,
                 providerName: account.providerName, accountLabel: account.accountLabel, metricLabel: metric.label
@@ -435,6 +438,9 @@ struct WatchComplicationResolver {
         in account: WatchAccountSnapshot,
         for metricID: String
     ) -> WatchMetricSnapshot? {
+        if let replacementID = ClaudeFableUsageIdentity.replacementMetricID(for: metricID) {
+            return account.metrics.first { $0.id == replacementID }
+        }
         if let replacementID = CursorUsageIdentity.replacementMetricID(for: metricID) {
             return account.metrics.first { $0.id == replacementID }
         }

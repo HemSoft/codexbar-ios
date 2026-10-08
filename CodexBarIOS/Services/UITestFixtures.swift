@@ -155,7 +155,7 @@ final class UITestFixtures {
     }
 
     private static func seedSecondClaudeAccount(in store: ProviderConfigurationStore, scenario: String?) {
-        guard scenario == "claude-resets-two-accounts" else { return }
+        guard ["claude-resets-two-accounts", "claude-fable-two-accounts", "claude-fable-renamed"].contains(scenario ?? "") else { return }
         let second = ProviderAccountConfiguration(id: "ui-claude-second", providerID: .claude,
                                                   accountLabel: "Second Claude", authMethod: .browserSession)
         _ = store.update(second)
@@ -440,20 +440,53 @@ final class UITestFixtures {
         let now = Date()
         let sessionReset = ISO8601DateFormatter().string(from: now.addingTimeInterval(7_200))
         let weeklyReset = ISO8601DateFormatter().string(from: now.addingTimeInterval(3 * 86_400))
-        let data = Data("""
+        let legacyData = Data("""
             {"five_hour":{"utilization":42,"resets_at":"\(sessionReset)"},
             "seven_day":{"utilization":64,"resets_at":"\(weeklyReset)"}}
             """.utf8)
-        guard let parsed = ClaudeUsageParser.parse(
-            data, subscriptionType: scenario == "claude-max" ? "max_20x" : "pro", fetchedAt: now
-        ) else {
+        let fableScenario = scenario?.hasPrefix("claude-fable-") == true
+        let data = fableScenario ? fableFixtureData(for: account, scenario: scenario ?? "", now: now) : legacyData
+        let maxPlan = scenario == "claude-max" || (fableScenario && scenario != "claude-fable-credits")
+        guard let parsed = ClaudeUsageParser.parse(data, subscriptionType: maxPlan ? "max_20x" : "pro", fetchedAt: now) else {
             preconditionFailure("Synthetic Claude windows must parse")
         }
         return ProviderUsageResult(
             accountID: account.id, providerID: .claude, title: account.displayName,
             plan: parsed.plan, subtitle: "Synthetic Claude usage. No live account.",
-            bars: parsed.bars, fetchedAt: now
+            bars: parsed.bars, monetaryMetrics: parsed.monetaryMetrics,
+            usageMessages: parsed.usageMessages, dashboardUsageMessages: parsed.dashboardUsageMessages,
+            cardInformationSections: parsed.cardInformationSections, fetchedAt: now
         )
+    }
+
+    nonisolated private static func fableFixtureData(
+        for account: ProviderAccountConfiguration, scenario: String, now: Date
+    ) -> Data {
+        let formatter = ISO8601DateFormatter()
+        let session = formatter.string(from: now.addingTimeInterval(7_200))
+        let weekly = formatter.string(from: now.addingTimeInterval(3 * 86_400))
+        let second = account.id == "ui-claude-second"
+        let model = scenario == "claude-fable-renamed" ? "Claude Fable 5.1" : "Fable 5"
+        var payload: [String: Any] = [
+            "five_hour": ["utilization": 42, "resets_at": session],
+            "seven_day": ["utilization": 64, "resets_at": weekly],
+        ]
+        if scenario == "claude-fable-two-accounts" || scenario == "claude-fable-renamed" {
+            payload["limits"] = [[
+                "kind": "weekly_scoped", "percent": second ? 7 : 21,
+                "resets_at": weekly, "is_active": true,
+                "scope": ["model": ["display_name": model]],
+            ], ]
+        } else if scenario == "claude-fable-credits" {
+            payload["extra_usage"] = [
+                "is_enabled": true, "monthly_limit": 1_000,
+                "used_credits": 350, "utilization": 35,
+            ]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
+            preconditionFailure("Synthetic Fable fixture must serialize")
+        }
+        return data
     }
 
     /// Existing UUID-isolated, network-blocked UI infrastructure only. No live account data.
