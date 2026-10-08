@@ -32,6 +32,7 @@ public enum ClaudeUsageResetError: LocalizedError, Equatable, Sendable {
     case credentialChanged
     case inProgress
     case indeterminate
+    case storageUnavailable
     case httpStatus(Int)
 
     public var errorDescription: String? {
@@ -40,6 +41,7 @@ public enum ClaudeUsageResetError: LocalizedError, Equatable, Sendable {
         case .credentialChanged: "The Claude account changed. Refresh usage before using a reset."
         case .inProgress: "A Claude reset request is already in progress."
         case .indeterminate: "Claude has not confirmed the previous reset request. Refresh usage before trying again."
+        case .storageUnavailable: "CodexBar could not prepare this reset. No request was sent. Try again."
         case .httpStatus(let status): "Claude could not use the reset (HTTP \(status)). Refresh usage to check again."
         }
     }
@@ -97,13 +99,18 @@ public actor ClaudeUsageResetClient {
         let requestID = UUID().uuidString
         let receipt = Receipt(scope: scope, grantHash: digest(grant.id), remainingCount: grant.remainingCount,
                               expiresAt: grant.expiresAt)
-        try storeReceipt(receipt, at: receiptURL)
+        do {
+            try storeReceipt(receipt, at: receiptURL)
+        } catch {
+            throw ClaudeUsageResetError.storageUnavailable
+        }
         do {
             let outcome = try await postReset(accessToken: accessToken, organization: organization, grant: grant, requestID: requestID)
             try? FileManager.default.removeItem(at: receiptURL)
             return outcome
         } catch let error as ClaudeUsageResetError {
-            if case .httpStatus(let status) = error, (400..<500).contains(status), status != 408 {
+            if case .httpStatus(let status) = error {
+                guard (400..<500).contains(status), status != 408 else { throw ClaudeUsageResetError.indeterminate }
                 try? FileManager.default.removeItem(at: receiptURL)
             }
             throw error

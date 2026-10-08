@@ -68,7 +68,7 @@ final class ClaudeUsageResetClientTests: XCTestCase {
                                                           credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
                 XCTFail("An unconfirmed mutation must remain unknown")
             } catch {
-                XCTAssertTrue([ClaudeUsageResetError.indeterminate, .httpStatus(503)].contains(error as? ClaudeUsageResetError ?? .inProgress))
+                XCTAssertEqual(error as? ClaudeUsageResetError, .indeterminate)
             }
             XCTAssertEqual(ResetClientProtocol.requests.filter { $0.httpMethod == "POST" }.count, 1)
             let restarted = client(session: harness.session, directory: harness.directory, token: "rotated-token")
@@ -173,6 +173,19 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         let post = try XCTUnwrap(ResetClientProtocol.requests.first { $0.httpMethod == "POST" })
         XCTAssertEqual(post.url?.path, "/api/organizations/00000000-0000-0000-0000-000000000004/reset_rate_limits")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: harness.directory.path).count, 1)
+    }
+
+    func testUnwritableReceiptStopsBeforeMutatingRequest() async throws {
+        let harness = makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.directory) }
+        try Data("file, not directory".utf8).write(to: harness.directory)
+        ResetClientProtocol.configure(mode: .success)
+        do {
+            _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
+                credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
+            XCTFail("A mutation without a durable safety receipt must not start")
+        } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .storageUnavailable) }
+        XCTAssertFalse(ResetClientProtocol.requests.contains { $0.httpMethod == "POST" })
     }
 
     private func makeHarness(token: String = "fixture-token") -> Harness {
