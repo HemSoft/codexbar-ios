@@ -154,6 +154,27 @@ final class ClaudeUsageResetClientTests: XCTestCase {
         XCTAssertEqual(ResetClientProtocol.requests.filter { $0.httpMethod == "POST" }.count, 1)
     }
 
+    func testUncertainReceiptDoesNotLeakAcrossVerifiedProviderAccounts() async throws {
+        let harness = makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.directory) }
+        ResetClientProtocol.configure(mode: .timeout)
+        let originalBinding = ClaudeUsageResetClient.credentialBinding(for: "fixture-token")
+        do {
+            _ = try await harness.client.consume(for: account, accessToken: "fixture-token", grantID: "fixture_grant",
+                                                credentialBinding: originalBinding)
+            XCTFail("Original account mutation should remain unconfirmed")
+        } catch { XCTAssertEqual(error as? ClaudeUsageResetError, .indeterminate) }
+        let other = client(session: harness.session, directory: harness.directory, token: "other-token")
+        let otherAccount = ProviderAccountConfiguration(id: "claude.other", providerID: .claude, authMethod: .cliToken)
+        ResetClientProtocol.configure(mode: .otherIdentity)
+        let outcome = try await other.consume(for: otherAccount, accessToken: "other-token", grantID: "fixture_grant",
+                                             credentialBinding: ClaudeUsageResetClient.credentialBinding(for: "other-token"))
+        XCTAssertEqual(outcome, .reset)
+        let post = try XCTUnwrap(ResetClientProtocol.requests.first { $0.httpMethod == "POST" })
+        XCTAssertEqual(post.url?.path, "/api/organizations/00000000-0000-0000-0000-000000000004/reset_rate_limits")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: harness.directory.path).count, 1)
+    }
+
     private func makeHarness(token: String = "fixture-token") -> Harness {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ClaudeResetClientTests.\(UUID())")
         let configuration = URLSessionConfiguration.ephemeral
@@ -185,7 +206,7 @@ private struct ResetClientSecrets: SecretStore {
 private class ResetClientProtocol: URLProtocol, @unchecked Sendable {
     enum Mode: Sendable {
         case success, ineligible, expired, missingIdentity, timeout, reconciled
-        case serverError, malformedSuccess, missingGrant, changedIdentity, delayed
+        case serverError, malformedSuccess, missingGrant, changedIdentity, delayed, otherIdentity
     }
     private static let lock = NSLock()
     nonisolated(unsafe) private static var mode = Mode.success
@@ -227,10 +248,17 @@ private class ResetClientProtocol: URLProtocol, @unchecked Sendable {
         let body: String
         if request.url?.path == "/api/oauth/profile" {
             let profileCount = Self.requests.filter { $0.url?.path == "/api/oauth/profile" }.count
-            let organization = mode == .changedIdentity && profileCount > 1
-                ? "00000000-0000-0000-0000-000000000003" : "00000000-0000-0000-0000-000000000002"
+            let organization: String
+            if mode == .otherIdentity {
+                organization = "00000000-0000-0000-0000-000000000004"
+            } else {
+                organization = mode == .changedIdentity && profileCount > 1
+                    ? "00000000-0000-0000-0000-000000000003" : "00000000-0000-0000-0000-000000000002"
+            }
+            let accountID = mode == .otherIdentity
+                ? "00000000-0000-0000-0000-000000000003" : "00000000-0000-0000-0000-000000000001"
             body = mode == .missingIdentity ? "{}" : """
-            {"account":{"uuid":"00000000-0000-0000-0000-000000000001"},
+            {"account":{"uuid":"\(accountID)"},
              "organization":{"uuid":"\(organization)"}}
             """
         } else if request.httpMethod == "POST" {
