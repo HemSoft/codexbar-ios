@@ -191,6 +191,59 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
     }
 
     @MainActor
+    func testOptionalTierFailuresRetainOnlyTheSameVerifiedSubjectsPlan() async throws {
+        let account = ProviderAccountConfiguration.defaultConfiguration(for: .grok)
+        let secrets = GrokTestSecrets()
+        let credential = GrokCredential(
+            kind: "grok-oauth-v1", accessToken: "synthetic", refreshToken: "synthetic-refresh",
+            expiresAt: Date().addingTimeInterval(3600), subject: "subject-one", email: nil
+        )
+        try secrets.saveSecret(credential.encoded(), account: ProviderConfigurationStore.keychainAccount(for: account))
+        let formatter = ISO8601DateFormatter()
+        let start = formatter.string(from: Date().addingTimeInterval(-86_400))
+        let end = formatter.string(from: Date().addingTimeInterval(86_400))
+        let billing = """
+            {"config":{"isUnifiedBillingUser":true,"creditUsagePercent":31,
+            "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"\(start)","end":"\(end)"}}}
+            """
+        for singleAccount in [false, true] {
+            for sameSubject in [false, true] {
+                let cached = try GrokUsageProvider.parseCredits(
+                    Data(billing.replacingOccurrences(of: ":31", with: ":11").utf8), configuration: account,
+                    subject: sameSubject ? "subject-one" : "another-subject", now: Date(), verifiedPlanName: "SuperGrok Lite"
+                )
+                for (status, settings, unavailable, freshTier) in [
+                    (0, "", true, "Plan unavailable"),
+                    (503, "{}", true, "Plan unavailable"),
+                    (403, "{}", true, "Plan unavailable"),
+                    (200, "not-json", true, "Plan unavailable"),
+                    (200, #"{"subscription_tier":123}"#, true, "Plan unavailable"),
+                    (200, "{}", false, "Plan unavailable"),
+                    (200, #"{"subscription_tier":"Unknown future tier"}"#, false, "Plan unavailable"),
+                    (200, #"{"subscription_tier_display":"SuperGrok Heavy"}"#, false, "SuperGrok Heavy"),
+                ] {
+                    let session = makeSession([(200, #"{"sub":"subject-one"}"#), (200, billing), (status, settings)])
+                    let service = UsageRefreshService(
+                        providers: [GrokUsageProvider(secretStore: secrets, session: session)], initialResults: [cached]
+                    )
+                    if singleAccount {
+                        _ = await service.refresh(configuration: account)
+                    } else {
+                        await service.refresh(configurations: [account])
+                    }
+                    let result = try XCTUnwrap(service.results.first)
+                    XCTAssertEqual(result.cardPlan.displayLabel, unavailable && sameSubject ? "SuperGrok Lite" : freshTier)
+                    XCTAssertEqual(result.grokPlanLookupFailed, unavailable)
+                    XCTAssertEqual(result.bars.first?.used, 31, "New billing must not be replaced by cached quota")
+                    XCTAssertNil(result.failureMessage)
+                    XCTAssertEqual(GrokTestProtocol.state.requests.count, 3)
+                    session.invalidateAndCancel()
+                }
+            }
+        }
+    }
+
+    @MainActor
     func testUnsupportedBillingDiscardsCachedPlanWhileOutagesKeepIt() async throws {
         let account = ProviderAccountConfiguration.defaultConfiguration(for: .grok)
         let secrets = GrokTestSecrets()

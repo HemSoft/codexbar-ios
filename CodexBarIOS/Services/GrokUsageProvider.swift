@@ -107,23 +107,33 @@ public final class GrokUsageProvider: UsageProvider {
         // A failed settings read must never turn a real usage response into a guessed plan.
         let tier = await fetchPlanName(accessToken: credential.accessToken)
         return try Self.parseCredits(
-            data, configuration: configuration, subject: identity.sub, now: now, verifiedPlanName: tier
+            data, configuration: configuration, subject: identity.sub, now: now, verifiedPlanName: tier.name,
+            planLookupFailed: tier.isUnavailable
         )
     }
 
-    private func fetchPlanName(accessToken: String) async -> String? {
+    private struct PlanLookup {
+        let name: String?
+        let isUnavailable: Bool
+    }
+
+    private func fetchPlanName(accessToken: String) async -> PlanLookup {
         var request = URLRequest(url: Self.settingsURL)
         request.timeoutInterval = 8
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("xai-grok-cli", forHTTPHeaderField: "x-xai-token-auth")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         guard let (data, reply) = try? await session.data(for: request),
-              let response = reply as? HTTPURLResponse, response.url == request.url else { return nil }
+              let response = reply as? HTTPURLResponse, response.url == request.url else {
+            return PlanLookup(name: nil, isUnavailable: true)
+        }
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         guard response.statusCode == 200,
-              let settings = try? decoder.decode(GrokRemoteSettings.self, from: data) else { return nil }
-        return Self.knownPlan(settings.subscriptionTierDisplay ?? settings.subscriptionTier)
+              let settings = try? decoder.decode(GrokRemoteSettings.self, from: data) else {
+            return PlanLookup(name: nil, isUnavailable: true)
+        }
+        return PlanLookup(name: Self.knownPlan(settings.subscriptionTierDisplay ?? settings.subscriptionTier), isUnavailable: false)
     }
 
     private static func knownPlan(_ value: String?) -> String? {
@@ -249,7 +259,7 @@ public final class GrokUsageProvider: UsageProvider {
 
     static func parseCredits(
         _ data: Data, configuration: ProviderAccountConfiguration, subject: String, now: Date,
-        verifiedPlanName: String? = nil
+        verifiedPlanName: String? = nil, planLookupFailed: Bool = false
     ) throws -> ProviderUsageResult {
         guard let response = try? JSONDecoder().decode(GrokCreditsResponse.self, from: data),
               let config = response.config else { throw GrokAuthError.invalidResponse }
@@ -283,7 +293,7 @@ public final class GrokUsageProvider: UsageProvider {
         let cacheIdentity = Data(SHA256.hash(data: Data(subject.utf8))).base64EncodedString()
         return ProviderUsageResult(
             accountID: configuration.id, providerID: .grok, title: configuration.displayName,
-            verifiedGrokPlanName: knownPlan(verifiedPlanName),
+            verifiedGrokPlanName: knownPlan(verifiedPlanName), grokPlanLookupFailed: planLookupFailed,
             subtitle: bar == nil ? reason : inferredZero ? "No included usage reported by Grok." : "Direct Grok subscription usage",
             bars: bar.map { [$0] } ?? [],
             monetaryMetrics: [balance].compactMap { $0 },

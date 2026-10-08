@@ -224,7 +224,7 @@ public final class UsageRefreshService: ObservableObject {
                         finishRefresh(accountID: accountID)
                         continue
                     }
-                    replaceResult(result)
+                    replaceResult(preservingVerifiedGrokPlan(result))
                     refreshErrorsByAccountID.removeValue(forKey: accountID)
                     finishRefresh(accountID: accountID)
                 case .failure(let configuration, let generation, let message, let result):
@@ -277,7 +277,7 @@ public final class UsageRefreshService: ObservableObject {
         }
 
         do {
-            let result = preservingGreptileRenewal(try await provider.fetchUsage(for: configuration))
+            let result = preservingVerifiedGrokPlan(preservingGreptileRenewal(try await provider.fetchUsage(for: configuration)))
             guard isCurrent(configuration, generation: generation) else {
                 return nil
             }
@@ -404,6 +404,17 @@ public final class UsageRefreshService: ObservableObject {
 
     private nonisolated static func isCancellation(_ error: Error) -> Bool {
         error is CancellationError || Task.isCancelled || (error as? URLError)?.code == .cancelled
+    }
+
+    private func preservingVerifiedGrokPlan(_ incoming: ProviderUsageResult) -> ProviderUsageResult {
+        guard incoming.providerID == .grok, incoming.failureMessage == nil, incoming.grokPlanLookupFailed,
+              incoming.verifiedGrokPlanName == nil,
+              let identity = incoming.cacheIdentity,
+              let cached = results.first(where: { $0.accountID == incoming.accountID && $0.cacheIdentity == identity })
+        else { return incoming }
+        var result = incoming
+        result.verifiedGrokPlanName = cached.verifiedGrokPlanName
+        return result
     }
 
     private func preservingGreptileRenewal(_ incoming: ProviderUsageResult) -> ProviderUsageResult {

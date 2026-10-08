@@ -237,7 +237,9 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         }
     }
     /// Plan verified through the same Grok subject as this usage response; never a usage metric.
-    public let verifiedGrokPlanName: String?
+    public var verifiedGrokPlanName: String?
+    /// The optional Grok tier read failed; a matching verified subject may retain its known tier.
+    public let grokPlanLookupFailed: Bool
     public let subtitle: String
     public let bars: [UsageBar]
     public let barsFetchedAt: Date?
@@ -266,6 +268,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         title: String,
         plan: ProviderPlanDescriptor? = nil,
         verifiedGrokPlanName: String? = nil,
+        grokPlanLookupFailed: Bool = false,
         subtitle: String,
         bars: [UsageBar],
         barsFetchedAt: Date? = nil,
@@ -293,6 +296,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.title = title
         self.plan = plan
         self.verifiedGrokPlanName = verifiedGrokPlanName
+        self.grokPlanLookupFailed = providerID == .grok && grokPlanLookupFailed
         self.subtitle = subtitle
         self.bars = bars
         self.barsFetchedAt = bars.isEmpty ? nil : (barsFetchedAt ?? fetchedAt)
