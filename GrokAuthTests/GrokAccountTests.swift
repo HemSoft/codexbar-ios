@@ -98,8 +98,13 @@ final class GrokAccountTests: XCTestCase {
                 configuration: account, subject: subject, now: Date(), verifiedPlanName: plan
             )
         }
-        XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "two", plan: "SuperGrok Lite")))
-        XCTAssertTrue(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: "SuperGrok Lite")))
+        for plan in [nil, "SuperGrok Lite", "Unrecognized tier"] as [String?] {
+            XCTAssertTrue(store.update(formerlyGenerated))
+            XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "two", plan: plan)))
+            XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "SuperGrok Lite")
+            XCTAssertTrue(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: plan)))
+            XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "Grok")
+        }
         XCTAssertTrue(store.applyVerifiedGrokPlan(try result(second, subject: "two", plan: "SuperGrok Lite")))
         XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "Grok")
         XCTAssertEqual(store.configuration(accountID: second.id)?.accountLabel, "Grok 2")
@@ -108,9 +113,11 @@ final class GrokAccountTests: XCTestCase {
         var custom = try XCTUnwrap(store.configuration(accountID: first.id))
         custom.accountLabel = "My Grok"
         XCTAssertTrue(store.update(custom))
-        XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: "SuperGrok Heavy")))
+        for plan in [nil, "SuperGrok Heavy"] as [String?] {
+            XCTAssertFalse(store.applyVerifiedGrokPlan(try result(first, subject: "one", plan: plan)))
+        }
         XCTAssertEqual(store.configuration(accountID: first.id)?.accountLabel, "My Grok")
-        XCTAssertFalse(store.applyVerifiedGrokPlan(try result(second, subject: "two", plan: nil)))
+        XCTAssertTrue(store.applyVerifiedGrokPlan(try result(second, subject: "two", plan: nil)))
         XCTAssertEqual(store.configuration(accountID: second.id)?.accountLabel, "Grok 2")
     }
 

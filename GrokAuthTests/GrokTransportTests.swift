@@ -256,17 +256,17 @@ final class GrokTransportTests: XCTestCase, @unchecked Sendable {
             accountID: account.id, providerID: .grok, title: "Grok", verifiedGrokPlanName: "SuperGrok Lite",
             subtitle: "Synthetic", bars: [UsageBar(label: "Weekly", used: 31, limit: 100)], fetchedAt: Date()
         )
-        for status in [402, 404, 410, 429, 503] {
+        for status in [302, 400, 401, 402, 403, 404, 408, 409, 410, 422, 425, 429, 500, 503, 599] {
             let session = makeSession([(200, #"{"sub":"subject-one"}"#), (status, "{}")])
             let provider = GrokUsageProvider(secretStore: secrets, session: session)
             let service = UsageRefreshService(providers: [provider], initialResults: [cached])
             await service.refresh(configurations: [account])
             let result = try XCTUnwrap(service.results.first)
-            let temporary = status == 429 || status == 503
+            let temporary = ![401, 402, 403, 404, 410].contains(status)
             XCTAssertEqual(result.cardPlan.displayLabel, temporary ? "SuperGrok Lite" : "Plan unavailable", "HTTP \(status)")
             XCTAssertEqual(result.bars.isEmpty, !temporary, "HTTP \(status)")
             XCTAssertNotNil(result.failureMessage)
-            XCTAssertEqual(result.recoveryAction, .retryRefresh)
+            XCTAssertEqual(result.recoveryAction, [401, 403].contains(status) ? .reauthenticate : .retryRefresh)
             XCTAssertEqual(GrokTestProtocol.state.requests.count, 2)
             session.invalidateAndCancel()
         }

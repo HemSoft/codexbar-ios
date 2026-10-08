@@ -96,10 +96,11 @@ public final class GrokUsageProvider: UsageProvider {
             throw GrokAuthError.invalidResponse
         }
         if response.statusCode == 401 || response.statusCode == 403 { throw GrokAuthError.unauthorized }
-        if response.statusCode == 429 || (500...599).contains(response.statusCode) {
+        if [408, 425, 429].contains(response.statusCode) || (500...599).contains(response.statusCode) {
             throw GrokAuthError.temporarilyUnavailable
         }
-        guard response.statusCode == 200 else { throw GrokAuthError.unsupportedAccount }
+        if [402, 404, 410].contains(response.statusCode) { throw GrokAuthError.unsupportedAccount }
+        guard response.statusCode == 200 else { throw GrokAuthError.invalidResponse }
         // Do not read settings for a malformed billing response; retry billing first.
         let now = Date()
         _ = try Self.parseCredits(data, configuration: configuration, subject: identity.sub, now: now)

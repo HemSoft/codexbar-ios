@@ -1608,7 +1608,6 @@ public final class ProviderConfigurationStore: ObservableObject {
     @discardableResult
     func applyVerifiedGrokPlan(_ result: ProviderUsageResult) -> Bool {
         guard result.providerID == .grok, result.failureMessage == nil,
-              result.verifiedGrokPlanName != nil,
               let current = configuration(accountID: result.accountID), current.providerID == .grok,
               let credential = try? GrokCredentialLock.withLock({
                   GrokCredential.parse(try secretStore.readSecret(account: Self.keychainAccount(for: current)))
@@ -1621,7 +1620,10 @@ public final class ProviderConfigurationStore: ObservableObject {
             candidate.accountLabel = suffix == 1 ? "Grok" : "Grok \(suffix)"
             suffix += 1
         } while !isAccountNameUnique(candidate)
-        guard candidate.accountLabel != current.accountLabel else { return true }
+        // A neutral generated name is stable even when an earlier number becomes free.
+        let generatedNumber = Int(generated.dropFirst(5)) ?? 0
+        guard candidate.accountLabel != current.accountLabel, generated != "Grok",
+              !(generated.hasPrefix("Grok ") && generatedNumber >= 2) else { return true }
         candidate.grokGeneratedLabel = candidate.accountLabel
         return update(candidate)
     }
