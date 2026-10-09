@@ -111,7 +111,7 @@ must remain accurate, readable, and useful to people outside the codebase.
 version (`## <version> - <date>`), with `### Added`, `### Changed`, `### Fixed`,
 and a separate `### Developer Experience` subsection for build, signing, and
 release-process changes so they do not leak into App Store copy. Reference
-GitHub issues with `([#NN](https://github.com/HemSoft/codexbar-ios/issues/NN))`
+GitHub issues with `([#NN](https://github.com/hemsoft-dev/codexbar-ios/issues/NN))`
 when they add useful context.
 
 - Update the current `Unreleased` version in the same branch or PR as every
@@ -169,7 +169,7 @@ Tools, so prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/D
   branch or tag:
 
   ```sh
-  gh workflow run ci.yml --repo HemSoft/codexbar-ios \
+  gh workflow run ci.yml --repo hemsoft-dev/codexbar-ios \
     --ref <release-candidate-branch-or-tag>
   ```
 
