@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 struct GreptileDashboardIdentity: Decodable, Sendable {
     let greptileId: String
@@ -9,6 +10,25 @@ struct GreptileDashboardIdentity: Decodable, Sendable {
 struct GreptileDashboardState: Equatable, Sendable {
     let renewalDate: Date?
     var isFreeAllowance = true
+    var creditAllowance: GreptileCreditAllowance?
+}
+
+struct GreptileCreditAllowance: Equatable, Sendable {
+    let used: Double
+    let included: Double
+    let periodStart: Date?
+    let periodEnd: Date
+
+    var remaining: Double { max(included - used, 0) }
+
+    func usageBar(at now: Date) -> UsageBar? {
+        guard periodEnd > now, periodStart.map({ $0 <= now }) ?? true else { return nil }
+        return UsageBar(
+            stableKey: GreptileUsageIdentity.creditAllowanceStableKey, label: "Credits used", used: used, limit: included,
+            resetDescription: "\(used.formatted()) of \(included.formatted()) credits used. \(remaining.formatted()) remaining.",
+            resetsAt: periodEnd
+        )
+    }
 }
 
 struct GreptileDashboardClient: Sendable {
@@ -109,7 +129,20 @@ struct GreptileDashboardClient: Sendable {
                 return GreptileDashboardState(renewalDate: nil)
             }
         }
-        return GreptileDashboardState(renewalDate: end)
+        let allowance: GreptileCreditAllowance?
+        if let used = creditCount(state["used"]), let included = creditCount(state["includedCreditsPerPeriod"]), included > 0,
+           used / included <= Double(Int.max) / 200 {
+            allowance = GreptileCreditAllowance(used: used, included: included, periodStart: isoDate(period["start"]), periodEnd: end)
+        } else {
+            allowance = nil
+        }
+        return GreptileDashboardState(renewalDate: end, creditAllowance: allowance)
+    }
+
+    private static func creditCount(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let count = number.doubleValue
+        return count.isFinite && count >= 0 ? count : nil
     }
 
     private static func isFreeAllowance(kind: String) throws -> Bool {

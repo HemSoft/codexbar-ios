@@ -52,6 +52,22 @@ billing clears the date while retaining that classification. More Information
 can dismiss its sheet and open guided account settings to reconnect. The
 reconnect action keeps CodexBar in the foreground.
 
+[Issue #429](https://github.com/hemsoft-dev/codexbar-ios/issues/429) adds a separate
+`greptile.credit-allowance` metric for a valid free billing state. It reads the
+reported numeric `used` and positive `includedCreditsPerPeriod`, shows their
+percentage and exact credit values, and calculates remaining included credits
+as `max(included - used, 0)`. More Information lists used, included and remaining
+credits. Credit history has its own series, separate from review history.
+Exhaustion and over-allowance usage retain the actual used amount.
+Neither completed reviews nor a fixed 50-credit assumption supplies these values.
+Missing, malformed, boolean, negative or non-finite values remain unavailable;
+a missing, invalid, ended or future-starting period cannot become current usage.
+Renewal may still be available when the credit counts are absent. Paid billing
+states do not create this free-credit metric, and API-key behavior is unchanged.
+This uses the internal dashboard contract already verified above; it does not
+establish fresh Google sign-in, which remains tracked in
+[Issue #409](https://github.com/hemsoft-dev/codexbar-ios/issues/409).
+
 Review activity remains a separate metric with its existing IDs and saved
 visibility, order and width. The verified session's user token authorizes
 read-only MCP activity calls, scoped with the selected organization. Existing

@@ -1275,11 +1275,7 @@ struct ProviderUsageCard: View {
             if result.providerID == .greptile,
                result.bars.indices.contains(index),
                let stableKey = result.bars[index].stableKey,
-               stableKey == GreptileUsageIdentity.reviewQuotaStableKey
-                   || stableKey == GreptileUsageIdentity.completedReviewsStableKey {
-                let seriesID = stableKey == GreptileUsageIdentity.reviewQuotaStableKey
-                    ? GreptileUsageIdentity.reviewQuotaHistorySeriesID
-                    : GreptileUsageIdentity.completedReviewsHistorySeriesID
+               let seriesID = GreptileUsageIdentity.historySeriesID(forStableKey: stableKey) {
                 return historySeriesOptionsProvider()
                     .first(where: {
                         $0.id == seriesID
