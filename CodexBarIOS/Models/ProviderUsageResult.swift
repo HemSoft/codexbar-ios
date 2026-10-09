@@ -408,7 +408,12 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
                 kind: .monetary(index: index)
             )
         }
-        return usageMetrics + creditMetrics + moneyMetrics
+        let greptileUnavailable = providerID == .greptile
+            ? unavailableUsageMetrics[GreptileUsageIdentity.creditAllowanceMetricID].map { reason in
+                ProviderUsageMetric(id: GreptileUsageIdentity.creditAllowanceMetricID, label: "Credits used", kind: .unavailableUsage(reason))
+            }
+            : nil
+        return usageMetrics + (greptileUnavailable.map { [$0] } ?? []) + creditMetrics + moneyMetrics
     }
 
     public var highestSeverity: UsageSeverity {

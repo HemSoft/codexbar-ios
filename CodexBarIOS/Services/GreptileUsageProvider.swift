@@ -161,8 +161,10 @@ public final class GreptileUsageProvider: UsageProvider {
             return result
         }
         let renewal: GreptileAllowanceRenewal
+        var allowance: GreptileCreditAllowance?
         do {
             let state = try await client.billingState(for: credential)
+            allowance = state.creditAllowance
             renewal = GreptileAllowanceRenewal(renewsAt: state.renewalDate, observedAt: Date(), isApplicable: state.isFreeAllowance)
         } catch {
             try Self.rethrowCancellation(error)
@@ -173,12 +175,35 @@ public final class GreptileUsageProvider: UsageProvider {
                 lookupFailed: (error as? GreptileSignInError) != .invalidBillingResponse, isApplicable: nil
             )
         }
-        var result = try await fetchReviewActivity(
+        let activity = try await fetchReviewActivity(
             apiKey: identity.greptileToken, organization: credential.organization.id, configuration: configuration
         )
-        result.greptileAllowanceRenewal = renewal
-        result.cacheIdentity = credential.cacheIdentity
-        return result
+        return browserResult(activity: activity, allowance: allowance, renewal: renewal, cacheIdentity: credential.cacheIdentity)
+    }
+
+    private func browserResult(
+        activity: ProviderUsageResult, allowance: GreptileCreditAllowance?, renewal: GreptileAllowanceRenewal, cacheIdentity: String
+    ) -> ProviderUsageResult {
+        let bar = allowance?.usageBar(at: activity.fetchedAt)
+        let unavailable = renewal.isApplicable == false || bar != nil ? [:] : [
+            GreptileUsageIdentity.creditAllowanceMetricID: "Credit usage unavailable",
+        ]
+        let creditInformation = bar.flatMap { _ in allowance }.map { allowance in
+            ProviderCardInformationSection(id: "greptile.credit-allowance", title: "Free credit allowance", items: [
+                ProviderCardInformationItem(id: "credits.used", label: "Credits used", detail: allowance.used.formatted()),
+                ProviderCardInformationItem(id: "credits.included", label: "Included credits", detail: allowance.included.formatted()),
+                ProviderCardInformationItem(id: "credits.remaining", label: "Credits remaining", detail: allowance.remaining.formatted()),
+            ])
+        }
+        return ProviderUsageResult(
+            accountID: activity.accountID, providerID: .greptile, title: activity.title, plan: activity.plan, subtitle: activity.subtitle,
+            bars: (bar.map { [$0] } ?? []) + activity.bars,
+            unavailableUsageMetrics: unavailable, usageMessages: activity.usageMessages,
+            cardInformationSections: (creditInformation.map { [$0] } ?? []) + activity.cardInformationSections,
+            greptileAllowanceRenewal: renewal, failureMessage: activity.failureMessage, recoveryAction: activity.recoveryAction,
+            preserveCachedBarsOnFailure: activity.preserveCachedBarsOnFailure, cacheIdentity: cacheIdentity,
+            fetchedAt: activity.fetchedAt
+        )
     }
 
     private func fetchReviewActivity(

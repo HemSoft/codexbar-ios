@@ -69,6 +69,8 @@ final class GreptileAllowanceUITests: XCTestCase {
         let cases = [
             ("greptile-renewal-available", "Renews in", false),
             ("greptile-renewal-available", "Renews in", true),
+            ("greptile-renewal-exhausted", "Renews in", false),
+            ("greptile-renewal-overage", "Renews in", true),
             ("greptile-renewal-missing", "Renewal date unavailable", false),
             ("greptile-renewal-unknown", "Renewal date unavailable", false),
             ("greptile-renewal-malformed", "Renewal date unavailable", true),
@@ -93,6 +95,14 @@ final class GreptileAllowanceUITests: XCTestCase {
             if scenario.hasSuffix("expired") {
                 XCTAssertTrue(app.buttons["greptile-renewal-connect"].waitForExistence(timeout: 10))
             }
+            let credit = app.buttons["dashboard-metric-greptile.credit-allowance"].firstMatch
+            if ["greptile-renewal-available", "greptile-renewal-exhausted", "greptile-renewal-overage"].contains(scenario) {
+                XCTAssertTrue(credit.waitForExistence(timeout: 10), app.debugDescription)
+                let values = ["greptile-renewal-exhausted": "50 of 50 credits used. 0 remaining.",
+                              "greptile-renewal-overage": "52 of 50 credits used. 0 remaining.",
+                ]
+                XCTAssertTrue(credit.label.contains(values[scenario] ?? "12 of 50 credits used. 38 remaining."), credit.label)
+            }
             reveal(label, in: app)
             if scenario == "greptile-renewal-available", !full {
                 let date = app.staticTexts["greptile-renewal-date"].firstMatch
@@ -110,6 +120,11 @@ final class GreptileAllowanceUITests: XCTestCase {
                 .matching(NSPredicate(format: "label BEGINSWITH %@", status)).firstMatch
             XCTAssertTrue(detail.waitForExistence(timeout: 10), app.debugDescription)
             XCTAssertTrue(detail.label.hasPrefix(status), app.debugDescription)
+            if scenario == "greptile-renewal-available" {
+                XCTAssertTrue(app.staticTexts["Free credit allowance"].exists)
+                XCTAssertTrue(app.staticTexts["Credits remaining"].exists)
+                XCTAssertTrue(app.staticTexts["38"].exists)
+            }
             keep("\(scenario)-detail-\(full ? "dark-large" : "light")", app: app)
             app.terminate()
         }

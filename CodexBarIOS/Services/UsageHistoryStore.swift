@@ -1313,6 +1313,7 @@ public final class UsageHistoryStore: ObservableObject {
                         "Completed reviews"
                     ),
                 ]
+                seriesIdentities.append((GreptileUsageIdentity.creditAllowanceStableKey, "usage.credit-allowance", "Credits used"))
                 let preferredStableKey = greptilePrimaryStableKey(snapshots: accountSnapshots)
                 if let preferredIndex = seriesIdentities.firstIndex(where: { $0.0 == preferredStableKey }),
                    preferredIndex != seriesIdentities.startIndex {

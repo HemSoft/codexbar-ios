@@ -8,6 +8,11 @@ building, testing, or releasing the app.
 
 ### Added
 
+- See actual Greptile free-credit usage, included credits and remaining allowance
+  alongside the renewal date for connected dashboard accounts. Credit usage stays
+  separate from completed reviews; missing billing values remain unavailable.
+  ([#429](https://github.com/hemsoft-dev/codexbar-ios/issues/429))
+
 - View saved Claude usage resets, the windows they restore and their expiry.
   Confirm the account before using one, then see refreshed usage and the remaining
   resets. Availability updates when a grant starts or expires, and provider cooldowns

@@ -1641,7 +1641,11 @@ private final class UITestNetworkBlocker: URLProtocol, @unchecked Sendable {
             default: end = ISO8601DateFormatter().string(from: Date().addingTimeInterval(604_800))
             }
             let kind = ["greptile-renewal-paid": "paid", "greptile-renewal-unknown": "unknown"][scenario] ?? "free"
-            let state: [String: Any] = ["kind": kind, "currentPeriod": ["end": end]]
+            var state: [String: Any] = ["kind": kind, "currentPeriod": ["end": end]]
+            if ["greptile-renewal-available", "greptile-renewal-exhausted", "greptile-renewal-overage"].contains(scenario) {
+                state["used"] = ["greptile-renewal-exhausted": 50, "greptile-renewal-overage": 52][scenario] ?? 12
+                state["includedCreditsPerPeriod"] = 50
+            }
             return (try? JSONSerialization.data(withJSONObject: [["result": ["data": ["json": state]]]])) ?? Data()
         case "/mcp": return UITestFixtures.greptilePayload(scenario: scenario)
         default: return Data()
