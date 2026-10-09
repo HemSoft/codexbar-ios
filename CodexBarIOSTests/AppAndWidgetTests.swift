@@ -1185,7 +1185,7 @@ final class AppAndWidgetTests: XCTestCase {
         )
         XCTAssertEqual(
             AppReviewLinks.supportURL.absoluteString,
-            "https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md"
+            "https://github.com/hemsoft-dev/codexbar-ios/blob/main/SUPPORT.md"
         )
     }
 

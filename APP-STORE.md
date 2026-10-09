@@ -8,16 +8,16 @@ Status last reviewed: 2026-10-07
 
 - Version `1.3 (3)` remains the distributed release at the final submission check.
 - Version `1.4.0 (4)` was submitted for App Review on October 7, 2026 at 4:56 PM EDT under
-  [release issue #373](https://github.com/HemSoft/codexbar-ios/issues/373).
+  [release issue #373](https://github.com/hemsoft-dev/codexbar-ios/issues/373).
   Apple reports `WAITING_FOR_REVIEW`. Submission is complete; public distribution
   remains pending Apple's review. Apple displays no review-time estimate.
 - Shipping source is immutable commit `54b2a489cadf38af0c741a3553249e9411fca0be`, frozen as
-  `release/1.4.0-rc-54b2a48`. [PR #415](https://github.com/HemSoft/codexbar-ios/pull/415)
+  `release/1.4.0-rc-54b2a48`. [PR #415](https://github.com/hemsoft-dev/codexbar-ios/pull/415)
   merged the dated, consolidated 1.4.0 changelog before this archive was built.
   The next `1.5.0 - Unreleased` section starts after that release cut.
 - All seven local gates passed with 711 iOS and 61 Watch tests. All five required
   CI jobs and the complete 28-test iPhone and iPad UI suites passed for the shipping
-  SHA in [run 37661183114](https://github.com/HemSoft/codexbar-ios/actions/runs/37661183114).
+  SHA in [run 37661183114](https://github.com/hemsoft-dev/codexbar-ios/actions/runs/37661183114).
   Initial iPad attempt 1 failed one Greptile account-navigation assertion; its native
   bundle, video and logs remain preserved. One complete unchanged-source focused
   journey passed on matching iOS 26.5, then the bounded failed-jobs attempt 2 passed.
@@ -46,8 +46,8 @@ Status last reviewed: 2026-10-07
   Runtime warnings remain unresolved. Original hosted performance failure is
   preserved alongside the complete local passing comparison under unchanged policy;
   security/performance provenance is explicit source equivalence, not fresh analysis.
-- [#405](https://github.com/HemSoft/codexbar-ios/issues/405) and
-  [#409](https://github.com/HemSoft/codexbar-ios/issues/409) remain deferred to V1.5.
+- [#405](https://github.com/hemsoft-dev/codexbar-ios/issues/405) and
+  [#409](https://github.com/hemsoft-dev/codexbar-ios/issues/409) remain deferred to V1.5.
   The release and review copy disclose the Greptile Google-backed billing sign-in
   limitation. The complete local artifact ledger is
   `DerivedData/ReleasePreparation/1.4.0-54b2a48/release-status.md`, with Apple write
@@ -142,9 +142,9 @@ submission unless a version-specific note says otherwise.
 - [x] Sync the Issue #22 promotional text, description, and keywords to App
   Store Connect and verify their previews. The version 1.1 submission was
   updated and verified on 2026-07-11.
-- [x] Provide support URL and add it to App Store Connect. Public support page is `https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md`.
+- [x] Provide support URL and add it to App Store Connect. Public support page is `https://github.com/hemsoft-dev/codexbar-ios/blob/main/SUPPORT.md`.
 - [ ] Provide marketing URL if desired.
-- [x] Provide privacy policy URL and add it to App Store Connect. Public privacy policy is `https://github.com/HemSoft/codexbar-ios/blob/main/PRIVACY.md`.
+- [x] Provide privacy policy URL and add it to App Store Connect. Public privacy policy is `https://github.com/hemsoft-dev/codexbar-ios/blob/main/PRIVACY.md`.
 - [x] Prepare screenshots for required iPhone sizes. Six deterministic iPhone 17 Pro Max images at `1320x2868` were generated and reviewed at full size on 2026-07-11.
 - [x] Prepare screenshots for required iPad sizes. Six deterministic iPad Pro 13-inch (M5) images at `2064x2752` were generated and reviewed at full size on 2026-07-11.
 - [x] Upload the Issue #22 iPhone and iPad screenshot sets to App Store Connect

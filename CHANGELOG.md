@@ -26,6 +26,9 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Open feedback and support links in the organization GitHub repository.
+  ([#427](https://github.com/hemsoft-dev/codexbar-ios/issues/427))
+
 - Keep Claude Fable 5 and 5.1 under one weekly metric, separate from shared
   Claude allowances. Saved visibility, layout, history, widget and Apple Watch
   choices survive model-name changes. A saved Fable widget stays unavailable
