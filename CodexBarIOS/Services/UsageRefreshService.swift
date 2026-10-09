@@ -489,6 +489,17 @@ public final class UsageRefreshService: ObservableObject {
             return
         }
 
+        let freshGreptileCredits = failureResult.greptileReviewActivityUnavailableReason != nil
+            ? failureResult.bars.filter { $0.stableKey == GreptileUsageIdentity.creditAllowanceStableKey }
+            : []
+        let cachedGreptileReviews = freshGreptileCredits.isEmpty ? [] : (cachedResult?.bars ?? []).filter {
+            $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey || $0.stableKey == GreptileUsageIdentity.reviewQuotaStableKey
+        }
+        var unavailableMetrics = dataResult.unavailableUsageMetrics.merging(failureResult.unavailableUsageMetrics) { _, latest in latest }
+        for (index, bar) in cachedGreptileReviews.enumerated() {
+            unavailableMetrics[bar.metricIdentifier(providerID: .greptile, index: index)] =
+                "Review activity unavailable. Last known: \(bar.used.formatted())."
+        }
         let preserveGreptileHistory = failureResult.providerID == .greptile && failureResult.bars.isEmpty
         let barsResult = failureResult.preserveCachedBarsOnFailure || preserveGreptileHistory
             ? cachedResult ?? failureResult
@@ -515,16 +526,17 @@ public final class UsageRefreshService: ObservableObject {
             plan: failureResult.plan ?? cachedResult?.plan,
             verifiedGrokPlanName: failureResult.verifiedGrokPlanName ?? cachedResult?.verifiedGrokPlanName,
             subtitle: subtitle,
-            bars: barsResult.bars,
-            barsFetchedAt: barsResult.barsFetchedAt,
+            bars: freshGreptileCredits.isEmpty ? barsResult.bars : freshGreptileCredits + cachedGreptileReviews,
+            barsFetchedAt: freshGreptileCredits.isEmpty ? barsResult.barsFetchedAt : failureResult.fetchedAt,
             creditsRemaining: creditsResult.creditsRemaining,
             creditsFetchedAt: creditsResult.creditsFetchedAt,
             monetaryMetrics: dataResult.monetaryMetrics,
-            unavailableUsageMetrics: dataResult.unavailableUsageMetrics.merging(failureResult.unavailableUsageMetrics) { _, latest in latest },
+            unavailableUsageMetrics: unavailableMetrics,
             usageMessages: dataResult.usageMessages,
             dashboardUsageMessages: dataResult.dashboardUsageMessages,
             cardInformationSections: dataResult.cardInformationSections,
             greptileAllowanceRenewal: renewal,
+            greptileReviewActivityUnavailableReason: failureResult.greptileReviewActivityUnavailableReason,
             codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,
             failureMessage: failureResult.failureMessage,
             recoveryAction: failureResult.recoveryAction,

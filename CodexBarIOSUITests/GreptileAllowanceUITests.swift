@@ -109,6 +109,11 @@ final class GreptileAllowanceUITests: XCTestCase {
                 XCTAssertEqual(label.frame.midY, date.frame.midY, accuracy: 6)
             }
             keep("\(scenario)-\(full ? "full-dark-large" : "compact-light")", app: app)
+            if scenario == "greptile-renewal-available" {
+                tap(credit, in: app)
+                XCTAssertTrue(app.staticTexts["History"].waitForExistence(timeout: 10), app.debugDescription)
+                keep("\(scenario)-credit-history-\(full ? "dark-large" : "light")", app: app)
+            }
             app.terminate()
             app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
             app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION"] = "1"

@@ -108,6 +108,93 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
 
     }
 
+    @MainActor
+    func testPartialRefreshRecordsFreshCreditsWithoutReplacingCachedReviews() async throws {
+        let fixture = GreptileHTTPFixture([
+            try identity(), .payload(try billing(["kind": "free", "used": 12, "includedCreditsPerPeriod": 50,
+                                                   "currentPeriod": ["end": "2030-02-15T12:03:41Z"],
+            ])),
+            try GreptileHTTPFixture.page(["one", "two"], total: 2),
+            try identity(), .payload(try billing(["kind": "free", "used": 15, "includedCreditsPerPeriod": 50,
+                                                   "currentPeriod": ["end": "2030-02-15T12:03:41Z"],
+            ])),
+            .payload(Data(), status: 503),
+        ])
+        defer { fixture.invalidate() }
+        let service = UsageRefreshService(providers: [try provider(fixture, credential: credential())])
+        await service.refresh(configurations: [browserAccount()])
+        await service.refresh(configurations: [browserAccount()])
+        let result = try XCTUnwrap(service.results.first)
+        XCTAssertNotNil(result.failureMessage)
+        XCTAssertTrue(result.hasCurrentBars)
+        XCTAssertEqual(result.bars.first { $0.stableKey == GreptileUsageIdentity.completedReviewsStableKey }?.used, 2)
+        XCTAssertEqual(result.usageHistoryBars().map(\.used), [15])
+        XCTAssertEqual(result.freshBars.map(\.used), [15])
+        XCTAssertEqual(result.availableMetrics.count, 2)
+        let review = try XCTUnwrap(result.availableMetrics.first { $0.id == GreptileUsageIdentity.completedReviewsMetricID })
+        XCTAssertEqual(review.kind, .unavailableUsage("Review activity unavailable. Last known: 2."))
+        let snapshot = UsageHistorySnapshot(result: result)
+        XCTAssertEqual(snapshot.bars.map(\.used), [15])
+    }
+
+    @MainActor
+    func testFailedBillingAndReviewsExposeOneUnavailableCreditChoice() async throws {
+        let fixture = GreptileHTTPFixture([
+            try identity(), .payload(try billing(["kind": "free", "used": 12, "includedCreditsPerPeriod": 50,
+                                                   "currentPeriod": ["end": "2030-02-15T12:03:41Z"],
+            ])),
+            try GreptileHTTPFixture.page(["one"], total: 1),
+            try identity(), .payload(Data(), status: 503), .payload(Data(), status: 503),
+        ])
+        defer { fixture.invalidate() }
+        let service = UsageRefreshService(providers: [try provider(fixture, credential: credential())])
+        await service.refresh(configurations: [browserAccount()])
+        await service.refresh(configurations: [browserAccount()])
+        let result = try XCTUnwrap(service.results.first)
+        let credits = result.availableMetrics.filter { $0.id == GreptileUsageIdentity.creditAllowanceMetricID }
+        XCTAssertEqual(credits.count, 1)
+        XCTAssertEqual(credits.first?.kind, .unavailableUsage("Credit usage unavailable"))
+        XCTAssertFalse(result.hasCurrentBars)
+    }
+
+    @MainActor
+    func testKnownPaidAccountDoesNotGainFreeCreditChoiceOnBillingFailure() async throws {
+        let fixture = GreptileHTTPFixture([
+            try identity(), .payload(try billing(["kind": "paid"])), try GreptileHTTPFixture.page(["one"], total: 1),
+            try identity(), .payload(Data(), status: 503), try GreptileHTTPFixture.page(["two"], total: 1),
+        ])
+        defer { fixture.invalidate() }
+        let service = UsageRefreshService(providers: [try provider(fixture, credential: credential())])
+        await service.refresh(configurations: [browserAccount()])
+        await service.refresh(configurations: [browserAccount()])
+        let result = try XCTUnwrap(service.results.first)
+        XCTAssertEqual(result.greptileAllowanceRenewal?.isApplicable, false)
+        XCTAssertFalse(result.availableMetrics.contains { $0.id == GreptileUsageIdentity.creditAllowanceMetricID })
+        XCTAssertEqual(result.availableMetrics.count, 1)
+    }
+
+    @MainActor
+    func testCreditOnlyAccountUsesCountHistoryAndCreditDetailIdentity() async throws {
+        let fixture = GreptileHTTPFixture([
+            try identity(), .payload(try billing(["kind": "free", "used": 12, "includedCreditsPerPeriod": 50,
+                                                   "currentPeriod": ["end": "2030-02-15T12:03:41Z"],
+            ])),
+            try GreptileHTTPFixture.page([], total: 0),
+        ])
+        defer { fixture.invalidate() }
+        let result = try await provider(fixture, credential: credential()).fetchUsage(for: browserAccount())
+        let suite = "GreptileCreditOnlyHistory.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let history = UsageHistoryStore(defaults: defaults)
+        history.record(results: [result])
+        XCTAssertEqual(history.historySeries(for: result).points.last?.value, 12)
+        XCTAssertTrue(history.historySeries(for: result).isCount)
+        let id = GreptileUsageIdentity.historySeriesID(forStableKey: GreptileUsageIdentity.creditAllowanceStableKey)
+        XCTAssertEqual(id, "usage.credit-allowance")
+        XCTAssertEqual(history.historySeriesOptions(for: result).first { $0.id == id }?.series.points.last?.value, 12)
+    }
+
     func testCreditExhaustionOverageAndZeroUsageRemainTruthful() throws {
         for (used, remaining, percent) in [(0.0, 50.0, "0%"), (50.0, 0.0, "100%"), (52.0, 0.0, "104%")] {
             let state = try GreptileDashboardClient.parseBillingState(billing([

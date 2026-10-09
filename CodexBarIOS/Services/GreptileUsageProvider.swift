@@ -200,7 +200,9 @@ public final class GreptileUsageProvider: UsageProvider {
             bars: (bar.map { [$0] } ?? []) + activity.bars,
             unavailableUsageMetrics: unavailable, usageMessages: activity.usageMessages,
             cardInformationSections: (creditInformation.map { [$0] } ?? []) + activity.cardInformationSections,
-            greptileAllowanceRenewal: renewal, failureMessage: activity.failureMessage, recoveryAction: activity.recoveryAction,
+            greptileAllowanceRenewal: renewal,
+            greptileReviewActivityUnavailableReason: bar == nil ? nil : activity.failureMessage,
+            failureMessage: activity.failureMessage, recoveryAction: activity.recoveryAction,
             preserveCachedBarsOnFailure: activity.preserveCachedBarsOnFailure, cacheIdentity: cacheIdentity,
             fetchedAt: activity.fetchedAt
         )
