@@ -1274,7 +1274,7 @@ final class AppAndWidgetTests: XCTestCase {
             URLComponents(url: publicProblemURL, resolvingAgainstBaseURL: false)
         )
         XCTAssertEqual(publicProblemComponents.host, "github.com")
-        XCTAssertEqual(publicProblemComponents.path, "/HemSoft/codexbar-ios/issues/new")
+        XCTAssertEqual(publicProblemComponents.path, "/hemsoft-dev/codexbar-ios/issues/new")
         XCTAssertEqual(
             publicProblemComponents.queryItems?.first(where: { $0.name == "template" })?.value,
             "bug_report.yml"
@@ -1300,7 +1300,7 @@ final class AppAndWidgetTests: XCTestCase {
         XCTAssertEqual(publicImprovementComponents.host, "github.com")
         XCTAssertEqual(
             publicImprovementComponents.path,
-            "/HemSoft/codexbar-ios/issues/new"
+            "/hemsoft-dev/codexbar-ios/issues/new"
         )
         XCTAssertEqual(
             publicImprovementComponents.queryItems?
@@ -1320,7 +1320,7 @@ final class AppAndWidgetTests: XCTestCase {
         let knownIssuesComponents = try XCTUnwrap(
             URLComponents(url: knownIssuesURL, resolvingAgainstBaseURL: false)
         )
-        XCTAssertEqual(knownIssuesComponents.path, "/HemSoft/codexbar-ios/issues")
+        XCTAssertEqual(knownIssuesComponents.path, "/hemsoft-dev/codexbar-ios/issues")
         XCTAssertEqual(
             knownIssuesComponents.queryItems?.first(where: { $0.name == "q" })?.value,
             "is:issue is:open"
