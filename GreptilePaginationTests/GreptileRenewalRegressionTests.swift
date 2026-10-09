@@ -122,8 +122,14 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         ])
         defer { fixture.invalidate() }
         let service = UsageRefreshService(providers: [try provider(fixture, credential: credential())])
+        let suite = "GreptilePartialRefreshHistory.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let history = UsageHistoryStore(defaults: defaults)
         await service.refresh(configurations: [browserAccount()])
+        history.record(results: service.successfulRefreshResults)
         await service.refresh(configurations: [browserAccount()])
+        history.record(results: service.successfulRefreshResults)
         let result = try XCTUnwrap(service.results.first)
         XCTAssertNotNil(result.failureMessage)
         XCTAssertTrue(result.hasCurrentBars)
@@ -133,8 +139,10 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(result.availableMetrics.count, 2)
         let review = try XCTUnwrap(result.availableMetrics.first { $0.id == GreptileUsageIdentity.completedReviewsMetricID })
         XCTAssertEqual(review.kind, .unavailableUsage("Review activity unavailable. Last known: 2."))
-        let snapshot = UsageHistorySnapshot(result: result)
-        XCTAssertEqual(snapshot.bars.map(\.used), [15])
+        XCTAssertEqual(service.successfulRefreshResults.count, 1)
+        let options = history.historySeriesOptions(for: result)
+        XCTAssertEqual(options.first { $0.id == "usage.credit-allowance" }?.series.points.map(\.value), [12, 15])
+        XCTAssertEqual(options.first { $0.id == GreptileUsageIdentity.completedReviewsHistorySeriesID }?.series.points.map(\.value), [2])
     }
 
     @MainActor
@@ -155,6 +163,8 @@ final class GreptileRenewalRegressionTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(credits.count, 1)
         XCTAssertEqual(credits.first?.kind, .unavailableUsage("Credit usage unavailable"))
         XCTAssertFalse(result.hasCurrentBars)
+        XCTAssertTrue(service.successfulRefreshResults.isEmpty)
+        XCTAssertFalse(result.cardInformationSections.contains { $0.id == "greptile.credit-allowance" })
     }
 
     @MainActor

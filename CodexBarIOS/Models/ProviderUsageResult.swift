@@ -316,7 +316,14 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         self.unavailableUsageMetrics = unavailableUsageMetrics
         self.usageMessages = usageMessages
         self.dashboardUsageMessages = dashboardUsageMessages ?? usageMessages
-        self.cardInformationSections = cardInformationSections.filter { !$0.items.isEmpty }
+        self.cardInformationSections = cardInformationSections.filter { section in
+            guard !section.items.isEmpty else { return false }
+            if providerID == .greptile, section.id == "greptile.credit-allowance" {
+                return unavailableUsageMetrics[GreptileUsageIdentity.creditAllowanceMetricID] == nil
+                    && greptileAllowanceRenewal?.isApplicable != false && greptileAllowanceRenewal?.isStale != true
+            }
+            return true
+        }
         self.greptileReviewActivityUnavailableReason = greptileReviewActivityUnavailableReason
         self.greptileAllowanceRenewal = greptileAllowanceRenewal
         self.codexBankedRateLimitResets = codexBankedRateLimitResets.flatMap {

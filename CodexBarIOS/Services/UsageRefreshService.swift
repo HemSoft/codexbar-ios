@@ -50,6 +50,7 @@ public final class UsageRefreshService: ObservableObject {
             return refreshErrorsByAccountID[result.accountID] == nil
                 || result.preserveCachedBarsOnFailure
                 || result.preserveCachedCreditsOnFailure
+                || (result.providerID == .greptile && result.greptileReviewActivityUnavailableReason != nil && result.hasCurrentBars)
         }
     }
 
