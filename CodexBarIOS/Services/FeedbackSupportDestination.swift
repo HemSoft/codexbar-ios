@@ -722,7 +722,7 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
             )
         case .knownIssues:
             var components = URLComponents(
-                string: "https://github.com/HemSoft/codexbar-ios/issues"
+                string: "https://github.com/hemsoft-dev/codexbar-ios/issues"
             )!
             components.queryItems = [
                 URLQueryItem(name: "q", value: "is:issue is:open"),
@@ -777,7 +777,7 @@ enum FeedbackSupportDestination: String, CaseIterable, Identifiable, Sendable {
         queryItems: [URLQueryItem]
     ) -> URL {
         var components = URLComponents(
-            string: "https://github.com/HemSoft/codexbar-ios/issues/new"
+            string: "https://github.com/hemsoft-dev/codexbar-ios/issues/new"
         )!
         components.queryItems = [URLQueryItem(name: "template", value: template)] + queryItems
         components.percentEncodedQuery = components.percentEncodedQuery?

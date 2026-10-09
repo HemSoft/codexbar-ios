@@ -4,7 +4,7 @@ enum AppReviewLinks {
     static let writeReviewURL = URL(
         string: "https://apps.apple.com/us/app/codexbar-usage-monitor/id6787769891?action=write-review"
     )!
-    static let supportURL = URL(string: "https://github.com/HemSoft/codexbar-ios/blob/main/SUPPORT.md")!
+    static let supportURL = URL(string: "https://github.com/hemsoft-dev/codexbar-ios/blob/main/SUPPORT.md")!
 }
 
 enum AppReviewPromptEligibility {

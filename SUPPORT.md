@@ -7,9 +7,9 @@ Use the destination that best matches what you need:
 - Email a problem report or improvement suggestion privately to
   `fphemmer@gmail.com` from **Settings > Feedback & Support**. No GitHub account
   is required.
-- [Report a problem](https://github.com/HemSoft/codexbar-ios/issues/new?template=bug_report.yml)
-- [Suggest an improvement](https://github.com/HemSoft/codexbar-ios/issues/new?template=feature_request.yml)
-- [View known issues](https://github.com/HemSoft/codexbar-ios/issues?q=is%3Aissue%20is%3Aopen)
+- [Report a problem](https://github.com/hemsoft-dev/codexbar-ios/issues/new?template=bug_report.yml)
+- [Suggest an improvement](https://github.com/hemsoft-dev/codexbar-ios/issues/new?template=feature_request.yml)
+- [View known issues](https://github.com/hemsoft-dev/codexbar-ios/issues?q=is%3Aissue%20is%3Aopen)
 
 The iPhone and iPad app exposes these destinations together under
 **Settings > Feedback & Support**, alongside the support guide and App Store

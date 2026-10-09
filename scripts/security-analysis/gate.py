@@ -84,7 +84,7 @@ def apply_reviewed_baseline(sarif, findings, baseline, root):
                 or set(entry) != {"finding", "alert", "rationale"}
                 or not isinstance(entry["rationale"], str) or not entry["rationale"].strip()
                 or not isinstance(entry["alert"], str)
-                or not re.fullmatch(r"https://github.com/HemSoft/codexbar-ios/security/code-scanning/[0-9]+",
+                or not re.fullmatch(r"https://github.com/(?:HemSoft|hemsoft-dev)/codexbar-ios/security/code-scanning/[0-9]+",
                                     entry["alert"])):
             raise ValueError("Invalid reviewed baseline entry")
         expected = entry["finding"]
