@@ -21,6 +21,11 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Hide redundant OpenCode plan pills and show named Google AI subscriptions when
+  the connected Google account reports them, including verified plan variants.
+  Missing subscription metadata stays unavailable instead of guessing from quotas.
+  ([#442](https://github.com/hemsoft-dev/codexbar-ios/issues/442))
+
 - Read Codex Credits pool balances as whole credits, with locale-aware grouping
   and consistent rounding across cards, widgets and Apple Watch.
   ([#437](https://github.com/hemsoft-dev/codexbar-ios/issues/437))

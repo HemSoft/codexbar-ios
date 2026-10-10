@@ -372,7 +372,7 @@ struct ProviderUsageCard: View {
                                         .font(.headline)
                                         .fixedSize(horizontal: true, vertical: false)
 
-                                    planBadge
+                                    if result.showsCardPlan { planBadge }
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
@@ -380,7 +380,7 @@ struct ProviderUsageCard: View {
                                         .font(.headline)
                                         .fixedSize(horizontal: false, vertical: true)
 
-                                    planBadge
+                                    if result.showsCardPlan { planBadge }
                                 }
                             }
                         }
@@ -859,7 +859,7 @@ struct ProviderUsageCard: View {
     }
 
     static func headerAccessibilityLabel(for result: ProviderUsageResult) -> String {
-        "\(result.title), \(result.cardPlan.accessibilityLabel)"
+        result.showsCardPlan ? "\(result.title), \(result.cardPlan.accessibilityLabel)" : result.title
     }
 
     static func menuActions(

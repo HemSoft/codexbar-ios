@@ -387,3 +387,17 @@ headers in light/dark at default and accessibility text sizes. It asserts actual
 expanded/collapsed state changes and the same account's plan after refresh. The
 full release runner requires all 29 journeys with zero skips; ordinary automatic
 CI does not run them.
+
+## Google and OpenCode subscription headers
+
+The existing manual-only compact-header journey also exercises isolated
+`google-plan-*` scenarios for named Google AI Free, Plus, Pro, generic Ultra,
+Ultra 5x/20x and unknown metadata. Each scenario seeds an OpenCode Go + Zen
+card. It verifies Google labels, omitted OpenCode pills and expanded/collapsed
+cards in light/default and dark/accessibility text sizes, retaining screenshots.
+These are synthetic responses, not a live account comparison.
+
+Run the affected journey with
+`-only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testCompactCardHeadersAndIndependentControls`
+on the UI-test scheme. This extends an existing journey; the release runner's
+29-test contract and automatic CI workloads are unchanged.

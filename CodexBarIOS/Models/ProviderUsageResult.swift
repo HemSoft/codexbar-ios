@@ -211,6 +211,8 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public var title: String
     public let plan: ProviderPlanDescriptor?
 
+    public var showsCardPlan: Bool { providerID != .openCodeZen }
+
     /// Presentation fallback only. Never infers a subscription from usage or account labels.
     public var cardPlan: ProviderPlanDescriptor {
         if let plan { return plan }
