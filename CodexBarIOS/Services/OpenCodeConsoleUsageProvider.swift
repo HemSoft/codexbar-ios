@@ -22,13 +22,18 @@ struct OpenCodeConsoleUsageProvider {
         }
         let fetchedAt = Date()
         async let balance = fetchBalance(current, service: service)
-        async let goUsage = fetchGo(current, service: service, now: fetchedAt)
+        async let goUsage = fetchGo(current, configuration: configuration, service: service, now: fetchedAt)
         let identity = Data(SHA256.hash(data: Data("\(current.workspaceID)\u{0}\(current.userID)".utf8)))
             .base64EncodedString()
-        return await OpenCodeZenUsageProvider.buildCombinedResult(
-            balance: balance, goUsage: goUsage, configuration: configuration,
+        let (balanceValue, goValue) = await (balance, goUsage)
+        var result = OpenCodeZenUsageProvider.buildCombinedResult(
+            balance: balanceValue, goUsage: goValue.usage, configuration: configuration,
             cacheIdentity: identity, cacheScope: "console.\(current.workspaceID).\(current.userID)", fetchedAt: fetchedAt
         )
+        if credentialIsSaved(current, configuration: configuration), !Task.isCancelled {
+            result.subscriptionRenewal = goValue.renewal
+        }
+        return result
     }
 
     private func currentCredential(
@@ -87,16 +92,38 @@ struct OpenCodeConsoleUsageProvider {
     }
 
     private func fetchGo(
-        _ credential: OpenCodeConsoleCredential, service: OpenCodeDeviceAuthService, now: Date
-    ) async -> OpenCodeGoPageOutcome {
+        _ credential: OpenCodeConsoleCredential, configuration: ProviderAccountConfiguration,
+        service: OpenCodeDeviceAuthService, now: Date
+    ) async -> (usage: OpenCodeGoPageOutcome, renewal: SubscriptionRenewal?) {
+        let verifiedBefore = await verifyBillingIdentity(credential, configuration: configuration, service: service)
         do {
             let data = try await service.get(
                 path: "api/go/status", accessToken: credential.accessToken, workspaceID: credential.workspaceID
             )
-            return Self.goUsage(data, userID: credential.userID, now: now)
+            let usage = Self.goUsage(data, userID: credential.userID, now: now)
+            let candidate = OpenCodeSubscriptionBilling.observation(data, credential: credential, configuration: configuration, at: now)
+            guard verifiedBefore, let candidate,
+                  await verifyBillingIdentity(credential, configuration: configuration, service: service) else { return (usage, nil) }
+            return (usage, candidate)
         } catch {
-            return .failure("OpenCode Go usage could not be verified. Try refreshing or reconnecting.")
+            return (.failure("OpenCode Go usage could not be verified. Try refreshing or reconnecting."), nil)
         }
+    }
+
+    private func credentialIsSaved(_ credential: OpenCodeConsoleCredential, configuration: ProviderAccountConfiguration) -> Bool {
+        guard let saved = try? secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)) else { return false }
+        return configuration.openCodeWorkspaceId == credential.workspaceID && OpenCodeConsoleCredential.parse(saved) == credential
+    }
+
+    private func verifyBillingIdentity(
+        _ credential: OpenCodeConsoleCredential, configuration: ProviderAccountConfiguration, service: OpenCodeDeviceAuthService
+    ) async -> Bool {
+        guard !Task.isCancelled, credentialIsSaved(credential, configuration: configuration) else { return false }
+        do {
+            let data = try await service.get(path: "auth/session", accessToken: credential.accessToken, timeout: 3)
+            return !Task.isCancelled && credentialIsSaved(credential, configuration: configuration)
+                && OpenCodeSubscriptionBilling.matchesIdentity(data, credential: credential)
+        } catch { return false }
     }
 
     static func balance(_ data: Data) -> Double? {

@@ -220,6 +220,7 @@ final class OpenCodeDeviceTransportTests: XCTestCase, @unchecked Sendable {
         AuthTestURLProtocol.state.reset { request in
             switch request.url?.lastPathComponent {
             case "token": return (200, Self.refreshedToken)
+            case "session": return (200, #"{"user":{"id":"user_one"},"org_id":"wrk_one"}"#)
             default:
                 XCTAssertEqual(request.value(forHTTPHeaderField: "x-org-id"), "wrk_one")
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer renewed-access")

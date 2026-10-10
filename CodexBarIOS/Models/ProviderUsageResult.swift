@@ -329,7 +329,8 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
             return true
         }
         self.greptileReviewActivityUnavailableReason = greptileReviewActivityUnavailableReason
-        self.subscriptionRenewal = failureMessage == nil ? subscriptionRenewal : nil
+        // A fresh Go billing observation remains valid if only the independent Zen balance fails.
+        self.subscriptionRenewal = failureMessage == nil || providerID == .openCodeZen ? subscriptionRenewal : nil
         self.greptileAllowanceRenewal = greptileAllowanceRenewal
         self.codexBankedRateLimitResets = codexBankedRateLimitResets.flatMap {
             $0.availableCount > 0 ? $0 : nil

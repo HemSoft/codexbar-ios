@@ -20,7 +20,7 @@ specific to the product and authentication method already connected in this app.
 | Grok | Optional private Grok web session, `GET grok.com/rest/subscriptions` | Implemented for one active personal SuperGrok subscription with an exact `xaiUserId` match to the connected OAuth subject. Stripe uses `currentPeriodEnd` and Boolean `cancelAtPeriodEnd`; Google purchases use `expiryTime` and `autoRenewEnabled`; Apple purchases require provider-reported `billingPeriodEnd` and `autoRenewOn`. Missing or contradictory state, multiple active personal subscriptions, payment grace/hold, X, enterprise, API and complimentary grants are excluded. Weekly quota dates remain usage resets. Live account compatibility is pending Franz. |
 | Google Gemini | Code Assist tier metadata and Gemini usage windows | Google AI plan names do not supply Google One billing dates. Missing an account-bound next charge and renewal state. |
 | Antigravity | Google coding quota windows | No directly identified recurring subscription or billing date in this connection. No renewal pill. |
-| OpenCode Go / Zen | Go quotas and Zen credit balance | The current console contract exposes explicit Go/Go Plus cancellation, subscriber and paid-period/recovery state. Implementation is tracked in [#451](https://github.com/hemsoft-dev/codexbar-ios/issues/451); the app does not read these billing fields yet. Old month anchors and Zen balance remain insufficient. |
+| OpenCode Go / Zen | Go quotas and Zen credit balance | The connected Console device grant now verifies Go/Go Plus subscriber, current paid period, cancellation and recovery state. Identity and saved credentials are checked around the existing Go status read. Canceled access ends in details; recovery, unknown state and another member stay unavailable. Zen balances and old month anchors remain separate. ([#451](https://github.com/hemsoft-dev/codexbar-ios/issues/451)) |
 | OpenRouter | API credit balance | Prepaid/API credits, not a renewing subscription in this integration. No renewal pill. |
 | Moonshot | API credit balance | Prepaid/API credits, not a Kimi subscription in this integration. No renewal pill. |
 | Greptile | Free-credit allowance renewal | Existing allowance details stay separate. Free accounts get no billing-renewal pill. A paid subscription would need a verified next-charge/auto-renewal contract. |
@@ -29,6 +29,32 @@ Unavailable recurring products explain the missing billing date in **More
 Information**. Confirmed free or prepaid products have no billing countdown.
 Canceled subscriptions show their access end date in details and never say
 "Renews". Nothing here requires users to import tokens, cookies or billing dates.
+
+## OpenCode Go billing acquisition
+
+The existing guided device grant needs no separate billing sign-in. The Console
+provider checks the saved account credential and `auth/session.user.id` (plus
+optional `org_id`) before its existing workspace-scoped Go status request. A
+recognized subscriber's billing observation requires a second identity read and
+an unchanged saved credential after acquisition. Each optional identity request
+has a three-second timeout. A failed optional check drops the billing date while
+retaining successfully fetched Go windows and Zen balance. Successful credential
+replacement, disconnect, account removal and reset also invalidate cached
+OpenCode observations immediately; failed credential writes preserve the cache.
+
+Only explicit, consistent cancellation flags and a currently valid paid access
+interval establish a date. Cancellation shows access ending in details. Renewal
+requires `resumability: renewing`, `renewalPending: false` and no payment recovery
+or stop fields; Go Plus downgrades retain the returned period boundary. Arrays,
+unknown products, missing fields and expired intervals remain unavailable. These
+reads perform no checkout, portal, cancellation, resume or payment mutation.
+
+The local `OpenCodeSubscriptionBillingTests` intercept production transport and
+cover subscriber/workspace/credential isolation, rejected optional access,
+malformed billing state, redirect policy and task cancellation after successful
+usage. The existing OpenCode verification-failure UI journey captures production
+client fixtures on iPhone and iPad. Franz's live account date comparison remains
+separate from these synthetic checks.
 
 ## Freshness and isolation
 
@@ -159,3 +185,7 @@ Franz owns real account sign-in, transport compatibility and comparisons against
 provider billing pages. Those checks remain pending and do not hold up agent
 delivery. Synthetic acquisition fixtures exercise the real clients, provider
 parsers and owner checks; they do not establish live provider access.
+
+Verified Go billing remains visible when the independent Zen balance read fails.
+Partial-refresh preservation keeps only the fresh account-bound observation; an
+old renewal is never reused when the new Go billing state is unavailable.

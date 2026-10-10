@@ -49,9 +49,16 @@ final class OpenCodeTestSecrets: SecretStore, @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: String] = [:]
     private var fails = false
+    private var readFails = false
 
     func setFailure(_ value: Bool) { lock.withLock { fails = value } }
-    func readSecret(account: String) throws -> String? { lock.withLock { values[account] } }
+    func setReadFailure(_ value: Bool) { lock.withLock { readFails = value } }
+    func readSecret(account: String) throws -> String? {
+        try lock.withLock {
+            if readFails { throw OpenCodeSignInError.validationFailed }
+            return values[account]
+        }
+    }
     func saveSecret(_ secret: String, account: String) throws {
         try lock.withLock {
             if fails { throw OpenCodeSignInError.validationFailed }

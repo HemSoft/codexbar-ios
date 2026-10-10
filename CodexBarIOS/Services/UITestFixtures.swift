@@ -75,6 +75,7 @@ final class UITestFixtures {
         }
         let githubBilling = scenario?.hasPrefix("github-billing") == true
         let grok = scenario?.hasPrefix("grok") == true
+        UITestOpenCodeRenewalProvider.seed(in: configurationStore, scenario: scenario)
         Self.seedRenewalAccounts(in: configurationStore, scenario: scenario)
         Self.seedGooglePlanAccounts(in: configurationStore, scenario: scenario)
         Self.seedPlanPillAccounts(in: configurationStore, scenario: scenario)
@@ -129,7 +130,7 @@ final class UITestFixtures {
             providers = [UITestUsageProvider(failsFirstRefresh: recovery), UITestGrokProvider(scenario: scenario)]
         }
         refreshService = UsageRefreshService(providers: Self.providersForPlanPills(providers, scenario: scenario, suiteName: suite), initialResults: results)
-        if scenario == "plan-pills" || scenario?.hasPrefix("claude-plan-") == true
+        if scenario?.hasPrefix("opencode-renewal-") == true || scenario == "plan-pills" || scenario?.hasPrefix("claude-plan-") == true
             || (greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1")
             || scenario?.hasPrefix("grok-cursor-parity") == true
             || Self.isCursorSessionScenario(scenario) {
@@ -197,6 +198,10 @@ final class UITestFixtures {
     nonisolated private static func initialResult(
         for configuration: ProviderAccountConfiguration, scenario: String?, googleSources: [ProviderID]
     ) -> ProviderUsageResult {
+        if scenario?.hasPrefix("opencode-renewal-") == true {
+            return ProviderUsageResult(accountID: configuration.id, providerID: .openCodeZen, title: configuration.displayName,
+                                       subtitle: "Waiting for synthetic Console response", bars: [], fetchedAt: Date())
+        }
         if scenario?.hasPrefix("subscription-renewals") == true { return renewalResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("google-plan-") == true {
             return googlePlanResult(for: configuration)
@@ -272,6 +277,9 @@ final class UITestFixtures {
     private static func providersForPlanPills(
         _ providers: [any UsageProvider], scenario: String?, suiteName: String
     ) -> [any UsageProvider] {
+        if scenario?.hasPrefix("opencode-renewal-") == true {
+            return [UITestOpenCodeRenewalProvider(secretStore: UITestSecretStore(suite: suiteName))]
+        }
         if scenario?.hasPrefix("subscription-renewals") == true {
             return [ProviderID.codex, .claude, .grok, .gemini, .openCodeZen].map { UITestRenewalProvider(providerID: $0, scenario: scenario) }
         }
@@ -1457,7 +1465,11 @@ private struct UITestSecretStore: SecretStore {
                 || $0.providerID == .grok && $0.ownerID == "synthetic-user" && $0.organizationID == nil)
                 && $0.cookies.count == 1 && $0.cookies[0].value == "matching"
         } ?? false
-        guard secret.hasPrefix("cursor-plan-") || secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile || grok
+        let openCode = OpenCodeConsoleCredential.parse(secret).map {
+            $0.accessToken == "synthetic-access" && $0.refreshToken == "synthetic-refresh"
+                && $0.userID == "user_synthetic" && $0.workspaceID == "org_synthetic"
+        } == true
+        guard secret.hasPrefix("cursor-plan-") || secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile || grok || openCode
                 || secret == UITestFixtures.claudeProfileCredential || fixtureBilling else {
             throw UITestFixtureError.invalidCredential
         }

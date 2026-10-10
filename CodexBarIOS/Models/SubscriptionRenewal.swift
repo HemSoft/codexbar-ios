@@ -108,7 +108,9 @@ public struct SubscriptionRenewal: Equatable, Sendable {
 extension ProviderUsageResult {
     /// Also validates mutations: a copied observation must not appear on another account.
     public var boundSubscriptionRenewal: SubscriptionRenewal? {
-        guard !subscriptionBillingIsNotApplicable, failureMessage == nil, let renewal = subscriptionRenewal,
+        // OpenCode verifies Go billing separately from the optional Zen balance read.
+        guard !subscriptionBillingIsNotApplicable, failureMessage == nil || providerID == .openCodeZen,
+              let renewal = subscriptionRenewal,
               renewal.accountID == accountID, renewal.providerID == providerID else { return nil }
         return renewal
     }
@@ -154,7 +156,7 @@ extension ProviderUsageResult {
             return "Copilot allowance resets are separate from subscription billing. The current connection does not provide a next "
                 + "charge and cancellation status. Check GitHub Billing & licensing."
         case .openCodeZen:
-            return "OpenCode Go reports quotas, but not a next charge with cancellation status. Check your workspace Billing page. Zen "
+            return "The current OpenCode connection did not verify a Go subscription billing date. Refresh or reconnect to check. Zen "
                 + "prepaid credit balances do not renew."
         case .greptile:
             return "Paid Greptile billing needs a verified next charge and renewal status for the selected organization. Free-credit "

@@ -48,8 +48,10 @@ struct OpenCodeDeviceAuthService: Sendable {
         self.session = session
     }
 
-    static func makeSession() -> URLSession {
+    static func makeSession(protocolClasses: [AnyClass]? = nil) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = protocolClasses
+        configuration.urlCredentialStorage = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
@@ -166,8 +168,8 @@ struct OpenCodeDeviceAuthService: Sendable {
         return try token.credential(workspaceID: workspace, userID: identity.user.id, now: issuedAt)
     }
 
-    func get(path: String, accessToken: String, workspaceID: String? = nil) async throws -> Data {
-        let (data, status) = try await send(path: path, accessToken: accessToken, workspaceID: workspaceID)
+    func get(path: String, accessToken: String, workspaceID: String? = nil, timeout: TimeInterval = 20) async throws -> Data {
+        let (data, status) = try await send(path: path, accessToken: accessToken, workspaceID: workspaceID, timeout: timeout)
         guard status == 200 else { throw OpenCodeSignInError.validationFailed }
         return data
     }
@@ -176,10 +178,13 @@ struct OpenCodeDeviceAuthService: Sendable {
         path: String,
         payload: [String: Any]? = nil,
         accessToken: String? = nil,
-        workspaceID: String? = nil
+        workspaceID: String? = nil,
+        timeout: TimeInterval = 20
     ) async throws -> (Data, Int) {
         var request = URLRequest(url: Self.baseURL.appending(path: path))
-        request.timeoutInterval = 20
+        request.timeoutInterval = timeout
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.httpShouldHandleCookies = false
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let payload {
             request.httpMethod = "POST"
