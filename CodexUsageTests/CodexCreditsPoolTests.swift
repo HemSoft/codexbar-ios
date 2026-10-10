@@ -7,11 +7,19 @@ final class CodexCreditsPoolTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_893_448_800)
 
     func testBalancesUseCreditUnitsAndPreserveQuotaIdentity() throws {
-        for (balance, expected) in [("62500", "62,500 credits"), ("0", "0 credits"), ("1", "1 credit"), ("12.125", "12.125 credits")] {
+        for (balance, expected) in [
+            ("62500", "62,500 credits"), ("0", "0 credits"), ("1", "1 credit"),
+            ("12.125", "12 credits"), ("62500.75", "62,501 credits"),
+            ("0.49", "0 credits"), ("0.5", "1 credit"), ("1.2", "1 credit"),
+            ("1.5", "2 credits"), ("999.5", "1,000 credits"),
+        ] {
             let result = try parse(credits: ["has_credits": balance != "0", "unlimited": false, "balance": balance])
             let pool = try XCTUnwrap(result.bars.last)
             XCTAssertEqual(pool.stableKey, "credits-pool")
             XCTAssertEqual(pool.usageText, expected)
+            let original = try XCTUnwrap(Double(balance))
+            XCTAssertEqual(pool.used, original, accuracy: max(original * 1e-12, 1e-112),
+                           "Display rounding must preserve the balance")
             XCTAssertTrue(pool.isUnboundedNumeric)
             XCTAssertEqual(pool.supportedVisualizationStyles, [.automatic, .largeNumeric])
             XCTAssertEqual(pool.severity, .normal)
@@ -24,7 +32,8 @@ final class CodexCreditsPoolTests: XCTestCase {
         let numeric = try parse(credits: ["has_credits": true, "unlimited": false, "balance": 62500])
         XCTAssertEqual(numeric.bars.last?.usageText, "62,500 credits")
         let tiny = try parse(credits: ["has_credits": true, "unlimited": false, "balance": "1e-100"])
-        XCTAssertEqual(tiny.bars.last?.usageText, "0." + String(repeating: "0", count: 99) + "1 credits")
+        XCTAssertEqual(tiny.bars.last?.usageText, "0 credits")
+        XCTAssertEqual(try XCTUnwrap(tiny.bars.last).used, 1e-100, accuracy: 1e-112)
     }
 
     func testInvalidOrMissingBalancesNeverBecomeZero() throws {
@@ -54,7 +63,7 @@ final class CodexCreditsPoolTests: XCTestCase {
     func testCreditOnlyResponseIsUsefulAndLocaleAware() throws {
         let data = Data(#"{"credits":{"has_credits":true,"unlimited":false,"balance":"62500.5"}}"#.utf8)
         let result = try XCTUnwrap(CodexUsageParser.parse(data, fetchedAt: now, locale: Locale(identifier: "de_DE")))
-        XCTAssertEqual(result.bars.first?.usageText, "62.500,5 credits")
+        XCTAssertEqual(result.bars.first?.usageText, "62.501 credits")
         XCTAssertEqual(result.availableMetrics.first?.id, metricID)
         let absent = try XCTUnwrap(CodexUsageParser.parse(Data(#"{"credits":{"has_credits":false,"unlimited":false,"balance":null}}"#.utf8)))
         XCTAssertTrue(absent.bars.isEmpty)
@@ -121,7 +130,7 @@ final class CodexCreditsPoolTests: XCTestCase {
         let store = ProviderConfigurationStore(defaults: defaults, secretStore: CreditsFixtureSecretStore())
         let account = store.addAccount(for: .codex)
         XCTAssertTrue(store.saveSecret("synthetic", for: account))
-        let parsed = try parse(credits: ["has_credits": true, "unlimited": false, "balance": "62500"])
+        let parsed = try parse(credits: ["has_credits": true, "unlimited": false, "balance": "62500.75"])
         let result = ProviderUsageResult(accountID: account.id, providerID: .codex, title: account.displayName,
                                          subtitle: parsed.subtitle, bars: parsed.bars, fetchedAt: now)
         let watch = WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: now)
@@ -129,14 +138,14 @@ final class CodexCreditsPoolTests: XCTestCase {
         WidgetSnapshotPublisher.publish(results: [result], configurationStore: store, snapshotDefaults: defaults, now: now)
         let snapshot = WidgetSnapshotStore.loadSnapshot(defaults: defaults)
         let tile = try XCTUnwrap(snapshot.results.first?.bars.first { $0.metricID == metricID })
-        XCTAssertEqual(tile.usageText, "62,500 credits")
+        XCTAssertEqual(tile.usageText, "62,501 credits")
         XCTAssertEqual(tile.allowsGauge, false)
         let savedID = "bar.\(tile.id)"
         XCTAssertNotNil(snapshot.builderTile(resolvingSavedID: savedID))
         store.updateMetricVisibility(true, accountID: account.id, metricID: metricID)
         let shown = WatchSnapshotPublisher.makeSnapshot(results: [result], configurationStore: store, now: now)
         let watchPool = try XCTUnwrap(shown.accounts.first?.metrics.first { $0.id == metricID })
-        XCTAssertEqual(watchPool.exactValue, "62,500 credits")
+        XCTAssertEqual(watchPool.exactValue, "62,501 credits")
         XCTAssertNil(watchPool.usedFraction)
         XCTAssertEqual(watchPool.visualizationStyle, .largeNumeric)
         let poolOnly = ProviderUsageResult(accountID: account.id, providerID: .codex, title: result.title,

@@ -73,3 +73,14 @@ The focused manual native journey is
 `CodexCreditsPoolUITests.testOptInBalanceStatesAndSavedAccountChoices`. Run it
 on iPhone and iPad with the instructions in [UI-TESTING.md](UI-TESTING.md).
 Synthetic screenshots and recordings are not proof of a live account balance.
+
+## Display precision
+
+Credit counts display no decimal places. Round to the nearest whole credit,
+with half credits rounding up, and apply locale-aware grouping. Singular and
+plural wording follows the displayed count. For example, 12.125 displays as
+12 credits, 62500.75 as 62,501 credits in en_US, and 1.2 as 1 credit.
+The underlying numeric balance keeps its original precision; only presentation
+changes. The same count text feeds dashboard, detail, customization, widget
+and Apple Watch presentations. Unavailable, unlimited and stale states retain
+their existing semantics.

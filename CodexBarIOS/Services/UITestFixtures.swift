@@ -428,6 +428,8 @@ final class UITestFixtures {
     ) -> ProviderUsageResult {
         let credits: String
         switch scenario {
+        case "codex-credits-round-up":
+            credits = #"{"has_credits":true,"unlimited":false,"balance":"62500.75"}"#
         case "codex-credits-zero":
             credits = #"{"has_credits":false,"unlimited":false,"balance":"0"}"#
         case "codex-credits-unlimited":
@@ -435,7 +437,7 @@ final class UITestFixtures {
         case "codex-credits-unavailable":
             credits = #"{"has_credits":true,"unlimited":false,"balance":null}"#
         default:
-            let balance = account.id == "ui-codex-personal" ? "62500" : "770"
+            let balance = account.id == "ui-codex-personal" ? "62500.125" : "770"
             credits = #"{"has_credits":true,"unlimited":false,"balance":"\#(balance)"}"#
         }
         let now = Date()
@@ -450,7 +452,8 @@ final class UITestFixtures {
         return ProviderUsageResult(
             accountID: account.id, providerID: .codex, title: account.displayName,
             subtitle: "Synthetic Codex usage", bars: parsed.bars,
-            unavailableUsageMetrics: parsed.unavailableUsageMetrics, fetchedAt: parsed.fetchedAt
+            unavailableUsageMetrics: parsed.unavailableUsageMetrics,
+            cacheIdentity: "ui-codex-credits:\(account.id)", fetchedAt: parsed.fetchedAt
         )
     }
 
@@ -1399,7 +1402,8 @@ private actor UITestCodexProvider: UsageProvider {
         if scenario == "codex-credits-failure" {
             return ProviderUsageResult(
                 accountID: configuration.id, providerID: .codex, title: configuration.displayName,
-                subtitle: "Synthetic refresh failed", bars: [], failureMessage: "Synthetic refresh failed", fetchedAt: Date()
+                subtitle: "Synthetic refresh failed", bars: [], failureMessage: "Synthetic refresh failed",
+                cacheIdentity: "ui-codex-credits:\(configuration.id)", allowsUnscopedCacheReuse: true, fetchedAt: Date()
             )
         }
         return UITestFixtures.codexResult(for: configuration, scenario: scenario)

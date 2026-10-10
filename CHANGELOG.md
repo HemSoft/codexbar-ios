@@ -21,6 +21,10 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Read Codex Credits pool balances as whole credits, with locale-aware grouping
+  and consistent rounding across cards, widgets and Apple Watch.
+  ([#437](https://github.com/hemsoft-dev/codexbar-ios/issues/437))
+
 - Recognize Codex subscriptions by their ChatGPT Pro 100, Pro 200 or Pro 500
   names, with ChatGPT 20 for Plus and ChatGPT Free for Free. Plan labels stay
   tied to the signed-in account when credentials change or a refresh fails.
