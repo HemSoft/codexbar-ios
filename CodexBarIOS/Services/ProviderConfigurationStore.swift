@@ -1576,6 +1576,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private func writeAccountSecret(_ value: String?, for configuration: ProviderAccountConfiguration) throws {
         var changedGrokSubject = false
         let write = {
+            try self.deleteSubscriptionBillingSessionBeforeCredentialChange(configuration)
             let account = self.keychainAccount(for: configuration)
             if configuration.providerID == .grok {
                 let previous = GrokCredential.parse(try self.secretStore.readSecret(account: account))?.subject
@@ -2922,6 +2923,7 @@ extension ProviderConfigurationStore {
         for account in configurations.map({ keychainAccount(for: $0) })
             + ProviderID.allCases.map({ keychainAccount(for: $0) })
             + codingAccounts
+            + configurations.filter({ [.claude, .grok].contains($0.providerID) }).map({ SubscriptionBillingSession.keychainAccount($0) })
         where seenKeychainAccounts.insert(account).inserted {
             accountsToDelete.append(account)
         }
@@ -3056,4 +3058,52 @@ extension ProviderConfigurationStore {
         defaults.set(shows, forKey: DefaultsKey.showsSubscriptionRenewals)
     }
 
+}
+
+extension ProviderConfigurationStore {
+    private func deleteSubscriptionBillingSessionBeforeCredentialChange(_ configuration: ProviderAccountConfiguration) throws {
+        if [.claude, .grok].contains(configuration.providerID) {
+            try secretStore.deleteSecret(account: SubscriptionBillingSession.keychainAccount(configuration))
+        }
+    }
+
+    func billingUsageSecret(for configuration: ProviderAccountConfiguration) -> String? {
+        guard let current = self.configuration(accountID: configuration.id), current.providerID == configuration.providerID else { return nil }
+        return try? secretStore.readSecret(account: Self.keychainAccount(for: current))
+    }
+
+    func hasSubscriptionBillingSession(for configuration: ProviderAccountConfiguration) -> Bool {
+        SubscriptionBillingSession.parse(try? secretStore.readSecret(account: SubscriptionBillingSession.keychainAccount(configuration))) != nil
+    }
+
+    @discardableResult
+    func saveSubscriptionBillingSession(_ session: SubscriptionBillingSession, for configuration: ProviderAccountConfiguration,
+                                        expectedUsageSecret: String) -> Bool {
+        guard allowConfigurationMutation(), let current = self.configuration(accountID: configuration.id),
+              current.providerID == session.providerID, SubscriptionBillingSession.host(session.providerID) != nil,
+              SubscriptionBillingSession.header(session.cookies, at: Date()) != nil,
+              session.providerID != .grok || GrokCredential.parse(expectedUsageSecret)?.subject == session.ownerID,
+              billingUsageSecret(for: current) == expectedUsageSecret else { return false }
+        do {
+            try secretStore.saveSecret(try session.encoded(), account: SubscriptionBillingSession.keychainAccount(current))
+            credentialChanges.send(current.id)
+            return true
+        } catch {
+            lastError = "Billing connection could not be saved securely."
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeSubscriptionBillingSession(for configuration: ProviderAccountConfiguration) -> Bool {
+        guard allowConfigurationMutation() else { return false }
+        do {
+            try secretStore.deleteSecret(account: SubscriptionBillingSession.keychainAccount(configuration))
+            credentialChanges.send(configuration.id)
+            return true
+        } catch {
+            lastError = "Billing connection could not be removed."
+            return false
+        }
+    }
 }

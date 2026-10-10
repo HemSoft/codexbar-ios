@@ -8,6 +8,12 @@ building, testing, or releasing the app.
 
 ### Added
 
+- Connect billing for Claude and Grok to see verified subscription renewal dates
+  beside their usage. Billing sign-in checks the same account, canceled plans show
+  their access end date in details, and the existing setting controls all renewal
+  pills. Providers without verified billing dates explain what is missing.
+  ([#446](https://github.com/hemsoft-dev/codexbar-ios/issues/446))
+
 - See compact subscription renewal countdowns when the connected provider supplies
   a verified billing date, with exact dates in card details. Control their display
   in Dashboard settings; usage reset dates remain separate. Billing dates that the

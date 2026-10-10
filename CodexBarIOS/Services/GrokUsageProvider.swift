@@ -36,7 +36,12 @@ public final class GrokUsageProvider: UsageProvider {
         let state = await currentCredential(candidate, keychainAccount: account)
         guard case .ready(let credential) = state else { return credentialFailure(state, configuration: configuration, subject: candidate.subject) }
         do {
-            let result = try await fetchCandidate(credential, for: configuration)
+            var result = try await fetchCandidate(credential, for: configuration)
+            if let usageSecret = try? secretStore.readSecret(account: account), GrokCredential.parse(usageSecret) == credential {
+                result.subscriptionRenewal = try await SubscriptionBillingClient(session: session).fetch(
+                    configuration: configuration, usageSecret: usageSecret, secretStore: secretStore, at: Date()
+                )
+            }
             return try GrokCredentialLock.withLock {
                 guard let saved = try secretStore.readSecret(account: account),
                       GrokCredential.parse(saved) == credential else { throw GrokAuthError.unauthorized }
@@ -348,6 +353,7 @@ public final class GrokUsageProvider: UsageProvider {
             monetaryMetrics: incoming.monetaryMetrics,
             usageMessages: ["Inferred zero from Grok's CLI convention, not a reported measurement."],
             cardInformationSections: incoming.cardInformationSections,
+            subscriptionRenewal: incoming.subscriptionRenewal,
             cacheIdentity: incoming.cacheIdentity, cacheScope: incoming.cacheScope, fetchedAt: incoming.fetchedAt
         )
     }

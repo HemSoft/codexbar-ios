@@ -79,11 +79,20 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
         } else {
             usageResult = await staleOrFailureResult("Claude usage did not include rate-limit windows.", configuration: configuration)
         }
-        let resolved = applyAccountMetadata(
+        var resolved = applyAccountMetadata(
             to: usageResult, configuration: configuration, resetInventory: usageResult.claudeUsageResetInventory,
             planResolution: resolution
         )
         if oauthOutcome.isSuccessfulSnapshot {
+            if let usageSecret = try? secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
+               ClaudeCredentialsParser.parse(usageSecret)?.accessToken == token {
+                resolved.subscriptionRenewal = try await SubscriptionBillingClient(session: session).fetch(
+                    configuration: configuration, usageSecret: usageSecret, secretStore: secretStore, at: now()
+                )
+            }
+            guard try currentToken(for: configuration) == token else {
+                return failureResult("Claude account changed during refresh. Refresh again.", configuration: configuration)
+            }
             return await snapshotCache.storePreservingBars(resolved, accountID: configuration.id, credential: token)
                 ?? failureResult("Claude account changed during refresh. Refresh again.", configuration: configuration)
         }
@@ -442,6 +451,7 @@ private actor ClaudeUsageSnapshotCache {
             usageMessages: result.usageMessages,
             dashboardUsageMessages: result.dashboardUsageMessages,
             cardInformationSections: result.cardInformationSections,
+            subscriptionRenewal: result.subscriptionRenewal,
             claudeUsageResetInventory: result.claudeUsageResetInventory,
             failureMessage: result.failureMessage,
             hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory

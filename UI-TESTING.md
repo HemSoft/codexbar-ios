@@ -443,4 +443,10 @@ The renewal subjourney also checks parsed Google AI Free has no renewal label or
 billing-only More Information menu item. The release runner does not set this
 selector and still requires all 29 complete journeys on both families. Billing
 fixtures are synthetic; real-account billing comparisons remain Franz-owned.
+The same focused journey covers Claude and Grok renewal pills and unknown,
+canceled, stale and passed details. Its billing connection sheet uses the real
+account-verifying client against a simulator-only URLProtocol: another sample
+account is rejected, the matching sample account returns automatically, and
+Disconnect Billing and Cancel preserve the usage connection. No live sign-in or
+provider endpoint is accessed by that fixture.
 See [subscription source coverage](SUBSCRIPTION-RENEWALS.md).

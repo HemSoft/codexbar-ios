@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A44600000000000000000601 /* UITestSubscriptionBillingProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44600000000000000000602 /* UITestSubscriptionBillingProtocol.swift */; };
+		A44600000000000000000501 /* SubscriptionBillingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44600000000000000000502 /* SubscriptionBillingTests.swift */; };
+		A44600000000000000000401 /* SubscriptionBillingSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44600000000000000000402 /* SubscriptionBillingSignInView.swift */; };
+		A44600000000000000000301 /* SubscriptionBillingClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44600000000000000000302 /* SubscriptionBillingClient.swift */; };
+		A44600000000000000000201 /* SubscriptionBillingParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44600000000000000000202 /* SubscriptionBillingParser.swift */; };
+		A44600000000000000000101 /* SubscriptionBillingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44600000000000000000102 /* SubscriptionBillingSession.swift */; };
 		A44400000000000000000301 /* SubscriptionRenewalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44400000000000000000302 /* SubscriptionRenewalTests.swift */; };
 		A44400000000000000000201 /* CodexSubscriptionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44400000000000000000202 /* CodexSubscriptionClient.swift */; };
 		A44400000000000000000101 /* SubscriptionRenewal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44400000000000000000102 /* SubscriptionRenewal.swift */; };
@@ -272,6 +278,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A44600000000000000000602 /* UITestSubscriptionBillingProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestSubscriptionBillingProtocol.swift; sourceTree = "<group>"; };
+		A44600000000000000000502 /* SubscriptionBillingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarIOSTests/SubscriptionBillingTests.swift; sourceTree = SOURCE_ROOT; };
+		A44600000000000000000402 /* SubscriptionBillingSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionBillingSignInView.swift; sourceTree = "<group>"; };
+		A44600000000000000000302 /* SubscriptionBillingClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionBillingClient.swift; sourceTree = "<group>"; };
+		A44600000000000000000202 /* SubscriptionBillingParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionBillingParser.swift; sourceTree = "<group>"; };
+		A44600000000000000000102 /* SubscriptionBillingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionBillingSession.swift; sourceTree = "<group>"; };
 		A44400000000000000000302 /* SubscriptionRenewalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarIOSTests/SubscriptionRenewalTests.swift; sourceTree = SOURCE_ROOT; };
 		A44400000000000000000202 /* CodexSubscriptionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexSubscriptionClient.swift; sourceTree = "<group>"; };
 		A44400000000000000000102 /* SubscriptionRenewal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionRenewal.swift; sourceTree = "<group>"; };
@@ -593,6 +605,10 @@
 				200000000000000000000023 /* ClaudeUsageParser.swift */,
 				200000000000000000000024 /* ClaudeUsageProvider.swift */,
 				A44400000000000000000202 /* CodexSubscriptionClient.swift */,
+				A44600000000000000000602 /* UITestSubscriptionBillingProtocol.swift */,
+				A44600000000000000000302 /* SubscriptionBillingClient.swift */,
+				A44600000000000000000202 /* SubscriptionBillingParser.swift */,
+				A44600000000000000000102 /* SubscriptionBillingSession.swift */,
 				A43100000000000000000102 /* ClaudePlanProfileClient.swift */,
 				A42000000000000000000202 /* ClaudeUsageResetClient.swift */,
 				A42100000000000000000202 /* ClaudeFableMetricPreferenceCompatibility.swift */,
@@ -633,6 +649,7 @@
 				200000000000000000000012 /* SettingsView.swift */,
 				200000000000000000000038 /* WidgetBuilderView.swift */,
 				200000000000000000000013 /* ProviderSettingsView.swift */,
+				A44600000000000000000402 /* SubscriptionBillingSignInView.swift */,
 				A29900000000000000000102 /* GeminiBrowserSignInView.swift */,
 				A40600000000000000000602 /* ProviderCardInformationView.swift */,
 				A40600000000000000000502 /* GreptileRenewalView.swift */,
@@ -672,6 +689,7 @@
 				A42100000000000000000302 /* ClaudeFableWeeklyTests.swift */,
 				A43100000000000000000202 /* ClaudePlanProfileTests.swift */,
 				A44400000000000000000302 /* SubscriptionRenewalTests.swift */,
+				A44600000000000000000502 /* SubscriptionBillingTests.swift */,
 				A43800000000000000000102 /* CursorPlanTests.swift */,
 				20000000000000000000004A /* UsageAlertTests.swift */,
 				20000000000000000000004D /* UsageHistoryTests.swift */,
@@ -1115,6 +1133,11 @@
 				100000000000000000000021 /* ClaudeUsageParser.swift in Sources */,
 				100000000000000000000022 /* ClaudeUsageProvider.swift in Sources */,
 				A44400000000000000000201 /* CodexSubscriptionClient.swift in Sources */,
+				A44600000000000000000601 /* UITestSubscriptionBillingProtocol.swift in Sources */,
+				A44600000000000000000401 /* SubscriptionBillingSignInView.swift in Sources */,
+				A44600000000000000000301 /* SubscriptionBillingClient.swift in Sources */,
+				A44600000000000000000201 /* SubscriptionBillingParser.swift in Sources */,
+				A44600000000000000000101 /* SubscriptionBillingSession.swift in Sources */,
 				A43100000000000000000101 /* ClaudePlanProfileClient.swift in Sources */,
 				A42000000000000000000201 /* ClaudeUsageResetClient.swift in Sources */,
 				A42100000000000000000201 /* ClaudeFableMetricPreferenceCompatibility.swift in Sources */,
@@ -1182,6 +1205,7 @@
 				A42100000000000000000301 /* ClaudeFableWeeklyTests.swift in Sources */,
 				A43100000000000000000201 /* ClaudePlanProfileTests.swift in Sources */,
 				A44400000000000000000301 /* SubscriptionRenewalTests.swift in Sources */,
+				A44600000000000000000501 /* SubscriptionBillingTests.swift in Sources */,
 				A43800000000000000000101 /* CursorPlanTests.swift in Sources */,
 				100000000000000000000051 /* UsageAlertTests.swift in Sources */,
 				10000000000000000000004D /* UsageHistoryTests.swift in Sources */,
