@@ -48,7 +48,9 @@ private final class UITestOpenCodeRenewalProtocol: URLProtocol, @unchecked Senda
         switch url.path {
         case "/console/auth/session":
             body = "{\"user\":{\"id\":\"user_synthetic\"},\"org_id\":\"org_synthetic\"}"
-        case "/console/api/billing/status": body = "{\"balanceMicroCents\":\"2500000000\"}"
+        case "/console/api/billing/status":
+            if scenario.hasSuffix("balance-failure") { return fail() }
+            body = "{\"balanceMicroCents\":\"2500000000\"}"
         case "/console/api/go/status":
             guard request.value(forHTTPHeaderField: "x-org-id") == "org_synthetic" else { return fail() }
             body = """

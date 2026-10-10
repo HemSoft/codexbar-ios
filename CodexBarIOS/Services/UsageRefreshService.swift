@@ -536,6 +536,7 @@ public final class UsageRefreshService: ObservableObject {
             usageMessages: dataResult.usageMessages,
             dashboardUsageMessages: dataResult.dashboardUsageMessages,
             cardInformationSections: dataResult.cardInformationSections,
+            subscriptionRenewal: failureResult.providerID == .openCodeZen ? failureResult.boundSubscriptionRenewal : nil,
             greptileAllowanceRenewal: renewal,
             greptileReviewActivityUnavailableReason: failureResult.greptileReviewActivityUnavailableReason,
             codexBankedRateLimitResets: dataResult.codexBankedRateLimitResets,

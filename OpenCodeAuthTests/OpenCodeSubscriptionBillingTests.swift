@@ -104,6 +104,41 @@ final class OpenCodeSubscriptionBillingTests: XCTestCase, @unchecked Sendable {
         }
     }
 
+    @MainActor
+    func testZenFailureKeepsFreshGoBillingThroughRefreshWithoutReusingOldBilling() async throws {
+        for state in ["renewing", "canceled", "pending"] {
+            let config = configuration()
+            let credentials = credential()
+            let secrets = OpenCodeTestSecrets()
+            try secrets.saveSecret(credentials.encoded(), account: ProviderConfigurationStore.keychainAccount(for: config))
+            let data = try fixture(state == "pending" ? ["renewalPending": true]
+                : state == "canceled" ? ["cancelAtPeriodEnd": true] : [:],
+                access: state == "canceled" ? ["cancelAtPeriodEnd": true] : [:])
+            BillingReplay.state.reset { request, _ in
+                if request.url?.path == "/console/auth/session" {
+                    return (200, Data(#"{"user":{"id":"user_synthetic"},"org_id":"org_synthetic"}"#.utf8))
+                }
+                return request.url!.path.contains("/billing/") ? (503, Data()) : (200, data)
+            }
+            let result = await OpenCodeConsoleUsageProvider(secretStore: secrets, makeSession: Self.session)
+                .fetchUsage(credential: credentials, configuration: config)
+            XCTAssertNotNil(result.failureMessage)
+            XCTAssertNil(result.creditsRemaining)
+            XCTAssertEqual(result.bars.count, 3)
+            let expected: SubscriptionRenewal.State? = state == "pending" ? nil : state == "canceled" ? .nonRenewing : .renewing
+            XCTAssertEqual(result.boundSubscriptionRenewal?.state, expected)
+            let old = ProviderUsageResult(accountID: config.id, providerID: .openCodeZen, title: "OpenCode", subtitle: "Old observation",
+                                          bars: [], subscriptionRenewal: try parse(fixture()), fetchedAt: now)
+            let refresh = UsageRefreshService(providers: [BillingResultProvider(result: result)], initialResults: [old])
+            await refresh.refresh(configuration: config)
+            let displayed = try XCTUnwrap(refresh.results.first)
+            XCTAssertNotNil(displayed.failureMessage)
+            XCTAssertEqual(displayed.boundSubscriptionRenewal?.state, expected)
+            XCTAssertEqual(displayed.subscriptionBillingInformation(at: Date())?.items.first?.label,
+                           state == "pending" ? "Renewal date unavailable" : state == "canceled" ? "Does not renew" : "Next subscription renewal")
+        }
+    }
+
     func testSessionIdentityUsesNativeOptionalWorkspaceAndRejectsMalformedScope() {
         for raw in [#"{"user":{"id":"user_synthetic"}}"#, #"{"user":{"id":"user_synthetic"},"org_id":null}"#] {
             XCTAssertTrue(OpenCodeSubscriptionBilling.matchesIdentity(Data(raw.utf8), credential: credential()))
@@ -277,4 +312,10 @@ private final class BillingReplayState: @unchecked Sendable {
             return handler?(request, count) ?? (500, Data())
         }
     }
+}
+
+private struct BillingResultProvider: UsageProvider {
+    let providerID = ProviderID.openCodeZen
+    let result: ProviderUsageResult
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult { result }
 }

@@ -79,7 +79,7 @@ final class OpenCodeSignInUITests: XCTestCase {
 
     private func exerciseRenewalBillingStates() {
         for dark in [false, true] {
-            for state in ["renewing", "canceled", "payment", "mismatch"] {
+            for state in ["renewing", "canceled", "payment", "mismatch", "balance-failure"] {
                 let app = XCUIApplication()
                 app.launchEnvironment = [
                     "CODEXBAR_UI_TESTS": "1", "CODEXBAR_UI_TEST_RUN_ID": UUID().uuidString,
@@ -88,12 +88,12 @@ final class OpenCodeSignInUITests: XCTestCase {
                 ]
                 app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
                 app.launch()
-                let title = state == "mismatch" ? "OpenCode Zen" : "OpenCode Go + Zen"
+                let title = state == "mismatch" ? "OpenCode Zen" : state == "balance-failure" ? "OpenCode Go" : "OpenCode Go + Zen"
                 let header = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", title + ", ")).firstMatch
                 XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
                 let balance = app.staticTexts["$25.00"]
-                XCTAssertTrue(balance.waitForExistence(timeout: 10), app.debugDescription)
-                if state == "renewing" {
+                if state != "balance-failure" { XCTAssertTrue(balance.waitForExistence(timeout: 10), app.debugDescription) }
+                if state == "renewing" || state == "balance-failure" {
                     let renewal = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Renews in"), object: header)
                     XCTAssertEqual(XCTWaiter.wait(for: [renewal], timeout: 10), .completed)
                 } else { XCTAssertFalse(header.label.contains("Renews in"), header.label) }
@@ -123,7 +123,8 @@ final class OpenCodeSignInUITests: XCTestCase {
                 app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION"] = "1"
                 app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"] = "ui-opencode-renewal"
                 app.launch()
-                let label = state == "renewing" ? "Next subscription renewal" : state == "canceled" ? "Does not renew" : "Renewal date unavailable"
+                let label = state == "renewing" || state == "balance-failure"
+                    ? "Next subscription renewal" : state == "canceled" ? "Does not renew" : "Renewal date unavailable"
                 XCTAssertTrue(app.staticTexts[label].waitForExistence(timeout: 15), app.debugDescription)
                 capture("opencode-\(state)-\(dark ? "dark-large" : "light-default")-details", app: app)
                 app.terminate()

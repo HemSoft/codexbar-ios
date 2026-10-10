@@ -108,7 +108,9 @@ public struct SubscriptionRenewal: Equatable, Sendable {
 extension ProviderUsageResult {
     /// Also validates mutations: a copied observation must not appear on another account.
     public var boundSubscriptionRenewal: SubscriptionRenewal? {
-        guard !subscriptionBillingIsNotApplicable, failureMessage == nil, let renewal = subscriptionRenewal,
+        // OpenCode verifies Go billing separately from the optional Zen balance read.
+        guard !subscriptionBillingIsNotApplicable, failureMessage == nil || providerID == .openCodeZen,
+              let renewal = subscriptionRenewal,
               renewal.accountID == accountID, renewal.providerID == providerID else { return nil }
         return renewal
     }

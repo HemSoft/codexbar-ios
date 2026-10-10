@@ -185,3 +185,7 @@ Franz owns real account sign-in, transport compatibility and comparisons against
 provider billing pages. Those checks remain pending and do not hold up agent
 delivery. Synthetic acquisition fixtures exercise the real clients, provider
 parsers and owner checks; they do not establish live provider access.
+
+Verified Go billing remains visible when the independent Zen balance read fails.
+Partial-refresh preservation keeps only the fresh account-bound observation; an
+old renewal is never reused when the new Go billing state is unavailable.
