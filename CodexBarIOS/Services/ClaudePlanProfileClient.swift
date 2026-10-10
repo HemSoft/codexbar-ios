@@ -138,6 +138,7 @@ enum ClaudeProfilePlanParser {
         if let maxFlag = boolean(account["has_claude_max"]), type == "max", !maxFlag { return nil }
         if let proFlag = boolean(account["has_claude_pro"]), type == "pro", !proFlag { return nil }
         if type == "pro", boolean(account["has_claude_max"]) == true { return nil }
+        if type == "max", boolean(account["has_claude_pro"]) == true { return nil }
         return ClaudeUsageParser.planDescriptor(subscriptionType: type, rateLimitTier: tier)
     }
 

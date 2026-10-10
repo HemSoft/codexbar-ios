@@ -30,6 +30,7 @@ final class ClaudePlanProfileTests: XCTestCase {
             #"{"account":{"has_claude_max":1,"has_claude_pro":0}}"#,
             #"{"organization":{"organization_type":7},"account":{"has_claude_pro":true}}"#,
             #"{"organization":{"organization_type":"claude_max"},"account":{"has_claude_max":false}}"#,
+            #"{"organization":{"organization_type":"claude_max"},"account":{"has_claude_pro":true}}"#,
         ] {
             let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
             XCTAssertNil(ClaudeProfilePlanParser.parse(root), json)
