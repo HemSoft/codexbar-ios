@@ -277,8 +277,7 @@ final class GrokSignInUITests: XCTestCase {
             let appearance = darkLarge ? "dark-large" : "light-default"
             for (title, plan) in [("Personal Cursor", "Pro"), ("Work Cursor", "Pro+"), ("Unknown Cursor", "Plan unavailable")] {
                 let header = cursorPlanHeader(title, plan: plan, app: app)
-                for _ in 0..<24 where !header.isHittable { app.swipeUp() }
-                XCTAssertTrue(header.wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
+                revealCursorPlanHeader(header, app: app)
                 XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
                 XCTAssertEqual(header.value as? String, "Expanded")
                 keep("cursor-plan-\(title)-\(appearance)-expanded", app: app)
@@ -297,14 +296,28 @@ final class GrokSignInUITests: XCTestCase {
             let restored = launch(scenario: scenario, runID: runID, reset: false, darkAccessibility: darkLarge)
             for (title, plan) in [("Personal Cursor", "Pro"), ("Work Cursor", "Pro+"), ("Unknown Cursor", "Plan unavailable")] {
                 let header = cursorPlanHeader(title, plan: plan, app: restored)
-                for _ in 0..<24 where !header.isHittable { restored.swipeUp() }
-                XCTAssertTrue(header.wait(for: \.isHittable, toEqual: true, timeout: 5), restored.debugDescription)
+                revealCursorPlanHeader(header, app: restored)
                 XCTAssertTrue(header.waitForExistence(timeout: 10), restored.debugDescription)
                 XCTAssertEqual(header.value as? String, "Collapsed")
             }
             keep("cursor-plans-relaunch-\(appearance)", app: restored)
             restored.terminate()
         }
+    }
+
+    private func revealCursorPlanHeader(_ header: XCUIElement, app: XCUIApplication) {
+        XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
+        let top = app.buttons["Refresh usage"].frame.maxY + 12
+        for _ in 0..<12 {
+            if header.frame.minY < top {
+                app.swipeDown()
+            } else if header.frame.maxY > app.frame.maxY - 20 {
+                app.swipeUp()
+            } else {
+                break
+            }
+        }
+        XCTAssertTrue(header.isHittable, app.debugDescription)
     }
 
     private func cursorPlanHeader(_ title: String, plan: String, app: XCUIApplication) -> XCUIElement {
