@@ -4,7 +4,8 @@ import XCTest
 final class CursorPlanTests: XCTestCase {
     func testMembershipMappingRejectsGuessesAndMalformedValues() throws {
         for (raw, label) in [("pro", "Pro"), ("pro_plus", "Pro+"), ("ultra", "Ultra"),
-                             ("free", "Hobby"), ("free_trial", "Pro Trial"),] {
+                             ("free", "Hobby"), ("free_trial", "Pro Trial"),
+        ] {
             let plan = try XCTUnwrap(CursorUsageProvider.parseMembership(Data("{\"membershipType\":\"\(raw)\"}".utf8)))
             XCTAssertEqual(plan.identifier, "cursor.\(raw)")
             XCTAssertEqual(plan.displayLabel, label)
@@ -12,7 +13,8 @@ final class CursorPlanTests: XCTestCase {
         }
         for body in ["{}", "null", "[]", "invalid", #"{"membershipType":null}"#,
                      #"{"membershipType":123}"#, #"{"membershipType":"enterprise"}"#,
-                     #"{"membershipType":"future","price":60,"limit":200}"#,] {
+                     #"{"membershipType":"future","price":60,"limit":200}"#,
+        ] {
             XCTAssertNil(CursorUsageProvider.parseMembership(Data(body.utf8)), body)
         }
     }
