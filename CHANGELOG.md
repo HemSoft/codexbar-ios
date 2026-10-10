@@ -82,6 +82,11 @@ building, testing, or releasing the app.
 
 ### Developer Experience
 
+- Document verified subscription billing contracts and access gaps for Cursor,
+  Google AI, personal Copilot, OpenCode Go and paid Greptile. Add a manual,
+  offline OpenCode contract replay and a separate implementation follow-up.
+  ([#447](https://github.com/hemsoft-dev/codexbar-ios/issues/447))
+
 - Run ordinary PR lint and configuration checks without native build/test reruns.
   Extensive iOS/watchOS tests, function-risk checks, strict-concurrency builds,
   smoke validation and both UI families run before releases or on demand.
