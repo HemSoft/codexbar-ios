@@ -596,6 +596,15 @@ final class UITestFixtures {
     }
 
     private static func seedGrokAccounts(in store: ProviderConfigurationStore, scenario: String?) {
+        if scenario?.hasPrefix("grok-cursor-parity-plans") == true {
+            for (id, label) in [("pro", "Personal Cursor"), ("pro_plus", "Work Cursor"), ("unknown", "Unknown Cursor")] {
+                let account = ProviderAccountConfiguration(id: "ui-cursor-\(id)", providerID: .cursor,
+                                                           accountLabel: label, authMethod: .browserSession)
+                _ = store.update(account)
+                _ = store.saveSecret("cursor-plan-\(id)", for: account)
+            }
+            return
+        }
         let cursorOnly = scenario?.hasPrefix("grok-cursor-parity") == true || Self.isCursorSessionScenario(scenario)
         let grok = ProviderAccountConfiguration(
             id: "ui-grok-connected", providerID: .grok, accountLabel: "SuperGrok Lite",
@@ -1362,7 +1371,7 @@ private struct UITestSecretStore: SecretStore {
         let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }
         let greptile = GreptileSessionCredentials.parse(secret) == UITestFixtures.greptileCredential
         let grok = GrokCredential.parse(secret) == UITestFixtures.planPillGrokCredential
-        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile || grok
+        guard secret.hasPrefix("cursor-plan-") || secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile || grok
                 || secret == UITestFixtures.claudeProfileCredential else {
             throw UITestFixtureError.invalidCredential
         }
@@ -1501,6 +1510,7 @@ private actor UITestCursorProvider: UsageProvider {
     private let scenario: String?
     private let secretStore: UITestSecretStore
     private var stage = 0
+    private var accountStages: [String: Int] = [:]
 
     init(scenario: String?, secretStore: UITestSecretStore) {
         self.scenario = scenario
@@ -1512,7 +1522,10 @@ private actor UITestCursorProvider: UsageProvider {
             return UITestFixtures.cursorResult(for: configuration, scenario: scenario)
         }
         stage += 1
-        if stage == 2 && scenario.hasPrefix("grok-cursor-parity") { throw UITestFixtureError.refreshFailed }
+        let plans = scenario.hasPrefix("grok-cursor-parity-plans")
+        accountStages[configuration.id, default: 0] += 1
+        let accountStage = accountStages[configuration.id, default: 0]
+        if stage == 2 && scenario.hasPrefix("grok-cursor-parity") && !plans { throw UITestFixtureError.refreshFailed }
         if stage == 2 && ["grok-cursor-session-stale", "grok-cursor-session-stale-dark-large"].contains(scenario) {
             try secretStore.saveSecret(
                 UITestFixtures.cursorSessionCredential(expired: true), account: ProviderConfigurationStore.keychainAccount(for: configuration)
@@ -1524,11 +1537,12 @@ private actor UITestCursorProvider: UsageProvider {
         settings.httpShouldSetCookies = false
         let session = URLSession(configuration: settings)
         defer { session.invalidateAndCancel() }
-        let base = "https://cursor-parity-fixture.invalid/\(scenario)/"
+        let base = "https://cursor-parity-fixture.invalid/\(scenario)/\(configuration.id)/\(accountStage)/"
         return try await CursorUsageProvider(
             secretStore: secretStore, session: session,
             usageEndpoint: URL(string: "\(base)GetCurrentPeriodUsage")!,
-            grokBotUsageEndpoint: URL(string: "\(base)GetSandUsageStatus")!
+            grokBotUsageEndpoint: URL(string: "\(base)GetSandUsageStatus")!,
+            membershipEndpoint: URL(string: "\(base)full_stripe_profile")!
         ).fetchUsage(for: configuration)
     }
 }
@@ -1549,7 +1563,15 @@ private final class UITestCursorParityProtocol: URLProtocol, @unchecked Sendable
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
-        if url.lastPathComponent == "GetCurrentPeriodUsage" {
+        if url.path.contains("grok-cursor-parity-plans") && url.lastPathComponent == "full_stripe_profile" {
+            let token = request.value(forHTTPHeaderField: "Authorization") ?? ""
+            let value = token.replacingOccurrences(of: "Bearer cursor-plan-", with: "")
+            complete(status: 200, body: #"{"membershipType":"\#(value)"}"#)
+        } else if url.lastPathComponent == "GetCurrentPeriodUsage" {
+            if url.path.contains("grok-cursor-parity-plans") && url.pathComponents.contains("2") {
+                complete(status: 503, body: "{}")
+                return
+            }
             let fresh = request.cachePolicy == .reloadIgnoringLocalCacheData
             complete(status: 200, body: fresh
                      ? Self.currentBody(for: url)

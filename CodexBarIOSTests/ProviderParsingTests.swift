@@ -2895,6 +2895,12 @@ final class ProviderParsingTests: XCTestCase {
         let grokBotUsageRequest = expectation(description: "Grok Bot usage requested")
 
         ProviderParsingMockURLProtocol.handler = { request in
+            if request.url?.lastPathComponent == "full_stripe_profile" {
+                XCTAssertEqual(request.httpMethod, "GET")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cursor-token")
+                return (HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200,
+                                        httpVersion: nil, headerFields: nil)!, Data(#"{"membershipType":"pro_plus"}"#.utf8))
+            }
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cursor-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Connect-Protocol-Version"), "1")

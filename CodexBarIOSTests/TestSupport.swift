@@ -1066,6 +1066,10 @@ final class StalledCursorGrokBotURLProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
+        if request.url?.lastPathComponent == "full_stripe_profile" {
+            client?.urlProtocol(self, didFailWithError: URLError(.resourceUnavailable))
+            return
+        }
         guard request.url?.lastPathComponent == "GetCurrentPeriodUsage" else {
             events.record(.optionalStarted)
             return

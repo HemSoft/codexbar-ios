@@ -41,6 +41,8 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- See verified Cursor Pro and Pro+ subscriptions in each account’s header pill, with independent plan names that survive refresh and relaunch. Unknown plans remain clearly unavailable. ([#438](https://github.com/hemsoft-dev/codexbar-ios/issues/438))
+
 - Resolve Claude subscription names from connected-account profile metadata,
   including Max 5x and 20x, when sign-in metadata is missing or stale. Supported
   plan changes appear on a later refresh without signing out; unknown plans

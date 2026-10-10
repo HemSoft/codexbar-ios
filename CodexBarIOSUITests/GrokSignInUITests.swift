@@ -269,6 +269,46 @@ final class GrokSignInUITests: XCTestCase {
         keep("Cursor unavailable Bot remains customizable", app: unavailable)
     }
 
+    func testCursorSubscriptionPillsAreAccountScoped() {
+        for darkLarge in [false, true] {
+            let runID = UUID().uuidString
+            let scenario = "grok-cursor-parity-plans"
+            let app = launch(scenario: scenario, runID: runID, darkAccessibility: darkLarge)
+            let appearance = darkLarge ? "dark-large" : "light-default"
+            for (title, plan) in [("Personal Cursor", "Pro"), ("Work Cursor", "Pro+"), ("Unknown Cursor", "Plan unavailable")] {
+                let header = cursorPlanHeader(title, plan: plan, app: app)
+                for _ in 0..<8 where !header.isHittable { app.swipeUp() }
+                XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
+                XCTAssertEqual(header.value as? String, "Expanded")
+                keep("cursor-plan-\(title)-\(appearance)-expanded", app: app)
+                header.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()
+                XCTAssertEqual(header.value as? String, "Collapsed")
+                keep("cursor-plan-\(title)-\(appearance)-collapsed", app: app)
+            }
+            for _ in 0..<6 { app.swipeDown() }
+            app.buttons["Refresh usage"].tap()
+            let stale = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "HTTP 503"))
+            XCTAssertTrue(stale.firstMatch.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertTrue(cursorPlanHeader("Personal Cursor", plan: "Pro", app: app).exists)
+            XCTAssertTrue(cursorPlanHeader("Work Cursor", plan: "Pro+", app: app).exists)
+            keep("cursor-plans-stale-\(appearance)", app: app)
+            app.terminate()
+            let restored = launch(scenario: scenario, runID: runID, reset: false, darkAccessibility: darkLarge)
+            for (title, plan) in [("Personal Cursor", "Pro"), ("Work Cursor", "Pro+"), ("Unknown Cursor", "Plan unavailable")] {
+                let header = cursorPlanHeader(title, plan: plan, app: restored)
+                for _ in 0..<8 where !header.isHittable { restored.swipeUp() }
+                XCTAssertTrue(header.waitForExistence(timeout: 10), restored.debugDescription)
+                XCTAssertEqual(header.value as? String, "Collapsed")
+            }
+            keep("cursor-plans-relaunch-\(appearance)", app: restored)
+            restored.terminate()
+        }
+    }
+
+    private func cursorPlanHeader(_ title: String, plan: String, app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", title + ", " + plan)).firstMatch
+    }
+
     private func assertCursor(in app: XCUIApplication, botText: String) {
         let models = loadedCursorModels(in: app)
         let other = app.buttons["dashboard-metric-cursor.other-models"]

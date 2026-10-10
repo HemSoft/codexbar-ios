@@ -5,6 +5,8 @@ public final class CursorUsageProvider: UsageProvider {
     private let session: URLSession
     private let usageEndpoint: URL
     private let grokBotUsageEndpoint: URL
+    private let membershipEndpoint: URL
+    private let membershipRequestTimeout: Duration
     private let grokBotRequestTimeout: Duration
     private let waitForGrokBotTimeout: @Sendable (Duration) async throws -> Void
 
@@ -15,7 +17,9 @@ public final class CursorUsageProvider: UsageProvider {
         session: URLSession? = nil,
         usageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")!,
         grokBotUsageEndpoint: URL = URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus")!,
-        grokBotRequestTimeout: Duration = .seconds(5)
+        grokBotRequestTimeout: Duration = .seconds(5),
+        membershipEndpoint: URL? = nil,
+        membershipRequestTimeout: Duration = .seconds(5)
     ) {
         self.init(
             secretStore: secretStore,
@@ -23,6 +27,8 @@ public final class CursorUsageProvider: UsageProvider {
             usageEndpoint: usageEndpoint,
             grokBotUsageEndpoint: grokBotUsageEndpoint,
             grokBotRequestTimeout: grokBotRequestTimeout,
+            membershipEndpoint: membershipEndpoint,
+            membershipRequestTimeout: membershipRequestTimeout,
             waitForGrokBotTimeout: { try await Task.sleep(for: $0) }
         )
     }
@@ -33,6 +39,8 @@ public final class CursorUsageProvider: UsageProvider {
         usageEndpoint: URL,
         grokBotUsageEndpoint: URL,
         grokBotRequestTimeout: Duration,
+        membershipEndpoint: URL? = nil,
+        membershipRequestTimeout: Duration = .seconds(5),
         waitForGrokBotTimeout: @escaping @Sendable (Duration) async throws -> Void
     ) {
         self.secretStore = secretStore
@@ -40,6 +48,9 @@ public final class CursorUsageProvider: UsageProvider {
         self.usageEndpoint = usageEndpoint
         self.grokBotUsageEndpoint = grokBotUsageEndpoint
         self.grokBotRequestTimeout = grokBotRequestTimeout
+        self.membershipEndpoint = membershipEndpoint
+            ?? URL(string: "/auth/full_stripe_profile", relativeTo: usageEndpoint)!.absoluteURL
+        self.membershipRequestTimeout = membershipRequestTimeout
         self.waitForGrokBotTimeout = waitForGrokBotTimeout
     }
 
@@ -154,15 +165,18 @@ public final class CursorUsageProvider: UsageProvider {
         try Task.checkCancellation()
         if credential.needsRenewal(at: Date()) { throw CursorSessionFailure.needsRenewal }
         async let grokBotData = fetchGrokBotUsage(accessToken: credential.accessToken)
+        async let membershipData = fetchMembership(accessToken: credential.accessToken)
         let (data, response) = try await session.data(for: makeUsageRequest(accessToken: credential.accessToken))
         try Self.validatePrimaryResponse(response)
         let optional = await grokBotData
+        let membership = await membershipData
         try Task.checkCancellation()
         if credential.needsRenewal(at: Date()) { throw CursorSessionFailure.needsRenewal }
         guard try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration))
                 == credential.storedSecret else { throw CursorSessionFailure.changed }
         guard let result = Self.parseUsage(
             data, grokBotUsageData: optional.data, configuration: configuration,
+            membershipData: membership,
             grokBotFailureReason: optional.unavailableReason, cacheIdentity: credential.cacheIdentity
         ) else { throw URLError(.cannotParseResponse) }
         return result
@@ -218,6 +232,31 @@ public final class CursorUsageProvider: UsageProvider {
         }
     }
 
+    private func fetchMembership(accessToken: String) async -> Data? {
+        let session = session
+        var request = makeUsageRequest(endpoint: membershipEndpoint, accessToken: accessToken)
+        request.httpMethod = "GET"
+        request.httpBody = nil
+        request.setValue(nil, forHTTPHeaderField: "Connect-Protocol-Version")
+        let timedRequest = request
+        let timeout = membershipRequestTimeout
+        return await withTaskGroup(of: Data?.self) { group in
+            group.addTask {
+                guard let (data, response) = try? await session.data(for: timedRequest),
+                      let response = response as? HTTPURLResponse,
+                      (200..<300).contains(response.statusCode) else { return nil }
+                return data
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return nil
+            }
+            let response = await group.next() ?? nil
+            group.cancelAll()
+            return response
+        }
+    }
+
     func makeUsageRequest(accessToken: String) -> URLRequest {
         makeUsageRequest(endpoint: usageEndpoint, accessToken: accessToken)
     }
@@ -242,6 +281,7 @@ public final class CursorUsageProvider: UsageProvider {
         _ data: Data,
         grokBotUsageData: Data? = nil,
         configuration: ProviderAccountConfiguration,
+        membershipData: Data? = nil,
         fetchedAt: Date = Date(),
         grokBotFailureReason: String? = nil,
         cacheIdentity: String? = nil
@@ -265,6 +305,7 @@ public final class CursorUsageProvider: UsageProvider {
             accountID: configuration.id,
             providerID: .cursor,
             title: configuration.displayName,
+            plan: membershipData.flatMap(Self.parseMembership),
             subtitle: "Cursor plan usage",
             bars: bars,
             unavailableUsageMetrics: unavailableMetrics(
@@ -274,6 +315,21 @@ public final class CursorUsageProvider: UsageProvider {
             cacheIdentity: cacheIdentity,
             fetchedAt: fetchedAt
         )
+    }
+
+    static func parseMembership(_ data: Data) -> ProviderPlanDescriptor? {
+        guard let profile = try? JSONDecoder().decode(CursorMembershipProfile.self, from: data),
+              let value = ProviderPlanDescriptor.normalizedPlanValue(profile.membershipType) else { return nil }
+        let label: String
+        switch value {
+        case "pro": label = "Pro"
+        case "pro_plus": label = "Pro+"
+        case "ultra": label = "Ultra"
+        case "free": label = "Hobby"
+        case "free_trial": label = "Pro Trial"
+        default: return nil
+        }
+        return .make(providerPrefix: "cursor", identifier: value, label: label, displayLabel: label)
     }
 
     private static func optionalResponse(_ response: (Data, URLResponse)) -> OptionalUsageResponse {
@@ -614,6 +670,10 @@ public final class CursorUsageProvider: UsageProvider {
 
 private struct CursorCredentials: Decodable {
     let accessToken: String?
+}
+
+private struct CursorMembershipProfile: Decodable {
+    let membershipType: String?
 }
 
 private struct CursorCurrentPeriodUsage: Decodable {
