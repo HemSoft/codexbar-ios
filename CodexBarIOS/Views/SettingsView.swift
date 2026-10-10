@@ -653,6 +653,18 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
             }
 
+            Section {
+                Toggle("Show subscription renewals", isOn: Binding(
+                    get: { configurationStore.showsSubscriptionRenewals },
+                    set: { configurationStore.updateShowsSubscriptionRenewals($0) }
+                ))
+                .accessibilityIdentifier("settings-show-subscription-renewals")
+            } header: {
+                Text("Subscription billing")
+            } footer: {
+                Text("Show compact countdowns when a provider supplies a verified billing date. Usage resets stay visible.")
+            }
+
             Section("Auto Refresh") {
                 Picker("Refresh", selection: autoRefreshIntervalBinding) {
                     ForEach(AutoRefreshInterval.allCases) { interval in

@@ -75,6 +75,7 @@ final class UITestFixtures {
         }
         let githubBilling = scenario?.hasPrefix("github-billing") == true
         let grok = scenario?.hasPrefix("grok") == true
+        Self.seedRenewalAccounts(in: configurationStore, scenario: scenario)
         Self.seedGooglePlanAccounts(in: configurationStore, scenario: scenario)
         Self.seedPlanPillAccounts(in: configurationStore, scenario: scenario)
         let codex = scenario?.hasPrefix("codex-") == true
@@ -196,6 +197,7 @@ final class UITestFixtures {
     nonisolated private static func initialResult(
         for configuration: ProviderAccountConfiguration, scenario: String?, googleSources: [ProviderID]
     ) -> ProviderUsageResult {
+        if scenario?.hasPrefix("subscription-renewals") == true { return renewalResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("google-plan-") == true {
             return googlePlanResult(for: configuration)
         }
@@ -270,6 +272,9 @@ final class UITestFixtures {
     private static func providersForPlanPills(
         _ providers: [any UsageProvider], scenario: String?, suiteName: String
     ) -> [any UsageProvider] {
+        if scenario?.hasPrefix("subscription-renewals") == true {
+            return [ProviderID.codex, .gemini, .openCodeZen].map { UITestRenewalProvider(providerID: $0, scenario: scenario) }
+        }
         if scenario?.hasPrefix("google-plan-") == true {
             return [UITestGooglePlanProvider(providerID: .gemini), UITestGooglePlanProvider(providerID: .openCodeZen)]
         }
@@ -283,6 +288,36 @@ final class UITestFixtures {
             resetCreditsEndpoint: URL(string: "https://codex-plan-fixture.invalid/inventory")!
         )
         return [codex] + [ProviderID.claude, .grok, .gemini, .openRouter].map { UITestPlanPillProvider(providerID: $0) }
+    }
+
+    private static func seedRenewalAccounts(in store: ProviderConfigurationStore, scenario: String?) {
+        guard scenario?.hasPrefix("subscription-renewals") == true, store.configurations.isEmpty else { return }
+        for (id, provider, title) in [("monthly", ProviderID.codex, "Personal Codex"), ("annual", .codex, "Work Codex"),
+                                      ("google", .gemini, "Personal Google"), ("go", .openCodeZen, "OpenCode Go + Zen"),
+        ] {
+            var account = ProviderAccountConfiguration(id: id, providerID: provider, accountLabel: title, authMethod: .browserSession)
+            if provider == .openCodeZen { account.openCodeWorkspaceId = "fixture-workspace" }
+            _ = store.update(account)
+            precondition(store.saveSecret("ui-test-credential", for: account))
+        }
+    }
+
+    nonisolated static func renewalResult(for account: ProviderAccountConfiguration, scenario: String?) -> ProviderUsageResult {
+        let now = Date()
+        let plan = account.providerID == .gemini ? GoogleAIPlanParser.parse(Data(#"{"paidTier":{"name":"Google AI Pro (5 TB)"}}"#.utf8))
+            : account.providerID == .codex ? ProviderPlanDescriptor.make(providerPrefix: "codex", identifier: "pro", label: "ChatGPT Pro 200",
+                                                                        displayLabel: "ChatGPT Pro 200") : nil
+        let state: SubscriptionRenewal.State = scenario == "subscription-renewals-canceled" ? .nonRenewing : .renewing
+        let offset: Double = account.id == "annual" ? 31_536_000 : account.id == "google" ? 7_200 : 259_200
+        let renewal = scenario == "subscription-renewals-unknown" ? nil : SubscriptionRenewal(
+            accountID: account.id, providerID: account.providerID, state: state,
+            date: now.addingTimeInterval(scenario == "subscription-renewals-past" ? -60 : offset),
+            observedAt: now.addingTimeInterval(scenario == "subscription-renewals-stale" ? -90_000 : 0)
+        )
+        return ProviderUsageResult(accountID: account.id, providerID: account.providerID, title: account.displayName,
+                                   plan: plan, subtitle: "Synthetic billing fixture. No live account.",
+                                   bars: [UsageBar(stableKey: "fixture", label: "Usage", used: 12, limit: 100)],
+                                   subscriptionRenewal: renewal, fetchedAt: now)
     }
 
     private static func seedGooglePlanAccounts(in store: ProviderConfigurationStore, scenario: String?) {
@@ -1848,6 +1883,14 @@ private class UITestCodexPlanURLProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
+}
+
+private struct UITestRenewalProvider: UsageProvider {
+    let providerID: ProviderID
+    let scenario: String?
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        UITestFixtures.renewalResult(for: configuration, scenario: scenario)
+    }
 }
 
 private struct UITestGooglePlanProvider: UsageProvider {

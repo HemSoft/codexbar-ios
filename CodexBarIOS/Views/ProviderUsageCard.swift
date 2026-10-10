@@ -63,6 +63,7 @@ struct ProviderUsageCard: View {
     }
 
     let result: ProviderUsageResult
+    let showsSubscriptionRenewals: Bool
     let statusText: String
     let history: UsageHistorySeries
     let alerts: [UsageAlertDetail]
@@ -137,6 +138,7 @@ struct ProviderUsageCard: View {
     init(
         result: ProviderUsageResult,
         statusText: String,
+        showsSubscriptionRenewals: Bool = true,
         history: UsageHistorySeries,
         alerts: [UsageAlertDetail] = [],
         isHistoryEnabled: Bool = true,
@@ -178,6 +180,7 @@ struct ProviderUsageCard: View {
         onMetricsDiscovered: @escaping ([String]) -> Void = { _ in }
     ) {
         self.result = result
+        self.showsSubscriptionRenewals = showsSubscriptionRenewals
         self.statusText = statusText
         self.history = history
         self.alerts = alerts
@@ -359,6 +362,12 @@ struct ProviderUsageCard: View {
     }
 
     private var cardHeader: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            cardHeader(at: context.date)
+        }
+    }
+
+    private func cardHeader(at now: Date) -> some View {
         ZStack(alignment: Alignment(horizontal: .trailing, vertical: .firstTextBaseline)) {
             Button(action: toggleExpansion) {
                 HStack(alignment: .firstTextBaseline, spacing: Self.headerControlSpacing) {
@@ -372,7 +381,7 @@ struct ProviderUsageCard: View {
                                         .font(.headline)
                                         .fixedSize(horizontal: true, vertical: false)
 
-                                    if result.showsCardPlan { planBadge }
+                                    headerBadges(at: now)
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
@@ -380,7 +389,7 @@ struct ProviderUsageCard: View {
                                         .font(.headline)
                                         .fixedSize(horizontal: false, vertical: true)
 
-                                    if result.showsCardPlan { planBadge }
+                                    headerBadges(at: now)
                                 }
                             }
                         }
@@ -436,7 +445,7 @@ struct ProviderUsageCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(disclosureAccessibilityLabel)
+            .accessibilityLabel(disclosureAccessibilityLabel(at: now))
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .accessibilityHint(disclosureAccessibilityHint)
 
@@ -633,14 +642,16 @@ struct ProviderUsageCard: View {
         }
     }
 
-    private var disclosureAccessibilityLabel: String {
+    private func disclosureAccessibilityLabel(at now: Date) -> String {
         Self.disclosureAccessibilityLabel(
             for: result,
             statusText: statusText,
             isRefreshing: isRefreshing,
             isPerformingRecovery: isPerformingRecovery,
             severity: cardSeverity,
-            severitySource: hiddenSeverityAlert?.message
+            severitySource: hiddenSeverityAlert?.message,
+            showsSubscriptionRenewals: showsSubscriptionRenewals,
+            now: now
         )
     }
 
@@ -671,9 +682,14 @@ struct ProviderUsageCard: View {
         isRefreshing: Bool,
         isPerformingRecovery: Bool,
         severity: UsageSeverity,
-        severitySource: String? = nil
+        severitySource: String? = nil,
+        showsSubscriptionRenewals: Bool = true,
+        now: Date = Date()
     ) -> String {
         var components = [headerAccessibilityLabel(for: result), statusText]
+        if showsSubscriptionRenewals, let text = result.boundSubscriptionRenewal?.accessibilityText(at: now) {
+            components.append(text)
+        }
         if isPerformingRecovery {
             components.append("Signing in")
         } else if isRefreshing {
@@ -844,6 +860,35 @@ struct ProviderUsageCard: View {
         )
     }
 
+    @ViewBuilder
+    private func headerBadges(at now: Date) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                if result.showsCardPlan { planBadge }
+                renewalBadge(at: now)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: .leading, spacing: 4) {
+                if result.showsCardPlan { planBadge }
+                renewalBadge(at: now)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func renewalBadge(at now: Date) -> some View {
+        if showsSubscriptionRenewals, let text = result.boundSubscriptionRenewal?.compactLabel(at: now) {
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Color.secondary.opacity(0.10), in: Capsule())
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
+        }
+    }
+
     private var planBadge: some View {
         Text(result.cardPlan.displayLabel)
             .font(.caption2.weight(.semibold))
@@ -881,9 +926,11 @@ struct ProviderUsageCard: View {
 
     static func informationSections(
         for result: ProviderUsageResult,
-        alerts: [UsageAlertDetail] = []
+        alerts: [UsageAlertDetail] = [],
+        now: Date = Date()
     ) -> [ProviderCardInformationSection] {
         var sections = result.cardInformationSections
+        if let billing = result.subscriptionBillingInformation(at: now) { sections.append(billing) }
         if result.providerID == .cursor, !alerts.isEmpty {
             sections.append(ProviderCardInformationSection(
                 id: "cursor.active-alerts",
