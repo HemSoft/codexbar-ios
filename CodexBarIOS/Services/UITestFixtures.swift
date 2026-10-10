@@ -428,6 +428,8 @@ final class UITestFixtures {
     ) -> ProviderUsageResult {
         let credits: String
         switch scenario {
+        case "codex-credits-round-up":
+            credits = #"{"has_credits":true,"unlimited":false,"balance":"62500.75"}"#
         case "codex-credits-zero":
             credits = #"{"has_credits":false,"unlimited":false,"balance":"0"}"#
         case "codex-credits-unlimited":
@@ -435,7 +437,7 @@ final class UITestFixtures {
         case "codex-credits-unavailable":
             credits = #"{"has_credits":true,"unlimited":false,"balance":null}"#
         default:
-            let balance = account.id == "ui-codex-personal" ? "62500" : "770"
+            let balance = account.id == "ui-codex-personal" ? "62500.125" : "770"
             credits = #"{"has_credits":true,"unlimited":false,"balance":"\#(balance)"}"#
         }
         let now = Date()

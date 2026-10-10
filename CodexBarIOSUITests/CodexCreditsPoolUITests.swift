@@ -6,6 +6,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
         continueAfterFailure = false
         let states = [
             ("codex-credits", "62,500 credits"),
+            ("codex-credits-round-up", "62,501 credits"),
             ("codex-credits-zero", "0 credits"),
             ("codex-credits-unavailable", "Credits unavailable"),
             ("codex-credits-unlimited", "Unlimited credits"),
@@ -39,6 +40,14 @@ final class CodexCreditsPoolUITests: XCTestCase {
             reveal(pool, in: app)
             keep("\(scenario)-dashboard", app: app)
             if scenario == "codex-credits" {
+                tap(pool, in: app)
+                XCTAssertTrue(app.navigationBars["Metric Details"].waitForExistence(timeout: 5))
+                XCTAssertTrue(app.staticTexts[expected].exists, app.debugDescription)
+                keep("credits-whole-count-details", app: app)
+                tap(app.buttons["Done"], in: app)
+                tap(app.buttons["Refresh usage"], in: app)
+                XCTAssertTrue(pool.label.contains(expected), pool.label)
+                keep("credits-whole-count-refreshed", app: app)
                 openAccount("Work Codex", in: app)
                 let workToggle = app.switches["account-metric-visibility-codex.credits-pool"]
                 reveal(workToggle, in: app)
@@ -341,6 +350,8 @@ final class CodexCreditsPoolUITests: XCTestCase {
         app.launchEnvironment = [
             "CODEXBAR_UI_TESTS": "1", "CODEXBAR_UI_TEST_RUN_ID": runID,
             "CODEXBAR_UI_TEST_RESET": reset ? "1" : "0", "CODEXBAR_UI_TEST_SCENARIO": scenario,
+            "CODEXBAR_UI_TEST_DEFAULT_TEXT": ["codex-credits", "codex-credits-zero"].contains(scenario) ? "1" : "0",
+            "CODEXBAR_UI_TEST_DARK": scenario == "codex-credits-round-up" || scenario == "codex-credits-failure" ? "1" : "0",
         ]
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()

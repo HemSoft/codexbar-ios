@@ -150,13 +150,16 @@ public enum CodexUsageParser {
         else {
             return nil
         }
-        let number = balance.formatted(.number.precision(.significantDigits(1...38)).locale(locale))
+        var sourceBalance = balance
+        var displayedBalance = Decimal()
+        NSDecimalRound(&displayedBalance, &sourceBalance, 0, .plain)
+        let number = displayedBalance.formatted(.number.precision(.fractionLength(0)).locale(locale))
         return UsageBar(
             stableKey: creditsPoolStableKey,
             label: "Credits pool",
             used: NSDecimalNumber(decimal: balance).doubleValue,
             limit: 0,
-            fractionlessUsageText: "\(number) \(balance == 1 ? "credit" : "credits")"
+            fractionlessUsageText: "\(number) \(displayedBalance == 1 ? "credit" : "credits")"
         )
     }
 
