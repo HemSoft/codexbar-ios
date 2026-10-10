@@ -82,11 +82,15 @@ Team and Enterprise profile shapes and seat variants have not been verified
 against live accounts; only an explicit supported organization family is
 accepted. Seat-specific labels, free-plan detection and future tier identifiers
 remain unsupported. Quotas, model availability, prices and custom account names
-never determine the plan. Specific login-time names remain a fallback only
+never determine the plan. Team/Enterprise capacity tiers never rename the
+explicit organization family. Both present personal-plan flags must be actual
+JSON booleans before they can establish or contradict a family. Specific login-time names remain a fallback only
 until the profile establishes a plan or explicitly establishes no known plan.
 
 Profile requests run alongside usage reads, with a ten-second timeout, refused
-redirects and an ephemeral session. Responses over 64 KiB are not parsed.
+redirects and an ephemeral session with cookie and HTTP-credential storage
+disabled. Parent-session headers and response cookies do not cross accounts.
+Responses over 64 KiB are not parsed.
 Concurrent requests share one lookup; the next usage refresh can request a
 profile after five minutes. Numeric and HTTP-date `Retry-After` extend that
 interval, bounded between five minutes and 24 hours. There are no immediate

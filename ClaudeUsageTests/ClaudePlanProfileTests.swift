@@ -12,6 +12,8 @@ final class ClaudePlanProfileTests: XCTestCase {
             ("claude_max", "future_tier", "Max"),
             ("claude_team", "team_standard", "Team"),
             ("claude_enterprise", "enterprise", "Enterprise"),
+            ("claude_enterprise", "default_claude_max_5x", "Enterprise"),
+            ("claude_team", "default_claude_max_20x", "Team"),
         ] {
             let data = try JSONSerialization.data(withJSONObject: ["organization": ["organization_type": type, "rate_limit_tier": tier]])
             let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -28,6 +30,10 @@ final class ClaudePlanProfileTests: XCTestCase {
             #"{"account":{"has_claude_max":true,"has_claude_pro":true}}"#,
             #"{"organization":{"organization_type":"claude_max"},"account":{"has_claude_max":true,"has_claude_pro":true}}"#,
             #"{"account":{"has_claude_max":1,"has_claude_pro":0}}"#,
+            #"{"account":{"has_claude_pro":true,"has_claude_max":1}}"#,
+            #"{"account":{"has_claude_max":true,"has_claude_pro":"false"}}"#,
+            #"{"organization":false,"account":{"has_claude_pro":true}}"#,
+            #"{"organization":{"organization_type":"claude_pro"},"account":[]}"#,
             #"{"organization":{"organization_type":7},"account":{"has_claude_pro":true}}"#,
             #"{"organization":{"organization_type":"claude_max"},"account":{"has_claude_max":false}}"#,
             #"{"organization":{"organization_type":"claude_max"},"account":{"has_claude_pro":true}}"#,
@@ -53,6 +59,8 @@ final class ClaudePlanProfileTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "anthropic-beta"), "oauth-2025-04-20")
         XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "CodexBarIOS")
         XCTAssertEqual(request.timeoutInterval, 10)
+        XCTAssertFalse(request.httpShouldHandleCookies)
+        XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
         XCTAssertEqual(PlanProfileProtocol.requests.count, 2)
     }
 
@@ -223,6 +231,7 @@ final class ClaudePlanProfileTests: XCTestCase {
 
     func testProfileCachesAreSeparateAcrossAccounts() async {
         let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpAdditionalHeaders = ["Cookie": "synthetic-other-account", "X-Unrelated-Session": "synthetic"]
         configuration.protocolClasses = [PlanProfileProtocol.self]
         let client = ClaudePlanProfileClient(session: URLSession(configuration: configuration))
         PlanProfileProtocol.configure(profile: Self.max20)
@@ -235,6 +244,11 @@ final class ClaudePlanProfileTests: XCTestCase {
         XCTAssertEqual(second.plan(fallback: nil)?.accessibilityLabel, "Pro")
         XCTAssertEqual(cached.plan(fallback: nil)?.accessibilityLabel, "Max 20x")
         XCTAssertEqual(PlanProfileProtocol.profileCount, 2)
+        for request in PlanProfileProtocol.requests {
+            XCTAssertFalse(request.httpShouldHandleCookies)
+            XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+            XCTAssertNil(request.value(forHTTPHeaderField: "X-Unrelated-Session"))
+        }
     }
 
     private func waitForHeldRequest() async throws {
@@ -329,8 +343,10 @@ private class PlanProfileProtocol: URLProtocol, @unchecked Sendable {
     private func respond(profile: String, status: Int, retry: String?) {
         guard let url = request.url else { return }
         let isProfile = url.path == "/api/oauth/profile"
-        let response = HTTPURLResponse(url: url, statusCode: isProfile ? status : 200, httpVersion: nil,
-                                       headerFields: retry.map { ["Retry-After": $0] })!
+        var headers: [String: String] = [:]
+        if let retry { headers["Retry-After"] = retry }
+        if isProfile { headers["Set-Cookie"] = "claude-profile-session=synthetic; Path=/; Secure; HttpOnly" }
+        let response = HTTPURLResponse(url: url, statusCode: isProfile ? status : 200, httpVersion: nil, headerFields: headers)!
         let body = isProfile ? profile : #"{"five_hour":{"utilization":42,"resets_at":"2030-01-01T06:00:00Z"}}"#
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))

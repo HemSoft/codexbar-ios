@@ -35,7 +35,9 @@ actor ClaudePlanProfileClient {
     init(session: URLSession) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = session.configuration.protocolClasses
-        configuration.httpAdditionalHeaders = session.configuration.httpAdditionalHeaders
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
         self.session = URLSession(configuration: configuration, delegate: ClaudeProfileRedirectGuard(), delegateQueue: nil)
     }
 
@@ -81,6 +83,7 @@ actor ClaudePlanProfileClient {
         request.httpMethod = "GET"
         request.timeoutInterval = 10
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.httpShouldHandleCookies = false
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
@@ -115,8 +118,13 @@ actor ClaudePlanProfileClient {
 
 enum ClaudeProfilePlanParser {
     static func parse(_ root: [String: Any]) -> ProviderPlanDescriptor? {
+        if root["organization"] != nil, !(root["organization"] is [String: Any]) { return nil }
+        if root["account"] != nil, !(root["account"] is [String: Any]) { return nil }
         let organization = root["organization"] as? [String: Any] ?? [:]
         let account = root["account"] as? [String: Any] ?? [:]
+        for key in ["has_claude_max", "has_claude_pro"] where account[key] != nil {
+            guard boolean(account[key]) != nil else { return nil }
+        }
         let rawType = ProviderPlanDescriptor.normalizedPlanValue(organization["organization_type"] as? String)
         if organization["organization_type"] != nil, rawType == nil { return nil }
         let tier = ProviderPlanDescriptor.normalizedPlanValue(organization["rate_limit_tier"] as? String)
@@ -132,14 +140,14 @@ enum ClaudeProfilePlanParser {
             guard maxPlan != proPlan else { return nil }
             type = maxPlan ? "max" : "pro"
         }
-        // A multiplier cannot turn an explicitly different plan family into Max.
-        if tier?.contains("max") == true, type != "max" { return nil }
+        // Personal Pro/Max flags conflict; organization capacity tiers do not rename Team or Enterprise.
+        if tier?.contains("max") == true, type == "pro" { return nil }
         if type == "max", tier == "default_claude_pro" { return nil }
         if let maxFlag = boolean(account["has_claude_max"]), type == "max", !maxFlag { return nil }
         if let proFlag = boolean(account["has_claude_pro"]), type == "pro", !proFlag { return nil }
         if type == "pro", boolean(account["has_claude_max"]) == true { return nil }
         if type == "max", boolean(account["has_claude_pro"]) == true { return nil }
-        return ClaudeUsageParser.planDescriptor(subscriptionType: type, rateLimitTier: tier)
+        return ClaudeUsageParser.planDescriptor(subscriptionType: type, rateLimitTier: type == "max" ? tier : nil)
     }
 
     private static func boolean(_ value: Any?) -> Bool? {
