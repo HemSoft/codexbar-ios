@@ -33,6 +33,10 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Show only the green number beneath Codex's Credits pool heading, removing the
+  repeated "credits" suffix from dashboard tiles and customization previews.
+  ([#449](https://github.com/hemsoft-dev/codexbar-ios/issues/449))
+
 - Hide redundant OpenCode plan pills and show named Google AI subscriptions when
   the connected Google account reports them, including verified plan variants.
   Missing subscription metadata stays unavailable instead of guessing from quotas.

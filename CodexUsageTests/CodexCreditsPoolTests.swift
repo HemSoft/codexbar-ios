@@ -7,16 +7,17 @@ final class CodexCreditsPoolTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_893_448_800)
 
     func testBalancesUseCreditUnitsAndPreserveQuotaIdentity() throws {
-        for (balance, expected) in [
-            ("62500", "62,500 credits"), ("0", "0 credits"), ("1", "1 credit"),
-            ("12.125", "12 credits"), ("62500.75", "62,501 credits"),
-            ("0.49", "0 credits"), ("0.5", "1 credit"), ("1.2", "1 credit"),
-            ("1.5", "2 credits"), ("999.5", "1,000 credits"),
+        for (balance, expected, tileValue) in [
+            ("62500", "62,500 credits", "62,500"), ("0", "0 credits", "0"), ("1", "1 credit", "1"),
+            ("12.125", "12 credits", "12"), ("62500.75", "62,501 credits", "62,501"),
+            ("0.49", "0 credits", "0"), ("0.5", "1 credit", "1"), ("1.2", "1 credit", "1"),
+            ("1.5", "2 credits", "2"), ("999.5", "1,000 credits", "1,000"),
         ] {
             let result = try parse(credits: ["has_credits": balance != "0", "unlimited": false, "balance": balance])
             let pool = try XCTUnwrap(result.bars.last)
             XCTAssertEqual(pool.stableKey, "credits-pool")
             XCTAssertEqual(pool.usageText, expected)
+            XCTAssertEqual(pool.metricTileValueText, tileValue)
             let original = try XCTUnwrap(Double(balance))
             XCTAssertEqual(pool.used, original, accuracy: max(original * 1e-12, 1e-112),
                            "Display rounding must preserve the balance")
@@ -26,6 +27,7 @@ final class CodexCreditsPoolTests: XCTestCase {
             XCTAssertNil(pool.resetsAt)
             XCTAssertNil(pool.projectedFraction(at: now))
             XCTAssertEqual(result.bars.dropLast().map(\.used), [12, 34])
+            XCTAssertEqual(result.bars.dropLast().map(\.metricTileValueText), ["12%", "34%"])
             XCTAssertEqual(result.configurableMetrics.map(\.id), ["codex.window-18000", "codex.window-604800", metricID])
             XCTAssertNil(result.creditsRemaining, "Counts must never enter the money path")
         }
@@ -64,6 +66,7 @@ final class CodexCreditsPoolTests: XCTestCase {
         let data = Data(#"{"credits":{"has_credits":true,"unlimited":false,"balance":"62500.5"}}"#.utf8)
         let result = try XCTUnwrap(CodexUsageParser.parse(data, fetchedAt: now, locale: Locale(identifier: "de_DE")))
         XCTAssertEqual(result.bars.first?.usageText, "62.501 credits")
+        XCTAssertEqual(result.bars.first?.metricTileValueText, "62.501")
         XCTAssertEqual(result.availableMetrics.first?.id, metricID)
         let absent = try XCTUnwrap(CodexUsageParser.parse(Data(#"{"credits":{"has_credits":false,"unlimited":false,"balance":null}}"#.utf8)))
         XCTAssertTrue(absent.bars.isEmpty)
