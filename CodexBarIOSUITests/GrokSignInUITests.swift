@@ -277,7 +277,8 @@ final class GrokSignInUITests: XCTestCase {
             let appearance = darkLarge ? "dark-large" : "light-default"
             for (title, plan) in [("Personal Cursor", "Pro"), ("Work Cursor", "Pro+"), ("Unknown Cursor", "Plan unavailable")] {
                 let header = cursorPlanHeader(title, plan: plan, app: app)
-                for _ in 0..<8 where !header.isHittable { app.swipeUp() }
+                for _ in 0..<24 where !header.isHittable { app.swipeUp() }
+                XCTAssertTrue(header.wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
                 XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
                 XCTAssertEqual(header.value as? String, "Expanded")
                 keep("cursor-plan-\(title)-\(appearance)-expanded", app: app)
@@ -296,7 +297,8 @@ final class GrokSignInUITests: XCTestCase {
             let restored = launch(scenario: scenario, runID: runID, reset: false, darkAccessibility: darkLarge)
             for (title, plan) in [("Personal Cursor", "Pro"), ("Work Cursor", "Pro+"), ("Unknown Cursor", "Plan unavailable")] {
                 let header = cursorPlanHeader(title, plan: plan, app: restored)
-                for _ in 0..<8 where !header.isHittable { restored.swipeUp() }
+                for _ in 0..<24 where !header.isHittable { restored.swipeUp() }
+                XCTAssertTrue(header.wait(for: \.isHittable, toEqual: true, timeout: 5), restored.debugDescription)
                 XCTAssertTrue(header.waitForExistence(timeout: 10), restored.debugDescription)
                 XCTAssertEqual(header.value as? String, "Collapsed")
             }
