@@ -16,7 +16,7 @@ ORIGIN = "https://opencode.ai/console/"
 NOW = dt.datetime(2026, 10, 10, tzinfo=dt.timezone.utc)
 USER = "user_synthetic"
 WORKSPACE = "org_synthetic"
-SESSION = {"user": {"id": USER}, "orgId": WORKSPACE}
+SESSION = {"user": {"id": USER}, "org_id": WORKSPACE}
 STATUS = {
     "subscriberUserId": USER,
     "product": "go",
@@ -78,6 +78,18 @@ def observation(status):
     return ("renews", end)
 
 
+def identity(session):
+    """Match the native response's user.id and optional org_id, not metadata."""
+    if not isinstance(session, dict) or not isinstance(session.get("user"), dict):
+        return None
+    if session["user"].get("id") != USER:
+        return None
+    workspace = session.get("org_id")
+    if workspace is not None and workspace != WORKSPACE:
+        return None
+    return (USER, WORKSPACE)
+
+
 def acquire(read):
     """Replay identity, workspace-scoped status, identity without any writes."""
     def get(path, scoped=False):
@@ -87,11 +99,11 @@ def acquire(read):
         return read(Request(ORIGIN + path, headers=headers, method="GET"))
 
     try:
-        before = get("auth/session")
-        if before != SESSION:
+        before = identity(get("auth/session"))
+        if before is None:
             return None
         status = get("api/go/status", scoped=True)
-        after = get("auth/session")
+        after = identity(get("auth/session"))
         if after != before:
             return None
         return observation(status)
@@ -100,7 +112,7 @@ def acquire(read):
 
 
 class ContractReplay(unittest.TestCase):
-    def replay(self, status, session_after=None, failure=False):
+    def replay(self, status, session_after=None, failure=False, session_before=None):
         reads = []
 
         def read(request):
@@ -115,11 +127,13 @@ class ContractReplay(unittest.TestCase):
                 return json.loads(json.dumps(status))
             self.assertEqual(request.full_url, ORIGIN + "auth/session")
             self.assertIsNone(request.get_header("X-org-id"))
-            return SESSION if len(reads) == 1 or session_after is None else session_after
+            if len(reads) == 1:
+                return SESSION if session_before is None else session_before
+            return SESSION if session_after is None else session_after
 
         result = acquire(read)
         self.assertEqual([r.full_url for r in reads][:2],
-                         [ORIGIN + "auth/session", ORIGIN + "api/go/status"])
+                         [ORIGIN + "auth/session", ORIGIN + "api/go/status"][:len(reads)])
         return result
 
     def test_verified_shapes_and_failures(self):
@@ -164,8 +178,16 @@ class ContractReplay(unittest.TestCase):
 
     def test_optional_failure_and_identity_change(self):
         self.assertIsNone(self.replay(STATUS, failure=True))
-        self.assertIsNone(self.replay(STATUS, session_after={"user": {"id": "user_other"}, "orgId": WORKSPACE}))
-        self.assertIsNone(self.replay(STATUS, session_after={"user": {"id": USER}, "orgId": "org_other"}))
+        self.assertIsNone(self.replay(STATUS, session_after={"user": {"id": "user_other"}, "org_id": WORKSPACE}))
+        self.assertIsNone(self.replay(STATUS, session_after={"user": {"id": USER}, "org_id": "org_other"}))
+        self.assertEqual(self.replay(STATUS, session_before={**SESSION, "expires": "synthetic"})[0], "renews")
+        self.assertEqual(self.replay(STATUS, session_before={"user": {"id": USER}})[0], "renews")
+        self.assertEqual(self.replay(STATUS, session_after={**SESSION, "user": {"id": USER, "name": "Synthetic"}})[0], "renews")
+        for before in ({}, {"user": {"id": "user_other"}},
+                       {"user": {"id": USER}, "org_id": "org_other"},
+                       {"user": {"id": USER}, "org_id": 42}):
+            with self.subTest(session=before):
+                self.assertIsNone(self.replay(STATUS, session_before=before))
 
 
 if __name__ == "__main__":

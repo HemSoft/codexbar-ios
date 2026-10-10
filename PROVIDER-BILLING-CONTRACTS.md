@@ -319,7 +319,9 @@ The current first-party Go controls compare that subscriber to the session
 user before allowing subscriber actions. Do not confuse display names, a
 workspace member or the old `mine` Boolean with a stable billing owner.
 Verify `auth/session` before and after acquisition, reject a conflicting
-returned `orgId`, and compare saved credentials again after the read. These
+returned `org_id`, and compare saved credentials again after the read. The
+session parser uses `user.id` and optional `org_id`, ignoring unrelated metadata.
+These
 repeated reads are the proposed native isolation policy, not a claim that the
 web client itself makes them in that order.
 
@@ -379,8 +381,9 @@ Run the local-only [contract replay](scripts/research/opencode-billing-contract.
 python3 scripts/research/opencode-billing-contract.py
 ```
 
-Three test methods cover 27 synthetic cases. They check the exact GET paths,
-bearer/header scoping, identity changes, other subscribers, Go/Go Plus and
+Three test methods cover 34 synthetic cases. They check the exact GET paths,
+bearer/header scoping, optional workspace fields, extra session metadata,
+identity changes, other subscribers, Go/Go Plus and
 downgrade, arrays/multiple subscriptions, cancellation precedence/contradiction,
 missing/malformed/past dates, unknown/store products, payment recovery and
 optional access failure. The fixture reader intercepts every request in memory;
