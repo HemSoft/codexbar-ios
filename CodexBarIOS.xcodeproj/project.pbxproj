@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A44400000000000000000301 /* SubscriptionRenewalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44400000000000000000302 /* SubscriptionRenewalTests.swift */; };
+		A44400000000000000000201 /* CodexSubscriptionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44400000000000000000202 /* CodexSubscriptionClient.swift */; };
+		A44400000000000000000101 /* SubscriptionRenewal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44400000000000000000102 /* SubscriptionRenewal.swift */; };
 		A42000000000000000000501 /* ClaudeUsageResetInventoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000502 /* ClaudeUsageResetInventoryTests.swift */; };
 		A42000000000000000000601 /* ClaudeUsageResetClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000602 /* ClaudeUsageResetClientTests.swift */; };
 		A42000000000000000000701 /* ClaudeUsageResetFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42000000000000000000702 /* ClaudeUsageResetFlowTests.swift */; };
@@ -269,6 +272,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A44400000000000000000302 /* SubscriptionRenewalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarIOSTests/SubscriptionRenewalTests.swift; sourceTree = SOURCE_ROOT; };
+		A44400000000000000000202 /* CodexSubscriptionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexSubscriptionClient.swift; sourceTree = "<group>"; };
+		A44400000000000000000102 /* SubscriptionRenewal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionRenewal.swift; sourceTree = "<group>"; };
 		A42000000000000000000502 /* ClaudeUsageResetInventoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetInventoryTests.swift; sourceTree = SOURCE_ROOT; };
 		A42000000000000000000602 /* ClaudeUsageResetClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetClientTests.swift; sourceTree = SOURCE_ROOT; };
 		A42000000000000000000702 /* ClaudeUsageResetFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetFlowTests.swift; sourceTree = SOURCE_ROOT; };
@@ -528,6 +534,7 @@
 				200000000000000000000003 /* ProviderID.swift */,
 				200000000000000000000004 /* ProviderUsageResult.swift */,
 				A42000000000000000000102 /* ClaudeUsageResetInventory.swift */,
+				A44400000000000000000102 /* SubscriptionRenewal.swift */,
 				A40600000000000000000302 /* GreptileAllowanceRenewal.swift */,
 				A37600000000000000000002 /* ProviderMetricTileContent.swift */,
 				A37700000000000000000002 /* SettingsPresentationModels.swift */,
@@ -585,6 +592,7 @@
 				AB2990000000000000000002 /* GoogleCodingSignIn.swift */,
 				200000000000000000000023 /* ClaudeUsageParser.swift */,
 				200000000000000000000024 /* ClaudeUsageProvider.swift */,
+				A44400000000000000000202 /* CodexSubscriptionClient.swift */,
 				A43100000000000000000102 /* ClaudePlanProfileClient.swift */,
 				A42000000000000000000202 /* ClaudeUsageResetClient.swift */,
 				A42100000000000000000202 /* ClaudeFableMetricPreferenceCompatibility.swift */,
@@ -663,6 +671,7 @@
 				A42000000000000000000802 /* ClaudeUsageResetProviderTests.swift */,
 				A42100000000000000000302 /* ClaudeFableWeeklyTests.swift */,
 				A43100000000000000000202 /* ClaudePlanProfileTests.swift */,
+				A44400000000000000000302 /* SubscriptionRenewalTests.swift */,
 				A43800000000000000000102 /* CursorPlanTests.swift */,
 				20000000000000000000004A /* UsageAlertTests.swift */,
 				20000000000000000000004D /* UsageHistoryTests.swift */,
@@ -1076,6 +1085,7 @@
 				A40600000000000000000601 /* ProviderCardInformationView.swift in Sources */,
 				A40600000000000000000501 /* GreptileRenewalView.swift in Sources */,
 				A40600000000000000000401 /* GreptileBrowserSignInView.swift in Sources */,
+				A44400000000000000000101 /* SubscriptionRenewal.swift in Sources */,
 				A40600000000000000000301 /* GreptileAllowanceRenewal.swift in Sources */,
 				A40600000000000000000201 /* GreptileDashboardClient.swift in Sources */,
 				A40600000000000000000101 /* GreptileSessionCredentials.swift in Sources */,
@@ -1104,6 +1114,7 @@
 				AB2990000000000000000001 /* GoogleCodingSignIn.swift in Sources */,
 				100000000000000000000021 /* ClaudeUsageParser.swift in Sources */,
 				100000000000000000000022 /* ClaudeUsageProvider.swift in Sources */,
+				A44400000000000000000201 /* CodexSubscriptionClient.swift in Sources */,
 				A43100000000000000000101 /* ClaudePlanProfileClient.swift in Sources */,
 				A42000000000000000000201 /* ClaudeUsageResetClient.swift in Sources */,
 				A42100000000000000000201 /* ClaudeFableMetricPreferenceCompatibility.swift in Sources */,
@@ -1170,6 +1181,7 @@
 				A42000000000000000000801 /* ClaudeUsageResetProviderTests.swift in Sources */,
 				A42100000000000000000301 /* ClaudeFableWeeklyTests.swift in Sources */,
 				A43100000000000000000201 /* ClaudePlanProfileTests.swift in Sources */,
+				A44400000000000000000301 /* SubscriptionRenewalTests.swift in Sources */,
 				A43800000000000000000101 /* CursorPlanTests.swift in Sources */,
 				100000000000000000000051 /* UsageAlertTests.swift in Sources */,
 				10000000000000000000004D /* UsageHistoryTests.swift in Sources */,

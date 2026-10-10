@@ -664,6 +664,7 @@ struct ContentView: View {
             ProviderUsageCard(
                 result: result,
                 statusText: orchestrator.dashboardStatusText(for: result),
+                showsSubscriptionRenewals: configurationStore.showsSubscriptionRenewals,
                 history: historyStore.historySeries(
                     for: result,
                     severityThresholds:

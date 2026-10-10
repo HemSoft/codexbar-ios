@@ -8,6 +8,12 @@ building, testing, or releasing the app.
 
 ### Added
 
+- See compact subscription renewal countdowns when the connected provider supplies
+  a verified billing date, with exact dates in card details. Control their display
+  in Dashboard settings; usage reset dates remain separate. Billing dates that the
+  current connection cannot provide stay unavailable.
+  ([#444](https://github.com/hemsoft-dev/codexbar-ios/issues/444))
+
 - See actual Greptile free-credit usage, included credits and remaining allowance
   alongside the renewal date for connected dashboard accounts. Credit usage stays
   separate from completed reviews; missing billing values remain unavailable.

@@ -256,6 +256,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
     public let cardInformationSections: [ProviderCardInformationSection]
     /// Review observations retained after a partial Greptile refresh, excluded from fresh history.
     public let greptileReviewActivityUnavailableReason: String?
+    public var subscriptionRenewal: SubscriptionRenewal?
     public var greptileAllowanceRenewal: GreptileAllowanceRenewal?
     public let codexBankedRateLimitResets: CodexBankedRateLimitResets?
     /// Transient account-bound grants; never persist in usage history or device snapshots.
@@ -288,6 +289,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
         usageMessages: [String] = [],
         dashboardUsageMessages: [String]? = nil,
         cardInformationSections: [ProviderCardInformationSection] = [],
+        subscriptionRenewal: SubscriptionRenewal? = nil,
         greptileAllowanceRenewal: GreptileAllowanceRenewal? = nil,
         greptileReviewActivityUnavailableReason: String? = nil,
         codexBankedRateLimitResets: CodexBankedRateLimitResets? = nil,
@@ -327,6 +329,7 @@ public struct ProviderUsageResult: Identifiable, Equatable, Sendable {
             return true
         }
         self.greptileReviewActivityUnavailableReason = greptileReviewActivityUnavailableReason
+        self.subscriptionRenewal = failureMessage == nil ? subscriptionRenewal : nil
         self.greptileAllowanceRenewal = greptileAllowanceRenewal
         self.codexBankedRateLimitResets = codexBankedRateLimitResets.flatMap {
             $0.availableCount > 0 ? $0 : nil

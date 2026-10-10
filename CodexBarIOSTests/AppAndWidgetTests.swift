@@ -740,18 +740,18 @@ final class AppAndWidgetTests: XCTestCase {
         )
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: meteredResult),
-            [.configureAccount, .customizeMetrics]
+            [.moreInformation, .configureAccount, .customizeMetrics]
         )
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: multiMetricBalanceResult),
-            [.configureAccount, .customizeMetrics]
+            [.moreInformation, .configureAccount, .customizeMetrics]
         )
         XCTAssertEqual(
             ProviderUsageCard.menuActions(for: resultWithInformation),
             [.moreInformation, .configureAccount]
         )
         XCTAssertEqual(
-            ProviderUsageCard.informationSections(for: resultWithInformation),
+            ProviderUsageCard.informationSections(for: resultWithInformation).filter { $0.id != "subscription-renewal" },
             resultWithInformation.cardInformationSections
         )
         XCTAssertTrue(

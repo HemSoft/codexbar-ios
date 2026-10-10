@@ -47,6 +47,7 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
 
     private let secretStore: SecretStore
     private let session: URLSession
+    private let subscriptionClient: CodexSubscriptionClient
     private let usageEndpoint: URL
     private let resetCreditsEndpoint: URL
     private let consumeResetEndpoint: URL
@@ -64,6 +65,7 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
         tokenEndpoint: URL = CodexWebAuthService.tokenEndpoint,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        self.subscriptionClient = CodexSubscriptionClient(session: session)
         self.secretStore = secretStore
         self.session = session
         self.usageEndpoint = usageEndpoint
@@ -165,11 +167,16 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
                 credentials: credentials
             )
             try requireCurrentCredentials(credentials, keychainAccount: keychainAccount)
-            return applyAccountMetadata(
+            var result = applyAccountMetadata(
                 to: resultWithResetDetails,
                 configuration: configuration,
                 credentials: credentials
             )
+            result.subscriptionRenewal = try await subscriptionClient.fetch(
+                credentials: credentials, accountID: configuration.id, observedAt: now()
+            )
+            try requireCurrentCredentials(credentials, keychainAccount: keychainAccount)
+            return result
         case 401 where canRefresh && credentials.refreshToken?.isEmpty == false:
             switch await refreshCredentials(credentials, keychainAccount: keychainAccount) {
             case .success(let refreshed):

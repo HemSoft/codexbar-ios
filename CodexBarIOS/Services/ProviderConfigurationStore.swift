@@ -468,6 +468,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     @Published public private(set) var configurations: [ProviderAccountConfiguration]
     @Published public private(set) var groups: [ProviderAccountGroup]
     @Published public private(set) var secretAvailability: [String: Bool]
+    @Published public private(set) var showsSubscriptionRenewals: Bool
     @Published public private(set) var appAppearance: AppAppearance
     @Published public private(set) var autoRefreshInterval: AutoRefreshInterval
     @Published public private(set) var historySamplingInterval: HistorySamplingInterval
@@ -533,6 +534,7 @@ public final class ProviderConfigurationStore: ObservableObject {
         self.confirmedGoogleAccountLinks = defaults.dictionary(forKey: "confirmedGoogleAccountLinks") as? [String: String] ?? [:]
         self.configurations = configurationLoadResult.configurations
         self.secretAvailability = [:]
+        self.showsSubscriptionRenewals = defaults.object(forKey: DefaultsKey.showsSubscriptionRenewals) as? Bool ?? true
         self.appAppearance = Self.loadAppAppearance(from: defaults)
         self.autoRefreshInterval = Self.loadAutoRefreshInterval(from: defaults)
         self.historySamplingInterval = Self.loadHistorySamplingInterval(from: defaults)
@@ -1999,6 +2001,7 @@ public final class ProviderConfigurationStore: ObservableObject {
     private enum DefaultsKey {
         static let configurations = "providerConfigurations"
         static let groups = "providerAccountGroups"
+        static let showsSubscriptionRenewals = "showsSubscriptionRenewals"
         static let appAppearance = "appAppearance"
         static let autoRefreshInterval = "autoRefreshInterval"
         static let historySamplingInterval = "historySamplingInterval"
@@ -3043,6 +3046,14 @@ extension ProviderConfigurationStore {
             lastError = "The saved Greptile identity could not be verified. Your saved account was not changed."
             return false
         }
+    }
+
+}
+
+extension ProviderConfigurationStore {
+    public func updateShowsSubscriptionRenewals(_ shows: Bool) {
+        showsSubscriptionRenewals = shows
+        defaults.set(shows, forKey: DefaultsKey.showsSubscriptionRenewals)
     }
 
 }

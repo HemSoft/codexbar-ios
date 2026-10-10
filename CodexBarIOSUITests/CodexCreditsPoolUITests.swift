@@ -184,6 +184,73 @@ final class CodexCreditsPoolUITests: XCTestCase {
         }
     }
 
+    private func exerciseSubscriptionRenewals() {
+        for dark in [false, true] {
+            let app = launchSpacingFixture(defaultText: !dark, dark: dark, scenario: "subscription-renewals")
+            let header = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Personal Codex, ChatGPT Pro 200")).firstMatch
+            XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertTrue(header.label.contains("Renews in"), header.label)
+            keep("renewals-\(dark ? "dark-large" : "light-default")-expanded", app: app)
+            header.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.4)).tap()
+            XCTAssertEqual(header.value as? String, "Collapsed")
+            XCTAssertTrue(header.label.contains("Renews in"))
+            keep("renewals-\(dark ? "dark-large" : "light-default")-collapsed", app: app)
+            tap(app.buttons["More options for Personal Codex"], in: app)
+            tap(app.buttons["More Information…"], in: app)
+            XCTAssertTrue(app.staticTexts["Next subscription renewal"].waitForExistence(timeout: 5), app.debugDescription)
+            keep("renewals-\(dark ? "dark-large" : "light-default")-exact-date", app: app)
+            tap(app.buttons["Done"], in: app)
+            tap(app.buttons["Open settings"], in: app)
+            tap(app.descendants(matching: .any)["settings-dashboard"], in: app)
+            let toggle = app.switches["settings-show-subscription-renewals"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 5), app.debugDescription)
+            XCTAssertEqual(toggle.value as? String, "1")
+            keep("renewals-\(dark ? "dark-large" : "light-default")-setting-on", app: app)
+            toggle.switches.firstMatch.tap()
+            XCTAssertEqual(toggle.value as? String, "0")
+            keep("renewals-\(dark ? "dark-large" : "light-default")-setting-off", app: app)
+            tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
+            XCTAssertFalse(header.label.contains("Renews in"), header.label)
+            keep("renewals-\(dark ? "dark-large" : "light-default")-off-immediate", app: app)
+            var environment = app.launchEnvironment
+            environment["CODEXBAR_UI_TEST_RESET"] = "0"
+            app.terminate()
+            app.launchEnvironment = environment
+            app.launch()
+            XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertFalse(header.label.contains("Renews in"), header.label)
+            keep("renewals-\(dark ? "dark-large" : "light-default")-off-persisted", app: app)
+            tap(app.buttons["Open settings"], in: app)
+            tap(app.descendants(matching: .any)["settings-dashboard"], in: app)
+            XCTAssertEqual(toggle.value as? String, "0")
+            toggle.switches.firstMatch.tap()
+            tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
+            XCTAssertTrue(header.label.contains("Renews in"), header.label)
+            keep("renewals-\(dark ? "dark-large" : "light-default")-on-restored", app: app)
+            for title in ["Work Codex", "Personal Google", "OpenCode Go + Zen"] {
+                let other = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", title + ", ")).firstMatch
+                reveal(other, in: app)
+                XCTAssertTrue(other.label.contains("Renews in"), other.label)
+                if title == "OpenCode Go + Zen" { XCTAssertFalse(other.label.contains("Plan unavailable")) }
+                keep("renewals-\(title)-\(dark ? "dark-large" : "light-default")", app: app)
+            }
+            app.terminate()
+        }
+        for state in ["unknown", "canceled", "stale", "past"] {
+            let app = launchSpacingFixture(defaultText: true, dark: false, scenario: "subscription-renewals-\(state)")
+            let header = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Personal Codex, ChatGPT Pro 200")).firstMatch
+            XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertFalse(header.label.contains("Renews in"), header.label)
+            tap(app.buttons["More options for Personal Codex"], in: app)
+            tap(app.buttons["More Information…"], in: app)
+            let expected = state == "unknown" ? "Renewal date unavailable" : state == "canceled" ? "Does not renew"
+                : state == "stale" ? "Last known billing date" : "Billing date passed"
+            XCTAssertTrue(app.staticTexts[expected].waitForExistence(timeout: 5), app.debugDescription)
+            keep("renewals-\(state)-details", app: app)
+            app.terminate()
+        }
+    }
+
     private func exerciseGoogleAndOpenCodePlanPills() {
         continueAfterFailure = false
         let variants = [("free", "Google AI Free"), ("plus", "Google AI Plus (400 GB)"),
@@ -216,6 +283,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
 
     func testCompactCardHeadersAndIndependentControls() {
         continueAfterFailure = false
+        exerciseSubscriptionRenewals()
         exerciseGoogleAndOpenCodePlanPills()
         exerciseClaudeProfilePills()
         for defaultText in [true, false] {
