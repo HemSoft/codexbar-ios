@@ -160,6 +160,18 @@ public struct UsageBar: Identifiable, Equatable, Sendable {
         return "\(Int(percent.rounded()))%"
     }
 
+    /// Visible value beneath the metric heading. Standalone and accessibility text retain units.
+    public var metricTileValueText: String {
+        let text = usageText
+        guard isUnboundedNumeric,
+              stableKey == CodexUsageParser.creditsPoolStableKey,
+              label == "Credits pool",
+              let suffix = [" credits", " credit"].first(where: { text.hasSuffix($0) }) else {
+            return text
+        }
+        return String(text.dropLast(suffix.count))
+    }
+
     public func metricIdentifier(providerID: ProviderID, index: Int) -> String {
         if let stableKey, !stableKey.isEmpty {
             if providerID == .gemini,

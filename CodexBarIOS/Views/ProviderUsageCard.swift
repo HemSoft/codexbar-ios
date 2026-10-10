@@ -3371,11 +3371,11 @@ private struct MetricVisualizationView: View {
                     tint: tint
                 )
             case .largeNumeric:
-                Text(bar.usageText)
+                Text(bar.metricTileValueText)
                     .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                     .foregroundStyle(tint)
                     .monospacedDigit()
-                    .lineLimit(bar.stableKey == CodexUsageParser.creditsPoolStableKey ? 2 : 1)
+                    .lineLimit(1)
                     .minimumScaleFactor(0.65)
             }
         }

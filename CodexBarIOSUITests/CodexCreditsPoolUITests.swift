@@ -59,7 +59,8 @@ final class CodexCreditsPoolUITests: XCTestCase {
                 XCTAssertTrue(app.navigationBars["Customize Card"].waitForExistence(timeout: 5))
                 let choice = app.buttons["customize-metric-codex.credits-pool"]
                 reveal(choice, in: app)
-                XCTAssertTrue(app.staticTexts["62,500 credits"].exists, app.debugDescription)
+                XCTAssertTrue(app.staticTexts["62,500"].exists, app.debugDescription)
+                XCTAssertFalse(app.staticTexts["62,500 credits"].exists, app.debugDescription)
                 keep("credits-customize-on", app: app)
                 tap(choice, in: app)
                 tap(app.buttons["Hide"], in: app)
