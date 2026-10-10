@@ -31,6 +31,12 @@ building, testing, or releasing the app.
 
 ### Fixed
 
+- Resolve Claude subscription names from connected-account profile metadata,
+  including Max 5x and 20x, when sign-in metadata is missing or stale. Supported
+  plan changes appear on a later refresh without signing out; unknown plans
+  stay unavailable and profile failures preserve valid usage.
+  ([#431](https://github.com/hemsoft-dev/codexbar-ios/issues/431))
+
 - Open feedback and support links in the organization GitHub repository.
   ([#427](https://github.com/hemsoft-dev/codexbar-ios/issues/427))
 

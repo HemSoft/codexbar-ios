@@ -370,6 +370,15 @@ final class ProviderNetworkMockURLProtocol: TestURLProtocol, @unchecked Sendable
     // URLProtocol requires an overridable class property.
     // swiftlint:disable:next static_over_final_class
     override class var handlerStore: TestURLProtocolHandlerStore { store }
+
+    // Legacy network scenarios exercise usage/token endpoints only. Profile coverage has its own protocol.
+    override func startLoading() {
+        guard request.url?.path == "/api/oauth/profile" else { super.startLoading(); return }
+        guard let url = request.url, let response = HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil) else { return }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data())
+        client?.urlProtocolDidFinishLoading(self)
+    }
 }
 
 final class DashboardAndSettingsMockURLProtocol: TestURLProtocol, @unchecked Sendable {
