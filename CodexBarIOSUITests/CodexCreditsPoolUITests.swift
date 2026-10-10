@@ -196,11 +196,11 @@ final class CodexCreditsPoolUITests: XCTestCase {
             XCTAssertTrue(header.label.contains("Renews in"))
             keep("renewals-\(dark ? "dark-large" : "light-default")-collapsed", app: app)
             tap(app.buttons["More options for Personal Codex"], in: app)
-            tap(app.buttons["More Information…"], in: app)
+            tap(app.buttons["More information for Personal Codex"], in: app)
             XCTAssertTrue(app.staticTexts["Next subscription renewal"].waitForExistence(timeout: 5), app.debugDescription)
             keep("renewals-\(dark ? "dark-large" : "light-default")-exact-date", app: app)
             tap(app.buttons["Done"], in: app)
-            tap(app.buttons["Open settings"], in: app)
+            tap(app.buttons["Open settings"].firstMatch, in: app)
             tap(app.descendants(matching: .any)["settings-dashboard"], in: app)
             let toggle = app.switches["settings-show-subscription-renewals"]
             XCTAssertTrue(toggle.waitForExistence(timeout: 5), app.debugDescription)
@@ -220,7 +220,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
             XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
             XCTAssertFalse(header.label.contains("Renews in"), header.label)
             keep("renewals-\(dark ? "dark-large" : "light-default")-off-persisted", app: app)
-            tap(app.buttons["Open settings"], in: app)
+            tap(app.buttons["Open settings"].firstMatch, in: app)
             tap(app.descendants(matching: .any)["settings-dashboard"], in: app)
             XCTAssertEqual(toggle.value as? String, "0")
             toggle.switches.firstMatch.tap()
@@ -242,7 +242,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
             XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
             XCTAssertFalse(header.label.contains("Renews in"), header.label)
             tap(app.buttons["More options for Personal Codex"], in: app)
-            tap(app.buttons["More Information…"], in: app)
+            tap(app.buttons["More information for Personal Codex"], in: app)
             let expected = state == "unknown" ? "Renewal date unavailable" : state == "canceled" ? "Does not renew"
                 : state == "stale" ? "Last known billing date" : "Billing date passed"
             XCTAssertTrue(app.staticTexts[expected].waitForExistence(timeout: 5), app.debugDescription)
@@ -458,7 +458,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
     }
 
     private func openAccount(_ label: String, in app: XCUIApplication) {
-        tap(app.buttons["Open settings"], in: app)
+        tap(app.buttons["Open settings"].firstMatch, in: app)
         tap(app.descendants(matching: .any)["settings-accountsAndGroups"].firstMatch, in: app)
         XCTAssertTrue(app.navigationBars["Accounts & Groups"].waitForExistence(timeout: 10))
         tap(app.otherElements[label], in: app)
