@@ -124,6 +124,7 @@ extension ProviderUsageResult {
     private var subscriptionBillingIsNotApplicable: Bool {
         if [.openRouter, .moonshot, .githubBilling, .antigravity].contains(providerID) { return true }
         let identifier = plan?.identifier.lowercased() ?? ""
+        if providerID == .gemini && identifier == "google-ai.google ai free" { return true }
         if identifier.hasSuffix(".free") || identifier.hasSuffix(".hobby") || identifier.contains(".api-credits") { return true }
         return providerID == .greptile && greptileAllowanceRenewal?.isApplicable == true
     }

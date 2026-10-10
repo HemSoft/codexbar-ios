@@ -12,7 +12,7 @@ specific to the product and authentication method already connected in this app.
 
 | Provider | Current evidence | Billing renewal support |
 | --- | --- | --- |
-| ChatGPT / Codex | `GET chatgpt.com/backend-api/subscriptions`, `active_until` plus Boolean `will_renew` | For verified individual Go, Plus and Pro plans, an optional request uses the existing account-bound OAuth grant and account header. Business, Enterprise and unknown workspace plans lack a verified workspace billing contract and receive no lookup. A recognized 200 response supplies the date; rejected access or missing fields means unavailable. The source below demonstrates browser-session access, **not guaranteed Codex OAuth access**. Live grant compatibility is pending Franz's account check. |
+| ChatGPT / Codex | `GET chatgpt.com/backend-api/subscriptions`, `active_until` plus Boolean `will_renew` | For verified individual Go, Plus and Pro plans, an optional request uses the existing account-bound OAuth grant, account query/header and Codex client identity headers. Business, Enterprise and unknown workspace plans lack a verified workspace billing contract and receive no lookup. A recognized 200 response supplies the date; rejected access or missing fields means unavailable. The inspected Codex Switch implementation reports successful OAuth reads with this request contract; native iOS transport/grant compatibility remains pending Franz's account check. |
 | Claude | OAuth usage and profile provide reset windows and subscription tier | Unavailable through the current OAuth connection. The known billing route is `claude.ai/api/organizations/<uuid>/subscription_details`, using a web `sessionKey`. It needs verified web-account/organization ownership and `status`, `next_charge_at`/`next_charge_date`, `plan_ending_at`/`plan_ending_before`. Current OAuth does not expose that web credential. |
 | Cursor | `GetCurrentPeriodUsage` exposes a usage period; `/auth/full_stripe_profile` supplies membership | No verified next-charge timestamp plus renewal/cancellation state in the supported response contract. `billingCycleEnd` remains a quota-period boundary, never a promised charge. |
 | Copilot | Copilot quota windows | No per-subscription billing renewal and auto-renewal state in the connected quota response. |
@@ -67,8 +67,17 @@ uses browser cookies. The
 requires a matching web session and organization, and prioritizes cancellation
 end dates over residual next-charge fields.
 
-If Codex OAuth rejects subscription access, a guided, account-verified phone
-billing authorization flow is still needed. Claude likewise needs a guided,
+The [Codex Switch request implementation](https://github.com/wen495033653/codex-switch/blob/2965a2e8d6d0737942e7e175951bb471d6816445/src-tauri/src/accounts/usage/client.rs)
+and its [live verification notes](https://github.com/wen495033653/codex-switch/blob/2965a2e8d6d0737942e7e175951bb471d6816445/docs/development/subscription-refresh.md)
+provide an OAuth acquisition avenue: account query/header, `OpenAI-Beta: codex-1`,
+`Originator: Codex Desktop` and a `codex_cli_rs` compatibility user agent. The
+notes also report HTTP/2 rejection with their Rust client and success over HTTP/1.1.
+iOS uses URLSession protocol negotiation; no private protocol-forcing API or
+claim of equivalent live transport behavior is used. Rejected native requests
+remain unavailable. Live iOS access must still be checked before calling this
+provider supported on Franz's account. If it rejects subscription access, a
+public transport solution or guided, account-verified phone billing authorization
+flow is still needed. Claude likewise needs a guided,
 verified web-billing connection or an OAuth endpoint carrying billing fields.
 Do not substitute Safari's inaccessible cookies, desktop imports, guessed dates
 or a second account's billing session. Live date comparisons and OAuth billing

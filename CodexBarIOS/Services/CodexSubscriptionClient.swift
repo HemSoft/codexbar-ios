@@ -25,11 +25,18 @@ final class CodexSubscriptionClient: @unchecked Sendable {
 
     func fetch(credentials: CodexCredentials, accountID: String, observedAt: Date) async throws -> SubscriptionRenewal? {
         guard let providerAccount = credentials.accountID, !providerAccount.isEmpty else { return nil }
+        guard var url = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else { return nil }
+        url.queryItems = (url.queryItems ?? []).filter { $0.name != "account_id" }
+            + [URLQueryItem(name: "account_id", value: providerAccount)]
+        guard let endpoint = url.url else { return nil }
         var request = URLRequest(url: endpoint)
         request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(providerAccount, forHTTPHeaderField: "ChatGPT-Account-Id")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("CodexBarIOS", forHTTPHeaderField: "User-Agent")
+        request.setValue("codex-1", forHTTPHeaderField: "OpenAI-Beta")
+        request.setValue("Codex Desktop", forHTTPHeaderField: "Originator")
+        // Subscription access requires the Codex compatibility identity, not a browser identity.
+        request.setValue("codex_cli_rs/0.76.0 (iOS; arm64) CodexBarIOS", forHTTPHeaderField: "User-Agent")
         do {
             let (data, response) = try await session.data(for: request)
             try Task.checkCancellation()

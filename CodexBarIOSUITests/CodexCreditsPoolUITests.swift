@@ -249,6 +249,18 @@ final class CodexCreditsPoolUITests: XCTestCase {
             keep("renewals-\(state)-details", app: app)
             app.terminate()
         }
+        for dark in [false, true] {
+            let app = launchSpacingFixture(defaultText: !dark, dark: dark, scenario: "google-plan-free")
+            let header = app.descendants(matching: .any).matching(NSPredicate(
+                format: "label BEGINSWITH %@", "Personal Google, Google AI Free"
+            )).firstMatch
+            XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertFalse(header.label.contains("Renews"), header.label)
+            tap(app.buttons["More options for Personal Google"], in: app)
+            XCTAssertFalse(app.buttons["More information for Personal Google"].exists, app.debugDescription)
+            keep("renewals-google-free-\(dark ? "dark-large" : "light-default")", app: app)
+            app.terminate()
+        }
     }
 
     private func exerciseGoogleAndOpenCodePlanPills() {

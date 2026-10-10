@@ -64,12 +64,14 @@ final class SubscriptionRenewalTests: XCTestCase {
         XCTAssertNil(otherProvider.boundSubscriptionRenewal)
     }
 
-    func testFreeAndPrepaidProductsRejectConflictingBillingEvidence() {
+    func testFreeAndPrepaidProductsRejectConflictingBillingEvidence() throws {
+        let googleFree = try XCTUnwrap(GoogleAIPlanParser.namedPlan("Google AI Free"))
         for (provider, identifier) in [(ProviderID.codex, "codex.free"), (.cursor, "cursor.free"),
-                                       (.gemini, "google.free"), (.openRouter, "openrouter.api-credits"), (.moonshot, "moonshot.api-credits"),
+                                       (.gemini, googleFree.identifier), (.openRouter, "openrouter.api-credits"), (.moonshot, "moonshot.api-credits"),
         ] {
             var result = ProviderUsageResult(accountID: "personal", providerID: provider, title: "Fixture",
-                                              plan: .make(providerPrefix: provider.rawValue, identifier: identifier, label: "Free"),
+                                              plan: provider == .gemini ? googleFree
+                                                  : .make(providerPrefix: provider.rawValue, identifier: identifier, label: "Free"),
                                               subtitle: "", bars: [], fetchedAt: now)
             result.subscriptionRenewal = SubscriptionRenewal(accountID: "personal", providerID: provider, state: .renewing,
                                                               date: now.addingTimeInterval(172_800), observedAt: now)
@@ -130,6 +132,12 @@ final class SubscriptionRenewalTests: XCTestCase {
             XCTAssertEqual(request.url?.path, "/backend-api/subscriptions")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer personal-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-Id"), "provider-personal")
+            let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
+            XCTAssertEqual(query?.filter { $0.name == "account_id" }.map(\.value), ["provider-personal"])
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "OpenAI-Beta"), "codex-1")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Originator"), "Codex Desktop")
+            XCTAssertTrue(request.value(forHTTPHeaderField: "User-Agent")?.hasPrefix("codex_cli_rs/") == true)
             XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
             return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
                     Data(#"{"active_until":"2027-01-15T13:00:00Z","will_renew":true}"#.utf8))
