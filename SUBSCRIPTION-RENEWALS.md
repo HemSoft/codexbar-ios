@@ -38,7 +38,9 @@ optional `org_id`) before its existing workspace-scoped Go status request. A
 recognized subscriber's billing observation requires a second identity read and
 an unchanged saved credential after acquisition. Each optional identity request
 has a three-second timeout. A failed optional check drops the billing date while
-retaining successfully fetched Go windows and Zen balance.
+retaining successfully fetched Go windows and Zen balance. Successful credential
+replacement, disconnect, account removal and reset also invalidate cached
+OpenCode observations immediately; failed credential writes preserve the cache.
 
 Only explicit, consistent cancellation flags and a currently valid paid access
 interval establish a date. Cancellation shows access ending in details. Renewal

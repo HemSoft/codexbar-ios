@@ -168,6 +168,46 @@ final class OpenCodeSubscriptionBillingTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(result.failureMessage)
     }
 
+    @MainActor
+    func testCredentialMutationsInvalidateCachedBillingOnlyForTheirAccount() throws {
+        for operation in ["save", "disconnect", "replace", "remove", "reset"] {
+            let suite = "OpenCodeBilling.\(UUID())"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let secrets = OpenCodeTestSecrets()
+            let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+            let first = configuration()
+            var second = ProviderAccountConfiguration(id: "second", providerID: .openCodeZen,
+                                                      accountLabel: "Second account", authMethod: .browserSession)
+            second.openCodeWorkspaceId = first.openCodeWorkspaceId
+            XCTAssertTrue(store.replaceCredential(try credential().encoded(), for: first))
+            XCTAssertTrue(store.replaceCredential(try credential().encoded(), for: second))
+            let renewal = try XCTUnwrap(parse(fixture()))
+            let cached = ProviderUsageResult(accountID: first.id, providerID: .openCodeZen, title: "OpenCode", subtitle: "Synthetic billing",
+                                             bars: [], subscriptionRenewal: renewal, fetchedAt: now)
+            let other = ProviderUsageResult(accountID: second.id, providerID: .openCodeZen, title: "OpenCode", subtitle: "Synthetic billing",
+                                            bars: [], subscriptionRenewal: SubscriptionRenewal(accountID: second.id, providerID: .openCodeZen,
+                                                                                             state: .renewing, date: renewal.date, observedAt: now),
+                                            fetchedAt: now)
+            let refresh = UsageRefreshService(providers: [], initialResults: [cached, other])
+            let subscription = store.credentialChanges.sink { refresh.invalidateCredentials(accountID: $0) }
+            defer { subscription.cancel() }
+            secrets.setFailure(true)
+            XCTAssertFalse(store.saveSecret("rejected replacement", for: first))
+            XCTAssertNotNil(refresh.results.first { $0.accountID == first.id }?.subscriptionRenewal)
+            secrets.setFailure(false)
+            switch operation {
+            case "save": XCTAssertTrue(store.saveSecret("replacement", for: first))
+            case "disconnect": XCTAssertTrue(store.saveSecret("", for: first))
+            case "replace": XCTAssertTrue(store.replaceCredential("replacement", for: first))
+            case "remove": XCTAssertTrue(store.removeAccount(first))
+            default: XCTAssertTrue(store.resetAccounts())
+            }
+            XCTAssertNil(refresh.results.first { $0.accountID == first.id }, operation)
+            XCTAssertEqual(refresh.results.contains { $0.accountID == second.id }, operation != "reset", operation)
+        }
+    }
+
     private func parse(_ data: Data) -> SubscriptionRenewal? {
         OpenCodeSubscriptionBilling.observation(data, credential: credential(), configuration: configuration(), at: now)
     }
