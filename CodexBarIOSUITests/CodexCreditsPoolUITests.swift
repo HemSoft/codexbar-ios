@@ -135,16 +135,17 @@ final class CodexCreditsPoolUITests: XCTestCase {
         for defaultText in [true, false] {
             for dark in [false, true] {
                 let app = launchSpacingFixture(defaultText: defaultText, dark: dark, scenario: "plan-pills")
+                // Follow provider/name order so lazy offscreen cards are reached from above.
                 for (title, plan) in [
-                    ("Codex Pro fixture", "ChatGPT Pro 200"),
-                    ("Codex Pro lower tier fixture", "ChatGPT Pro 100"),
-                    ("Codex Pro highest tier fixture", "ChatGPT Pro 500"),
-                    ("Codex unavailable fixture", "Plan unavailable"),
-                    ("Codex Plus fixture", "ChatGPT 20"),
                     ("Codex Free fixture", "ChatGPT Free"),
+                    ("Codex Plus fixture", "ChatGPT 20"),
+                    ("Codex Pro fixture", "ChatGPT Pro 200"),
+                    ("Codex Pro highest tier fixture", "ChatGPT Pro 500"),
+                    ("Codex Pro lower tier fixture", "ChatGPT Pro 100"),
+                    ("Codex unavailable fixture", "Plan unavailable"),
                     ("Claude Max fixture", "Max 5x"),
-                    ("Grok", "SuperGrok Lite"),
                     ("Long Google AI Ultra account name is not proof of a subscription", "Plan unavailable"),
+                    ("Grok", "SuperGrok Lite"),
                     ("OpenRouter fixture", "API credits"),
                 ] {
                     let header = app.descendants(matching: .any).matching(NSPredicate(
