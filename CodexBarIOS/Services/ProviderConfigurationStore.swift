@@ -1573,29 +1573,6 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 
-    private func writeAccountSecret(_ value: String?, for configuration: ProviderAccountConfiguration) throws {
-        var changedGrokSubject = false
-        let write = {
-            let account = self.keychainAccount(for: configuration)
-            if configuration.providerID == .grok {
-                let previous = GrokCredential.parse(try self.secretStore.readSecret(account: account))?.subject
-                let replacement = GrokCredential.parse(value)?.subject
-                changedGrokSubject = previous != nil && previous != replacement
-            }
-            if let value, !value.isEmpty {
-                try self.secretStore.saveSecret(value, account: account)
-            } else {
-                try self.secretStore.deleteSecret(account: account)
-            }
-        }
-        if configuration.providerID == .grok {
-            try GrokCredentialLock.withLock(write)
-            if changedGrokSubject { grokHistoryInvalidations.send(configuration.id) }
-        } else {
-            try write()
-        }
-    }
-
     func canReconnectOpenCodeSession(_ credential: String, workspaceID: String, accountID: String) -> Bool {
         guard let current = configuration(accountID: accountID), current.providerID == .openCodeZen else { return false }
         do {
@@ -2922,6 +2899,7 @@ extension ProviderConfigurationStore {
         for account in configurations.map({ keychainAccount(for: $0) })
             + ProviderID.allCases.map({ keychainAccount(for: $0) })
             + codingAccounts
+            + configurations.filter({ [.claude, .grok].contains($0.providerID) }).map({ SubscriptionBillingSession.keychainAccount($0) })
         where seenKeychainAccounts.insert(account).inserted {
             accountsToDelete.append(account)
         }
@@ -2935,7 +2913,9 @@ extension ProviderConfigurationStore {
                 if let configuration = configurations.first(where: {
                     [ProviderID.gemini, .grok, .claude].contains($0.providerID)
                         && (keychainAccount(for: $0) == account
-                            || Self.geminiCodingKeychainAccount(accountID: $0.id) == account)
+                            || Self.geminiCodingKeychainAccount(accountID: $0.id) == account
+                            || ([.claude, .grok].contains($0.providerID)
+                                && SubscriptionBillingSession.keychainAccount($0) == account))
                 }) {
                     credentialChanges.send(configuration.id)
                     if configuration.providerID == .grok { grokHistoryInvalidations.send(configuration.id) }
@@ -2947,14 +2927,19 @@ extension ProviderConfigurationStore {
                 )
             } catch {
                 failedKeychainAccounts.insert(account)
-                removedAccountIDs.subtract(configurations.filter {
-            $0.providerID == .gemini && failedKeychainAccounts.contains(Self.geminiCodingKeychainAccount(accountID: $0.id))
-        }.map(\.id))
-        if firstDeletionError == nil {
+                if firstDeletionError == nil {
                     firstDeletionError = error.localizedDescription
                 }
             }
         }
+
+        removedAccountIDs.subtract(configurations.filter { configuration in
+            failedKeychainAccounts.contains(keychainAccount(for: configuration))
+                || (configuration.providerID == .gemini
+                    && failedKeychainAccounts.contains(Self.geminiCodingKeychainAccount(accountID: configuration.id)))
+                || ([.claude, .grok].contains(configuration.providerID)
+                    && failedKeychainAccounts.contains(SubscriptionBillingSession.keychainAccount(configuration)))
+        }.map(\.id))
 
         if firstDeletionError == nil {
             confirmedGoogleAccountLinks = [:]
@@ -3056,4 +3041,88 @@ extension ProviderConfigurationStore {
         defaults.set(shows, forKey: DefaultsKey.showsSubscriptionRenewals)
     }
 
+}
+
+extension ProviderConfigurationStore {
+    private func writeAccountSecret(_ value: String?, for configuration: ProviderAccountConfiguration) throws {
+        var changedGrokSubject = false
+        let write = {
+            let account = self.keychainAccount(for: configuration)
+            let hasBilling = [.claude, .grok].contains(configuration.providerID)
+            let previous = hasBilling ? try self.secretStore.readSecret(account: account) : nil
+            if configuration.providerID == .grok {
+                let oldSubject = GrokCredential.parse(previous)?.subject
+                changedGrokSubject = oldSubject != nil && oldSubject != GrokCredential.parse(value)?.subject
+            }
+            try self.replaceSecret(value, account: account)
+            guard hasBilling else { return }
+            do {
+                try self.secretStore.deleteSecret(account: SubscriptionBillingSession.keychainAccount(configuration))
+            } catch {
+                let deletionError = error
+                do {
+                    try self.replaceSecret(previous, account: account)
+                } catch {
+                    self.credentialChanges.send(configuration.id)
+                    if configuration.providerID == .grok { self.grokHistoryInvalidations.send(configuration.id) }
+                    throw error
+                }
+                throw deletionError
+            }
+        }
+        if configuration.providerID == .grok {
+            try GrokCredentialLock.withLock(write)
+            if changedGrokSubject { grokHistoryInvalidations.send(configuration.id) }
+        } else {
+            try write()
+        }
+    }
+
+    private func replaceSecret(_ value: String?, account: String) throws {
+        if let value, !value.isEmpty {
+            try secretStore.saveSecret(value, account: account)
+        } else {
+            try secretStore.deleteSecret(account: account)
+        }
+    }
+
+    func billingUsageSecret(for configuration: ProviderAccountConfiguration) -> String? {
+        guard let current = self.configuration(accountID: configuration.id), current.providerID == configuration.providerID else { return nil }
+        return try? secretStore.readSecret(account: Self.keychainAccount(for: current))
+    }
+
+    func hasSubscriptionBillingSession(for configuration: ProviderAccountConfiguration) -> Bool {
+        SubscriptionBillingSession.parse(try? secretStore.readSecret(account: SubscriptionBillingSession.keychainAccount(configuration))) != nil
+    }
+
+    @discardableResult
+    func saveSubscriptionBillingSession(_ session: SubscriptionBillingSession, for configuration: ProviderAccountConfiguration,
+                                        expectedUsageSecret: String) -> Bool {
+        guard allowConfigurationMutation(), let current = self.configuration(accountID: configuration.id),
+              current.providerID == session.providerID, SubscriptionBillingSession.host(session.providerID) != nil,
+              SubscriptionBillingSession.header(session.cookies, at: Date()) != nil,
+              session.providerID != .grok || GrokCredential.parse(expectedUsageSecret)?.subject == session.ownerID,
+              billingUsageSecret(for: current) == expectedUsageSecret else { return false }
+        do {
+            try secretStore.saveSecret(try session.encoded(), account: SubscriptionBillingSession.keychainAccount(current))
+            credentialChanges.send(current.id)
+            return true
+        } catch {
+            lastError = "Billing connection could not be saved securely."
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeSubscriptionBillingSession(for configuration: ProviderAccountConfiguration) -> Bool {
+        guard allowConfigurationMutation() else { return false }
+        do {
+            try secretStore.deleteSecret(account: SubscriptionBillingSession.keychainAccount(configuration))
+            credentialChanges.send(configuration.id)
+            return true
+        } catch {
+            lastError = "Billing connection could not be removed."
+            return false
+        }
+    }
 }

@@ -13,11 +13,11 @@ specific to the product and authentication method already connected in this app.
 | Provider | Current evidence | Billing renewal support |
 | --- | --- | --- |
 | ChatGPT / Codex | `GET chatgpt.com/backend-api/subscriptions`, `active_until` plus Boolean `will_renew` | For verified individual Go, Plus and Pro plans, an optional request uses the existing account-bound OAuth grant, account query/header and Codex client identity headers. Business, Enterprise and unknown workspace plans lack a verified workspace billing contract and receive no lookup. A recognized 200 response supplies the date; rejected access or missing fields means unavailable. The inspected Codex Switch implementation reports successful OAuth reads with this request contract; native iOS transport/grant compatibility remains pending Franz's account check. |
-| Claude | OAuth usage and profile provide reset windows and subscription tier | Unavailable through the current OAuth connection. The known billing route is `claude.ai/api/organizations/<uuid>/subscription_details`, using a web `sessionKey`. It needs verified web-account/organization ownership and `status`, `next_charge_at`/`next_charge_date`, `plan_ending_at`/`plan_ending_before`. Current OAuth does not expose that web credential. |
+| Claude | OAuth profile identity plus an optional, separate Claude web session | Implemented for personal Pro/Max: **Connect Billing** in account settings opens a private phone sign-in, verifies the web account UUID and organization against the current OAuth profile, then reads `GET /api/organizations/<uuid>/subscription_details`. `status`, `next_charge_at`/`next_charge_date` and `plan_ending_at`/`plan_ending_before` are required. An access-end date overrides a residual next charge. Store-managed subscriptions work only if this provider response supplies the same explicit billing fields; no cross-app StoreKit lookup. Live account compatibility is pending Franz. |
 | Cursor | `GetCurrentPeriodUsage` exposes a usage period; `/auth/full_stripe_profile` supplies membership | No verified next-charge timestamp plus renewal/cancellation state in the supported response contract. `billingCycleEnd` remains a quota-period boundary, never a promised charge. |
 | Copilot | Copilot quota windows | No per-subscription billing renewal and auto-renewal state in the connected quota response. |
 | GitHub billing | Account or organization metered usage | Product usage and invoice periods do not identify an individual renewing subscription. No renewal pill. |
-| Grok | Credit/weekly usage and separately verified tier | No verified next charge or auto-renewal state in the current APIs. Weekly quota dates remain usage resets. |
+| Grok | Optional private Grok web session, `GET grok.com/rest/subscriptions` | Implemented for one active personal SuperGrok subscription with an exact `xaiUserId` match to the connected OAuth subject. Stripe uses `currentPeriodEnd` and Boolean `cancelAtPeriodEnd`; Google purchases use `expiryTime` and `autoRenewEnabled`; Apple purchases require provider-reported `billingPeriodEnd` and `autoRenewOn`. Missing or contradictory state, multiple active personal subscriptions, payment grace/hold, X, enterprise, API and complimentary grants are excluded. Weekly quota dates remain usage resets. Live account compatibility is pending Franz. |
 | Google Gemini | Code Assist tier metadata and Gemini usage windows | Google AI plan names do not supply Google One billing dates. Missing an account-bound next charge and renewal state. |
 | Antigravity | Google coding quota windows | No directly identified recurring subscription or billing date in this connection. No renewal pill. |
 | OpenCode Go / Zen | Go quotas and Zen credit balance | No verified next charge and cancellation state in the current console response. Month anchors used for projections do not establish renewal. A future verified date can appear independently of OpenCode's hidden plan pill. |
@@ -77,9 +77,78 @@ claim of equivalent live transport behavior is used. Rejected native requests
 remain unavailable. Live iOS access must still be checked before calling this
 provider supported on Franz's account. If it rejects subscription access, a
 public transport solution or guided, account-verified phone billing authorization
-flow is still needed. Claude likewise needs a guided,
-verified web-billing connection or an OAuth endpoint carrying billing fields.
+flow is still needed. Claude and Grok now have guided, account-verified phone billing connections.
 Do not substitute Safari's inaccessible cookies, desktop imports, guessed dates
 or a second account's billing session. Live date comparisons and OAuth billing
 access verification remain pending for Franz; synthetic tests verify display,
 isolation and failure handling, not access to a real subscription.
+
+## Non-Codex acquisition and account isolation (#446)
+
+Claude and Grok use a nonpersistent WKWebView for **Connect Billing** in their
+account settings. The user signs in and selects the same provider account;
+verification returns to the app automatically. Canceling leaves the usage
+connection intact. The session stores only secure, root-path cookies for the
+exact provider host in a separate account-specific Keychain entry. Claude keeps
+only `sessionKey`. OAuth requests never carry web cookies, and provider web
+requests never carry usage OAuth tokens. Neither flow purchases or cancels a plan.
+
+Claude checks `GET api.anthropic.com/api/oauth/profile` with the existing bearer
+and `anthropic-beta: oauth-2025-04-20`. Personal `claude_pro`/`claude_max` profiles
+must identify `account.uuid` and `organization.uuid`. The web session's
+`GET claude.ai/api/account` must identify the same UUID and exactly one matching
+membership organization. Web ownership and OAuth ownership are checked again
+after subscription details. Organization IDs must be valid UUIDs, never arbitrary
+URL paths. Team/enterprise contracts remain unverified.
+
+Grok's read-only first-party client exposes `GET /rest/subscriptions` with browser
+credentials. Each returned subscription must identify the current OAuth subject
+in `xaiUserId`; a second authenticated observation verifies that ownership is
+unchanged. Exactly one active personal subscription with a recognized tier and
+one recognized commerce source may supply a date. Provider-reported store data
+is accepted only with explicit renewal state and a timestamp. This reads Grok's
+account response, not another app's purchase receipts. The existing CLI OAuth
+scope (`openid profile email offline_access grok-cli:access api:access`) does not
+establish web-cookie access, so no unverified bearer fallback is attempted.
+
+The Grok contract was inspected on October 10, 2026 in the anonymous
+[first-party subscription client](https://cdn.grok.com/_next/static/chunks/2_h-917onhidd.js),
+SHA-256 `1a25b51f69e656d6c4bcd3cfac2d7e97540913c449a71f2c29a7fb1b15243ade`.
+It defines subscription status/tier, `xaiUserId`, Stripe cancellation/period end,
+Google renewal/expiry, Apple renewal and top-level billing expiry. This identifies
+a viable private web contract; it is not a promise of a stable public API. The
+[Grok FAQ](https://docs.x.ai/grok/faq) distinguishes Grok web, App Store, Google
+Play and X billing. Claude's [billing FAQ](https://support.claude.com/en/articles/8325618-paid-plan-billing-faqs)
+and [cancellation guidance](https://support.claude.com/en/articles/8325617-cancel-your-pro-or-max-subscription)
+likewise distinguish provider-managed and store-managed subscriptions.
+
+All reads reject redirects, shared credential storage, caches and inherited
+credential headers. Each request has a three-second transport limit. A Claude
+refresh performs five reads (at most 15 seconds of transport waits); Grok performs
+two (at most six). Reads are optional and performed only after a successful usage
+snapshot. Missing/expired billing sessions, access denial, malformed responses,
+account changes and optional Keychain read failures return no observation and
+leave successful usage intact. Cancellation propagates. Both usage and billing
+secrets are compared after the read. Explicit reconnect, credential replacement,
+account removal and reset delete the secondary billing secret; normal OAuth
+refresh can retain it only when the fresh provider identity still matches.
+
+## Remaining contracts and next actions
+
+[Issue #447](https://github.com/hemsoft-dev/codexbar-ios/issues/447) tracks the
+following exact gaps. These are **unverified consumer contracts**, not claims
+that a provider can never expose renewal dates. No new authorization scopes or
+billing mutation endpoints are introduced speculatively.
+
+| Product | Investigated evidence / blocker | Next read-only investigation |
+| --- | --- | --- |
+| Cursor | The installed official client (workbench bundle SHA-256 `a9157bf9054d3f27a2a6910c855e028bd5e38896fa74405ca2f766abff590cb8`) reads `/auth/full_stripe_profile` with its current bearer. No next-charge field plus explicit cancel-at-period-end contract was found. The current-period usage response lacks that cancellation distinction and can reset monthly on annual plans. | Follow [Cursor's documented Billing flow](https://cursor.com/help/account-and-billing/billing) from its [dashboard](https://cursor.com/dashboard/billing) into Manage Subscription; verify charge date, cancellation state, personal/team ownership and safe guided phone access. |
+| Google AI / Google One | Existing Gemini session and Code Assist tier metadata do not expose a verified billing response. Anonymous Google One settings redirect to Google sign-in, so public marketing bundles cannot prove an authenticated contract. [Payments Reseller API](https://developers.google.com/payments/reseller/subscription) is for wholesale partners, not arbitrary existing consumer subscriptions. [Play subscriptionsv2.get](https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptionsv2/get) requires publisher authorization, package and purchase token. | Inspect an owner-bound consumer response from [Google payments](https://payments.google.com/) or [Google One settings](https://one.google.com/settings); distinguish direct/Play/App Store/partner subscriptions and match the existing Gemini account. [Google's subscription guidance](https://support.google.com/paymentscenter/answer/9003237) identifies the relevant UI, not an app-readable API. |
+| Personal Copilot | Current quota responses lack a next charge and cancellation state. [Published Copilot seat endpoints](https://docs.github.com/en/rest/copilot/copilot-user-management) concern organization administrators and seat settings, not a personal subscription. [GitHub documents](https://docs.github.com/en/copilot/reference/copilot-billing/license-changes) that allowance resets are independent of billing dates. | Verify a personal, account-bound response behind [Billing & licensing](https://github.com/settings/billing), as described in [plan management](https://docs.github.com/en/copilot/how-tos/manage-your-account/view-and-change-your-copilot-plan). Do not reuse organization seat-cancellation dates. |
+| OpenCode Go | First-party [console billing component](https://github.com/anomalyco/opencode/blob/7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937/packages/console/app/src/routes/workspace/%5Bid%5D/billing/billing-section.tsx) calls a server-side Stripe portal action, while [subscription usage logic](https://github.com/anomalyco/opencode/blob/7b3d4ce3a7dbd2a6d3637722a0d5f22a7d086937/packages/console/core/src/subscription.ts) computes usage anchors. Neither establishes a client next-charge/cancellation response. The connected workspace status and Zen balance are insufficient. | Trace the owner/workspace-bound consumer billing response and portal. Require explicit charge/renewal state without a Stripe server secret. Zen prepaid balances remain excluded. |
+| Paid Greptile | [Existing research](GREPTILE-USAGE.md) verifies `billing.getState` and `billing.getSubscriptionInfo` for a **free** code-review allowance, not a paid monetary renewal. A legacy API subscription is a different product. Google-backed billing sign-in remains [#409](https://github.com/hemsoft-dev/codexbar-ios/issues/409). | After resolving that auth path, verify a paid organization's code-review billing response with explicit next charge and auto-renew/cancellation state. Keep free allowance periods separate. |
+
+Franz owns real account sign-in, transport compatibility and comparisons against
+provider billing pages. Those checks remain pending and do not hold up agent
+delivery. Synthetic acquisition fixtures exercise the real clients, provider
+parsers and owner checks; they do not establish live provider access.

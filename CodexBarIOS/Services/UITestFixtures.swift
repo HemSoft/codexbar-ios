@@ -273,7 +273,7 @@ final class UITestFixtures {
         _ providers: [any UsageProvider], scenario: String?, suiteName: String
     ) -> [any UsageProvider] {
         if scenario?.hasPrefix("subscription-renewals") == true {
-            return [ProviderID.codex, .gemini, .openCodeZen].map { UITestRenewalProvider(providerID: $0, scenario: scenario) }
+            return [ProviderID.codex, .claude, .grok, .gemini, .openCodeZen].map { UITestRenewalProvider(providerID: $0, scenario: scenario) }
         }
         if scenario?.hasPrefix("google-plan-") == true {
             return [UITestGooglePlanProvider(providerID: .gemini), UITestGooglePlanProvider(providerID: .openCodeZen)]
@@ -294,28 +294,43 @@ final class UITestFixtures {
         guard scenario?.hasPrefix("subscription-renewals") == true, store.configurations.isEmpty else { return }
         for (id, provider, title) in [("monthly", ProviderID.codex, "Personal Codex"), ("annual", .codex, "Work Codex"),
                                       ("google", .gemini, "Personal Google"), ("go", .openCodeZen, "OpenCode Go + Zen"),
+                                      ("claude", .claude, "Personal Claude"), ("grok", .grok, "Personal Grok"),
         ] {
             var account = ProviderAccountConfiguration(id: id, providerID: provider, accountLabel: title, authMethod: .browserSession)
             if provider == .openCodeZen { account.openCodeWorkspaceId = "fixture-workspace" }
             _ = store.update(account)
-            precondition(store.saveSecret("ui-test-credential", for: account))
+            let secret = provider == .grok ? (try? Self.planPillGrokCredential.encoded()) ?? "invalid-synthetic-credential" : "ui-test-credential"
+            precondition(store.saveSecret(secret, for: account))
         }
     }
 
     nonisolated static func renewalResult(for account: ProviderAccountConfiguration, scenario: String?) -> ProviderUsageResult {
         let now = Date()
-        let plan = account.providerID == .gemini ? GoogleAIPlanParser.parse(Data(#"{"paidTier":{"name":"Google AI Pro (5 TB)"}}"#.utf8))
+        let plan = account.providerID == .claude ? ClaudeUsageParser.planDescriptor(subscriptionType: "max", rateLimitTier: "default_claude_max_20x")
+            : account.providerID == .gemini ? GoogleAIPlanParser.parse(Data(#"{"paidTier":{"name":"Google AI Pro (5 TB)"}}"#.utf8))
             : account.providerID == .codex ? ProviderPlanDescriptor.make(providerPrefix: "codex", identifier: "pro", label: "ChatGPT Pro 200",
                                                                         displayLabel: "ChatGPT Pro 200") : nil
         let state: SubscriptionRenewal.State = scenario == "subscription-renewals-canceled" ? .nonRenewing : .renewing
         let offset: Double = account.id == "annual" ? 31_536_000 : account.id == "google" ? 7_200 : 259_200
-        let renewal = scenario == "subscription-renewals-unknown" ? nil : SubscriptionRenewal(
+        var renewal = scenario == "subscription-renewals-unknown" ? nil : SubscriptionRenewal(
             accountID: account.id, providerID: account.providerID, state: state,
             date: now.addingTimeInterval(scenario == "subscription-renewals-past" ? -60 : offset),
             observedAt: now.addingTimeInterval(scenario == "subscription-renewals-stale" ? -90_000 : 0)
         )
+        if [.claude, .grok].contains(account.providerID), scenario != "subscription-renewals-unknown" {
+            let date = ISO8601DateFormatter().string(from: now.addingTimeInterval(scenario == "subscription-renewals-past" ? -60 : offset))
+            let observed = now.addingTimeInterval(scenario == "subscription-renewals-stale" ? -90_000 : 0)
+            if account.providerID == .claude {
+                let data = Data("{\"status\":\"active\",\"next_charge_at\":\"\(date)\",\"next_charge_date\":null,\"plan_ending_at\":\(state == .nonRenewing ? "\"\(date)\"" : "null"),\"plan_ending_before\":null}".utf8)
+                renewal = SubscriptionBillingParser.claude(data, configuration: account, at: observed)
+            } else {
+                let data = Data("{\"subscriptions\":[{\"xaiUserId\":\"synthetic-user\",\"tier\":\"SUBSCRIPTION_TIER_GROK_PRO\",\"status\":\"SUBSCRIPTION_STATUS_ACTIVE\",\"stripe\":{\"currentPeriodEnd\":\"\(date)\",\"cancelAtPeriodEnd\":\(state == .nonRenewing ? "true" : "false")}}]}".utf8)
+                renewal = SubscriptionBillingParser.grok(data, configuration: account, owner: "synthetic-user", at: observed)
+            }
+        }
         return ProviderUsageResult(accountID: account.id, providerID: account.providerID, title: account.displayName,
-                                   plan: plan, subtitle: "Synthetic billing fixture. No live account.",
+                                   plan: plan, verifiedGrokPlanName: account.providerID == .grok ? "SuperGrok" : nil,
+                                   subtitle: "Synthetic billing fixture. No live account.",
                                    bars: [UsageBar(stableKey: "fixture", label: "Usage", used: 12, limit: 100)],
                                    subscriptionRenewal: renewal, fetchedAt: now)
     }
@@ -1435,8 +1450,15 @@ private struct UITestSecretStore: SecretStore {
         let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }
         let greptile = GreptileSessionCredentials.parse(secret) == UITestFixtures.greptileCredential
         let grok = GrokCredential.parse(secret) == UITestFixtures.planPillGrokCredential
+        let billing = SubscriptionBillingSession.parse(secret)
+        let fixtureBilling = billing.map {
+            ($0.providerID == .claude && $0.ownerID == UITestSubscriptionBillingProtocol.claudeOwner
+                && $0.organizationID == UITestSubscriptionBillingProtocol.claudeOrganization
+                || $0.providerID == .grok && $0.ownerID == "synthetic-user" && $0.organizationID == nil)
+                && $0.cookies.count == 1 && $0.cookies[0].value == "matching"
+        } ?? false
         guard secret.hasPrefix("cursor-plan-") || secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile || grok
-                || secret == UITestFixtures.claudeProfileCredential else {
+                || secret == UITestFixtures.claudeProfileCredential || fixtureBilling else {
             throw UITestFixtureError.invalidCredential
         }
         UserDefaults(suiteName: suite)?.set(secret, forKey: "fixture-secret.\(account)")

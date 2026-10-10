@@ -135,9 +135,30 @@ extension ProviderUsageResult {
         case .codex:
             return "The current ChatGPT connection did not provide a verified subscription billing date. Usage resets are separate."
         case .claude:
-            return "Claude does not provide subscription billing dates through the current connection. Usage resets are separate."
-        case .cursor, .copilot, .grok, .gemini, .openCodeZen, .greptile:
-            return "This provider does not supply a verified subscription billing date through the current connection. Usage resets are separate."
+            if let identifier = plan?.identifier.lowercased(), identifier.contains("team") || identifier.contains("enterprise") {
+                return "Claude Team and Enterprise organization billing is unsupported. Check billing with your organization's administrator. "
+                    + "Usage resets are separate."
+            }
+            return "Connect Billing in this Claude account's settings to verify its renewal date. If already connected, reconnect "
+                + "billing and refresh. Usage resets are separate."
+        case .grok:
+            return "Connect Billing in this Grok account's settings to verify its subscription date. If already connected, reconnect "
+                + "billing and refresh. X and API billing remain separate."
+        case .cursor:
+            return "Cursor reports usage cycles and membership, but not a verified next charge with cancellation status. Check Manage "
+                + "Subscription in Cursor Billing."
+        case .gemini:
+            return "Google AI billing is managed by Google One, Google payments or the store where you subscribed. The current "
+                + "connection does not expose a verified next charge and renewal status."
+        case .copilot:
+            return "Copilot allowance resets are separate from subscription billing. The current connection does not provide a next "
+                + "charge and cancellation status. Check GitHub Billing & licensing."
+        case .openCodeZen:
+            return "OpenCode Go reports quotas, but not a next charge with cancellation status. Check your workspace Billing page. Zen "
+                + "prepaid credit balances do not renew."
+        case .greptile:
+            return "Paid Greptile billing needs a verified next charge and renewal status for the selected organization. Free-credit "
+                + "allowance renewals remain separate."
         default:
             return nil
         }

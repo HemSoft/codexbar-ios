@@ -227,12 +227,19 @@ final class CodexCreditsPoolUITests: XCTestCase {
             tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
             XCTAssertTrue(header.label.contains("Renews in"), header.label)
             keep("renewals-\(dark ? "dark-large" : "light-default")-on-restored", app: app)
-            for title in ["Work Codex", "Personal Google", "OpenCode Go + Zen"] {
+            for title in ["Work Codex", "Personal Claude", "Personal Google", "Personal Grok", "OpenCode Go + Zen"] {
                 let other = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", title + ", ")).firstMatch
                 reveal(other, in: app)
                 XCTAssertTrue(other.label.contains("Renews in"), other.label)
                 if title == "OpenCode Go + Zen" { XCTAssertFalse(other.label.contains("Plan unavailable")) }
                 keep("renewals-\(title)-\(dark ? "dark-large" : "light-default")", app: app)
+                if ["Personal Claude", "Personal Grok"].contains(title) {
+                    other.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.4)).tap()
+                    XCTAssertEqual(other.value as? String, "Collapsed")
+                    XCTAssertTrue(other.label.contains("Renews in"))
+                    keep("renewals-\(title)-\(dark ? "dark-large" : "light-default")-collapsed", app: app)
+                    other.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.4)).tap()
+                }
             }
             app.terminate()
         }
@@ -247,6 +254,17 @@ final class CodexCreditsPoolUITests: XCTestCase {
                 : state == "stale" ? "Last known billing date" : "Billing date passed"
             XCTAssertTrue(app.staticTexts[expected].waitForExistence(timeout: 5), app.debugDescription)
             keep("renewals-\(state)-details", app: app)
+            tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
+            for title in ["Personal Claude", "Personal Grok"] {
+                let providerHeader = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", title + ", ")).firstMatch
+                reveal(providerHeader, in: app)
+                XCTAssertFalse(providerHeader.label.contains("Renews in"), providerHeader.label)
+                tap(app.buttons["More options for \(title)"], in: app)
+                tap(app.buttons["More information for \(title)"], in: app)
+                XCTAssertTrue(app.staticTexts[expected].waitForExistence(timeout: 5), app.debugDescription)
+                keep("renewals-\(title)-\(state)-details", app: app)
+                tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
+            }
             app.terminate()
         }
         for dark in [false, true] {
@@ -261,6 +279,39 @@ final class CodexCreditsPoolUITests: XCTestCase {
             keep("renewals-google-free-\(dark ? "dark-large" : "light-default")", app: app)
             app.terminate()
         }
+        exerciseSubscriptionBillingConnections()
+    }
+
+    private func exerciseSubscriptionBillingConnections() {
+        let app = launchSpacingFixture(defaultText: true, dark: false, scenario: "subscription-renewals")
+        for title in ["Personal Claude", "Personal Grok"] {
+            tap(app.buttons["More options for \(title)"], in: app)
+            tap(app.buttons["Configure account \(title)"], in: app)
+            XCTAssertTrue(app.collectionViews["provider-account-settings-form"].waitForExistence(timeout: 5), app.debugDescription)
+            keep("billing-\(title)-disconnected", app: app)
+            tap(app.buttons["subscription-billing-connect"], in: app)
+            tap(app.buttons["subscription-billing-synthetic-wrong"], in: app)
+            XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "different account")).firstMatch
+                .waitForExistence(timeout: 10), app.debugDescription)
+            keep("billing-\(title)-wrong-account", app: app)
+            tap(app.buttons["Reload Sign-In"], in: app)
+            XCTAssertTrue(app.buttons["subscription-billing-synthetic-match"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "different account")).firstMatch.exists)
+            keep("billing-\(title)-reloaded", app: app)
+            tap(app.buttons["subscription-billing-synthetic-match"], in: app)
+            XCTAssertTrue(app.buttons["subscription-billing-disconnect"].waitForExistence(timeout: 10), app.debugDescription)
+            keep("billing-\(title)-connected", app: app)
+            tap(app.buttons["subscription-billing-disconnect"], in: app)
+            XCTAssertFalse(app.buttons["subscription-billing-disconnect"].exists)
+            tap(app.buttons["subscription-billing-connect"], in: app)
+            XCTAssertTrue(app.buttons["subscription-billing-synthetic-match"].waitForExistence(timeout: 5))
+            tap(app.navigationBars.buttons["Cancel"].firstMatch, in: app)
+            XCTAssertTrue(app.collectionViews["provider-account-settings-form"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.buttons["subscription-billing-disconnect"].exists)
+            keep("billing-\(title)-canceled", app: app)
+            tap(app.navigationBars.buttons["Done"].firstMatch, in: app)
+        }
+        app.terminate()
     }
 
     private func exerciseGoogleAndOpenCodePlanPills() {

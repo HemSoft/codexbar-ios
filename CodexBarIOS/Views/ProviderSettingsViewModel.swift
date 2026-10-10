@@ -56,6 +56,8 @@ final class ProviderSettingsViewModel: ObservableObject {
     @Published private(set) var grokMessage: String?
     @Published var grokFixtureStage: GrokFixtureStage?
     @Published private(set) var isSigningInWithCursor = false
+    @Published var subscriptionBillingSession: SubscriptionBillingSignInSession?
+    @Published private(set) var subscriptionBillingMessage: String?
     @Published var geminiBrowserSession: GeminiBrowserSignInSession?
     @Published var greptileBrowserSession: GreptileBrowserSignInSession?
     @Published private(set) var isSigningInWithGreptile = false
@@ -482,7 +484,49 @@ final class ProviderSettingsViewModel: ObservableObject {
         await loadMetricsIfNeeded()
     }
 
+    var isClaudeOrganizationBilling: Bool {
+        guard configuration.providerID == .claude, let identifier = usageResult?.plan?.identifier.lowercased() else { return false }
+        return identifier.contains("team") || identifier.contains("enterprise")
+    }
+
+    func startSubscriptionBillingSignIn() {
+        cancelSubscriptionBillingSignIn()
+        guard [.claude, .grok].contains(configuration.providerID), !isClaudeOrganizationBilling,
+              let usageSecret = configurationStore.billingUsageSecret(for: configuration) else { return }
+        let account = configuration
+        subscriptionBillingMessage = nil
+        subscriptionBillingSession = SubscriptionBillingSignInSession(configuration: account, usageSecret: usageSecret) { [weak self] result in
+            guard let self else { return }
+            self.subscriptionBillingSession = nil
+            switch result {
+            case .success(let session):
+                guard self.configurationStore.saveSubscriptionBillingSession(session, for: account, expectedUsageSecret: usageSecret) else {
+                    self.subscriptionBillingMessage = "Account changed or billing could not be saved. Connect billing again."
+                    return
+                }
+                self.subscriptionBillingMessage = "Billing connected. Updating the current renewal date."
+                self.credentialsDidChange()
+            case .failure(let error):
+                if error as? SubscriptionBillingError != .canceled { self.subscriptionBillingMessage = error.localizedDescription }
+            }
+        }
+    }
+
+    func cancelSubscriptionBillingSignIn() {
+        subscriptionBillingSession?.invalidate()
+        subscriptionBillingSession = nil
+    }
+
+    func disconnectSubscriptionBilling() {
+        cancelSubscriptionBillingSignIn()
+        if configurationStore.removeSubscriptionBillingSession(for: configuration) {
+            subscriptionBillingMessage = "Billing disconnected. Your usage connection is unchanged."
+            credentialsDidChange()
+        }
+    }
+
     func cancelAuthentication() {
+        cancelSubscriptionBillingSignIn()
         cancelGrokSignIn()
         cancelOpenCodeSignIn()
         cancelGoogleCodingSignIn()

@@ -59,6 +59,27 @@ struct ProviderSettingsView: View {
         let configuration = viewModel.configuration
 
         Form {
+            if [.claude, .grok].contains(providerID), configurationStore.hasSecret(for: configuration) {
+                Section("Subscription billing") {
+                    Button(configurationStore.hasSubscriptionBillingSession(for: configuration) ? "Reconnect Billing" : "Connect Billing") {
+                        viewModel.startSubscriptionBillingSignIn()
+                    }
+                    .accessibilityIdentifier("subscription-billing-connect")
+                    .disabled(viewModel.isClaudeOrganizationBilling)
+                    Text(providerID == .claude
+                         ? "Personal Claude Pro and Max billing is supported. Team and Enterprise organization billing is unavailable. "
+                            + "Connect the same account; billing sign-in is separate from usage."
+                         : "Connect the same personal SuperGrok commerce account to show its renewal date. X and API billing are separate.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if configurationStore.hasSubscriptionBillingSession(for: configuration) {
+                        Button("Disconnect Billing", role: .destructive) { viewModel.disconnectSubscriptionBilling() }
+                            .accessibilityIdentifier("subscription-billing-disconnect")
+                    }
+                    if let message = viewModel.subscriptionBillingMessage {
+                        Text(message).font(.footnote).accessibilityIdentifier("subscription-billing-message")
+                    }
+                }
+            }
             Section {
                 Toggle("Enabled", isOn: viewModel.binding(for: \.isEnabled))
                 Toggle("Show History", isOn: viewModel.binding(for: \.showsHistory))
@@ -609,6 +630,9 @@ struct ProviderSettingsView: View {
             )
         }
         #endif
+        .sheet(item: $viewModel.subscriptionBillingSession, onDismiss: { viewModel.cancelSubscriptionBillingSignIn() }, content: { session in
+            SubscriptionBillingSignInView(session: session)
+        })
         .sheet(item: $viewModel.openCodeBrowserSession) { session in
             OpenCodeBrowserSignInView(session: session)
         }
