@@ -7,46 +7,59 @@ The existing guided phone sign-in is sufficient; no additional lookup is made.
 
 ## Verified mappings
 
-Verified against [OpenAI's protocol source](https://github.com/openai/codex/blob/806d9732c974bc8a51b8317c1bd8985544fe627c/codex-rs/protocol/src/auth.rs)
-and [backend response schema](https://github.com/openai/codex/blob/806d9732c974bc8a51b8317c1bd8985544fe627c/codex-rs/codex-backend-openapi-models/src/models/rate_limit_status_payload.rs)
-on October 10, 2026. The current client deliberately distinguishes these three
-Pro identifiers, as recorded in [the upstream naming change](https://github.com/openai/codex/pull/47971).
+Verified on October 10, 2026 against OpenAI Codex revision
+[`806d973`](https://github.com/openai/codex/tree/806d9732c974bc8a51b8317c1bd8985544fe627c).
+The [account plan enum](https://github.com/openai/codex/blob/806d9732c974bc8a51b8317c1bd8985544fe627c/codex-rs/protocol/src/account.rs)
+serializes `Pro`, `ProLite` and `ProMax` as `pro`, `prolite` and `promax`.
+The [TUI subscription formatter](https://github.com/openai/codex/blob/806d9732c974bc8a51b8317c1bd8985544fe627c/codex-rs/tui/src/subscription.rs#L9)
+explicitly maps those variants to Pro 200, Pro 100 and Pro 500.
+The [status formatter tests](https://github.com/openai/codex/blob/806d9732c974bc8a51b8317c1bd8985544fe627c/codex-rs/tui/src/status/helpers.rs#L185)
+assert all three numeric names. The [usage response schema](https://github.com/openai/codex/blob/806d9732c974bc8a51b8317c1bd8985544fe627c/codex-rs/codex-backend-openapi-models/src/models/rate_limit_status_payload.rs)
+uses the same identifiers.
 
 | Authenticated `plan_type` | Card pill |
 | --- | --- |
-| `prolite` | ChatGPT Pro |
-| `pro` | ChatGPT Pro (More) |
-| `promax` | ChatGPT Pro (Max) |
-| `free`, `go`, `plus` | ChatGPT Free, Go or Plus |
+| `prolite` | ChatGPT Pro 100 |
+| `pro` | ChatGPT Pro 200 |
+| `promax` | ChatGPT Pro 500 |
+| `plus` | ChatGPT 20 |
+| `free`, `go` | ChatGPT Free or Go |
 | `business`, legacy `team` | ChatGPT Business |
 | `enterprise`, `edu`, `health`, `gov` | ChatGPT Enterprise, Edu, Health or Gov |
 | Missing, malformed or unrecognized | Plan unavailable |
 
-Existing normalized identifiers remain stable, such as `codex.pro` and
-`codex.prolite`. Display and accessibility text use natural casing, and the
+Existing normalized identifiers remain stable, such as `codex.pro`,
+`codex.prolite` and `codex.plus`. Display and accessibility text match, and the
 existing card layout can wrap longer names while preserving independent controls.
+There is no family-only Pro response field in the inspected usage schema:
+`pro` specifically identifies Pro 200. Unknown values stay unavailable rather
+than being guessed as Pro or a numeric tier.
 
-## Numeric names and multipliers
+## Subscription names and display preferences
 
-[OpenAI's consumer subscription documentation](https://help.openai.com/en/articles/9793128-about-chatgpt-pro-tiers)
-currently names the billing plans Pro 100, Pro 200 and Pro 500. That page does not
-bind those numeric names to authenticated Codex identifiers. The first-party
-Codex schema distinguishes the Pro tiers but contains no numeric billing name.
-CodexBar therefore uses the verified Codex client names above rather than
-claiming an unverified price variant.
+[OpenAI's consumer documentation](https://help.openai.com/en/articles/9793128-about-chatgpt-pro-tiers)
+names the billing plans Pro 100, Pro 200 and Pro 500. The numeric mapping above
+comes directly from OpenAI's formatter, not allowance amounts or an inferred
+monthly charge. These labels identify the subscription; they do not promise a
+permanent multiplier, grandfathered allowance or a localized invoice amount.
 
-[T3 Code's current resolver](https://github.com/pingdotgg/t3code/blob/dd4549eede928f9dc514778aeae15d74656a87f8/apps/server/src/provider/CodexProvider.ts#L115)
-uses the same `planType` identifiers. It still labels `pro` and `prolite` with
-historical 20x and 5x wording and `promax` as Pro Max.
+[OpenAI calls the $20 plan ChatGPT Plus](https://help.openai.com/en/articles/6950777-what-is-chatgpt-plus).
+The pill uses **ChatGPT 20** at Franz's explicit request in
+[#435](https://github.com/hemsoft-dev/codexbar-ios/issues/435). This is a display
+preference, not an official rename or a measurement of the account's payment.
+
+The earlier research inspected the
+[generic authentication formatter](https://github.com/openai/codex/blob/806d9732c974bc8a51b8317c1bd8985544fe627c/codex-rs/protocol/src/auth.rs),
+which uses Pro, Pro (More) and Pro (Max), and missed the separate numeric
+subscription formatter. That limitation is now resolved by the first-party
+source above. No additional network lookup, credential export or manual tier
+selector is needed.
+
+[T3 Code's resolver](https://github.com/pingdotgg/t3code/blob/dd4549eede928f9dc514778aeae15d74656a87f8/apps/server/src/provider/CodexProvider.ts#L115)
+uses the same identifiers with historical 5x/20x labels and Pro Max.
 [Desktop CodexBar's formatter](https://github.com/steipete/CodexBar/blob/6e118bdb5782707bfb0dfd0453d3483e3b216cd0/Sources/CodexBarCore/Providers/Codex/CodexPlanFormatting.swift)
-also uses the historical multipliers. Those labels are not proof of an account's
-current allowance, especially during grandfathering or provider changes.
-Neither multiplier is added to the iOS pill.
-
-The unauthenticated public pricing route rejected the research request with
-HTTP 403. No numeric billing payload was obtained. Numeric names remain
-unsupported until a first-party account-scoped source establishes their mapping;
-users are not asked to export credentials or manually choose a tier.
+also uses historical multipliers. Neither is the source for our numeric names,
+and no multiplier is added to the iOS pill.
 
 ## Refresh and isolation
 

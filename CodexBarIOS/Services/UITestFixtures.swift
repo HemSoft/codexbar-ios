@@ -286,6 +286,7 @@ final class UITestFixtures {
             ("promax", .codex, "Codex Pro highest tier fixture"),
             ("future-plan", .codex, "Codex unavailable fixture"),
             ("plus", .codex, "Codex Plus fixture"),
+            ("free", .codex, "Codex Free fixture"),
             ("max5", .claude, "Claude Max fixture"),
             ("grok-plan", .grok, "SuperGrok Lite"),
             ("google", .gemini, "Long Google AI Ultra account name is not proof of a subscription"),
@@ -1352,7 +1353,7 @@ private struct UITestSecretStore: SecretStore {
     func saveSecret(_ secret: String, account: String) throws {
         let coding = try? AntigravityCredentials.parse(secret)
         let expectedCoding = try AntigravityCredentials.parse(UITestFixtures.codingCredential)
-        let codex = ["personal", "work", "pro", "prolite", "promax", "future-plan", "plus"].contains {
+        let codex = ["personal", "work", "pro", "prolite", "promax", "future-plan", "plus", "free"].contains {
             secret == UITestFixtures.codexCredential(for: $0)
         }
         let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }

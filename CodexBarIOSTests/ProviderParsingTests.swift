@@ -3095,8 +3095,8 @@ final class ProviderParsingTests: XCTestCase {
             result.plan,
             ProviderPlanDescriptor(
                 identifier: "codex.plus",
-                displayLabel: "ChatGPT Plus",
-                accessibilityLabel: "ChatGPT Plus"
+                displayLabel: "ChatGPT 20",
+                accessibilityLabel: "ChatGPT 20"
             )
         )
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit", "Credits pool"])
@@ -3431,10 +3431,10 @@ final class ProviderParsingTests: XCTestCase {
         let mappings: [(rawValue: String, identifier: String, label: String)] = [
             ("free", "codex.free", "ChatGPT Free"),
             ("go", "codex.go", "ChatGPT Go"),
-            ("plus", "codex.plus", "ChatGPT Plus"),
-            ("pro", "codex.pro", "ChatGPT Pro (More)"),
-            ("prolite", "codex.prolite", "ChatGPT Pro"),
-            ("promax", "codex.promax", "ChatGPT Pro (Max)"),
+            ("plus", "codex.plus", "ChatGPT 20"),
+            ("pro", "codex.pro", "ChatGPT Pro 200"),
+            ("prolite", "codex.prolite", "ChatGPT Pro 100"),
+            ("promax", "codex.promax", "ChatGPT Pro 500"),
             ("business", "codex.business", "ChatGPT Business"),
             ("team", "codex.business", "ChatGPT Business"),
             ("enterprise", "codex.enterprise", "ChatGPT Enterprise"),
