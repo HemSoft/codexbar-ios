@@ -67,10 +67,18 @@ final class CodexCreditsTransportTests: XCTestCase {
         fixture.state.update(plan: "promax")
         await service.refresh(configurations: [fixture.account])
         XCTAssertEqual(service.results.first?.cardPlan.displayLabel, "ChatGPT Pro (Max)")
-        fixture.state.update(status: 503)
+        fixture.state.update(status: 200, plan: "future-pro")
         await service.refresh(configurations: [fixture.account])
-        XCTAssertEqual(service.results.first?.cardPlan.displayLabel, "ChatGPT Pro (Max)")
-        XCTAssertNotNil(service.results.first?.failureMessage)
+        XCTAssertEqual(service.results.first?.cardPlan.displayLabel, "Plan unavailable")
+        XCTAssertEqual(service.results.first?.bars.first?.used, 42)
+        fixture.state.update(status: 200, plan: "promax")
+        await service.refresh(configurations: [fixture.account])
+        for status in [503, 0] {
+            fixture.state.update(status: status)
+            await service.refresh(configurations: [fixture.account])
+            XCTAssertEqual(service.results.first?.cardPlan.displayLabel, "ChatGPT Pro (Max)")
+            XCTAssertNotNil(service.results.first?.failureMessage)
+        }
         fixture.state.replaceCredential(token: "replacement")
         await service.refresh(configurations: [fixture.account])
         XCTAssertEqual(service.results.first?.cardPlan.displayLabel, "Plan unavailable")
@@ -272,6 +280,10 @@ private class CodexPlanURLProtocol: URLProtocol, @unchecked Sendable {
             return
         }
         let (status, data) = state.response(for: request)
+        if status == 0 {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
         guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil) else { return }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)

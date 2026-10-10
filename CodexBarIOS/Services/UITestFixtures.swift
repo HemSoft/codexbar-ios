@@ -296,7 +296,8 @@ final class UITestFixtures {
                 grokGeneratedLabel: provider == .grok ? title : nil, authMethod: provider == .grok ? .browserSession : .apiKey
             )
             _ = store.update(account)
-            _ = store.saveSecret(provider == .codex ? Self.codexCredential(for: id) : "ui-test-credential", for: account)
+            precondition(store.saveSecret(provider == .codex ? Self.codexCredential(for: id) : "ui-test-credential", for: account),
+                         "Synthetic plan fixture credentials must be saved")
             if provider == .grok {
                 let credential = Self.planPillGrokCredential
                 _ = store.saveSecret((try? credential.encoded()) ?? "", for: account)
@@ -1351,7 +1352,9 @@ private struct UITestSecretStore: SecretStore {
     func saveSecret(_ secret: String, account: String) throws {
         let coding = try? AntigravityCredentials.parse(secret)
         let expectedCoding = try AntigravityCredentials.parse(UITestFixtures.codingCredential)
-        let codex = ["personal", "work"].contains { secret == UITestFixtures.codexCredential(for: $0) }
+        let codex = ["personal", "work", "pro", "prolite", "promax", "future-plan", "plus"].contains {
+            secret == UITestFixtures.codexCredential(for: $0)
+        }
         let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }
         let greptile = GreptileSessionCredentials.parse(secret) == UITestFixtures.greptileCredential
         let grok = GrokCredential.parse(secret) == UITestFixtures.planPillGrokCredential
