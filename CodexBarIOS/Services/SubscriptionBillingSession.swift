@@ -36,9 +36,11 @@ struct SubscriptionBillingSession: Codable, Equatable, Sendable {
     }
 
     static func header(_ cookies: [Cookie], at now: Date) -> String? {
-        guard !cookies.isEmpty, cookies.count <= 48, Set(cookies.map(\.name)).count == cookies.count,
-              cookies.allSatisfy({ validName($0.name) && validValue($0.value) && ($0.expiresAt == nil || $0.expiresAt! > now) }) else { return nil }
-        let value = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+        guard !cookies.isEmpty, cookies.count <= 48,
+              cookies.allSatisfy({ validName($0.name) && validValue($0.value) }) else { return nil }
+        let current = cookies.filter { $0.expiresAt == nil || $0.expiresAt! > now }
+        guard !current.isEmpty, Set(current.map(\.name)).count == current.count else { return nil }
+        let value = current.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
         return value.utf8.count <= 16_384 ? value : nil
     }
 
@@ -69,11 +71,15 @@ enum SubscriptionBillingError: Equatable, LocalizedError {
     case unavailable
     case accountMismatch
     case canceled
+    case unsupportedSubscription
 
     var errorDescription: String? {
         switch self {
         case .unavailable: "Billing could not be verified. Finish signing in, then try again. Your usage connection is unchanged."
         case .accountMismatch: "Choose the same account you connected for usage. This billing session belongs to a different account."
+        case .unsupportedSubscription:
+            "This subscription does not provide supported personal billing details. "
+                + "Claude Pro/Max and personal SuperGrok commerce subscriptions are supported. Organization, X and API billing are separate."
         case .canceled: "Billing sign-in canceled."
         }
     }

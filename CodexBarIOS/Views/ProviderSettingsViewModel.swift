@@ -484,9 +484,14 @@ final class ProviderSettingsViewModel: ObservableObject {
         await loadMetricsIfNeeded()
     }
 
+    var isClaudeOrganizationBilling: Bool {
+        guard configuration.providerID == .claude, let identifier = usageResult?.plan?.identifier.lowercased() else { return false }
+        return identifier.contains("team") || identifier.contains("enterprise")
+    }
+
     func startSubscriptionBillingSignIn() {
         cancelSubscriptionBillingSignIn()
-        guard [.claude, .grok].contains(configuration.providerID),
+        guard [.claude, .grok].contains(configuration.providerID), !isClaudeOrganizationBilling,
               let usageSecret = configurationStore.billingUsageSecret(for: configuration) else { return }
         let account = configuration
         subscriptionBillingMessage = nil
@@ -499,8 +504,8 @@ final class ProviderSettingsViewModel: ObservableObject {
                     self.subscriptionBillingMessage = "Account changed or billing could not be saved. Connect billing again."
                     return
                 }
-                self.subscriptionBillingMessage = "Billing connected. Refresh to see the current renewal date."
-                self.onCredentialsChanged()
+                self.subscriptionBillingMessage = "Billing connected. Updating the current renewal date."
+                self.credentialsDidChange()
             case .failure(let error):
                 if error as? SubscriptionBillingError != .canceled { self.subscriptionBillingMessage = error.localizedDescription }
             }
@@ -516,7 +521,7 @@ final class ProviderSettingsViewModel: ObservableObject {
         cancelSubscriptionBillingSignIn()
         if configurationStore.removeSubscriptionBillingSession(for: configuration) {
             subscriptionBillingMessage = "Billing disconnected. Your usage connection is unchanged."
-            onCredentialsChanged()
+            credentialsDidChange()
         }
     }
 

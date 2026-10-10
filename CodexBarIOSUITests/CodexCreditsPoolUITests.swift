@@ -294,6 +294,10 @@ final class CodexCreditsPoolUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "different account")).firstMatch
                 .waitForExistence(timeout: 10), app.debugDescription)
             keep("billing-\(title)-wrong-account", app: app)
+            tap(app.buttons["Reload Sign-In"], in: app)
+            XCTAssertTrue(app.buttons["subscription-billing-synthetic-match"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "different account")).firstMatch.exists)
+            keep("billing-\(title)-reloaded", app: app)
             tap(app.buttons["subscription-billing-synthetic-match"], in: app)
             XCTAssertTrue(app.buttons["subscription-billing-disconnect"].waitForExistence(timeout: 10), app.debugDescription)
             keep("billing-\(title)-connected", app: app)

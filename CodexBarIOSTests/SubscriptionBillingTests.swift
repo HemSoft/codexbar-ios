@@ -123,6 +123,34 @@ final class SubscriptionBillingTests: XCTestCase {
         }
     }
 
+    func testUnsupportedGrokSubscriptionCannotConnect() async throws {
+        let account = ProviderAccountConfiguration(id: "grok-personal", providerID: .grok, authMethod: .browserSession)
+        let credential = GrokCredential(kind: "grok-oauth-v1", accessToken: "usage-token", refreshToken: "refresh",
+                                        expiresAt: Date().addingTimeInterval(3600), subject: owner, email: nil)
+        for data in [grokBilling(extra: #", "x":{}"#), Data("{\"subscriptions\":[{\"xaiUserId\":\"\(owner)\"}]}".utf8)] {
+            let fixture = IsolatedTestURLSession { request in
+                (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data)
+            }
+            defer { fixture.invalidate() }
+            do {
+                _ = try await SubscriptionBillingClient(session: fixture.session).connect(
+                    configuration: account, usageSecret: credential.encoded(), cookies: [cookie])
+                XCTFail("An owned but unsupported subscription must not be reported connected")
+            } catch {
+                XCTAssertEqual(error as? SubscriptionBillingError, .unsupportedSubscription)
+            }
+        }
+    }
+
+    func testExpiredAncillaryCookieDoesNotInvalidateLiveAuthentication() throws {
+        let expired = SubscriptionBillingSession.Cookie(name: "ancillary", value: "old", expiresAt: .distantPast)
+        let live = SubscriptionBillingSession.Cookie(name: "auth", value: "current", expiresAt: .distantFuture)
+        XCTAssertEqual(SubscriptionBillingSession.header([expired, live], at: now), "auth=current")
+        XCTAssertNil(SubscriptionBillingSession.header([expired], at: now))
+        let session = SubscriptionBillingSession(providerID: .grok, ownerID: owner, organizationID: nil, cookies: [expired, live])
+        XCTAssertEqual(SubscriptionBillingSession.parse(try session.encoded()), session)
+    }
+
     func testClaudeOrganizationSwitchAfterBillingRejectsObservation() async throws {
         let account = ProviderAccountConfiguration(id: "claude-personal", providerID: .claude, authMethod: .browserSession)
         let secrets = MemorySecretStore()
@@ -175,6 +203,62 @@ final class SubscriptionBillingTests: XCTestCase {
         XCTAssertNil(try secrets.readSecret(account: SubscriptionBillingSession.keychainAccount(account)))
     }
 
+    @MainActor
+    func testFailedCredentialReplacementPreservesBillingAndOriginalCredential() throws {
+        for failure in ["primary-save", "primary-delete", "billing-delete"] {
+            let suite = "SubscriptionBillingTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let secrets = BillingMutationSecretStore()
+            let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+            let account = ProviderAccountConfiguration(id: "claude-personal", providerID: .claude, authMethod: .browserSession)
+            XCTAssertTrue(store.update(account))
+            XCTAssertTrue(store.saveSecret("usage-token", for: account))
+            let billing = SubscriptionBillingSession(providerID: .claude, ownerID: owner, organizationID: organization, cookies: [cookie])
+            XCTAssertTrue(store.saveSubscriptionBillingSession(billing, for: account, expectedUsageSecret: "usage-token"))
+            let primary = ProviderConfigurationStore.keychainAccount(for: account)
+            secrets.failingSaveAccount = failure == "primary-save" ? primary : nil
+            secrets.failingDeleteAccount = failure == "primary-delete" ? primary
+                : failure == "billing-delete" ? SubscriptionBillingSession.keychainAccount(account) : nil
+            if failure == "primary-delete" {
+                XCTAssertFalse(store.removeAccount(account))
+                XCTAssertNotNil(store.configuration(accountID: account.id))
+            } else {
+                XCTAssertFalse(store.saveSecret("replacement-token", for: account))
+            }
+            XCTAssertEqual(try secrets.readSecret(account: primary), "usage-token", failure)
+            XCTAssertEqual(SubscriptionBillingSession.parse(try secrets.readSecret(account: SubscriptionBillingSession.keychainAccount(account))), billing, failure)
+        }
+    }
+
+    @MainActor
+    func testResetRetainsBillingOwnerUntilFailedDeletionCanBeRetried() throws {
+        for provider in [ProviderID.claude, .grok] {
+            let suite = "SubscriptionBillingTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let secrets = BillingMutationSecretStore()
+            let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+            let account = ProviderAccountConfiguration(id: "personal-\(provider.rawValue)", providerID: provider, authMethod: .browserSession)
+            XCTAssertTrue(store.update(account))
+            let primary = ProviderConfigurationStore.keychainAccount(for: account)
+            let billingKey = SubscriptionBillingSession.keychainAccount(account)
+            try secrets.saveSecret("usage-token", account: primary)
+            try secrets.saveSecret("billing-token", account: billingKey)
+            secrets.failingDeleteAccount = billingKey
+            XCTAssertFalse(store.resetAccounts())
+            XCTAssertNil(try secrets.readSecret(account: primary))
+            XCTAssertEqual(try secrets.readSecret(account: billingKey), "billing-token")
+            XCTAssertNotNil(store.configuration(accountID: account.id))
+            let reloaded = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+            XCTAssertNotNil(reloaded.configuration(accountID: account.id))
+            secrets.failingDeleteAccount = nil
+            XCTAssertTrue(reloaded.resetAccounts())
+            XCTAssertNil(try secrets.readSecret(account: billingKey))
+            XCTAssertNil(reloaded.configuration(accountID: account.id))
+        }
+    }
+
     func testCookieCaptureRejectsForeignInsecureExpiredAndHeaderInjection() throws {
         let make = { (domain: String, secure: Bool, value: String, expiry: Date?) -> HTTPCookie in
             var properties: [HTTPCookiePropertyKey: Any] = [.name: "sessionKey", .value: value, .domain: domain, .path: "/"]
@@ -204,5 +288,23 @@ final class SubscriptionBillingTests: XCTestCase {
 
     private func webAccount(owner: String? = nil) -> Data {
         Data("{\"uuid\":\"\(owner ?? self.owner)\",\"memberships\":[{\"organization\":{\"uuid\":\"\(organization)\"}}]}".utf8)
+    }
+}
+
+private final class BillingMutationSecretStore: SecretStore, @unchecked Sendable {
+    private let storage = MemorySecretStore()
+    var failingSaveAccount: String?
+    var failingDeleteAccount: String?
+
+    func readSecret(account: String) throws -> String? { try storage.readSecret(account: account) }
+
+    func saveSecret(_ secret: String, account: String) throws {
+        if account == failingSaveAccount { throw KeychainError.unhandledStatus(-25308) }
+        try storage.saveSecret(secret, account: account)
+    }
+
+    func deleteSecret(account: String) throws {
+        if account == failingDeleteAccount { throw KeychainError.unhandledStatus(-25308) }
+        try storage.deleteSecret(account: account)
     }
 }

@@ -135,6 +135,10 @@ extension ProviderUsageResult {
         case .codex:
             return "The current ChatGPT connection did not provide a verified subscription billing date. Usage resets are separate."
         case .claude:
+            if let identifier = plan?.identifier.lowercased(), identifier.contains("team") || identifier.contains("enterprise") {
+                return "Claude Team and Enterprise organization billing is unsupported. Check billing with your organization's administrator. "
+                    + "Usage resets are separate."
+            }
             return "Connect Billing in this Claude account's settings to verify its renewal date. If already connected, reconnect "
                 + "billing and refresh. Usage resets are separate."
         case .grok:

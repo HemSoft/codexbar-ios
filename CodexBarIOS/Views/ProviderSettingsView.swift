@@ -65,7 +65,11 @@ struct ProviderSettingsView: View {
                         viewModel.startSubscriptionBillingSignIn()
                     }
                     .accessibilityIdentifier("subscription-billing-connect")
-                    Text("Connect the same account to show its renewal date. Billing sign-in is separate from your usage connection.")
+                    .disabled(viewModel.isClaudeOrganizationBilling)
+                    Text(providerID == .claude
+                         ? "Personal Claude Pro and Max billing is supported. Team and Enterprise organization billing is unavailable. "
+                            + "Connect the same account; billing sign-in is separate from usage."
+                         : "Connect the same personal SuperGrok commerce account to show its renewal date. X and API billing are separate.")
                         .font(.footnote).foregroundStyle(.secondary)
                     if configurationStore.hasSubscriptionBillingSession(for: configuration) {
                         Button("Disconnect Billing", role: .destructive) { viewModel.disconnectSubscriptionBilling() }

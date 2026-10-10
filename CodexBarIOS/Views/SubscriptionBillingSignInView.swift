@@ -17,6 +17,7 @@ final class SubscriptionBillingSignInSession: NSObject, ObservableObject, Identi
     private var task: Task<Void, Never>?
     private var revision = UUID()
     private var started = false
+    private var isResetting = false
 
     init(configuration: ProviderAccountConfiguration, usageSecret: String, client: SubscriptionBillingClient = SubscriptionBillingClient(),
          completion: @escaping (Result<SubscriptionBillingSession, Error>) -> Void) {
@@ -55,7 +56,7 @@ final class SubscriptionBillingSignInSession: NSObject, ObservableObject, Identi
     }
 
     func chooseSyntheticAccount(matching: Bool) {
-        guard isSynthetic, completion != nil else { return }
+        guard isSynthetic, completion != nil, !isResetting else { return }
         let cookie = HTTPCookie(properties: [
             .name: configuration.providerID == .claude ? "sessionKey" : "billing-fixture",
             .value: matching ? "matching" : "wrong",
@@ -82,6 +83,7 @@ final class SubscriptionBillingSignInSession: NSObject, ObservableObject, Identi
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        if isResetting { return }
         revision = UUID()
         task?.cancel()
         task = nil
@@ -103,16 +105,27 @@ final class SubscriptionBillingSignInSession: NSObject, ObservableObject, Identi
     }
 
     func retrySignIn() {
+        guard completion != nil, !isResetting else { return }
         task?.cancel()
         task = nil
         revision = UUID()
-        isVerifying = false
+        let attempt = revision
+        isResetting = true
+        isVerifying = true
         message = nil
-        started = false
-        start()
+        webView.stopLoading()
+        let dataStore = webView.configuration.websiteDataStore
+        dataStore.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) { [weak self] in
+            guard let self, self.completion != nil, self.revision == attempt else { return }
+            self.isResetting = false
+            self.isVerifying = false
+            self.started = false
+            self.start()
+        }
     }
 
     func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        guard !isResetting else { return }
         revision = UUID()
         task?.cancel()
         task = nil
@@ -121,7 +134,7 @@ final class SubscriptionBillingSignInSession: NSObject, ObservableObject, Identi
     }
 
     func verify() {
-        guard completion != nil, task == nil, !webView.isLoading,
+        guard completion != nil, !isResetting, task == nil, !webView.isLoading,
               webView.url?.scheme == "https", webView.url?.host == SubscriptionBillingSession.host(configuration.providerID) else { return }
         let attempt = revision
         webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] values in

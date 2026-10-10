@@ -35,7 +35,9 @@ final class SubscriptionBillingClient: @unchecked Sendable {
         case .grok:
             guard let credential = GrokCredential.parse(usageSecret) else { throw SubscriptionBillingError.unavailable }
             let session = SubscriptionBillingSession(providerID: .grok, ownerID: credential.subject, organizationID: nil, cookies: cookies)
-            _ = try await grok(session, configuration: configuration, at: Date())
+            guard try await grok(session, configuration: configuration, at: Date()) != nil else {
+                throw SubscriptionBillingError.unsupportedSubscription
+            }
             return session
         default: throw SubscriptionBillingError.unavailable
         }
@@ -80,8 +82,10 @@ final class SubscriptionBillingClient: @unchecked Sendable {
         let root = try SubscriptionBillingParser.object(await get(request))
         guard let account = (root?["account"] as? [String: Any])?["uuid"] as? String, UUID(uuidString: account) != nil,
               let organization = root?["organization"] as? [String: Any],
-              let organizationID = organization["uuid"] as? String, UUID(uuidString: organizationID) != nil,
-              ["claude_pro", "claude_max"].contains(organization["organization_type"] as? String ?? "") else { throw SubscriptionBillingError.unavailable }
+              let organizationID = organization["uuid"] as? String, UUID(uuidString: organizationID) != nil else { throw SubscriptionBillingError.unavailable }
+        guard ["claude_pro", "claude_max"].contains(organization["organization_type"] as? String ?? "") else {
+            throw SubscriptionBillingError.unsupportedSubscription
+        }
         return ClaudeOwner(account: account, organization: organizationID)
     }
 

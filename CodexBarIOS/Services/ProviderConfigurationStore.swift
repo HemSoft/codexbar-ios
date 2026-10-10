@@ -1573,30 +1573,6 @@ public final class ProviderConfigurationStore: ObservableObject {
         }
     }
 
-    private func writeAccountSecret(_ value: String?, for configuration: ProviderAccountConfiguration) throws {
-        var changedGrokSubject = false
-        let write = {
-            try self.deleteSubscriptionBillingSessionBeforeCredentialChange(configuration)
-            let account = self.keychainAccount(for: configuration)
-            if configuration.providerID == .grok {
-                let previous = GrokCredential.parse(try self.secretStore.readSecret(account: account))?.subject
-                let replacement = GrokCredential.parse(value)?.subject
-                changedGrokSubject = previous != nil && previous != replacement
-            }
-            if let value, !value.isEmpty {
-                try self.secretStore.saveSecret(value, account: account)
-            } else {
-                try self.secretStore.deleteSecret(account: account)
-            }
-        }
-        if configuration.providerID == .grok {
-            try GrokCredentialLock.withLock(write)
-            if changedGrokSubject { grokHistoryInvalidations.send(configuration.id) }
-        } else {
-            try write()
-        }
-    }
-
     func canReconnectOpenCodeSession(_ credential: String, workspaceID: String, accountID: String) -> Bool {
         guard let current = configuration(accountID: accountID), current.providerID == .openCodeZen else { return false }
         do {
@@ -2949,14 +2925,19 @@ extension ProviderConfigurationStore {
                 )
             } catch {
                 failedKeychainAccounts.insert(account)
-                removedAccountIDs.subtract(configurations.filter {
-            $0.providerID == .gemini && failedKeychainAccounts.contains(Self.geminiCodingKeychainAccount(accountID: $0.id))
-        }.map(\.id))
-        if firstDeletionError == nil {
+                if firstDeletionError == nil {
                     firstDeletionError = error.localizedDescription
                 }
             }
         }
+
+        removedAccountIDs.subtract(configurations.filter { configuration in
+            failedKeychainAccounts.contains(keychainAccount(for: configuration))
+                || (configuration.providerID == .gemini
+                    && failedKeychainAccounts.contains(Self.geminiCodingKeychainAccount(accountID: configuration.id)))
+                || ([.claude, .grok].contains(configuration.providerID)
+                    && failedKeychainAccounts.contains(SubscriptionBillingSession.keychainAccount(configuration)))
+        }.map(\.id))
 
         if firstDeletionError == nil {
             confirmedGoogleAccountLinks = [:]
@@ -3061,9 +3042,45 @@ extension ProviderConfigurationStore {
 }
 
 extension ProviderConfigurationStore {
-    private func deleteSubscriptionBillingSessionBeforeCredentialChange(_ configuration: ProviderAccountConfiguration) throws {
-        if [.claude, .grok].contains(configuration.providerID) {
-            try secretStore.deleteSecret(account: SubscriptionBillingSession.keychainAccount(configuration))
+    private func writeAccountSecret(_ value: String?, for configuration: ProviderAccountConfiguration) throws {
+        var changedGrokSubject = false
+        let write = {
+            let account = self.keychainAccount(for: configuration)
+            let hasBilling = [.claude, .grok].contains(configuration.providerID)
+            let previous = hasBilling ? try self.secretStore.readSecret(account: account) : nil
+            if configuration.providerID == .grok {
+                let oldSubject = GrokCredential.parse(previous)?.subject
+                changedGrokSubject = oldSubject != nil && oldSubject != GrokCredential.parse(value)?.subject
+            }
+            try self.replaceSecret(value, account: account)
+            guard hasBilling else { return }
+            do {
+                try self.secretStore.deleteSecret(account: SubscriptionBillingSession.keychainAccount(configuration))
+            } catch {
+                let deletionError = error
+                do {
+                    try self.replaceSecret(previous, account: account)
+                } catch {
+                    self.credentialChanges.send(configuration.id)
+                    if configuration.providerID == .grok { self.grokHistoryInvalidations.send(configuration.id) }
+                    throw error
+                }
+                throw deletionError
+            }
+        }
+        if configuration.providerID == .grok {
+            try GrokCredentialLock.withLock(write)
+            if changedGrokSubject { grokHistoryInvalidations.send(configuration.id) }
+        } else {
+            try write()
+        }
+    }
+
+    private func replaceSecret(_ value: String?, account: String) throws {
+        if let value, !value.isEmpty {
+            try secretStore.saveSecret(value, account: account)
+        } else {
+            try secretStore.deleteSecret(account: account)
         }
     }
 
