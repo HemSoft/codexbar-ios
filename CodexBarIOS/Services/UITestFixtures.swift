@@ -452,7 +452,8 @@ final class UITestFixtures {
         return ProviderUsageResult(
             accountID: account.id, providerID: .codex, title: account.displayName,
             subtitle: "Synthetic Codex usage", bars: parsed.bars,
-            unavailableUsageMetrics: parsed.unavailableUsageMetrics, fetchedAt: parsed.fetchedAt
+            unavailableUsageMetrics: parsed.unavailableUsageMetrics,
+            cacheIdentity: "ui-codex-credits:\(account.id)", fetchedAt: parsed.fetchedAt
         )
     }
 
@@ -1401,7 +1402,8 @@ private actor UITestCodexProvider: UsageProvider {
         if scenario == "codex-credits-failure" {
             return ProviderUsageResult(
                 accountID: configuration.id, providerID: .codex, title: configuration.displayName,
-                subtitle: "Synthetic refresh failed", bars: [], failureMessage: "Synthetic refresh failed", fetchedAt: Date()
+                subtitle: "Synthetic refresh failed", bars: [], failureMessage: "Synthetic refresh failed",
+                cacheIdentity: "ui-codex-credits:\(configuration.id)", allowsUnscopedCacheReuse: true, fetchedAt: Date()
             )
         }
         return UITestFixtures.codexResult(for: configuration, scenario: scenario)
