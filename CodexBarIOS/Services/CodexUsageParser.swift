@@ -416,18 +416,20 @@ public enum CodexUsageParser {
         case "go":
             identifier = "go"
             label = "Go"
+        // Plus uses the product owner's requested pill wording, ChatGPT 20.
         case "plus":
             identifier = "plus"
-            label = "Plus"
+            label = "20"
+        // Numeric Pro names follow OpenAI's TUI subscription formatter; see CODEX-PLANS.md.
         case "pro":
             identifier = "pro"
-            label = "Pro (More)"
+            label = "Pro 200"
         case "prolite":
             identifier = "prolite"
-            label = "Pro"
+            label = "Pro 100"
         case "promax":
             identifier = "promax"
-            label = "Pro (Max)"
+            label = "Pro 500"
         case "business", "team":
             identifier = "business"
             label = "Business"
