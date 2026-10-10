@@ -75,6 +75,7 @@ final class UITestFixtures {
         }
         let githubBilling = scenario?.hasPrefix("github-billing") == true
         let grok = scenario?.hasPrefix("grok") == true
+        Self.seedGooglePlanAccounts(in: configurationStore, scenario: scenario)
         Self.seedPlanPillAccounts(in: configurationStore, scenario: scenario)
         let codex = scenario?.hasPrefix("codex-") == true
         let claude = scenario?.hasPrefix("claude-") == true
@@ -195,6 +196,9 @@ final class UITestFixtures {
     nonisolated private static func initialResult(
         for configuration: ProviderAccountConfiguration, scenario: String?, googleSources: [ProviderID]
     ) -> ProviderUsageResult {
+        if scenario?.hasPrefix("google-plan-") == true {
+            return googlePlanResult(for: configuration)
+        }
         if scenario == "plan-pills" {
             if configuration.providerID == .codex {
                 return ProviderUsageResult(accountID: configuration.id, providerID: .codex, title: configuration.displayName,
@@ -266,6 +270,9 @@ final class UITestFixtures {
     private static func providersForPlanPills(
         _ providers: [any UsageProvider], scenario: String?, suiteName: String
     ) -> [any UsageProvider] {
+        if scenario?.hasPrefix("google-plan-") == true {
+            return [UITestGooglePlanProvider(providerID: .gemini), UITestGooglePlanProvider(providerID: .openCodeZen)]
+        }
         guard scenario == "plan-pills" else { return providers }
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [UITestCodexPlanURLProtocol.self]
@@ -276,6 +283,28 @@ final class UITestFixtures {
             resetCreditsEndpoint: URL(string: "https://codex-plan-fixture.invalid/inventory")!
         )
         return [codex] + [ProviderID.claude, .grok, .gemini, .openRouter].map { UITestPlanPillProvider(providerID: $0) }
+    }
+
+    private static func seedGooglePlanAccounts(in store: ProviderConfigurationStore, scenario: String?) {
+        guard let scenario, scenario.hasPrefix("google-plan-"), store.configurations.isEmpty else { return }
+        let variant = String(scenario.dropFirst("google-plan-".count))
+        let google = ProviderAccountConfiguration(id: variant, providerID: .gemini, accountLabel: "Personal Google", authMethod: .browserSession)
+        _ = store.update(google)
+        precondition(store.saveSecret("ui-test-credential", for: google))
+        var openCode = ProviderAccountConfiguration(id: "opencode", providerID: .openCodeZen, accountLabel: "OpenCode Go + Zen", authMethod: .browserSession)
+        openCode.openCodeWorkspaceId = "fixture-workspace"
+        _ = store.update(openCode)
+        precondition(store.saveSecret("ui-test-credential", for: openCode))
+    }
+
+    nonisolated static func googlePlanResult(for account: ProviderAccountConfiguration) -> ProviderUsageResult {
+        let names = ["free": "Google AI Free", "plus": "Google AI Plus (400 GB)", "pro": "Google AI Pro (5 TB)",
+                     "ultra": "Google AI Ultra", "ultra5": "Google AI Ultra 5x", "ultra20": "Google AI Ultra 20x",
+        ]
+        let plan = names[account.id].flatMap { GoogleAIPlanParser.parse(Data("{\"paidTier\":{\"name\":\"\($0)\"}}".utf8)) }
+        return ProviderUsageResult(accountID: account.id, providerID: account.providerID, title: account.displayName,
+                                   plan: plan, subtitle: "Synthetic subscription fixture",
+                                   bars: [UsageBar(stableKey: "fixture", label: "Usage", used: 12, limit: 100)], fetchedAt: Date())
     }
 
     private static func seedPlanPillAccounts(in store: ProviderConfigurationStore, scenario: String?) {
@@ -1819,6 +1848,14 @@ private class UITestCodexPlanURLProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
+}
+
+private struct UITestGooglePlanProvider: UsageProvider {
+    let providerID: ProviderID
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        UITestFixtures.googlePlanResult(for: configuration)
+    }
 }
 
 private struct UITestPlanPillProvider: UsageProvider {

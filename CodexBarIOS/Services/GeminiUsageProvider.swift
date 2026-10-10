@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct GeminiSessionCredentials: Codable, Equatable, Sendable {
@@ -189,6 +190,7 @@ public final class GeminiUsageProvider: UsageProvider {
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        let initialIdentity = credentialIdentity(for: configuration)
         async let apps = fetchAppsUsage(for: configuration)
         async let coding = codingProvider.fetchUsage(
             for: configuration,
@@ -196,13 +198,21 @@ public final class GeminiUsageProvider: UsageProvider {
         )
         let sources = try await (apps, coding)
         try Task.checkCancellation()
-        return Self.combinedResult(apps: sources.0, coding: sources.1, configuration: configuration)
+        let plan = try await codingProvider.googlePlan(
+            keychainAccount: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: configuration.id)
+        )
+        let unchanged = initialIdentity != nil && initialIdentity == credentialIdentity(for: configuration)
+        return Self.combinedResult(
+            apps: sources.0, coding: sources.1, configuration: configuration,
+            plan: unchanged ? plan : nil
+        )
     }
 
     private static func combinedResult(
         apps: ProviderUsageResult,
         coding: ProviderUsageResult,
-        configuration: ProviderAccountConfiguration
+        configuration: ProviderAccountConfiguration,
+        plan: ProviderPlanDescriptor?
     ) -> ProviderUsageResult {
         let bars = apps.bars + coding.bars
         let failedSources = [apps, coding].filter { $0.failureMessage != nil }
@@ -218,6 +228,7 @@ public final class GeminiUsageProvider: UsageProvider {
             accountID: configuration.id,
             providerID: .gemini,
             title: configuration.displayName,
+            plan: plan,
             subtitle: failure ?? "Gemini Apps and coding usage",
             bars: bars,
             unavailableUsageMetrics: unavailable,
@@ -227,6 +238,20 @@ public final class GeminiUsageProvider: UsageProvider {
             preserveCachedBarsOnFailure: failure != nil,
             fetchedAt: Date()
         )
+    }
+
+    private func credentialIdentity(for configuration: ProviderAccountConfiguration) -> String? {
+        do {
+            let apps = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)) ?? ""
+            let coding = try secretStore.readSecret(
+                account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: configuration.id)
+            )
+            let credential = coding.flatMap { try? AntigravityCredentials.parse($0) }
+            // Renewal changes the access token, not the renewable account identity.
+            let codingIdentity = credential.map { [$0.refreshToken ?? $0.accessToken, $0.clientID ?? ""].joined(separator: "\0") } ?? ""
+            let value = [configuration.id, apps, codingIdentity].joined(separator: "\0")
+            return SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+        } catch { return nil }
     }
 
     private static func sourceAvailability(
@@ -685,5 +710,34 @@ public final class GeminiUsageProvider: UsageProvider {
             preserveCachedBarsOnFailure: true,
             fetchedAt: Date()
         )
+    }
+}
+
+/// Accept only named Google AI subscriptions, not generic coding tiers or quota sizes.
+enum GoogleAIPlanParser {
+    static func parse(_ data: Data) -> ProviderPlanDescriptor? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let paid = root["paidTier"]
+        let tier = paid is NSNull ? root["currentTier"] : (paid ?? root["currentTier"])
+        guard let object = tier as? [String: Any], let name = object["name"] as? String else { return nil }
+        return namedPlan(name)
+    }
+
+    static func namedPlan(_ name: String) -> ProviderPlanDescriptor? {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pattern = #"^(?:Gemini Code Assist in )?Google (?:One )?AI (Free|Plus|Pro|Ultra)(?: (5x|20x))?(?: \((5x|20x|[0-9]+(?:\.[0-9]+)? (?:TB|GB))\))?$"#
+        guard let expression = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = expression.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized))
+        else { return nil }
+        let value = normalized as NSString
+        let tier = value.substring(with: match.range(at: 1)).capitalized
+        let multiplier = match.range(at: 2).location == NSNotFound ? nil : value.substring(with: match.range(at: 2)).lowercased()
+        let suffix = match.range(at: 3).location == NSNotFound ? nil : value.substring(with: match.range(at: 3))
+        guard multiplier == nil || tier == "Ultra",
+              suffix?.lowercased().hasSuffix("x") != true || (tier == "Ultra" && multiplier == nil) else { return nil }
+        var label = "Google AI \(tier)"
+        if let multiplier { label += " \(multiplier)" }
+        if let suffix { label += " (\(suffix.lowercased().hasSuffix("x") ? suffix.lowercased() : suffix.uppercased()))" }
+        return .make(providerPrefix: "google-ai", identifier: label.lowercased(), label: label, displayLabel: label)
     }
 }

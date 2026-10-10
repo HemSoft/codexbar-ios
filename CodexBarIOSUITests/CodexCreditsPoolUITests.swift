@@ -184,8 +184,39 @@ final class CodexCreditsPoolUITests: XCTestCase {
         }
     }
 
+    private func exerciseGoogleAndOpenCodePlanPills() {
+        continueAfterFailure = false
+        let variants = [("free", "Google AI Free"), ("plus", "Google AI Plus (400 GB)"),
+                        ("pro", "Google AI Pro (5 TB)"), ("ultra", "Google AI Ultra"),
+                        ("ultra5", "Google AI Ultra 5x"), ("ultra20", "Google AI Ultra 20x"),
+                        ("unknown", "Plan unavailable"),
+        ]
+        for (variant, label) in variants {
+            for dark in [false, true] {
+                let app = launchSpacingFixture(defaultText: !dark, dark: dark, scenario: "google-plan-\(variant)")
+                let header = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Personal Google, \(label)")).firstMatch
+                XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
+                reveal(header, in: app, towardTop: true)
+                keep("google-\(variant)-\(dark ? "dark-large" : "light-default")-expanded", app: app)
+                header.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+                XCTAssertEqual(header.value as? String, "Collapsed", app.debugDescription)
+                let openCode = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "OpenCode Go + Zen, Synthetic")).firstMatch
+                reveal(openCode, in: app)
+                XCTAssertTrue(openCode.exists, app.debugDescription)
+                XCTAssertFalse(openCode.label.contains("Plan unavailable"))
+                XCTAssertFalse(openCode.label.contains("Google AI"))
+                keep("google-\(variant)-\(dark ? "dark-large" : "light-default")-collapsed-opencode", app: app)
+                openCode.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+                XCTAssertEqual(openCode.value as? String, "Collapsed", app.debugDescription)
+                keep("google-\(variant)-\(dark ? "dark-large" : "light-default")-both-collapsed", app: app)
+                app.terminate()
+            }
+        }
+    }
+
     func testCompactCardHeadersAndIndependentControls() {
         continueAfterFailure = false
+        exerciseGoogleAndOpenCodePlanPills()
         exerciseClaudeProfilePills()
         for defaultText in [true, false] {
             for dark in [false, true] {

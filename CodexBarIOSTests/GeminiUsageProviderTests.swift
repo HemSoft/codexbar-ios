@@ -611,6 +611,7 @@ final class UnifiedGeminiUsageProviderTests: XCTestCase {
                 : try makeGeminiBatchResponse([2, [[2_400, 0.12, 1, [[1_900_000_000, 0]]], [48_106, 0.45, 2, [[1_900_600_000, 0]]]], false])
             return (try http(request, status: appsStatus), data)
         }
+        if request.url == AntigravityUsageProvider.planURL { return (try http(request, status: 200), Data("{}".utf8)) }
         XCTAssertEqual(request.url, AntigravityUsageProvider.quotaURL)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(codingToken)")
         XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
@@ -1053,5 +1054,155 @@ extension GeminiUsageProviderTests {
         let data = try JSONSerialization.data(withJSONObject: ["groups": [["buckets": buckets]]])
         let account = ProviderAccountConfiguration(id: "gemini.projection", providerID: .gemini, authMethod: .apiKey)
         return try AntigravityQuotaParser.result(from: data, configuration: account, fetchedAt: now)
+    }
+}
+
+final class GoogleAIPlanTests: XCTestCase {
+    func testNamedSubscriptionMappingAndVariants() throws {
+        for name in ["Google AI Free", "Google AI Plus", "Google AI Pro", "Google AI Ultra",
+                     "Google AI Pro (5 TB)", "Google AI Pro (10 TB)", "Google AI Plus (400 GB)",
+                     "Google AI Plus (2 TB)", "Google AI Ultra 5x", "Google AI Ultra 20x",
+                     "Google AI Ultra (5x)", "Google AI Ultra (20x)",
+        ] {
+            let plan = try XCTUnwrap(GoogleAIPlanParser.namedPlan(name))
+            XCTAssertEqual(plan.displayLabel, name)
+            XCTAssertEqual(plan.accessibilityLabel, name)
+        }
+        XCTAssertEqual(GoogleAIPlanParser.namedPlan("Gemini Code Assist in Google One AI Pro")?.displayLabel, "Google AI Pro")
+        for name in ["Free", "free-tier", "standard-tier", "Gemini Code Assist Standard", "Workspace",
+                     "Google AI Enterprise", "Google AI Pro 20x", "Google AI Ultra 100x", "Upgrade to Google AI Pro",
+                     "Google AI Pro\nUpgrade", "Pro", "Google AI Pro (unknown)",
+        ] {
+            XCTAssertNil(GoogleAIPlanParser.namedPlan(name), name)
+        }
+    }
+
+    func testOnlyAssignedNamedTiersEstablishPlan() throws {
+        let paid = Data(#"{"currentTier":{"id":"free-tier"},"paidTier":{"name":"Google AI Pro (5 TB)"}}"#.utf8)
+        XCTAssertEqual(GoogleAIPlanParser.parse(paid)?.displayLabel, "Google AI Pro (5 TB)")
+        let free = Data(#"{"currentTier":{"name":"Google AI Free"}}"#.utf8)
+        XCTAssertEqual(GoogleAIPlanParser.parse(free)?.displayLabel, "Google AI Free")
+        for body in ["{}", "null", "[]", "bad", #"{"currentTier":{"id":"free-tier"}}"#,
+                     #"{"allowedTiers":[{"name":"Google AI Ultra"}]}"#,
+                     #"{"paidTier":{"name":"Workspace"},"currentTier":{"name":"Google AI Free"}}"#,
+                     #"{"paidTier":{"name":123}}"#, #"{"credits":200,"plan":"Google AI Pro"}"#,
+        ] {
+            XCTAssertNil(GoogleAIPlanParser.parse(Data(body.utf8)), body)
+        }
+    }
+
+    func testOptionalLookupUsesOnlyAccountCodingGrantAndRejectsReplacement() async throws {
+        let secrets = MemorySecretStore()
+        let key = ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: "personal")
+        try secrets.saveSecret(#"{"access_token":"personal"}"#, account: key)
+        try secrets.saveSecret(#"{"access_token":"other"}"#,
+                               account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: "other"))
+        let fixture = IsolatedTestURLSession { request in
+            XCTAssertEqual(request.url, AntigravityUsageProvider.planURL)
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer personal")
+            XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+            XCTAssertEqual(request.timeoutInterval, 8)
+            let body = try XCTUnwrap(requestBodyData(from: request))
+            let root = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let metadata = try XCTUnwrap(root["metadata"] as? [String: String])
+            XCTAssertEqual(metadata["ideType"], "IDE_UNSPECIFIED")
+            XCTAssertEqual(metadata["ideName"], "CodexBar iOS")
+            if try secrets.readSecret(account: "replace") != nil {
+                try secrets.saveSecret(#"{"access_token":"replacement"}"#, account: key)
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"paidTier":{"name":"Google AI Pro (5 TB)"}}"#.utf8))
+        }
+        defer { fixture.invalidate() }
+        let provider = AntigravityUsageProvider(secretStore: secrets, sessionConfiguration: fixture.session.configuration)
+        let plan = try await provider.googlePlan(keychainAccount: key)
+        XCTAssertEqual(plan?.displayLabel, "Google AI Pro (5 TB)")
+        try secrets.saveSecret("yes", account: "replace")
+        let replaced = try await provider.googlePlan(keychainAccount: key)
+        XCTAssertNil(replaced)
+        let missing = try await provider.googlePlan(keychainAccount: "not-configured")
+        XCTAssertNil(missing)
+    }
+
+    func testOptionalLookupFailureDoesNotBecomeFree() async throws {
+        for status in [401, 403, 503, 200] {
+            let secrets = MemorySecretStore()
+            try secrets.saveSecret(#"{"access_token":"personal"}"#, account: "coding")
+            let fixture = IsolatedTestURLSession { request in
+                (HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, Data("{}".utf8))
+            }
+            defer { fixture.invalidate() }
+            let provider = AntigravityUsageProvider(secretStore: secrets, sessionConfiguration: fixture.session.configuration)
+            let plan = try await provider.googlePlan(keychainAccount: "coding")
+            XCTAssertNil(plan)
+        }
+    }
+
+    @MainActor
+    func testCombinedPlansStayAccountBoundAndClearAfterFailedLookupOrReconnect() async throws {
+        let secrets = MemorySecretStore()
+        let personal = ProviderAccountConfiguration(id: "personal", providerID: .gemini, accountLabel: "Google AI Ultra", authMethod: .browserSession)
+        let work = ProviderAccountConfiguration(id: "work", providerID: .gemini, accountLabel: "Google AI Free", authMethod: .browserSession)
+        for account in [personal, work] {
+            try secrets.saveSecret("__Secure-1PSID=\(account.id)", account: ProviderConfigurationStore.keychainAccount(for: account))
+            try secrets.saveSecret("{\"access_token\":\"\(account.id)\"}",
+                                   account: ProviderConfigurationStore.geminiCodingKeychainAccount(accountID: account.id))
+        }
+        let fixture = IsolatedTestURLSession { request in
+            let mode = try secrets.readSecret(account: "test-mode")
+            let failure = mode == "failure"
+            let planFailure = request.url == AntigravityUsageProvider.planURL && mode == "plan-failure"
+            let status = failure || planFailure ? 503 : 200
+            let body: Data
+            if request.url == AntigravityUsageProvider.planURL {
+                let name = request.value(forHTTPHeaderField: "Authorization") == "Bearer personal" ? "Google AI Pro (5 TB)" : "Google AI Plus"
+                body = Data("{\"paidTier\":{\"name\":\"\(name)\"}}".utf8)
+            } else if request.url == AntigravityUsageProvider.quotaURL {
+                body = Data(#"{"groups":[]}"#.utf8)
+            } else if request.url?.path == "/usage" {
+                body = Data(#"<script>window.WIZ_global_data={"SNlM0e":"csrf"};</script>"#.utf8)
+            } else {
+                body = try makeGeminiBatchResponse([2, [[2_400, 0.12, 1, [[1_900_000_000, 0]]]], false])
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, body)
+        }
+        defer { fixture.invalidate() }
+        let provider = GeminiUsageProvider(secretStore: secrets, session: fixture.session)
+        async let first = provider.fetchUsage(for: personal)
+        async let second = provider.fetchUsage(for: work)
+        let results = try await [first, second]
+        XCTAssertEqual(results.map { $0.plan?.displayLabel }, ["Google AI Pro (5 TB)", "Google AI Plus"])
+        XCTAssertEqual(results.map(\.accountID), [personal.id, work.id])
+        let service = UsageRefreshService(providers: [provider])
+        await service.refresh(configurations: [personal])
+        XCTAssertEqual(service.results.first?.plan?.displayLabel, "Google AI Pro (5 TB)")
+        service.invalidateCredentials(accountID: personal.id, preserveCachedResult: true)
+        XCTAssertNil(service.results.first?.plan)
+        await service.refresh(configurations: [personal])
+        XCTAssertNotNil(service.results.first?.plan)
+        try secrets.saveSecret("plan-failure", account: "test-mode")
+        await service.refresh(configurations: [personal])
+        XCTAssertNil(service.results.first?.plan)
+        XCTAssertNil(service.results.first?.failureMessage)
+        XCTAssertFalse(service.results.first?.bars.isEmpty ?? true)
+        try secrets.saveSecret("failure", account: "test-mode")
+        await service.refresh(configurations: [personal])
+        XCTAssertNil(service.results.first?.plan)
+        XCTAssertNotNil(service.results.first?.failureMessage)
+        XCTAssertFalse(service.results.first?.bars.isEmpty ?? true)
+    }
+
+    func testOpenCodeHeaderOmitsPillEvenWithPlanMetadata() {
+        for plan in [nil, GoogleAIPlanParser.namedPlan("Google AI Pro")] {
+            let result = ProviderUsageResult(accountID: "go", providerID: .openCodeZen, title: "OpenCode Go + Zen",
+                                             plan: plan, subtitle: "Usage", bars: [], fetchedAt: Date())
+            XCTAssertFalse(result.showsCardPlan)
+            XCTAssertEqual(ProviderUsageCard.headerAccessibilityLabel(for: result), "OpenCode Go + Zen")
+        }
+        let google = ProviderUsageResult(accountID: "google", providerID: .gemini, title: "Personal",
+                                        plan: GoogleAIPlanParser.namedPlan("Google AI Pro"), subtitle: "Usage", bars: [], fetchedAt: Date())
+        XCTAssertTrue(google.showsCardPlan)
+        XCTAssertEqual(ProviderUsageCard.headerAccessibilityLabel(for: google), "Personal, Google AI Pro")
     }
 }

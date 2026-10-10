@@ -102,7 +102,7 @@ public final class UsageRefreshService: ObservableObject {
         guard let cached = results.first(where: { $0.accountID == accountID }) else { return }
         replaceResult(ProviderUsageResult(
             accountID: cached.accountID, providerID: cached.providerID, title: cached.title,
-            plan: cached.plan, verifiedGrokPlanName: cached.verifiedGrokPlanName,
+            plan: cached.providerID == .gemini ? nil : cached.plan, verifiedGrokPlanName: cached.verifiedGrokPlanName,
             subtitle: "\(message) Showing last known data.",
             bars: cached.bars, barsFetchedAt: cached.barsFetchedAt,
             creditsRemaining: cached.creditsRemaining, creditsFetchedAt: cached.creditsFetchedAt,
@@ -524,7 +524,7 @@ public final class UsageRefreshService: ObservableObject {
             accountID: accountID,
             providerID: failureResult.providerID,
             title: title,
-            plan: failureResult.plan ?? cachedResult?.plan,
+            plan: failureResult.providerID == .gemini ? failureResult.plan : (failureResult.plan ?? cachedResult?.plan),
             verifiedGrokPlanName: failureResult.verifiedGrokPlanName ?? cachedResult?.verifiedGrokPlanName,
             subtitle: subtitle,
             bars: freshGreptileCredits.isEmpty ? barsResult.bars : freshGreptileCredits + cachedGreptileReviews,

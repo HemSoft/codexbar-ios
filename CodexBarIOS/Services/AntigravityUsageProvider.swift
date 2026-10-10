@@ -73,6 +73,29 @@ final class AntigravityUsageProvider: UsageProvider {
         }
     }
 
+    static let planURL = URL(string: "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist")!
+
+    /// Optional subscription lookup using this account's existing coding OAuth grant.
+    /// Generic Code Assist tiers do not establish a Google One subscription.
+    func googlePlan(keychainAccount: String) async throws -> ProviderPlanDescriptor? {
+        do {
+            guard let stored = try secretStore.readSecret(account: keychainAccount),
+                  let credential = try? AntigravityCredentials.parse(stored),
+                  credential.expiry.map({ $0 > Date() }) ?? true else { return nil }
+            var request = quotaRequest(token: credential.accessToken)
+            request.url = Self.planURL
+            request.timeoutInterval = 8
+            request.httpBody = Data(#"{"metadata":{"ideType":"IDE_UNSPECIFIED","ideName":"CodexBar iOS","pluginType":"GEMINI"}}"#.utf8)
+            let data = try await responseData(for: request)
+            try Task.checkCancellation()
+            guard try secretStore.readSecret(account: keychainAccount) == stored else { return nil }
+            return GoogleAIPlanParser.parse(data)
+        } catch {
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { throw CancellationError() }
+            return nil
+        }
+    }
+
     /// Validate a newly issued token without reading or replacing the saved session.
     func validateCandidate(
         _ credentials: AntigravityCredentials,
