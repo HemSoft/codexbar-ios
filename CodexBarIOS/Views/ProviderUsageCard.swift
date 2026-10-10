@@ -3328,7 +3328,7 @@ private struct MetricVisualizationView: View {
                     .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                     .foregroundStyle(tint)
                     .monospacedDigit()
-                    .lineLimit(1)
+                    .lineLimit(bar.stableKey == CodexUsageParser.creditsPoolStableKey ? 2 : 1)
                     .minimumScaleFactor(0.65)
             }
         }
