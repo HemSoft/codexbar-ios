@@ -14,13 +14,13 @@ specific to the product and authentication method already connected in this app.
 | --- | --- | --- |
 | ChatGPT / Codex | `GET chatgpt.com/backend-api/subscriptions`, `active_until` plus Boolean `will_renew` | For verified individual Go, Plus and Pro plans, an optional request uses the existing account-bound OAuth grant, account query/header and Codex client identity headers. Business, Enterprise and unknown workspace plans lack a verified workspace billing contract and receive no lookup. A recognized 200 response supplies the date; rejected access or missing fields means unavailable. The inspected Codex Switch implementation reports successful OAuth reads with this request contract; native iOS transport/grant compatibility remains pending Franz's account check. |
 | Claude | OAuth profile identity plus an optional, separate Claude web session | Implemented for personal Pro/Max: **Connect Billing** in account settings opens a private phone sign-in, verifies the web account UUID and organization against the current OAuth profile, then reads `GET /api/organizations/<uuid>/subscription_details`. `status`, `next_charge_at`/`next_charge_date` and `plan_ending_at`/`plan_ending_before` are required. An access-end date overrides a residual next charge. Store-managed subscriptions work only if this provider response supplies the same explicit billing fields; no cross-app StoreKit lookup. Live account compatibility is pending Franz. |
-| Cursor | `GetCurrentPeriodUsage` exposes a usage period; `/auth/full_stripe_profile` supplies membership | No verified next-charge timestamp plus renewal/cancellation state in the supported response contract. `billingCycleEnd` remains a quota-period boundary, never a promised charge. |
+| Cursor | `GetCurrentPeriodUsage` exposes a usage period; `/auth/full_stripe_profile` supplies membership | The official client exposes `pendingCancellationDate`, but no verified next-charge timestamp plus affirmative renewal and billing-owner contract. `billingCycleEnd` remains a quota-period boundary, never a promised charge. |
 | Copilot | Copilot quota windows | No per-subscription billing renewal and auto-renewal state in the connected quota response. |
 | GitHub billing | Account or organization metered usage | Product usage and invoice periods do not identify an individual renewing subscription. No renewal pill. |
 | Grok | Optional private Grok web session, `GET grok.com/rest/subscriptions` | Implemented for one active personal SuperGrok subscription with an exact `xaiUserId` match to the connected OAuth subject. Stripe uses `currentPeriodEnd` and Boolean `cancelAtPeriodEnd`; Google purchases use `expiryTime` and `autoRenewEnabled`; Apple purchases require provider-reported `billingPeriodEnd` and `autoRenewOn`. Missing or contradictory state, multiple active personal subscriptions, payment grace/hold, X, enterprise, API and complimentary grants are excluded. Weekly quota dates remain usage resets. Live account compatibility is pending Franz. |
 | Google Gemini | Code Assist tier metadata and Gemini usage windows | Google AI plan names do not supply Google One billing dates. Missing an account-bound next charge and renewal state. |
 | Antigravity | Google coding quota windows | No directly identified recurring subscription or billing date in this connection. No renewal pill. |
-| OpenCode Go / Zen | Go quotas and Zen credit balance | No verified next charge and cancellation state in the current console response. Month anchors used for projections do not establish renewal. A future verified date can appear independently of OpenCode's hidden plan pill. |
+| OpenCode Go / Zen | Go quotas and Zen credit balance | The current console contract exposes explicit Go/Go Plus cancellation, subscriber and paid-period/recovery state. Implementation is tracked in [#451](https://github.com/hemsoft-dev/codexbar-ios/issues/451); the app does not read these billing fields yet. Old month anchors and Zen balance remain insufficient. |
 | OpenRouter | API credit balance | Prepaid/API credits, not a renewing subscription in this integration. No renewal pill. |
 | Moonshot | API credit balance | Prepaid/API credits, not a Kimi subscription in this integration. No renewal pill. |
 | Greptile | Free-credit allowance renewal | Existing allowance details stay separate. Free accounts get no billing-renewal pill. A paid subscription would need a verified next-charge/auto-renewal contract. |
@@ -134,6 +134,13 @@ account removal and reset delete the secondary billing secret; normal OAuth
 refresh can retain it only when the fresh provider identity still matches.
 
 ## Remaining contracts and next actions
+
+[The #447 contract investigation](PROVIDER-BILLING-CONTRACTS.md) records fresh
+first-party source hashes, Cursor's discovered cancellation field, the new
+OpenCode implementation opportunity, and the exact remaining access gaps.
+The table below preserves the initial #446 investigation and its starting points;
+the newer investigation supersedes its Cursor and OpenCode contract conclusions.
+
 
 [Issue #447](https://github.com/hemsoft-dev/codexbar-ios/issues/447) tracks the
 following exact gaps. These are **unverified consumer contracts**, not claims
