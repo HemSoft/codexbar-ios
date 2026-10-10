@@ -175,6 +175,30 @@ final class SubscriptionRenewalTests: XCTestCase {
         }
     }
 
+    func testPersonalBillingIsNeverAttachedToFreeOrWorkspaceUsage() async throws {
+        for plan in ["free", "business", "enterprise", "future"] {
+            let store = MemorySecretStore()
+            let account = ProviderAccountConfiguration(id: "work", providerID: .codex, authMethod: .browserSession)
+            try store.saveSecret(CodexCredentialsParser.storedCredential(from: CodexCredentials(
+                accessToken: "work-token", accountID: "work-account"
+            )), account: ProviderConfigurationStore.keychainAccount(for: account))
+            let fixture = IsolatedTestURLSession { request in
+                XCTAssertNotEqual(request.url?.path, "/backend-api/subscriptions", "Personal billing has no verified workspace semantics")
+                let body = request.url?.path == "/usage"
+                    ? "{\"plan_type\":\"\(plan)\",\"rate_limit\":{\"primary_window\":{\"used_percent\":25,\"reset_at\":2000007200,\"limit_window_seconds\":18000}}}"
+                    : "{}"
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(body.utf8))
+            }
+            defer { fixture.invalidate() }
+            let result = try await CodexUsageProvider(secretStore: store, session: fixture.session,
+                                                      usageEndpoint: URL(string: "https://example.test/usage")!,
+                                                      resetCreditsEndpoint: URL(string: "https://example.test/resets")!).fetchUsage(for: account)
+            XCTAssertNil(result.subscriptionRenewal)
+            XCTAssertNil(result.failureMessage)
+            XCTAssertEqual(result.bars.first?.used, 25)
+        }
+    }
+
     @MainActor
     func testCachedUsageAndReconnectNeverRestoreBillingDates() async {
         let account = ProviderAccountConfiguration(id: "personal", providerID: .codex, authMethod: .browserSession)

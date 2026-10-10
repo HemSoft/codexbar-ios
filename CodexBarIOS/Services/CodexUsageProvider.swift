@@ -172,9 +172,12 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
                 configuration: configuration,
                 credentials: credentials
             )
-            result.subscriptionRenewal = try await subscriptionClient.fetch(
-                credentials: credentials, accountID: configuration.id, observedAt: now()
-            )
+            // The known subscription contract describes personal billing, not workspace invoices.
+            if ["codex.go", "codex.plus", "codex.pro", "codex.prolite", "codex.promax"].contains(result.plan?.identifier ?? "") {
+                result.subscriptionRenewal = try await subscriptionClient.fetch(
+                    credentials: credentials, accountID: configuration.id, observedAt: now()
+                )
+            }
             try requireCurrentCredentials(credentials, keychainAccount: keychainAccount)
             return result
         case 401 where canRefresh && credentials.refreshToken?.isEmpty == false:

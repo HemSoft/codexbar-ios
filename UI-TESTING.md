@@ -401,3 +401,29 @@ Run the affected journey with
 `-only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testCompactCardHeadersAndIndependentControls`
 on the UI-test scheme. This extends an existing journey; the release runner's
 29-test contract and automatic CI workloads are unchanged.
+
+
+## Subscription billing countdowns
+
+The existing compact-header journey also exercises renewal pills in light/default
+and dark/Accessibility 2 text, exact billing details, two accounts, a long Google
+plan label, OpenCode without a plan pill, unknown/canceled/stale/passed dates, and
+the default-on preference with immediate changes and relaunch persistence.
+
+For focused local issue validation, select its renewal subjourney without running
+unrelated plan and tile-customization scenarios:
+
+```sh
+TEST_RUNNER_CODEXBAR_UI_TEST_SUBJOURNEY=renewals \
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
+  -project CodexBarIOS.xcodeproj -scheme CodexBarIOSUITests \
+  -destination 'platform=iOS Simulator,id=<discovered-iphone-or-ipad-id>' \
+  -skipPackagePluginValidation -parallel-testing-enabled NO \
+  -only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testCompactCardHeadersAndIndependentControls \
+  CODE_SIGNING_ALLOWED=NO test
+```
+
+Xcode forwards `TEST_RUNNER_` variables to the test process without that prefix.
+The release runner does not set this selector and still requires all 29 complete
+journeys on both families. Billing fixtures are synthetic; real-account billing
+comparisons remain Franz-owned. See [subscription source coverage](SUBSCRIPTION-RENEWALS.md).
