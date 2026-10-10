@@ -1209,7 +1209,7 @@ public enum ClaudeUsageParser {
         ) ?? "Resets now"
     }
 
-    private static func planDescriptor(
+    static func planDescriptor(
         subscriptionType: String?,
         rateLimitTier: String?
     ) -> ProviderPlanDescriptor? {

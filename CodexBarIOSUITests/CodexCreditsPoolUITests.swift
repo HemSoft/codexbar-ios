@@ -167,6 +167,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
 
     func testCompactCardHeadersAndIndependentControls() {
         continueAfterFailure = false
+        exerciseClaudeProfilePills()
         for defaultText in [true, false] {
             for dark in [false, true] {
                 let app = launchSpacingFixture(defaultText: defaultText, dark: dark)
@@ -207,6 +208,44 @@ final class CodexCreditsPoolUITests: XCTestCase {
         XCTAssertTrue(personalQuota(in: stale).label.contains("stale"))
         keep("spacing-stale", app: stale)
         stale.terminate()
+    }
+
+    private func exerciseClaudeProfilePills() {
+        for (scenario, plan, defaultText, dark) in [
+            ("claude-plan-pro", "Pro", true, false),
+            ("claude-plan-max20", "Max 20x", true, false),
+            ("claude-plan-unknown", "Plan unavailable", true, false),
+            ("claude-plan-change", "Max 5x", false, true),
+        ] {
+            let app = launchSpacingFixture(defaultText: defaultText, dark: dark, scenario: scenario)
+            let header = claudeProfileHeader(plan: plan, in: app)
+            XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
+            reveal(header, in: app)
+            XCTAssertEqual(header.value as? String, "Expanded")
+            XCTAssertTrue(app.buttons["dashboard-metric-claude.session"].label.contains("42%"))
+            keep("\(scenario)-expanded", app: app)
+            header.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()
+            XCTAssertEqual(header.value as? String, "Collapsed")
+            keep("\(scenario)-collapsed", app: app)
+            if scenario == "claude-plan-change" {
+                tap(app.buttons["Refresh usage"], in: app)
+                let changed = claudeProfileHeader(plan: "Max 20x", in: app)
+                XCTAssertTrue(changed.waitForExistence(timeout: 10), app.debugDescription)
+                reveal(changed, in: app)
+                XCTAssertEqual(changed.value as? String, "Collapsed")
+                keep("claude-plan-changed-collapsed-dark-large", app: app)
+                changed.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.4)).tap()
+                XCTAssertTrue(app.buttons["dashboard-metric-claude.session"].label.contains("42%"))
+                keep("claude-plan-changed-expanded-dark-large", app: app)
+            }
+            app.terminate()
+        }
+    }
+
+    private func claudeProfileHeader(plan: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Synthetic Claude, " + plan
+        )).firstMatch
     }
 
     private func launchSpacingFixture(defaultText: Bool, dark: Bool, scenario: String = "codex-credits") -> XCUIApplication {

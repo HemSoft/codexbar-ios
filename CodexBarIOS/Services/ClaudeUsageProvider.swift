@@ -9,6 +9,7 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
     private let session: URLSession
     private let now: @Sendable () -> Date
     private let resetClient: ClaudeUsageResetClient
+    private let planClient: ClaudePlanProfileClient
     private let snapshotCache = ClaudeUsageSnapshotCache()
 
     public let providerID = ProviderID.claude
@@ -22,6 +23,7 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
         self.session = session
         self.now = now
         self.resetClient = ClaudeUsageResetClient(session: session, secretStore: secretStore, now: now)
+        self.planClient = ClaudePlanProfileClient(session: session)
     }
 
     public func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
@@ -31,6 +33,8 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
             let accessToken = parsedCredentials.accessToken,
             !accessToken.isEmpty
         else {
+            await snapshotCache.clear(accountID: configuration.id)
+            await planClient.clear(accountID: configuration.id)
             return failureResult(
                 "Not configured - sign in with Claude.",
                 configuration: configuration,
@@ -58,22 +62,37 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
             await snapshotCache.prepare(accountID: configuration.id, credential: token)
         }
 
+        async let planResolution = planClient.resolve(accountID: configuration.id, accessToken: token, at: now(),
+                                                      isCurrent: { (try? self.currentToken(for: configuration)) == token })
         let oauthOutcome = try await fetchOAuthUsage(
             configuration: configuration,
             credentials: credentials,
             accessToken: token
         )
-        if let usageResult = oauthOutcome.result {
-            if oauthOutcome.isSuccessfulSnapshot {
-                return await snapshotCache.storePreservingBars(usageResult, accountID: configuration.id)
-            }
-            return usageResult
+        let resolution = await planResolution
+        guard try currentToken(for: configuration) == token else {
+            return failureResult("Claude account changed during refresh. Refresh again.", configuration: configuration)
         }
-
-        return await staleOrFailureResult(
-            "Claude usage did not include rate-limit windows.",
-            configuration: configuration
+        let usageResult: ProviderUsageResult
+        if let result = oauthOutcome.result {
+            usageResult = result
+        } else {
+            usageResult = await staleOrFailureResult("Claude usage did not include rate-limit windows.", configuration: configuration)
+        }
+        let resolved = applyAccountMetadata(
+            to: usageResult, configuration: configuration, resetInventory: usageResult.claudeUsageResetInventory,
+            planResolution: resolution
         )
+        if oauthOutcome.isSuccessfulSnapshot {
+            return await snapshotCache.storePreservingBars(resolved, accountID: configuration.id, credential: token)
+                ?? failureResult("Claude account changed during refresh. Refresh again.", configuration: configuration)
+        }
+        return resolved
+    }
+
+    private func currentToken(for configuration: ProviderAccountConfiguration) throws -> String? {
+        guard let secret = try secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)) else { return nil }
+        return ClaudeCredentialsParser.parse(secret)?.accessToken
     }
 
     public func consumeClaudeReset(
@@ -109,6 +128,9 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
         }
 
         let (data, response) = try await session.data(for: makeOAuthUsageRequest(accessToken: accessToken))
+        guard try currentToken(for: configuration) == accessToken else {
+            return OAuthUsageOutcome(result: failureResult("Claude account changed during refresh. Refresh again.", configuration: configuration))
+        }
         guard let httpResponse = response as? HTTPURLResponse else {
             return OAuthUsageOutcome(
                 result: failureResult("Claude usage returned an invalid response.", configuration: configuration)
@@ -153,7 +175,7 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
         case 429:
             let retryAt = retryDate(httpResponse, now: fetchedAt)
                 ?? fetchedAt.addingTimeInterval(60)
-            await snapshotCache.setRetryAt(retryAt, accountID: configuration.id)
+            await snapshotCache.setRetryAt(retryAt, accountID: configuration.id, credential: accessToken)
             return OAuthUsageOutcome(
                 result: await staleOrFailureResult(
                     "Claude usage is rate-limited until \(Self.formatRetryDate(retryAt)).",
@@ -334,13 +356,14 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
     private func applyAccountMetadata(
         to result: ProviderUsageResult,
         configuration: ProviderAccountConfiguration,
-        resetInventory: ClaudeUsageResetInventory? = nil
+        resetInventory: ClaudeUsageResetInventory? = nil,
+        planResolution: ClaudePlanResolution = .unavailable
     ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id,
             providerID: result.providerID,
             title: configuration.displayName,
-            plan: result.plan,
+            plan: planResolution.plan(fallback: result.plan),
             subtitle: result.subtitle,
             bars: result.bars,
             barsFetchedAt: result.barsFetchedAt,
@@ -352,6 +375,7 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
             cardInformationSections: result.cardInformationSections,
             claudeUsageResetInventory: resetInventory,
             failureMessage: result.failureMessage,
+            recoveryAction: result.recoveryAction,
             hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory,
             fetchedAt: result.fetchedAt
         )
@@ -366,6 +390,12 @@ private actor ClaudeUsageSnapshotCache {
     private var results: [String: ProviderUsageResult] = [:]
     private var retryDates: [String: Date] = [:]
     private var credentials: [String: String] = [:]
+
+    func clear(accountID: String) {
+        credentials[accountID] = nil
+        results[accountID] = nil
+        retryDates[accountID] = nil
+    }
 
     func prepare(accountID: String, credential: String) {
         guard credentials[accountID] != credential else {
@@ -392,7 +422,8 @@ private actor ClaudeUsageSnapshotCache {
         retryDates[accountID] = nil
     }
 
-    func storePreservingBars(_ result: ProviderUsageResult, accountID: String) -> ProviderUsageResult {
+    func storePreservingBars(_ result: ProviderUsageResult, accountID: String, credential: String) -> ProviderUsageResult? {
+        guard credentials[accountID] == credential else { return nil }
         guard result.bars.isEmpty, let cached = results[accountID], !cached.bars.isEmpty else {
             store(result, accountID: accountID)
             return result
@@ -426,7 +457,8 @@ private actor ClaudeUsageSnapshotCache {
         results[accountID]
     }
 
-    func setRetryAt(_ date: Date?, accountID: String) {
+    func setRetryAt(_ date: Date?, accountID: String, credential: String) {
+        guard credentials[accountID] == credential else { return }
         retryDates[accountID] = date
     }
 

@@ -43,6 +43,71 @@ plan name. Local synthetic Pro and Max 20x fixtures verify the labels and
 unchanged percentages, resets, and saved identities. Live same-account Pro
 and Max quota comparisons remain pending for Franz.
 
+## Subscription-name source and refresh policy
+
+The card pill now reads `GET https://api.anthropic.com/api/oauth/profile` with
+its account-scoped Bearer credential, the existing `user:profile` authorization
+scope and `anthropic-beta: oauth-2025-04-20`. Guided phone sign-in already
+requests that scope. This read-only lookup sends no inference request and
+requires no desktop process, exported credentials or additional setup.
+
+Source research for [#431](https://github.com/hemsoft-dev/codexbar-ios/issues/431):
+
+- [T3 Code at `5fe9d024`](https://github.com/pingdotgg/t3code/blob/5fe9d024d9b1c28ec93d495cf1441c57e47ae7ce/apps/server/src/provider/ClaudeProvider.ts#L415)
+  reads the Agent SDK initialization account's `subscriptionType`; its
+  [label mapper](https://github.com/pingdotgg/t3code/blob/5fe9d024d9b1c28ec93d495cf1441c57e47ae7ce/apps/server/src/provider/ClaudeProvider.ts#L74)
+  distinguishes Pro and Max multipliers. Anthropic Agent SDK `0.3.276` declares
+  the field in `AccountInfo`. That desktop SDK transport does not run on iOS.
+- [Desktop CodexBar at `b8c6a1eb`](https://github.com/steipete/CodexBar/blob/b8c6a1eb8b0e67754806b9aabe0a0186e201afc9/Sources/CodexBarCore/Providers/Claude/ClaudeOAuth/ClaudeOAuthUsageFetcher.swift#L149)
+  supplies the existing OAuth profile route. Its identity parser alone does
+  not establish subscription mappings.
+- [A first-hand OpenUsage investigation](https://github.com/robinebers/openusage/issues/394)
+  reports `organization.organization_type = claude_max` and
+  `organization.rate_limit_tier = default_claude_max_20x` after an upgrade,
+  while login-time metadata still says 5x. This is an undocumented response
+  contract, not a published Anthropic API guarantee or a live CodexBar account
+  verification.
+
+| Explicit profile metadata | Pill |
+| --- | --- |
+| Organization type `claude_pro` | Pro |
+| Organization type `claude_max` and exact tier `default_claude_max_5x` / `max_5x` | Max 5x |
+| Organization type `claude_max` and exact tier `default_claude_max_20x` / `max_20x` | Max 20x |
+| Organization type `claude_max` without a recognized multiplier | Max |
+| Organization type `claude_team` / `claude_enterprise` | Team / Enterprise family only |
+| No organization type, exactly one true JSON boolean `account.has_claude_pro` / `account.has_claude_max` | Pro / Max family, with an explicit Max tier when present |
+| Unknown, missing or contradictory family metadata | Plan unavailable |
+
+Team and Enterprise profile shapes and seat variants have not been verified
+against live accounts; only an explicit supported organization family is
+accepted. Seat-specific labels, free-plan detection and future tier identifiers
+remain unsupported. Quotas, model availability, prices and custom account names
+never determine the plan. Specific login-time names remain a fallback only
+until the profile establishes a plan or explicitly establishes no known plan.
+
+Profile requests run alongside usage reads, with a ten-second timeout, refused
+redirects and an ephemeral session. Responses over 64 KiB are not parsed.
+Concurrent requests share one lookup; the next usage refresh can request a
+profile after five minutes. Numeric and HTTP-date `Retry-After` extend that
+interval, bounded between five minutes and 24 hours. There are no immediate
+retries. A changed supported plan therefore appears without signing out on a
+subsequent eligible refresh.
+
+Each in-memory entry belongs to the app account ID and a hash of the access
+token, with a fresh generation on replacement. Rotation starts a fresh profile
+lookup. Sign-out clears plan and usage caches; late responses are checked
+against the currently saved credential before they can publish. Raw profile
+identity fields are not saved or sent to widgets, history, logs or backups.
+Only the existing public plan descriptor follows the usage snapshot.
+
+A valid profile with unsupported or conflicting fields clears the old label.
+Profile 401/403 also clears it without discarding successful usage. Network,
+malformed JSON, 404, 429 and server failures retain only the last verified
+label for the same account and token, or the explicit credential fallback when
+no profile resolution exists. This retained label may be stale; a later valid
+profile replaces it. Profile failure does not become a usage failure or trigger
+sign-in by itself. Live plan-name and quota comparisons remain pending for Franz.
+
 ## Redacted regression shape
 
 The regression test uses the same provider-owned money representation observed

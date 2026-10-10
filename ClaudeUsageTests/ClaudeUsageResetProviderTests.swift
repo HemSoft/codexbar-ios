@@ -22,8 +22,10 @@ final class ClaudeUsageResetProviderTests: XCTestCase {
             XCTAssertEqual(fresh.claudeUsageResetInventory?.availableCount(at: now), 2)
             XCTAssertEqual(fresh.claudeUsageResetInventory?.credentialBinding,
                            ClaudeUsageResetClient.credentialBinding(for: "fixture-token"))
-            XCTAssertEqual(ResetFetchProtocol.requests.count, 1)
-            XCTAssertEqual(ResetFetchProtocol.requests.first?.url?.query, "cedar_ember=1")
+            let usageRequests = ResetFetchProtocol.requests.filter { $0.url?.path == "/api/oauth/usage" }
+            XCTAssertEqual(usageRequests.count, 1)
+            XCTAssertEqual(usageRequests.first?.url?.query, "cedar_ember=1")
+            XCTAssertEqual(ResetFetchProtocol.requests.filter { $0.url?.path == "/api/oauth/profile" }.count, 1)
             ResetFetchProtocol.configure(status: status, inventory: false)
             let failed = try await provider.fetchUsage(for: account)
             XCTAssertNotNil(failed.failureMessage)

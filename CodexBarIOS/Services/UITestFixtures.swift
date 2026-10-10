@@ -83,7 +83,7 @@ final class UITestFixtures {
             Self.seedGreptileAccount(in: configurationStore, scenario: scenario ?? "")
         }
         if claude && configurationStore.configurations.isEmpty {
-            Self.seedClaudeAccount(in: configurationStore)
+            Self.seedClaudeAccount(in: configurationStore, scenario: scenario)
             Self.seedSecondClaudeAccount(in: configurationStore, scenario: scenario)
         }
         let googleSources = Self.googleSources(for: scenario)
@@ -127,7 +127,8 @@ final class UITestFixtures {
             providers = [UITestUsageProvider(failsFirstRefresh: recovery), UITestGrokProvider(scenario: scenario)]
         }
         refreshService = UsageRefreshService(providers: Self.providersForPlanPills(providers, scenario: scenario), initialResults: results)
-        if (greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1")
+        if scenario?.hasPrefix("claude-plan-") == true
+            || (greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1")
             || scenario?.hasPrefix("grok-cursor-parity") == true
             || Self.isCursorSessionScenario(scenario) {
             // These routes must load the real provider before evidence is captured.
@@ -163,6 +164,9 @@ final class UITestFixtures {
     }
 
     private static func claudeProviders(scenario: String?, suiteName: String) -> [any UsageProvider] {
+        if scenario?.hasPrefix("claude-plan-") == true {
+            return [UITestClaudeProfileProvider(suiteName: suiteName)]
+        }
         if let scenario, scenario.hasPrefix("claude-resets-") {
             return [UITestClaudeResetProvider(scenario: scenario, suiteName: suiteName)]
         }
@@ -208,6 +212,10 @@ final class UITestFixtures {
             )
         }
         if scenario?.hasPrefix("codex-") == true { return codexResult(for: configuration, scenario: scenario) }
+        if scenario?.hasPrefix("claude-plan-") == true {
+            return ProviderUsageResult(accountID: configuration.id, providerID: .claude, title: configuration.displayName,
+                                       subtitle: "Loading synthetic Claude profile", bars: [], fetchedAt: Date())
+        }
         if scenario?.hasPrefix("claude-") == true { return claudeResult(for: configuration, scenario: scenario) }
         if scenario?.hasPrefix("github-billing") == true { return githubBillingResult(for: configuration) }
         if scenario?.hasPrefix("grok-cursor-parity") == true || Self.isCursorSessionScenario(scenario) {
@@ -425,13 +433,18 @@ final class UITestFixtures {
         )
     }
 
-    private static func seedClaudeAccount(in store: ProviderConfigurationStore) {
+    nonisolated static var claudeProfileCredential: String {
+        ClaudeCredentialsParser.storedCredential(from: ClaudeCredentials(subscriptionType: "subscription", accessToken: "ui-claude-profile"))
+    }
+
+    private static func seedClaudeAccount(in store: ProviderConfigurationStore, scenario: String?) {
         let account = ProviderAccountConfiguration(
             id: "ui-claude", providerID: .claude,
             accountLabel: "Synthetic Claude", authMethod: .browserSession
         )
         _ = store.update(account)
-        _ = store.saveSecret("ui-test-credential", for: account)
+        let credential = scenario?.hasPrefix("claude-plan-") == true ? claudeProfileCredential : "ui-test-credential"
+        _ = store.saveSecret(credential, for: account)
     }
 
     nonisolated static func claudeResult(
@@ -1323,7 +1336,8 @@ private struct UITestSecretStore: SecretStore {
         let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }
         let greptile = GreptileSessionCredentials.parse(secret) == UITestFixtures.greptileCredential
         let grok = GrokCredential.parse(secret) == UITestFixtures.planPillGrokCredential
-        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile || grok else {
+        guard secret == "ui-test-credential" || coding == expectedCoding || codex || cursor || greptile || grok
+                || secret == UITestFixtures.claudeProfileCredential else {
             throw UITestFixtureError.invalidCredential
         }
         UserDefaults(suiteName: suite)?.set(secret, forKey: "fixture-secret.\(account)")
@@ -1366,6 +1380,74 @@ private actor UITestCodexProvider: UsageProvider {
             )
         }
         return UITestFixtures.codexResult(for: configuration, scenario: scenario)
+    }
+}
+
+/// The fixture supplies only HTTP responses; the production client resolves the displayed plan.
+private actor UITestClaudeProfileProvider: UsageProvider {
+    nonisolated let providerID = ProviderID.claude
+    private let clock = UITestClaudeProfileClock()
+    private let provider: ClaudeUsageProvider
+    private var fetchCount = 0
+
+    init(suiteName: String) {
+        let settings = URLSessionConfiguration.ephemeral
+        settings.protocolClasses = [UITestClaudeProfileProtocol.self]
+        let clock = self.clock
+        provider = ClaudeUsageProvider(secretStore: UITestSecretStore(suite: suiteName),
+                                       session: URLSession(configuration: settings), now: { clock.date })
+    }
+
+    func fetchUsage(for configuration: ProviderAccountConfiguration) async throws -> ProviderUsageResult {
+        if fetchCount > 0 { clock.advance() }
+        fetchCount += 1
+        return try await provider.fetchUsage(for: configuration)
+    }
+}
+
+private final class UITestClaudeProfileClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored = Date()
+    var date: Date { lock.withLock { stored } }
+    func advance() { lock.withLock { stored = stored.addingTimeInterval(301) } }
+}
+
+private final class UITestClaudeProfileProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var profileCount = 0
+    override static func canInit(with request: URLRequest) -> Bool { true }
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        guard let url = request.url, url.host == "api.anthropic.com",
+              request.value(forHTTPHeaderField: "Authorization") == "Bearer ui-claude-profile",
+              ["/api/oauth/profile", "/api/oauth/usage"].contains(url.path) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
+        let body: String
+        if url.path == "/api/oauth/profile" {
+            let count = Self.lock.withLock { Self.profileCount += 1; return Self.profileCount }
+            let scenario = ProcessInfo.processInfo.environment["CODEXBAR_UI_TEST_SCENARIO"] ?? ""
+            switch scenario {
+            case "claude-plan-pro": body = #"{"organization":{"organization_type":"claude_pro"}}"#
+            case "claude-plan-max20":
+                body = Self.maxProfile(multiplier: 20)
+            case "claude-plan-change": body = Self.maxProfile(multiplier: count == 1 ? 5 : 20)
+            default: body = #"{"organization":{"organization_type":"future_plan"}}"#
+            }
+        } else {
+            let reset = ISO8601DateFormatter().string(from: Date().addingTimeInterval(7_200))
+            body = #"{"five_hour":{"utilization":42,"resets_at":"\#(reset)"}}"#
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    private static func maxProfile(multiplier: Int) -> String {
+        #"{"organization":{"organization_type":"claude_max","rate_limit_tier":"default_claude_max_\#(multiplier)x"}}"#
     }
 }
 
