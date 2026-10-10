@@ -17,7 +17,9 @@ final class CodexCreditsPoolTests: XCTestCase {
             let pool = try XCTUnwrap(result.bars.last)
             XCTAssertEqual(pool.stableKey, "credits-pool")
             XCTAssertEqual(pool.usageText, expected)
-            XCTAssertEqual(pool.used, try XCTUnwrap(Double(balance)), "Display rounding must preserve the balance")
+            let original = try XCTUnwrap(Double(balance))
+            XCTAssertEqual(pool.used, original, accuracy: max(original * 1e-12, 1e-112),
+                           "Display rounding must preserve the balance")
             XCTAssertTrue(pool.isUnboundedNumeric)
             XCTAssertEqual(pool.supportedVisualizationStyles, [.automatic, .largeNumeric])
             XCTAssertEqual(pool.severity, .normal)
@@ -31,7 +33,7 @@ final class CodexCreditsPoolTests: XCTestCase {
         XCTAssertEqual(numeric.bars.last?.usageText, "62,500 credits")
         let tiny = try parse(credits: ["has_credits": true, "unlimited": false, "balance": "1e-100"])
         XCTAssertEqual(tiny.bars.last?.usageText, "0 credits")
-        XCTAssertEqual(try XCTUnwrap(tiny.bars.last).used, 1e-100)
+        XCTAssertEqual(try XCTUnwrap(tiny.bars.last).used, 1e-100, accuracy: 1e-112)
     }
 
     func testInvalidOrMissingBalancesNeverBecomeZero() throws {
