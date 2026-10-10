@@ -410,20 +410,37 @@ and dark/Accessibility 2 text, exact billing details, two accounts, a long Googl
 plan label, OpenCode without a plan pill, unknown/canceled/stale/passed dates, and
 the default-on preference with immediate changes and relaunch persistence.
 
-For focused local issue validation, select its renewal subjourney without running
-unrelated plan and tile-customization scenarios:
+For focused local issue validation, build the test products, then set the
+selector in a copy of Xcode's generated test-run specification. Do not rely on
+`TEST_RUNNER_` shell forwarding: the installed runner may omit that value.
 
 ```sh
-TEST_RUNNER_CODEXBAR_UI_TEST_SUBJOURNEY=renewals \
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
   -project CodexBarIOS.xcodeproj -scheme CodexBarIOSUITests \
   -destination 'platform=iOS Simulator,id=<discovered-iphone-or-ipad-id>' \
-  -skipPackagePluginValidation -parallel-testing-enabled NO \
+  -derivedDataPath .build/renewal-ui -skipPackagePluginValidation \
+  CODE_SIGNING_ALLOWED=NO build-for-testing
+
+python3 - <<'PYTHON'
+from pathlib import Path
+import plistlib
+products = Path('.build/renewal-ui/Build/Products')
+source = max(products.glob('CodexBarIOSUITests_*.xctestrun'), key=lambda path: path.stat().st_mtime)
+run = plistlib.loads(source.read_bytes())
+run['CodexBarIOSUITests'].setdefault('EnvironmentVariables', {})['CODEXBAR_UI_TEST_SUBJOURNEY'] = 'renewals'
+(products / 'subscription-renewals.xctestrun').write_bytes(plistlib.dumps(run))
+PYTHON
+
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
+  -xctestrun .build/renewal-ui/Build/Products/subscription-renewals.xctestrun \
+  -destination 'platform=iOS Simulator,id=<discovered-iphone-or-ipad-id>' \
+  -parallel-testing-enabled NO \
   -only-testing:CodexBarIOSUITests/CodexCreditsPoolUITests/testCompactCardHeadersAndIndependentControls \
-  CODE_SIGNING_ALLOWED=NO test
+  test-without-building
 ```
 
-Xcode forwards `TEST_RUNNER_` variables to the test process without that prefix.
-The release runner does not set this selector and still requires all 29 complete
-journeys on both families. Billing fixtures are synthetic; real-account billing
-comparisons remain Franz-owned. See [subscription source coverage](SUBSCRIPTION-RENEWALS.md).
+The renewal subjourney also checks parsed Google AI Free has no renewal label or
+billing-only More Information menu item. The release runner does not set this
+selector and still requires all 29 complete journeys on both families. Billing
+fixtures are synthetic; real-account billing comparisons remain Franz-owned.
+See [subscription source coverage](SUBSCRIPTION-RENEWALS.md).
