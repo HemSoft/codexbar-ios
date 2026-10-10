@@ -30,7 +30,7 @@ final class UITestSubscriptionBillingProtocol: URLProtocol, @unchecked Sendable 
         case "/api/account":
             body = "{\"uuid\":\"\(wrong ? "other-account" : Self.claudeOwner)\",\"memberships\":[{\"organization\":{\"uuid\":\"\(Self.claudeOrganization)\"}}]}"
         case "/rest/subscriptions":
-            body = "{\"subscriptions\":[{\"xaiUserId\":\"\(wrong ? "other-account" : "synthetic-grok")\",\"tier\":\"SUBSCRIPTION_TIER_GROK_PRO\",\"status\":\"SUBSCRIPTION_STATUS_ACTIVE\",\"stripe\":{\"currentPeriodEnd\":\"\(date)\",\"cancelAtPeriodEnd\":false}}]}"
+            body = "{\"subscriptions\":[{\"xaiUserId\":\"\(wrong ? "other-account" : "synthetic-user")\",\"tier\":\"SUBSCRIPTION_TIER_GROK_PRO\",\"status\":\"SUBSCRIPTION_STATUS_ACTIVE\",\"stripe\":{\"currentPeriodEnd\":\"\(date)\",\"cancelAtPeriodEnd\":false}}]}"
         default:
             guard url.path == "/api/organizations/\(Self.claudeOrganization)/subscription_details" else {
                 client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
