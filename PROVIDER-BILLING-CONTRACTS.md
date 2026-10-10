@@ -18,7 +18,7 @@ private client source proves the fields that client consumes, not live iOS acces
 | Cursor | Official client reads a cancellation date and subscription status; its plan-info response distinguishes Stripe and Apple ownership. | Actual next charge, affirmative renewal state, billing-owner binding and full response schema. | Partial private contract; no renewal implementation authorized. |
 | Google AI / One | Consumer billing pages and store/partner distinctions; publisher and reseller API access boundaries. | Consumer response, account/payer binding and a supported phone authorization-to-data flow. | Private consumer contract unverified; published publisher/reseller APIs inapplicable to this lookup. |
 | Personal Copilot | Personal billing UI, cancellation semantics and public personal usage APIs. | Product-specific next charge and cancellation response tied to the authenticated GitHub user. | Private consumer contract unverified; documented usage/seat APIs insufficient. |
-| OpenCode Go / Go Plus | Current console read schema, workspace bearer middleware, subscriber ID, explicit cancellation, paid period and recovery state. | Production implementation and Franz's separate live compatibility check. | Verified private client contract; implementation tracked in [#451](https://github.com/hemsoft-dev/codexbar-ios/issues/451). |
+| OpenCode Go / Go Plus | Current console read schema, workspace bearer middleware, subscriber ID, explicit cancellation, paid period and recovery state. | Franz's separate live compatibility check. | Implemented private client contract in [#451](https://github.com/hemsoft-dev/codexbar-ios/issues/451); synthetic production-client coverage, live account compatibility pending. |
 | Paid Greptile | Current first-party client exposes code-review cancellation/status fields. | Paid next-charge semantics, paid response schema and supported fresh Google billing authorization. | Partial private contract; [#409](https://github.com/hemsoft-dev/codexbar-ios/issues/409) remains open. |
 
 These classifications are specific to the inspected interfaces. They do not claim
@@ -322,7 +322,7 @@ Verify `auth/session` before and after acquisition, reject a conflicting
 returned `org_id`, and compare saved credentials again after the read. The
 session parser uses `user.id` and optional `org_id`, ignoring unrelated metadata.
 These
-repeated reads are the proposed native isolation policy, not a claim that the
+repeated reads are the native isolation policy, not a claim that the
 web client itself makes them in that order.
 
 The following is a source-derived JSON field shape. No live Go subscription
@@ -450,7 +450,10 @@ plan purchase is not required to finish this research.
 
 ## Validation limits and disposition
 
-OpenCode is the only proposed implementable read; its isolated replay passes.
+OpenCode was the only implementation opportunity found in this investigation.
+Its isolated replay passes; #451 now integrates that contract into the production
+Console provider with native transport and rendered simulator coverage. Live
+account compatibility remains pending for Franz.
 The remaining providers have no verified acquisition/schema pair to replay as
 a renewal implementation. Invented JSON fixtures would not remove those gaps.
 Their next steps specify the missing fields, authorization and owner checks so

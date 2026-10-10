@@ -8,6 +8,12 @@ building, testing, or releasing the app.
 
 ### Added
 
+- See verified OpenCode Go and Go Plus renewal countdowns, with the exact billing
+  date in card details. Canceled plans show when access ends; payment recovery
+  and subscriptions belonging to another workspace member never show an assumed
+  renewal. The existing Dashboard setting controls the countdown.
+  ([#451](https://github.com/hemsoft-dev/codexbar-ios/issues/451))
+
 - Connect billing for Claude and Grok to see verified subscription renewal dates
   beside their usage. Billing sign-in checks the same account, canceled plans show
   their access end date in details, and the existing setting controls all renewal

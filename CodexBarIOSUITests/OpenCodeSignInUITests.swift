@@ -73,6 +73,62 @@ final class OpenCodeSignInUITests: XCTestCase {
         chooseWorkspace(in: app)
         app.buttons["Cancel"].tap()
         XCTAssertFalse(app.buttons["Remove Saved Credential"].exists)
+        app.terminate()
+        exerciseRenewalBillingStates()
+    }
+
+    private func exerciseRenewalBillingStates() {
+        for dark in [false, true] {
+            for state in ["renewing", "canceled", "payment", "mismatch"] {
+                let app = XCUIApplication()
+                app.launchEnvironment = [
+                    "CODEXBAR_UI_TESTS": "1", "CODEXBAR_UI_TEST_RUN_ID": UUID().uuidString,
+                    "CODEXBAR_UI_TEST_RESET": "1", "CODEXBAR_UI_TEST_SCENARIO": "opencode-renewal-\(state)",
+                    "CODEXBAR_UI_TEST_DEFAULT_TEXT": dark ? "0" : "1", "CODEXBAR_UI_TEST_DARK": dark ? "1" : "0",
+                ]
+                app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+                app.launch()
+                let title = state == "mismatch" ? "OpenCode Zen" : "OpenCode Go + Zen"
+                let header = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", title + ", ")).firstMatch
+                XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
+                let balance = app.staticTexts["$25.00"]
+                XCTAssertTrue(balance.waitForExistence(timeout: 10), app.debugDescription)
+                if state == "renewing" {
+                    let renewal = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Renews in"), object: header)
+                    XCTAssertEqual(XCTWaiter.wait(for: [renewal], timeout: 10), .completed)
+                } else { XCTAssertFalse(header.label.contains("Renews in"), header.label) }
+                XCTAssertFalse(header.label.contains("Plan unavailable"))
+                capture("opencode-\(state)-\(dark ? "dark-large" : "light-default")-dashboard", app: app)
+                if state == "renewing" {
+                    app.buttons["Open settings"].firstMatch.tap()
+                    let dashboard = app.descendants(matching: .any)["settings-dashboard"]
+                    XCTAssertTrue(dashboard.waitForExistence(timeout: 5))
+                    dashboard.tap()
+                    let toggle = app.switches["settings-show-subscription-renewals"]
+                    XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+                    XCTAssertEqual(toggle.value as? String, "1")
+                    toggle.switches.firstMatch.tap()
+                    app.navigationBars.buttons["Done"].firstMatch.tap()
+                    XCTAssertFalse(header.label.contains("Renews in"))
+                    capture("opencode-hidden-\(dark ? "dark-large" : "light-default")-dashboard", app: app)
+                    app.terminate()
+                    app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+                    app.launch()
+                    XCTAssertTrue(balance.waitForExistence(timeout: 10))
+                    XCTAssertFalse(header.label.contains("Renews in"))
+                    capture("opencode-hidden-persisted-\(dark ? "dark-large" : "light-default")", app: app)
+                }
+                app.terminate()
+                app.launchEnvironment["CODEXBAR_UI_TEST_RESET"] = "0"
+                app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION"] = "1"
+                app.launchEnvironment["CODEXBAR_UI_TEST_MORE_INFORMATION_ACCOUNT"] = "ui-opencode-renewal"
+                app.launch()
+                let label = state == "renewing" ? "Next subscription renewal" : state == "canceled" ? "Does not renew" : "Renewal date unavailable"
+                XCTAssertTrue(app.staticTexts[label].waitForExistence(timeout: 15), app.debugDescription)
+                capture("opencode-\(state)-\(dark ? "dark-large" : "light-default")-details", app: app)
+                app.terminate()
+            }
+        }
     }
 
     private func launchAccountSettings(failsVerification: Bool = false) -> XCUIApplication {

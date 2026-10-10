@@ -163,7 +163,13 @@ it. Animations retain the normal app behavior.
   Browser approval is synthetic, with no live provider account or credentials.
 - `OpenCodeSignInUITests.testVerificationFailureKeepsAccountDisconnectedAndAllowsRetry`
   verifies that failed usage validation does not save a connection and permits
-  another attempt or cancellation. See [OpenCode sign-in](OPENCODE-SIGN-IN.md)
+  another attempt or cancellation. It also runs the production Console transport
+  through offline Go renewal, cancellation, payment recovery and foreign-subscriber
+  fixtures. Light/default and dark/accessibility2 captures cover the dashboard,
+  billing details and the default-on renewal setting, including saved hiding.
+  Run just this existing manual journey with
+  `-only-testing:CodexBarIOSUITests/OpenCodeSignInUITests/testVerificationFailureKeepsAccountDisconnectedAndAllowsRetry`.
+  It adds no automatic CI work or additional release journey. See [OpenCode sign-in](OPENCODE-SIGN-IN.md)
   for local auth transport and quota regressions.
 - `GrokSignInUITests` exercises Grok's Add Account entry, synthetic approval,
   cancellation, reconnect and removal. A second journey shows the shared Grok
