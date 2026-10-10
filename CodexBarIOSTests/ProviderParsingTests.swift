@@ -3095,8 +3095,8 @@ final class ProviderParsingTests: XCTestCase {
             result.plan,
             ProviderPlanDescriptor(
                 identifier: "codex.plus",
-                displayLabel: "PLUS",
-                accessibilityLabel: "Plus"
+                displayLabel: "ChatGPT Plus",
+                accessibilityLabel: "ChatGPT Plus"
             )
         )
         XCTAssertEqual(result.bars.map(\.label), ["5 hour usage limit", "Weekly usage limit", "Credits pool"])
@@ -3429,17 +3429,18 @@ final class ProviderParsingTests: XCTestCase {
 
     func testCodexUsageParserNormalizesOnlyVerifiedPlanValues() throws {
         let mappings: [(rawValue: String, identifier: String, label: String)] = [
-            ("free", "codex.free", "FREE"),
-            ("go", "codex.go", "GO"),
-            ("plus", "codex.plus", "PLUS"),
-            ("pro", "codex.pro", "PRO"),
-            ("prolite", "codex.prolite", "PRO"),
-            ("business", "codex.business", "BUSINESS"),
-            ("team", "codex.business", "BUSINESS"),
-            ("enterprise", "codex.enterprise", "ENTERPRISE"),
-            ("edu", "codex.edu", "EDU"),
-            ("health", "codex.health", "HEALTH"),
-            ("gov", "codex.gov", "GOV"),
+            ("free", "codex.free", "ChatGPT Free"),
+            ("go", "codex.go", "ChatGPT Go"),
+            ("plus", "codex.plus", "ChatGPT Plus"),
+            ("pro", "codex.pro", "ChatGPT Pro (More)"),
+            ("prolite", "codex.prolite", "ChatGPT Pro"),
+            ("promax", "codex.promax", "ChatGPT Pro (Max)"),
+            ("business", "codex.business", "ChatGPT Business"),
+            ("team", "codex.business", "ChatGPT Business"),
+            ("enterprise", "codex.enterprise", "ChatGPT Enterprise"),
+            ("edu", "codex.edu", "ChatGPT Edu"),
+            ("health", "codex.health", "ChatGPT Health"),
+            ("gov", "codex.gov", "ChatGPT Gov"),
         ]
 
         for mapping in mappings {

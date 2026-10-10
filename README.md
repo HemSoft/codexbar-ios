@@ -94,6 +94,10 @@ on the existing account and retry; CodexBar does not assume an unknown
 identity is different. A legacy single account remains usable without
 reauthentication.
 
+The Codex card shows the ChatGPT plan reported by OpenAI, including separate
+Pro, Pro (More) and Pro (Max) names. See [Codex subscription names](CODEX-PLANS.md)
+for verified mappings and numeric-name limits.
+
 **Credits pool** is off by default. To show the reported remaining credits,
 open **Settings → Accounts & Groups → your Codex account → Metrics** and turn
 it on, or show it in Customize Card. Choices stay separate for each account

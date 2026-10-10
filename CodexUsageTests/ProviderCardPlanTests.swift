@@ -3,8 +3,11 @@ import XCTest
 @testable import CodexBarIOS
 
 final class ProviderCardPlanTests: XCTestCase {
-    func testCodexProFamilyDoesNotInventNumericTier() throws {
-        for (raw, label) in [("pro", "PRO"), ("prolite", "PRO"), ("plus", "PLUS"), ("unknown", "Plan unavailable")] {
+    func testCodexUsesCurrentOfficialTierNamesWithoutInventingPricesOrMultipliers() throws {
+        for (raw, label) in [
+            ("pro", "ChatGPT Pro (More)"), ("prolite", "ChatGPT Pro"),
+            ("promax", "ChatGPT Pro (Max)"), ("plus", "ChatGPT Plus"), ("unknown", "Plan unavailable"),
+        ] {
             let payload = "{\"plan_type\":\"\(raw)\",\"rate_limit\":{\"primary_window\":{\"used_percent\":42,\"reset_at\":1893542400,\"limit_window_seconds\":18000}}}"
             let parsed = try XCTUnwrap(CodexUsageParser.parse(Data(payload.utf8)))
             XCTAssertEqual(parsed.cardPlan.displayLabel, label)

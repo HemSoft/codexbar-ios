@@ -21,6 +21,11 @@ building, testing, or releasing the app.
 
 ### Changed
 
+- Identify Codex subscriptions with ChatGPT plan names and distinguish the Pro,
+  Pro (More) and Pro (Max) tiers reported by OpenAI. Plan labels stay tied to the
+  signed-in account when credentials change or a refresh fails.
+  ([#433](https://github.com/hemsoft-dev/codexbar-ios/issues/433))
+
 - Identify each provider card with a subscription or billing-type pill, including
   Codex plan families and Claude Max 5x/20x. Accounts whose provider does not report
   a verified plan show “Plan unavailable” instead of a guessed tier.
