@@ -193,14 +193,15 @@ final class ProviderNetworkTests: XCTestCase {
             resetCreditsEndpoint: URL(string: "https://example.test/wham/rate-limit-reset-credits")!,
             now: { Date(timeIntervalSince1970: 2_000_000_000) }
         )
-        let cachedResult = ProviderUsageResult(
-            accountID: configuration.id,
-            providerID: .codex,
-            title: configuration.displayName,
-            subtitle: "Live ChatGPT usage",
-            bars: [UsageBar(label: "Session", used: 25, limit: 100)],
-            fetchedAt: Date(timeIntervalSince1970: 1_999_999_000)
-        )
+        ProviderNetworkMockURLProtocol.handler = { request in
+            let inventory = request.url?.path == "/wham/rate-limit-reset-credits"
+            return (
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: inventory ? 503 : 200,
+                                httpVersion: nil, headerFields: nil)!,
+                Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":25,"reset_at":2000007200,"limit_window_seconds":18000}}}"#.utf8)
+            )
+        }
+        let cachedResult = try await provider.fetchUsage(for: configuration)
         let service = UsageRefreshService(providers: [provider], initialResults: [cachedResult])
         var requestedPaths: [String] = []
 

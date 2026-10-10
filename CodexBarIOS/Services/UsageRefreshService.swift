@@ -559,13 +559,14 @@ public final class UsageRefreshService: ObservableObject {
         if failureResult.providerID == .greptile {
             return cachedResult.cacheIdentity == failureResult.cacheIdentity
         }
-        if failureResult.providerID == .grok
+        if [.grok, .codex].contains(failureResult.providerID)
             && (failureResult.recoveryAction == .reauthenticate || !failureResult.allowsUnscopedCacheReuse) {
             return false
         }
         if let failureIdentity = failureResult.cacheIdentity {
             return cachedResult.cacheIdentity == failureIdentity
         }
+        if failureResult.providerID == .codex { return cachedResult.cacheIdentity == nil }
         guard failureResult.providerID == .openCodeZen else {
             return true
         }

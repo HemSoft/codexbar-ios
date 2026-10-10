@@ -126,8 +126,8 @@ final class UITestFixtures {
         } else {
             providers = [UITestUsageProvider(failsFirstRefresh: recovery), UITestGrokProvider(scenario: scenario)]
         }
-        refreshService = UsageRefreshService(providers: Self.providersForPlanPills(providers, scenario: scenario), initialResults: results)
-        if scenario?.hasPrefix("claude-plan-") == true
+        refreshService = UsageRefreshService(providers: Self.providersForPlanPills(providers, scenario: scenario, suiteName: suite), initialResults: results)
+        if scenario == "plan-pills" || scenario?.hasPrefix("claude-plan-") == true
             || (greptile && environment["CODEXBAR_UI_TEST_MORE_INFORMATION"] == "1")
             || scenario?.hasPrefix("grok-cursor-parity") == true
             || Self.isCursorSessionScenario(scenario) {
@@ -195,7 +195,13 @@ final class UITestFixtures {
     nonisolated private static func initialResult(
         for configuration: ProviderAccountConfiguration, scenario: String?, googleSources: [ProviderID]
     ) -> ProviderUsageResult {
-        if scenario == "plan-pills" { return planPillResult(for: configuration) }
+        if scenario == "plan-pills" {
+            if configuration.providerID == .codex {
+                return ProviderUsageResult(accountID: configuration.id, providerID: .codex, title: configuration.displayName,
+                                           subtitle: "Loading synthetic plan fixture", bars: [], fetchedAt: Date())
+            }
+            return planPillResult(for: configuration)
+        }
         if scenario?.hasPrefix("metric-evidence-") == true {
             return metricEvidenceResult(for: configuration, scenario: scenario ?? "")
         }
@@ -257,15 +263,28 @@ final class UITestFixtures {
         ))
     }
 
-    private static func providersForPlanPills(_ providers: [any UsageProvider], scenario: String?) -> [any UsageProvider] {
+    private static func providersForPlanPills(
+        _ providers: [any UsageProvider], scenario: String?, suiteName: String
+    ) -> [any UsageProvider] {
         guard scenario == "plan-pills" else { return providers }
-        return [ProviderID.codex, .claude, .grok, .gemini, .openRouter].map { UITestPlanPillProvider(providerID: $0) }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [UITestCodexPlanURLProtocol.self]
+        config.httpAdditionalHeaders = ["X-CodexBar-Fixture-Suite": suiteName]
+        let codex = CodexUsageProvider(
+            secretStore: UITestSecretStore(suite: suiteName), session: URLSession(configuration: config),
+            usageEndpoint: URL(string: "https://codex-plan-fixture.invalid/usage")!,
+            resetCreditsEndpoint: URL(string: "https://codex-plan-fixture.invalid/inventory")!
+        )
+        return [codex] + [ProviderID.claude, .grok, .gemini, .openRouter].map { UITestPlanPillProvider(providerID: $0) }
     }
 
     private static func seedPlanPillAccounts(in store: ProviderConfigurationStore, scenario: String?) {
         guard scenario == "plan-pills", store.configurations.isEmpty else { return }
         for (id, provider, title) in [
             ("pro", ProviderID.codex, "Codex Pro fixture"),
+            ("prolite", .codex, "Codex Pro lower tier fixture"),
+            ("promax", .codex, "Codex Pro highest tier fixture"),
+            ("future-plan", .codex, "Codex unavailable fixture"),
             ("plus", .codex, "Codex Plus fixture"),
             ("max5", .claude, "Claude Max fixture"),
             ("grok-plan", .grok, "SuperGrok Lite"),
@@ -277,7 +296,8 @@ final class UITestFixtures {
                 grokGeneratedLabel: provider == .grok ? title : nil, authMethod: provider == .grok ? .browserSession : .apiKey
             )
             _ = store.update(account)
-            _ = store.saveSecret("ui-test-credential", for: account)
+            precondition(store.saveSecret(provider == .codex ? Self.codexCredential(for: id) : "ui-test-credential", for: account),
+                         "Synthetic plan fixture credentials must be saved")
             if provider == .grok {
                 let credential = Self.planPillGrokCredential
                 _ = store.saveSecret((try? credential.encoded()) ?? "", for: account)
@@ -1332,7 +1352,9 @@ private struct UITestSecretStore: SecretStore {
     func saveSecret(_ secret: String, account: String) throws {
         let coding = try? AntigravityCredentials.parse(secret)
         let expectedCoding = try AntigravityCredentials.parse(UITestFixtures.codingCredential)
-        let codex = ["personal", "work"].contains { secret == UITestFixtures.codexCredential(for: $0) }
+        let codex = ["personal", "work", "pro", "prolite", "promax", "future-plan", "plus"].contains {
+            secret == UITestFixtures.codexCredential(for: $0)
+        }
         let cursor = [false, true].contains { secret == UITestFixtures.cursorSessionCredential(expired: $0) }
         let greptile = GreptileSessionCredentials.parse(secret) == UITestFixtures.greptileCredential
         let grok = GrokCredential.parse(secret) == UITestFixtures.planPillGrokCredential
@@ -1732,6 +1754,42 @@ private final class UITestNetworkBlocker: URLProtocol, @unchecked Sendable {
         case "/mcp": return UITestFixtures.greptilePayload(scenario: scenario)
         default: return Data()
         }
+    }
+    override func stopLoading() {}
+}
+
+private class UITestCodexPlanURLProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard request.url?.host == "codex-plan-fixture.invalid", request.httpMethod == "GET",
+              let suite = request.value(forHTTPHeaderField: "X-CodexBar-Fixture-Suite"),
+              let defaults = UserDefaults(suiteName: suite),
+              let accountID = request.value(forHTTPHeaderField: "ChatGPT-Account-Id"),
+              let credential = CodexCredentialsParser.parse(UITestFixtures.codexCredential(for: accountID)),
+              request.value(forHTTPHeaderField: "Authorization") == "Bearer \(credential.accessToken)",
+              let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        let count = Self.lock.withLock {
+            let key = "codex-plan-requests-\(accountID)"
+            let count = defaults.integer(forKey: key) + 1
+            if url.path == "/usage" { defaults.set(count, forKey: key) }
+            return count
+        }
+        // The More-tier fixture upgrades on refresh; other accounts remain independent.
+        let plan = accountID == "pro" && count > 1 ? "promax" : accountID
+        let body = url.path == "/usage" ? #"""
+        {"plan_type":"\#(plan)","rate_limit":{"primary_window":{
+        "used_percent":42,"reset_at":1893542400,"limit_window_seconds":18000}}}
+        """# : "{}"
+        let status = url.path == "/usage" ? 200 : 503
+        guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil) else { return }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
 }

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public enum CodexBankedResetConsumptionOutcome: String, Equatable, Sendable {
@@ -111,7 +112,7 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
                 if credentials.isExpired(at: now()) {
                     return failureResult(
                         "Could not renew the ChatGPT / Codex credential. Try again.",
-                        configuration: configuration
+                        configuration: configuration, credentials: credentials, allowsCacheReuse: true
                     )
                 }
             case .persistenceFailed:
@@ -136,23 +137,38 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
         keychainAccount: String,
         canRefresh: Bool
     ) async throws -> ProviderUsageResult {
-        let (data, response) = try await session.data(for: makeUsageRequest(credentials: credentials))
+        try requireCurrentCredentials(credentials, keychainAccount: keychainAccount)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: makeUsageRequest(credentials: credentials))
+        } catch {
+            try Task.checkCancellation()
+            try requireCurrentCredentials(credentials, keychainAccount: keychainAccount)
+            return failureResult("Could not load ChatGPT usage. Try again.", configuration: configuration,
+                                 credentials: credentials, allowsCacheReuse: true)
+        }
+        try requireCurrentCredentials(credentials, keychainAccount: keychainAccount)
         guard let httpResponse = response as? HTTPURLResponse else {
-            return failureResult("ChatGPT usage returned an invalid response.", configuration: configuration)
+            return failureResult("ChatGPT usage returned an invalid response.", configuration: configuration,
+                                 credentials: credentials, allowsCacheReuse: true)
         }
 
         switch httpResponse.statusCode {
         case 200..<300:
             guard let parsedResult = CodexUsageParser.parse(data, fetchedAt: now()) else {
-                return failureResult("Could not parse ChatGPT usage.", configuration: configuration)
+                return failureResult("Could not parse ChatGPT usage.", configuration: configuration,
+                                     credentials: credentials, allowsCacheReuse: true)
             }
             let resultWithResetDetails = try await addResetDetails(
                 to: parsedResult,
                 credentials: credentials
             )
+            try requireCurrentCredentials(credentials, keychainAccount: keychainAccount)
             return applyAccountMetadata(
                 to: resultWithResetDetails,
-                configuration: configuration
+                configuration: configuration,
+                credentials: credentials
             )
         case 401 where canRefresh && credentials.refreshToken?.isEmpty == false:
             switch await refreshCredentials(credentials, keychainAccount: keychainAccount) {
@@ -190,7 +206,8 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
                 configuration: configuration
             )
         default:
-            return failureResult("ChatGPT usage returned HTTP \(httpResponse.statusCode).", configuration: configuration)
+            return failureResult("ChatGPT usage returned HTTP \(httpResponse.statusCode).", configuration: configuration,
+                                 credentials: credentials, allowsCacheReuse: true)
         }
     }
 
@@ -426,7 +443,26 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
         )
     }
 
-    private func failureResult(_ message: String, configuration: ProviderAccountConfiguration) -> ProviderUsageResult {
+    private func requireCurrentCredentials(_ credentials: CodexCredentials, keychainAccount: String) throws {
+        try Task.checkCancellation()
+        guard let stored = try secretStore.readSecret(account: keychainAccount),
+              let current = CodexCredentialsParser.parse(stored),
+              current.accessToken == credentials.accessToken, current.accountID == credentials.accountID else {
+            throw CancellationError()
+        }
+    }
+
+    private static func cacheIdentity(for credentials: CodexCredentials) -> String {
+        let encoded = CodexCredentialsParser.storedCredential(from: CodexCredentials(
+            accessToken: credentials.accessToken, accountID: credentials.accountID
+        ))
+        return SHA256.hash(data: Data(encoded.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func failureResult(
+        _ message: String, configuration: ProviderAccountConfiguration,
+        credentials: CodexCredentials? = nil, allowsCacheReuse: Bool = false
+    ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id,
             providerID: .codex,
@@ -434,6 +470,8 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
             subtitle: message,
             bars: [],
             failureMessage: message,
+            cacheIdentity: credentials.map(Self.cacheIdentity),
+            allowsUnscopedCacheReuse: allowsCacheReuse,
             fetchedAt: now()
         )
     }
@@ -450,7 +488,8 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
 
     private func applyAccountMetadata(
         to result: ProviderUsageResult,
-        configuration: ProviderAccountConfiguration
+        configuration: ProviderAccountConfiguration,
+        credentials: CodexCredentials
     ) -> ProviderUsageResult {
         ProviderUsageResult(
             accountID: configuration.id,
@@ -469,6 +508,8 @@ public final class CodexUsageProvider: CodexBankedResetConsuming {
             cardInformationSections: result.cardInformationSections,
             codexBankedRateLimitResets: result.codexBankedRateLimitResets,
             failureMessage: result.failureMessage,
+            cacheIdentity: Self.cacheIdentity(for: credentials),
+            allowsUnscopedCacheReuse: false,
             hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory,
             fetchedAt: result.fetchedAt
         )

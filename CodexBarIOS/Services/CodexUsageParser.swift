@@ -421,10 +421,13 @@ public enum CodexUsageParser {
             label = "Plus"
         case "pro":
             identifier = "pro"
-            label = "Pro"
+            label = "Pro (More)"
         case "prolite":
             identifier = "prolite"
             label = "Pro"
+        case "promax":
+            identifier = "promax"
+            label = "Pro (Max)"
         case "business", "team":
             identifier = "business"
             label = "Business"
@@ -447,7 +450,8 @@ public enum CodexUsageParser {
         return ProviderPlanDescriptor.make(
             providerPrefix: "codex",
             identifier: identifier,
-            label: label
+            label: "ChatGPT \(label)",
+            displayLabel: "ChatGPT \(label)"
         )
     }
 
