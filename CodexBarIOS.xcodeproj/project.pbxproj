@@ -275,7 +275,7 @@
 		A42000000000000000000802 /* ClaudeUsageResetProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeUsageResetProviderTests.swift; sourceTree = SOURCE_ROOT; };
 		A42100000000000000000302 /* ClaudeFableWeeklyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudeFableWeeklyTests.swift; sourceTree = SOURCE_ROOT; };
 		A43100000000000000000202 /* ClaudePlanProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/ClaudePlanProfileTests.swift; sourceTree = SOURCE_ROOT; };
-		A43800000000000000000102 /* CursorPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageTests/CursorPlanTests.swift; sourceTree = SOURCE_ROOT; };
+		A43800000000000000000102 /* CursorPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarIOSTests/CursorPlanTests.swift; sourceTree = SOURCE_ROOT; };
 		A42000000000000000000302 /* ClaudeUsageResetInventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetInventoryView.swift; sourceTree = "<group>"; };
 		A42000000000000000000402 /* ProviderMetricTileGridResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderMetricTileGridResolver.swift; sourceTree = "<group>"; };
 		A42000000000000000000202 /* ClaudeUsageResetClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageResetClient.swift; sourceTree = "<group>"; };
