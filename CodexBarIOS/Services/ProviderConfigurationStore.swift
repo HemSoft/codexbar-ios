@@ -2913,7 +2913,9 @@ extension ProviderConfigurationStore {
                 if let configuration = configurations.first(where: {
                     [ProviderID.gemini, .grok, .claude].contains($0.providerID)
                         && (keychainAccount(for: $0) == account
-                            || Self.geminiCodingKeychainAccount(accountID: $0.id) == account)
+                            || Self.geminiCodingKeychainAccount(accountID: $0.id) == account
+                            || ([.claude, .grok].contains($0.providerID)
+                                && SubscriptionBillingSession.keychainAccount($0) == account))
                 }) {
                     credentialChanges.send(configuration.id)
                     if configuration.providerID == .grok { grokHistoryInvalidations.send(configuration.id) }

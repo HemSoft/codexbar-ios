@@ -259,6 +259,32 @@ final class SubscriptionBillingTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testPartialResetInvalidatesDeletedBillingWhenUsageCredentialRemains() throws {
+        for provider in [ProviderID.claude, .grok] {
+            let suite = "SubscriptionBillingTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let secrets = BillingMutationSecretStore()
+            let store = ProviderConfigurationStore(defaults: defaults, secretStore: secrets, widgetSnapshotDefaults: defaults)
+            let account = ProviderAccountConfiguration(id: "personal-\(provider.rawValue)", providerID: provider, authMethod: .browserSession)
+            XCTAssertTrue(store.update(account))
+            let primary = ProviderConfigurationStore.keychainAccount(for: account)
+            let billingKey = SubscriptionBillingSession.keychainAccount(account)
+            try secrets.saveSecret("usage-token", account: primary)
+            try secrets.saveSecret("billing-token", account: billingKey)
+            secrets.failingDeleteAccount = primary
+            var invalidated = [String]()
+            let subscription = store.credentialChanges.sink { invalidated.append($0) }
+            defer { subscription.cancel() }
+            XCTAssertFalse(store.resetAccounts())
+            XCTAssertEqual(try secrets.readSecret(account: primary), "usage-token")
+            XCTAssertNil(try secrets.readSecret(account: billingKey))
+            XCTAssertNotNil(store.configuration(accountID: account.id))
+            XCTAssertTrue(invalidated.contains(account.id), "Deleted billing must invalidate cached renewal dates")
+        }
+    }
+
     func testCookieCaptureRejectsForeignInsecureExpiredAndHeaderInjection() throws {
         let make = { (domain: String, secure: Bool, value: String, expiry: Date?) -> HTTPCookie in
             var properties: [HTTPCookiePropertyKey: Any] = [.name: "sessionKey", .value: value, .domain: domain, .path: "/"]
