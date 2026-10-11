@@ -296,7 +296,7 @@ final class CodexCreditsPoolUITests: XCTestCase {
             let header = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Personal Claude, ")).firstMatch
             reveal(header, in: app)
             XCTAssertFalse(header.label.contains("Renews in"))
-            XCTAssertTrue(header.label.contains("Max 20X"), header.label)
+            XCTAssertTrue(header.label.contains("Max 20x"), header.label)
             tap(app.buttons["More options for Personal Claude"], in: app)
             tap(app.buttons["More information for Personal Claude"], in: app)
             XCTAssertTrue(app.staticTexts[state == "unknown" ? "Renewal date unavailable" : "Does not renew"].waitForExistence(timeout: 5))
