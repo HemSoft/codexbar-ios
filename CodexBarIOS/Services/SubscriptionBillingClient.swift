@@ -83,8 +83,12 @@ final class SubscriptionBillingClient: @unchecked Sendable {
         guard configuration.providerID == .claude else { return unavailable(.unsupportedSubscription) }
         let key = SubscriptionBillingSession.keychainAccount(configuration)
         let usageKey = ProviderConfigurationStore.keychainAccount(for: configuration)
-        guard (try? secretStore.readSecret(account: usageKey)) == usageSecret else { return unavailable(.accountMismatch) }
-        guard let saved = try? secretStore.readSecret(account: key) else { return unavailable(.notConnected) }
+        let saved: String
+        do {
+            guard try secretStore.readSecret(account: usageKey) == usageSecret else { return unavailable(.accountMismatch) }
+            guard let value = try secretStore.readSecret(account: key) else { return unavailable(.notConnected) }
+            saved = value
+        } catch { return unavailable(.credentialsUnavailable) }
         guard let billing = SubscriptionBillingSession.parse(saved, allowExpired: true), billing.providerID == .claude else {
             return unavailable(.rejectedResponse)
         }
@@ -107,8 +111,10 @@ final class SubscriptionBillingClient: @unchecked Sendable {
             observation = unavailable(reason)
         }
         try Task.checkCancellation()
-        guard (try? secretStore.readSecret(account: key)) == saved,
-              (try? secretStore.readSecret(account: usageKey)) == usageSecret else { return unavailable(.accountMismatch) }
+        do {
+            guard try secretStore.readSecret(account: key) == saved,
+                  try secretStore.readSecret(account: usageKey) == usageSecret else { return unavailable(.accountMismatch) }
+        } catch { return unavailable(.credentialsUnavailable) }
         return observation
     }
 
@@ -175,8 +181,8 @@ final class SubscriptionBillingClient: @unchecked Sendable {
 
     private func webGet(_ path: String, billing: SubscriptionBillingSession) async throws -> Data {
         guard let host = SubscriptionBillingSession.host(billing.providerID),
-              let header = SubscriptionBillingSession.header(billing.cookies, at: Date()),
               let url = URL(string: "https://\(host)\(path)") else { throw SubscriptionBillingError.unavailable }
+        guard let header = SubscriptionBillingSession.header(billing.cookies, at: Date()) else { throw SubscriptionBillingError.expiredSession }
         var request = URLRequest(url: url)
         request.setValue(header, forHTTPHeaderField: "Cookie")
         request.setValue("https://\(host)", forHTTPHeaderField: "Origin")

@@ -14,6 +14,7 @@ enum SubscriptionBillingParser {
         let ending = (root["plan_ending_at"] as? String).flatMap(date) ?? (root["plan_ending_before"] as? String).flatMap(date)
         let next = (root["next_charge_at"] as? String).flatMap(date) ?? (root["next_charge_date"] as? String).flatMap(date)
         let isRenewing = ending == nil && status != "canceled"
+        guard !isRenewing || next != nil else { return nil }
         let value = isRenewing ? next : ending
         return SubscriptionRenewal(accountID: configuration.id, providerID: .claude,
                                    state: isRenewing ? .renewing : .nonRenewing,

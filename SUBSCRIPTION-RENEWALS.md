@@ -227,7 +227,10 @@ whether the guided authenticated phone flow works for Franz.
 Claude uses the saved, separately verified billing session on each successful
 usage refresh. Missing authorization, expired cookies or HTTP 401, HTTP 403,
 identity mismatch, unsupported purchase source, transport failure and rejected
-response shape now have distinct account-bound messages. More Information offers
+response shape now have distinct account-bound messages. Keychain read failures
+produce a retry message instead of claiming that credentials are absent or
+belong to a different account. Known Team/Enterprise plans retain the unsupported
+explanation and do not offer the personal billing shortcut. More Information offers
 **Open Billing Settings** when no date is verified. Settings retain guided
 Connect/Reconnect Billing and link to the provider's billing page. The existing
 account/organization checks run before and after acquisition. Credential or

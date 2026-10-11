@@ -314,7 +314,7 @@ struct ProviderUsageCard: View {
                     reconnectAfterInformation = true
                     isShowingMoreInformation = false
                 },
-                showsBillingSettings: result.providerID == .claude && result.boundSubscriptionRenewal == nil
+                showsBillingSettings: result.canOpenClaudeBillingSettings
             )
         })
         .sheet(item: $metricDetailPresentation) { presentation in

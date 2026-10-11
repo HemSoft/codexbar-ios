@@ -40,7 +40,7 @@ final class SubscriptionBillingTests: XCTestCase {
             let data = Data("{\"status\":\"active\",\"next_charge_at\":\"2033-05-20T00:00:00Z\",\"\(key)\":\"2033-05-19\"}".utf8)
             XCTAssertEqual(SubscriptionBillingParser.claude(data, configuration: account, at: now)?.state, .nonRenewing)
         }
-        for body in [#"{"status":"active"}"#,
+        for body in [#"{"status":"active"}"#, #"{"status":"active","next_charge_at":null}"#, #"{"status":"trialing","next_charge_date":null}"#,
                      #"{"status":"active","next_charge_at":"2033-05-20T00:00:00Z","plan_ending_at":false}"#,
                      #"{"status":"active","next_charge_at":"2033-05-20T00:00:00Z","payment_paused_until":"2033-06-01"}"#,
         ] { XCTAssertNil(SubscriptionBillingParser.claude(Data(body.utf8), configuration: account, at: now)) }
@@ -92,6 +92,36 @@ final class SubscriptionBillingTests: XCTestCase {
             XCTAssertEqual(result.subscriptionBillingProblem?.accountID, reason == nil ? nil : account.id, scenario)
             XCTAssertEqual(result.boundSubscriptionRenewal != nil, reason == nil, scenario)
             XCTAssertEqual(try secrets.readSecret(account: ProviderConfigurationStore.keychainAccount(for: account)), "usage-token")
+        }
+    }
+
+    func testClaudeKeychainReadFailureDoesNotClaimMissingOrMismatchedCredentials() async throws {
+        for phase in ["usage", "billing", "final"] {
+            let account = ProviderAccountConfiguration(id: "claude-personal", providerID: .claude, authMethod: .browserSession)
+            let secrets = BillingMutationSecretStore()
+            let usageKey = ProviderConfigurationStore.keychainAccount(for: account)
+            let billingKey = SubscriptionBillingSession.keychainAccount(account)
+            try secrets.saveSecret("usage-token", account: usageKey)
+            let billing = SubscriptionBillingSession(providerID: .claude, ownerID: owner, organizationID: organization, cookies: [cookie])
+            try secrets.saveSecret(billing.encoded(), account: billingKey)
+            if phase != "final" { secrets.failingReadAccount = phase == "usage" ? usageKey : billingKey }
+            let fixture = IsolatedTestURLSession { [self] request in
+                let data: Data
+                switch request.url?.path {
+                case "/api/oauth/profile": data = profile()
+                case "/api/account": data = webAccount()
+                default: secrets.failingReadAccount = billingKey; data = claudeBilling()
+                }
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data)
+            }
+            defer { fixture.invalidate() }
+            let result = try await SubscriptionBillingClient(session: fixture.session).fetchClaudeObservation(
+                configuration: account, usageSecret: "usage-token", secretStore: secrets, at: now)
+            XCTAssertNil(result.renewal)
+            XCTAssertEqual(result.problem?.reason, .credentialsUnavailable, phase)
+            secrets.failingReadAccount = nil
+            XCTAssertEqual(try secrets.readSecret(account: usageKey), "usage-token")
+            XCTAssertEqual(try secrets.readSecret(account: billingKey), try billing.encoded())
         }
     }
 
@@ -424,9 +454,13 @@ final class SubscriptionBillingTests: XCTestCase {
 private final class BillingMutationSecretStore: SecretStore, @unchecked Sendable {
     private let storage = MemorySecretStore()
     var failingSaveAccount: String?
+    var failingReadAccount: String?
     var failingDeleteAccount: String?
 
-    func readSecret(account: String) throws -> String? { try storage.readSecret(account: account) }
+    func readSecret(account: String) throws -> String? {
+        if account == failingReadAccount { throw KeychainError.unhandledStatus(-25308) }
+        return try storage.readSecret(account: account)
+    }
 
     func saveSecret(_ secret: String, account: String) throws {
         if account == failingSaveAccount { throw KeychainError.unhandledStatus(-25308) }
