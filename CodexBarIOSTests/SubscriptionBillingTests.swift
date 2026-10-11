@@ -103,7 +103,8 @@ final class SubscriptionBillingTests: XCTestCase {
             let billingKey = SubscriptionBillingSession.keychainAccount(account)
             try secrets.saveSecret("usage-token", account: usageKey)
             let billing = SubscriptionBillingSession(providerID: .claude, ownerID: owner, organizationID: organization, cookies: [cookie])
-            try secrets.saveSecret(billing.encoded(), account: billingKey)
+            let original = try billing.encoded()
+            try secrets.saveSecret(original, account: billingKey)
             if phase != "final" { secrets.failingReadAccount = phase == "usage" ? usageKey : billingKey }
             let fixture = IsolatedTestURLSession { [self] request in
                 let data: Data
@@ -121,7 +122,7 @@ final class SubscriptionBillingTests: XCTestCase {
             XCTAssertEqual(result.problem?.reason, .credentialsUnavailable, phase)
             secrets.failingReadAccount = nil
             XCTAssertEqual(try secrets.readSecret(account: usageKey), "usage-token")
-            XCTAssertEqual(try secrets.readSecret(account: billingKey), try billing.encoded())
+            XCTAssertEqual(try secrets.readSecret(account: billingKey), original)
         }
     }
 
