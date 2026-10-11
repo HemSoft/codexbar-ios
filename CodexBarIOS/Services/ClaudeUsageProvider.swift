@@ -86,9 +86,11 @@ public final class ClaudeUsageProvider: UsageProvider, ClaudeUsageResetConsuming
         if oauthOutcome.isSuccessfulSnapshot {
             if let usageSecret = try? secretStore.readSecret(account: ProviderConfigurationStore.keychainAccount(for: configuration)),
                ClaudeCredentialsParser.parse(usageSecret)?.accessToken == token {
-                resolved.subscriptionRenewal = try await SubscriptionBillingClient(session: session).fetch(
+                let billing = try await SubscriptionBillingClient(session: session).fetchClaudeObservation(
                     configuration: configuration, usageSecret: usageSecret, secretStore: secretStore, at: now()
                 )
+                resolved.subscriptionRenewal = billing.renewal
+                resolved.subscriptionBillingProblem = billing.problem
             }
             guard try currentToken(for: configuration) == token else {
                 return failureResult("Claude account changed during refresh. Refresh again.", configuration: configuration)
@@ -452,6 +454,7 @@ private actor ClaudeUsageSnapshotCache {
             dashboardUsageMessages: result.dashboardUsageMessages,
             cardInformationSections: result.cardInformationSections,
             subscriptionRenewal: result.subscriptionRenewal,
+            subscriptionBillingProblem: result.subscriptionBillingProblem,
             claudeUsageResetInventory: result.claudeUsageResetInventory,
             failureMessage: result.failureMessage,
             hasSuccessfulRefreshHistory: result.hasSuccessfulRefreshHistory
